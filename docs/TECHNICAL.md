@@ -1141,7 +1141,14 @@ Soft cover on the ground of the 3D view: grass in the woodland and in the nymph'
 
 **Failure modes.** A cover image larger than the device's texture limit throws `GroundTooLargeError` (`groundError.ts`, re-exported by `view.ts`): the layer stays off with the stand-in texture, the host's error box shows the message, and `RunView3d` lifts nothing. After a lost device the new view gets the kept `CoverResult` again (the layer is rebuilt and the texture uploaded again, nothing is recomputed). A result with no cover (a dungeon without moss or cove, a 1x1 image) builds no mesh.
 
-**Speed.** TODO-MEASURE
+**Speed.** Measured 2026-11-14 on the dev notebook's RTX 3060 (headed Brave with the start line of `tools/e2e/gpu.mjs`, uncapped, 2560 x 1280, zoom 8, the dev pages `?r3d=woodland` (4 sheets, 487 bushels) and `?r3d=demo` with every room mossy (2 sheets)); mean fps / median frame time, cover on vs `cover=0`:
+
+| | woodland High | woodland Fast | mossy demo High | mossy demo Fast |
+|---|---|---|---|---|
+| WebGPU | 208 / 2.2 ms vs 212 / 2.3 ms | 464 / 1.9 ms vs 468 / 1.9 ms | 540 / 1.5 ms vs 537 / 1.6 ms | 552 / 1.6 ms vs 553 / 1.6 ms |
+| WebGL2 | 228 / 4.2 ms vs 346 / 1.9 ms | 612 / 1.5 ms vs 604 / 1.5 ms | 603 / 1.6 ms vs 719 / 1.1 ms | 1298 / 0.5 ms vs 1298 / 0.5 ms |
+
+Every case stays far above 60 fps, so Fast keeps its bushels. The clearest cost is WebGL2 on High in the woodland (median 1.9 → 4.2 ms). `cover=0` still draws the meshes and discards every pixel, so these figures understate the layer's cost a little compared with no layer at all. The woodland on WebGPU High has 1 % lows of 14 fps with the cover on and off alike: those stalls are not the cover's.
 
 **Tests.** In `render3d/cover/`: `kinds.test.ts` (the encoding, each kind at its own id, moss lower than grass without sway or bushels), `heights.test.ts` (the taper, the creep, only where `allow`, determinism), `moss.test.ts` (eligibility, corridors, doors and hazards, the seed from the wall layout only, `everywhere`, none with lava), `woodland.test.ts` (grass tiles, bare ground under paths, the two pictures), `cove.test.ts` (the carpet's shape and colours, the spots), `bushels.test.ts` (the rules, determinism, density weighting, spots), `coverJob.test.ts` (the budget, thin slices give the same bytes as one step, the spawn row first, the sheets and bare picture of a woodland, a dungeon with and without cove or lava), `coverMesh.test.ts` (quads per sheet, bounds hold the sway and the push, chunk borders), `coverLayer.test.ts` (one sheet mesh and at most one bushel mesh per chunk, the too-large image, a second set replaces the first, the layer stays off without a good image, `gh` clamped, dispose), `coverNodes.test.ts` and `coverRead.test.ts` (the materials build in GLSL and WGSL, the kind tables), `coverField.test.ts` (`topAt`, `gh` clamp). Beside it: additions to `params.test.ts`, `panel.test.ts`, `materials.test.ts`, `sightMaterials.test.ts`, `figures.test.ts`, `critters3d.test.ts`, `cards.test.ts`, `cove3d.test.ts`, `coveStage.test.ts`, `demoStage.test.ts`, `woodlandStage.test.ts`, `runStage.test.ts` and `runView3d.test.ts`.
 
