@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DataTexture, Mesh, Scene, Texture } from 'three/webgpu';
 import { makeLighting } from '../lightNodes';
 import { viewTowardUniform } from '../materials';
@@ -9,7 +9,7 @@ import { makeCoverShared } from './coverRead';
 import type { CoverResult } from './coverJob';
 import { CoverLayer } from './coverLayer';
 import { buildCoverChunk } from './coverMesh';
-import { encodeCover } from './kinds';
+import { encodeCover, GH_MAX } from './kinds';
 import type { Bushel } from './source';
 import { CHUNK } from '../worldMesh';
 
@@ -28,11 +28,12 @@ function make() {
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: false });
   const shared = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
   const sight = makeSight();
-  const layer = new CoverLayer(scene, shared, {
+  const materials = {
     sheet: coverSheetMaterial({ lighting, sight, shared }),
     bushel: bushelMaterial({ lighting, sight, toward: viewTowardUniform(), shared }),
-  });
-  return { layer, scene, shared };
+  };
+  const layer = new CoverLayer(scene, shared, materials);
+  return { layer, scene, shared, materials };
 }
 
 describe('CoverLayer', () => {
@@ -90,10 +91,32 @@ describe('CoverLayer', () => {
     expect(shared.on.value).toBe(0);
   });
 
-  it('dispose takes every mesh out', () => {
-    const { layer, scene } = make();
+  it('stays off (on = 0) without a good image and clamps gh to [0, GH_MAX]', () => {
+    const { layer, shared } = make();
+    const stand = shared.texture.value;
+    const on = (): number => { layer.frame({ on: true, gh: 1, wind: false, t: 0 }, 1); return shared.on.value; };
+    expect(on()).toBe(0); // before any set
     layer.set(R(), 4096);
+    expect(on()).toBe(1);
+    expect(() => layer.set(R(), 100)).toThrow(GroundTooLargeError);
+    expect(on()).toBe(0); // after a too-large set
+    expect(shared.texture.value).toBe(stand); // back on the stand-in
+    layer.set({ image: { w: 1, h: 1, data: new Uint8Array(4) }, bare: null, bushels: [], sheets: 0 }, 4096);
+    expect(on()).toBe(0); // no cover
+    layer.frame({ on: true, gh: 9, wind: false, t: 0 }, 1);
+    expect(shared.gh.value).toBe(GH_MAX);
+    layer.frame({ on: true, gh: 0.25, wind: false, t: 0 }, 1);
+    expect(shared.gh.value).toBe(0.25);
+    layer.frame({ on: true, gh: -1, wind: false, t: 0 }, 1);
+    expect(shared.gh.value).toBe(0);
+  });
+
+  it('dispose takes every mesh out and disposes its materials', () => {
+    const { layer, scene, materials } = make();
+    layer.set(R(), 4096);
+    const spies = [materials.sheet, materials.bushel].map((m) => vi.spyOn(m, 'dispose'));
     layer.dispose();
+    for (const s of spies) expect(s).toHaveBeenCalled();
     expect(scene.children).toHaveLength(0);
     expect(layer.meshCount).toBe(0);
   });

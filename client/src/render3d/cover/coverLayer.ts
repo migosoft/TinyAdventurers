@@ -2,7 +2,8 @@
 // bounds, plus the cover image as a texture the shaders read. A `CoverLayer` belongs to one view: a rebuilt view makes a new one and the
 // caller sets the kept result again.
 import { Box3, BufferAttribute, BufferGeometry, DataTexture, Mesh, NearestFilter, NoColorSpace, RGBAFormat, Sphere, UnsignedByteType, Vector3 } from 'three/webgpu';
-import type { Material, Scene } from 'three/webgpu';
+import type { Material, Scene, Texture } from 'three/webgpu';
+import { GH_MAX } from './kinds';
 import { GroundTooLargeError } from '../groundError';
 import { CHUNK } from '../worldMesh';
 import type { CoverResult } from './coverJob';
@@ -24,16 +25,29 @@ function boxed(g: BufferGeometry, c: CoverChunk): BufferGeometry {
 export class CoverLayer {
   private readonly meshes: Mesh[] = [];
   private tex: DataTexture | null = null;
+  /** True only while a good image with cover is bound; the layer stays off (the ground bare) otherwise. */
+  private ready = false;
+  /** The texture the shared uniforms started with, bound again when `set` fails. */
+  private readonly standIn: Texture;
 
-  constructor(private readonly scene: Scene, private readonly shared: CoverShared, private readonly materials: { sheet: Material; bushel: Material }) {}
+  /** The layer owns the two materials and disposes them. */
+  constructor(private readonly scene: Scene, private readonly shared: CoverShared, private readonly materials: { sheet: Material; bushel: Material }) {
+    this.standIn = shared.texture.value as Texture;
+  }
 
   get meshCount(): number { return this.meshes.length; }
 
   /** Builds every chunk's meshes and uploads the image; throws GroundTooLargeError above `limit` (the layer is then empty). */
   set(r: CoverResult, limit: number): void {
     this.clear();
+    this.ready = false;
     const { w, h } = r.image;
-    if (w > limit || h > limit) throw new GroundTooLargeError(w, h, limit);
+    if (w > limit || h > limit) {
+      this.shared.setTexture(this.standIn);
+      this.tex?.dispose();
+      this.tex = null;
+      throw new GroundTooLargeError(w, h, limit);
+    }
     const t = new DataTexture(r.image.data, w, h, RGBAFormat, UnsignedByteType);
     t.colorSpace = NoColorSpace;
     t.magFilter = NearestFilter;
@@ -46,6 +60,7 @@ export class CoverLayer {
     this.tex?.dispose();
     this.tex = t;
     if (r.sheets <= 0) return;
+    this.ready = true;
     const nx = Math.ceil(Math.floor(w / 16) / CHUNK), nz = Math.ceil(Math.floor(h / 16) / CHUNK);
     for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) {
       const c = buildCoverChunk(r, cx, cz);
@@ -69,8 +84,8 @@ export class CoverLayer {
 
   frame(f: CoverFrame, cosP: number): void {
     const s = this.shared;
-    s.on.value = f.on ? 1 : 0;
-    s.gh.value = f.gh;
+    s.on.value = f.on && this.ready ? 1 : 0;
+    s.gh.value = Math.min(GH_MAX, Math.max(0, f.gh)); // the chunk bounds assume at most GH_MAX
     s.windOn.value = f.wind ? 1 : 0;
     s.t.value = f.t;
     s.cosP.value = cosP;
@@ -84,7 +99,10 @@ export class CoverLayer {
 
   dispose(): void {
     this.clear();
+    this.ready = false;
     this.shared.on.value = 0;
+    this.materials.sheet.dispose();
+    this.materials.bushel.dispose();
     this.tex?.dispose();
     this.tex = null;
   }
