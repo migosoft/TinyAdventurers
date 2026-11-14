@@ -1,6 +1,6 @@
-// The nymph's cove in the 3D dungeon (#306, #329): the willow and the bushes as grown 3D trees (the tufts and ferns stay atlas sprites) that
-// sway in the wind, a shadow caster for each so the dungeon's lights throw their shadows, and the pixies: glows with wing cards that also light the ground.
-// The grass carpet and the stone floor are not here (the floor stays stone until #330). Layout and paths are the 2D view's (covemath.ts,
+// The nymph's cove in the 3D dungeon (#306, #329, #330): the willow and the bushes as grown 3D trees that sway in the wind, a shadow
+// caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer (and, until it
+// replaces them, atlas sprites), and the pixies: glows with wing cards that also light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts,
 // pixieMath.ts), so both views agree.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { LIGHT_KIND } from '../generated/defs';
@@ -10,6 +10,7 @@ import type { Cam } from './camera';
 import { pushCard, pushGlow, type CardBuf, type GlowBuf } from './cards';
 import type { Cand, ShadowCaster } from './lights';
 import type { PlantPlace, PlantSprite } from './plants';
+import type { BushelSpot } from './cover/source';
 import { hiddenAt, type SightMask } from './sightmask';
 import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { SWAY } from './wind';
@@ -140,11 +141,20 @@ function coveOrbit(w: { spec: TreeSpec; built: BuiltTree; reach: number }): (i: 
   };
 }
 
+/** How many bushels a tuft (3..5) or a fern (2..3) grows, from a hash of its seed (*first guess*). */
+function bushelCount(seed: number, fern: boolean): number {
+  let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
+  const u = (h >>> 0) / 4294967296;
+  return fern ? 2 + Math.floor(u * 2) : 3 + Math.floor(u * 3);
+}
+
 interface SmallPlant { place: PlantPlace; sprite: PlantSprite; bush: boolean }
 
 export class Cove3d {
-  /** Every small plant in the order of `placeCovePlants`: bushes, tufts and ferns (all cast; the bushes are 3D, the rest atlas sprites). */
+  /** Every small plant in the order of `placeCovePlants`: bushes, tufts and ferns (the bushes are 3D and cast; the rest are bushel spots and atlas sprites). */
   private readonly small: SmallPlant[] = [];
+  private readonly spots: BushelSpot[] = [];
   private readonly willow: { spec: TreeSpec; built: BuiltTree; reach: number };
   private readonly pixies: Pixies3d;
   private readonly bushSpecs: TreeSpec[] = [];
@@ -159,6 +169,7 @@ export class Cove3d {
       const x = (origin.x + p.x) / TILE, z = (origin.y + p.y) / TILE, bush = p.frame.startsWith('cove_bush');
       this.small.push({ place: { x, z, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } }, bush });
       // A bush's width is 32 px at scale 100.
+      if (!bush) this.spots.push({ x, z, fern: p.frame === 'cove_fern', count: bushelCount(c.seed + i + 1, p.frame === 'cove_fern') });
       if (bush) this.bushSpecs.push({ form: 'bush', x, z, seed: c.seed + i + 1, scalePct: (r.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
     });
     this.pixies = new Pixies3d({ x: foot.x, y: foot.y - CANOPY_UP }, foot.y, PIXIE_COUNT, c.seed, CANOPY_UP, coveOrbit(this.willow));
@@ -180,21 +191,27 @@ export class Cove3d {
     return this.bushSpecs;
   }
 
-  /** The tufts and ferns as atlas sprites with their places. */
+  /** The tufts and ferns as bushel spots for the cover layer: a spot at each one's foot. */
+  bushelSpots(): BushelSpot[] {
+    return this.spots;
+  }
+
+  /** The tufts and ferns as atlas sprites with their places (until the cover layer draws them as bushels). */
   plants(): { place: PlantPlace; sprite: PlantSprite }[] {
     return this.small.filter((s) => !s.bush);
   }
 
   /**
    * The casters for the lights' shadows: the willow first (id `CAST_ID0`; the atlas tree picture above its foot, as wide as its reach and as
-   * tall as it is: a stand-in), then one per small plant (its card above its foot). Their ids count down from `CAST_ID0 - 1`.
+   * tall as it is: a stand-in), then one per bush (its card above its foot; the tufts and ferns cast nothing). A bush's id is `CAST_ID0 - 1 - i` for its place `i` among the small plants.
    */
   casters(): ShadowCaster[] {
     const out: ShadowCaster[] = [];
     const tree = this.frames.cove_tree;
     const { spec, built } = this.willow;
     if (tree) out.push({ id: CAST_ID0, x: spec.x, z: spec.z, w: 2 * built.radius, y0: 0, y1: built.height, u0: tree.x, v0: tree.y, u1: tree.x + tree.w, v1: tree.y + COVE_TREE_FOOT.y });
-    this.small.forEach(({ place, sprite }, i) => {
+    this.small.forEach(({ place, sprite, bush }, i) => {
+      if (!bush) return;
       const { rect, foot } = sprite;
       out.push({
         id: CAST_ID0 - 1 - i, x: place.x, z: place.z, w: rect.w / TILE, y0: 0, y1: foot.y / TILE,

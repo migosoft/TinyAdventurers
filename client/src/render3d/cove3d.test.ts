@@ -155,9 +155,27 @@ describe('Cove3d', () => {
     expect(chunks.reduce((n, k) => n + k.n, 0)).toBe(c.plants().length * 6);
   });
 
-  it('casts the willow with CAST_ID0 sized to it, and each small plant with ids counting down from CAST_ID0 - 1', () => {
+  it('hands a bushel spot to every tuft and fern and none to a bush', () => {
+    const tufts = small.filter((p) => !p.frame.startsWith('cove_bush'));
+    const { origin } = coveLayout(cove);
+    const spots = c.bushelSpots();
+    expect(spots).toHaveLength(tufts.length);
+    spots.forEach((s, i) => {
+      const p = tufts[i];
+      expect(s.x).toBeCloseTo((origin.x + p.x) / 16, 9);
+      expect(s.z).toBeCloseTo((origin.y + p.y) / 16, 9);
+      expect(s.fern).toBe(p.frame === 'cove_fern');
+      expect(s.count).toBeGreaterThanOrEqual(s.fern ? 2 : 3);
+      expect(s.count).toBeLessThanOrEqual(s.fern ? 3 : 5);
+    });
+    expect(spots.some((s) => s.fern)).toBe(true);
+    expect(spots.some((s) => !s.fern)).toBe(true);
+    expect(new Cove3d(cove, frames).bushelSpots()).toEqual(spots);
+  });
+
+  it('casts the willow with CAST_ID0 sized to it and one caster per bush, each keeping its id from the plant order', () => {
     const k = c.casters();
-    expect(k).toHaveLength(1 + small.length);
+    expect(k).toHaveLength(1 + c.bushes().length);
     const built = buildTree(c.tree());
     expect(k[0].id).toBe(CAST_ID0);
     expect(k[0].w).toBeCloseTo(2 * built.radius, 6);
@@ -165,7 +183,8 @@ describe('Cove3d', () => {
     expect(k[0].x).toBeCloseTo(c.tree().x, 6);
     expect(k[0].z).toBeCloseTo(c.tree().z, 6);
     expect(k[0].u1 - k[0].u0).toBe(frames.cove_tree.w);
-    k.slice(1).forEach((e, i) => expect(e.id).toBe(CAST_ID0 - 1 - i));
+    const bushIds = small.map((p, i) => ({ p, i })).filter(({ p }) => p.frame.startsWith('cove_bush')).map(({ i }) => CAST_ID0 - 1 - i);
+    expect(k.slice(1).map((e) => e.id)).toEqual(bushIds);
     expect(new Set(k.map((e) => e.id)).size).toBe(k.length);
     for (const e of k) {
       expect(e.id).toBeLessThan(0);
