@@ -70,18 +70,23 @@ const look = uniformArray(COVER_KINDS.map((k) => new Vector4(k.sway, k.footShade
 const tones = uniformArray(COVER_KINDS.flatMap((k) => (k.bushels?.tones ?? [[1, 1, 1], [1, 1, 1], [1, 1, 1]]).map(([r, g, b]) => new Vector4(r, g, b, 0))), 'vec4');
 const bushelSway = uniformArray(COVER_KINDS.map((k) => new Vector4(k.bushels?.sway ?? 0, 0, 0, 0)), 'vec4');
 
+/** A kind id (a float node, maybe a varying that interpolated to 0.99999994) as a table index: rounded, never truncated. */
+export function kindSlot(id: N): N {
+  return int(floor(id.add(0.5)));
+}
+
 /** The kind table at `id` (a float node): (sway at the top sheet in tiles, foot shade, ground darkening, max height in px). */
 export function kindLook(id: N): { sway: N; footShade: N; darken: N; maxH: N } {
-  const e: N = look.element(int(id));
+  const e: N = look.element(kindSlot(id));
   return { sway: e.x, footShade: e.y, darken: e.z, maxH: max(e.w, 1) };
 }
 
 /** Tone `n` (0..2) of the kind's bushels, and the bushel sway amplitude (tiles at the card's top). */
 export function bushelTone(id: N, n: N): N {
-  const e: N = tones.element(int(id).mul(3).add(int(n)));
+  const e: N = tones.element(kindSlot(id).mul(3).add(int(n)));
   return e.xyz;
 }
 export function bushelSwayOf(id: N): N {
-  const e: N = bushelSway.element(int(id));
+  const e: N = bushelSway.element(kindSlot(id));
   return e.x;
 }

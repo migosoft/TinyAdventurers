@@ -38,7 +38,7 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       const m = plantCardMaterial(t, 1024, 1024, l, viewTowardUniform(), makeSight(), seeUniforms(), mask, makePlantShared());
       const code = fragment(B, m);
       expect(code).toContain('sightMode');
-      expect(code).not.toContain('43758');
+      expect(code).not.toContain('311.7');
     });
 
     it('the card samples the page, the sight mask and the see-through mask at the top level, once each', () => {

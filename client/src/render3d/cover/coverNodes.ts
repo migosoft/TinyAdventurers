@@ -2,11 +2,12 @@
 // and the bushel cards (camera-facing, blades made in the shader). The ground's darkening and the falling leaf read the cover through
 // coverRead.ts. Geometry: coverMesh.ts (sheets: `position`, `layer`; bushels: `position` = the foot, `corner`, `info`).
 import { DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
-import { Fn, attribute, dot, float, floor, fract, max, min, mix, positionGeometry, select, sin, step, varying, vec3, vec4 } from 'three/tsl';
+import { Fn, attribute, float, floor, max, min, mix, positionGeometry, select, step, varying, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { CARD_BIAS, bayerAt, cardSunAt, type ViewToward } from '../materials';
 import { swayNode } from '../windNodes';
+import { hash3 } from '../noiseNodes';
 import { GH_MAX } from './kinds';
 import { bushelSwayOf, bushelTone, coverTexel, kindLook, type CoverShared } from './coverRead';
 
@@ -20,8 +21,6 @@ type N = any;
 /** The floor's sun wrap (materials.ts: floor and ground 0.35). */
 const FLOOR_WRAP = 0.35;
 
-// Not the sun's and the trees' hash (43758...): the cover materials of a world without a sun carry none of the sun's code.
-const hash3 = (c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(24634.6345));
 
 /**
  * The sheets: `layer` (1..) is the sheet's number, `position` its cell corner at y 0. A sheet keeps the art pixels whose cover is at least
@@ -81,7 +80,7 @@ export function bushelMaterial(o: { lighting: Lighting; sight: Sight; toward: Vi
   m.colorNode = Fn(() => {
     const px: N = min(floor(corner.x.mul(w)), w.sub(1)), py: N = min(floor(corner.y.mul(h)), h.sub(1));
     // The whole bushel leans a little (ferns more); a pixel column has a height of its own, and a blade or a gap.
-    const col: N = px.sub(floor(py.mul(hash3(vec3(seed, 1, 2)).sub(0.5).mul(0.7).mul(fern.add(1)))));
+    const col: N = px.sub(floor(py.mul(hash3(vec3(seed, 1, 2)).sub(0.5).mul(0.7).mul(fern.add(1))))); // ferns lean twice as much: first guess
     const bh: N = h.mul(hash3(vec3(col, seed, 3)).mul(0.6).add(0.4));
     const blade = hash3(vec3(col, seed, 4)).greaterThan(0.3).and(py.lessThan(bh));
     const lvl = step(0.55, py.div(bh)).add(step(0.6, hash3(vec3(col, seed, 5)))); // tone 0..2

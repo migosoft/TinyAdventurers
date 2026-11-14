@@ -8,6 +8,7 @@ import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
+import { hash3 } from '../noiseNodes';
 import { coverHeightNode, type CoverShared } from '../cover/coverRead';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
@@ -64,7 +65,6 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
   }
 }
 
-const hash3 = (c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
 
 /**
  * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,

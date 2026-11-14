@@ -81,12 +81,17 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       }
     });
 
+    it('the sun marker (the sun\'s own jitter constant 311.7) is in the code of a world with a sun', () => {
+      const m = build(real(true));
+      for (const [name, mat] of [['sheet', m.sheet], ['bushel', m.bushel]] as const) expect(fragment(B, mat, { compare: true }), name).toContain('311.7');
+    });
+
     it('carry no sun code in a world without a sun', () => {
       const m = build(real(false));
       for (const [name, mat] of [['sheet', m.sheet], ['bushel', m.bushel]] as const) {
         const code = fragment(B, mat, { compare: true });
         expect(code, name).not.toMatch(wgsl ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/);
-        expect(code, name).not.toContain('43758');
+        expect(code, name).not.toContain('311.7');
       }
     });
 
@@ -138,4 +143,13 @@ describe('makeCoverShared', () => {
     s.setTexture(next);
     expect(s.texture.value).toBe(next);
   });
+});
+
+describe('kind ids index the tables rounded', () => {
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: the bushel vertex shader adds 0.5 and floors the id before indexing`, () => {
+      const code = vertex(B, build(stub()).bushel);
+      expect(code).toMatch(/floor\(\s*\(?\s*[\w.]*bushelKind\w*\s*\+\s*0\.5\s*\)?\s*\)/);
+    });
+  }
 });
