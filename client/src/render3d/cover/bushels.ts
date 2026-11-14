@@ -26,22 +26,37 @@ export function placeBushels(
     out.push({ x, z, w: bw, h: bh, seed: sd, fern });
   };
 
-  // Area in tiles² of thick cover (height >= 2), each px weighted by the density at its tile.
-  let area = 0;
-  for (let py = 0; py < h; py++) {
-    const tz = Math.floor(py / TILE_PX);
-    for (let px = 0; px < w; px++) if (heights[py * w + px] >= 2) area += density(Math.floor(px / TILE_PX), tz);
+  // Tiles that hold thick cover (height >= 2), each weighted by its thick px count times the density there
+  // (called once per tile). The weights give the cluster count (area in tiles²) and where the centres go.
+  const tilesW = Math.ceil(w / TILE_PX), tilesH = Math.ceil(h / TILE_PX);
+  const tileX: number[] = [], tileZ: number[] = [], cum: number[] = [];
+  let total = 0;
+  for (let tz = 0; tz < tilesH; tz++) for (let tx = 0; tx < tilesW; tx++) {
+    let n = 0;
+    for (let py = tz * TILE_PX; py < Math.min(h, (tz + 1) * TILE_PX); py++)
+      for (let px = tx * TILE_PX; px < Math.min(w, (tx + 1) * TILE_PX); px++) if (heights[py * w + px] >= 2) n++;
+    if (n === 0) continue;
+    const weight = n * density(tx, tz);
+    if (!(weight > 0)) continue;
+    total += weight; tileX.push(tx); tileZ.push(tz); cum.push(total);
   }
-  area /= TILE_PX * TILE_PX;
 
-  const clusters = Math.round(area / look.perArea);
+  const clusters = Math.round(total / (TILE_PX * TILE_PX) / look.perArea);
   for (let c = 0; c < clusters; c++) {
+    // The tile by weighted choice (binary search over the cumulative weights), then a thick px inside it.
+    const r = rnd() * total;
+    let lo = 0, hi = cum.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] > r) hi = mid; else lo = mid + 1; }
+    const x0 = tileX[lo] * TILE_PX, y0 = tileZ[lo] * TILE_PX, tw = Math.min(TILE_PX, w - x0), th = Math.min(TILE_PX, h - y0);
     let px = -1, py = -1;
-    for (let t = 0; t < 20; t++) {
-      const x = Math.floor(rnd() * w), y = Math.floor(rnd() * h);
-      if (heights[y * w + x] >= 2) { px = x; py = y; break; }
+    for (let t = 0; t < 20 && px < 0; t++) {
+      const x = x0 + Math.floor(rnd() * tw), y = y0 + Math.floor(rnd() * th);
+      if (heights[y * w + x] >= 2) { px = x; py = y; }
     }
-    if (px < 0) continue;
+    for (let i = 0; i < tw * th && px < 0; i++) { // a sparse tile: the first thick px
+      const x = x0 + (i % tw), y = y0 + Math.floor(i / tw);
+      if (heights[y * w + x] >= 2) { px = x; py = y; }
+    }
     const n = range(look.cluster);
     for (let i = 0; i < n; i++) add((px + 0.5) / TILE_PX, (py + 0.5) / TILE_PX, 1.2, 0.9, false);
   }

@@ -45,6 +45,13 @@ describe('placeBushels', () => {
     expect(two).toBeGreaterThan(one * 1.7);
     expect(two).toBeLessThan(one * 2.3);
   });
+  it('stands about four times as many on tiles of density 4 as on tiles of density 1', () => {
+    const list = placeBushels(full, W, H, look, 5, (tx) => (tx < 20 ? 4 : 1));
+    const dense = list.filter((b) => b.x < 20).length, thin = list.length - dense;
+    expect(thin).toBeGreaterThan(0);
+    expect(dense / thin).toBeGreaterThan(2.5);
+    expect(dense / thin).toBeLessThan(6);
+  });
   it('is deterministic', () => {
     expect(placeBushels(full, W, H, look, 9)).toEqual(placeBushels(full, W, H, look, 9));
     expect(placeBushels(full, W, H, look, 9)).not.toEqual(placeBushels(full, W, H, look, 10));
@@ -53,10 +60,11 @@ describe('placeBushels', () => {
     const none = field(() => 0);
     const grass: BushelSpot = { x: 10, z: 10, fern: false, count: 4 };
     const fern: BushelSpot = { x: 20, z: 15, fern: true, count: 5 };
-    const list = placeBushels(none.fill(4), W, H, look, 2, undefined, [grass, fern]);
-    // spots add to the clusters, so count the ones near each spot
-    const near = (s: BushelSpot) => list.filter((b) => Math.abs(b.x - s.x) <= 5 / 16 && Math.abs(b.z - s.z) <= 5 / 16);
-    expect(near(grass).length).toBeGreaterThanOrEqual(4);
+    const noClusters = { ...look, perArea: 1e9 }; // no cluster is placed: only the spots yield bushels
+    const list = placeBushels(none.fill(4), W, H, noClusters, 2, undefined, [grass, fern]);
+    const near = (s: BushelSpot) => list.filter((b) => Math.abs(b.x - s.x) <= 5 / 16 + 1e-9 && Math.abs(b.z - s.z) <= 5 / 16 + 1e-9);
+    expect(near(grass).length).toBe(4);
+    expect(list.length).toBe(9);
     const ferns = list.filter((b) => b.fern);
     expect(ferns.length).toBe(5);
     for (const b of ferns) {
