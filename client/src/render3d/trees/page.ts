@@ -23,7 +23,7 @@ const DBG = Number(new URLSearchParams(location.search).get('dbg') ?? 0); // tim
 const SM = 2048;
 const WIND: [number, number] = [0.98, 0.2];
 
-interface Params { grass: boolean; tall: boolean; gh: number; storm: number; flash: boolean; tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
+interface Params { grass: boolean; tall: boolean; gh: number; storm: number; flash: boolean; tree: 'recipe' | 'grown'; leaf: number; tint: number; bark: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
 
 function readParams(search: string): Params {
   const q = new URLSearchParams(search), num = (k: string, d: number) => { const v = Number(q.get(k)); return q.has(k) && Number.isFinite(v) ? v : d; };
@@ -32,6 +32,7 @@ function readParams(search: string): Params {
     grass: on('grass', true), tall: on('tall', true), gh: Math.min(3, Math.max(0.25, num('gh', 1))),
     storm: Math.min(100, Math.max(0, num('storm', 0))), flash: on('flash', false),
     tree: q.get('tree') === 'recipe' ? 'recipe' : 'grown', leaf: Math.min(100, Math.max(0, num('leaf', 100))),
+    tint: Math.min(100, Math.max(0, num('tint', 20))), bark: Math.min(100, Math.max(0, num('bark', 25))), // how far the plants differ in colour: 20 is the leaves' first guess (light within 7 %, warm-cool within 8 %), 100 five times that; bark 100 is light within 20 % and grey-brown within 40 %
     leaves: on('leaves', true), crown: q.get('crown') === 'balls' ? 'balls' : 'tufts',
     hour: Math.min(23, Math.max(4.5, num('hour', 8.25))), yaw: num('yaw', 0), mode: q.get('mode') === 'cards' ? 'cards' : '3d',
     stretch: on('stretch', true), wind: on('wind', true), snap: on('snap', false), shadows: on('shadows', true), outline: on('outline', false), // the user's picks (2026-11-13): smooth sway, no outline pass, 2 px per art px
@@ -149,7 +150,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- uniforms
   const u = {
     sun: uniform(new Vector3(0, 1, 0)), sunCol: uniform(new Vector3(1, 1, 1)), amb: uniform(new Vector3(0.3, 0.3, 0.3)),
-    time: uniform(0), grass: uniform(1), grassH: uniform(1), windT: uniform(0), storm: uniform(0), camT: uniform(new Vector3()), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
+    time: uniform(0), grass: uniform(1), grassH: uniform(1), windT: uniform(0), storm: uniform(0), camT: uniform(new Vector3()), leaf: uniform(1), tint: uniform(1), bark: uniform(0.25), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
     camR: uniform(new Vector3(1, 0, 0)), camU: uniform(new Vector3(0, 1, 0)), camV: uniform(new Vector3(0, 0, 1)),
     sunR: uniform(new Vector3(1, 0, 0)), sunU: uniform(new Vector3(0, 0, 1)), sunF: uniform(new Vector3(0, -1, 0)), sunRh: uniform(new Vector3(1, 0, 0)),
     sunC: uniform(new Vector3()), sunExt: uniform(new Vector2(1, 1)), sunNF: uniform(new Vector2(0, 1)),
@@ -238,9 +239,13 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const grade = u.amb.add(u.sunCol.mul(0.75));
     // in shadow the colour takes the sky's light, not the sun's
     // every plant's leaves differ a little: a touch lighter or darker, a touch warmer or cooler (the user, 2026-11-14). From the foot, so no extra data.
-    const bright = hash3((vec3 as N)(aSway.x, aSway.y, 1)).sub(0.5).mul(0.14).add(1).add(select(isTuft, aPart.w, float(0))), warm = hash3((vec3 as N)(aSway.x, aSway.y, 2)).sub(0.5).mul(0.16).add(select(isTuft, aPart.z, float(0))); // a tuft may carry its own shift (the willow's yellow-green)
+    const bright = hash3((vec3 as N)(aSway.x, aSway.y, 1)).sub(0.5).mul(0.14).mul(u.tint).add(1).add(select(isTuft, aPart.w, float(0))), warm = hash3((vec3 as N)(aSway.x, aSway.y, 2)).sub(0.5).mul(0.16).mul(u.tint).add(select(isTuft, aPart.z, float(0))); // a tuft may carry its own shift (the willow's yellow-green)
     const tint = select(isBark, vec3(1, 1, 1), (vec3 as N)(bright.mul(warm.add(1)), bright, bright.mul(float(1).sub(warm))));
-    const stepped = texture(palTex, vec2(level.add(0.5).div(5), aPart.x.add(0.5).div(4))).rgb.mul(tint).mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), grade));
+    // the bark differs too, only slightly (the user, 2026-11-14): a touch lighter or darker, a touch greyer or browner
+    const palCol: N = texture(palTex, vec2(level.add(0.5).div(5), aPart.x.add(0.5).div(4))).rgb;
+    const barkGrey = hash3((vec3 as N)(aSway.x, aSway.y, 4)).sub(0.5).mul(0.8).mul(u.bark), barkLight = hash3((vec3 as N)(aSway.x, aSway.y, 3)).sub(0.5).mul(0.4).mul(u.bark).add(1);
+    const barkCol = mix(palCol, (vec3 as N)(dot(palCol, vec3(0.3, 0.59, 0.11))), barkGrey).mul(barkLight);
+    const stepped = select(isBark, barkCol, palCol).mul(tint).mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), grade));
     // "plain": one flat colour per ramp, lit by the environment light alone, as the ground is
     const flat = texture(palTex, vec2(2.5 / 5, aPart.x.add(0.5).div(4))).rgb;
     const plainLit = u.amb.add(u.sunCol.mul(vis).mul(clamp(dot(nw, u.sun).add(0.35).div(1.35), 0, 1)).mul(1.3));
@@ -602,6 +607,14 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   leafL.appendChild(leafI);
   const leafText = leafL.firstChild as Text;
   leafI.addEventListener('input', () => { p.leaf = Number(leafI.value); changed(); });
+  const slider = (key: 'tint' | 'bark', text: () => string): void => {
+    const l = row(''), i = document.createElement('input'); i.type = 'range'; i.min = '0'; i.max = '100'; i.step = '1'; i.style.width = '150px';
+    l.appendChild(i);
+    i.addEventListener('input', () => { p[key] = Number(i.value); changed(); });
+    syncs.push(() => { i.value = String(p[key]); (l.firstChild as Text).textContent = text(); });
+  };
+  slider('tint', () => `Leaf tints ${p.tint} (light ±${(p.tint * 0.35).toFixed(0)}%, warm ±${(p.tint * 0.4).toFixed(0)}%)`);
+  slider('bark', () => `Bark ${p.bark} (light ±${(p.bark * 0.2).toFixed(0)}%, grey ±${(p.bark * 0.4).toFixed(0)}%)`);
   choice<'balls' | 'tufts'>('Crowns (B)', [['Leaf balls', 'balls'], ['Leaf tufts', 'tufts']], () => p.crown, (v) => { p.crown = v; });
   choice('Turn (Z / C)', [0, 45, 90, 135, 180, -135, -90, -45].map((d) => [`${d}°`, d] as [string, number]), () => p.yaw, (v) => { p.yaw = v; cam.yawTo = (v * Math.PI) / 180; });
   check('3D grass layer (H)', 'grass');
@@ -626,6 +639,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.wind.value = p.wind ? 1 : 0; u.snap.value = p.snap ? 1 : 0; u.shadows.value = p.shadows ? 1 : 0; u.outline.value = p.outline ? 1 : 0; u.plain.value = p.plain ? 1 : 0;
     u.stretch.value = p.stretch ? 1 / Math.cos(PITCH) : 1;
     for (const v of variants) v.shown.visible = v.cast.visible = p.mode === '3d' && v.key === `${p.tree}:${p.crown}`;
+    u.tint.value = p.tint / 20; u.bark.value = p.bark / 100;
     u.leaf.value = p.leaf / 100; leafI.value = String(p.leaf); leafText.textContent = `Leaves ${p.leaf}%`;
     plantMesh.visible = trunkShadow.visible = discShadow.visible = p.mode === 'cards';
     hourText.textContent = `Time ${clock(p.hour)}`; hourI.value = String(p.hour);
@@ -633,7 +647,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     bakeAt = performance.now() + 150;
     u.storm.value = p.storm / 100; stormI.value = String(p.storm); stormText.textContent = `Storm ${p.storm}%`;
     const q = new URLSearchParams(location.search);
-    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('storm', String(p.storm)); q.set('leaf', String(p.leaf));
+    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('storm', String(p.storm)); q.set('leaf', String(p.leaf)); q.set('tint', String(p.tint)); q.set('bark', String(p.bark));
     q.set('gh', String(p.gh));
     for (const k of ['grass', 'tall', 'stretch', 'wind', 'snap', 'shadows', 'outline', 'plain', 'leaves'] as const) q.set(k, p[k] ? '1' : '0');
     q.set('res', String(p.res)); q.set('zoom', String(p.zoom));
