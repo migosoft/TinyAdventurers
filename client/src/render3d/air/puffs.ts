@@ -18,6 +18,11 @@ export const EMBER_SIZE0 = PX;
 export const EMBER_SIZE1 = 0.6 * PX;
 /** A blast's burst starts this high (tiles; first guess). */
 export const BLAST_Y = 0.5;
+/** A blast's embers leap up at BLAST_LEAP0 + up to BLAST_LEAP tiles/s (first guess). */
+const BLAST_LEAP0 = 10 * PX;
+const BLAST_LEAP = 25 * PX;
+/** Torch smoke starts up to this far above the flame's top (tiles; 2D: 1.5 px). */
+const SMOKE_JITTER_Y = 1.5 * PX;
 /** A blast throws this many embers, once. */
 const BLAST_EMBERS = 18;
 /** Seconds between a fire shot's embers. */
@@ -41,6 +46,9 @@ interface Puff {
   /** Torch smoke: the floor tile whose sight it needs and the air it takes (tx < 0: none), and how visible it is now (0..1, eases). */
   tx: number;
   tz: number;
+  /** The torch's wall normal (the axis toward the wall is the one clamped when sampling). */
+  nx: number;
+  nz: number;
   vis: number;
 }
 
@@ -49,7 +57,7 @@ class Pool {
   items: Puff[] = [];
   n = 0;
   add(): Puff {
-    return (this.items[this.n++] ??= { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, s0: 0, s1: 0, a: 0, sway: 0, rgb: 0, tx: -1, tz: -1, vis: 1 });
+    return (this.items[this.n++] ??= { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, s0: 0, s1: 0, a: 0, sway: 0, rgb: 0, tx: -1, tz: -1, nx: 0, nz: 0, vis: 1 });
   }
   remove(i: number): void {
     const p = this.items[i];
@@ -120,13 +128,13 @@ export class Puffs {
     p.vis = 1;
   }
 
-  private puff(x: number, y: number, z: number, vx: number, vy: number, vz: number, max: number, s1: number, a: number, sway: number, rgb: number, s0: number, tx = -1, tz = -1): void {
+  private puff(x: number, y: number, z: number, vx: number, vy: number, vz: number, max: number, s1: number, a: number, sway: number, rgb: number, s0: number, tx = -1, tz = -1, nx = 0, nz = 0): void {
     const p = this.smoke.add();
     p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
     p.life = p.max = max;
     // The 2D texture is 32 px: a scale `s` is a diameter of 2 s tiles.
     p.s0 = 2 * s0; p.s1 = 2 * s1; p.a = a; p.sway = sway; p.rgb = rgb;
-    p.tx = tx; p.tz = tz; p.vis = 1;
+    p.tx = tx; p.tz = tz; p.nx = nx; p.nz = nz; p.vis = 1;
   }
 
   /** Fire shots trail embers; a blast throws a burst once, when it first shows. */
@@ -160,7 +168,7 @@ export class Puffs {
         const a = c.rng() * Math.PI * 2;
         const v = rnd(c, 20, 50) * PX;
         // The 2D burst is a ring in the screen plane; here it is a ring on the floor that also leaps up (first guess).
-        this.ember(m.x * PX, BLAST_Y, m.y * PX, Math.cos(a) * v, 10 * PX + rnd(c, 0, 25) * PX, Math.sin(a) * v, rnd(c, 0.6, 1.4));
+        this.ember(m.x * PX, BLAST_Y, m.y * PX, Math.cos(a) * v, BLAST_LEAP0 + rnd(c, 0, BLAST_LEAP), Math.sin(a) * v, rnd(c, 0.6, 1.4));
       }
     }
   }
@@ -171,7 +179,8 @@ export class Puffs {
     const stamp = ++this.stamp;
     for (const tr of torches) {
       if (!inView(c, tr.x, tr.z)) continue;
-      const key = tr.tx + tr.tz * c.map.w;
+      // Keyed by the flame's position (mood.ts): two torches on one floor tile (a corner) keep their own gusts.
+      const key = Math.round(tr.x / PX) * 65536 + Math.round(tr.z / PX);
       let g = this.gusts.get(key);
       if (!g) this.gusts.set(key, (g = { burst: false, left: c.rng() * 1.5, next: 0, soot: 0, stamp }));
       g.stamp = stamp;
@@ -191,9 +200,9 @@ export class Puffs {
       if (hidden(c, tr.tx + 0.5, tr.tz + 0.5)) continue;
       const soot = c.rng() < g.soot;
       this.puff(
-        tr.x + tr.nx * SMOKE_STAND + (c.rng() - 0.5) * 2 * PX, TORCH_MID + SMOKE_LIFT + (c.rng() - 0.5) * PX, tr.z + tr.nz * SMOKE_STAND,
+        tr.x + tr.nx * SMOKE_STAND + (c.rng() - 0.5) * 2 * PX, TORCH_MID + SMOKE_LIFT + c.rng() * SMOKE_JITTER_Y, tr.z + tr.nz * SMOKE_STAND,
         (c.rng() - 0.5) * 3 * PX, rnd(c, 8, 15) * PX, (c.rng() - 0.5) * 3 * PX,
-        rnd(c, 2.4, 4), soot ? rnd(c, 0.8, 1.2) : rnd(c, 0.6, 1), soot ? 0.34 : 0.26, rnd(c, 3, 6) * PX, soot ? SOOT : SMOKE_GREY, 0.3, tr.tx, tr.tz,
+        rnd(c, 2.4, 4), soot ? rnd(c, 0.8, 1.2) : rnd(c, 0.6, 1), soot ? 0.34 : 0.26, rnd(c, 3, 6) * PX, soot ? SOOT : SMOKE_GREY, 0.3, tr.tx, tr.tz, tr.nx, tr.nz,
       );
     }
     for (const [k, g] of this.gusts) if (g.stamp !== stamp) this.gusts.delete(k);
@@ -235,8 +244,9 @@ export class Puffs {
       p.z += p.vz * dt;
       if (c.windOn) {
         // A wall-face torch's flame sits on the wall's edge, where the air is 0: sample inside its floor tile.
-        const sx = p.tx >= 0 ? clamp(p.x, p.tx + 0.01, p.tx + 0.99) : p.x;
-        const sz = p.tz >= 0 ? clamp(p.z, p.tz + 0.01, p.tz + 0.99) : p.z;
+        // Only the wall-ward axis is clamped (mood.ts); the sample follows the puff along the wall.
+        const sx = p.tx >= 0 && p.nx !== 0 ? clamp(p.x, p.tx + 0.01, p.tx + 0.99) : p.x;
+        const sz = p.tz >= 0 && p.nz !== 0 ? clamp(p.z, p.tz + 0.01, p.tz + 0.99) : p.z;
         const w = airAt(c, sx, sz);
         p.x += w[0] * share * dt;
         p.z += w[1] * share * dt;

@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { reachesPhaser, read, specifiers, SRC } from '../testutil/importWalk';
 
 const listTs = (d: string) => readdirSync(join(SRC, d)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
-const render3d = listTs('render3d').map((f) => `render3d/${f}`);
+/** Every non-test .ts file under `d` (relative to src), subdirectories included. */
+const walkTs = (d: string): string[] =>
+  readdirSync(join(SRC, d), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walkTs(`${d}/${e.name}`) : e.name.endsWith('.ts') && !e.name.endsWith('.test.ts') && !e.name.endsWith('.testutil.ts') ? [`${d}/${e.name}`] : [],
+  );
+const render3d = walkTs('render3d');
 const run = listTs('run').map((f) => `run/${f}`);
 
 const bare = (f: string) => specifiers(read(f)).filter((s) => !s.startsWith('.'));

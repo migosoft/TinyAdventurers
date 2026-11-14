@@ -26,6 +26,10 @@ const LIFE0 = 6;
 const LIFE1 = 12;
 /** Floating up, tiles/s^2 (2D: 0.3 px/s^2). */
 const FLOAT = 0.3 * PX;
+/** With the wind off a cloud's height wanders by this much speed per second (tiles/s^2) within +-DUST_WANDER_Y (first guess). */
+const DUST_WANDER_Y = 2 * PX;
+/** Loose motes sink no lower than this (tiles; first guess). */
+const MOTE_FLOOR = 0.05;
 /** How fast (1/s) a drifting cloud and a loose mote follow the air, and the drag on a loose mote (1/s). */
 const CLOUD_FOLLOW = 2;
 const MOTE_FOLLOW = 6;
@@ -124,7 +128,7 @@ export class Dust {
       } else {
         cl.vx = clamp(cl.vx + (c.rng() - 0.5) * 4 * PX * dt, -2.5 * PX, 2.5 * PX);
         cl.vz = clamp(cl.vz + (c.rng() - 0.5) * 4 * PX * dt, -2.5 * PX, 2.5 * PX);
-        cl.vy = clamp(cl.vy + (c.rng() - 0.5) * 2 * PX * dt + FLOAT * dt, -2.5 * PX, 2 * PX);
+        cl.vy = clamp(cl.vy + (c.rng() - 0.5) * DUST_WANDER_Y * dt + FLOAT * dt, -2.5 * PX, 2 * PX);
       }
       cl.x += (cl.vx + dx) * dt;
       cl.y = clamp(cl.y + cl.vy * dt, DUST_Y0, DUST_TOP);
@@ -253,7 +257,7 @@ export class Dust {
       m.vz = (m.vz + (w[1] - m.vz) * k) * drag;
       m.vy *= drag;
       m.wx += (m.vx + dx) * dt;
-      m.wy = clamp(m.wy + m.vy * dt, 0.05, DUST_TOP);
+      m.wy = clamp(m.wy + m.vy * dt, MOTE_FLOOR, DUST_TOP);
       m.wz += (m.vz + dz) * dt;
       this.put(out, m.wx, m.wy, m.wz, m.a0 * (m.left / m.total));
     }

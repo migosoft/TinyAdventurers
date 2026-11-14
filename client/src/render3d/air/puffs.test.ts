@@ -33,6 +33,27 @@ describe('smoke', () => {
     expect(parts.puffs.sight[1]).toBeCloseTo(10.5, 6);
   });
 
+  it('keeps a gust per torch: two torches on one floor tile both smoke', () => {
+    const north: Torch = { x: 10.5, z: 10, nx: 0, nz: 1, lit: true, tx: 10, tz: 10 };
+    const west: Torch = { x: 10, z: 10.5, nx: 1, nz: 0, lit: true, tx: 10, tz: 10 };
+    const air = new Air3d(floorMap(), seeded(11));
+    let a = 0, b = 0;
+    for (let i = 0; i < 200; i++) {
+      const p = air.step(frame({ t: i * 0.05, torches: [north, west] }));
+      if (i < 20) continue;
+      // Young puffs sit at their flame: count those within a tile of each (they start 0.15 in front of their wall).
+      for (let k = 0; k < p.puffs.count; k++) {
+        const y = p.puffs.pos[k * 3 + 1];
+        if (y > TORCH_MID + 0.6) continue;
+        const x = p.puffs.pos[k * 3], z = p.puffs.pos[k * 3 + 2];
+        if (Math.abs(x - 10.5) < 0.2 && Math.abs(z - 10.15) < 0.2) a++;
+        if (Math.abs(x - 10.15) < 0.2 && Math.abs(z - 10.5) < 0.2) b++;
+      }
+    }
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(0);
+  });
+
   it('makes none from an unlit torch', () => {
     const air = new Air3d(floorMap(), seeded(2));
     run(air, 10, (t) => frame({ t, torches: [torch(10, 10, false)] }));

@@ -13,6 +13,8 @@ export const DRIP_TOP = 3;
 export const WATER_Y = 0.01;
 /** The drop's width in tiles (1 art px); the splash pixels are the same. */
 export const DROP_SIZE = PX;
+/** The drops' and splash pixels' colour (the 2D 0xd8ecff); the renderer tints them with it. */
+export const DROP_RGB = 0xd8ecff;
 export const DROP_ALPHA = 0.85;
 export const SPLASH_ALPHA = 0.8;
 export const RING_ALPHA = 0.7;
