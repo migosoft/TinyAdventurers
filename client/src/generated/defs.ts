@@ -1347,6 +1347,10 @@ export const EFFECT_LOOK = {
   "Vines": 1
 } as const;
 
+export const LEAF_PALETTE = {
+  "Summer": 0
+} as const;
+
 export const ENEMY_KINDS = {
   "Boar": {
     "max_hp": 40.0,

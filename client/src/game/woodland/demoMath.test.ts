@@ -87,10 +87,17 @@ describe('woodland demo math', () => {
 
 describe('forceKind', () => {
   const bush = PLANT_KINDS.indexOf('bush');
-  const bare = PLANT_KINDS.indexOf('bare');
-  const plants: PlantInfo[] = [[0, 1, 2, 3, 100, false], [bush, 4, 5, 6, 100, true], [3, 7, 8, 9, 60, true]];
+  const plants: PlantInfo[] = [[0, 1, 2, 3, 100, false, 100, false], [bush, 4, 5, 6, 100, true, 100, false], [3, 7, 8, 9, 60, true, 100, false]];
   it('sets every tree to the kind and keeps bushes and the rest', () => {
-    expect(forceKind(plants, 'bare')).toEqual([[bare, 1, 2, 3, 100, false], plants[1], [bare, 7, 8, 9, 60, true]]);
+    const tall = PLANT_KINDS.indexOf('tall');
+    expect(forceKind(plants, 'tall')).toEqual([[tall, 1, 2, 3, 100, false, 100, false], plants[1], [tall, 7, 8, 9, 60, true, 100, false]]);
+  });
+  it('makes every tree dead, bare and of its own shape, for bare', () => {
+    expect(forceKind(plants, 'bare')).toEqual([[0, 1, 2, 3, 100, false, 0, true], plants[1], [3, 7, 8, 9, 60, true, 0, true]]);
+  });
+  it('gives a dead tree its leaves back when it is set to a kind', () => {
+    const dead: PlantInfo[] = [[0, 1, 2, 3, 100, false, 0, true]];
+    expect(forceKind(dead, 'wide')).toEqual([[1, 1, 2, 3, 100, false, 100, false]]);
   });
   it('ignores bush, unknown and missing names', () => {
     for (const n of ['bush', 'oak', '', null]) expect(forceKind(plants, n)).toBe(plants);

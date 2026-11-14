@@ -10,7 +10,7 @@ import { touches } from '../../sim/view';
 import type { VisionMask } from '../visionmask';
 import { DEPTH } from '../effects';
 import { heroBox, occludersOf, Silhouette, type BodyLook, type Box } from '../silhouette';
-import { drawPlant, lightVector, PLANT_KINDS, type Drawn, type Light } from '../vegetation';
+import { drawPlant, lightVector, PLANT_KINDS, plantLook, type Drawn, type Light } from '../vegetation';
 import { BASE } from '../covemath';
 import { Clouds } from './clouds';
 import { Critters } from './critters';
@@ -45,7 +45,7 @@ const windowAround = (cam: Phaser.Geom.Rectangle) => ({ x0: cam.x - SETTLE_MARGI
 
 /** A bucket's map key; bx, by may be -1 (a neighbour off the map's edge) without clashing with a real bucket. */
 const bucketKey = (bx: number, by: number) => (by + 1) * 8192 + bx + 1;
-const keyOf = (p: PlantInfo) => `${p[0]}:${p[3]}:${p[4]}`;
+const keyOf = (p: PlantInfo) => `${plantLook(p)}:${p[3]}:${p[4]}`;
 /** The shadow frame of a plant frame (the shadow is never flipped, so it differs per mirroring). */
 const shadowKey = (key: string, mirrored: boolean) => `shadow:${key}${mirrored ? 'm' : ''}`;
 
@@ -163,7 +163,7 @@ export class WoodlandView {
     const needFrame = !this.frames.has(key), needShadow = !this.shadowFrames.has(sKey);
     if (needFrame || needShadow) {
       // the raster is not kept: a shadow variant that turns up later (a mirrored plant of a known frame) redraws it, which is deterministic for the same key and light
-      const { img, foot } = drawPlant(PLANT_KINDS[p[0]], p[3], p[4], this.light);
+      const { img, foot } = drawPlant(plantLook(p), p[3], p[4], this.light);
       if (needFrame) {
         const slot = this.pack(key, img);
         this.frames.set(key, { page: slot.page, name: key, w: img.w, h: img.h, foot });

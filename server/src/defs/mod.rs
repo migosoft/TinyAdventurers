@@ -7,6 +7,7 @@ pub mod damage;
 pub mod effects;
 mod enum_list;
 pub mod enemies;
+pub mod foliage;
 pub mod races;
 pub mod kinds;
 pub mod items;

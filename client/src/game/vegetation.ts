@@ -5,6 +5,7 @@
 // Pure: no Phaser, no DOM, no Node; the atlas script and the game both import it. The drawing code lives in vegetation/*.
 import type { SunInfo } from '../generated/SunInfo';
 import { DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, type Rgba } from './vegetation/canvas';
+import type { PlantInfo } from '../generated/PlantInfo';
 import { drawBush } from './vegetation/bush';
 import { drawBare } from './vegetation/bare';
 import { drawConifer } from './vegetation/conifer';
@@ -13,8 +14,13 @@ export { DEFAULT_LIGHT, drawBush };
 export type { Drawn, Light, PlantShape, Rgba };
 export type Shape = 'round' | 'wide' | 'tall' | 'conifer' | 'bare';
 export type PlantKind = Shape | 'bush';
-/** Index = wire id; the server's `PlantKind` (woodland.rs) has the same order. */
-export const PLANT_KINDS: readonly PlantKind[] = ['round', 'wide', 'tall', 'conifer', 'bush', 'bare'];
+/** Index = wire id; the server's `PlantKind` (woodland.rs) has the same order. A dead tree is not a kind: it is drawn as 'bare' (`plantLook`). */
+export const PLANT_KINDS: readonly PlantKind[] = ['round', 'wide', 'tall', 'conifer', 'bush'];
+
+/** The picture a plant is drawn as: the bare tree when it is dead, else its kind. */
+export function plantLook(p: PlantInfo): PlantKind {
+  return p[7] ? 'bare' : PLANT_KINDS[p[0]];
+}
 
 /** The light of a run's sun: `side` -1 is left, 1 right; the elevation is in degrees above the horizon. */
 export function lightVector(sun: SunInfo): Light {

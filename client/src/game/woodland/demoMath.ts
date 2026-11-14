@@ -69,10 +69,14 @@ export function stepHaze(look: HazeLook, key: keyof typeof HAZE_STEPS, dir: 1 | 
 /** The shadow layer's alpha knob: 0.04 steps within 0..0.6. */
 export const stepAlpha = (a: number, dir: 1 | -1) => round(Math.min(ALPHA.max, Math.max(ALPHA.min, a + dir * ALPHA.step)), 2);
 
-/** `kind=` of the demo URL: the plants with every non-bush one set to the named kind (for inspecting one kind); an unknown name, or bush, changes nothing. */
+/**
+ * `kind=` of the demo URL: the plants with every non-bush one set to the named kind (for inspecting one kind); an unknown name,
+ * or bush, changes nothing. `bare` makes every tree dead and leafless in its own shape; a named kind makes it living and full.
+ */
 export function forceKind(plants: PlantInfo[], name: string | null): PlantInfo[] {
   const kind = PLANT_KINDS.indexOf(name as PlantKind);
-  if (name === null || kind < 0 || name === 'bush') return plants;
+  if (name === null || (name !== 'bare' && kind < 0) || name === 'bush') return plants;
   const bush = PLANT_KINDS.indexOf('bush');
-  return plants.map((p) => (p[0] === bush ? p : [kind, p[1], p[2], p[3], p[4], p[5]]));
+  if (name === 'bare') return plants.map((p): PlantInfo => (p[0] === bush ? p : [p[0], p[1], p[2], p[3], p[4], p[5], 0, true]));
+  return plants.map((p): PlantInfo => (p[0] === bush ? p : [kind, p[1], p[2], p[3], p[4], p[5], p[7] ? 100 : p[6], false]));
 }

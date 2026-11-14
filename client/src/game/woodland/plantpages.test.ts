@@ -114,7 +114,7 @@ describe('DrawQueue', () => {
 
 describe('drawOrder', () => {
   it('nearest first', () => {
-    const p = (x: number, y: number): PlantInfo => [0, x, y, 1, 100, false];
+    const p = (x: number, y: number): PlantInfo => [0, x, y, 1, 100, false, 100, false];
     const plants = [p(500, 0), p(10, 10), p(100, 0), p(0, 0)];
     expect(drawOrder(plants, { x: 0, y: 0 })).toEqual([3, 1, 2, 0]);
     expect(drawOrder(plants, { x: 500, y: 0 })).toEqual([0, 2, 1, 3]);

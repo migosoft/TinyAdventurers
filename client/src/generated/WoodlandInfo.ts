@@ -6,4 +6,8 @@ import type { SunInfo } from "./SunInfo";
  * The woodland for the client: the seed its grass, flowers and critters grow from, the end clearing as
  * `[x, y, w, h]` in tiles, and every plant.
  */
-export type WoodlandInfo = { seed: number, end: [number, number, number, number], plants: Array<PlantInfo>, sun: SunInfo, };
+export type WoodlandInfo = { seed: number, end: [number, number, number, number], plants: Array<PlantInfo>, sun: SunInfo, 
+/**
+ * The leaf palette's id (`LeafPalette`).
+ */
+palette: number, };

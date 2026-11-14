@@ -7,7 +7,9 @@ import { CHUNK } from './worldMesh';
 const MAP = { w: 64, h: 32 };
 const kind = (k: string): number => PLANT_KINDS.indexOf(k as never);
 /** [kind, x px, y px, seed, scale %, mirrored]: tile (tx, tz) at its bottom. */
-const at = (k: string, tx: number, tz: number, seed: number, scale = 100, mirrored = false): PlantInfo => [kind(k), tx * 16 + 8, tz * 16 + 12, seed, scale, mirrored];
+/** `'bare'` is a dead round tree. */
+const at = (k: string, tx: number, tz: number, seed: number, scale = 100, mirrored = false): PlantInfo =>
+  k === 'bare' ? [kind('round'), tx * 16 + 8, tz * 16 + 12, seed, scale, mirrored, 0, true] : [kind(k), tx * 16 + 8, tz * 16 + 12, seed, scale, mirrored, 100, false];
 
 const all = (f: ReturnType<PlantField['frame']>): PlantChunk[] => [...f.chunks.values()].flat();
 

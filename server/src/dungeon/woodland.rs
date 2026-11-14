@@ -5,6 +5,7 @@
 
 use super::{Layout, Map, Rect, Spawn, Tile, TILE};
 use crate::defs::enemies::EnemyType;
+use crate::defs::foliage::{LeafPalette, WOODLAND_FOLIAGE};
 use crate::math::Vec2;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
@@ -50,7 +51,6 @@ pub enum PlantKind {
     Tall = 2,
     Conifer = 3,
     Bush = 4,
-    Bare = 5,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -62,6 +62,10 @@ pub struct Plant {
     /// Size in percent: a tree's scale * 100; a bush's drawn width is 32 * scale_pct / 100 px.
     pub scale_pct: u8,
     pub mirrored: bool,
+    /// How much of its leaf a plant carries, in percent.
+    pub leaf_pct: u8,
+    /// A dead tree: bare limbs, no leaves, no sway.
+    pub dead: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +83,8 @@ pub struct Woodland {
     /// 1..=1_000_000, for the client's grass, flowers and critters.
     pub seed: u32,
     pub sun: Sun,
+    /// The colours of the leaves.
+    pub palette: LeafPalette,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     ellipses: Vec<[f64; 4]>,
@@ -87,14 +93,12 @@ pub struct Woodland {
 /// The edge's plants come from fixed (seed, scale_pct) pairs, 12 per kind (index = `PlantKind as usize`),
 /// so the client draws at most 48 distinct edge looks (the edge picks only Round, Wide, Conifer and Bush: 4 x 12). Trees 80..120 %, bushes 113..150 % (36..48 px).
 // balancing
-/// The edge never picks bare; its row exists so `EDGE_SEEDS[kind as usize]` can never index out of range.
-const EDGE_SEEDS: [[(u32, u8); 12]; 6] = [
+const EDGE_SEEDS: [[(u32, u8); 12]; 5] = [
     [(101, 100), (102, 84), (103, 116), (104, 92), (105, 120), (106, 80), (107, 108), (108, 96), (109, 112), (110, 88), (111, 118), (112, 104)],
     [(201, 96), (202, 112), (203, 80), (204, 104), (205, 88), (206, 120), (207, 92), (208, 116), (209, 84), (210, 100), (211, 108), (212, 118)],
     [(301, 104), (302, 88), (303, 120), (304, 96), (305, 80), (306, 112), (307, 84), (308, 108), (309, 92), (310, 118), (311, 100), (312, 116)],
     [(401, 92), (402, 108), (403, 84), (404, 120), (405, 100), (406, 80), (407, 116), (408, 96), (409, 118), (410, 88), (411, 112), (412, 104)],
     [(501, 130), (502, 113), (503, 147), (504, 120), (505, 140), (506, 116), (507, 150), (508, 123), (509, 137), (510, 127), (511, 143), (512, 133)],
-    [(601, 100), (602, 84), (603, 116), (604, 92), (605, 120), (606, 80), (607, 108), (608, 96), (609, 112), (610, 88), (611, 118), (612, 104)],
 ];
 
 /// The tile a tree's trunk stands on; bushes have none.
@@ -314,14 +318,16 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     for _pass in 0..3 {
         for &(x, y) in &tiles {
             let roll = rng.gen_range(0..100);
-            // (kind, spacing in tiles, scale range); round 28, conifer 24, tall 19, small round 14, wide 10, bare 5
+            // (kind, spacing in tiles, scale range); round 28, conifer 24, tall 19, small round 14, wide 10, dead 5.
+            // A dead tree's kind is a placeholder until its seed is drawn.
+            let dead = roll >= 100 - WOODLAND_FOLIAGE.dead_pct as i32;
             let (kind, spacing, lo, hi) = match roll {
+                _ if dead => (PlantKind::Round, 3.2, 80, 120),
                 0..=27 => (PlantKind::Round, 3.2, 80, 120),
                 28..=51 => (PlantKind::Conifer, 2.4, 80, 120),
                 52..=70 => (PlantKind::Tall, 2.4, 80, 120),
                 71..=84 => (PlantKind::Round, 2.0, 50, 65),
-                85..=94 => (PlantKind::Wide, 3.2, 80, 120),
-                _ => (PlantKind::Bare, 3.2, 80, 120),
+                _ => (PlantKind::Wide, 3.2, 80, 120),
             }; // balancing
             let foot = jitter(&mut rng, x, y);
             // from the foot's own position: none within 3 tiles of the road's centre line, half of those within 5
@@ -335,7 +341,13 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             placed.add(foot, spacing);
             let scale_pct = rng.gen_range(lo..=hi);
             let mirrored = rng.gen_bool(0.5);
-            trees.push(Plant { kind, foot, seed: fresh_seed(&mut rng, &mut used), scale_pct, mirrored });
+            let seed = fresh_seed(&mut rng, &mut used);
+            let (kind, leaf_pct) = if dead {
+                ([PlantKind::Round, PlantKind::Wide, PlantKind::Tall][seed as usize % 3], 0)
+            } else {
+                (kind, WOODLAND_FOLIAGE.leaf_pct)
+            };
+            trees.push(Plant { kind, foot, seed, scale_pct, mirrored, leaf_pct, dead });
         }
     }
 
@@ -363,7 +375,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut edge: Vec<Plant> = vec![];
     let edge_plant = |rng: &mut ChaCha8Rng, kind: PlantKind, foot: Vec2| {
         let (seed, scale_pct) = EDGE_SEEDS[kind as usize][rng.gen_range(0..12)];
-        Plant { kind, foot, seed, scale_pct, mirrored: rng.gen_bool(0.5) }
+        Plant { kind, foot, seed, scale_pct, mirrored: rng.gen_bool(0.5), leaf_pct: WOODLAND_FOLIAGE.leaf_pct, dead: false }
     };
     for &(x, y, _) in &edge_tiles {
         let foot = jitter(&mut rng, x, y);
@@ -415,7 +427,15 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         }
         placed.add(foot, 1.5);
         let scale_pct = rng.gen_range(75..=150); // balancing: 24..48 px wide
-        bushes.push(Plant { kind: PlantKind::Bush, foot, seed: fresh_seed(&mut rng, &mut used), scale_pct, mirrored: rng.gen_bool(0.5) });
+        bushes.push(Plant {
+            kind: PlantKind::Bush,
+            foot,
+            seed: fresh_seed(&mut rng, &mut used),
+            scale_pct,
+            mirrored: rng.gen_bool(0.5),
+            leaf_pct: WOODLAND_FOLIAGE.leaf_pct,
+            dead: false,
+        });
     }
 
     // 7. Trunks; a tree whose trunk cuts off walkable ground is dropped.
@@ -546,7 +566,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(edge);
     let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
     let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, ellipses };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()) };
     (layout, wl)
 }
@@ -741,6 +761,49 @@ mod tests {
         });
     }
 
+    /// The plant list as it was printed before plants carried a leaf amount and a dead mark: a dead tree
+    /// reads `Bare`, and those two fields are left out. It keeps the pinned fingerprint comparable.
+    fn legacy_plants(w: &Woodland) -> String {
+        #[derive(Debug)]
+        #[allow(dead_code)] // read through Debug
+        enum PlantKind {
+            Round,
+            Wide,
+            Tall,
+            Conifer,
+            Bush,
+            Bare,
+        }
+        #[derive(Debug)]
+        #[allow(dead_code)] // read through Debug
+        struct Plant {
+            kind: PlantKind,
+            foot: Vec2,
+            seed: u32,
+            scale_pct: u8,
+            mirrored: bool,
+        }
+        let old: Vec<Plant> = w
+            .plants
+            .iter()
+            .map(|p| Plant {
+                kind: match p.kind {
+                    _ if p.dead => PlantKind::Bare,
+                    super::PlantKind::Round => PlantKind::Round,
+                    super::PlantKind::Wide => PlantKind::Wide,
+                    super::PlantKind::Tall => PlantKind::Tall,
+                    super::PlantKind::Conifer => PlantKind::Conifer,
+                    super::PlantKind::Bush => PlantKind::Bush,
+                },
+                foot: p.foot,
+                seed: p.seed,
+                scale_pct: p.scale_pct,
+                mirrored: p.mirrored,
+            })
+            .collect();
+        format!("{old:?}")
+    }
+
     /// FNV-1a over the map's tiles, the plants and the spawns of `generate(seed)`; the sun is not part of it.
     fn map_fingerprint(seed: u64) -> u64 {
         let (l, w) = generate(seed);
@@ -751,7 +814,7 @@ mod tests {
             }
         };
         feed(&l.map.tiles);
-        feed(format!("{:?}", w.plants).as_bytes());
+        feed(legacy_plants(&w).as_bytes());
         feed(format!("{:?}", l.spawns).as_bytes());
         h
     }
@@ -765,28 +828,56 @@ mod tests {
     }
 
     #[test]
-    fn bare_trees_grow_by_the_road_not_on_the_edge() {
-        let mut bare = 0;
+    fn dead_trees_grow_by_the_road_not_on_the_edge() {
+        let mut dead = 0;
         each(|seed, l, w| {
-            assert!(!w.plants.iter().any(|p| p.kind == PlantKind::Bare && on_thicket(l, p)), "seed {seed}: a bare tree on the edge");
-            bare += w.plants.iter().filter(|p| p.kind == PlantKind::Bare).count();
+            assert!(!w.plants.iter().any(|p| p.dead && on_thicket(l, p)), "seed {seed}: a dead tree on the edge");
+            for p in w.plants.iter().filter(|p| p.dead) {
+                assert_eq!(p.leaf_pct, 0, "seed {seed}: a dead tree with leaves");
+                assert!(matches!(p.kind, PlantKind::Round | PlantKind::Wide | PlantKind::Tall), "seed {seed}: a dead {:?}", p.kind);
+                dead += 1;
+            }
         });
-        assert!(bare > 0, "no seed has a bare tree");
+        assert!(dead > 0, "no seed has a dead tree");
+    }
+
+    #[test]
+    fn a_dead_tree_takes_its_shape_from_its_seed() {
+        each(|seed, _, w| {
+            for p in w.plants.iter().filter(|p| p.dead) {
+                assert_eq!(p.kind, [PlantKind::Round, PlantKind::Wide, PlantKind::Tall][p.seed as usize % 3], "seed {seed}");
+            }
+        });
+    }
+
+    #[test]
+    fn living_plants_are_full() {
+        each(|seed, _, w| {
+            for p in w.plants.iter().filter(|p| !p.dead) {
+                assert_eq!(p.leaf_pct, WOODLAND_FOLIAGE.leaf_pct, "seed {seed}");
+            }
+        });
+    }
+
+    #[test]
+    fn the_woodland_names_its_palette() {
+        let (_, w) = generate(1);
+        assert_eq!(w.palette, LeafPalette::Summer);
+        assert_eq!(crate::protocol::WoodlandInfo::from(&w).palette, 0);
     }
 
     #[test]
     fn plant_kind_ids_match_the_client() {
-        // client/src/game/vegetation.ts PLANT_KINDS has 6 entries, 'bare' last; vegetation.test.ts pins the same
-        // no `_` arm: a seventh variant fails to compile here
+        // client/src/game/vegetation.ts PLANT_KINDS has 5 entries; vegetation.test.ts pins the same
+        // no `_` arm: a sixth variant fails to compile here
         let id = |k: PlantKind| match k {
             PlantKind::Round => 0,
             PlantKind::Wide => 1,
             PlantKind::Tall => 2,
             PlantKind::Conifer => 3,
             PlantKind::Bush => 4,
-            PlantKind::Bare => 5,
         };
-        for k in [PlantKind::Round, PlantKind::Wide, PlantKind::Tall, PlantKind::Conifer, PlantKind::Bush, PlantKind::Bare] {
+        for k in [PlantKind::Round, PlantKind::Wide, PlantKind::Tall, PlantKind::Conifer, PlantKind::Bush] {
             assert_eq!(k as u8, id(k));
         }
     }

@@ -216,6 +216,8 @@ pub struct WoodlandInfo {
     pub end: [i32; 4],
     pub plants: Vec<PlantInfo>,
     pub sun: SunInfo,
+    /// The leaf palette's id (`LeafPalette`).
+    pub palette: u8,
 }
 
 /// The woodland's sun: `side` -1 (west) or 1 (east), `elevation` in degrees above the horizon.
@@ -237,17 +239,22 @@ impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
         WoodlandInfo {
             seed: w.seed,
             end: [w.end.x, w.end.y, w.end.w, w.end.h],
-            plants: w.plants.iter().map(|p| PlantInfo(p.kind as u8, p.foot.x.round() as i32, p.foot.y.round() as i32, p.seed, p.scale_pct, p.mirrored)).collect(),
+            plants: w
+                .plants
+                .iter()
+                .map(|p| PlantInfo(p.kind as u8, p.foot.x.round() as i32, p.foot.y.round() as i32, p.seed, p.scale_pct, p.mirrored, p.leaf_pct, p.dead))
+                .collect(),
             sun: SunInfo::from(w.sun),
+            palette: w.palette as u8,
         }
     }
 }
 
-/// A plant as an array: `[kind, x, y, seed, scale_pct, mirrored]` (kind = `PlantKind` wire id; x, y = the
-/// foot in px).
+/// A plant as an array: `[kind, x, y, seed, scale_pct, mirrored, leaf_pct, dead]` (kind = `PlantKind` wire
+/// id; x, y = the foot in px; leaf_pct = the leaf amount in percent; dead = a dead tree).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct PlantInfo(pub u8, pub i32, pub i32, pub u32, pub u8, pub bool);
+pub struct PlantInfo(pub u8, pub i32, pub i32, pub u32, pub u8, pub bool, pub u8, pub bool);
 
 /// The nymph's cove in tiles: its room, the tree's trunk tile and the seed the client's plants grow from.
 #[derive(Debug, Clone, Serialize, TS)]

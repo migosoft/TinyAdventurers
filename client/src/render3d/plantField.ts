@@ -2,7 +2,7 @@
 // and the card, trunk-caster and clump geometry of the plants is gathered per world chunk. No three.js: the view uploads what a frame holds.
 import type { PlantInfo } from '../generated/PlantInfo';
 import { DrawQueue, PlantPages, drawOrder } from '../game/woodland/plantpages';
-import { PLANT_KINDS, drawPlant, type Light } from '../game/vegetation';
+import { drawPlant, plantLook, type Light } from '../game/vegetation';
 import { newClumpBuf, newPlantBuf, plantChunks, pushClumps, pushPlant, pushTrunkCaster, type ClumpBuf, type PlantBuf, type PlantPlace, type PlantSprite } from './plants';
 import { swayAmp } from './wind';
 
@@ -78,7 +78,7 @@ export class PlantField {
 
   private drawOne(i: number): void {
     const p = this.plants[i];
-    const kind = PLANT_KINDS[p[0]];
+    const kind = plantLook(p);
     const key = `${kind}:${p[3]}:${p[4]}`;
     let sprite = this.sprites.get(key);
     if (!sprite) {

@@ -22,8 +22,8 @@ export const KNIGHT_START = { x: 20.5, z: 11.5 } as const;
 const TILE = 16;
 /** The tree row, and the trunk tiles' x. */
 const TREE_Z = 3;
-const TREES: [PlantKind, number, boolean][] = [
-  ['round', 4, false], ['wide', 10, false], ['tall', 16, true], ['conifer', 22, false], ['bare', 28, false], ['round', 34, true],
+const TREES: [PlantKind, number, boolean, boolean][] = [
+  ['round', 4, false, false], ['wide', 10, false, false], ['tall', 16, true, false], ['conifer', 22, false, false], ['round', 28, false, true], ['round', 34, true, false],
 ];
 /** The bushes on the thicket tiles: [x, z]. */
 const BUSHES: [number, number][] = [[7, 2], [13, 1], [19, 2], [25, 1], [31, 2], [37, 1]];
@@ -42,8 +42,8 @@ export function woodlandStageMap(): TileMap {
   return new TileMap(WOODLAND_W, WOODLAND_H, tiles);
 }
 
-/** Every plant kind, the feet near the bottom of their tile (px): trees on the Trunk tiles, bushes on the Thicket tiles. */
+/** Every plant kind and a dead tree, the feet near the bottom of their tile (px): trees on the Trunk tiles, bushes on the Thicket tiles. */
 export const WOODLAND_STAGE_PLANTS: PlantInfo[] = [
-  ...TREES.map(([kind, x, mirrored], i): PlantInfo => [PLANT_KINDS.indexOf(kind), x * TILE + TILE / 2, TREE_Z * TILE + 12, 101 + i, 100, mirrored]),
-  ...BUSHES.map(([x, z], i): PlantInfo => [PLANT_KINDS.indexOf('bush'), x * TILE + TILE / 2, z * TILE + 12, 201 + i, 100, i % 2 === 1]),
+  ...TREES.map(([kind, x, mirrored, dead], i): PlantInfo => [PLANT_KINDS.indexOf(kind), x * TILE + TILE / 2, TREE_Z * TILE + 12, 101 + i, 100, mirrored, dead ? 0 : 100, dead]),
+  ...BUSHES.map(([x, z], i): PlantInfo => [PLANT_KINDS.indexOf('bush'), x * TILE + TILE / 2, z * TILE + 12, 201 + i, 100, i % 2 === 1, 100, false]),
 ];
