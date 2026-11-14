@@ -1,6 +1,6 @@
 // Headless load check of the 3D renderer page (?r3d): waits for drawn frames, prints the backend, saves a screenshot.
 // Usage: node r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose] [page]
-// page: demo (default), gallery (?r3d=gallery, #303), lights (?r3d=lights, #304) or woodland (?r3d=woodland, #306; add &hour=9.5).
+// page: demo (default), gallery (?r3d=gallery, #303), lights (?r3d=lights, #304), woodland (?r3d=woodland, #306; add &hour=9.5) or cove (?r3d=cove, #329).
 // Env: GPU=1 runs a visible window on the discrete card with the notebook's start line and prints the GPU in use (GPU=uncapped: no frame limit); HEADED=1 shows the window; READBACK=1 also saves r3d-readback.png (the scene read back, for WebGPU); R3D_W / R3D_H the viewport (1280x768).
 // mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan).
 // lose: after the first screenshot the device is lost on purpose (window.__r3d.forceLoss()); the script waits up to 20 s

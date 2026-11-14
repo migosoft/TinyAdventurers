@@ -9,6 +9,7 @@ import { leafSeed, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
 import { FLUTTER_PX, TreeMesh, appendAt } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
+import { SWAY_WAVE_MAX } from '../wind';
 
 export interface Vec3 { x: number; y: number; z: number }
 /** One world chunk's trees merged: the mesh streams plus, per vertex, `plant` (foot x, z, leaf amount, dead) and `look` (leaf bright, leaf warm, bark light, bark grey), and the falling leaves of its trees (it grows with the chunk). */
@@ -53,9 +54,10 @@ function extent(t: BuiltTree): Built {
   }
   let half = 0, swing = 0;
   for (let i = 2; i < m.tuft.length; i += 4) half = Math.max(half, m.tuft[i]);
-  // The sway stream's x is each vertex's own largest sway offset in tiles.
+  // The sway stream's x is each vertex's sway factor (tiles per unit of wave); the wave reaches SWAY_WAVE_MAX at most.
   for (let i = 0; i < m.sway.length; i += 2) swing = Math.max(swing, m.sway[i]);
-  const room = Math.max(MIN_MARGIN, half + swing + FLUTTER);
+  // A patch is spread along the camera's right and up axes, whose horizontal parts together reach sqrt 2 times the half-size.
+  const room = Math.max(MIN_MARGIN, half * Math.SQRT2 + swing * SWAY_WAVE_MAX + FLUTTER);
   min.x -= room; min.z -= room; max.x += room; max.z += room;
   max.y = Math.max(max.y + half, (t.height + half) * STRETCH);
   return { tree: t, min, max };
@@ -86,6 +88,8 @@ export class Forest {
 
   get built(): number { return this.done; }
   get total(): number { return this.specs.length; }
+  /** How many built looks are kept for sharing (none once the forest is complete). */
+  get cachedLooks(): number { return this.looks.size; }
 
   /** Builds trees within `budgetMs` (nearest to `cam` first, sorted again after the camera moved 4 tiles; at least one when any is pending). Returns how many were added. */
   step(cam: { x: number; z: number }, budgetMs: number): number {
@@ -125,9 +129,10 @@ export class Forest {
       slot.plant = grow(slot.plant); slot.look = grow(slot.look);
     }
     appendAt(slot.chunk.mesh, b.tree.mesh, sp.x, sp.z);
-    for (let k = 0; k < n; k++) {
-      slot.plant.set([sp.x, sp.z, sp.dead ? 0 : sp.leaf, sp.dead ? 1 : 0], (slot.used + k) * 4);
-      slot.look.set(v, (slot.used + k) * 4);
+    for (let k = 0, o = slot.used * 4; k < n; k++, o += 4) {
+      const pl = slot.plant, lk = slot.look;
+      pl[o] = sp.x; pl[o + 1] = sp.z; pl[o + 2] = sp.dead ? 0 : sp.leaf; pl[o + 3] = sp.dead ? 1 : 0;
+      lk[o] = v[0]; lk[o + 1] = v[1]; lk[o + 2] = v[2]; lk[o + 3] = v[3];
     }
     // The falling leaves, with the plant's own leaf amount and colour (a willow's leaves carry its own warmer, lighter shift).
     const leaves = slot.chunk.leaves, from = leaves.n;
@@ -143,5 +148,7 @@ export class Forest {
     bd.min.y = Math.min(bd.min.y, b.min.y);
     bd.max.y = Math.max(bd.max.y, b.max.y);
     this.versionMap.set(chunk, (this.versionMap.get(chunk) ?? 0) + 1);
+    // The looks only share builds between trees; the chunks keep their merged meshes, so a finished forest lets them go.
+    if (this.done === this.specs.length) this.looks.clear();
   }
 }

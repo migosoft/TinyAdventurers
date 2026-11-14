@@ -1,5 +1,4 @@
 // One wind for the 3D woodland (#306): the plants' sway, the mist's drift and the clouds' drift share it. Pure.
-import type { PlantKind } from '../game/vegetation';
 import { MIST } from './mist';
 
 const ANGLE = (20 * Math.PI) / 180;
@@ -9,22 +8,12 @@ export const WIND: [number, number] = [MIST.speed * Math.cos(ANGLE), MIST.speed 
 export const WIND_DIR: [number, number] = [Math.cos(ANGLE), Math.sin(ANGLE)];
 
 /** How far (tiles) the top of a plant swings at most, by family. */
-export const SWAY = { leafy: 0.11, conifer: 0.07, small: 0.05, bare: 0, coveTree: 0.11 } as const;
+export const SWAY = { leafy: 0.11, conifer: 0.07, small: 0.05 } as const;
 
-export function swayAmp(kind: PlantKind): number {
-  switch (kind) {
-    case 'round':
-    case 'wide':
-    case 'tall':
-      return SWAY.leafy;
-    case 'conifer':
-      return SWAY.conifer;
-    case 'bush':
-      return SWAY.small;
-    case 'bare':
-      return SWAY.bare;
-  }
-}
+/** The sway wave's terms: two slow sines and the gust (windNodes.ts uses the same numbers). */
+export const SWAY_WAVE = { slow: 0.5, fast: 0.25, gust: 1.4 } as const;
+/** The largest value the wave takes (each sine at 1, the gust at 1): the sway never exceeds this times the amplitude. */
+export const SWAY_WAVE_MAX = SWAY_WAVE.slow + SWAY_WAVE.fast + SWAY_WAVE.gust;
 
 /** The travelling gust (0..1) at (x, z) at time `t` seconds: a band of wind that moves across the map. */
 export function gust(x: number, z: number, t: number): number {
@@ -35,5 +24,5 @@ export function gust(x: number, z: number, t: number): number {
 export function sway(x: number, z: number, y: number, h: number, amp: number, t: number): number {
   if (amp <= 0 || h <= 0) return 0;
   const k = Math.min(Math.max(y / h, 0), 1) ** 2;
-  return amp * k * (0.5 * Math.sin(1.3 * t + 0.9 * x + 0.4 * z) + 0.25 * Math.sin(2.9 * t + z) + 1.4 * gust(x, z, t));
+  return amp * k * (SWAY_WAVE.slow * Math.sin(1.3 * t + 0.9 * x + 0.4 * z) + SWAY_WAVE.fast * Math.sin(2.9 * t + z) + SWAY_WAVE.gust * gust(x, z, t));
 }

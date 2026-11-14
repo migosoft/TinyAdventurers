@@ -207,8 +207,9 @@ export function createPanel(
   const showRows = (): void => {
     hourRow.hidden = !skyOn;
     skySwRow.hidden = !skyOn;
-    leafRow.hidden = !skyOn;
-    treeSwRow.hidden = !skyOn;
+    // The tree rows are for the dev pages: a run does not read the leaf amount or the plain switch.
+    leafRow.hidden = !skyOn || mode === 'run';
+    treeSwRow.hidden = !skyOn || mode === 'run';
     mistSliders.forEach(({ d, row }) => { row.hidden = !daylightOn || (skyOn && d.key === 'mistDay'); });
   };
 

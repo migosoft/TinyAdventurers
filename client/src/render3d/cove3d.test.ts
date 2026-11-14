@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoveInfo } from '../generated/CoveInfo';
 import { coveLayout, placeCovePlants } from '../game/covemath';
+import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from '../game/pixieMath';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import type { Cam } from './camera';
@@ -71,6 +72,14 @@ describe('coveWillow', () => {
     expect(tight.scalePct).toBeLessThan(200);
     expect(tight.scalePct).toBeGreaterThanOrEqual(60);
     expect(coveWillow(room(1)).scalePct).toBeGreaterThan(130);
+  });
+
+  it('treats only the generator\'s canvas-edge error as too large a size, and rethrows any other', () => {
+    const c = room(1);
+    const edge = (s: TreeSpec): BuiltTree => { if (s.scalePct > 100) throw new CanvasEdgeError(); return buildTree(s); };
+    expect(coveWillow(c, edge).scalePct).toBeLessThanOrEqual(100);
+    const broken = (): BuiltTree => { throw new RangeError('not the canvas'); };
+    expect(() => coveWillow(c, broken)).toThrow('not the canvas');
   });
 
   it('falls back to the smallest size in a room too small for it', () => {

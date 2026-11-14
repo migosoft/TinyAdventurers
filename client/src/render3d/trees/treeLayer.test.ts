@@ -118,6 +118,18 @@ describe('TreeLayer', () => {
     expect(fresh.scene.children).toHaveLength(3 * 3);
   });
 
+  it('a complete forest drops its look cache, and a new layer (a lost device) still shows every chunk', () => {
+    const f = new Forest(FEET, MAP, 0);
+    f.step({ x: 0, z: 0 }, 0);
+    expect(f.cachedLooks).toBeGreaterThan(0);
+    f.step({ x: 0, z: 0 }, 1e6);
+    expect(f.built).toBe(f.total);
+    expect(f.cachedLooks).toBe(0);
+    const fresh = layer(true);
+    fresh.l.sync(frame(f));
+    expect(fresh.scene.children).toHaveLength(3 * 3);
+  });
+
   describe('uploads of a growing chunk', () => {
     const SAME = [spec(2, 2, 1), spec(4, 4, 2), spec(6, 6, 3), spec(8, 8, 4)]; // one chunk
     // A forest on a fake clock that moves 10 ms per reading, so a step with no budget builds exactly one tree.

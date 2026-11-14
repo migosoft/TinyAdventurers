@@ -1,5 +1,5 @@
-// The nymph's cove in the 3D dungeon (#306): the tree and the bushes, tufts and ferns as atlas sprites that sway in the wind, a shadow
-// caster for each so the dungeon's lights throw their shadows, and the pixies: glows with wing cards that also light the ground.
+// The nymph's cove in the 3D dungeon (#306, #329): the willow and the bushes as grown 3D trees (the tufts and ferns stay atlas sprites) that
+// sway in the wind, a shadow caster for each so the dungeon's lights throw their shadows, and the pixies: glows with wing cards that also light the ground.
 // The grass carpet and the stone floor are not here (the floor stays stone until #330). Layout and paths are the 2D view's (covemath.ts,
 // pixieMath.ts), so both views agree.
 import type { CoveInfo } from '../generated/CoveInfo';
@@ -11,6 +11,7 @@ import { pushCard, pushGlow, type CardBuf, type GlowBuf } from './cards';
 import type { Cand, ShadowCaster } from './lights';
 import type { PlantPlace, PlantSprite } from './plants';
 import { hiddenAt, type SightMask } from './sightmask';
+import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { SWAY } from './wind';
 import { buildTree, type BuiltTree } from './trees/build';
 import { lookKey, type TreeSpec } from './trees/spec';
@@ -96,7 +97,7 @@ export const COVE_PIXIES = { above: 3, aboveLift: 0.5, aboveBob: 0.25, aboveSpan
 const WALL_GAP = 0.5; // first guess
 
 /** The cove's willow, with the shape it builds into (its radius and height decide the casters and the pixies' height). */
-function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree; reach: number } {
+function fitWillow(c: CoveInfo, build: (s: TreeSpec) => BuiltTree = buildTree): { spec: TreeSpec; built: BuiltTree; reach: number } {
   const { foot } = coveLayout(c);
   const x = foot.x / TILE, z = foot.y / TILE;
   // The room in tiles; the reach is measured from the foot to every wall.
@@ -107,9 +108,9 @@ function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree; reach: numb
     const last = pct - WILLOW_SCALE.step < WILLOW_SCALE.min;
     let built: BuiltTree;
     try {
-      built = buildTree(spec);
+      built = build(spec);
     } catch (e) {
-      if (last) throw e;
+      if (!(e instanceof CanvasEdgeError) || last) throw e;
       continue;
     }
     if (built.radius <= room || last) return { spec, built, reach: room };
@@ -117,8 +118,8 @@ function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree; reach: numb
 }
 
 /** The cove's tree in the 3D view: a willow of the grown-tree system at the trunk's foot, the largest size whose curtains stay 0.5 tiles inside the room. */
-export function coveWillow(c: CoveInfo): TreeSpec {
-  return fitWillow(c).spec;
+export function coveWillow(c: CoveInfo, build?: (s: TreeSpec) => BuiltTree): TreeSpec {
+  return fitWillow(c, build).spec;
 }
 
 /** The pixies' paths round the willow (`COVE_PIXIES`): above its crown, or in a ring outside its curtains, never past the room's walls. */

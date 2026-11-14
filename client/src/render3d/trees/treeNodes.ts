@@ -63,7 +63,7 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
   }
 }
 
-const hash3 =(c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
+const hash3 = (c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
 
 /**
  * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,
@@ -196,8 +196,8 @@ function leafTint(bright: N, warm: N): N {
 }
 
 /**
- * The depth pre-pass, the colour pass and the sun's pass of a tree mesh. The meshes carry `position`, `normal`, `grad`, `sway`, `part`, `misc`,
- * `tuft` (mesh.ts) and `plant`, `look` per vertex. `hasSun` false (a dungeon): `sun` is null and the colour shader carries no sun code.
+ * The depth pre-pass, the colour pass and the sun's pass of a tree mesh. The meshes carry `position`, `nrm` (the normal and the sway factor),
+ * `grad`, `part`, `misc`, `tuft` (mesh.ts) and `plant` (foot, leaf amount, anchor height), `look` per vertex (`packTreeStreams`). `hasSun` false (a dungeon): `sun` is null and the colour shader carries no sun code.
  * All three are double sided: a mirrored tree flips its patches' winding while their corners stay screen-space.
  */
 export function treeMaterials(o: {

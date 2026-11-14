@@ -3,9 +3,9 @@
 //   z 0        Void (beyond the map's edge)
 //   z 1..2     the forest edge: Thicket, with a bush on some tiles
 //   z 3        Trunk tiles with a tree on each, Floor between them
-//   z 4..13    grass
+//   z 4..13    grass; the shape row at z 10 (round, wide and tall trees at three seeds each)
 //   z 14..15   the road across the map
-//   z 16..24   grass
+//   z 16..24   grass; the willow at z 19 (x 36), the leaf row at z 22 (one tree at five leaf amounts) and the dead tree at z 22 (x 29)
 //   z 25       Void
 import { TILE_ID } from '../generated/defs';
 import type { PlantInfo } from '../generated/PlantInfo';

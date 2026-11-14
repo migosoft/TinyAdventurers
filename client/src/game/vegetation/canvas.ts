@@ -2,6 +2,14 @@
 // Pure: no Phaser, no DOM, no Node.
 type Rgb = [number, number, number];
 export interface Rgba { w: number; h: number; data: Uint8ClampedArray }
+
+/** Thrown when a drawing reaches the edge of its canvas: the scale is too large for the generator. */
+export class CanvasEdgeError extends Error {
+  constructor() {
+    super('vegetation: the drawing reaches the canvas edge (scale too large)');
+    this.name = 'CanvasEdgeError';
+  }
+}
 /** How many of each detail a tree got; filled by the passes that count them (tests read it). */
 export type Parts = { pockets: number; vines: number; stems: number; limbs: number };
 /** The shape a plant casts a shadow with, in the drawn image's px (after the crop). Does not depend on the light. */
@@ -104,7 +112,7 @@ export class Canvas {
     for (const i of edge) px[i] = 'k';
     let x0 = w, y0 = h, x1 = 0, y1 = 0;
     for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) if (px[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    if (x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1) throw new Error('vegetation: the drawing reaches the canvas edge (scale too large)');
+    if (x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1) throw new CanvasEdgeError();
     const iw = x1 - x0 + 1, ih = y1 - y0 + 1;
     const img: Rgba = { w: iw, h: ih, data: new Uint8ClampedArray(iw * ih * 4) };
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {

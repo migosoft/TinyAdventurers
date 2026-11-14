@@ -101,7 +101,8 @@ describe('Mood', () => {
     expect(mood.counts.clouds).toBe(4);
   });
 
-  it('respects the caps on smoke, embers and drips', () => {
+  // 7200 simulation steps: about 1.4 s alone, so it can pass vitest's 5 s default in a busy parallel run.
+  it('respects the caps on smoke, embers and drips', { timeout: 20000 }, () => {
     const lava = setup(60, 40, TERRAIN.Lava);
     let smoke = 0;
     let embers = 0;

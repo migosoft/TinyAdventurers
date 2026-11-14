@@ -199,6 +199,14 @@ describe('panel', () => {
     expect(btn('Plain trees').getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('the tree rows stay hidden in a run, which does not read them, even with the sky on', () => {
+    const { host, panel, btn } = setup(DEFAULTS, 'run');
+    panel.setSky(true);
+    expect(host.querySelector<HTMLInputElement>('#r3d-leaf')!.parentElement!.hidden).toBe(true);
+    expect(btn('Plain trees').parentElement!.hidden).toBe(true);
+    expect(host.querySelector<HTMLInputElement>('#r3d-hour')!.parentElement!.hidden).toBe(false);
+  });
+
   it('the zoom row sets zoom or Auto (null)', () => {
     const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
     expect(btn('3').getAttribute('aria-pressed')).toBe('true');

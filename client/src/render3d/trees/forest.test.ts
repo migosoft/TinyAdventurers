@@ -7,6 +7,7 @@ import { FLUTTER_PX } from './mesh';
 import { Forest } from './forest';
 import type { TreeForm, TreeSpec } from './spec';
 import { plantVariation } from './variation';
+import { SWAY_WAVE_MAX } from '../wind';
 
 const spec = (x: number, z: number, seed = 1, extra: Partial<TreeSpec> = {}): TreeSpec => ({ form: 'round' as TreeForm, x, z, seed, scalePct: 100, mirrored: false, leaf: 1, dead: false, ...extra });
 const MAP = { w: 48, h: 32 }; // 3 x 2 chunks
@@ -123,7 +124,8 @@ describe('Forest.frame', () => {
       const at = { minX: -1, maxX: -1, minZ: -1, maxZ: -1, maxY: -1 };
       const over = (key: keyof typeof worst, amount: number, i: number) => { if (amount > worst[key]) { worst[key] = amount; at[key] = i; } };
       for (let i = 0; i < b.mesh.verts; i++) {
-        const half = b.mesh.tuft[i * 4 + 2], sway = b.mesh.sway[i * 2], r = Math.max(0.3, half + sway + flutter), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
+        // The sway stream is the factor; the drawn offset is up to SWAY_WAVE_MAX times it, and the patch spread (camera right + up) reaches sqrt 2 times the half-size.
+        const half = b.mesh.tuft[i * 4 + 2], sway = b.mesh.sway[i * 2] * SWAY_WAVE_MAX, r = Math.max(0.3, half * Math.SQRT2 + sway + flutter), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
         maxHalf = Math.max(maxHalf, half);
         maxSway = Math.max(maxSway, sway);
         over('minX', ch.bounds.min.x - (px - r + 1e-6), i);

@@ -182,7 +182,7 @@ export function growLeafy(spec: TreeSpec): Skeleton {
   for (const b of branches) for (const p of b.pts) top = Math.max(top, p.y);
   for (const b of lobes) top = Math.max(top, b.y + b.ry * 1.08);
   const height = Math.max(top, 0.5);
-  for (const b of lobes) b.k = swayK(SWAY.leafy, b.y, height);
+  for (const b of lobes) b.k = swayK(ampOf(form, spec.dead), b.y, height);
   return {
     trunk, branches, lobes, roots, skirts: [], curtain: [], height, amp: ampOf(form, spec.dead), trunkSides: 10, rootSides: 5, trunkShaded: true, lift: 0,
     falls: spec.dead ? [] : lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: b.th, k: b.k })),

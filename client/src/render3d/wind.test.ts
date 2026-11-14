@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MIST } from './mist';
-import { SWAY, WIND, WIND_DIR, gust, sway, swayAmp } from './wind';
+import { SWAY_WAVE_MAX, WIND, WIND_DIR, gust, sway } from './wind';
 
 describe('the wind', () => {
   it('is the mist speed turned 20 degrees, and WIND_DIR is its direction', () => {
@@ -30,11 +30,12 @@ describe('the wind', () => {
     expect(want).not.toBe(0);
   });
 
-  it('has an amplitude per plant kind', () => {
-    expect(swayAmp('conifer')).toBe(0.07);
-    expect(swayAmp('bare')).toBe(0);
-    expect(swayAmp('bush')).toBe(SWAY.small);
-    for (const k of ['round', 'wide', 'tall'] as const) expect(swayAmp(k)).toBe(SWAY.leafy);
+  it('never swings further than SWAY_WAVE_MAX times the amplitude, and gets there when the waves and the gust line up', () => {
+    expect(SWAY_WAVE_MAX).toBeCloseTo(0.5 + 0.25 + 1.4, 12);
+    let top = 0;
+    for (let i = 0; i < 20000; i++) top = Math.max(top, Math.abs(sway(i * 0.37, i * 0.11, 1, 1, 1, i * 0.053)));
+    expect(top).toBeLessThanOrEqual(SWAY_WAVE_MAX + 1e-12);
+    expect(top).toBeGreaterThan(0.6 * SWAY_WAVE_MAX);
   });
 
   it('sways the same as before the gust term was split out', () => {
