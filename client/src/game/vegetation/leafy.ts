@@ -29,7 +29,7 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const used = o.shape === 'tall' ? targets.slice(0, 2) : targets;
   limbs(cv, r, light, tr.at(1), used, X, Y, detail);
   paint(tr.seg, false, footY);
-  roots(r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
+  const rootSegs = roots(r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
   // crown: lobes from the shape's layout, lowest first so the upper ones sit in front
@@ -49,5 +49,5 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   let tx0 = cx, tx1 = cx;
   for (let i = 0; i <= 16; i++) { const p = tr.at(0.2 + ((tMax - 0.2) * i) / 16); tx0 = Math.min(tx0, p.x - p.w); tx1 = Math.max(tx1, p.x + p.w); }
   const shape: PlantShape = { cast: 'parts', trunkTop, trunkX0: tx0, trunkX1: tx1, clumps: lobes.map((b) => ({ x: b.x, y: b.y, r: Math.max(b.rx, b.ry) })) };
-  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length }, shape);
+  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length }, shape, { foot: { x: cx, y: footY }, trunk: tr.seg, roots: rootSegs, s });
 }

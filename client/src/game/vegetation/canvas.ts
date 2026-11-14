@@ -16,7 +16,14 @@ export interface PlantShape {
   clumps: { x: number; y: number; r: number; reach?: number }[];
 }
 /** A drawn plant; `foot` (px, inside img) is the trunk foot: the sprite's origin and its depth. */
-export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape }
+/** A stroke point of the recipe: canvas px (before the crop), y down, and half-width. */
+export interface RecipePt { x: number; y: number; w: number }
+/**
+ * What a leafy tree was drawn from, for the 3D builder: every length in canvas px before the crop (y down), `foot` in the same px.
+ * `s` is the px per design unit (the scale). Only the leafy trees carry one.
+ */
+export interface Recipe { foot: { x: number; y: number }; trunk: RecipePt[]; roots: RecipePt[][]; s: number }
+export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape; recipe?: Recipe }
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],
   5: [22, 48, 52], 6: [30, 74, 70], 7: [44, 104, 88], 8: [74, 140, 104], 9: [118, 176, 124],
@@ -78,7 +85,7 @@ export class Canvas {
   idAt(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.id[y * this.w + x] : -1; }
   clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) { const i = y * this.w + x; this.px[i] = null; this.ref[i] = null; this.id[i] = -1; } }
   /** Outer outline, then crop to the drawing; returns the image and where `foot` lands in it. Works inside the written box only. */
-  finish(foot: { x: number; y: number }, parts?: Parts, shape?: PlantShape): Drawn {
+  finish(foot: { x: number; y: number }, parts?: Parts, shape?: PlantShape, recipe?: Recipe): Drawn {
     const { w, h, px } = this;
     // The outline can only fall on cells next to a written one: the box grown by 1.
     const bx0 = Math.max(0, this.x0 - 1), by0 = Math.max(0, this.y0 - 1), bx1 = Math.min(w - 1, this.x1 + 1), by1 = Math.min(h - 1, this.y1 + 1);
@@ -99,6 +106,7 @@ export class Canvas {
     }
     const out: Drawn = { img, foot: { x: Math.round(foot.x - x0), y: Math.round(foot.y - y0) } };
     if (parts) out.parts = { ...parts };
+    if (recipe) out.recipe = recipe;
     if (shape) {
       out.shape = {
         cast: shape.cast, trunkTop: shape.trunkTop - y0,

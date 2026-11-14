@@ -107,7 +107,7 @@ const ROOT_DIRS: Record<2 | 3 | 4, [number, number, number, number][]> = {
 };
 
 /** A few short humps around the foot: length + r()·4 units times `lenMul`, tapering by (1 − t)^1.1, the rim kept; the lower ones overlap. */
-export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: number) => void, cx: number, footY: number, s: number, tw: number, count: 2 | 3 | 4, lenMul: number): void {
+export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: number) => void, cx: number, footY: number, s: number, tw: number, count: 2 | 3 | 4, lenMul: number): Seg[] {
   const list: Seg[] = [];
   for (const [vx, vy, len0, hw] of ROOT_DIRS[count]) {
     const len = (len0 + r() * 4) * s * lenMul, wig = r() * 6, w0 = Math.max(1.2, hw * tw), m = Math.hypot(vx, vy);
@@ -120,6 +120,7 @@ export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: n
     list.push(seg);
   }
   list.sort((A, B) => A[A.length - 1].y - B[B.length - 1].y).forEach((sg) => paint(sg, true));
+  return list;
 }
 
 /** Moss on the lit root pixels around the foot (leafy greens '2'/'3'), shared by the leafy trees and the conifer. */
