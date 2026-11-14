@@ -25,7 +25,7 @@ import { hiddenByPicture } from './sightAttrs';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SHOT_LIFT } from './camera';
 import { isProjectileKind } from '../game/anim/defs';
-import { CONST, KIND } from '../generated/defs';
+import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines } from './stats';
@@ -138,6 +138,8 @@ export class RunView3d implements RunView {
     }
     if (init.info.cove) {
       this.cove = new Cove3d(init.info.cove, frames);
+      // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns stay atlas cards.
+      this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer);
       this.covePlants = new AtlasPlants(this.cove.plants(), init.map);
       this.coveCasters = this.cove.casters();
     }
@@ -385,7 +387,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), ...(this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
       },
       c.timer,
     );
@@ -435,7 +437,7 @@ export class RunView3d implements RunView {
     const ls = this.lightStat;
     const lines = [
       ...(ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : []),
-      ...(this.forest ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : []),
+      ...(this.forest && this.woodland ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : []),
     ];
     return {
       lines: lines.length > 0 ? lines : undefined,

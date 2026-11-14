@@ -12,6 +12,8 @@ import type { Cand, ShadowCaster } from './lights';
 import type { PlantPlace, PlantSprite } from './plants';
 import { hiddenAt, type SightMask } from './sightmask';
 import { SWAY } from './wind';
+import { buildTree, type BuiltTree } from './trees/build';
+import type { TreeSpec } from './trees/spec';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -78,38 +80,89 @@ export class Pixies3d {
   }
 }
 
+/** The largest willow size (percent of the spike's big willow) and the smallest the cove tries. */
+const WILLOW_SCALE = { min: 60, max: 130, step: 5 } as const; // first guess
+/** The room's wall keeps this far (tiles) from the willow's reach. */
+const WALL_GAP = 0.5; // first guess
+
+/** The cove's willow, with the shape it builds into (its radius and height decide the casters and the pixies' height). */
+function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree } {
+  const { foot } = coveLayout(c);
+  const x = foot.x / TILE, z = foot.y / TILE;
+  // The room in tiles; the reach is measured from the foot to every wall.
+  const room = Math.min(x - (c.x + WALL_GAP), c.x + c.w - WALL_GAP - x, z - (c.y + WALL_GAP), c.y + c.h - WALL_GAP - z);
+  let spec: TreeSpec = { form: 'willow', x, z, seed: c.seed, scalePct: WILLOW_SCALE.max, mirrored: false, leaf: 1, dead: false };
+  let built = buildTree(spec);
+  while (built.radius > room && spec.scalePct > WILLOW_SCALE.min) {
+    spec = { ...spec, scalePct: spec.scalePct - WILLOW_SCALE.step };
+    built = buildTree(spec);
+  }
+  return { spec, built };
+}
+
+/** The cove's tree in the 3D view: a willow of the grown-tree system at the trunk's foot, the largest size whose curtains stay 0.5 tiles inside the room. */
+export function coveWillow(c: CoveInfo): TreeSpec {
+  return fitWillow(c).spec;
+}
+
+interface SmallPlant { place: PlantPlace; sprite: PlantSprite; bush: boolean }
+
 export class Cove3d {
-  private readonly items: { place: PlantPlace; sprite: PlantSprite }[] = [];
+  /** Every small plant in the order of `placeCovePlants`: bushes, tufts and ferns (all cast; the bushes are 3D, the rest atlas sprites). */
+  private readonly small: SmallPlant[] = [];
+  private readonly willow: { spec: TreeSpec; built: BuiltTree };
   private readonly pixies: Pixies3d;
+  private readonly bushSpecs: TreeSpec[] = [];
 
   constructor(c: CoveInfo, private readonly frames: FrameRects) {
     const { spec, origin, foot } = coveLayout(c);
-    // The tree: its foot (trunk base) is COVE_TREE_FOOT in the 96 x 100 frame.
-    const tree = frames.cove_tree;
-    if (tree) this.items.push({ place: { x: foot.x / TILE, z: foot.y / TILE, mirrored: false, amp: SWAY.coveTree, seed: c.seed }, sprite: { rect: tree, foot: COVE_TREE_FOOT } });
+    this.willow = fitWillow(c);
     // The plants stand with the bottom centre of their frame on the spot.
     placeCovePlants(spec).forEach((p, i) => {
       const r = frames[p.frame];
       if (!r) return;
-      this.items.push({ place: { x: (origin.x + p.x) / TILE, z: (origin.y + p.y) / TILE, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } } });
+      const x = (origin.x + p.x) / TILE, z = (origin.y + p.y) / TILE, bush = p.frame.startsWith('cove_bush');
+      this.small.push({ place: { x, z, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } }, bush });
+      // A bush's width is 32 px at scale 100.
+      if (bush) this.bushSpecs.push({ form: 'bush', x, z, seed: c.seed + i + 1, scalePct: (r.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
     });
-    this.pixies = new Pixies3d({ x: foot.x, y: foot.y - CANOPY_UP }, foot.y, PIXIE_COUNT, c.seed);
+    // The pixies fly around the middle of the willow's height.
+    const up = (this.willow.built.height / 2) * TILE;
+    this.pixies = new Pixies3d({ x: foot.x, y: foot.y - up }, foot.y, PIXIE_COUNT, c.seed, up);
   }
 
-  /** Every plant as an atlas sprite with its place. */
+  /** The cove's tree. */
+  tree(): TreeSpec {
+    return this.willow.spec;
+  }
+
+  /** The bushes, as grown bushes at their spots. */
+  bushes(): TreeSpec[] {
+    return this.bushSpecs;
+  }
+
+  /** The tufts and ferns as atlas sprites with their places. */
   plants(): { place: PlantPlace; sprite: PlantSprite }[] {
-    return this.items;
+    return this.small.filter((s) => !s.bush);
   }
 
-  /** One caster per plant, for the lights' shadows: the card above its foot, its atlas rect. Ids count down from `CAST_ID0`. */
+  /**
+   * The casters for the lights' shadows: the willow first (id `CAST_ID0`; the atlas tree picture above its foot, as wide as its reach and as
+   * tall as it is: a stand-in), then one per small plant (its card above its foot). Their ids count down from `CAST_ID0 - 1`.
+   */
   casters(): ShadowCaster[] {
-    return this.items.map(({ place, sprite }, i) => {
+    const out: ShadowCaster[] = [];
+    const tree = this.frames.cove_tree;
+    const { spec, built } = this.willow;
+    if (tree) out.push({ id: CAST_ID0, x: spec.x, z: spec.z, w: 2 * built.radius, y0: 0, y1: built.height, u0: tree.x, v0: tree.y, u1: tree.x + tree.w, v1: tree.y + COVE_TREE_FOOT.y });
+    this.small.forEach(({ place, sprite }, i) => {
       const { rect, foot } = sprite;
-      return {
-        id: CAST_ID0 - i, x: place.x, z: place.z, w: rect.w / TILE, y0: 0, y1: foot.y / TILE,
+      out.push({
+        id: CAST_ID0 - 1 - i, x: place.x, z: place.z, w: rect.w / TILE, y0: 0, y1: foot.y / TILE,
         u0: rect.x, v0: rect.y, u1: rect.x + rect.w, v1: rect.y + foot.y,
-      };
+      });
     });
+    return out;
   }
 
   /** The pixies' glows and wings for this frame. */

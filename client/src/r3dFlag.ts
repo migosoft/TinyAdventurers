@@ -1,10 +1,10 @@
-/** The server-free dev pages of `?r3d=`: the demo (#301), the gallery (#303), the lights (#304) and the woodland (#306). */
-export function r3dPage(search: string): 'demo' | 'gallery' | 'lights' | 'woodland' | null {
+/** The server-free dev pages of `?r3d=`: the demo (#301), the gallery (#303), the lights (#304), the woodland (#306) and the cove (#329). */
+export function r3dPage(search: string): 'demo' | 'gallery' | 'lights' | 'woodland' | 'cove' | null {
   const p = new URLSearchParams(search).get('r3d');
-  return p === 'demo' || p === 'gallery' || p === 'lights' || p === 'woodland' ? p : null;
+  return p === 'demo' || p === 'gallery' || p === 'lights' || p === 'woodland' || p === 'cove' ? p : null;
 }
 
-/** `?r3d=demo`, `?r3d=gallery`, `?r3d=lights` or `?r3d=woodland`: a dev scene of the 3D view, no server and no login needed. */
+/** `?r3d=demo`, `?r3d=gallery`, `?r3d=lights`, `?r3d=woodland` or `?r3d=cove`: a dev scene of the 3D view, no server and no login needed. */
 export function isR3dDemo(search: string): boolean {
   return r3dPage(search) !== null;
 }

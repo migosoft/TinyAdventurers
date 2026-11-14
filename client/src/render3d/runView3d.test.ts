@@ -109,10 +109,13 @@ describe('the run view and the game lights', () => {
     expect(f?.darkvision).toBeNull();
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
-  it('a dungeon with a cove hands over its plants, adds the pixie lights and the plants as casters', () => {
+  it('a dungeon with a cove hands over its willow and bushes as trees (no sun), its tufts and ferns as plants, adds the pixie lights and the plants as casters', () => {
     const { f } = run({ cove: true, params: { sight: false } });
+    expect(f?.trees).toBeDefined();
+    expect(f?.trees?.complete).toBe(true); // a willow and a few bushes: all built in the first frame
+    expect(f?.sun ?? null).toBeNull();
+    expect([...f!.trees!.chunks.values()].reduce((n, k) => n + k.mesh.verts, 0)).toBeGreaterThan(0); // the willow is built in the first frame
     expect(f?.plants).toBeDefined();
-    expect(f?.trees).toBeUndefined();
     expect([...f!.plants!.chunks.values()].every((k) => k.n > 0)).toBe(true);
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
     expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);

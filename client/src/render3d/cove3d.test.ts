@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { CoveInfo } from '../generated/CoveInfo';
 import { coveLayout, placeCovePlants } from '../game/covemath';
-import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY, CANOPY_UP } from '../game/pixieMath';
+import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from '../game/pixieMath';
+import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import type { Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
-import { Cove3d, PIXIE_LIGHT, Pixies3d } from './cove3d';
+import { CAST_ID0, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
+import { makeLighting } from './lightNodes';
+import { makeSight } from './sightNodes';
+import { seeUniforms } from './materials';
+import { fragment, type Builder } from './shaderCode.testutil';
+import { buildTree } from './trees/build';
+import { newLeafBuf, pushLeaves } from './trees/leaves';
+import { leafGeometry } from './trees/treeLayer';
+import { makeTreeShared, packTreeStreams, treeMaterials } from './trees/treeNodes';
 import { AtlasPlants } from './atlasPlants';
 import { TILE_ID } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
@@ -23,24 +32,99 @@ const frames: FrameRects = {
 const cam: Cam = { x: 16, z: 12, pitch: Math.PI / 4, yaw: 0 };
 const { foot } = coveLayout(cove);
 
+/** The real room: 26 x 20 tiles, the trunk at its middle. */
+const room = (seed: number): CoveInfo => ({ x: 10, y: 8, w: 26, h: 20, tree_x: 23, tree_y: 18, seed });
+
+describe('coveWillow', () => {
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
+    it(`keeps the willow of seed ${seed} 0.5 tiles inside the room, as large as the steps allow`, () => {
+      const c = room(seed);
+      const w = coveWillow(c);
+      const built = buildTree(w);
+      const f = coveLayout(c).foot;
+      expect(w.form).toBe('willow');
+      expect(w.seed).toBe(seed);
+      expect(w.x).toBeCloseTo(f.x / 16, 6);
+      expect(w.z).toBeCloseTo(f.y / 16, 6);
+      expect(w.scalePct % 5).toBe(0);
+      expect(w.scalePct).toBeGreaterThanOrEqual(60);
+      expect(w.scalePct).toBeLessThanOrEqual(130);
+      expect(w.x - built.radius).toBeGreaterThanOrEqual(c.x + 0.5 - 1e-9);
+      expect(w.x + built.radius).toBeLessThanOrEqual(c.x + c.w - 0.5 + 1e-9);
+      expect(w.z - built.radius).toBeGreaterThanOrEqual(c.y + 0.5 - 1e-9);
+      expect(w.z + built.radius).toBeLessThanOrEqual(c.y + c.h - 0.5 + 1e-9);
+      if (w.scalePct < 130) {
+        const bigger = buildTree({ ...w, scalePct: w.scalePct + 5 });
+        const fits = w.x - bigger.radius >= c.x + 0.5 && w.x + bigger.radius <= c.x + c.w - 0.5 && w.z - bigger.radius >= c.y + 0.5 && w.z + bigger.radius <= c.y + c.h - 0.5;
+        expect(fits).toBe(false);
+      }
+    });
+  }
+
+  it('falls back to the smallest size in a room too small for it', () => {
+    expect(coveWillow({ x: 10, y: 8, w: 4, h: 4, tree_x: 12, tree_y: 10, seed: 1 }).scalePct).toBe(60);
+  });
+});
+
+describe('the cove tree in the colour pass without a sun', () => {
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`builds the willow's materials and the falling leaves for ${B.name}`, () => {
+      const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: false });
+      const mats = treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette: new Texture(), shared: makeTreeShared(), hasSun: false });
+      expect(mats.sun).toBeNull();
+      const built = buildTree(coveWillow(room(1)));
+      expect(built.drops).toBe(true);
+      const m = built.mesh;
+      const g = new BufferGeometry();
+      const set = (name: string, data: ArrayLike<number>, size: number) => g.setAttribute(name, new BufferAttribute(Float32Array.from(data), size));
+      set('position', m.position, 3); set('grad', m.grad, 4); set('part', m.part, 4); set('misc', m.misc, 4); set('tuft', m.tuft, 4);
+      const packed = packTreeStreams(m.normal, m.sway, Array.from({ length: m.verts }, () => [3, 4, 1, 0]).flat());
+      g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
+      g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
+      set('look', Array.from({ length: m.verts }, () => [1, 0, 1, 0]).flat(), 4);
+      g.setIndex(m.index);
+      for (const mat of [mats.depth, mats.colour]) expect(fragment(B, mat, { geometry: g }).length).toBeGreaterThan(0);
+      const leaves = newLeafBuf();
+      pushLeaves(leaves, built, 3, 4, 1);
+      expect(leaves.n).toBeGreaterThan(0);
+      for (let i = 0; i < leaves.n; i++) { leaves.leaf.push(1); leaves.look.push(1, 0, 1, 0); }
+      expect(fragment(B, mats.leaf, { geometry: leafGeometry(leaves) }).length).toBeGreaterThan(0);
+    });
+  }
+});
+
 describe('Cove3d', () => {
   const c = new Cove3d(cove, frames);
+  const placed = placeCovePlants(coveLayout(cove).spec);
+  const small = placed.filter((p) => frames[p.frame]);
 
-  it('stands the tree on the layout foot, swaying as the cove tree', () => {
-    const tree = c.plants()[0];
-    expect(tree.place.x).toBeCloseTo(foot.x / 16, 6);
-    expect(tree.place.z).toBeCloseTo(foot.y / 16, 6);
-    expect(tree.place.amp).toBe(SWAY.coveTree);
-    expect(tree.sprite.rect).toEqual(frames.cove_tree);
+  it('plants the willow on the layout foot, as the cove coveWillow says', () => {
+    const t = c.tree();
+    expect(t).toEqual(coveWillow(cove));
+    expect(t.x).toBeCloseTo(foot.x / 16, 6);
+    expect(t.z).toBeCloseTo(foot.y / 16, 6);
   });
 
-  it('turns every placed plant into one atlas sprite that sways lightly', () => {
-    const placed = placeCovePlants(coveLayout(cove).spec);
-    expect(placed.length).toBeGreaterThan(0);
-    expect(c.plants()).toHaveLength(placed.length + 1);
-    for (const p of c.plants().slice(1)) {
+  it('turns every bush spot into a bush spec and no tuft or fern', () => {
+    const bushes = placed.map((p, i) => ({ p, i })).filter(({ p }) => p.frame.startsWith('cove_bush'));
+    expect(bushes.length).toBeGreaterThan(0);
+    const specs = c.bushes();
+    expect(specs).toHaveLength(bushes.length);
+    const { origin } = coveLayout(cove);
+    specs.forEach((s, k) => {
+      const { p, i } = bushes[k];
+      expect(s).toEqual({ form: 'bush', x: (origin.x + p.x) / 16, z: (origin.y + p.y) / 16, seed: cove.seed + i + 1, scalePct: (frames[p.frame]!.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
+    });
+  });
+
+  it('keeps only the tufts and ferns as atlas sprites, swaying lightly', () => {
+    const tufts = small.filter((p) => !p.frame.startsWith('cove_bush'));
+    expect(tufts.length).toBeGreaterThan(0);
+    expect(c.plants()).toHaveLength(tufts.length);
+    for (const p of c.plants()) {
       expect(p.place.amp).toBe(SWAY.small);
       expect(p.sprite.foot.y).toBe(p.sprite.rect.h);
+      expect([frames.cove_tuft_a, frames.cove_tuft_b, frames.cove_fern]).toContainEqual(p.sprite.rect);
     }
   });
 
@@ -50,9 +134,17 @@ describe('Cove3d', () => {
     expect(chunks.reduce((n, k) => n + k.n, 0)).toBe(c.plants().length * 6);
   });
 
-  it('casts one shadow per plant, with negative ids and positive widths', () => {
+  it('casts the willow with CAST_ID0 sized to it, and each small plant with ids counting down from CAST_ID0 - 1', () => {
     const k = c.casters();
-    expect(k).toHaveLength(c.plants().length);
+    expect(k).toHaveLength(1 + small.length);
+    const built = buildTree(c.tree());
+    expect(k[0].id).toBe(CAST_ID0);
+    expect(k[0].w).toBeCloseTo(2 * built.radius, 6);
+    expect(k[0].y1).toBeCloseTo(built.height, 6);
+    expect(k[0].x).toBeCloseTo(c.tree().x, 6);
+    expect(k[0].z).toBeCloseTo(c.tree().z, 6);
+    expect(k[0].u1 - k[0].u0).toBe(frames.cove_tree.w);
+    k.slice(1).forEach((e, i) => expect(e.id).toBe(CAST_ID0 - 1 - i));
     expect(new Set(k.map((e) => e.id)).size).toBe(k.length);
     for (const e of k) {
       expect(e.id).toBeLessThan(0);
@@ -76,11 +168,12 @@ describe('Cove3d', () => {
   });
 
   it('keeps the pixies inside the 2D ellipse span', () => {
+    const crown = buildTree(c.tree()).height / 2;
     for (let t = 0; t < 60; t += 1.7) {
       for (const l of c.lights(t)) {
         expect(Math.abs(l.x - foot.x / 16)).toBeLessThanOrEqual(PIXIE_RX / 16 + 1e-6);
         expect(Math.abs(l.z - foot.y / 16)).toBeLessThanOrEqual((0.6 * PIXIE_RY) / 16 + 1e-6);
-        expect(Math.abs(l.y - CANOPY_UP / 16)).toBeLessThanOrEqual((0.4 * PIXIE_RY) / 16 + 1e-6);
+        expect(Math.abs(l.y - crown)).toBeLessThanOrEqual((0.4 * PIXIE_RY) / 16 + 1e-6); // around the crown's middle
       }
     }
   });

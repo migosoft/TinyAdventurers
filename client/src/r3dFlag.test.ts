@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { isR3dDemo, wants3d } from './r3dFlag';
+import { isR3dDemo, r3dPage, wants3d } from './r3dFlag';
+
+describe('r3dPage', () => {
+  it('names the cove page', () => {
+    expect(r3dPage('?r3d=cove')).toBe('cove');
+    expect(isR3dDemo('?r3d=cove')).toBe(true);
+    expect(wants3d('?r3d=cove', true)).toBe(false);
+  });
+});
 
 describe('r3dFlag', () => {
   it('wants3d needs ?r3d and a debug account', () => {

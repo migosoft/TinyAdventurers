@@ -5,6 +5,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
+import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
@@ -38,6 +39,13 @@ export async function bootWoodland(el: HTMLElement, search: string): Promise<voi
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createWoodlandStage(assets, p, s, host));
+}
+
+/** `?r3d=cove` (#329): the nymph's cove with its willow, bushes, pixies and torches, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootCove(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createCoveStage(assets, p, s));
 }
 
 export interface Run3d {
