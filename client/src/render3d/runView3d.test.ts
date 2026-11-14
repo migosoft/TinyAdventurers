@@ -20,6 +20,8 @@ import type { OverlayItem } from './overlayLayout';
 import { SIDE } from '../generated/defs';
 import type { FrameInput } from './view';
 import type { PlantInfo } from '../generated/PlantInfo';
+import type { CoverResult } from './cover/coverJob';
+import { encodeCover } from './cover/kinds';
 import { hourLabel, mistLightOf, sky, startHour } from './sun';
 import { WIND } from './wind';
 
@@ -109,17 +111,18 @@ describe('the run view and the game lights', () => {
     expect(f?.darkvision).toBeNull();
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
-  it('a dungeon with a cove hands over its willow and bushes as trees (no sun), its tufts and ferns as plants, adds the pixie lights and the plants as casters', () => {
-    const { f } = run({ cove: true, params: { sight: false } });
+  it('a dungeon with a cove hands over its willow and bushes as trees (no sun), adds the pixie lights and the bushes as casters, and gives its tufts and ferns as bushel spots', () => {
+    const r = run({ cove: true, params: { sight: false } });
+    const { f } = r;
     expect(f?.trees).toBeDefined();
     expect(f?.trees?.complete).toBe(true); // a willow and a few bushes: all built in the first frame
     expect(f?.sun ?? null).toBeNull();
     expect([...f!.trees!.chunks.values()].reduce((n, k) => n + k.mesh.verts, 0)).toBeGreaterThan(0); // the willow is built in the first frame
-    expect(f?.plants).toBeDefined();
-    expect([...f!.plants!.chunks.values()].every((k) => k.n > 0)).toBe(true);
+    expect(f).not.toHaveProperty('plants');
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
     expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);
-    expect(run().f?.plants).toBeUndefined();
+    expect(Array.isArray(r.v.bushelSpots())).toBe(true); // this small cove may place no tuft; Cove3d's own test counts them
+    expect(run().v.bushelSpots()).toEqual([]);
   });
   it('with sight on the cove plants cast only where the picture shows them (none before the mask exists, the seen ones after)', () => {
     const r = run({ cove: true });
@@ -173,6 +176,49 @@ describe('the run view and the game lights', () => {
 });
 
 const WOODLAND_SUN = { side: 1, elevation: 30 } as const;
+describe('the ground cover in the run view (#330)', () => {
+  /** A cover of 4 art px over the whole 7 x 4 map. */
+  const covered = (): CoverResult => {
+    const w = 7 * 16, h = 4 * 16, data = new Uint8Array(w * h * 4);
+    for (let p = 0; p < w * h; p++) data[p * 4 + 3] = encodeCover(4, 0);
+    return { image: { w, h, data }, bare: null, bushels: [], sheets: 4 };
+  };
+  const shadowYs = (f: FrameInput | null): number[] => {
+    const p = f!.dynamic.shadows.position, out: number[] = [];
+    for (let i = 1; i < p.length; i += 3) out.push(p[i]);
+    return out;
+  };
+
+  it('the frame carries cover { on, gh, wind, t } from the parameters', () => {
+    const { f } = run({ params: { cover: false, gh: 2, wind: false } });
+    expect(f?.cover).toEqual({ on: false, gh: 2, wind: false, t: 0 });
+    expect(run().f?.cover).toEqual({ on: true, gh: 1, wind: true, t: 0 });
+  });
+
+  it('lifts the ground ovals onto the cover after setCover, none before, and not with the switch off', () => {
+    const r = run();
+    const before = shadowYs(r.f);
+    expect(before.length).toBeGreaterThan(0);
+    r.v.setCover(covered());
+    const after = shadowYs(r.again());
+    expect(after).toHaveLength(before.length);
+    after.forEach((y, i) => expect(y - before[i]).toBeCloseTo(4 / 16, 6));
+    r.v.setCover(null);
+    expect(shadowYs(r.again())).toEqual(before);
+  });
+
+  it('gh scales the lift and cover=0 lifts nothing', () => {
+    const lifted = (params: Partial<R3dParams>): number[] => {
+      const r = run({ params });
+      r.v.setCover(covered());
+      return shadowYs(r.again());
+    };
+    const plain = shadowYs(run().f);
+    expect(lifted({ gh: 2 })[0] - plain[0]).toBeCloseTo(8 / 16, 6);
+    expect(lifted({ cover: false })).toEqual(plain);
+  });
+});
+
 describe('the woodland run: sky, hour, sun and plants (#306)', () => {
   it('the first frame (no snapshot) has the sun for the start hour', () => {
     const { f } = run({ woodland: true, torch: false, noSnap: true });
@@ -182,7 +228,6 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     expect(f!.sun!.colour).toEqual(s.colour);
     expect(f!.sun!.fit.size).toBe(2048);
     expect(f?.trees).toBeDefined();
-    expect(f?.plants).toBeUndefined();
   });
   it('a snapshot at tick 60 * 720 is one hour later', () => {
     const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });
@@ -209,10 +254,9 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     expect(f?.sun ?? null).toBeNull();
     expect(f?.ambient).toEqual([...WORK_AMBIENT]);
   });
-  it('a dungeon frame has sun null and no plants', () => {
+  it('a dungeon frame has sun null', () => {
     const { f } = run();
     expect(f?.sun).toBeNull();
-    expect(f?.plants).toBeUndefined();
     expect(f?.trees).toBeUndefined();
   });
   it('the forest is built a few trees a frame and the readout counts them', () => {

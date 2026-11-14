@@ -9,6 +9,7 @@ import type { Hud } from '../ui/hud';
 import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
+import { tilesSeed } from './cover/moss';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
 import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
@@ -88,7 +89,7 @@ export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: RunHud; my
 
 export interface RunStage extends Stage {
   readonly runView: RunView3d;
-  readonly job: CoverJob | null;
+  readonly job: CoverJob;
 }
 
 /**
@@ -101,16 +102,24 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   const overlay = new Overlay3d(el);
   const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
-  const job = info.woodland ? coverJob(coverSources(session.map, { woodland: info.woodland, cove: null, spawnRow: info.spawn_y / TILE, spots: [] }), info.woodland.seed) : null;
-  // A ground too large for the device: shown once, the run keeps its flat grass.
+  // The cover of every level (the woodland's grass; a dungeon's moss and the cove's grass), built once and kept for the rebuilds after a lost device.
+  const job: CoverJob = coverJob(
+    coverSources(session.map, { woodland: info.woodland, cove: info.cove ?? null, spawnRow: info.spawn_y / TILE, spots: runView.bushelSpots() }),
+    info.woodland ? info.woodland.seed : tilesSeed(session.map),
+  );
+  // A ground or cover too large for the device: shown once, the run goes on without cover (nothing is lifted then).
   let tooLarge = false;
   const upload = (v: View): void => {
-    if (!job || tooLarge) return;
+    if (tooLarge) return;
+    const r = job.result()!;
     try {
-      v.setGround(job.result()!.bare!);
+      if (r.bare) v.setGround(r.bare);
+      v.setCover(r);
+      runView.setCover(r);
     } catch (e) {
       if (!(e instanceof GroundTooLargeError)) throw e;
       tooLarge = true;
+      runView.setCover(null);
       showError(el, e.message, false);
     }
   };
@@ -151,7 +160,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
     world: { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone' },
     built(view: View): void {
       runView.attach(view);
-      if (job?.done) upload(view); // the kept pixels, no repaint
+      if (job.done) upload(view); // the kept result, no new job
     },
     frame(c: StageCtx): number {
       if (!looped) {
@@ -173,7 +182,9 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       }
       run.input.yaw = (shown * Math.PI) / 180;
       run.input.free = c.params.free;
-      if (job && !job.done && job.step(COVER_BUDGET_MS) && c.view) upload(c.view);
+      if (!job.done && job.step(COVER_BUDGET_MS)) {
+        if (c.view) upload(c.view);
+      }
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.dt * 1000);
       const r = window.__r3d;
@@ -187,6 +198,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         r.casters = ls?.casters;
         r.yaw = whole;
         if (c.view) r.chunks = c.view.chunks;
+        const cr = job.result();
+        if (cr) r.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
       }
       return runView.drawCalls;
     },

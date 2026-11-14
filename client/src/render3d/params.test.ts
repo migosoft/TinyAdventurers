@@ -97,7 +97,7 @@ describe('toSearch', () => {
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
-      hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40,
+      hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -149,6 +149,19 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&plain=yes').plain).toBe(false);
     expect(toSearch({ ...DEFAULTS, leaf: 0, plain: true }, '?r3d=woodland')).toBe('?r3d=woodland&leaf=0&plain=1');
     expect(toSearch(DEFAULTS, '?r3d=woodland&leaf=50&plain=1')).toBe('?r3d=woodland');
+  });
+
+  it('reads the ground cover (#330): cover on unless cover=0, gh 0.25..3 (default 1), defaults left out of the URL', () => {
+    expect(parseParams('?r3d')).toMatchObject({ cover: true, gh: 1 });
+    expect(parseParams('?r3d&cover=0').cover).toBe(false);
+    expect(parseParams('?r3d&cover=1').cover).toBe(true);
+    expect(parseParams('?r3d&cover=x').cover).toBe(true);
+    expect(parseParams('?r3d&gh=2').gh).toBe(2);
+    expect(parseParams('?r3d&gh=9').gh).toBe(3);
+    expect(parseParams('?r3d&gh=0').gh).toBe(0.25);
+    expect(parseParams('?r3d&gh=abc').gh).toBe(1);
+    expect(toSearch({ ...DEFAULTS, cover: false, gh: 2 }, '?r3d=woodland')).toBe('?r3d=woodland&cover=0&gh=2');
+    expect(toSearch(DEFAULTS, '?r3d=woodland&cover=0&gh=2')).toBe('?r3d=woodland');
   });
 
   it('reads the dev-only leafRate (#329): a multiplier on the falling leaves\' clock, 1 by default', () => {

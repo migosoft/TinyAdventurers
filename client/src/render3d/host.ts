@@ -28,6 +28,8 @@ declare global {
       lights?: { list: number; inView: number }; casters?: number;
       /** ... and the trees built of all on the woodland dev page (#329), for the pictures script. */
       plants?: { built: number; total: number };
+      /** ... and the ground cover's sheets (the tallest kind, art px) and bushels once it is built (#330). */
+      cover?: { sheets: number; bushels: number };
     };
   }
 }

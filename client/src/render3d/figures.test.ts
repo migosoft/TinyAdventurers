@@ -589,4 +589,18 @@ describe('Figures3d ground ovals (#306)', () => {
     expect(half.shadows.n).toBe(full.shadows.n);
     full.shadows.alpha.forEach((a, i) => expect(half.shadows.alpha[i]).toBeCloseTo(a * 0.5, 6));
   });
+  it('lifts the ovals and a skull by look.ground (#330), the standing bodies stay put', () => {
+    const calls: number[] = [];
+    const ground = (_x: number, _z: number, r: number): number => { calls.push(r); return 0.2; };
+    const plain = make().frame(frame(ents()), cam(), look(1));
+    const fg = make();
+    const lifted = fg.frame(frame(ents()), cam(), { ...look(1), ground });
+    expect(lifted.shadows.n).toBe(plain.shadows.n);
+    for (let i = 0; i < plain.shadows.position.length; i += 3) expect(lifted.shadows.position[i + 1] - plain.shadows.position[i + 1]).toBeCloseTo(0.2, 6);
+    expect(Array.from(lifted.cards.position)).toEqual(Array.from(plain.cards.position));
+    fg.event({ t: 'Died', id: 10, x: at(1), y: 8, kind: KIND.Knight });
+    const b = fg.frame(frame([]), cam(), { ...look(1), ground });
+    expect(ys(b.decals).every((y) => Math.abs(y - (LIE_Y + 0.2)) < 1e-6)).toBe(true);
+    expect(calls).toContain(0.3);
+  });
 });

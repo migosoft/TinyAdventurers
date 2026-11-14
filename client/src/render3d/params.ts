@@ -32,6 +32,8 @@ export interface R3dParams {
   leaf: number | null; plain: boolean;
   /** Dev page, not in the panel: how many times as often the falling leaves fall (1: the real rate; a leaf's life still takes its whole time). */
   leafRate: number;
+  /** The ground cover (#330): on or off, and its height factor 0.25..3 (1: the approved heights). */
+  cover: boolean; gh: number;
 }
 
 /** The hour the sky pages start at (and the panel's slider shows) when the URL gives none. */
@@ -44,7 +46,7 @@ export const DEFAULTS: R3dParams = {
   free: false, light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
-  hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false, leafRate: 1,
+  hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false, leafRate: 1, cover: true, gh: 1,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -114,10 +116,12 @@ export function parseParams(search: string): R3dParams {
     leaf: leaf === null ? null : range(leaf, 0, 100, 0),
     plain: q.get('plain') === '1',
     leafRate: range(num(q.get('leafRate')), 1, 1000, DEFAULTS.leafRate),
+    cover: q.get('cover') === '0' ? false : DEFAULTS.cover,
+    gh: range(num(q.get('gh')), 0.25, 3, DEFAULTS.gh),
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -156,5 +160,7 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.leaf !== null) s += `&leaf=${p.leaf}`;
   if (p.plain !== DEFAULTS.plain) s += '&plain=1';
   if (p.leafRate !== DEFAULTS.leafRate) s += `&leafRate=${p.leafRate}`;
+  if (p.cover !== DEFAULTS.cover) s += '&cover=0';
+  if (p.gh !== DEFAULTS.gh) s += `&gh=${p.gh}`;
   return s;
 }

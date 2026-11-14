@@ -17,13 +17,11 @@ import { buildTree, type BuiltTree } from './trees/build';
 import { newLeafBuf, pushLeaves } from './trees/leaves';
 import { leafGeometry } from './trees/treeLayer';
 import { makeTreeShared, packTreeStreams, treeMaterials } from './trees/treeNodes';
-import { AtlasPlants } from './atlasPlants';
 import { TILE_ID } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { SightMask } from './sightmask';
-import { SWAY } from './wind';
 import type { FrameRects } from './worldMesh';
 
 const cove: CoveInfo = { x: 10, y: 8, w: 14, h: 10, tree_x: 16, tree_y: 12, seed: 5 };
@@ -136,23 +134,6 @@ describe('Cove3d', () => {
       const { p, i } = bushes[k];
       expect(s).toEqual({ form: 'bush', x: (origin.x + p.x) / 16, z: (origin.y + p.y) / 16, seed: cove.seed + i + 1, scalePct: (frames[p.frame]!.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
     });
-  });
-
-  it('keeps only the tufts and ferns as atlas sprites, swaying lightly', () => {
-    const tufts = small.filter((p) => !p.frame.startsWith('cove_bush'));
-    expect(tufts.length).toBeGreaterThan(0);
-    expect(c.plants()).toHaveLength(tufts.length);
-    for (const p of c.plants()) {
-      expect(p.place.amp).toBe(SWAY.small);
-      expect(p.sprite.foot.y).toBe(p.sprite.rect.h);
-      expect([frames.cove_tuft_a, frames.cove_tuft_b, frames.cove_fern]).toContainEqual(p.sprite.rect);
-    }
-  });
-
-  it('hands over to atlas plants that show every sprite at once', () => {
-    const f = new AtlasPlants(c.plants(), { w: 64, h: 48 });
-    const chunks = [...f.frame(true, 1).chunks.values()];
-    expect(chunks.reduce((n, k) => n + k.n, 0)).toBe(c.plants().length * 6);
   });
 
   it('hands a bushel spot to every tuft and fern and none to a bush', () => {

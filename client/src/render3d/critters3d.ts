@@ -55,7 +55,7 @@ export class Critters3d {
    * Pushes the critters at time `t` (s) into `cards`; nothing before `day` 0.5, none outside `view` or on an unseen texel (`mask` null: all
    * seen). Returns how many critters it drew.
    */
-  push(cards: CardBuf, frames: FrameRects, cam: Cam, t: number, day: number, mask: SightMask | null, view: Footprint): number {
+  push(cards: CardBuf, frames: FrameRects, cam: Cam, t: number, day: number, mask: SightMask | null, view: Footprint, ground?: (x: number, z: number, r: number) => number): number {
     if (day < 0.5) return 0;
     let n = 0;
     const shown = (x: number, z: number): boolean =>
@@ -80,7 +80,8 @@ export class Critters3d {
       const b = flyPos(fl.q, t, fl.bounds, this.pos);
       const x = b.x / TILE, z = b.ground / TILE;
       if (!shown(x, z)) continue;
-      const lift = butterflyLift(b) + FLY_LOW / TILE;
+      // A landed butterfly sits on the cover's top; one in flight keeps its height over the bare ground.
+      const lift = butterflyLift(b) + FLY_LOW / TILE + (b.landed && ground ? ground(x, z, 0) : 0);
       if (b.open) { rect(x, z, lift, -3, -2, 2, 3, fl.colour, 0); rect(x, z, lift, 1, -2, 2, 3, fl.colour, 0); }
       else { rect(x, z, lift, -1, -2, 1, 3, fl.colour, 0); rect(x, z, lift, 0, -2, 1, 3, fl.colour, 0); }
       rect(x, z, lift, 0, -1, 1, 3, BEE_COLOURS.body, OVER);

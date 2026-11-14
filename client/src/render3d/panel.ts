@@ -24,7 +24,7 @@ const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: num
   { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
-const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight'>, name: string): Switch =>
+const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
 const GAME_LIGHT: Switch = {
   name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
@@ -51,8 +51,8 @@ const SKY_SWITCHES: Switch[] = [
   { name: 'Clouds', get: (p) => p.clouds, set: (p) => ({ clouds: !p.clouds }) },
 ];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
-  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_FADE, flag('sight', 'Sight')],
-  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), DARK_FADE, flag('sight', 'Sight')],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
 };
 
 /** A degree value with at most one decimal and no trailing .0. */
@@ -141,6 +141,14 @@ export function createPanel(
   const swRow = el('div', 'r3d-row');
   for (const sw of SWITCHES[mode]) button(swRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
 
+  // Ground cover (#330): the height factor.
+  const ghRow = el('div', 'r3d-row');
+  const ghLabel = el('label');
+  const gh = slider(0.25, 3, 0.25, () => cur.gh, (v) => change({ gh: v }));
+  gh.input.id = 'r3d-gh';
+  ghLabel.htmlFor = 'r3d-gh';
+  ghRow.append(ghLabel, gh.input);
+
   // See through: the mode and the look's three sliders.
   const seeRow = el('div', 'r3d-row');
   seeRow.appendChild(el('span', undefined, 'See through'));
@@ -215,7 +223,7 @@ export function createPanel(
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -247,6 +255,8 @@ export function createPanel(
     yaw.sync();
     hourLabelEl.textContent = `Time of day ${hourLabel(cur.hour ?? DEFAULT_HOUR)}`;
     hour.sync();
+    ghLabel.textContent = `Cover height ${Math.round(cur.gh * 100) / 100}`;
+    gh.sync();
     leafLabel.textContent = cur.leaf === null ? 'Leaves own' : `Leaves ${cur.leaf}`;
     leaf.sync();
     for (const { d, label, s } of seeSliders) {

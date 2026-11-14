@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { parseParams } from './params';
@@ -23,7 +23,7 @@ function setup(search: string) {
   const p = parseParams(search);
   const stage: Stage = createCoveStage(assets, p, search);
   let f: FrameInput | null = null;
-  const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512 };
+  const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512, setCover: vi.fn() };
   let now = 0;
   const run = (n: number, dt: number, held: string[] = []): FrameInput => {
     for (let i = 0; i < n; i++) {
@@ -37,7 +37,7 @@ function setup(search: string) {
     }
     return f!;
   };
-  return { stage, run };
+  return { stage, run, view };
 }
 
 describe('the ?r3d=cove stage', () => {
@@ -63,13 +63,27 @@ describe('the ?r3d=cove stage', () => {
     expect(Array.from(map.tiles)).toEqual(Array.from(coveStageMap().tiles));
   });
 
-  it("draws the cove's willow and bushes as trees without a sun and its tufts and ferns as plants", () => {
+  it("draws the cove's willow and bushes as trees without a sun; its tufts and ferns are no atlas plants", () => {
     const f = setup('?r3d=cove').run(60, 0.016);
     expect(f.sun ?? null).toBeNull();
     expect(f.trees!.complete).toBe(true);
     expect(f.trees!.chunks.size).toBeGreaterThan(0);
-    expect(f.plants).toBeDefined();
+    expect(f).not.toHaveProperty('plants');
     expect(new Cove3d(COVE_STAGE, frames).bushes().length).toBeGreaterThan(0);
+  });
+
+  it("builds the room's cover (moss and the cove's grass with bushels from the tufts and ferns) and hands it to the view (#330)", () => {
+    window.__r3d = { backend: 'test', frames: 0, renderSize: [0, 0], zoom: 1 };
+    const { stage, view, run } = setup('?r3d=cove&gh=1.5&cover=0');
+    stage.built!(view as never);
+    expect(view.setCover).toHaveBeenCalledTimes(1);
+    const cover = view.setCover.mock.calls[0][0] as { sheets: number; bushels: unknown[]; bare: unknown };
+    expect(cover.bare).toBeNull();
+    expect(cover.bushels.length).toBeGreaterThan(0);
+    const f = run(1, 0.016);
+    expect(f.cover).toMatchObject({ on: false, gh: 1.5 });
+    expect(window.__r3d.cover).toEqual({ sheets: cover.sheets, bushels: cover.bushels.length });
+    delete window.__r3d;
   });
 
   it('lights it with two torches and the pixies, and casts the willow', () => {

@@ -75,6 +75,8 @@ export interface Card {
   originX: number; footY: number; scale: number; sx?: number; sy?: number;
   angle?: number; pivot?: [number, number]; offset?: [number, number];
   tint: [number, number, number]; mode: 0 | 1 | 2; alpha: number; bias?: number;
+  /** Tiles a flat card (`pushFlat`, `pushLying`) is raised onto the ground cover: y = LIE_Y + base. Default 0. */
+  base?: number;
   /** The server marks its entity dark: the card is lit by the ambient only (`shade.y` in the shader). */
   dark?: boolean;
   /** Tiles, half the drawn width: a wide figure's sight is the least of its centre and four corner points (`footSight`). Default 0. */
@@ -189,7 +191,7 @@ export function pushFlat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam): voi
 function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number, number, number], up: [number, number, number]): void {
   const p = place({ ...c, lift: 0 }, frames, cam, right, up, false);
   if (!p) return;
-  for (const q of p.q) q[1] = LIE_Y;
+  for (const q of p.q) q[1] = LIE_Y + (c.base ?? 0);
   pushQuad(b.position, b.uv, p.q, lookOf(b, c));
   b.n++;
 }
@@ -199,9 +201,9 @@ function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number,
  * `rx` runs along screen right on the ground, `rz` along screen down, so the ellipse keeps its look at any yaw.
  * Callers pass the snapped foot (`snapGround`), like the cards, so the shadow stays under the feet.
  */
-export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: number, rz: number, alpha: number): void {
+export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: number, rz: number, alpha: number, base = 0): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
-  const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y, z + sn * a * rx + cs * d * rz, u, v];
+  const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y + base,z + sn * a * rx + cs * d * rz, u, v];
   pushQuad(b.position, b.uv, [at(-1, -1, -1, -1), at(1, -1, 1, -1), at(1, 1, 1, 1), at(-1, 1, -1, 1)], () => { b.alpha.push(alpha); b.foot.push(x, z); });
   b.n++;
 }

@@ -150,6 +150,46 @@ describe('the run stage', () => {
     expect(view2.setGround).toHaveBeenCalledTimes(1); // no second upload by the frame
   });
 
+  it('every level builds its cover: a dungeon uploads cover without a bare ground, a woodland both, again after a rebuild from the kept result (#330)', () => {
+    window.__r3d = { backend: 'test', frames: 0, renderSize: [0, 0], zoom: 1 };
+    for (const over of [{}, { woodland: WOODLAND }]) {
+      const { stage, frame } = setup(BIG, over);
+      const view = fakeView();
+      stage.built!(view);
+      expect(view.setCover).not.toHaveBeenCalled();
+      for (let i = 0; i < 400 && !stage.job.done; i++) frame(view);
+      expect(stage.job.done).toBe(true);
+      expect(view.setCover).toHaveBeenCalledTimes(1);
+      expect(view.setGround).toHaveBeenCalledTimes(over.woodland ? 1 : 0);
+      const first = (view.setCover as ReturnType<typeof vi.fn>).mock.calls[0][0] as { image: unknown; sheets: number; bushels: unknown[] };
+      const view2 = fakeView();
+      stage.built!(view2);
+      expect(((view2.setCover as ReturnType<typeof vi.fn>).mock.calls[0][0] as { image: unknown }).image).toBe(first.image);
+      frame(view2);
+      expect(view2.setCover).toHaveBeenCalledTimes(1);
+      expect(window.__r3d.cover).toEqual({ sheets: first.sheets, bushels: first.bushels.length });
+    }
+    delete window.__r3d;
+  });
+
+  it('a cover too large for the device shows the error once, the run goes on and nothing is lifted', () => {
+    const { stage, frame, el } = setup(BIG);
+    const view = fakeView();
+    (view.setCover as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new GroundTooLargeError(1, 1, 0);
+    });
+    stage.built!(view);
+    for (let i = 0; i < 400 && !stage.job.done; i++) frame(view);
+    expect(el.querySelectorAll('.r3d-error')).toHaveLength(1);
+    stage.built!(view);
+    expect(el.querySelectorAll('.r3d-error')).toHaveLength(1);
+    expect(() => frame(view)).not.toThrow();
+    const draw = vi.mocked(view.draw).mock.calls.at(-1)![0];
+    const ys = Array.from(draw.dynamic.shadows.position).filter((_, i) => i % 3 === 1);
+    expect(ys.length).toBeGreaterThan(0);
+    expect(ys.every((y) => Math.abs(y - 0.01) < 1e-6)).toBe(true);
+  });
+
   it('a ground too large for the device shows the error once and the run goes on', () => {
     const { stage, frame, el } = setup(ROWS, { woodland: WOODLAND });
     const view = fakeView();

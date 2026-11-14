@@ -7,7 +7,9 @@ import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { AMBIENT, sceneLights } from './light';
 import { newScene, stepScene } from './scene';
 import { seeLook } from './seeThrough';
-import type { Assets, WorldInput } from './view';
+import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
+import { tilesSeed } from './cover/moss';
+import type { Assets, View, WorldInput } from './view';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
@@ -15,8 +17,17 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
   const scene = newScene();
   const cam = { x: scene.player.x, z: scene.player.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };
 
+  // The dev scene's cover: moss in every room (`everywhere`), built whole at the first build and kept for the rebuilds.
+  let job: CoverJob | null = null;
   return {
     world,
+    built(view: View): void {
+      if (!job) {
+        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [] }, { everywhere: true }), tilesSeed(map));
+        job.step(Infinity);
+      }
+      view.setCover(job.result()!);
+    },
     frame(c: StageCtx): number {
       let ix = 0;
       let iz = 0;
@@ -32,10 +43,12 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       c.timer.lap('cards');
       const lights = sceneLights(scene, c.now, c.params.orb);
       c.timer.lap('lights');
+      const cr = (job as CoverJob | null)?.result();
+      if (cr && window.__r3d) window.__r3d.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) } },
+        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) }, cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now } },
         c.timer,
       );
     },

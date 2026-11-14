@@ -1,5 +1,5 @@
 // The stage of the ?r3d=cove page (#329): the nymph's cove in the 3D view, no server, no login. A dark stone room of the real cove's size with
-// the trunk tile at its middle, the cove's willow and bushes as grown trees, its tufts and ferns as atlas cards, its seven pixies, two wall
+// the trunk tile at its middle, the cove's willow and bushes as grown trees, its tufts and ferns as bushels in the ground cover (with moss in the room), its seven pixies, two wall
 // torches and a knight to walk with WASD, with the sight on. There is no sun: the trees are lit by the torches, the pixies and the base light.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { ANIM, CONST, KIND, LEAF_PALETTE, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
@@ -8,7 +8,9 @@ import { DEFAULT_HAZE } from '../game/sightField';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import { View as SightView } from '../sim/view';
-import { AtlasPlants } from './atlasPlants';
+import { CoverField } from './cover/coverField';
+import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
+import { tilesSeed } from './cover/moss';
 import { atlasBounds } from './atlasBounds';
 import { keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
@@ -25,7 +27,7 @@ import { seeLook } from './seeThrough';
 import { SightMask, hiddenAt } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
-import type { Assets, WorldInput } from './view';
+import type { Assets, View, WorldInput } from './view';
 
 const TILE = 16;
 const KNIGHT_ID = 100;
@@ -72,8 +74,18 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   // The cove as a run makes it: the willow and bushes are grown by `step`, the tufts and ferns are cards.
   const cove = new Cove3d(COVE_STAGE, assets.frames);
   const forest = new Forest([cove.tree(), ...cove.bushes()], map, LEAF_PALETTE.Summer, cove.builder());
-  const plants = new AtlasPlants(cove.plants(), map);
   const coveCasters = cove.casters();
+
+  // The cover as a run builds it (moss in the room, the cove's grass and bushels), whole at the first build and kept for the rebuilds after a lost device.
+  let job: CoverJob | null = null;
+  let coverField: CoverField | null = null;
+  const build = (): CoverJob => {
+    if (!job) {
+      job = coverJob(coverSources(map, { woodland: null, cove: COVE_STAGE, spawnRow: KNIGHT_START.z, spots: cove.bushelSpots() }), tilesSeed(map));
+      job.step(Infinity);
+    }
+    return job;
+  };
 
   // The two torches: a light on each torch's tile and a flame figure.
   const field = new LightField(map);
@@ -104,6 +116,11 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   let seconds = 0;
   return {
     world,
+    built(view: View): void {
+      const r = build().result()!;
+      view.setCover(r);
+      coverField = new CoverField(r);
+    },
     frame(c: StageCtx): number {
       const params = c.params;
       seconds += c.dt;
@@ -125,7 +142,8 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       if (!c.view) return 0;
 
       const ambient = dungeonAmbient(params.amb);
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: false, oval: 1 });
+      const ground = coverField && params.cover ? (x: number, z: number, rad: number): number => coverField!.topAt(x, z, rad, params.gh) : undefined;
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: false, oval: 1, ground });
       cove.push(seconds, cam, fo.glows, fo.ghosts, params.sight ? mask : null);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
@@ -160,6 +178,8 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
         r.lights = { list: lights.length, inView: sel.inView };
         r.casters = casters.length;
         r.plants = { built: forest.built, total: forest.total };
+        const cr = (job as CoverJob | null)?.result();
+        if (cr) r.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
       }
       c.timer.renderStart();
       return c.view.draw(
@@ -168,7 +188,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           lava: null, lavaVersion: 0, darkvision: null, casters, sight,
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
-          plants: plants.frame(params.wind, seconds),
+          cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
         },
         c.timer,
       );

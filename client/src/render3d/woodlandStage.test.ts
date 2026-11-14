@@ -22,7 +22,7 @@ function setup(search: string, start = 0) {
   const host = { setDaylight: vi.fn(), setSky: vi.fn() };
   const stage: Stage = createWoodlandStage(assets, p, search, host);
   let f: FrameInput | null = null;
-  const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512 };
+  const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512, setGround: vi.fn(), setCover: vi.fn() };
   let now = start;
   const run = (n: number, dt: number, held: string[] = []): FrameInput => {
     for (let i = 0; i < n; i++) {
@@ -36,7 +36,7 @@ function setup(search: string, start = 0) {
     }
     return f!;
   };
-  return { stage, host, run, p };
+  return { stage, host, run, p, view };
 }
 
 describe('the ?r3d=woodland stage', () => {
@@ -60,6 +60,22 @@ describe('the ?r3d=woodland stage', () => {
     expect(f.cam.z).toBeCloseTo(21.5);
     expect(setup('?r3d=woodland&at=18,22').run(1, 0.016).cam).toMatchObject({ x: 20.5, z: 11.5 }); // a Trunk tile: ignored
     expect(setup('?r3d=woodland&at=abc').run(1, 0.016).cam).toMatchObject({ x: 20.5, z: 11.5 });
+  });
+
+  it('builds the grass cover whole: the bare ground and the cover go to the view, the frame carries the cover parameters (#330)', () => {
+    window.__r3d = { backend: 'test', frames: 0, renderSize: [0, 0], zoom: 1 };
+    const { stage, view, run } = setup('?r3d=woodland&gh=2');
+    stage.built!(view as never);
+    expect(view.setGround).toHaveBeenCalledTimes(1);
+    expect(view.setCover).toHaveBeenCalledTimes(1);
+    const cover = view.setCover.mock.calls[0][0] as { sheets: number; bushels: unknown[] };
+    expect(cover.sheets).toBe(4);
+    const f = run(1, 0.016);
+    expect(f.cover).toMatchObject({ on: true, gh: 2, wind: true });
+    expect(window.__r3d.cover).toEqual({ sheets: 4, bushels: cover.bushels.length });
+    stage.built!(view as never); // a rebuilt view gets the kept cover, not a new one
+    expect((view.setCover.mock.calls[1][0] as { image: unknown }).image).toBe((cover as unknown as { image: unknown }).image);
+    delete window.__r3d;
   });
 
   it('says how many trees are built of all in window.__r3d.plants (for the pictures script)', () => {
@@ -148,7 +164,7 @@ describe('the ?r3d=woodland stage', () => {
   it('grows the trees a few at a time and hands them to the view with the wind switch', () => {
     const { run } = setup('?r3d=woodland&hourRate=0');
     const first = run(1, 0.016);
-    expect(first.plants).toBeUndefined();
+    expect(first).not.toHaveProperty('plants');
     expect(first.trees!.wind).toBe(true);
     expect(first.trees!.chunks.size).toBeGreaterThan(0);
     const later = run(40, 0.016).trees!;

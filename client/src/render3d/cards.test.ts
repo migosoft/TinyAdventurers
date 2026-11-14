@@ -215,6 +215,22 @@ describe('pushLying', () => {
   });
 });
 
+describe('base (the cover lifts what lies flat, #330)', () => {
+  it('pushShadow, pushFlat and pushLying put every vertex at their height plus base; no base keeps the old height', () => {
+    const s0 = newShadowBuf(), s1 = newShadowBuf();
+    pushShadow(s0, cam(0), 4, 5, 0.4, 0.2, 0.45);
+    pushShadow(s1, cam(0), 4, 5, 0.4, 0.2, 0.45, 0.125);
+    for (let i = 0; i < 6; i++) expect(s1.position[i * 3 + 1] - s0.position[i * 3 + 1]).toBeCloseTo(0.125, 6);
+    const f = newCardBuf(), l = newCardBuf();
+    pushFlat(f, card({ base: 0.25 }), frames, cam(0));
+    pushLying(l, { ...card({ base: 0.25 }), headRight: true }, frames, cam(0));
+    for (const b of [f, l]) for (let i = 0; i < 6; i++) expect(vert(b, 0, i)[1]).toBeCloseTo(LIE_Y + 0.25, 6);
+    const g = newCardBuf();
+    pushFlat(g, card(), frames, cam(0));
+    for (let i = 0; i < 6; i++) expect(vert(g, 0, i)[1]).toBe(LIE_Y);
+  });
+});
+
 describe('sortBackToFront', () => {
   it('puts the farther quad first, at yaw 0 and at yaw 180', () => {
     for (const yaw of [0, Math.PI]) {

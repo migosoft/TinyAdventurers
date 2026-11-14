@@ -59,6 +59,8 @@ export interface FigureLook {
   ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean;
   /** Multiplies the alpha of every ground oval (figures, chests, barrels, mimics): 1 in the dungeon, `0.5 + 0.5 * night` on the woodland. */
   oval: number;
+  /** The ground cover's top (tiles) under a spot with a reach `r`: ovals, lying bodies and skulls are lifted onto it (#330). Absent: 0. */
+  ground?: (x: number, z: number, r: number) => number;
 }
 const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true, oval: 1 };
 
@@ -135,6 +137,7 @@ export class Figures3d {
   private fadeAlpha = 1;
   private torchGlow = true;
   private oval = 1;
+  private ground: (x: number, z: number, r: number) => number = () => 0;
   private readonly myKind: number;
   private readonly players: RunViewInit['info']['players'];
 
@@ -175,6 +178,7 @@ export class Figures3d {
     this.fadeAlpha = darkAlpha(look.ambient);
     this.torchGlow = look.torchGlow;
     this.oval = look.oval;
+    this.ground = look.ground ?? (() => 0);
     const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [] };
     const seen = new Set<number>();
     this.anchors.clear();
@@ -208,7 +212,7 @@ export class Figures3d {
       // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
-      pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true }, this.frames, cam);
+      pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true, base: this.ground(x, z, 0.3) }, this.frames, cam);
     }
     this.drawCoins(f.now, cam, out);
     sortBackToFront(out.ghosts, cam);
@@ -263,7 +267,8 @@ export class Figures3d {
   private objShadow(id: number, x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
     if (!this.shadowed(id)) return;
     const foot = snapGround(cam.pitch, cam.yaw, x, z);
-    pushShadow(out.shadows, cam, foot.x, foot.z, (OBJ_SHADOW_RX * scale) / TILE, (OBJ_SHADOW_RY * scale) / TILE, alpha * this.oval);
+    const rx = (OBJ_SHADOW_RX * scale) / TILE;
+    pushShadow(out.shadows, cam, foot.x, foot.z, rx, (OBJ_SHADOW_RY * scale) / TILE, alpha * this.oval, this.ground(foot.x, foot.z, rx));
   }
 
   private drawChest(e: EntState, cam: Cam, out: FigureOut): void {
@@ -415,7 +420,7 @@ export class Figures3d {
       const dark = this.dark.has(e.id);
       pushLying(out.decals, {
         frame: pose.frame, crop: { x: lie.cropX, y: 0, w: lie.cropW, h: pose.footY }, x, z, lift: 0, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
-        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark,
+        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark, base: this.ground(x, z, 0.3),
       }, this.frames, cam);
     } else {
       // The 2D body sits 1 px below the shadow (body.y 1). A card lowered into the floor would lose its foot row, so the
@@ -457,7 +462,8 @@ export class Figures3d {
     if (pose.shadow.visible && this.shadowed(e.id)) {
       const foot = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc) / TILE;
-      pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval);
+      const rx = r * pose.shadow.sx;
+      pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
     }
 
     // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.

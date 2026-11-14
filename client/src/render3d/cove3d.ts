@@ -1,6 +1,5 @@
 // The nymph's cove in the 3D dungeon (#306, #329, #330): the willow and the bushes as grown 3D trees that sway in the wind, a shadow
-// caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer (and, until it
-// replaces them, atlas sprites), and the pixies: glows with wing cards that also light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts,
+// caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer, and the pixies: glows with wing cards that also light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts,
 // pixieMath.ts), so both views agree.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { LIGHT_KIND } from '../generated/defs';
@@ -9,11 +8,9 @@ import { CANOPY_UP, PIXIE_COLOURS, PIXIE_RX, PIXIE_RY, PIXIE_COUNT, PIXIE_GLOW_A
 import type { Cam } from './camera';
 import { pushCard, pushGlow, type CardBuf, type GlowBuf } from './cards';
 import type { Cand, ShadowCaster } from './lights';
-import type { PlantPlace, PlantSprite } from './plants';
 import type { BushelSpot } from './cover/source';
 import { hiddenAt, type SightMask } from './sightmask';
 import { CanvasEdgeError } from '../game/vegetation/canvas';
-import { SWAY } from './wind';
 import { buildTree, type BuiltTree } from './trees/build';
 import { lookKey, type TreeSpec } from './trees/spec';
 import type { FrameRects } from './worldMesh';
@@ -149,7 +146,8 @@ function bushelCount(seed: number, fern: boolean): number {
   return fern ? 2 + Math.floor(u * 2) : 3 + Math.floor(u * 3);
 }
 
-interface SmallPlant { place: PlantPlace; sprite: PlantSprite; bush: boolean }
+/** A small plant: its foot (tiles) and its frame (atlas rect, and the foot in the frame's px). */
+interface SmallPlant { place: { x: number; z: number }; sprite: { rect: { x: number; y: number; w: number; h: number }; foot: { x: number; y: number } }; bush: boolean }
 
 export class Cove3d {
   /** Every small plant in the order of `placeCovePlants`: bushes, tufts and ferns (the bushes are 3D and cast; the rest are bushel spots and atlas sprites). */
@@ -167,7 +165,7 @@ export class Cove3d {
       const r = frames[p.frame];
       if (!r) return;
       const x = (origin.x + p.x) / TILE, z = (origin.y + p.y) / TILE, bush = p.frame.startsWith('cove_bush');
-      this.small.push({ place: { x, z, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } }, bush });
+      this.small.push({ place: { x, z }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } }, bush });
       // A bush's width is 32 px at scale 100.
       if (!bush) this.spots.push({ x, z, fern: p.frame === 'cove_fern', count: bushelCount(c.seed + i + 1, p.frame === 'cove_fern') });
       if (bush) this.bushSpecs.push({ form: 'bush', x, z, seed: c.seed + i + 1, scalePct: (r.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
@@ -194,11 +192,6 @@ export class Cove3d {
   /** The tufts and ferns as bushel spots for the cover layer: a spot at each one's foot. */
   bushelSpots(): BushelSpot[] {
     return this.spots;
-  }
-
-  /** The tufts and ferns as atlas sprites with their places (until the cover layer draws them as bushels). */
-  plants(): { place: PlantPlace; sprite: PlantSprite }[] {
-    return this.small.filter((s) => !s.bush);
   }
 
   /**

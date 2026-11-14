@@ -176,6 +176,22 @@ describe('panel', () => {
     expect(row('mistDay').hidden).toBe(false);
   });
 
+  it('has a Ground cover switch and a Cover height slider (0.25..3) on the demo pages and in runs (#330)', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { host, calls, btn } = setup(DEFAULTS, mode);
+      expect(btn('Ground cover').getAttribute('aria-pressed')).toBe('true');
+      btn('Ground cover').click();
+      expect(calls[0].cover).toBe(false);
+      expect(btn('Ground cover').getAttribute('aria-pressed')).toBe('false');
+      const s = host.querySelector<HTMLInputElement>('#r3d-gh')!;
+      expect([s.min, s.max, s.step]).toEqual(['0.25', '3', '0.25']);
+      s.value = '2.5';
+      s.dispatchEvent(new Event('input'));
+      expect(calls[1].gh).toBe(2.5);
+      expect(host.textContent).toContain('Cover height 2.5');
+    }
+  });
+
   it('the tree rows (#329) show with the sky: a leaf slider with an Own button, and a Plain trees switch', () => {
     const { host, calls, panel, btn } = setup();
     const leaf = host.querySelector<HTMLInputElement>('#r3d-leaf')!;

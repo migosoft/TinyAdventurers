@@ -44,16 +44,11 @@ import { CoverLayer, type CoverFrame } from './cover/coverLayer';
 import type { CoverResult } from './cover/coverJob';
 import { GroundTooLargeError } from './groundError';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
-import { SUN_TOP, type SunFit, type Vec3 } from './sun';
+import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
-import type { AtlasPlantFrame } from './atlasPlants';
-import { PITCH_MAX } from './params';
-import { type PlantBuf } from './plants';
-import { ChunkSync } from './trees/chunks';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
-import { makePlantShared, plantCardMaterial } from './plantNodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -102,8 +97,6 @@ export interface FrameInput {
   sight?: SightFrame;
   /** The sun (#306); absent or null: no sun, no sun pass, the sun's term is 0. */
   sun?: SunFrame | null;
-  /** The cove's small plants as atlas cards (#306); absent: none. */
-  plants?: AtlasPlantFrame;
   /** The woodland's grown trees (#329); absent: no trees. */
   trees?: TreeFrame;
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
@@ -201,30 +194,6 @@ function pixelTexture(t: Texture): void {
   t.flipY = false;
   t.premultiplyAlpha = false;
   t.needsUpdate = true;
-}
-
-/** How high (tiles) an atlas plant card's box reaches: `SUN_TOP` stretched by 1 / cos(pitch) at the steepest pitch (the card is stretched the same way on screen). */
-const CARD_TOP = SUN_TOP / Math.cos((PITCH_MAX * Math.PI) / 180);
-
-/** An atlas plant card buffer as a geometry: `position` is the foot (x, 0, z); the bounds hold the cards' reach across and their sway, for frustum culling. */
-function plantGeometry(b: PlantBuf): BufferGeometry {
-  const pos = new Float32Array(b.n * 3);
-  for (let i = 0; i < b.n; i++) { pos[i * 3] = b.foot[i * 2]; pos[i * 3 + 2] = b.foot[i * 2 + 1]; }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(pos, 3));
-  g.setAttribute('corner', new BufferAttribute(new Float32Array(b.corner), 2));
-  g.setAttribute('uv', new BufferAttribute(new Float32Array(b.uv), 2));
-  g.setAttribute('sway', new BufferAttribute(new Float32Array(b.sway), 2));
-  let pad = 0.3, x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-  for (let i = 0; i < b.n; i++) {
-    pad = Math.max(pad, Math.abs(b.corner[i * 2]) + 0.3);
-    x0 = Math.min(x0, b.foot[i * 2]); x1 = Math.max(x1, b.foot[i * 2]);
-    z0 = Math.min(z0, b.foot[i * 2 + 1]); z1 = Math.max(z1, b.foot[i * 2 + 1]);
-  }
-  const box = new Box3(new Vector3(x0 - pad, 0, z0 - pad), new Vector3(x1 + pad, CARD_TOP, z1 + pad));
-  g.boundingBox = box;
-  g.boundingSphere = box.getBoundingSphere(new Sphere());
-  return g;
 }
 
 /** RGBA rows in reverse order. */
@@ -419,41 +388,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     }
     return sunDepth!;
   };
-  // The cove's small plants (#306): atlas cards, one mesh per chunk, rebuilt when the frame says the chunk changed.
-  const plantShared = makePlantShared();
-  const plantCard = plantCardMaterial(atlas, aw, ah, lighting, toward, sight, wm.see, mask.texture, plantShared);
-  const plantMeshes = new Map<number, Mesh>();
-  let plantSync = new ChunkSync();
-  let plantVersionsOf: ReadonlyMap<number, number> | null = null;
-  const dropPlantChunk = (k: number): void => {
-    const mesh = plantMeshes.get(k);
-    if (!mesh) return;
-    scene.remove(mesh);
-    mesh.geometry.dispose();
-    plantMeshes.delete(k);
-  };
-  const clearPlants = (): void => {
-    for (const k of [...plantMeshes.keys()]) dropPlantChunk(k);
-    plantSync = new ChunkSync();
-  };
-  const syncPlants = (pf: AtlasPlantFrame): void => {
-    // Another set of plants has other chunks: start over.
-    if (plantVersionsOf !== pf.versions) {
-      if (plantVersionsOf) clearPlants();
-      plantVersionsOf = pf.versions;
-    }
-    for (const k of plantSync.changed(pf.versions)) {
-      dropPlantChunk(k);
-      const b = pf.chunks.get(k);
-      if (!b || b.n === 0) continue;
-      const mesh = new Mesh(plantGeometry(b), plantCard);
-      mesh.frustumCulled = true;
-      scene.add(mesh);
-      plantMeshes.set(k, mesh);
-    }
-    plantShared.t.value = pf.t;
-    plantShared.on.value = pf.wind ? 1 : 0;
-  };
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
   const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover }));
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
@@ -624,7 +558,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       camera.updateProjectionMatrix();
       const d = f.dynamic;
       card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
-      plantShared.cosP.value = trees.shared.cosP.value = Math.cos(f.cam.pitch);
+      trees.shared.cosP.value = Math.cos(f.cam.pitch);
       coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
@@ -667,8 +601,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
-      if (f.plants) syncPlants(f.plants);
-      else if (plantMeshes.size > 0) clearPlants();
       if (f.trees) { trees.sync(f.trees); void trees.warm(renderer, camera); }
       else if (trees.meshCount > 0) trees.clear();
       lighting.setLights(f.lights);
@@ -755,8 +687,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunDepth?.dispose();
         sunStandIn.dispose();
         casterMaterial?.dispose();
-        clearPlants();
-        plantCard.dispose();
         trees.dispose();
         coverLayer.dispose();
         mm.material.dispose();

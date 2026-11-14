@@ -30,7 +30,9 @@ import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
-import { AtlasPlants } from './atlasPlants';
+import { CoverField } from './cover/coverField';
+import type { CoverResult } from './cover/coverJob';
+import type { BushelSpot } from './cover/source';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
 import { Critters3d } from './critters3d';
@@ -94,9 +96,12 @@ export class RunView3d implements RunView {
   private forest: Forest | null = null;
   private critters: Critters3d | null = null;
   private fireflies: Fireflies | null = null;
-  // The nymph's cove (dungeon runs): its plants as atlas sprites (all ready at once), their casters, the pixies.
+  // The nymph's cove (dungeon runs): its tufts and ferns as bushel spots, the bushes' casters, the pixies.
   private cove: Cove3d | null = null;
-  private covePlants: AtlasPlants | null = null;
+  // The ground cover's heights, once the stage has set a good cover (#330); null before and after a failed one: nothing is lifted.
+  private coverField: CoverField | null = null;
+  private readonly groundOf = (x: number, z: number, r: number): number => this.coverField!.topAt(x, z, r, this.groundGh);
+  private groundGh = 1;
   private coveCasters: ShadowCaster[] = [];
   private readonly frames: FrameRects;
   private hourNow = 0;
@@ -141,7 +146,6 @@ export class RunView3d implements RunView {
       this.cove = new Cove3d(init.info.cove, frames);
       // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns stay atlas cards.
       this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer, this.cove.builder());
-      this.covePlants = new AtlasPlants(this.cove.plants(), init.map);
       this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
@@ -241,6 +245,16 @@ export class RunView3d implements RunView {
     return this.figures.count;
   }
 
+  /** The cove's bushel spots (tufts and ferns) for the cover sources; none without a cove. */
+  bushelSpots(): BushelSpot[] {
+    return this.cove ? this.cove.bushelSpots() : [];
+  }
+
+  /** The cover the view now draws (null: none, or it failed): from here on what lies flat is lifted onto its top. */
+  setCover(r: CoverResult | null): void {
+    this.coverField = r ? new CoverField(r) : null;
+  }
+
   /** The three.js view of the moment (null while it is restored). */
   attach(view: View | null): void {
     this.v = view;
@@ -322,13 +336,16 @@ export class RunView3d implements RunView {
     const skyNow = this.woodland ? this.skyOf(f, c) : null;
     const ambient = work ? WORK_AMBIENT : skyNow ? skyNow.ambient : dungeonAmbient(c.params.amb);
     const oval = skyNow && !work ? ovalOf(skyNow) : 1;
-    const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval });
+    // What lies flat sits on the cover's top while the cover is drawn.
+    this.groundGh = c.params.gh;
+    const ground = this.coverField && c.params.cover ? this.groundOf : undefined;
+    const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval, ground });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
     if (skyNow && this.critters && this.fireflies) {
       // Bees and butterflies by day, fireflies at night, where the viewer sees (the mask of the last frame: one frame behind is not seen).
       const seenMask = c.params.sight ? this.mask : null;
-      this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, fp);
+      this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, fp, ground);
       this.fireflies.step(c.dt, cam);
       this.fireflies.push(fo.glows, cam, skyNow.night, seenMask);
     }
@@ -354,7 +371,7 @@ export class RunView3d implements RunView {
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
-      // The cove's plants cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
+      // The cove's bushes cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
       const mask = this.mask;
       const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
       casters = selectCasters(cove.length > 0 ? [...fo.casters, ...cove] : fo.casters, lights, c.params.ccap);
@@ -388,7 +405,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), ...(this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
       },
       c.timer,
     );

@@ -15,6 +15,7 @@ import { Critters3d } from './critters3d';
 import { Figures3d } from './figures';
 import { Fireflies } from './fireflies';
 import { galleryFrame, galleryInit } from './galleryStage';
+import { CoverField } from './cover/coverField';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WOODLAND_CLEAR, WORK_AMBIENT } from './light';
@@ -99,6 +100,9 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
     return job;
   };
 
+  // The cover's heights for what lies flat; set by `built` once the view has the cover.
+  let field: CoverField | null = null;
+
   // The clock: stage seconds, anchored again when the URL's hour or the pace changes.
   const clock = new SkyClock(DEFAULT_HOUR); // the first frame takes the URL's hour and pace
   let seconds = 0;
@@ -126,7 +130,10 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   return {
     world,
     built(view: View): void {
-      view.setGround(paint().result()!.bare!);
+      const r = paint().result()!;
+      view.setGround(r.bare!);
+      view.setCover(r);
+      field = new CoverField(r); // only after a good upload: with no cover set nothing is lifted
     },
     frame(c: StageCtx): number {
       const params = c.params;
@@ -156,11 +163,12 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
 
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1 });
+      const ground = field && params.cover ? (x: number, z: number, rad: number): number => field!.topAt(x, z, rad, params.gh) : undefined;
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1, ground });
       // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const seenMask = params.sight ? mask : null;
-      critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, fp);
+      critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, fp, ground);
       fireflies.step(c.dt, cam);
       fireflies.push(fo.glows, cam, s.night, seenMask);
       pixie.push(seconds, cam, fo.glows, fo.ghosts, assets.frames, seenMask);
@@ -210,13 +218,15 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
         r.plants = { built: forest.built, total: forest.total };
+        const cr = (job as CoverJob | null)?.result();
+        if (cr) r.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
       }
       c.timer.renderStart();
       return c.view.draw(
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,
       );

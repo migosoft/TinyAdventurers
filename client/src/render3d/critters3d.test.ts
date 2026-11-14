@@ -100,6 +100,29 @@ describe('critter pixels above the ground', () => {
   });
 });
 
+describe('critters on the cover (#330)', () => {
+  it('lifts only the landed butterflies by ground(x, z, 0); bees and flyers in the air keep their height', () => {
+    const map = meadow(40, 30);
+    const base = new Critters3d(map, 5), lifted = new Critters3d(map, 5);
+    const rs: number[] = [];
+    let moved = 0, same = 0;
+    for (let t = 0; t < 60; t += 0.7) {
+      const a = newCardBuf(), b = newCardBuf();
+      base.push(a, frames, cam, t, 1, null, ALL);
+      lifted.push(b, frames, cam, t, 1, null, ALL, (_x, _z, r) => { rs.push(r); return 0.5; });
+      expect(b.n).toBe(a.n);
+      for (let q = 0; q < a.n; q++) {
+        const d = b.position[q * 18 + 1] - a.position[q * 18 + 1];
+        if (Math.abs(d - 0.5) < 1e-5) moved++;
+        else { expect(d).toBeCloseTo(0, 6); same++; }
+      }
+    }
+    expect(moved).toBeGreaterThan(0);
+    expect(same).toBeGreaterThan(0);
+    expect(new Set(rs)).toEqual(new Set([0]));
+  });
+});
+
 describe('critter heights', () => {
   it('lifts a landed butterfly by at most 0.02 and a flying one by its air plus 0.25', () => {
     const bounds = { x: 0, y: 0, w: 192, h: 192 };
