@@ -9,6 +9,8 @@ import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
+import { createMoodStage } from './moodStage';
+import { createSunlightStage } from './sunlightStage';
 import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
@@ -46,6 +48,20 @@ export async function bootCove(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets) => createCoveStage(assets, p, s));
+}
+
+/** `?r3d=mood` (#307): the 2D `?mood` room's air in 3D (torch smoke, lava embers, dust, haze, pool drips, a knight, an arrow and a fireball stirring the air), no server needed. Zoom 2 unless the URL picks one. */
+export async function bootMood(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets, host) => createMoodStage(assets, p, s, host));
+}
+
+/** `?r3d=sunlight` (#307): the 2D `?sunlight` room's cracks, shafts and patches in 3D, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootSunlight(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createSunlightStage(assets, p, s));
 }
 
 export interface Run3d {
