@@ -158,6 +158,8 @@ export interface View {
   draw(f: FrameInput, timer?: FrameTimer<R3dSystem>): number;
   /** Whether the backend has a way to fail on purpose (unlike `forceLoss`, true also after the view was lost). */
   readonly canForceLoss: boolean;
+  /** The device's largest texture side (px): the sun's map is fitted at no more than this. */
+  readonly maxTexture: number;
   /** Debug: makes the device or context fail on purpose. False when the backend offers no way or the view is lost or disposed. */
   forceLoss(): boolean;
   /** Debug: draws the last frame's scene again into an off-screen target and reads it back (RGBA bytes, `readRenderTargetPixelsAsync` order); null when lost, disposed or nothing was drawn yet. A canvas capture of WebGPU comes back black on some machines. */
@@ -619,6 +621,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       groundTex = next;
     },
     backend: be.isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
+    get maxTexture() {
+      return textureLimit();
+    },
     setSize(pw, ph) {
       renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
     },
@@ -719,7 +724,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // The sun (#306): the camera's right on the ground turns the cards (as the lights' `uRight`), the lookup follows the frame's sun.
       const sf2 = hasSun ? f.sun ?? null : null;
       (sunLight.right.value as Vector3).set(Math.cos(f.cam.yaw), 0, Math.sin(f.cam.yaw));
-      const sunMap = sf2 ? sunTargetFor(Math.min(sf2.fit.size, textureLimit())) : null;
+      // With the shadows switched off the pass is skipped: no target is made or drawn into (the shaders bind the last map or the stand-in; their shadow term is 0).
+      const sunPass = sf2 !== null && sf2.shadows;
+      const sunMap = sunPass ? sunTargetFor(sf2.fit.size) : null;
       // v is flipped on both backends: three's TSL texture lookup takes v = 0 at the top of a render target's image (it flips the
       // coordinate itself for WebGL's bottom-left origin), and the sun camera's NDC y = +1 is the top. Checked on WebGL2 (without the
       // flip every shadow vanished); WebGPU follows from three's source and awaits a look on a real screen.
@@ -745,7 +752,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // The counter only accumulates; three resets it in its own animation loop, whose order against ours is not guaranteed.
       renderer.info.reset();
       timer?.lap('upload');
-      if (sf2 && sunTarget) {
+      if (sunPass && sunTarget) {
         renderer.setRenderTarget(sunTarget);
         sunCam = sunCamera(sf2.fit, sunCam ?? undefined);
         renderer.render(sunScene, sunCam);

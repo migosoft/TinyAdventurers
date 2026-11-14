@@ -200,7 +200,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       }
       c.timer.lap('sight');
 
-      const sun = sunFrame(s, fp, cam, map, params, seconds);
+      // No sun with the work light (as in a run).
+      const sun = game ? sunFrame(s, fp, cam, map, params, seconds, c.view.maxTexture) : null;
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;

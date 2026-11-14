@@ -377,7 +377,7 @@ export class RunView3d implements RunView {
     let sun: SunFrame | null = null;
     this.sunPx = 0;
     if (skyNow && !work) {
-      sun = sunFrame(skyNow, fp, cam, this.map, c.params, c.now);
+      sun = sunFrame(skyNow, fp, cam, this.map, c.params, c.now, view.maxTexture);
       this.sunPx = sun.fit.size;
     }
     c.timer.renderStart();

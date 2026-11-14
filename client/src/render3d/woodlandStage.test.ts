@@ -21,7 +21,7 @@ function setup(search: string, start = 0) {
   const host = { setDaylight: vi.fn(), setSky: vi.fn() };
   const stage: Stage = createWoodlandStage(assets, p, search, host);
   let f: FrameInput | null = null;
-  const view = { draw: (i: FrameInput) => ((f = i), 0) };
+  const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512 };
   let now = start;
   const run = (n: number, dt: number, held: string[] = []): FrameInput => {
     for (let i = 0; i < n; i++) {
@@ -73,9 +73,15 @@ describe('the ?r3d=woodland stage', () => {
     const { run, p } = setup('?r3d=woodland&hour=9.5&hourRate=0&quality=fast');
     const f = run(1, 0.016);
     const cam = f.cam;
-    const fit = fitSunMap(sky(9.5).dir, sunView(footprint(cam, 40, 40), cam), { w: 40, h: 26 }, SUN_MAP.fast);
-    expect(f.sun!.fit).toEqual(fit);
+    const fit = fitSunMap(sky(9.5).dir, sunView(footprint(cam, 40, 40), cam), { w: 40, h: 26 }, 512);
+    expect(SUN_MAP.fast).toBeGreaterThan(512);
+    expect(f.sun!.fit).toEqual(fit); // fitted at the device's clamped size, not at SUN_MAP
+    expect(f.sun!.fit.size).toBe(512);
     expect(p.quality).toBe('fast');
+  });
+
+  it('sends no sun under the work light, as a run does', () => {
+    expect(setup('?r3d=woodland&light=work').run(1, 0.016).sun).toBeNull();
   });
 
   it('has the moon at hour 0', () => {

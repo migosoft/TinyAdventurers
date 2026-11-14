@@ -1,16 +1,16 @@
 // The lighting's shader code as three generates it (GLSL for the WebGL2 fallback, WGSL for WebGPU), built without a GPU (#304).
 import { describe, expect, it } from 'vitest';
 import { DataTexture, FloatType, GLSLNodeBuilder, MeshBasicNodeMaterial, RGBAFormat, WGSLNodeBuilder } from 'three/webgpu';
-import { float, positionWorld, vec3, vec4 } from 'three/tsl';
+import { float, positionWorld, vec2, vec3, vec4 } from 'three/tsl';
 import { makeLighting } from './lightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** The fragment shader of a material lit by `lightAt` (a card's options: its own slot, the dark flag). */
-function lightFragment(B: Builder, withSun = false, compare = false): string {
+function lightFragment(B: Builder, withSun = false, compare = false, foot = false): string {
   const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
   const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex(), { sun: withSun });
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
+  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(foot ? { selfFoot: vec2(1, 2) } : {}), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
   return fragment(B, m, { compare });
 }
 
@@ -44,6 +44,15 @@ describe('the lighting shader', () => {
       const ls = loops(lightFragment(B));
       expect(ls.some((l) => l.outer.length >= 1)).toBe(true); // the light loop holds the shadow loops
       for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+    });
+
+    it(`${B.name}: the own-foot comparison is built only for a material that gives a selfFoot`, () => {
+      const without = lightFragment(B);
+      const withFoot = lightFragment(B, false, false, true);
+      // The foot test is `length(caster.xy - foot) > 0.02`: it adds a length() of a difference to the card loop.
+      const lengths = (code: string): number => (code.match(/\blength\(/g) ?? []).length;
+      expect(lengths(withFoot)).toBeGreaterThan(lengths(without));
+      expect(withFoot.length).toBeGreaterThan(without.length);
     });
 
     it(`${B.name}: with the sun it builds, keeps the loop indices apart, and samples the sun's shadow map first, before any branch`, () => {

@@ -117,7 +117,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   // 1 when no caster's current frame stands between P and the light L, else 0 (the demo's cardVis). Each card is turned to face the
   // light and its atlas alpha is the occluder. Slot `self` (the surface's own figure) and `skip` (the light's carrier) are not tested;
   // the loop ends at the first empty slot; a card whose foot is far from the segment is rejected before the atlas is touched.
-  const cardVis = Fn(([P, L, self, skip, sf]: N[]) => {
+  // `withFoot`: the foot test (a plant's own caster does not shadow it) is built only for a material that gives a `selfFoot`.
+  const cardVisOf = (withFoot: boolean): N => Fn(([P, L, self, skip, sf]: N[]) => {
     const vis = float(1).toVar();
     const D = L.sub(P);
     const d2 = D.xz;
@@ -128,7 +129,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
         Break();
       });
       const j = float(i);
-      If(j.notEqual(self).and(j.notEqual(skip)).and(length(a.xy.sub(sf)).greaterThan(0.02)), () => {
+      const free = j.notEqual(self).and(j.notEqual(skip));
+      If(withFoot ? free.and(length(a.xy.sub(sf)).greaterThan(0.02)) : free, () => {
         const F = a.xy;
         const near = F.sub(P.xz.add(d2.mul(clamp(dot(F.sub(P.xz), d2).div(len2), 0, 1))));
         If(length(near).lessThan(a.z.mul(0.5).add(CARD_REACH)), () => {
@@ -172,6 +174,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     });
     return vis;
   });
+  const cardVis = cardVisOf(false);
+  let cardVisFoot: N | null = null;
 
   // The lava light: one rgba texel per tile (rgb: the light the tile's lava lights give, a: 1 on a lava tile).
   const lavaTex = new DataTexture(new Uint16Array(map.w * map.h * 4), map.w, map.h, RGBAFormat, HalfFloatType);
@@ -195,7 +199,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
 
   const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } } = {}): { rgb: N; dv: N } => {
     const w = typeof wrap === 'number' ? float(wrap) : wrap;
-    const selfFoot: N = opts.selfFoot ?? vec2(1e6, 1e6);
+    const selfFoot: N | null = opts.selfFoot ?? null;
+    const cardTest: N = selfFoot ? (cardVisFoot ??= cardVisOf(true)) : cardVis;
     const dark: N = opts.darkOnly ?? float(0);
     const self: N = opts.self ?? float(-1);
     // Sampled outside any branch: a filtered read needs uniform control flow.
@@ -237,7 +242,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
               v.assign(wallVis(Po, L));
               // The wall test first: a card is looked at only for a light that still reaches P. The shadow channel is skip + 2.
               If(v.greaterThan(0.5), () => {
-                v.assign(cardVis(Po, L, self, carrier, selfFoot));
+                v.assign(cardTest(Po, L, self, carrier, selfFoot ?? vec2(0, 0)));
               });
             });
             sum.addAssign(lc.xyz.mul(f.mul(ndl).mul(v)));

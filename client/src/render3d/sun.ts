@@ -217,7 +217,7 @@ export function mistInputs(s: Sky, wind: boolean): { mistDay: number; mistLight:
   return { mistDay: s.day, mistLight: mistLightOf(s), wind: wind ? WIND : [0, 0] };
 }
 
-/** The sun frame of `s` with its map fitted to `fp` (what the camera sees); `t` is the one clock the clouds drift by. */
-export function sunFrame(s: Sky, fp: Footprint, cam: Cam, map: { w: number; h: number }, p: { quality: Quality; shadows: boolean; clouds: boolean; wind: boolean }, t: number): SunFrame {
-  return { dir: s.dir, colour: s.colour, fit: fitSunMap(s.dir, sunView(fp, cam), map, SUN_MAP[p.quality]), shadows: p.shadows, clouds: p.clouds, wind: p.wind ? WIND : [0, 0], t };
+/** The sun frame of `s` with its map fitted to `fp` (what the camera sees); `t` is the one clock the clouds drift by; `cap` is the device's largest texture side (the map is fitted at the clamped size, so the texel snap is the real one). */
+export function sunFrame(s: Sky, fp: Footprint, cam: Cam, map: { w: number; h: number }, p: { quality: Quality; shadows: boolean; clouds: boolean; wind: boolean }, t: number, cap = Infinity): SunFrame {
+  return { dir: s.dir, colour: s.colour, fit: fitSunMap(s.dir, sunView(fp, cam), map, Math.min(SUN_MAP[p.quality], cap)),shadows: p.shadows, clouds: p.clouds, wind: p.wind ? WIND : [0, 0], t };
 }
