@@ -8,6 +8,7 @@ import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
+import { coverHeightNode, type CoverShared } from '../cover/coverRead';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
 import { FLUTTER_PX, RAMP } from './mesh';
@@ -202,6 +203,8 @@ function leafTint(bright: N, warm: N): N {
  */
 export function treeMaterials(o: {
   lighting: Lighting; sight: Sight; see: SeeUniforms; mask: Texture; palette: Texture; shared: TreeShared; hasSun: boolean;
+  /** The ground cover (#330): a leaf lies on top of it. */
+  cover?: CoverShared;
 }): TreeMaterials {
   const { lighting, sight, see, mask, palette, shared, hasSun } = o;
   const s = streams();
@@ -314,9 +317,9 @@ export function treeMaterials(o: {
  * (tone 2 at the leaf ramp's reference brightness), and ends with the sight step.
  */
 export function leafMaterial(o: {
-  lighting: Lighting; sight: Sight; palette: Texture; shared: TreeShared; hasSun: boolean;
+  lighting: Lighting; sight: Sight; palette: Texture; shared: TreeShared; hasSun: boolean; cover?: CoverShared;
 }): MeshBasicNodeMaterial {
-  const { lighting, sight, palette, shared, hasSun } = o;
+  const { lighting, sight, palette, shared, hasSun, cover } = o;
   const start = attribute('start', 'vec4'), params = attribute('params', 'vec4'), plant = attribute('plant', 'vec4'), look = attribute('look', 'vec4');
   const corner = positionGeometry.xy;
 
@@ -333,8 +336,11 @@ export function leafMaterial(o: {
   const alongWind = vec3(WIND_DIR[0], 0, WIND_DIR[1]);
   const acrossWind = vec3(-WIND_DIR[1], 0, WIND_DIR[0]);
   const sway = swayNode(plant.xy, float(1), float(1), start.w, shared.t, shared.windOn).mul(float(1).sub(f));
-  const y = select(landed, float(GROUND), start.y.add(f.mul(float(GROUND).sub(start.y))));
-  const base = vec3(start.x, y, start.z).add(alongWind.mul(drift)).add(acrossWind.mul(flutter)).add(sway);
+  const planar: N = vec3(start.x, 0, start.z).add(alongWind.mul(drift)).add(acrossWind.mul(flutter)).add(sway);
+  // Where it lands: on the ground, or on top of the cover that stands there (#330).
+  const groundY: N = cover ? float(GROUND).add(coverHeightNode(cover, planar.xz)) : float(GROUND);
+  const y: N = select(landed, groundY, start.y.add(f.mul(groundY.sub(start.y))));
+  const base = vec3(planar.x, y, planar.z);
 
   // Falling, the quad faces the camera; lying, it is flat on the ground (a camera-facing quad would sink half into it).
   const axes = cameraAxes();
@@ -342,7 +348,7 @@ export function leafMaterial(o: {
   const upAxis = select(landed, flat, axes.up);
   const point = base.add(axes.right.mul(corner.x.mul(LEAF_HALF))).add(upAxis.mul(corner.y.mul(LEAF_HALF)));
   // The card proportions: lifted by its height, as the tree's points are, and not at all on the ground.
-  const lifted = point.add(vec3(0, max(y.sub(GROUND), 0).mul(float(1).div(shared.cosP).sub(1)), 0));
+  const lifted = point.add(vec3(0, max(y.sub(groundY), 0).mul(float(1).div(shared.cosP).sub(1)), 0));
   const material = new MeshBasicNodeMaterial();
   material.positionNode = select(gone, vec3(...GONE), lifted);
 

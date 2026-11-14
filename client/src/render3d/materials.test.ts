@@ -5,6 +5,7 @@ import { makeLighting, type Lighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { makeSunLight } from './sunNodes';
 import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { makeCoverShared } from './cover/coverRead';
 
 type Opts = { self?: unknown; darkOnly?: unknown; sun?: unknown } | undefined;
 /** A stub `Lighting` that records the options `lightAt` was called with. */
@@ -71,7 +72,7 @@ describe('cardMaterial', () => {
 describe('worldMaterial', () => {
   it('passes no shade options to the light, only the sun', () => {
     const { lighting, calls } = stub();
-    worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture(), makeSight());
+    worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture(), makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1)));
     expect(calls).toHaveLength(1);
     expect(calls[0]?.self).toBeUndefined();
     expect(calls[0]?.darkOnly).toBeUndefined();

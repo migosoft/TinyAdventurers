@@ -4,6 +4,7 @@ import type { Texture } from 'three/webgpu';
 import { attribute, clamp, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
+import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
 import type { SunLight } from './sunNodes';
 import { CARD_GAIN } from './sun';
 import { GRASS_FLAT, STONE } from './light';
@@ -79,7 +80,7 @@ export interface WorldMaterial {
  * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
  * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
  */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight): WorldMaterial {
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared): WorldMaterial {
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
   const isGround = kind.greaterThan(2.5);
@@ -122,7 +123,11 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
     .or(fx.greaterThan(1 - PX).and(lower(1, 0)));
 
   const top = select(rim, vec3(...RIM), vec3(...STONE));
-  const albedo = select(isTop, top, texel.rgb);
+  const base = select(isTop, top, texel.rgb);
+  // Ground cover (#330): floor and ground darken where cover stands (the sheets and bushels show on it); with the layer off they show the cover's colour flat.
+  const grown = coverTexel(cover, floor(wp.xz.mul(16)));
+  const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
+  const albedo = select(covered, select(cover.on.greaterThan(0.5), base.mul(kindLook(grown.id).darken), grown.rgb), base);
   // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
   const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
   const normal = attribute('normal', 'vec3');

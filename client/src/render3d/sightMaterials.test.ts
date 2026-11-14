@@ -8,6 +8,7 @@ import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
+import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
 const lit = () => {
   const heights = new DataTexture(new Uint8Array(12), 4, 3);
@@ -21,9 +22,13 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
   const toward = viewTowardUniform();
   const t = new Texture();
   // The tree's depth pass stipples by the sight value at the foot; its colour pass ends with the sight step. The sun's pass is depth only and never hidden (plants are scenery).
-  const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false });
+  const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
+  const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover });
   return [
-    { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight).material, world: true },
+    { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, world: true },
+    // The ground cover (#330): sheets and bushels end with the sight step.
+    { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
+    { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },
     { name: 'card translucent', m: cardMaterial(t, 64, 64, l, toward, sight, { translucent: true }).material, world: false },
     { name: 'card flat', m: cardMaterial(t, 64, 64, l, toward, sight, { flat: true, translucent: true }).material, world: false },
@@ -65,7 +70,8 @@ describe('a world without a sun', () => {
       const l = lit();
       const t = new Texture();
       const toward = viewTowardUniform();
-      const ms = [worldMaterial(t, t, 64, 64, l, t, t, sight).material, cardMaterial(t, 64, 64, l, toward, sight).material];
+      const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
+      const ms = [worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, cardMaterial(t, 64, 64, l, toward, sight).material];
       for (const m of ms) {
         const code = fragment(B, m, { compare: true });
         expect(code).not.toMatch(B === WGSLNodeBuilder ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/);

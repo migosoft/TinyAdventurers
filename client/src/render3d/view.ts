@@ -38,6 +38,7 @@ import { makeLighting } from './lightNodes';
 import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
+import { makeCoverShared } from './cover/coverRead';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { SUN_TOP, type SunFit, type Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
@@ -306,7 +307,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const maskScene = new Scene();
   maskScene.add(maskDiscs.mesh);
   const sight = makeSight();
-  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight);
+  // The ground cover (#330): a 1x1 stand-in with the layer off, until the layer is wired in.
+  const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType));
+  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
   const material = wm.material;
 
   const scene = new Scene();
