@@ -20,26 +20,34 @@ export interface Cracks {
   at(s: N): { dir: N; rgb: N; ceil: N };
   /** Fills the slots (at most `CRACK_CAP`); the rest are zeroed. */
   set(cracks: readonly Crack[]): void;
-  /** The packed uniform arrays: a, b, c, d (`CRACK_CAP` vec4 each) and e (`CRACK_CAP * RAY_CAP`), as `packCracks` writes them. */
-  readonly arrays: { a: N; b: N; c: N; d: N; e: N };
+  /**
+   * The one packed uniform array of vec4: a, b, c, d (`CRACK_CAP` entries each, at `OFF_A`..`OFF_D`) then e (`CRACK_CAP * RAY_CAP`, at `OFF_E`),
+   * each as `packCracks` writes it.
+   */
+  readonly data: N;
 }
 
-const vec4s = (n: number): Vector4[] => Array.from({ length: n }, () => new Vector4());
+/** Where each of `packCracks`'s arrays starts in the one uniform array (in vec4s). */
+export const OFF_A = 0;
+export const OFF_B = CRACK_CAP;
+export const OFF_C = 2 * CRACK_CAP;
+export const OFF_D = 3 * CRACK_CAP;
+export const OFF_E = 4 * CRACK_CAP;
+export const DATA_LEN = CRACK_CAP * (4 + RAY_CAP);
+
+const vec4s =(n: number): Vector4[] => Array.from({ length: n }, () => new Vector4());
 
 export function makeCracks(): Cracks {
-  const a = uniformArray(vec4s(CRACK_CAP), 'vec4');
-  const b = uniformArray(vec4s(CRACK_CAP), 'vec4');
-  const c = uniformArray(vec4s(CRACK_CAP), 'vec4');
-  const d = uniformArray(vec4s(CRACK_CAP), 'vec4');
-  const e = uniformArray(vec4s(CRACK_CAP * RAY_CAP), 'vec4');
+  // One uniform buffer for all of it: WebGPU allows 12 per fragment stage and the world material is near that (five arrays made 13).
+  const data = uniformArray(vec4s(DATA_LEN), 'vec4');
   const count = uniform(0);
 
   const mask = (Q: N, s: N): N => Fn(() => {
     const si = int(s);
-    const A: N = a.element(si);
-    const B: N = b.element(si);
-    const C: N = c.element(si);
-    const D: N = d.element(si);
+    const A: N = data.element(si.add(OFF_A));
+    const B: N = data.element(si.add(OFF_B));
+    const C: N = data.element(si.add(OFF_C));
+    const D: N = data.element(si.add(OFF_D));
     const out = float(0).toVar();
     const y = Q.y;
     If(y.greaterThanEqual(0).and(y.lessThan(A.z)), () => {
@@ -61,7 +69,7 @@ export function makeCracks(): Cracks {
           If(float(j).greaterThanEqual(D.w), () => {
             Break();
           });
-          const ray: N = e.element(si.mul(RAY_CAP).add(j));
+          const ray: N = data.element(si.mul(RAY_CAP).add(j).add(OFF_E));
           const lo = mix(ray.x, ray.z, h);
           const hi = mix(ray.y, ray.w, h);
           bands.addAssign(smoothstep(lo.sub(RAY_EDGE / 2), lo.add(RAY_EDGE / 2), ex).mul(float(1).sub(smoothstep(hi.sub(RAY_EDGE / 2), hi.add(RAY_EDGE / 2), ex))));
@@ -80,23 +88,23 @@ export function makeCracks(): Cracks {
     count,
     at(s) {
       const si = int(s);
-      const B: N = b.element(si);
-      const C: N = c.element(si);
-      const A: N = a.element(si);
+      const B: N = data.element(si.add(OFF_B));
+      const C: N = data.element(si.add(OFF_C));
+      const A: N = data.element(si.add(OFF_A));
       return { dir: B.xyz, rgb: C.xyz, ceil: A.z };
     },
-    arrays: { a, b, c, d, e },
+    data,
     set(cracks) {
       const p = packCracks(cracks);
-      const fill = (u: N, src: Float32Array): void => {
-        const arr = u.array as Vector4[];
-        for (let i = 0; i < arr.length; i++) arr[i].set(src[i * 4], src[i * 4 + 1], src[i * 4 + 2], src[i * 4 + 3]);
+      const arr = data.array as Vector4[];
+      const fill = (at: number, src: Float32Array): void => {
+        for (let i = 0; i * 4 < src.length; i++) arr[at + i].set(src[i * 4], src[i * 4 + 1], src[i * 4 + 2], src[i * 4 + 3]);
       };
-      fill(a, p.a);
-      fill(b, p.b);
-      fill(c, p.c);
-      fill(d, p.d);
-      fill(e, p.e);
+      fill(OFF_A, p.a);
+      fill(OFF_B, p.b);
+      fill(OFF_C, p.c);
+      fill(OFF_D, p.d);
+      fill(OFF_E, p.e);
       count.value = p.count;
     },
   };

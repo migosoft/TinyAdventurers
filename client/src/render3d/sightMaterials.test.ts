@@ -77,3 +77,23 @@ describe('a world without a sun', () => {
     });
   }
 });
+
+// WebGPU allows 12 uniform buffers per fragment stage (`maxUniformBuffersPerShaderStage`); a material over it fails to build its pipeline on a real GPU
+// and draws nothing (#307: the crack arrays took the world material from 8 to 13). The tests build without a GPU, so the count is read from the code.
+describe('the uniform buffers of the WebGPU shaders', () => {
+  const LIMIT = 12;
+  it('no material needs more than the stage limit', () => {
+    for (const { name, m } of materials()) {
+      const code = fragment(WGSLNodeBuilder, m);
+      expect((code.match(/var<uniform>/g) ?? []).length, name).toBeLessThanOrEqual(LIMIT);
+    }
+  });
+
+  it('the shaft march fits too', async () => {
+    const { makeShaftPass } = await import('./air/shaftNodes');
+    const pass = makeShaftPass(lit(), makeSight());
+    expect((fragment(WGSLNodeBuilder, pass.march).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);
+    expect((fragment(WGSLNodeBuilder, pass.composite).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);
+    pass.dispose();
+  });
+});

@@ -39,6 +39,8 @@ export interface ShaftPass {
   /** Full-screen, additive: the 5-tap blur of the shaft texture. */
   composite: NodeMaterial;
   set(o: ShaftFrame): void;
+  /** The frame's uniform nodes (for tests): `set` writes their values. */
+  readonly uniforms: { top: N; toward: N; uvScale: N; texel: N };
   dispose(): void;
 }
 
@@ -114,6 +116,7 @@ export function makeShaftPass(lighting: Lighting, sight: Sight): ShaftPass {
   return {
     march,
     composite,
+    uniforms: { top: uTop, toward: uToward, uvScale: uUvScale, texel: uTexel },
     set(o) {
       depthNode.value = o.depth;
       shaftNode.value = o.shaft;

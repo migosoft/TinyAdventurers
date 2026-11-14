@@ -52,6 +52,14 @@ describe('marchPoints', () => {
   }
 });
 
+describe('marchPoints above the top', () => {
+  it('a surface above the ceiling gets steps of length 0 (the shader clamps top - P.y at 0): every point is P', () => {
+    const toward = viewRay((48 * Math.PI) / 180, 0);
+    const P: [number, number, number] = [1, 6, 2];
+    for (const q of marchPoints(P, toward, 3, 0.7)) expect(q).toEqual(P);
+  });
+});
+
 describe('the blur', () => {
   it('keeps the light: the centre and four diagonal taps sum to 1', () => {
     expect(BLUR_CENTRE + 4 * BLUR_DIAG).toBeCloseTo(1, 12);

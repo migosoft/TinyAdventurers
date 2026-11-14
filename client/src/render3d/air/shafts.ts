@@ -24,7 +24,7 @@ export function ignOffset(px: number, py: number): number {
 
 /** CPU twin of the march: the sample points from surface `P` toward the camera (unit `toward`) up to height `top`; `j` is the pixel's offset. */
 export function marchPoints(P: Vec3, toward: Vec3, top: number, j: number, steps: number = SHAFT_STEPS): Vec3[] {
-  const dt = (top - P[1]) / toward[1] / steps;
+  const dt = Math.max(top - P[1], 0) / toward[1] / steps;
   const out: Vec3[] = [];
   for (let k = 0; k < steps; k++) {
     const s = (k + j) * dt;

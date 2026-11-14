@@ -38,7 +38,7 @@ const KNIGHT_ID = 100;
 const LOOP: [number, number][] = [[3.5, 4.5], [10.5, 4.5], [10.5, 14.5], [7.5, 14.5], [7.5, 8.5], [3.5, 8.5]];
 /** The tile of the Daylight crack: on the loop's west leg, so the knight crosses the patch and cuts a gap into the shafts. */
 export const CRACK_TILE: [number, number] = [7, 9];
-const LOOP_LEN =LOOP.reduce((s, p, i) => s + Math.hypot(LOOP[(i + 1) % LOOP.length][0] - p[0], LOOP[(i + 1) % LOOP.length][1] - p[1]), 0);
+const LOOP_LEN = LOOP.reduce((s, p, i) => s + Math.hypot(LOOP[(i + 1) % LOOP.length][0] - p[0], LOOP[(i + 1) % LOOP.length][1] - p[1]), 0);
 
 /** Where the knight is at time `t` (s), in px, and the aim it faces (right, or left while it goes west). */
 export function lightsKnight(t: number): { x: number; y: number; aim: number } {

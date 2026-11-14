@@ -69,7 +69,11 @@ describe('the shaft pass', () => {
   it('set takes the frame: the gain is a named constant and the uniforms follow', () => {
     expect(SHAFT_GAIN).toBe(0.11);
     const p = pass();
-    p.set({ depth: new DepthTexture(2, 2), shaft: new Texture(), projInv: new Matrix4(), camWorld: new Matrix4(), toward: new Vector3(0, 1, 0), top: 3, uvScale: new Vector2(1, 1), texel: new Vector2(0.5, 0.5) });
+    p.set({ depth: new DepthTexture(2, 2), shaft: new Texture(), projInv: new Matrix4(), camWorld: new Matrix4(), toward: new Vector3(0, 1, 0), top: 3, uvScale: new Vector2(0.25, 0.5), texel: new Vector2(0.125, 0.0625) });
+    expect(p.uniforms.top.value).toBe(3);
+    expect((p.uniforms.uvScale.value as Vector2).toArray()).toEqual([0.25, 0.5]);
+    expect((p.uniforms.texel.value as Vector2).toArray()).toEqual([0.125, 0.0625]);
+    expect((p.uniforms.toward.value as Vector3).toArray()).toEqual([0, 1, 0]);
     p.dispose();
   });
 });

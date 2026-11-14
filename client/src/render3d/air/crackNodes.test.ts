@@ -6,7 +6,7 @@ import { LIGHT_KIND } from '../../generated/defs';
 import { sunLook } from '../../game/sunmath';
 import { fragment, type Builder } from '../shaderCode.testutil';
 import { CRACK_CAP, RAY_CAP, crackOf, packCracks } from './cracks';
-import { makeCracks } from './crackNodes';
+import { DATA_LEN, OFF_A, OFF_B, OFF_C, OFF_D, OFF_E, makeCracks } from './crackNodes';
 
 describe('makeCracks', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
@@ -26,11 +26,15 @@ describe('makeCracks', () => {
     expect(cracks.count.value).toBe(2);
     const p = packCracks(list);
     const flat = (arr: { x: number; y: number; z: number; w: number }[]): number[] => arr.flatMap((v) => [v.x, v.y, v.z, v.w]);
-    expect(flat(cracks.arrays.a.array)).toEqual([...p.a]);
-    expect(flat(cracks.arrays.e.array)).toEqual([...p.e]);
-    expect(cracks.arrays.e.array.length).toBe(CRACK_CAP * RAY_CAP);
+    const all = cracks.data.array as { x: number; y: number; z: number; w: number }[];
+    expect(all.length).toBe(DATA_LEN);
+    expect(flat(all.slice(OFF_A, OFF_A + CRACK_CAP))).toEqual([...p.a]);
+    expect(flat(all.slice(OFF_B, OFF_B + CRACK_CAP))).toEqual([...p.b]);
+    expect(flat(all.slice(OFF_C, OFF_C + CRACK_CAP))).toEqual([...p.c]);
+    expect(flat(all.slice(OFF_D, OFF_D + CRACK_CAP))).toEqual([...p.d]);
+    expect(flat(all.slice(OFF_E, OFF_E + CRACK_CAP * RAY_CAP))).toEqual([...p.e]);
     cracks.set([]);
     expect(cracks.count.value).toBe(0);
-    expect(flat(cracks.arrays.a.array).every((v) => v === 0)).toBe(true);
+    expect(flat(all).every((v) => v === 0)).toBe(true);
   });
 });
