@@ -169,4 +169,36 @@ describe('Forest.frame', () => {
     s.changed(v);
     expect(s.changed(f.frame({ wind: true, t: 0 }).versions)).toEqual([]);
   });
+  it('gathers the falling leaves of its trees per chunk, one per lobe, with the plant\'s own leaf amount and colour', () => {
+    const specs = [spec(2, 2, 1), spec(3, 3, 2, { leaf: 0.4 }), spec(30, 10, 5, { form: 'willow' }), spec(5, 5, 6, { dead: true }), spec(6, 6, 7, { form: 'conifer' }), spec(7, 7, 8, { form: 'bush' })];
+    const f = make(specs);
+    f.step({ x: 0, z: 0 }, 1000);
+    const fr = f.frame({ wind: true, t: 0 });
+    const lobes = (s: TreeSpec) => buildTree(s).lobes.length;
+    const a = fr.chunks.get(0)!.leaves;
+    // Chunk 0 holds the two leafy trees, the dead one, the conifer and the bush; only the two leafy ones drop leaves.
+    expect(a.n).toBe(lobes(specs[0]) + lobes(specs[1]));
+    expect(a.start).toHaveLength(a.n * 3);
+    expect(a.leaf).toHaveLength(a.n);
+    expect(a.look).toHaveLength(a.n * 4);
+    expect([...new Set(a.leaf.map((v) => Math.fround(v)))].sort()).toEqual([Math.fround(0.4), 1].sort());
+    expect(a.look.slice(0, 4)).toEqual(plantVariation(2, 2));
+    // The willow's leaves take its own warmer, lighter shift.
+    const nx = Math.ceil(MAP.w / CHUNK);
+    const w = fr.chunks.get(Math.floor(10 / CHUNK) * nx + Math.floor(30 / CHUNK))!.leaves;
+    const wv = plantVariation(30, 10);
+    expect(w.n).toBe(lobes(specs[2]));
+    expect(w.look.slice(0, 4)).toEqual([wv[0] + 0.08, wv[1] + 0.09, wv[2], wv[3]]);
+  });
+  it('grows a chunk\'s leaves as trees are added, and hands the leaf rate on', () => {
+    const f = make([spec(2, 2, 1), spec(4, 4, 2)], counting(10));
+    f.step({ x: 0, z: 0 }, 0);
+    const ch = f.frame({ wind: true, t: 0 }).chunks.get(0)!;
+    const n1 = ch.leaves.n;
+    expect(n1).toBeGreaterThan(2);
+    f.step({ x: 0, z: 0 }, 1000);
+    expect(ch.leaves.n).toBeGreaterThan(n1);
+    expect(f.frame({ wind: true, t: 0 }).leafRate).toBe(1);
+    expect(f.frame({ wind: true, t: 0, leafRate: 12 }).leafRate).toBe(12);
+  });
 });

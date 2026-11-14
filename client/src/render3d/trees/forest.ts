@@ -4,13 +4,15 @@ import { PITCH_MAX } from '../params';
 import { DrawQueue } from '../../game/woodland/plantpages';
 import { buildTree, type BuiltTree } from './build';
 import { plantChunks } from './chunks';
+import { WILLOW_SHIFT } from './grow';
+import { leafSeed, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
 import { FLUTTER_PX, TreeMesh, appendAt } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
 
 export interface Vec3 { x: number; y: number; z: number }
-/** One world chunk's trees merged: the mesh streams plus, per vertex, `plant` (foot x, z, leaf amount, dead) and `look` (leaf bright, leaf warm, bark light, bark grey). */
-export interface TreeChunk { mesh: TreeMesh; plant: Float32Array; look: Float32Array; bounds: { min: Vec3; max: Vec3 } }
+/** One world chunk's trees merged: the mesh streams plus, per vertex, `plant` (foot x, z, leaf amount, dead) and `look` (leaf bright, leaf warm, bark light, bark grey), and the falling leaves of its trees (it grows with the chunk). */
+export interface TreeChunk { mesh: TreeMesh; plant: Float32Array; look: Float32Array; leaves: LeafBuf; bounds: { min: Vec3; max: Vec3 } }
 export interface TreeFrame {
   chunks: ReadonlyMap<number, TreeChunk>;
   /** Chunk index to a number that grows when a tree was added to it. */
@@ -23,6 +25,8 @@ export interface TreeFrame {
   /** Leaf amount forced on every living tree; negative: none. */
   leafOverride: number;
   plain: boolean;
+  /** Dev page: a multiplier on how often leaves fall (1: the real rate). */
+  leafRate: number;
 }
 
 /** Milliseconds of tree building per frame (first guess). */
@@ -97,8 +101,8 @@ export class Forest {
     return this.queue.run(budgetMs);
   }
 
-  frame(o: { wind: boolean; t: number; leafOverride?: number; plain?: boolean }): TreeFrame {
-    return { chunks: this.chunkMap, versions: this.versionMap, palette: this.palette, complete: this.done === this.specs.length, wind: o.wind, t: o.t, leafOverride: o.leafOverride ?? -1, plain: o.plain ?? false };
+  frame(o: { wind: boolean; t: number; leafOverride?: number; plain?: boolean; leafRate?: number }): TreeFrame {
+    return { chunks: this.chunkMap, versions: this.versionMap, palette: this.palette, complete: this.done === this.specs.length, wind: o.wind, t: o.t, leafOverride: o.leafOverride ?? -1, plain: o.plain ?? false, leafRate: o.leafRate ?? 1 };
   }
 
   private add(i: number): void {
@@ -110,7 +114,7 @@ export class Forest {
     const chunk = this.chunkOf[i];
     let slot = this.slots.get(chunk);
     if (!slot) {
-      const c: TreeChunk = { mesh: new TreeMesh(), plant: new Float32Array(0), look: new Float32Array(0), bounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } } };
+      const c: TreeChunk = { mesh: new TreeMesh(), plant: new Float32Array(0), look: new Float32Array(0), leaves: newLeafBuf(), bounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } } };
       this.slots.set(chunk, (slot = { chunk: c, plant: new Float32Array(0), look: new Float32Array(0), used: 0 }));
       this.chunkMap.set(chunk, c);
     }
@@ -125,6 +129,11 @@ export class Forest {
       slot.plant.set([sp.x, sp.z, sp.dead ? 0 : sp.leaf, sp.dead ? 1 : 0], (slot.used + k) * 4);
       slot.look.set(v, (slot.used + k) * 4);
     }
+    // The falling leaves, with the plant's own leaf amount and colour (a willow's leaves carry its own warmer, lighter shift).
+    const leaves = slot.chunk.leaves, from = leaves.n;
+    pushLeaves(leaves, b.tree, sp.x, sp.z, leafSeed(sp.seed, sp.x, sp.z));
+    const look: [number, number, number, number] = sp.form === 'willow' ? [v[0] + WILLOW_SHIFT[1], v[1] + WILLOW_SHIFT[0], v[2], v[3]] : v;
+    for (let k = from; k < leaves.n; k++) { leaves.leaf.push(sp.leaf); leaves.look.push(...look); }
     slot.used += n;
     slot.chunk.plant = slot.plant.subarray(0, slot.used * 4);
     slot.chunk.look = slot.look.subarray(0, slot.used * 4);

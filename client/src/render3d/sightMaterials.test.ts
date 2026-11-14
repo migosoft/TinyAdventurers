@@ -37,6 +37,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
     { name: 'plant card', m: plantCardMaterial(t, 64, 64, l, toward, sight, seeUniforms(), t, makePlantShared()), world: false },
     { name: 'tree depth', m: trees.depth, world: false },
     { name: 'tree colour', m: trees.colour, world: false },
+    // A falling leaf: lit like the leaves and veiled like every world material.
+    { name: 'tree leaf', m: trees.leaf, world: false },
   ];
 }
 

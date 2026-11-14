@@ -10,7 +10,7 @@ import type { TreeForm, TreeSpec } from './spec';
 const U = 1 / 16;
 
 /** A spot where a falling leaf may start: a crown lobe, or the end of a limb under a willow's curtains. */
-export interface FallLobe { x: number; y: number; z: number; r: number; th: number }
+export interface FallLobe { x: number; y: number; z: number; r: number; th: number; /** The sway factor at the spot. */ k: number }
 
 export interface Skeleton {
   trunk: P3[];
@@ -185,7 +185,7 @@ export function growLeafy(spec: TreeSpec): Skeleton {
   for (const b of lobes) b.k = swayK(SWAY.leafy, b.y, height);
   return {
     trunk, branches, lobes, roots, skirts: [], curtain: [], height, amp: ampOf(form, spec.dead), trunkSides: 10, rootSides: 5, trunkShaded: true, lift: 0,
-    falls: spec.dead ? [] : lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: b.th })),
+    falls: spec.dead ? [] : lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: b.th, k: b.k })),
   };
 }
 
@@ -208,7 +208,7 @@ function layRoots(rc: Recipe, X: (x: number) => number, minW: number): P3[][] {
 /** How much further a willow strand swings at its tip than at its root, tiles. */
 const CURTAIN_SWING = 0.2; // first guess
 /** A willow leaf's own shift: warmer and lighter than the other trees', a yellow-green. */
-const WILLOW_SHIFT: [number, number] = [0.09, 0.08];
+export const WILLOW_SHIFT: [number, number] = [0.09, 0.08];
 
 /**
  * A weeping willow: the generator's old, thick, bent trunk; a few heavy limbs that go up and out and fork; and the crown is
@@ -242,7 +242,7 @@ export function growWillow(spec: TreeSpec): Skeleton {
       }
     }
     branches.push({ pts, sides: w0 > 1.5 * U ? 6 : 4 });
-    ends.push({ x: p.x, y: p.y, z: p.z, r: 9 * du, th: minTh });
+    ends.push({ x: p.x, y: p.y, z: p.z, r: 9 * du, th: minTh, k: 0 });
     if (depth === 0) for (const sg of [-1, 1]) {
       const from = pts[sg < 0 ? 3 : 4], a = sg * (0.55 + r() * 0.4), c = Math.cos(a), sn = Math.sin(a);
       limb(from, norm([dir0[0] * c - dir0[2] * sn, 0.5, dir0[0] * sn + dir0[2] * c]), len * 0.66, from.w * 0.75, 1);
@@ -259,6 +259,7 @@ export function growWillow(spec: TreeSpec): Skeleton {
   for (const b of branches) for (const p of b.pts) top = Math.max(top, p.y);
   for (const h of hangs) R = Math.max(R, Math.hypot(h.x - fork.x, h.z - fork.z));
   const height = Math.max(top + 2 * du, 0.5), amp = ampOf('willow', spec.dead), swing = spec.dead ? 0 : CURTAIN_SWING;
+  for (const e of ends) e.k = swayK(amp, e.y, height);
 
   // the curtains
   const curtain: TuftPatch[] = [];
@@ -354,6 +355,6 @@ export function growPlant(spec: TreeSpec): Skeleton {
   return {
     trunk: thin(trunk, Math.max(1, Math.floor(nT / 12))), branches, lobes, roots: layRoots(rc, X, minW), skirts, curtain: [], height, amp,
     trunkSides: bush ? 5 : 10, rootSides: 6, trunkShaded: !bush, lift: bush ? 0.3 : 0,
-    falls: lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: 0 })),
+    falls: lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: 0, k: b.k })),
   };
 }

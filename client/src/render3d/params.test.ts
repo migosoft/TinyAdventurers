@@ -97,7 +97,7 @@ describe('toSearch', () => {
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
-      hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true,
+      hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -149,5 +149,14 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&plain=yes').plain).toBe(false);
     expect(toSearch({ ...DEFAULTS, leaf: 0, plain: true }, '?r3d=woodland')).toBe('?r3d=woodland&leaf=0&plain=1');
     expect(toSearch(DEFAULTS, '?r3d=woodland&leaf=50&plain=1')).toBe('?r3d=woodland');
+  });
+
+  it('reads the dev-only leafRate (#329): a multiplier on the falling leaves\' clock, 1 by default', () => {
+    expect(parseParams('?r3d').leafRate).toBe(1);
+    expect(parseParams('?r3d&leafRate=30').leafRate).toBe(30);
+    expect(parseParams('?r3d&leafRate=0.2').leafRate).toBe(1);
+    expect(parseParams('?r3d&leafRate=99999').leafRate).toBe(1000);
+    expect(parseParams('?r3d&leafRate=abc').leafRate).toBe(1);
+    expect(toSearch({ ...DEFAULTS, leafRate: 30 }, '?r3d=woodland')).toBe('?r3d=woodland&leafRate=30');
   });
 });

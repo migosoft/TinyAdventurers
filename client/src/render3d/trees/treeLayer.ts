@@ -5,6 +5,7 @@ import { Box3, BufferAttribute, BufferGeometry, DataTexture, Mesh, NearestFilter
 import type { Texture } from 'three/webgpu';
 import { ChunkSync } from './chunks';
 import type { TreeChunk, TreeFrame } from './forest';
+import { LEAF_DRIFT, LEAF_FLUTTER, LEAF_HALF, type LeafBuf } from './leaves';
 import { paletteBytes } from './palette';
 import { TREE_ORDER, makeTreeShared, packTreeStreams, type TreeMaterials, type TreeShared } from './treeNodes';
 
@@ -32,6 +33,45 @@ export function chunkGeometry(c: TreeChunk): BufferGeometry {
   // The raw positions lack the patches' spread, the sway and the stretched height: the forest's bounds hold them.
   const b = c.bounds;
   g.boundingBox = new Box3(new Vector3(b.min.x, b.min.y, b.min.z), new Vector3(b.max.x, b.max.y, b.max.z));
+  g.boundingSphere = g.boundingBox.getBoundingSphere(new Sphere());
+  return g;
+}
+
+/** The corners of a leaf's quad, in half-widths. */
+const CORNERS = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+/** How far a leaf can end up from its lobe in x and z (the wind's drift at its largest, the flutter and the quad), tiles. */
+const LEAF_REACH = LEAF_DRIFT * 1.4 + LEAF_FLUTTER + 2 * LEAF_HALF;
+
+/**
+ * One chunk's falling leaves as a geometry: a quad per leaf with five attributes (`position` the corner, `start`, `params`, `plant`, `look`: far
+ * under the 8 vertex buffers WebGPU allows). `bounds` (the chunk's) are widened by the leaves' reach and run down to the ground, for culling.
+ */
+export function leafGeometry(l: LeafBuf, bounds?: TreeChunk['bounds']): BufferGeometry {
+  const n = l.n, g = new BufferGeometry();
+  const position = new Float32Array(n * 12), start = new Float32Array(n * 16), params = new Float32Array(n * 16), plant = new Float32Array(n * 16), look = new Float32Array(n * 16);
+  const index = new Uint32Array(n * 6);
+  let x0 = Infinity, x1 = -Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < 4; c++) {
+      const v = i * 4 + c;
+      position[v * 3] = CORNERS[c][0]; position[v * 3 + 1] = CORNERS[c][1];
+      start.set([l.start[i * 3], l.start[i * 3 + 1], l.start[i * 3 + 2], l.sway[i]], v * 4);
+      for (let k = 0; k < 4; k++) { params[v * 4 + k] = l.params[i * 4 + k]; look[v * 4 + k] = l.look[i * 4 + k]; }
+      plant.set([l.foot[i * 2], l.foot[i * 2 + 1], l.leaf[i], 0], v * 4);
+    }
+    index.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
+    x0 = Math.min(x0, l.start[i * 3]); x1 = Math.max(x1, l.start[i * 3]); y1 = Math.max(y1, l.start[i * 3 + 1]);
+    z0 = Math.min(z0, l.start[i * 3 + 2]); z1 = Math.max(z1, l.start[i * 3 + 2]);
+  }
+  g.setAttribute('position', new BufferAttribute(position, 3));
+  g.setAttribute('start', new BufferAttribute(start, 4));
+  g.setAttribute('params', new BufferAttribute(params, 4));
+  g.setAttribute('plant', new BufferAttribute(plant, 4));
+  g.setAttribute('look', new BufferAttribute(look, 4));
+  g.setIndex(new BufferAttribute(index, 1));
+  // A leaf starts at y > 0 and a lifted leaf stays below its start's lifted height; the tree's own bounds cover that.
+  const b = bounds ?? { min: { x: x0, y: 0, z: z0 }, max: { x: x1, y: y1, z: z1 } };
+  g.boundingBox = new Box3(new Vector3(Math.min(b.min.x, x0) - LEAF_REACH, 0, Math.min(b.min.z, z0) - LEAF_REACH), new Vector3(Math.max(b.max.x, x1) + LEAF_REACH, Math.max(b.max.y, y1) + LEAF_HALF, Math.max(b.max.z, z1) + LEAF_REACH));
   g.boundingSphere = g.boundingBox.getBoundingSphere(new Sphere());
   return g;
 }
@@ -77,6 +117,7 @@ export class TreeLayer {
     this.shared.windOn.value = f.wind ? 1 : 0;
     this.shared.leafOverride.value = f.leafOverride;
     this.shared.plain.value = f.plain ? 1 : 0;
+    this.shared.leafRate.value = f.leafRate;
     for (const k of this.sync_.changed(f.versions)) this.dirty.add(k);
     const now = this.now();
     for (const k of this.dirty) {
@@ -101,6 +142,14 @@ export class TreeLayer {
       add(mats.depth, this.scene, TREE_ORDER.depth);
       add(mats.colour, this.scene, TREE_ORDER.colour);
       if (this.sunScene && mats.sun) add(mats.sun, this.sunScene, 0);
+      // The falling leaves are their own geometry and one more draw, in the scene only (a leaf casts no shadow).
+      if (c.leaves.n > 0) {
+        const mesh = new Mesh(leafGeometry(c.leaves, c.bounds), mats.leaf);
+        mesh.frustumCulled = true;
+        mesh.renderOrder = TREE_ORDER.leaf;
+        this.scene.add(mesh);
+        list.push({ mesh, scene: this.scene });
+      }
       this.meshes.set(k, list);
     }
   }
@@ -115,7 +164,7 @@ export class TreeLayer {
 
   dispose(): void {
     this.clear();
-    if (this.mats) for (const m of [this.mats.depth, this.mats.colour, this.mats.sun]) m?.dispose();
+    if (this.mats) for (const m of [this.mats.depth, this.mats.colour, this.mats.sun, this.mats.leaf]) m?.dispose();
     this.mats = null;
     this.palette?.dispose();
     this.palette = null;
@@ -125,7 +174,7 @@ export class TreeLayer {
     const list = this.meshes.get(k);
     if (!list) return;
     for (const { mesh, scene } of list) scene.remove(mesh);
-    list[0].mesh.geometry.dispose();
+    for (const g of new Set(list.map((e) => e.mesh.geometry))) g.dispose();
     this.meshes.delete(k);
   }
 

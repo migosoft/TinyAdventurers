@@ -7,6 +7,17 @@ import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
 import { makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
+import { buildTree } from './build';
+import { newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
+import { leafGeometry } from './treeLayer';
+
+/** The falling leaves of one round tree, with the plant's own values as the forest fills them. */
+function leafSample(): LeafBuf {
+  const out = newLeafBuf();
+  pushLeaves(out, buildTree({ form: 'round', x: 3, z: 4, seed: 1, scalePct: 100, mirrored: false, leaf: 1, dead: false }), 3, 4, 1);
+  for (let i = 0; i < out.n; i++) { out.leaf.push(1); out.look.push(1, 0, 1, 0); }
+  return out;
+}
 
 /** A small tree: a trunk tube and a lobe of tufts, with the per-plant attributes a forest fills. */
 function treeGeometry(): BufferGeometry {
@@ -118,6 +129,28 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       }
     });
 
+    it('the falling leaf builds in both stages, ends with the sight step, and collapses with the tree\'s own leaf rule', () => {
+      const { mats } = build(true);
+      const g = leafGeometry(leafSample());
+      const frag = fragment(B, mats.leaf, { compare: true, geometry: g });
+      expect(frag).toContain('sightMode');
+      expect(frag).toContain('sightOrigin');
+      const vert = vertex(B, mats.leaf, { compare: true, geometry: g });
+      expect(vert).toMatch(/-50\.0/);
+      // The effective leaf amount is the tree shader's: the same override uniform decides.
+      expect(vert).toContain('treeLeafOverride');
+      for (const m of [mats.depth, mats.colour]) expect(vertex(B, m, { compare: true, geometry: build(true).geometry })).toContain('treeLeafOverride');
+    });
+
+    it('the falling leaf reads the palette once and the sight mask once, at the top level', () => {
+      const { mats } = build(true);
+      const g = leafGeometry(leafSample());
+      const code = fragment(B, mats.leaf, { compare: true, geometry: g });
+      const reads = [...code.matchAll(wgsl ? /textureSample\w*\(/g : /\btexture\(/g)];
+      expect(reads).toHaveLength(4); // sight mask, shadow map, lava light, palette
+      topLevel(B, code, reads[0]);
+    });
+
     it('a dungeon colour pass divides the texel only by the floored brightness, and darkvision greys the undivided texel', () => {
       const { mats, geometry } = build(false);
       const code = fragment(B, mats.colour, { geometry });
@@ -169,6 +202,18 @@ describe('tree material state', () => {
     const code = fragment(GLSLNodeBuilder, m);
     expect(code).toMatch(/0\.0 > 0\.0/);
     expect(code).not.toMatch(/<=/);
+  });
+
+  it('the falling leaf is an opaque, alpha-tested, double-sided pass drawn after the tree colour pass, with the sight veil', () => {
+    const { mats } = build(true);
+    expect(mats.leaf.alphaTest).toBe(0.5);
+    expect(mats.leaf.depthWrite).toBe(true);
+    expect(mats.leaf.side).toBe(DoubleSide);
+    expect(TREE_ORDER.leaf).toBeGreaterThan(TREE_ORDER.colour);
+  });
+
+  it('the leaf rate is a shared uniform that defaults to 1', () => {
+    expect(makeTreeShared().leafRate.value).toBe(1);
   });
 
   it('all three take their position and their collapse from the one shared treePoint', () => {

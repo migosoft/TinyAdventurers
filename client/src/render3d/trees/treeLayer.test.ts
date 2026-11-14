@@ -36,15 +36,16 @@ describe('TreeLayer', () => {
   it('holds a depth and a colour mesh per chunk in the scene and a caster in the sun scene', () => {
     const { l, scene, sun } = layer(true);
     l.sync(frame(built(2)));
-    expect(scene.children).toHaveLength(2 * 2);
+    // Per chunk: the depth and colour passes, the leaves (all in the scene), and the caster in the sun's scene.
+    expect(scene.children).toHaveLength(2 * 3);
     expect(sun!.children).toHaveLength(2);
-    expect(l.meshCount).toBe(6);
+    expect(l.meshCount).toBe(2 * 4);
   });
 
   it('makes no caster without a sun', () => {
     const { l, scene } = layer(false);
     l.sync(frame(built(3)));
-    expect(scene.children).toHaveLength(3 * 2);
+    expect(scene.children).toHaveLength(3 * 3);
   });
 
   it('draws the depth pass before and the colour pass after the opaque things, on one geometry', () => {
@@ -97,7 +98,7 @@ describe('TreeLayer', () => {
     expect(scene.children[0]).toBe(first);
     f.step({ x: 0, z: 0 }, 1e6);
     l.sync(frame(f));
-    expect(scene.children).toHaveLength(3 * 2);
+    expect(scene.children).toHaveLength(3 * 3);
   });
 
   it('a new layer on the same half-built forest shows every chunk so far and keeps receiving new ones (a lost device)', () => {
@@ -106,15 +107,15 @@ describe('TreeLayer', () => {
     f.step({ x: 0, z: 0 }, 0);
     const old = layer(true);
     old.l.sync(frame(f));
-    expect(old.scene.children).toHaveLength(2 * 2);
+    expect(old.scene.children).toHaveLength(2 * 3);
     old.l.dispose();
     const fresh = layer(true);
     fresh.l.sync(frame(f));
-    expect(fresh.scene.children).toHaveLength(2 * 2);
+    expect(fresh.scene.children).toHaveLength(2 * 3);
     expect(fresh.sun!.children).toHaveLength(2);
     f.step({ x: 0, z: 0 }, 1e6);
     fresh.l.sync(frame(f));
-    expect(fresh.scene.children).toHaveLength(3 * 2);
+    expect(fresh.scene.children).toHaveLength(3 * 3);
   });
 
   describe('uploads of a growing chunk', () => {
@@ -136,7 +137,7 @@ describe('TreeLayer', () => {
       for (let i = 0; i < 2; i++) { now += 16; grow(f); l.sync(frame(f)); }
       expect(scene.children[0]).toBe(first); // same mesh: no rebuild
       expect(verts(scene)).toBe(v1);
-      expect(scene.children).toHaveLength(2);
+      expect(scene.children).toHaveLength(3);
     });
 
     it('shows every tree after the window', () => {
@@ -151,7 +152,7 @@ describe('TreeLayer', () => {
       now += TREE_UPLOAD_MS; // no new tree: the pending change is still uploaded
       l.sync(frame(f));
       expect(verts(scene)).toBe(total(f));
-      expect(scene.children).toHaveLength(2);
+      expect(scene.children).toHaveLength(3);
     });
 
     it('is complete on the next sync when the forest is complete, inside the window', () => {
@@ -187,11 +188,11 @@ describe('TreeLayer', () => {
   it('starts over when handed another forest', () => {
     const { l, scene, sun } = layer(true);
     l.sync(frame(built(3)));
-    expect(scene.children).toHaveLength(6);
+    expect(scene.children).toHaveLength(9);
     const other = new Forest([spec(2, 2, 9)], MAP, 0);
     other.step({ x: 0, z: 0 }, 1e6);
     l.sync(frame(other));
-    expect(scene.children).toHaveLength(2); // the first forest's chunks are gone
+    expect(scene.children).toHaveLength(3); // the first forest's chunks are gone
     expect(sun!.children).toHaveLength(1);
   });
 
@@ -202,7 +203,7 @@ describe('TreeLayer', () => {
     expect(scene.children).toHaveLength(0);
     expect(sun!.children).toHaveLength(0);
     l.sync(frame(built(3)));
-    expect(scene.children).toHaveLength(6);
+    expect(scene.children).toHaveLength(9);
     l.dispose();
     expect(scene.children).toHaveLength(0);
   });
@@ -218,6 +219,91 @@ describe('TreeLayer', () => {
     expect(tex.generateMipmaps).toBe(false);
     expect(tex.flipY).toBe(false);
     expect(Array.from(tex.image.data as Uint8Array)).toEqual(Array.from(paletteBytes(0)));
+  });
+
+  describe('falling leaves', () => {
+    const leafMeshes = (scene: Scene) => (scene.children as Mesh[]).filter((m) => m.renderOrder === TREE_ORDER.leaf);
+    const leafCount = (f: Forest) => [...f.frame({ wind: false, t: 0 }).chunks.values()].reduce((n, c) => n + c.leaves.n, 0);
+
+    it('adds one more mesh per chunk with leaves, drawn after the tree colour pass, in the scene only (no shadow)', () => {
+      const { l, scene, sun } = layer(true);
+      const f = built(3);
+      l.sync(frame(f));
+      expect(leafMeshes(scene)).toHaveLength(3);
+      expect(scene.children).toHaveLength(3 * 3);
+      expect(sun!.children).toHaveLength(3);
+      expect(TREE_ORDER.leaf).toBeGreaterThan(TREE_ORDER.colour);
+      expect(TREE_ORDER.leaf).toBeLessThan(1);
+    });
+
+    it('has no leaf mesh for a chunk whose trees drop none (a dead tree, a conifer)', () => {
+      const f = new Forest([spec(2, 2, 1, { dead: true }), spec(20, 3, 2, { form: 'conifer' }), spec(40, 20, 3)], MAP, 0);
+      f.step({ x: 0, z: 0 }, 1e6);
+      const { l, scene } = layer(true);
+      l.sync(frame(f));
+      expect(leafMeshes(scene)).toHaveLength(1);
+      expect(scene.children).toHaveLength(3 * 2 + 1);
+    });
+
+    it('uses at most 8 vertex attributes, one quad of four vertices per leaf', () => {
+      const f = built(1);
+      const { l, scene } = layer(true);
+      l.sync(frame(f));
+      const g = leafMeshes(scene)[0].geometry;
+      expect(Object.keys(g.attributes).sort()).toEqual(['look', 'params', 'plant', 'position', 'start']);
+      expect(Object.keys(g.attributes).length).toBeLessThanOrEqual(8);
+      const n = leafCount(f);
+      expect(n).toBeGreaterThan(2);
+      expect(g.getAttribute('position').count).toBe(n * 4);
+      for (const k of ['start', 'params', 'plant', 'look']) expect(g.getAttribute(k).count, k).toBe(n * 4);
+      expect(g.getIndex()!.count).toBe(n * 6);
+    });
+
+    it('keeps the leaf bounds wide enough for the drift and above the ground', () => {
+      const f = built(1);
+      const { l, scene } = layer(true);
+      l.sync(frame(f));
+      const c = [...f.frame({ wind: false, t: 0 }).chunks.values()][0];
+      const b = leafMeshes(scene)[0].geometry.boundingBox!;
+      expect(b.min.x).toBeLessThan(c.bounds.min.x);
+      expect(b.max.z).toBeGreaterThan(c.bounds.max.z);
+      expect(b.min.y).toBeLessThanOrEqual(0);
+      expect(b.max.y).toBeGreaterThanOrEqual(c.bounds.max.y);
+    });
+
+    it('a new layer on the same forest (a lost device) shows the leaves again, and clear takes them out', () => {
+      const f = built(2);
+      const old = layer(true);
+      old.l.sync(frame(f));
+      old.l.dispose();
+      expect(old.scene.children).toHaveLength(0);
+      const fresh = layer(true);
+      fresh.l.sync(frame(f));
+      expect(leafMeshes(fresh.scene)).toHaveLength(2);
+      expect(leafMeshes(fresh.scene)[0].geometry.getAttribute('position').count % 4).toBe(0);
+      fresh.l.clear();
+      expect(fresh.scene.children).toHaveLength(0);
+    });
+
+    it('uploads a growing chunk\'s leaves with its trees, inside the same window', () => {
+      let now = 0;
+      let c = 0;
+      const f = new Forest([spec(2, 2, 1), spec(4, 4, 2), spec(6, 6, 3)], MAP, 0, buildTree, () => (c += 10));
+      const { l, scene } = layer(true, () => now);
+      f.step({ x: 0, z: 0 }, 0);
+      l.sync(frame(f));
+      const first = leafMeshes(scene)[0], n1 = first.geometry.getAttribute('position').count;
+      now += 16; f.step({ x: 0, z: 0 }, 0); l.sync(frame(f));
+      expect(leafMeshes(scene)[0]).toBe(first); // inside the window: not rebuilt
+      now += TREE_UPLOAD_MS; l.sync(frame(f));
+      expect(leafMeshes(scene)[0].geometry.getAttribute('position').count).toBeGreaterThan(n1);
+    });
+
+    it('hands the leaf rate to the shared uniform', () => {
+      const { l } = layer(true);
+      l.sync({ ...frame(built(1)), leafRate: 12 });
+      expect(l.shared.leafRate.value).toBe(12);
+    });
   });
 
   it('hands the frame\'s clock, wind, leaf override and plain switch to the shared uniforms', () => {

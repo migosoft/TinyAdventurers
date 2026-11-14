@@ -11,6 +11,8 @@ export interface BuiltTree {
   radius: number;
   /** Where leaves may fall from, for the falling leaves. */
   lobes: FallLobe[];
+  /** Whether this tree sheds single leaves: a living leafy tree or willow (not a dead one, a conifer or a bush). */
+  drops: boolean;
 }
 
 function skeletonOf(s: TreeSpec): Skeleton {
@@ -53,7 +55,7 @@ export function buildTree(s: TreeSpec): BuiltTree {
     height = Math.max(height, m.position[i * 3 + 1]);
     reach = Math.max(reach, Math.hypot(m.position[i * 3], m.position[i * 3 + 2]));
   }
-  const out: BuiltTree = { mesh: m, height, radius: reach + sk.amp, lobes: sk.falls };
+  const out: BuiltTree = { mesh: m, height, radius: reach + sk.amp, lobes: sk.falls, drops: !s.dead && (leafy || s.form === 'willow') };
   if (!s.mirrored) return out;
   return { ...out, mesh: mirrorX(m), lobes: sk.falls.map((l) => ({ ...l, x: -l.x })) };
 }

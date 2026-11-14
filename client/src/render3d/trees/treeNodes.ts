@@ -4,13 +4,14 @@
 import { DoubleSide, EqualDepth, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { NodeBuilder } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, mod, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
 import { FLUTTER_PX, RAMP } from './mesh';
+import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE } from './leaves';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,20 +29,20 @@ export const TREE_LIGHT = {
 /**
  * Draw order of the pre-pass and the colour pass (set on the meshes by the view): the opaque world (ground, walls, figures: order 0), the tree depth,
  * the tree colour, then the translucent passes (shadows 1, decals and the force field 2, ghosts 3, glows 4). The depth pass comes after the ground,
- * so a pixel the colour pass misses shows the ground, never the clear colour.
+ * so a pixel the colour pass misses shows the ground, never the clear colour. The falling leaves come after the tree colour.
  */
-export const TREE_ORDER = { depth: 0.25, colour: 0.5 } as const;
+export const TREE_ORDER = { depth: 0.25, colour: 0.5, leaf: 0.6 } as const;
 
 /** Where a collapsed vertex goes: far below the ground, out of every view. */
 const GONE = [0, -50, 0] as const;
 /** The cell size of the light dabs in art pixels. */
 const DAB_CELL = 2.3;
 
-/** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp. */
+/** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp; `leafRate`: the dev page's multiplier on how often leaves fall. */
 export function makeTreeShared() {
   return {
     t: uniform(0), windOn: uniform(0), cosP: uniform(1),
-    leafOverride: uniform(-1).setName('treeLeafOverride'), plain: uniform(0),
+    leafOverride: uniform(-1).setName('treeLeafOverride'), plain: uniform(0), leafRate: uniform(1),
   };
 }
 export type TreeShared = ReturnType<typeof makeTreeShared>;
@@ -50,6 +51,8 @@ export interface TreeMaterials {
   depth: MeshBasicNodeMaterial;
   colour: MeshBasicNodeMaterial;
   sun: MeshBasicNodeMaterial | null;
+  /** The falling leaves: drawn with their own geometry (`leafGeometry`), after the tree colour pass. */
+  leaf: MeshBasicNodeMaterial;
 }
 
 /** A material whose clip position is invariant (GLSL `invariant gl_Position`, WGSL `@invariant`): the depth pass and the colour pass are two programs with different varyings, and the colour pass tests at equal depth, so both must compute the very same position. */
@@ -121,6 +124,15 @@ export function leafGone(threshold: N, leaf: N): N {
 }
 
 /**
+ * The leaf amount a plant has right now, from its `plant` stream's z (-1: a dead plant): the dev page's override replaces a living plant's own amount.
+ * The tree's foliage and the falling leaves both gate on this one rule.
+ */
+export function plantLeaf(shared: TreeShared, plantZ: N): { dead: N; leaf: N } {
+  const dead = plantZ.lessThan(-0.5);
+  return { dead, leaf: select(shared.leafOverride.greaterThanEqual(0).and(dead.not()), shared.leafOverride, max(plantZ, 0)) };
+}
+
+/**
  * The one place a tree vertex's point is made, for the depth, colour and sun passes:
  * - `point`: the true point (tiles): the vertex swayed with its crown, plus the leaf patches' flutter, a patch spread across the camera's axes;
  * - `position`: that point lifted by `sway.y * (1 / cosP - 1)` (the card proportions) for the camera passes; light, sight and shadows read `point`;
@@ -129,8 +141,7 @@ export function leafGone(threshold: N, leaf: N): N {
  */
 export function treePoint(shared: TreeShared) {
   const s = streams();
-  const dead = s.dead;
-  const leaf = select(shared.leafOverride.greaterThanEqual(0).and(dead.not()), shared.leafOverride, s.leafOwn);
+  const { dead, leaf } = plantLeaf(shared, s.plant.z);
   const gone = s.isFoliage.and(leafGone(s.misc.w, leaf));
   // A dead tree does not sway; a living one with no leaves does. The factor is the vertex's own (already scaled by height).
   const offset = swayNode(s.foot, float(1), float(1), select(dead, float(0), s.sway.x), shared.t, shared.windOn);
@@ -270,5 +281,74 @@ export function treeMaterials(o: {
   }
 
   for (const m of [depth, colour, sun]) if (m) m.userData.treePoint = p;
-  return { depth, colour, sun };
+  return { depth, colour, sun, leaf: leafMaterial(o) };
+}
+
+/**
+ * The falling leaves (#329): one camera-facing quad of an art pixel per leaf, from the streams `start` (x, y, z of the lobe it leaves, the lobe's sway
+ * factor), `params` (period, phase, leaf threshold, seed), `plant` (foot x, z, the plant's leaf amount or -1 when dead) and `look` (the plant's colour);
+ * the corner is `position`'s xy. The path is `leafAt` in leaves.ts. A leaf not falling, lying or fading, one whose lobe is above the plant's
+ * leaf amount (the tree's own `plantLeaf` rule) and one of a dead plant collapse out of view. It is lit like the leaves, tone picked by the light
+ * (tone 2 at the leaf ramp's reference brightness), and ends with the sight step.
+ */
+export function leafMaterial(o: {
+  lighting: Lighting; sight: Sight; palette: Texture; shared: TreeShared; hasSun: boolean;
+}): MeshBasicNodeMaterial {
+  const { lighting, sight, palette, shared, hasSun } = o;
+  const start = attribute('start', 'vec4'), params = attribute('params', 'vec4'), plant = attribute('plant', 'vec4'), look = attribute('look', 'vec4');
+  const corner = positionGeometry.xy;
+
+  const { dead, leaf } = plantLeaf(shared, plant.z);
+  const period = max(params.x.div(max(shared.leafRate, 1e-6)), LEAF_LIFE);
+  const age = mod(shared.t.add(params.y.mul(period)), period);
+  const f = min(age.div(LEAF_FALL), 1);
+  const landed = f.greaterThanEqual(1);
+  const gone = age.greaterThanEqual(LEAF_LIFE).or(leafGone(params.z, leaf)).or(dead);
+
+  // The path of leafAt: carried along the wind by 0.6..1.4 of LEAF_DRIFT, fluttering across it; the lobe's sway fades out over the fall.
+  const drift = shared.windOn.mul(LEAF_DRIFT).mul(params.w.mul(0.8).add(0.6)).mul(f);
+  const flutter = select(landed, float(0), sin(age.mul(LEAF_FLUTTER_RATE).add(params.w.mul(2 * Math.PI))).mul(LEAF_FLUTTER).mul(sin(f.mul(Math.PI))));
+  const alongWind = vec3(WIND_DIR[0], 0, WIND_DIR[1]);
+  const acrossWind = vec3(-WIND_DIR[1], 0, WIND_DIR[0]);
+  const sway = swayNode(plant.xy, float(1), float(1), start.w, shared.t, shared.windOn).mul(float(1).sub(f));
+  const y = select(landed, float(GROUND), start.y.add(f.mul(float(GROUND).sub(start.y))));
+  const base = vec3(start.x, y, start.z).add(alongWind.mul(drift)).add(acrossWind.mul(flutter)).add(sway);
+
+  // Falling, the quad faces the camera; lying, it is flat on the ground (a camera-facing quad would sink half into it).
+  const axes = cameraAxes();
+  const flat = normalize(vec3(axes.up.x, 0, axes.up.z));
+  const upAxis = select(landed, flat, axes.up);
+  const point = base.add(axes.right.mul(corner.x.mul(LEAF_HALF))).add(upAxis.mul(corner.y.mul(LEAF_HALF)));
+  // The card proportions: lifted by its height, as the tree's points are, and not at all on the ground.
+  const lifted = point.add(vec3(0, max(y.sub(GROUND), 0).mul(float(1).div(shared.cosP).sub(1)), 0));
+  const material = new MeshBasicNodeMaterial();
+  material.positionNode = select(gone, vec3(...GONE), lifted);
+
+  const truePos = varying(point, 'leafPos');
+  const foot = varying(plant.xy, 'leafFoot');
+  const opacity = varying(select(age.lessThan(LEAF_FALL + LEAF_LIE), float(1), float(1).sub(age.sub(LEAF_FALL + LEAF_LIE).div(LEAF_FADE))), 'leafAlpha');
+  const tint = varying(look, 'leafLook');
+  material.colorNode = Fn(() => {
+    const nl = vec3(0, 1, 0);
+    const sunDir = lighting.sun.dir;
+    const Ps = truePos.add(nl.mul(0.05)).add(sunDir.mul(0.05)); // first guess: both nudges, as the tree's
+    const ndl = mix(max(dot(nl, sunDir), 0), float(1), 0.3); // first guess: the wrap
+    const unseen = sight.unseenAt(foot);
+    const lit0 = lighting.lightAt(truePos, nl, 0.35, { sun: hasSun ? { Ps, ndl } : undefined, selfFoot: foot }); // first guess: wrap 0.35
+    const lit = { rgb: lit0.rgb.toVar('leafLit'), dv: lit0.dv.toVar('leafDv') };
+    const b = dot(lit.rgb, vec3(0.2126, 0.7152, 0.0722)).toVar('leafBright');
+    const l: N = log2(max(b, 1e-4).div(TREE_LIGHT.mid)).mul(TREE_LIGHT.gain);
+    const [s0, s1, s2, s3] = TREE_LIGHT.steps;
+    const level = select(shared.plain.greaterThan(0.5), float(2), step(s0, l).add(step(s1, l)).add(step(s2, l)).add(step(s3, l)));
+    const pal = paletteAt(palette, level, float(RAMP.leaf)).toVar('leafPalette');
+    const tone = vec3(tint.x.mul(tint.y.add(1)), tint.x, tint.x.mul(float(1).sub(tint.y)));
+    const texel = select(shared.plain.greaterThan(0.5), pal, pal.mul(tone));
+    const albedo = texel.div(max(b, TREE_LIGHT.floor));
+    // The fade: a Bayer pattern thins the leaf out (the world is pixel art, no blending).
+    const a = select(bayerAt().lessThan(opacity), float(1), float(0));
+    return vec4(sight.apply(lighting.finish(albedo, lit, texel), truePos, unseen), a);
+  })();
+  material.alphaTest = 0.5;
+  material.side = DoubleSide;
+  return material;
 }
