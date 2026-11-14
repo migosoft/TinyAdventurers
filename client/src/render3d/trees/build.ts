@@ -364,51 +364,49 @@ export function buildGrown(m: MeshData, spec: PlantSpec, tufts = false): Plant3 
 
 // ---------------------------------------------------------------- the willow (spike/3d-willow, for #299 and #329)
 /**
- * A willow: the generator's old, thick, bent trunk; limbs that rise, arch over and droop; a wide dome of leaf lobes on them;
- * and curtains of hanging strands (chains of small leaf tufts) from the outer limbs almost to the ground. A strand swings
- * more the further down it hangs. Blue-green leaves. Lobes and strands carry a leaf amount like the grown tree's.
+ * A weeping willow: the generator's old, thick, bent trunk; a few heavy limbs that go up and out and fork; and the crown is
+ * the curtains themselves: dense strands (chains of small leaf tufts) that start all along the limbs, from the very top,
+ * arch outward a little and hang down in overlapping tiers. Strands at the outside reach nearly to the ground, those near the
+ * trunk end higher, so the trunk shows under the middle; one sector of the curtain is parted. A strand swings more the
+ * further down it hangs. Light leaf greens, darker inside and toward the strand ends. Strands carry a leaf amount like the
+ * grown tree's lobes. There are no leaf lobes, so the crown setting (balls or tufts) does not change a willow.
  */
-export function buildWillow(m: MeshData, spec: PlantSpec, tufts = false): Plant3 {
+export function buildWillow(m: MeshData, spec: PlantSpec, _tufts = false): Plant3 {
   const drawn = drawTree({ seed: spec.seed, scale: spec.scalePct / 100, shape: 'wide', old: true }), rc = drawn.recipe;
   if (!rc) throw new Error('trees: the generator returned no recipe');
-  const foot = { x: spec.x, z: spec.z }, r = rng((spec.seed * 15485863 + 5) >>> 0), du = rc.s * U, ramp = RAMP.conifer;
+  const foot = { x: spec.x, z: spec.z }, r = rng((spec.seed * 15485863 + 5) >>> 0), du = rc.s * U, ramp = RAMP.leaf;
   const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
   const bz = (r() - 0.5) * 6 * du, nT = rc.trunk.length;
   const trunk: P3[] = rc.trunk.map((p, i) => ({ x: X(p.x), y: Y(p.y), z: bz * Math.sin((Math.PI * i) / Math.max(1, nT - 1)), w: Math.max(minW, p.w * U) }));
   const fork = trunk[nT - 1];
   const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
-  const branches: { pts: P3[]; sides: number }[] = [], lobes: (Lobe3 & { th: number })[] = [], hangs: { x: number; y: number; z: number; th: number }[] = [];
-  const leaf = (p: P3, rad: number, th: number) => lobes.push({ x: p.x, y: p.y, z: p.z, rx: rad * du, ry: rad * du * 0.7, rz: rad * du, ph: r() * 6, ph2: r() * 6, k: 0, th });
+  const branches: { pts: P3[]; sides: number }[] = [], hangs: { x: number; y: number; z: number; th: number }[] = [], ends: P3[] = [];
   const limb = (start: P3, dir0: number[], len: number, w0: number, depth: number): void => {
     let d = dir0, p = start; const n = 8, pts: P3[] = [{ ...start, w: w0 }];
     for (let i = 1; i <= n; i++) {
-      d = norm([d[0] + (r() - 0.5) * 0.1, d[1] - 0.105, d[2] + (r() - 0.5) * 0.1]); // rises, arches over, droops
-      p = { x: p.x + d[0] * (len / n), y: p.y + d[1] * (len / n), z: p.z + d[2] * (len / n), w: Math.max(minW, w0 * (1 - 0.5 * (i / n))) };
+      d = norm([d[0] + (r() - 0.5) * 0.22, d[1] - (i <= 3 ? 0.02 : 0.1), d[2] + (r() - 0.5) * 0.22]); // gnarled; goes up and out, only its end levels off
+      p = { x: p.x + d[0] * (len / n), y: p.y + d[1] * (len / n), z: p.z + d[2] * (len / n), w: Math.max(minW, w0 * (1 - 0.6 * (i / n))) };
       pts.push(p);
-      if (i >= 5 && r() < 0.65) hangs.push({ x: p.x + (r() - 0.5) * 7 * du, y: p.y - 1.5 * du, z: p.z + (r() - 0.5) * 7 * du, th: 0.15 + r() * 0.85 });
+      if (i >= (depth === 0 ? 3 : 2)) for (let k = 0; k < 5; k++) hangs.push({ x: p.x + (r() - 0.5) * 11 * du, y: p.y + (1 + r() * 3) * du, z: p.z + (r() - 0.5) * 11 * du, th: 0.1 + r() * 0.9 });
     }
     branches.push({ pts, sides: w0 > 1.5 * U ? 6 : 4 });
-    leaf(pts[4], 8.5 + r() * 2, 0.1 + r() * 0.4);
-    leaf(p, 6.5 + r() * 2, 0.2 + r() * 0.6);
-    for (let k = 0; k < 6; k++) { const a = r() * Math.PI * 2; hangs.push({ x: p.x + Math.cos(a) * 8 * du, y: p.y - 1 * du, z: p.z + Math.sin(a) * 8 * du, th: 0.15 + r() * 0.85 }); }
+    ends.push(p);
     if (depth === 0) for (const sg of [-1, 1]) {
-      const from = pts[4], a = sg * (0.5 + r() * 0.35), c = Math.cos(a), sn = Math.sin(a);
-      limb(from, norm([dir0[0] * c - dir0[2] * sn, 0.2, dir0[0] * sn + dir0[2] * c]), len * 0.7, from.w * 0.7, 1);
+      const from = pts[sg < 0 ? 3 : 4], a = sg * (0.55 + r() * 0.4), c = Math.cos(a), sn = Math.sin(a);
+      limb(from, norm([dir0[0] * c - dir0[2] * sn, 0.5, dir0[0] * sn + dir0[2] * c]), len * 0.66, from.w * 0.75, 1);
     }
   };
-  const limbs = 5 + Math.floor(r() * 2), az0 = r() * Math.PI * 2;
+  const limbs = 4 + Math.floor(r() * 2), az0 = r() * Math.PI * 2;
   for (let i = 0; i < limbs; i++) {
-    if (limbs > 5 && i === 0 && r() < 0.5) continue; // a gap in the crown, where the trunk shows through
-    const az = az0 + (i / limbs) * Math.PI * 2 + (r() - 0.5) * 0.4, tilt = 0.5 + r() * 0.25;
-    limb(fork, [Math.cos(az) * Math.sin(tilt), Math.cos(tilt), Math.sin(az) * Math.sin(tilt)], (25 + (r() - 0.5) * 4) * du, fork.w * 0.6, 0);
+    const az = az0 + (i / limbs) * Math.PI * 2 + (r() - 0.5) * 0.5, tilt = 0.6 + r() * 0.3;
+    limb(fork, [Math.cos(az) * Math.sin(tilt), Math.cos(tilt), Math.sin(az) * Math.sin(tilt)], (30 + (r() - 0.5) * 6) * du, fork.w * 0.62, 0);
   }
-  const tip: P3 = { x: fork.x + (r() - 0.5) * 3 * du, y: fork.y + 9 * du, z: fork.z + (r() - 0.5) * 3 * du, w: fork.w * 0.4 };
-  branches.push({ pts: [{ ...fork, w: fork.w * 0.7 }, tip], sides: 6 });
-  leaf(tip, 13 + r() * 2, 0.05 + r() * 0.2);
+  limb(fork, norm([(r() - 0.5) * 0.4, 1, (r() - 0.5) * 0.4]), 15 * du, fork.w * 0.5, 1); // a short leader: the top of the mop
 
-  let top = fork.y;
-  for (const b of lobes) top = Math.max(top, b.y + b.ry);
-  const height = Math.max(top, 0.5), amp = AMP.leafy, kOf = (y: number) => amp * (y / height) ** 2;
+  let top = fork.y, R = 0;
+  for (const b of branches) for (const p of b.pts) top = Math.max(top, p.y);
+  for (const h of hangs) R = Math.max(R, Math.hypot(h.x - fork.x, h.z - fork.z));
+  const height = Math.max(top + 2 * du, 0.5), amp = AMP.leafy, kOf = (y: number) => amp * (y / height) ** 2;
   const tPts = thin(trunk, Math.max(1, Math.floor(nT / 12)));
   tube(m, foot, tPts, 10, RAMP.bark, kOf, (i) => (i >= tPts.length - 3 ? 1 : 0), 1);
   for (const b of branches) tube(m, foot, b.pts, b.sides, RAMP.bark, kOf, () => 1, 0);
@@ -420,34 +418,38 @@ export function buildWillow(m: MeshData, spec: PlantSpec, tufts = false): Plant3
     tube(m, foot, thin(lay(false), 3), 6, RAMP.bark, () => 0, () => 1, 0);
     if (ri === 0 || ri === rc.roots.length - 1) tube(m, foot, thin(lay(true), 3), 6, RAMP.bark, () => 0, () => 1, 0);
   });
-  let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
-  for (const b of lobes) {
-    b.k = kOf(b.y);
-    bx0 = Math.min(bx0, b.x - b.rx); bx1 = Math.max(bx1, b.x + b.rx); by0 = Math.min(by0, b.y - b.ry); by1 = Math.max(by1, b.y + b.ry); bz0 = Math.min(bz0, b.z - b.rz); bz1 = Math.max(bz1, b.z + b.rz);
-  }
-  const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2, cz = (bz0 + bz1) / 2, crx = (bx1 - bx0) / 2, cry = (by1 - by0) / 2, crz = (bz1 - bz0) / 2, span = by1 - by0;
-  const grad = (x: number, y: number, z: number): [number, number, number, number] => [(x - cx) / crx, (y - cy) / cry, (z - cz) / crz, 0.25 - (0.7 * (by1 - y)) / span];
-  const rt = rng((spec.seed * 31 + 7) >>> 0);
-  for (const b of lobes) { if (tufts) tuftLobe(m, foot, b, grad, 0, rt, b.th, ramp); else lobe(m, foot, b, ramp, grad, 0, 1.4 / (Math.min(b.rx, b.ry) / U), b.th); }
-  // the curtains: every strand hangs straight down to a few px above the ground, a chain of small tufts
+
+  // the curtains
+  const gapAz = Math.PI / 2 + (r() - 0.5) * 1.2, gapW = 0.4, step = 2.2 * U; // the parted sector faces roughly south, toward the game's camera
   for (const h of hangs) {
-    const ground = (2 + r() * 5) * du, len = (h.y - ground) * (r() < 0.25 ? 0.55 + r() * 0.3 : 1), step = 1.9 * U, n = Math.floor(len / step);
+    let ox = h.x - fork.x, oz = h.z - fork.z; const ol = Math.hypot(ox, oz);
+    if (ol < 1.5 * du) { const a = r() * Math.PI * 2; ox = Math.cos(a); oz = Math.sin(a); } else { ox /= ol; oz /= ol; }
+    const q = Math.min(1, ol / R), reach = (4 + r() * 6 + 4 * q) * du, arc = (8 + r() * 5) * du;
+    const s = Math.min(1, Math.max(0, (q - 0.25) / 0.5)), ss = s * s * (3 - 2 * s);
+    let end = fork.y * 0.85 * (1 - ss) + 3 * du * ss + r() * 7 * du; // outside nearly to the ground, near the trunk only to the fork
+    if (r() < 0.2) end += (6 + r() * 10) * du; // a ragged rim
+    let da = Math.abs(Math.atan2(oz, ox) - gapAz); if (da > Math.PI) da = 2 * Math.PI - da;
+    if (da < gapW && q > 0.35) end = Math.max(end, fork.y * (0.75 + r() * 0.4));
+    const n = Math.floor((h.y - end) / step);
     if (n < 3) continue;
-    const ox = h.x - cx, oz = h.z - cz, ol = Math.hypot(ox, oz) || 1, nx = (ox / ol) * 0.9, nz = (oz / ol) * 0.9, k0 = kOf(h.y), wob = r() * 6, tone = 0.15 + (r() - 0.5) * 0.7; // strands differ in tone, so the curtain reads as streaks
+    const k0 = kOf(h.y), wob = r() * 6, tone = (r() - 0.5) * 0.5; // strands differ in tone, so the curtain reads as streaks
     for (let j = 0; j < n; j++) {
-      const t = j / n, px = h.x + Math.sin(j * 0.9 + wob) * 0.6 * U, py = h.y - j * step, pz = h.z + Math.cos(j * 0.7 + wob) * 0.6 * U;
-      const size = (1.25 + r() * 0.5 - 0.3 * t) * U, seed = Math.floor(r() * 997), base = m.verts;
+      const t = j / n, uu = Math.min(1, (j * step) / arc), out = reach * (1 - (1 - uu) * (1 - uu));
+      const px = h.x + ox * out + Math.sin(j * 0.9 + wob) * 0.6 * U, py = h.y - j * step, pz = h.z + oz * out + Math.cos(j * 0.7 + wob) * 0.6 * U;
+      const size = (1.9 + r() * 0.9 - 0.6 * t) * U, seed = Math.floor(r() * 997), base = m.verts;
       for (const [qx, qy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
         m.pos.push(foot.x + px, py, foot.z + pz);
-        m.nrm.push(nx, 0.35, nz);
-        m.grad.push(nx * 0.5, 0.2, nz * 0.5, 0.2 + tone - 0.25 * t);
+        m.nrm.push(ox * (0.3 + 0.6 * t), 0.9 - 0.6 * t, oz * (0.3 + 0.6 * t)); // the top of a strand faces the sky, its length faces outward
+        m.grad.push(ox * 0.5 * q, 0.2, oz * 0.5 * q, 0.5 + tone * 2.8 - 0.5 * t - 0.5 * (1 - q)); // brighter at the top and outside, darker inside and below
         m.sway.push(foot.x, foot.z, k0 + 0.2 * t * t, py); // a strand swings more the further down it hangs
         m.part.push(ramp, 3, 0, 0);
-        m.misc.push(0, 0, 0, h.th);
+        m.misc.push(0, t > 0.25 && j % 2 ? 1 : 0, 0, h.th); // a curtain lets light through: below its top, every other tuft casts no shadow
         m.tuft.push(qx, qy, size, seed);
       }
       m.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
   }
+  // not drawn: where the page drops falling leaves and what the card version's shadow needs
+  const lobes: Lobe3[] = ends.map((p) => ({ x: p.x, y: p.y, z: p.z, rx: 9 * du, ry: 6 * du, rz: 9 * du, ph: 0, ph2: 0, k: kOf(p.y) }));
   return { spec, drawn, lobes, height, amp, trunkHalf: fork.w, trunkTop: fork.y };
 }

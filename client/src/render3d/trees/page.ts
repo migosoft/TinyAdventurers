@@ -258,7 +258,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   }
   const treeShadowMat = new MeshBasicNodeMaterial();
   treeShadowMat.side = DoubleSide;
-  treeShadowMat.positionNode = select(gone, vec3(0, -50, 0), positionGeometry.add(treeOff).add(tuftSpread(u.sunR, u.sunU)));
+  treeShadowMat.positionNode = select(gone.or(isTuft.and(aMisc.y.greaterThan(0.5))),vec3(0, -50, 0), positionGeometry.add(treeOff).add(tuftSpread(u.sunR, u.sunU)));
   {
     const lv = lobeView(u.sunR, u.sunU, u.sun);
     treeShadowMat.colorNode = vec4(0, 0, 0, select(isLobe.and(lv.keep.not()).or(isTuft.and(tuftKeep.not())), float(0), float(1)));
