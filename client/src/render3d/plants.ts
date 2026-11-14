@@ -1,7 +1,6 @@
 // The 3D woodland's plant geometry (#306): the upright card with its root decal, the trunk caster and the clump discs the sun's
 // shadow pass draws, and the chunking of plants. Pure: no three.js, and nothing here depends on the camera.
 import type { PlantShape } from '../game/vegetation';
-import { CHUNK } from './worldMesh';
 
 /** Pixels per tile in a plant's image. */
 const PX = 16;
@@ -92,27 +91,4 @@ export function pushClumps(out: ClumpBuf, p: PlantPlace, s: PlantSprite): void {
     }
     out.n += 6;
   });
-}
-
-/** Which chunk (CHUNK tiles) each plant's foot lies in: chunk index = cz * nx + cx. Values are indices into `feet`. */
-export function plantChunks(feet: readonly { x: number; z: number }[], map: { w: number; h: number }): Map<number, number[]> {
-  const nx = Math.ceil(map.w / CHUNK), nz = Math.ceil(map.h / CHUNK);
-  const out = new Map<number, number[]>();
-  feet.forEach((f, i) => {
-    const cx = Math.min(nx - 1, Math.max(0, Math.floor(f.x / CHUNK))), cz = Math.min(nz - 1, Math.max(0, Math.floor(f.z / CHUNK)));
-    const k = cz * nx + cx;
-    const l = out.get(k);
-    if (l) l.push(i); else out.set(k, [i]);
-  });
-  return out;
-}
-
-/** Tracks which chunk versions a consumer has; a new consumer (a rebuilt view) sees every chunk as changed. */
-export class ChunkSync {
-  private seen = new Map<number, number>();
-  changed(versions: ReadonlyMap<number, number>): number[] {
-    const out: number[] = [];
-    for (const [k, v] of versions) if (this.seen.get(k) !== v) { out.push(k); this.seen.set(k, v); }
-    return out;
-  }
 }

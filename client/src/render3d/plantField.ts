@@ -3,8 +3,9 @@
 import type { PlantInfo } from '../generated/PlantInfo';
 import { DrawQueue, PlantPages, drawOrder } from '../game/woodland/plantpages';
 import { drawPlant, plantLook, type Light } from '../game/vegetation';
-import { newClumpBuf, newPlantBuf, plantChunks, pushClumps, pushPlant, pushTrunkCaster, type ClumpBuf, type PlantBuf, type PlantPlace, type PlantSprite } from './plants';
+import { newClumpBuf, newPlantBuf, pushClumps, pushPlant, pushTrunkCaster, type ClumpBuf, type PlantBuf, type PlantPlace, type PlantSprite } from './plants';
 import { swayAmp } from './wind';
+import { plantChunks } from './trees/chunks';
 
 /** A page of drawn plants: `size` x `size` RGBA px; `version` grows when an image was drawn into it. */
 export interface PageImage { size: number; data: Uint8ClampedArray; version: number }
