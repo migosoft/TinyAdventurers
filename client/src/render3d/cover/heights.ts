@@ -8,6 +8,8 @@ const h2 = (x: number, y: number, k: number): number => {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
 
+/** The farthest distance the fields measure, px. */
+const CAP = 16;
 const DIAG = Math.SQRT2;
 /** Px rows per build unit. */
 const BAND = 16;
@@ -83,7 +85,7 @@ class DistanceField {
 }
 
 /** Signed distance to the rim of `grow` (nonzero = cover), in px: positive inside, negative outside, clamped to +-cap. */
-export function signedDistance(grow: Uint8Array, w: number, h: number, cap = 16): Float32Array {
+export function signedDistance(grow: Uint8Array, w: number, h: number, cap = CAP): Float32Array {
   const f = new DistanceField(grow, w, h, cap);
   f.forward(0, h);
   f.backward(0, h);
@@ -113,7 +115,7 @@ export class HeightBuilder {
   readonly heights: Uint8Array;
   constructor(grow: Uint8Array, readonly allow: Uint8Array, readonly w: number, readonly h: number, m: CoverKind, seed: number) {
     this.heights = new Uint8Array(w * h);
-    const field = new DistanceField(grow, w, h, 16);
+    const field = new DistanceField(grow, w, h, CAP);
     const bands = Math.ceil(h / BAND), range = (k: number): [number, number] => [k * BAND, Math.min(h, (k + 1) * BAND)];
     for (let k = 0; k < bands; k++) this.units.push(() => field.forward(...range(k)));
     for (let k = bands - 1; k >= 0; k--) this.units.push(() => field.backward(...range(k)));

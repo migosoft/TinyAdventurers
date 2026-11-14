@@ -39,8 +39,9 @@ export interface CoverKind {
 export const GH_MAX = 3;
 
 const grass: CoverKind = {
-  id: 0, name: 'grass', maxH: 4, taper: 5, climb: 3, creep: 3.5, rough: 1, sway: 0.06, footShade: 0.62, darken: 0.4,
-  bushels: { w: [7, 12], h: [7, 13], fernW: [10, 14], fernH: [5, 8], perArea: 12, cluster: [3, 9], tones: [P['1'], P['2'], P['3']], sway: 0.22 },
+  id: 0, name: 'grass', maxH: 4, taper: 5, climb: 3, creep: 3.5, rough: 1, sway: 0.06, footShade: 0.62, darken: 0.4, // rough, footShade, darken: spike values, first guess
+  bushels: { // fernW, fernH, perArea, cluster: spike values, first guess
+    w: [7, 12], h: [7, 13], fernW: [10, 14], fernH: [5, 8], perArea: 12, cluster: [3, 9], tones: [P['1'], P['2'], P['3']], sway: 0.22 },
 };
 const moss: CoverKind = {
   id: 1, name: 'moss', maxH: 2, taper: 2, climb: 2, creep: 1.5, rough: 0.6, sway: 0, footShade: 0.75, darken: 0.55, // first guess

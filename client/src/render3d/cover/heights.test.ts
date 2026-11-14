@@ -36,15 +36,17 @@ describe('coverHeights', () => {
   it('thins out toward the rim', () => {
     const w = 400, h = 200, x0 = 200, g = halfPlane(w, h, x0), all = new Uint8Array(w * h).fill(1);
     const out = coverHeights(g, all, w, h, COVER.grass, 5);
-    const share = (sd: number): number => { const x = sd >= 0 ? x0 + sd : x0 + sd; let n = 0; for (let z = 0; z < h; z++) if (out[z * w + x]) n++; return n / h; };
-    const creep = share(-3), mid = share(1), far = share(6);
+    // the column at x0 has sd 1; rows near the image border are skipped (outside counts as non-grow)
+    const share = (sd: number): number => { const x = sd > 0 ? x0 + sd - 1 : x0 + sd; let n = 0; for (let z = 10; z < h - 10; z++) if (out[z * w + x]) n++; return n / (h - 20); };
+    const creep = share(-3), mid = share(2), far = share(6);
     expect(creep).toBeGreaterThan(0);
     expect(creep).toBeLessThan(mid);
     expect(mid).toBeLessThan(far);
     expect(far).toBeGreaterThan(0.9);
+    const sd = signedDistance(g, w, h);
     let sum = 0, n = 0;
-    for (let z = 0; z < h; z++) for (let x = x0 + 10; x < w - 10; x++) { sum += out[z * w + x]; n++; }
-    expect(sum / n).toBeGreaterThan(2.9); // the formula gives 3 + 0.22 - 0.2 = 3.02 on average
+    for (let i = 0; i < out.length; i++) if (sd[i] >= 10) { sum += out[i]; n++; }
+    expect(sum / n).toBeGreaterThan(3); // 3 + 0.22 - 0.2 = 3.02 on average
     expect(sum / n).toBeLessThan(4);
   });
   it('is deterministic per seed', () => {
