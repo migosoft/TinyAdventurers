@@ -5,8 +5,9 @@ import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { parseParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
-import { COVE_STAGE, coveStageMap, createCoveStage } from './coveStage';
-import { CAST_ID0, Cove3d } from './cove3d';
+import { COVE_STAGE, PILLARS, coveStageMap, createCoveStage } from './coveStage';
+import { CAST_ID0, Cove3d, coveWillow } from './cove3d';
+import { buildTree } from './trees/build';
 import type { FrameInput } from './view';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
@@ -44,6 +45,12 @@ describe('the ?r3d=cove stage', () => {
     expect(r3dPage('?r3d=cove')).toBe('cove');
     expect(isR3dDemo('?r3d=cove')).toBe(true);
     expect(wants3d('?r3d=cove', true)).toBe(false);
+  });
+
+  it('keeps the torch pillars outside the willow\'s reach', () => {
+    const w = coveWillow(COVE_STAGE);
+    const radius = buildTree(w).radius;
+    for (const p of PILLARS) expect(Math.hypot(p.x + 0.5 - w.x, p.y + 0.5 - w.z)).toBeGreaterThan(radius + 0.5);
   });
 
   it('is a dark stone map with the room as floor and the trunk tile at the tree', () => {

@@ -5,7 +5,7 @@
 import type { CoveInfo } from '../generated/CoveInfo';
 import { LIGHT_KIND } from '../generated/defs';
 import { COVE_TREE_FOOT, coveLayout, placeCovePlants } from '../game/covemath';
-import { CANOPY_UP, PIXIE_COLOURS, PIXIE_COUNT, PIXIE_GLOW_ALPHA, PIXIE_WING_ALPHA, pixieAt } from '../game/pixieMath';
+import { CANOPY_UP, PIXIE_COLOURS, PIXIE_RX, PIXIE_RY, PIXIE_COUNT, PIXIE_GLOW_ALPHA, PIXIE_WING_ALPHA, pixieAt } from '../game/pixieMath';
 import type { Cam } from './camera';
 import { pushCard, pushGlow, type CardBuf, type GlowBuf } from './cards';
 import type { Cand, ShadowCaster } from './lights';
@@ -13,7 +13,7 @@ import type { PlantPlace, PlantSprite } from './plants';
 import { hiddenAt, type SightMask } from './sightmask';
 import { SWAY } from './wind';
 import { buildTree, type BuiltTree } from './trees/build';
-import type { TreeSpec } from './trees/spec';
+import { lookKey, type TreeSpec } from './trees/spec';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -41,11 +41,14 @@ export class Pixies3d {
     private readonly seed: number,
     /** The height of the path's centre above the ground (px). */
     private readonly up: number = CANOPY_UP,
+    /** Another path than the 2D ellipse: pixie `i` at time `t` from the ellipse's unit position (u, v, each -1..1), as a point in tiles. */
+    private readonly orbit?: (i: number, t: number, u: number, v: number) => { x: number; y: number; z: number },
   ) {}
 
   /** Pixie `i` at time `t` (s): its point (tiles) and whether its wings are up. */
   at(i: number, t: number): { x: number; y: number; z: number; wingUp: boolean } {
     const p = pixieAt(i, t, this.centre, this.seed);
+    if (this.orbit) return { ...this.orbit(i, t, (p.x - this.centre.x) / PIXIE_RX, (p.y - this.centre.y) / PIXIE_RY), wingUp: p.wingUp };
     const dy = p.y - this.centre.y;
     // The 2D ellipse is the canopy seen from above at a tilt: its vertical axis is mostly depth, a little height.
     return { x: p.x / TILE, z: this.groundPx / TILE + (0.6 * dy) / TILE, y: this.up / TILE - (0.4 * dy) / TILE, wingUp: p.wingUp };
@@ -80,24 +83,37 @@ export class Pixies3d {
   }
 }
 
-/** The largest willow size (percent of the spike's big willow) and the smallest the cove tries. */
-const WILLOW_SCALE = { min: 60, max: 130, step: 5 } as const; // first guess
+/** The cove willow's sizes (percent of the spike's big willow; the cove's is a special, larger one, about the old tree's 100 px at 200). */
+const WILLOW_SCALE = { min: 60, max: 200, step: 5 } as const; // first guess
+/**
+ * The 3D cove's pixies (first guesses): the first `above` circle above the crown (their path `aboveLift` tiles over the willow's height,
+ * bobbing `aboveBob` tiles, on an ellipse `aboveSpan` times the willow's reach), the others circle the trunk outside the curtains
+ * (`ringGap` tiles beyond the willow's reach, wobbling `ringWobble` tiles, at `ringHeight` times its height, one lap in about `ringPeriod` s),
+ * all inside the room's walls.
+ */
+export const COVE_PIXIES = { above: 3, aboveLift: 0.5, aboveBob: 0.25, aboveSpan: 0.7, ringGap: 1, ringWobble: 0.4, ringHeight: [0.15, 0.45], ringPeriod: 45 } as const;
 /** The room's wall keeps this far (tiles) from the willow's reach. */
 const WALL_GAP = 0.5; // first guess
 
 /** The cove's willow, with the shape it builds into (its radius and height decide the casters and the pixies' height). */
-function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree } {
+function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree; reach: number } {
   const { foot } = coveLayout(c);
   const x = foot.x / TILE, z = foot.y / TILE;
   // The room in tiles; the reach is measured from the foot to every wall.
   const room = Math.min(x - (c.x + WALL_GAP), c.x + c.w - WALL_GAP - x, z - (c.y + WALL_GAP), c.y + c.h - WALL_GAP - z);
-  let spec: TreeSpec = { form: 'willow', x, z, seed: c.seed, scalePct: WILLOW_SCALE.max, mirrored: false, leaf: 1, dead: false };
-  let built = buildTree(spec);
-  while (built.radius > room && spec.scalePct > WILLOW_SCALE.min) {
-    spec = { ...spec, scalePct: spec.scalePct - WILLOW_SCALE.step };
-    built = buildTree(spec);
+  // From the largest size down: the first that fits the room. The generator's drawing canvas is finite, so a size it cannot draw counts as too large.
+  for (let pct = WILLOW_SCALE.max; ; pct -= WILLOW_SCALE.step) {
+    const spec: TreeSpec = { form: 'willow', x, z, seed: c.seed, scalePct: pct, mirrored: false, leaf: 1, dead: false };
+    const last = pct - WILLOW_SCALE.step < WILLOW_SCALE.min;
+    let built: BuiltTree;
+    try {
+      built = buildTree(spec);
+    } catch (e) {
+      if (last) throw e;
+      continue;
+    }
+    if (built.radius <= room || last) return { spec, built, reach: room };
   }
-  return { spec, built };
 }
 
 /** The cove's tree in the 3D view: a willow of the grown-tree system at the trunk's foot, the largest size whose curtains stay 0.5 tiles inside the room. */
@@ -105,12 +121,30 @@ export function coveWillow(c: CoveInfo): TreeSpec {
   return fitWillow(c).spec;
 }
 
+/** The pixies' paths round the willow (`COVE_PIXIES`): above its crown, or in a ring outside its curtains, never past the room's walls. */
+function coveOrbit(w: { spec: TreeSpec; built: BuiltTree; reach: number }): (i: number, t: number, u: number, v: number) => { x: number; y: number; z: number } {
+  const { spec, built, reach } = w;
+  const P = COVE_PIXIES;
+  const ring0 = Math.min(built.radius + P.ringGap, reach - P.ringWobble);
+  return (i, t, u, v) => {
+    if (i < P.above) {
+      const rx = P.aboveSpan * built.radius;
+      return { x: spec.x + u * rx, z: spec.z + v * rx * 0.5, y: built.height + P.aboveLift + v * P.aboveBob };
+    }
+    const k = i - P.above;
+    const angle = k * 2.399963 + ((k % 2 === 0 ? 1 : -1) * 2 * Math.PI * t) / (P.ringPeriod * (1 + 0.15 * (k % 3)));
+    const r = ring0 + u * P.ringWobble;
+    const f = (v + 1) / 2;
+    return { x: spec.x + r * Math.cos(angle), z: spec.z + r * Math.sin(angle), y: built.height * (P.ringHeight[0] + (P.ringHeight[1] - P.ringHeight[0]) * f) };
+  };
+}
+
 interface SmallPlant { place: PlantPlace; sprite: PlantSprite; bush: boolean }
 
 export class Cove3d {
   /** Every small plant in the order of `placeCovePlants`: bushes, tufts and ferns (all cast; the bushes are 3D, the rest atlas sprites). */
   private readonly small: SmallPlant[] = [];
-  private readonly willow: { spec: TreeSpec; built: BuiltTree };
+  private readonly willow: { spec: TreeSpec; built: BuiltTree; reach: number };
   private readonly pixies: Pixies3d;
   private readonly bushSpecs: TreeSpec[] = [];
 
@@ -126,14 +160,18 @@ export class Cove3d {
       // A bush's width is 32 px at scale 100.
       if (bush) this.bushSpecs.push({ form: 'bush', x, z, seed: c.seed + i + 1, scalePct: (r.w / 32) * 100, mirrored: false, leaf: 1, dead: false });
     });
-    // The pixies fly around the middle of the willow's height.
-    const up = (this.willow.built.height / 2) * TILE;
-    this.pixies = new Pixies3d({ x: foot.x, y: foot.y - up }, foot.y, PIXIE_COUNT, c.seed, up);
+    this.pixies = new Pixies3d({ x: foot.x, y: foot.y - CANOPY_UP }, foot.y, PIXIE_COUNT, c.seed, CANOPY_UP, coveOrbit(this.willow));
   }
 
   /** The cove's tree. */
   tree(): TreeSpec {
     return this.willow.spec;
+  }
+
+  /** The forest's tree builder: the willow comes from the fit that already built it, every other tree from `base`. */
+  builder(base: (s: TreeSpec) => BuiltTree = buildTree): (s: TreeSpec) => BuiltTree {
+    const key = lookKey(this.willow.spec);
+    return (s) => (lookKey(s) === key ? this.willow.built : base(s));
   }
 
   /** The bushes, as grown bushes at their spots. */

@@ -39,8 +39,8 @@ const MAP_W = 44;
 const MAP_H = 32;
 /** Where the knight starts (tiles): in front of the tree. */
 const KNIGHT_START = { x: 22.5, z: 20.5 };
-/** Two stone pillars (one wall tile each) in the room, 4 tiles either side of the trunk and a row north of it, for the torches to hang on. */
-const PILLARS = [{ x: 18, y: 14 }, { x: 26, y: 14 }];
+/** Two stone pillars (one wall tile each) in the room, 9 tiles either side of the trunk (past the willow's curtains) and a row north of it, for the torches to hang on. */
+export const PILLARS = [{ x: 13, y: 14 }, { x: 31, y: 14 }];
 /** The two wall torches: the spot (px) on the floor row under each pillar, as the lights demo hangs them. */
 const TORCHES = PILLARS.map((p) => ({ x: (p.x + 0.5) * TILE, y: (p.y + 1) * TILE + 0.5, colour: 0xffaa5a }));
 
@@ -71,7 +71,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
 
   // The cove as a run makes it: the willow and bushes are grown by `step`, the tufts and ferns are cards.
   const cove = new Cove3d(COVE_STAGE, assets.frames);
-  const forest = new Forest([cove.tree(), ...cove.bushes()], map, LEAF_PALETTE.Summer);
+  const forest = new Forest([cove.tree(), ...cove.bushes()], map, LEAF_PALETTE.Summer, cove.builder());
   const plants = new AtlasPlants(cove.plants(), map);
   const coveCasters = cove.casters();
 

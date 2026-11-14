@@ -31,7 +31,12 @@ export function lightLines(list: number, inView: number, casters: number, lcap: 
 
 /** The woodland run's two lines (#306): the hour with the sun map's size, and the trees built of all. */
 export function skyLines(hourLabel: string, sunPx: number, built: number, total: number): string[] {
-  return [`sun        ${hourLabel} ${sunPx} px`, `plants     ${built} of ${total}`];
+  return [`sun        ${hourLabel} ${sunPx} px`, treeLine(built, total)];
+}
+
+/** The readout's line of the trees built of all (any level with a forest: the woodland, the cove). */
+export function treeLine(built: number, total: number): string {
+  return `plants     ${built} of ${total}`;
 }
 
 const UPDATE = new Set<string>(['sim', 'cards', 'plants', 'lights', 'sight']);

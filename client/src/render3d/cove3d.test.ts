@@ -5,12 +5,14 @@ import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import type { Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
-import { CAST_ID0, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
+import { CAST_ID0, COVE_PIXIES, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
+import { Forest } from './trees/forest';
+import type { TreeSpec } from './trees/spec';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { seeUniforms } from './materials';
 import { fragment, type Builder } from './shaderCode.testutil';
-import { buildTree } from './trees/build';
+import { buildTree, type BuiltTree } from './trees/build';
 import { newLeafBuf, pushLeaves } from './trees/leaves';
 import { leafGeometry } from './trees/treeLayer';
 import { makeTreeShared, packTreeStreams, treeMaterials } from './trees/treeNodes';
@@ -48,18 +50,28 @@ describe('coveWillow', () => {
       expect(w.z).toBeCloseTo(f.y / 16, 6);
       expect(w.scalePct % 5).toBe(0);
       expect(w.scalePct).toBeGreaterThanOrEqual(60);
-      expect(w.scalePct).toBeLessThanOrEqual(130);
+      expect(w.scalePct).toBeLessThanOrEqual(200);
       expect(w.x - built.radius).toBeGreaterThanOrEqual(c.x + 0.5 - 1e-9);
       expect(w.x + built.radius).toBeLessThanOrEqual(c.x + c.w - 0.5 + 1e-9);
       expect(w.z - built.radius).toBeGreaterThanOrEqual(c.y + 0.5 - 1e-9);
       expect(w.z + built.radius).toBeLessThanOrEqual(c.y + c.h - 0.5 + 1e-9);
-      if (w.scalePct < 130) {
-        const bigger = buildTree({ ...w, scalePct: w.scalePct + 5 });
+      // Every larger step either does not fit or cannot be drawn (the generator's canvas is finite).
+      for (let pct = w.scalePct + 5; pct <= 200; pct += 5) {
+        let bigger: BuiltTree | null = null;
+        try { bigger = buildTree({ ...w, scalePct: pct }); } catch { /* too large to draw */ }
+        if (!bigger) continue;
         const fits = w.x - bigger.radius >= c.x + 0.5 && w.x + bigger.radius <= c.x + c.w - 0.5 && w.z - bigger.radius >= c.y + 0.5 && w.z + bigger.radius <= c.y + c.h - 0.5;
-        expect(fits).toBe(false);
+        expect(fits, `${pct} %`).toBe(false);
       }
     });
   }
+
+  it('shrinks the willow to fit a narrower room, and is allowed past the ordinary willows\' 130', () => {
+    const tight = coveWillow({ x: 10, y: 8, w: 14, h: 12, tree_x: 17, tree_y: 13, seed: 2 });
+    expect(tight.scalePct).toBeLessThan(200);
+    expect(tight.scalePct).toBeGreaterThanOrEqual(60);
+    expect(coveWillow(room(1)).scalePct).toBeGreaterThan(130);
+  });
 
   it('falls back to the smallest size in a room too small for it', () => {
     expect(coveWillow({ x: 10, y: 8, w: 4, h: 4, tree_x: 12, tree_y: 10, seed: 1 }).scalePct).toBe(60);
@@ -167,15 +179,47 @@ describe('Cove3d', () => {
     });
   });
 
-  it('keeps the pixies inside the 2D ellipse span', () => {
-    const crown = buildTree(c.tree()).height / 2;
-    for (let t = 0; t < 60; t += 1.7) {
-      for (const l of c.lights(t)) {
-        expect(Math.abs(l.x - foot.x / 16)).toBeLessThanOrEqual(PIXIE_RX / 16 + 1e-6);
-        expect(Math.abs(l.z - foot.y / 16)).toBeLessThanOrEqual((0.6 * PIXIE_RY) / 16 + 1e-6);
-        expect(Math.abs(l.y - crown)).toBeLessThanOrEqual((0.4 * PIXIE_RY) / 16 + 1e-6); // around the crown's middle
+  it('flies some pixies above the crown and the others round outside the curtains, all inside the walls', () => {
+    for (const info of [cove, room(3)]) {
+      const cv = new Cove3d(info, frames);
+      const t0 = cv.tree(), b = buildTree(t0);
+      const reach = Math.min(t0.x - (info.x + 0.5), info.x + info.w - 0.5 - t0.x, t0.z - (info.y + 0.5), info.y + info.h - 0.5 - t0.z);
+      const ring0 = Math.min(b.radius + COVE_PIXIES.ringGap, reach - COVE_PIXIES.ringWobble);
+      for (let t = 0; t < 120; t += 3.1) {
+        cv.lights(t).forEach((l, i) => {
+          const d = Math.hypot(l.x - t0.x, l.z - t0.z);
+          expect(Math.abs(l.x - t0.x)).toBeLessThanOrEqual(reach + 1e-6);
+          expect(Math.abs(l.z - t0.z)).toBeLessThanOrEqual(reach + 1e-6);
+          if (i < COVE_PIXIES.above) {
+            expect(Math.abs(l.y - (b.height + COVE_PIXIES.aboveLift))).toBeLessThanOrEqual(COVE_PIXIES.aboveBob + 1e-6);
+            expect(d).toBeLessThanOrEqual(b.radius);
+          } else {
+            expect(Math.abs(d - ring0)).toBeLessThanOrEqual(COVE_PIXIES.ringWobble + 1e-6);
+            if (b.radius + COVE_PIXIES.ringGap <= reach - COVE_PIXIES.ringWobble) expect(d).toBeGreaterThan(b.radius);
+            expect(l.y).toBeGreaterThanOrEqual(b.height * COVE_PIXIES.ringHeight[0] - 1e-6);
+            expect(l.y).toBeLessThanOrEqual(b.height * COVE_PIXIES.ringHeight[1] + 1e-6);
+          }
+        });
       }
     }
+  });
+
+  it('leaves the 2D pixie path alone: the shared ellipse still holds a default Pixies3d', () => {
+    const p = new Pixies3d({ x: 160, y: 100 }, 114, 3, 1, 50);
+    for (let t = 0; t < 60; t += 1.7) for (const l of p.lights(t)) {
+      expect(Math.abs(l.x - 10)).toBeLessThanOrEqual(PIXIE_RX / 16 + 1e-6);
+      expect(Math.abs(l.y - 50 / 16)).toBeLessThanOrEqual((0.4 * PIXIE_RY) / 16 + 1e-6);
+    }
+  });
+
+  it('builds the willow once for the forest: its builder hands out the tree the fit already built', () => {
+    const calls: string[] = [];
+    const base = (s: TreeSpec): BuiltTree => { calls.push(s.form); return buildTree(s); };
+    const forest = new Forest([c.tree(), ...c.bushes()], { w: 64, h: 48 }, 0, c.builder(base));
+    for (let i = 0; i < 20 && forest.built < forest.total; i++) forest.step({ x: 16, z: 12 }, 1e6);
+    expect(forest.built).toBe(forest.total);
+    expect(calls).not.toContain('willow');
+    expect(calls.filter((f) => f === 'bush').length).toBeGreaterThan(0);
   });
 
   it('pushes a glow and a core and two wing cards per pixie', () => {

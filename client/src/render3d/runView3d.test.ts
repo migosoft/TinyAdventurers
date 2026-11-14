@@ -154,6 +154,12 @@ describe('the run view and the game lights', () => {
     const { stats } = run({ params: { lcap: 8, ccap: 4 } });
     expect(stats.lines).toEqual(['lights     1 of 1 (cap 8)', 'shadows    1 cards (cap 4)']);
   });
+  it('a cove shows the trees built line but no sky lines; a level with a woodland and a cove is refused', () => {
+    const { stats } = run({ cove: true });
+    expect(stats.lines!.find((l) => l.startsWith('plants'))).toMatch(/^plants {5}\d+ of \d+$/);
+    expect(stats.lines!.some((l) => l.startsWith('sun'))).toBe(false);
+    expect(() => run({ cove: true, woodland: true })).toThrow(/woodland and a cove/);
+  });
   it('a refilled lava buffer bumps lavaVersion', () => {
     const a = run();
     const v1 = a.f!.lavaVersion;

@@ -28,7 +28,7 @@ import { isProjectileKind } from '../game/anim/defs';
 import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
-import { R3D_SYSTEMS, lightLines, skyLines } from './stats';
+import { R3D_SYSTEMS, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { AtlasPlants } from './atlasPlants';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
@@ -137,9 +137,10 @@ export class RunView3d implements RunView {
       this.fireflies = new Fireflies(wl.seed);
     }
     if (init.info.cove) {
+      if (this.forest) throw new Error('A level has a woodland and a cove: the one forest of a run would hold only one of them.');
       this.cove = new Cove3d(init.info.cove, frames);
       // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns stay atlas cards.
-      this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer);
+      this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer, this.cove.builder());
       this.covePlants = new AtlasPlants(this.cove.plants(), init.map);
       this.coveCasters = this.cove.casters();
     }
@@ -437,7 +438,7 @@ export class RunView3d implements RunView {
     const ls = this.lightStat;
     const lines = [
       ...(ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : []),
-      ...(this.forest && this.woodland ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : []),
+      ...(this.forest && this.woodland ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : this.forest ? [treeLine(this.forest.built, this.forest.total)] : []),
     ];
     return {
       lines: lines.length > 0 ? lines : undefined,
