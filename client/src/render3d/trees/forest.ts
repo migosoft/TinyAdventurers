@@ -3,10 +3,8 @@
 import { PITCH_MAX } from '../params';
 import { DrawQueue } from '../../game/woodland/plantpages';
 import { buildTree, type BuiltTree } from './build';
-import { SWAY } from '../wind';
 import { plantChunks } from './chunks';
-import { FLUTTER_PX } from './treeNodes';
-import { TreeMesh, appendAt } from './mesh';
+import { FLUTTER_PX, TreeMesh, appendAt } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
 
@@ -47,9 +45,11 @@ function extent(t: BuiltTree): Built {
     min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
     min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
   }
-  let half = 0;
+  let half = 0, swing = 0;
   for (let i = 2; i < m.tuft.length; i += 4) half = Math.max(half, m.tuft[i]);
-  const room = Math.max(MIN_MARGIN, half + SWAY.leafy + FLUTTER);
+  // The sway stream's x is each vertex's own largest sway offset in tiles.
+  for (let i = 0; i < m.sway.length; i += 2) swing = Math.max(swing, m.sway[i]);
+  const room = Math.max(MIN_MARGIN, half + swing + FLUTTER);
   min.x -= room; min.z -= room; max.x += room; max.z += room;
   max.y = Math.max(max.y + half, (t.height + half) * STRETCH);
   return { tree: t, min, max };

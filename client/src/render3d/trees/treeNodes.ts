@@ -9,7 +9,7 @@ import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
-import { RAMP } from './mesh';
+import { FLUTTER_PX, RAMP } from './mesh';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,8 +27,6 @@ export const TREE_LIGHT = {
 /** Draw order of the pre-pass and the colour pass (set on the meshes by the view): ground, tree depth, everything else, tree colour. */
 export const TREE_ORDER = { depth: -1, colour: 0.5 } as const;
 
-/** How far a leaf patch flutters in a gust (art pixels, along the wind and across it). */
-export const FLUTTER_PX = 0.6; // first guess
 /** Where a collapsed vertex goes: far below the ground, out of every view. */
 const GONE = [0, -50, 0] as const;
 /** The outer share of a patch's radius that counts as its rim (first guess), and the cell size of the light dabs in art pixels. */

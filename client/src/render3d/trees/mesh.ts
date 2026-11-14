@@ -10,6 +10,8 @@ export const SHAPE = { wood: 1, skirt: 2, tuft: 3, core: 4 } as const;
 export interface P3 { x: number; y: number; z: number; w: number }
 /** A crown lobe: centre and radii in tiles, `k` the sway factor at its centre. */
 export interface Lobe3 { x: number; y: number; z: number; rx: number; ry: number; rz: number; k: number }
+/** How far a leaf patch flutters in a gust (art pixels, along the wind and across it). */
+export const FLUTTER_PX = 0.6; // first guess
 /** The crown gradient at a point of the plant: xyz in -1..1, w the height darkening. */
 export type GradFn = (x: number, y: number, z: number) => [number, number, number, number];
 

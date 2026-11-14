@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PITCH_MAX } from '../params';
 import { CHUNK } from '../worldMesh';
 import { buildTree, type BuiltTree } from './build';
-import { SWAY } from '../wind';
 import { ChunkSync } from './chunks';
-import { FLUTTER_PX } from './treeNodes';
+import { FLUTTER_PX } from './mesh';
 import { Forest } from './forest';
 import type { TreeForm, TreeSpec } from './spec';
 import { plantVariation } from './variation';
@@ -98,7 +97,7 @@ describe('Forest.frame', () => {
     expect(at).toBe(n);
   });
   it('keeps every vertex, the sway and the stretched height inside the chunk bounds, also across a chunk border', () => {
-    const specs = [spec(CHUNK - 0.1, 8, 3, { form: 'wide' }), spec(CHUNK + 0.05, 20, 4, { form: 'tall' }), spec(0.2, 0.2, 5, { scalePct: 130 }), spec(47.9, 31.9, 6)];
+    const specs = [spec(CHUNK - 0.1, 8, 3, { form: 'wide' }), spec(CHUNK + 0.05, 20, 4, { form: 'tall' }), spec(0.2, 0.2, 5, { scalePct: 130 }), spec(47.9, 31.9, 6), spec(30, 20, 7, { form: 'willow' })];
     const f = make(specs);
     f.step({ x: 0, z: 0 }, 1000);
     const fr = f.frame({ wind: true, t: 0 });
@@ -108,11 +107,12 @@ describe('Forest.frame', () => {
       const ch = fr.chunks.get(key)!;
       const b = buildTree(s);
       // Every patch corner (centre +/- half-size on each axis) plus the sway and the flutter, and at least 0.3 tiles around every vertex.
-      const room = SWAY.leafy + (2 * FLUTTER_PX) / 16;
-      let maxHalf = 0;
+      const flutter = (2 * FLUTTER_PX) / 16;
+      let maxHalf = 0, maxSway = 0;
       for (let i = 0; i < b.mesh.verts; i++) {
-        const half = b.mesh.tuft[i * 4 + 2], r = Math.max(0.3, half + room), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
+        const half = b.mesh.tuft[i * 4 + 2], sway = b.mesh.sway[i * 2], r = Math.max(0.3, half + sway + flutter), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
         maxHalf = Math.max(maxHalf, half);
+        maxSway = Math.max(maxSway, sway);
         expect(ch.bounds.min.x).toBeLessThanOrEqual(px - r + 1e-6);
         expect(ch.bounds.max.x).toBeGreaterThanOrEqual(px + r - 1e-6);
         expect(ch.bounds.min.z).toBeLessThanOrEqual(pz - r + 1e-6);
@@ -120,6 +120,7 @@ describe('Forest.frame', () => {
         expect(ch.bounds.max.y).toBeGreaterThanOrEqual(py + half - 1e-6);
       }
       expect(maxHalf).toBeGreaterThan(0.1);
+      if (s.form === 'willow') expect(maxSway).toBeGreaterThan(0.2); // the strand tips swing more than a leafy crown
       expect(ch.bounds.max.y).toBeGreaterThanOrEqual((b.height + maxHalf) / COS - 1e-6);
     }
     // the plant on the border reaches past its chunk's cell, and is still inside its own chunk's bounds
