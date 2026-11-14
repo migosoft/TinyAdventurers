@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CARD_BIAS } from '../materials';
 import { PITCH_MAX } from '../params';
 import { SWAY_WAVE_MAX } from '../wind';
 import type { CoverResult } from './coverJob';
@@ -51,23 +52,30 @@ describe('buildCoverChunk', () => {
     expect(c.max[0]).toBeGreaterThanOrEqual(W);
   });
 
-  it('keeps every bushel corner inside the bounds after the largest sway and stretch', () => {
+  it('keeps every drawn bushel corner inside the bounds for any yaw, with sway and the card bias', () => {
     const bushels: Bushel[] = [
       { x: 20.5, z: 3.2, w: 12, h: 13, seed: 0.3, fern: false },
       { x: 17.1, z: 15.9, w: 14, h: 8, seed: 0.7, fern: true },
+      { x: 16.02, z: 0.1, w: 7, h: 7, seed: 0.1, fern: false },
     ];
     const c = buildCoverChunk(result([[20 * 16, 3 * 16, 4]], bushels), 1, 0)!;
-    expect(c.bushel.count).toBe(12);
-    const sway = Math.max(...COVER_KINDS.map((k) => k.bushels?.sway ?? 0)) * SWAY_WAVE_MAX;
-    for (let i = 0; i < c.bushel.count; i++) {
-      const [fx, fy, fz] = [c.bushel.foot[i * 3], c.bushel.foot[i * 3 + 1], c.bushel.foot[i * 3 + 2]];
-      const [w, h] = [c.bushel.info[i * 4], c.bushel.info[i * 4 + 1]];
-      const top = fy + (h / 16 / Math.cos((PITCH_MAX * Math.PI) / 180)) * GH_MAX + sway;
-      const r = w / 16 / 2 + sway;
-      for (const [x, y, z] of [[fx - r, fy, fz - r], [fx + r, top, fz + r], [fx - r, top, fz + r], [fx + r, fy, fz - r]]) {
-        expect(x).toBeGreaterThanOrEqual(c.min[0]); expect(x).toBeLessThanOrEqual(c.max[0]);
-        expect(y).toBeGreaterThanOrEqual(c.min[1]); expect(y).toBeLessThanOrEqual(c.max[1]);
-        expect(z).toBeGreaterThanOrEqual(c.min[2]); expect(z).toBeLessThanOrEqual(c.max[2]);
+    expect(c.bushel.count).toBe(18);
+    const swing = (COVER_KINDS[0].bushels?.sway ?? 0) * SWAY_WAVE_MAX;
+    const stretch = 1 / Math.cos((PITCH_MAX * Math.PI) / 180);
+    for (const deg of [0, 8, 37, 90, 135]) {
+      const yaw = (deg * Math.PI) / 180;
+      const right = [Math.cos(yaw), Math.sin(yaw)], toward = [-Math.sin(yaw), Math.cos(yaw)]; // card plane direction; horizontal part of the way to the camera
+      for (let i = 0; i < c.bushel.count; i++) {
+        const [fx, fy, fz] = [c.bushel.foot[i * 3], c.bushel.foot[i * 3 + 1], c.bushel.foot[i * 3 + 2]];
+        const [w, h] = [c.bushel.info[i * 4], c.bushel.info[i * 4 + 1]];
+        for (const side of [-1, 1]) for (const up of [0, 1]) for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const bias of [-1, 1]) {
+          const x = fx + side * right[0] * (w / 32) + sx * swing + bias * CARD_BIAS * toward[0];
+          const z = fz + side * right[1] * (w / 32) + sz * swing + bias * CARD_BIAS * toward[1];
+          const y = fy + up * (h / 16) * GH_MAX * stretch + (up ? swing : 0);
+          expect(x).toBeGreaterThanOrEqual(c.min[0]); expect(x).toBeLessThanOrEqual(c.max[0]);
+          expect(y).toBeGreaterThanOrEqual(c.min[1]); expect(y).toBeLessThanOrEqual(c.max[1]);
+          expect(z).toBeGreaterThanOrEqual(c.min[2]); expect(z).toBeLessThanOrEqual(c.max[2]);
+        }
       }
     }
     expect(c.max[1]).toBeGreaterThanOrEqual((4 / 16) * GH_MAX);

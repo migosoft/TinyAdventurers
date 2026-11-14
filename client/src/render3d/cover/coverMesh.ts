@@ -1,5 +1,6 @@
 // Per map chunk, the vertex arrays of the ground-cover layer (#330): stacked sheets (one quad per cell per sheet the cover reaches)
 // and bushel cards, with bounds for frustum culling. Pure data: the shaders that read these attributes live in coverNodes.
+import { CARD_BIAS } from '../materials';
 import { PITCH_MAX } from '../params';
 import { SWAY_WAVE_MAX } from '../wind';
 import { CHUNK } from '../worldMesh';
@@ -42,7 +43,8 @@ export function buildCoverChunk(r: CoverResult, cx: number, cz: number): CoverCh
   const min: [number, number, number] = [x0, 0, z0], max: [number, number, number] = [x1, cells ? (r.sheets / PX) * GH_MAX : 0, z1];
   for (const b of mine) {
     for (const [u, v] of QUAD) { foot.push(b.x, 0, b.z); corner.push(u, v); info.push(b.w, b.h, b.seed, b.fern ? 1 : 0); }
-    const room = b.w / PX / 2 + BUSHEL_SWAY;
+    // Half the card, the sway, and the card shader's push toward the camera (its horizontal part is at most CARD_BIAS).
+    const room = b.w / PX / 2 + BUSHEL_SWAY + CARD_BIAS;
     min[0] = Math.min(min[0], b.x - room); max[0] = Math.max(max[0], b.x + room);
     min[2] = Math.min(min[2], b.z - room); max[2] = Math.max(max[2], b.z + room);
     max[1] = Math.max(max[1], (b.h / PX) * STRETCH * GH_MAX + BUSHEL_SWAY);
