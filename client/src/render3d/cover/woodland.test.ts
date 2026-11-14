@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { BASE, EDGE, FLOWERS, PATCH, type Rgb } from '../../game/covemath';
 import { groundKindAt, kindRow, paintGround, THICK_0, THICK_1 } from '../../game/woodland/ground';
@@ -30,10 +30,24 @@ describe('kindRow', () => {
   });
 });
 
+describe('kindRow after an in-place tile change', () => {
+  it('still equals groundKindAt', () => {
+    const m = mapOf(), w = m.w * TILE, out = new Uint8Array(w * TILE);
+    kindRow(m, SEED, 3, out);
+    m.set(2, 3, TILE_ID.Road);
+    kindRow(m, SEED, 3, out);
+    for (let x = 0; x < w; x++) expect(out[8 * w + x]).toBe(groundKindAt(m, SEED, x, 3 * TILE + 8));
+  });
+});
+
 describe('woodlandSource', () => {
-  const m = mapOf(), src = woodlandSource(m, SEED, 3);
-  const before = Buffer.from(paintGround(m, SEED).data);
-  src.prep.forEach((u) => u());
+  const m = mapOf();
+  let src: ReturnType<typeof woodlandSource>, before: Buffer;
+  beforeAll(() => {
+    src = woodlandSource(m, SEED, 3);
+    before = Buffer.from(paintGround(m, SEED).data);
+    src.prep.forEach((u) => u());
+  });
   const px = (tx: number, ty: number) => (ty * TILE + 8) * src.w + tx * TILE + 8;
 
   it('sizes and masks', () => {
