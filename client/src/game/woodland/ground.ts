@@ -20,7 +20,7 @@ const FLOWER_AREA = 40;
 const DIRT_D: Rgb = [176, 112, 74], DIRT_C: Rgb = [143, 64, 41], DIRT_B: Rgb = [98, 53, 43];
 /** The road's rim: a darker, greener brown, mixed in at low contrast. */
 const RIM: Rgb = [70, 56, 40], RIM_MIX = 0.4;
-const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
+export const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
 
 const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : GRASS);
 
@@ -84,6 +84,16 @@ export function groundKindAt(map: TileMap, seed: number, x: number, y: number): 
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return NONE;
   return pixelKind(kinds(map), map.w, map.h, tx, ty, x, y, seed);
+}
+
+const kindCache = new WeakMap<TileMap, { tiles: Uint8Array; k: Uint8Array }>();
+
+/** `groundKindAt` of every pixel of tile row `ty`, into `out` (map px, row-major, TILE rows of map.w * TILE). */
+export function kindRow(map: TileMap, seed: number, ty: number, out: Uint8Array): void {
+  let c = kindCache.get(map);
+  if (!c || c.tiles !== map.tiles) kindCache.set(map, (c = { tiles: map.tiles, k: kinds(map) }));
+  const w = map.w * TILE;
+  for (let ly = 0; ly < TILE; ly++) for (let x = 0; x < w; x++) out[ly * w + x] = pixelKind(c.k, map.w, map.h, x >> 4, ty, x, ty * TILE + ly, seed);
 }
 
 /** Flower spots (px, the flower's own pixel; it and its four neighbours show grass), about one per FLOWER_AREA px² of grass, never on road or thicket. */
