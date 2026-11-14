@@ -6,9 +6,9 @@
 // Respawn (instant / 3 s). URL: ?dust=0 etc., ?stir=0, ?draft=0, ?respawn=<seconds>, and
 // ?wind=1 draws the wind field as short lines. Zoomed to fit the room to the screen, so it reads on a phone.
 import Phaser from 'phaser';
-import { CONST, KIND, LIGHT_KIND, TILE_ID } from '../generated/defs';
+import { CONST, KIND, LIGHT_KIND } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
-import { TILE, TileMap } from '../sim/map';
+import { TILE } from '../sim/map';
 import { demoBoard } from './contextrestore';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -16,70 +16,14 @@ import { LightView } from './lightview';
 import { Mood, type AirMover } from './mood';
 import { projectileAir } from './airshots';
 import { TERRAIN, TerrainLayer } from './terrain';
+import { BLAST_X, FIRE_EVERY, FIRE_FLIGHT, FIRE_Y, MOOD_FIGURES, MOOD_H, MOOD_TORCHES, MOOD_VIEWER, MOOD_W, MOOD_WARM, moodMap, moodScript } from './moodDemoScript';
 import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
 
-const W = 15;
-const H = 17;
-const WARM = 0xffaa5a;
-
-function buildMap(): TileMap {
-  const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
-  for (let y = 3; y <= 15; y++) for (let x = 1; x <= 13; x++) tiles[y * W + x] = TILE_ID.Floor;
-  tiles[7 * W + 4] = TILE_ID.Wall; // a pillar, for a shadow
-  for (let y = 12; y <= 14; y++) for (let x = 9; x <= 12; x++) tiles[y * W + x] = TERRAIN.Lava;
-  for (let y = 12; y <= 15; y++) for (let x = 1; x <= 4; x++) tiles[y * W + x] = TERRAIN.Shallow; // a pool, for the drips
-  for (let y = 13; y <= 14; y++) for (let x = 2; x <= 3; x++) tiles[y * W + x] = TERRAIN.Deep;
-  return new TileMap(W, H, tiles);
-}
-
-const WALK_SPEED = 60;
-const DASH_SPEED = 300;
-const DASH_EVERY = 6;
-const DASH_TIME = 0.25;
-const ARROW_SPEED = 260;
+const W = MOOD_W;
+const H = MOOD_H;
 const arrowAir = projectileAir(KIND.Arrow);
 const fireAir = projectileAir(KIND.Fireball);
-// The walker's loop: a rounded rectangle round the pillar (feet positions, px).
-const LX0 = 3.3 * TILE;
-const LX1 = 11.7 * TILE;
-const LY0 = 6.3 * TILE;
-const LY1 = 10.7 * TILE;
-const LR = 1.2 * TILE;
-const SEG_X = LX1 - LX0 - 2 * LR;
-const SEG_Y = LY1 - LY0 - 2 * LR;
-const ARC = (Math.PI / 2) * LR;
-const LOOP = 2 * SEG_X + 2 * SEG_Y + 4 * ARC;
-
-/** The point and heading (x direction) at arc length s along the loop, clockwise from the top left. */
-function loopAt(s: number): { x: number; y: number; dx: number } {
-  s = ((s % LOOP) + LOOP) % LOOP;
-  if (s < SEG_X) return { x: LX0 + LR + s, y: LY0, dx: 1 };
-  s -= SEG_X;
-  if (s < ARC) {
-    const a = s / LR;
-    return { x: LX1 - LR + Math.sin(a) * LR, y: LY0 + LR - Math.cos(a) * LR, dx: 1 };
-  }
-  s -= ARC;
-  if (s < SEG_Y) return { x: LX1, y: LY0 + LR + s, dx: 0 };
-  s -= SEG_Y;
-  if (s < ARC) {
-    const a = s / LR;
-    return { x: LX1 - LR + Math.cos(a) * LR, y: LY1 - LR + Math.sin(a) * LR, dx: 1 };
-  }
-  s -= ARC;
-  if (s < SEG_X) return { x: LX1 - LR - s, y: LY1, dx: -1 };
-  s -= SEG_X;
-  if (s < ARC) {
-    const a = s / LR;
-    return { x: LX0 + LR - Math.sin(a) * LR, y: LY1 - LR + Math.cos(a) * LR, dx: -1 };
-  }
-  s -= ARC;
-  if (s < SEG_Y) return { x: LX0, y: LY1 - LR - s, dx: 0 };
-  s -= SEG_Y;
-  const a = s / LR;
-  return { x: LX0 + LR - Math.cos(a) * LR, y: LY0 + LR - Math.sin(a) * LR, dx: -1 };
-}
 
 export class MoodDemoScene extends Phaser.Scene {
   private t = 0;
@@ -88,14 +32,13 @@ export class MoodDemoScene extends Phaser.Scene {
   private view!: LightView;
   private mask!: VisionMask;
   private mood!: Mood;
-  private viewer = { x: 7.5 * TILE, y: 9.5 * TILE };
+  private viewer = MOOD_VIEWER;
   private torches: { view: TorchView; x: number; y: number; side: number }[] = [];
   private bar?: HTMLDivElement;
   private fireball!: Phaser.GameObjects.Image;
   private arrow!: Phaser.GameObjects.Image;
   private knight!: Phaser.GameObjects.Image;
   private wind?: Phaser.GameObjects.Graphics;
-  private walkS = 0;
   private flip = false;
   private prev = new Map<string, [number, number]>();
 
@@ -105,7 +48,7 @@ export class MoodDemoScene extends Phaser.Scene {
 
   create(): void {
     const q = new URLSearchParams(location.search);
-    const map = buildMap();
+    const map = moodMap();
     this.cameras.main.setBackgroundColor('#000000');
     this.fx = new Effects(this);
     demoBoard(this, map);
@@ -114,12 +57,10 @@ export class MoodDemoScene extends Phaser.Scene {
     const field = new LightField(map);
     let id = 1;
     const light = (x: number, y: number, kind: number, colour: number) => field.add({ id: id++, kind, colour, x, y, on: true });
-    for (const tx of [3, 7, 11]) {
-      light(tx, 3, LIGHT_KIND.Torch, WARM);
-      this.torches.push({ view: new TorchView(this), x: (tx + 0.5) * TILE, y: 3 * TILE + 0.5, side: 0 });
+    for (const tc of MOOD_TORCHES) {
+      light(tc.tx, tc.ty, LIGHT_KIND.Torch, MOOD_WARM);
+      this.torches.push({ view: new TorchView(this), x: tc.x, y: tc.y, side: tc.side });
     }
-    light(1, 9, LIGHT_KIND.Torch, WARM);
-    this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1 });
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map.get(x, y) === TERRAIN.Lava) light(x, y, LIGHT_KIND.Lava, 0xff4818);
     this.view = new LightView(this, map, field);
     this.mask = new VisionMask(this, map);
@@ -133,14 +74,7 @@ export class MoodDemoScene extends Phaser.Scene {
     // Figures and props, standing on their feet.
     const put = (frame: string, x: number, y: number, flip = false) =>
       this.add.image(x * TILE, y * TILE, 'atlas', frame).setOrigin(0.5, 1).setFlipX(flip).setDepth(DEPTH.entityBase + y * TILE);
-    put('elf_f_idle_anim_f0', 5.5, 11.2);
-    put('wizzard_m_idle_anim_f0', 9.2, 8.6, true);
-    put('skelet_idle_anim_f0', 6.6, 12.8);
-    put('skelet_idle_anim_f0', 11.5, 6, true);
-    put('chest_full_open_anim_f0', 2.5, 5);
-    put('crate', 12.5, 4.8);
-    put('skull', 6.3, 14.4);
-    put('skull', 10.4, 5.4);
+    for (const f of MOOD_FIGURES) put(f.frame, f.x, f.y, f.flip);
 
     this.fireball = this.add.image(0, 0, 'glow').setTint(0xff7020).setScale(1.4).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.projectile);
 
@@ -214,10 +148,9 @@ export class MoodDemoScene extends Phaser.Scene {
       this.prev.set(key, [x, y]);
       if (o && dt > 0) movers.push({ x, y, vx: (x - o[0]) / dt, vy: (y - o[1]) / dt, r, shot, heat });
     };
+    const st = moodScript(this.t);
     // The knight walks the loop and dashes for 0.25 s every 6 s.
-    const dashing = this.t % DASH_EVERY < DASH_TIME;
-    this.walkS += (dashing ? DASH_SPEED : WALK_SPEED) * dt;
-    const w = loopAt(this.walkS);
+    const w = st.walker;
     if (w.dx !== 0) this.flip = w.dx < 0;
     this.knight
       .setPosition(w.x, w.y)
@@ -226,30 +159,26 @@ export class MoodDemoScene extends Phaser.Scene {
       .setFrame(`knight_m_run_anim_f${Math.floor(this.t * 10) % 4}`);
     mover('knight', w.x, w.y - 4, 6, false);
     // An arrow crosses from west to east at y = 8.5 tiles every 3 s, 1.5 s after the fireball.
-    const ap = (((this.t - 1.5) % 3) + 3) % 3;
-    const ax = (1.5 * TILE) + ap * ARROW_SPEED;
-    if (ax < 13.5 * TILE) {
-      this.arrow.setVisible(true).setPosition(ax, 8.5 * TILE);
-      mover('arrow', ax, 8.5 * TILE, arrowAir.r, true, arrowAir.heat);
+    if (st.arrow) {
+      this.arrow.setVisible(true).setPosition(st.arrow.x, st.arrow.y);
+      mover('arrow', st.arrow.x, st.arrow.y, arrowAir.r, true, arrowAir.heat);
     } else {
       this.arrow.setVisible(false);
       this.prev.delete('arrow');
     }
     // A fireball crosses the north of the room every 4 s and explodes at the east wall.
     const moving: MovingLight[] = [];
-    const p = this.t % 4;
-    const fy = 5.5 * TILE;
-    if (p < 2) {
-      const fx = (2.5 + 10 * (p / 2)) * TILE;
-      this.fireball.setVisible(true).setPosition(fx, fy);
-      moving.push([fx, fy, LIGHT_KIND.Fire, 0xff7020]);
-      mover('fireball', fx, fy, fireAir.r, true, fireAir.heat);
+    const p = this.t % FIRE_EVERY;
+    if (st.fireball) {
+      this.fireball.setVisible(true).setPosition(st.fireball.x, st.fireball.y);
+      moving.push([st.fireball.x, st.fireball.y, LIGHT_KIND.Fire, 0xff7020]);
+      mover('fireball', st.fireball.x, st.fireball.y, fireAir.r, true, fireAir.heat);
     } else {
       this.fireball.setVisible(false);
       this.prev.delete('fireball');
     }
-    if (p >= 2 && p - dt < 2) this.fx.blast(12.5 * TILE, fy, 20);
-    if (p >= 2 && p < 2.4) moving.push([12.5 * TILE, fy, LIGHT_KIND.Blast, null]);
+    if (p >= FIRE_FLIGHT && p - dt < FIRE_FLIGHT) this.fx.blast(BLAST_X, FIRE_Y, 20);
+    if (st.blast) moving.push([st.blast.x, st.blast.y, LIGHT_KIND.Blast, null]);
     this.view.update(cam.worldView, this.viewer.x, this.viewer.y, moving, this.t, 0, CONST.FOV_RADIUS);
     this.mask.update(cam.worldView, this.view.view);
     this.mood.update(dt, cam.worldView, this.torches.map((tr) => ({ x: tr.x, y: tr.y, side: tr.side, lit: true })), moving.map(([x, y, kind]) => ({ x, y, kind })), movers);

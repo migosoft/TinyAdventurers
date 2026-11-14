@@ -5,6 +5,7 @@
 // torches whose floor tile is seen and lit. Counts follow the camera's view, with hard caps.
 import type Phaser from 'phaser';
 import { LIGHT_KIND } from '../generated/defs';
+import type { AirMover, AirShot, AirTorch } from './airTypes';
 import { TILE, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightView } from './lightview';
@@ -14,6 +15,8 @@ import { Drips } from './mood-drips';
 import { ensureTextures, HAZE_TEX, SMOKE_TEX } from './mood-textures';
 import { flameTip } from './torch';
 import { Wind } from './wind';
+
+export type { AirMover, AirShot, AirTorch } from './airTypes';
 
 /** Motes per dust cloud. */
 const CLOUD_MOTES = 7;
@@ -39,35 +42,6 @@ const MOTE_DRAG = 0.6;
 /** Shares of the sampled air that smoke and embers take on. */
 const SMOKE_WIND = 0.6;
 const EMBER_WIND = 0.4;
-
-/** A moving figure (r = body radius) or projectile (shot = true); v in px/s. */
-export interface AirMover {
-  x: number;
-  y: number;
-  /** The y where the air is injected (default `y`): a shot is drawn 8 px above its ground position. */
-  airY?: number;
-  vx: number;
-  vy: number;
-  r: number;
-  shot: boolean;
-  /** 0..1: how much a shot warms the air it passes (0 for figures). */
-  heat: number;
-}
-
-/** A torch in the window; its smoke needs `lit` and a seen, lit floor tile. */
-export interface AirTorch {
-  x: number;
-  y: number;
-  side: number;
-  lit: boolean;
-}
-
-/** A moving light: `kind` is a `LIGHT_KIND` (fire trails embers, a blast throws a burst). */
-export interface AirShot {
-  x: number;
-  y: number;
-  kind: number;
-}
 
 interface Mote {
   img: Phaser.GameObjects.Image;

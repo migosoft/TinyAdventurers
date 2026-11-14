@@ -1,5 +1,10 @@
 // Turns positions per id into AirMovers (see mood.ts), with velocities from the change since the last frame.
-import type { AirMover } from './mood';
+import { FLAG, KIND } from '../generated/defs';
+import type { RunFrame } from '../run/view';
+import type { AirMover } from './airTypes';
+import { projectileAir } from './airshots';
+import { FIGURES, isHazardKind, isProjectileKind } from './anim/defs';
+import { ownPredictedShot } from './world';
 
 /** A step longer than this in one frame is a teleport or a respawn, not a walk. */
 const JUMP = 48;
@@ -41,4 +46,40 @@ export class MoverTracker {
     const k = Math.min(1, MAX_SPEED / (d / this.dt));
     return { x, y, vx: (dx / this.dt) * k, vy: (dy / this.dt) * k, r, shot, heat };
   }
+}
+
+/**
+ * The movers of a frame for the air, appended to `out` (cleared first) and returned: figures (the own hero
+ * included), server projectiles and the own predicted shots (`f.shots`). Dead entities, torches, hazards, chests
+ * and barrels give none. `tracker.begin` is called here.
+ */
+export function collectAirMovers(f: RunFrame, tracker: MoverTracker, myKind: number, out: AirMover[]): AirMover[] {
+  out.length = 0;
+  tracker.begin(f.dt);
+  const add = (m: AirMover | null) => {
+    if (m) out.push(m);
+  };
+  // Projectiles are drawn 8 px above their ground position; their air follows the drawing.
+  const shotMover = (m: AirMover | null): AirMover | null => {
+    if (m) m.airY = m.y - 8;
+    return m;
+  };
+  for (const e of f.ents.values()) {
+    if (e.id === f.you || e.flags & FLAG.DEAD) continue;
+    if (isProjectileKind(e.kind)) {
+      if (ownPredictedShot(e.extra, f.you) !== null) continue; // own shots come from f.shots
+      const a = projectileAir(e.kind);
+      add(shotMover(tracker.track(e.id, e.x, e.y, a.r, true, a.heat)));
+    } else if (e.kind === KIND.Torch || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
+      continue;
+    } else {
+      add(tracker.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0));
+    }
+  }
+  if (f.own.alive) add(tracker.track(-1, f.own.x, f.own.y, FIGURES[myKind]?.baseR ?? 6, false, 0));
+  for (const c of f.shots) {
+    const a = projectileAir(c.kind);
+    add(shotMover(tracker.track(-(100000 + c.shot), c.x, c.y, a.r, true, a.heat)));
+  }
+  return out;
 }

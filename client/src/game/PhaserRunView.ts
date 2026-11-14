@@ -13,8 +13,7 @@ import { skimsTerrain, splashes } from './anim/entityAlpha';
 import { FigureStates } from './anim/figureState';
 import { PROJECTILES, FIGURES, heroWeapons, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
-import { MoverTracker } from './airmovers';
-import { projectileAir } from './airshots';
+import { MoverTracker, collectAirMovers } from './airmovers';
 import { tileDraws } from './autotile';
 import { barOf } from './barName';
 import { BarrelView } from './barrel';
@@ -41,7 +40,7 @@ import { WoodlandView } from './woodland/WoodlandView';
 import { GROUND_TILES } from './woodland/ground';
 import { FONT_TEXT } from '../fonts';
 import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
-import { ownPredictedShot, type EntState } from './world';
+import type { EntState } from './world';
 
 /**
  * How each hazard looks: glow tint, base radius (px, used when the server sends none), the glow's
@@ -699,36 +698,7 @@ export class PhaserRunView implements RunView {
 
   /** What moves through the air this frame: figures, the own hero (from prediction), others' shots and the own cosmetic shots, each once. */
   private collectMovers(f: RunFrame): AirMover[] {
-    const out = this.airMovers;
-    out.length = 0;
-    const tr = this.movers;
-    tr.begin(f.dt);
-    const add = (m: AirMover | null) => {
-      if (m) out.push(m);
-    };
-    // Projectiles are drawn 8 px above their ground position; their air follows the drawing.
-    const shotMover = (m: AirMover | null): AirMover | null => {
-      if (m) m.airY = m.y - 8;
-      return m;
-    };
-    for (const e of f.ents.values()) {
-      if (e.id === f.you || e.flags & FLAG.DEAD) continue;
-      if (isProjectileKind(e.kind)) {
-        if (ownPredictedShot(e.extra, f.you) !== null) continue; // own shots come from f.shots
-        const a = projectileAir(e.kind);
-        add(shotMover(tr.track(e.id, e.x, e.y, a.r, true, a.heat)));
-      } else if (e.kind === KIND.Torch || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
-        continue;
-      } else {
-        add(tr.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0));
-      }
-    }
-    if (f.own.alive) add(tr.track(-1, f.own.x, f.own.y, FIGURES[this.myKind]?.baseR ?? 6, false, 0));
-    for (const c of f.shots) {
-      const a = projectileAir(c.kind);
-      add(shotMover(tr.track(-(100000 + c.shot), c.x, c.y, a.r, true, a.heat)));
-    }
-    return out;
+    return collectAirMovers(f, this.movers, this.myKind, this.airMovers);
   }
 
   private drawBarsAndBeams(f: RunFrame): void {

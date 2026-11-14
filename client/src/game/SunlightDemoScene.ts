@@ -14,8 +14,8 @@
 // (clouds is 0..0.6, the dip; the fixed-look parameters apply with vary=0).
 // Zoomed to fit the rooms to the screen, so it reads on a phone.
 import Phaser from 'phaser';
-import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
-import { TILE, TileMap } from '../sim/map';
+import { CONST, LIGHT, LIGHT_KIND } from '../generated/defs';
+import { TILE } from '../sim/map';
 import { demoBoard } from './contextrestore';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -24,33 +24,12 @@ import { Mood } from './mood';
 import { Sunbeams } from './sunbeams';
 import { sunLook } from './sunmath';
 import { TerrainLayer } from './terrain';
+import { CLOUDS, GLOWS, HEIGHTS, OFTEN, PATCHES, SECOND, SLANTS, STYLES, SUN, SUNLIGHT_H, SUNLIGHT_KNIGHTS, SUNLIGHT_PROPS, SUNLIGHT_TORCHES, SUNLIGHT_VIEWER, SUNLIGHT_W, SUNLIGHT_WARM, sunlightMap } from './sunlightDemoScript';
 import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
 
-const W = 15;
-const H = 17;
-const WARM = 0xffaa5a;
-const SUN = { x: 5, y: 9 };
-/** The second crack: 3 to 4 tiles from the first, on open floor. */
-const SECOND = { x: 3, y: 12 };
-
-const PATCHES = [1.5, 2, 3];
-const SLANTS = [0, 1, 1.5, 2];
-const CLOUDS: [string, number][] = [['off', 0], ['soft', 0.3], ['medium', 0.45], ['strong', 0.6]];
-const HEIGHTS = [4, 5, 6, 7];
-const STYLES = ['fan', 'parallel'] as const;
-const GLOWS = [1, 1.5, 2];
-const OFTEN: [number, number][] = [[8, 25], [2, 4]];
-
-function buildMap(): TileMap {
-  const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
-  for (let y = 2; y <= 14; y++) for (let x = 1; x <= 9; x++) tiles[y * W + x] = TILE_ID.Floor;
-  // An open alcove on the east side. No wall stubs and the pillar stands in a corner, so the viewer's
-  // line of sight casts no black wedge over the floor (it would read as a daylight shadow).
-  for (let y = 6; y <= 10; y++) for (let x = 10; x <= 13; x++) tiles[y * W + x] = TILE_ID.Floor;
-  tiles[13 * W + 9] = TILE_ID.Wall; // a pillar by the south-east corner
-  return new TileMap(W, H, tiles);
-}
+const W = SUNLIGHT_W;
+const H = SUNLIGHT_H;
 
 export class SunlightDemoScene extends Phaser.Scene {
   private t = 0;
@@ -60,7 +39,7 @@ export class SunlightDemoScene extends Phaser.Scene {
   private mask!: VisionMask;
   private mood!: Mood;
   private sun!: Sunbeams;
-  private viewer = { x: 7.5 * TILE, y: 8.5 * TILE };
+  private viewer = SUNLIGHT_VIEWER;
   private torches: { view: TorchView; x: number; y: number; side: number; lit: boolean }[] = [];
   private bar?: HTMLDivElement;
   private field!: LightField;
@@ -75,7 +54,7 @@ export class SunlightDemoScene extends Phaser.Scene {
   create(): void {
     const q = new URLSearchParams(location.search);
     this.readParams(q);
-    const map = buildMap();
+    const map = sunlightMap();
     this.cameras.main.setBackgroundColor('#000000');
     this.fx = new Effects(this);
     demoBoard(this, map);
@@ -84,9 +63,10 @@ export class SunlightDemoScene extends Phaser.Scene {
     const field = (this.field = new LightField(map));
     this.placeSuns();
     // The sunlit room's torch is out; the small room's torch is lit.
-    this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1, lit: false });
-    this.torches.push({ view: new TorchView(this), x: 14 * TILE - 0.5, y: 8.5 * TILE, side: 2, lit: true });
-    field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: WARM, x: 13, y: 8, on: true });
+    for (const tc of SUNLIGHT_TORCHES) {
+      this.torches.push({ view: new TorchView(this), x: tc.x, y: tc.y, side: tc.side, lit: tc.lit });
+      if (tc.light) field.add({ id: tc.light.id, kind: LIGHT_KIND.Torch, colour: SUNLIGHT_WARM, x: tc.light.x, y: tc.light.y, on: true });
+    }
     this.view = new LightView(this, map, field);
     this.mask = new VisionMask(this, map);
     this.sun = new Sunbeams(this, field, this.view);
@@ -97,10 +77,7 @@ export class SunlightDemoScene extends Phaser.Scene {
 
     const put = (frame: string, x: number, y: number, flip = false) =>
       this.add.image(x * TILE, y * TILE, 'atlas', frame).setOrigin(0.5, 1).setFlipX(flip).setDepth(DEPTH.entityBase + y * TILE);
-    put('knight_m_idle_anim_f0', 5.5, 9.9);
-    put('knight_m_idle_anim_f0', 7.4, 10.3, true);
-    put('crate', 8.5, 4.8);
-    put('skull', 2.5, 13.6);
+    for (const f of [...SUNLIGHT_KNIGHTS, ...SUNLIGHT_PROPS]) put(f.frame, f.x, f.y, f.flip);
 
     const cam = this.cameras.main;
     const barH = 110;
