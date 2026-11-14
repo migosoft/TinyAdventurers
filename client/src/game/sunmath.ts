@@ -33,12 +33,14 @@ export interface SunLook {
 export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 6, rays: 2, rayWidth: [0.5, 0.8], style: 'fan', main: false, vary: true };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
-function rnd(id: number, n: number, salt: number): number {
+export function hash01(id: number, n: number, salt: number): number {
   let h = Math.imul(id ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(n + 1, 0xc2b2ae35) ^ Math.imul(salt + 1, 0x27d4eb2f);
   h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
   h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
   return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
 }
+
+const rnd = hash01;
 
 interface Cloud {
   start: number;
