@@ -9,6 +9,7 @@ import { SUN_MAP, fitSunMap, mistLightOf, sky, sunView } from './sun';
 import { footprint } from './lights';
 import type { FrameInput } from './view';
 import { WIND } from './wind';
+import { WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS } from './woodlandMap';
 import { createWoodlandStage } from './woodlandStage';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -51,6 +52,30 @@ describe('the ?r3d=woodland stage', () => {
     expect(stage.world.map.w).toBe(40);
     expect(host.setSky).toHaveBeenCalledWith(true);
     expect(host.setDaylight).toHaveBeenCalledWith(true);
+  });
+
+  it('starts the knight, and so the camera, at `at=x,z` (tiles) when the URL gives a free tile (#329)', () => {
+    const f = setup('?r3d=woodland&at=18,21').run(1, 0.016);
+    expect(f.cam.x).toBeCloseTo(18.5);
+    expect(f.cam.z).toBeCloseTo(21.5);
+    expect(setup('?r3d=woodland&at=18,22').run(1, 0.016).cam).toMatchObject({ x: 20.5, z: 11.5 }); // a Trunk tile: ignored
+    expect(setup('?r3d=woodland&at=abc').run(1, 0.016).cam).toMatchObject({ x: 20.5, z: 11.5 });
+  });
+
+  it('says how many trees are built of all in window.__r3d.plants (for the pictures script)', () => {
+    window.__r3d = { backend: 'test', frames: 0, renderSize: [0, 0], zoom: 1 };
+    const { run } = setup('?r3d=woodland');
+    run(1, 0.016);
+    expect(window.__r3d.plants!.total).toBe(WOODLAND_STAGE_PLANTS.length + WOODLAND_STAGE_EXTRA.length);
+    expect(window.__r3d.plants!.built).toBeGreaterThan(0);
+    delete window.__r3d;
+  });
+
+  it('draws the leaf override and the plain switch of the URL through to the trees', () => {
+    const f = setup('?r3d=woodland&leaf=25&plain=1').run(1, 0.016);
+    expect(f.trees!.leafOverride).toBe(0.25);
+    expect(f.trees!.plain).toBe(true);
+    expect(setup('?r3d=woodland').run(1, 0.016).trees!.leafOverride).toBe(-1);
   });
 
   it('hands the view the sun, the ambient and the mist day of the hour', () => {

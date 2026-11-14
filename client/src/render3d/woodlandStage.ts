@@ -28,7 +28,7 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
 import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
-import { KNIGHT_START, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
 
@@ -60,14 +60,16 @@ export function fireballAt(t: number): MovingLight {
 }
 
 export function createWoodlandStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setDaylight' | 'setSky'>): Stage {
-  void search;
   const map = woodlandStageMap();
+  // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures of the line-ups.
+  const at = /[?&]at=(\d+),(\d+)/.exec(search);
+  const start = at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
   const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   host?.setDaylight(true);
   host?.setSky(true);
 
-  const knight: { x: number; z: number; aim: number; moving: boolean } = { x: KNIGHT_START.x, z: KNIGHT_START.z, aim: 0, moving: false };
+  const knight: { x: number; z: number; aim: number; moving: boolean } = { x: start.x, z: start.z, aim: 0, moving: false };
   const cam = { x: knight.x, z: knight.z, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 
   // The sight: the daylight mist around the knight, with the `hard` and the `all` views as the run computes them.
@@ -80,7 +82,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   };
 
   // The trees are grown by `step` a few per frame.
-  const forest = new Forest(WOODLAND_STAGE_PLANTS.map(treeSpecOf), map, LEAF_PALETTE.Summer);
+  const forest = new Forest([...WOODLAND_STAGE_PLANTS.map(treeSpecOf), ...WOODLAND_STAGE_EXTRA], map, LEAF_PALETTE.Summer);
 
   const critters = new Critters3d(map, GROUND_SEED);
   const fireflies = new Fireflies(GROUND_SEED);
@@ -207,13 +209,14 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
+        r.plants = { built: forest.built, total: forest.total };
       }
       c.timer.renderStart();
       return c.view.draw(
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, trees: forest.frame({ wind: params.wind, t: seconds }),
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain }),
         },
         c.timer,
       );

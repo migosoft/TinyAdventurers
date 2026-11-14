@@ -26,6 +26,8 @@ declare global {
       yaw?: number; overlay?: number;
       /** ... and the lights in use of those that reach the screen, and the shadow cards (#304). */
       lights?: { list: number; inView: number }; casters?: number;
+      /** ... and the trees built of all on the woodland dev page (#329), for the pictures script. */
+      plants?: { built: number; total: number };
     };
   }
 }

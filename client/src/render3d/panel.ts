@@ -190,17 +190,31 @@ export function createPanel(
   hourRow.append(hourLabelEl, hour.input);
   const skySwRow = el('div', 'r3d-row');
   for (const sw of SKY_SWITCHES) button(skySwRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
+  // Trees (#329): the leaf amount forced on every living tree (Own: each tree's own) and the flat silhouettes.
+  const leafRow = el('div', 'r3d-row');
+  const leafLabel = el('label');
+  const leaf = slider(0, 100, 5, () => cur.leaf ?? 100, (v) => change({ leaf: v }));
+  leaf.input.id = 'r3d-leaf';
+  leafLabel.htmlFor = 'r3d-leaf';
+  leafRow.append(leafLabel, leaf.input);
+  button(leafRow, 'Own', () => cur.leaf === null, () => change({ leaf: null }));
+  const treeSwRow = el('div', 'r3d-row');
+  button(treeSwRow, 'Plain trees', () => cur.plain, () => change({ plain: !cur.plain }));
   hourRow.hidden = true;
   skySwRow.hidden = true;
+  leafRow.hidden = true;
+  treeSwRow.hidden = true;
   const showRows = (): void => {
     hourRow.hidden = !skyOn;
     skySwRow.hidden = !skyOn;
+    leafRow.hidden = !skyOn;
+    treeSwRow.hidden = !skyOn;
     mistSliders.forEach(({ d, row }) => { row.hidden = !daylightOn || (skyOn && d.key === 'mistDay'); });
   };
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, hourRow, skySwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -232,6 +246,8 @@ export function createPanel(
     yaw.sync();
     hourLabelEl.textContent = `Time of day ${hourLabel(cur.hour ?? DEFAULT_HOUR)}`;
     hour.sync();
+    leafLabel.textContent = cur.leaf === null ? 'Leaves own' : `Leaves ${cur.leaf}`;
+    leaf.sync();
     for (const { d, label, s } of seeSliders) {
       label.textContent = `${d.name} ${Math.round(cur[d.key] * 100) / 100}`;
       s.sync();

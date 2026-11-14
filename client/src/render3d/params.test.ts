@@ -97,7 +97,7 @@ describe('toSearch', () => {
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
-      hour: 18.5, hourRate: 0, wind: false, clouds: false,
+      hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -135,5 +135,19 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&wind=x&clouds=x')).toMatchObject({ wind: true, clouds: true });
     expect(toSearch({ ...DEFAULTS, hour: 13, hourRate: 0, wind: false, clouds: false }, '?r3d=woodland')).toBe('?r3d=woodland&hour=13&hourRate=0&wind=0&clouds=0');
     expect(toSearch(DEFAULTS, '?r3d=woodland&hour=13&hourRate=0&wind=0&clouds=0')).toBe('?r3d=woodland');
+  });
+
+  it('reads the tree parameters (#329): leaf 0..100 or absent, plain on or off', () => {
+    expect(parseParams('?r3d')).toMatchObject({ leaf: null, plain: false });
+    expect(parseParams('?r3d&leaf=0')).toMatchObject({ leaf: 0 });
+    expect(parseParams('?r3d&leaf=37.5').leaf).toBe(37.5);
+    expect(parseParams('?r3d&leaf=250').leaf).toBe(100);
+    expect(parseParams('?r3d&leaf=-5').leaf).toBe(0);
+    expect(parseParams('?r3d&leaf=abc').leaf).toBeNull();
+    expect(parseParams('?r3d&plain=1').plain).toBe(true);
+    expect(parseParams('?r3d&plain=0').plain).toBe(false);
+    expect(parseParams('?r3d&plain=yes').plain).toBe(false);
+    expect(toSearch({ ...DEFAULTS, leaf: 0, plain: true }, '?r3d=woodland')).toBe('?r3d=woodland&leaf=0&plain=1');
+    expect(toSearch(DEFAULTS, '?r3d=woodland&leaf=50&plain=1')).toBe('?r3d=woodland');
   });
 });

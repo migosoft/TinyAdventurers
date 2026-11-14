@@ -28,6 +28,8 @@ export interface R3dParams {
   sight: boolean; mistHigh: number; mistTop: number; mistDrift: number; mistDay: number;
   /** The sky (#306): the hour of day, 0..24 (null = the run's own); game hours per 720 real seconds times `hourRate` (0 stops time); the wind and the clouds on or off. */
   hour: number | null; hourRate: number; wind: boolean; clouds: boolean;
+  /** The trees (#329, dev page): a leaf amount 0..100 forced on every living tree (null: each tree's own); flat silhouettes in one colour per ramp. */
+  leaf: number | null; plain: boolean;
 }
 
 /** The hour the sky pages start at (and the panel's slider shows) when the URL gives none. */
@@ -40,7 +42,7 @@ export const DEFAULTS: R3dParams = {
   free: false, light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
-  hour: null, hourRate: 1, wind: true, clouds: true,
+  hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -76,6 +78,7 @@ export function parseParams(search: string): R3dParams {
   const ccap = num(q.get('ccap'));
   const dv = num(q.get('dv'));
   const hour = num(q.get('hour'));
+  const leaf = num(q.get('leaf'));
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(30, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
@@ -106,10 +109,12 @@ export function parseParams(search: string): R3dParams {
     hourRate: range(num(q.get('hourRate')), 0, 100, DEFAULTS.hourRate),
     wind: q.get('wind') === '0' ? false : DEFAULTS.wind,
     clouds: q.get('clouds') === '0' ? false : DEFAULTS.clouds,
+    leaf: leaf === null ? null : range(leaf, 0, 100, 0),
+    plain: q.get('plain') === '1',
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -145,5 +150,7 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.hourRate !== DEFAULTS.hourRate) s += `&hourRate=${p.hourRate}`;
   if (p.wind !== DEFAULTS.wind) s += '&wind=0';
   if (p.clouds !== DEFAULTS.clouds) s += '&clouds=0';
+  if (p.leaf !== null) s += `&leaf=${p.leaf}`;
+  if (p.plain !== DEFAULTS.plain) s += '&plain=1';
   return s;
 }

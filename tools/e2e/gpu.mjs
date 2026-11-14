@@ -5,6 +5,8 @@ export const gpuOn = !!process.env.GPU;
 /** Launch options for `chromium.launch` when GPU is set: headed, the ANGLE-over-Vulkan start line and the env that picks the NVIDIA card. */
 export function gpuLaunch() {
   const args = ['--use-angle=vulkan', '--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE', '--enable-unsafe-webgpu', '--ozone-platform=x11'];
+  // An occluded or background window gets about one animation frame a second: keep it drawing at full rate.
+  args.push('--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling');
   if (process.env.GPU === 'uncapped') args.push('--disable-gpu-vsync', '--disable-frame-rate-limit');
   return { headless: false, args, env: { ...process.env, __VK_LAYER_NV_optimus: 'NVIDIA_only' } };
 }

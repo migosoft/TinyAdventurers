@@ -1,6 +1,7 @@
 // Headless check of a real run in the 3D view (?r3d): one debug e2e_* account opens a debug room for the level, starts it,
 // waits for drawn frames, walks the hero, switches to the free camera and checks the chunk culling on the dungeon.
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
+// Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
@@ -18,7 +19,32 @@ const browser = await chromium.launch({
 });
 const errors = [];
 const account = `e2e_${tag()}`;
-const page = await (await browser.newContext({ viewport: { width: 1280, height: 768 } })).newPage();
+// R3D_W / R3D_H: the window (1280x768). BACKEND=webgpu: the page picks WebGPU (default: WebGL2). FPS_S=10: the frame-rate measurement (below).
+const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 };
+const page = await (await browser.newContext({ viewport })).newPage();
+// Frame-rate bookkeeping, from the first script of the page: every requestAnimationFrame interval, and the draw calls and triangles
+// the context submits (all passes: depth, colour, sun). WebGL2 and WebGPU are both hooked.
+await page.addInitScript(() => {
+  const perf = { t: [], dt: [], calls: 0, tris: 0 };
+  window.__perf = perf;
+  let last = performance.now();
+  const loop = (t) => { perf.t.push(t); perf.dt.push(t - last); last = t; requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+  const tri = (mode, n, inst = 1) => { perf.calls++; if (mode === 4) perf.tris += (n / 3) * inst; };
+  for (const [name, f] of [
+    ['drawElements', (mode, n) => tri(mode, n)], ['drawElementsInstanced', (mode, n, _t, _o, i) => tri(mode, n, i)],
+    ['drawArrays', (mode, _f, n) => tri(mode, n)], ['drawArraysInstanced', (mode, _f, n, i) => tri(mode, n, i)],
+  ]) {
+    const orig = WebGL2RenderingContext.prototype[name];
+    WebGL2RenderingContext.prototype[name] = function (...a) { f(...a); return orig.apply(this, a); };
+  }
+  if (typeof GPURenderPassEncoder !== 'undefined') {
+    for (const name of ['draw', 'drawIndexed']) {
+      const orig = GPURenderPassEncoder.prototype[name];
+      GPURenderPassEncoder.prototype[name] = function (n, inst = 1, ...r) { perf.calls++; perf.tris += (n / 3) * inst; return orig.call(this, n, inst, ...r); };
+    }
+  }
+});
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 // The first /api/me before logging in is an expected 401.
 page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));
@@ -78,7 +104,8 @@ const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window._
 let registered = false;
 
 try {
-  await page.goto(`${base}?r3d&backend=webgl${process.env.R3D_QUERY ?? ''}`); // R3D_QUERY: more page parameters, e.g. "&shadows=0&hour=14"
+  await page.goto(`${base}?r3d${process.env.BACKEND === 'webgpu' ? '' : '&backend=webgl'}${process.env.R3D_QUERY ?? ''}`); // R3D_QUERY: more page parameters, e.g. "&shadows=0&hour=14"
+  await page.bringToFront();
   await page.waitForSelector('#auth-name');
   await login(page, account, true);
   registered = true;
@@ -97,6 +124,7 @@ try {
   await page.waitForSelector('#game.active', { timeout: 10000 });
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   if (gpuOn) await printGpu(page);
+  const t0 = await page.evaluate(() => performance.now()); // the build window starts here
   // The woodland's trees are grown a few per frame: wait until the F3 line `plants <built> of <total>` shows them all (WAIT_MS: the time allowed, default 120 s).
   if (level === 'woodland') {
     await page.keyboard.press('F3');
@@ -108,7 +136,37 @@ try {
     while ((!n || n[0] < need(n)) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
     console.log(`trees built ${n ? `${n[0]} of ${n[1]}` : 'unknown (no F3 plants line)'}`);
     if (!n || n[0] < need(n)) errors.push(`the forest was not built in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 plants line'}`);
+    const t1 = await page.evaluate(() => performance.now());
+    // The build: the time from the first frames to the last tree, and the longest frame in it (the hitch).
+    const build = await page.evaluate(([a, b]) => {
+      const dts = window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b);
+      return { frames: dts.length, longest: Math.max(0, ...dts) };
+    }, [t0, t1]);
+    console.log(`forest build: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, ${build.frames} frames, longest frame ${build.longest.toFixed(1)} ms`);
     await page.keyboard.press('F3');
+  }
+  // FPS_S=10: sample requestAnimationFrame for that many seconds (F3 off), then print the mean, the 1 % low, the draw calls and triangles per frame
+  // (all passes) and the F3 block. With FPS_ONLY=1 the run ends after this and the picture r3d-run-<level>-fps.png.
+  if (process.env.FPS_S) {
+    await page.waitForTimeout(1000);
+    const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
+    await page.waitForTimeout(Number(process.env.FPS_S) * 1000);
+    const m = await page.evaluate((a) => {
+      const p = window.__perf, now = performance.now();
+      const dts = p.dt.filter((_, i) => p.t[i] >= a.now).sort((x, y) => y - x);
+      const worst = dts.slice(0, Math.max(1, Math.ceil(dts.length / 100)));
+      const stalls = p.dt.map((d, i) => [d, p.t[i] - a.now]).filter(([d, t]) => t >= 0 && d > 200).map(([d, t]) => `${d.toFixed(0)} ms at +${(t / 1000).toFixed(1)} s`);
+      const median = dts[Math.floor(dts.length / 2)];
+      return { n: dts.length, secs: (now - a.now) / 1000, worst: worst.reduce((s, v) => s + v, 0) / worst.length, max: dts[0], median, stalls, calls: p.calls - a.calls, tris: p.tris - a.tris };
+    }, a);
+    console.log(`median frame ${m.median.toFixed(1)} ms (${(1000 / m.median).toFixed(0)} fps); frames over 200 ms: ${m.stalls.join(', ') || 'none'}`);
+    console.log(`fps ${(m.n / m.secs).toFixed(1)} mean over ${m.secs.toFixed(1)} s (${m.n} frames), 1% low ${(1000 / m.worst).toFixed(1)} fps, longest frame ${m.max.toFixed(1)} ms; per frame ${(m.calls / m.n).toFixed(0)} draw calls and ${(m.tris / m.n / 1000).toFixed(0)}k triangles (all passes)`);
+    await page.keyboard.press('F3');
+    await page.waitForTimeout(1500);
+    console.log(`F3:\n${await page.evaluate(() => [...document.querySelectorAll('body *')].map((e) => e.children.length === 0 ? e.innerText : '').find((t) => /^FPS/.test(t)) ?? document.body.innerText.slice(0, 600))}`);
+    await page.screenshot({ path: `${out}/r3d-run-${level}-fps.png` });
+    await page.keyboard.press('F3');
+    if (process.env.FPS_ONLY) throw Object.assign(new Error('FPS_ONLY'), { quiet: true });
   }
   // The 3D canvas, plus the overlay canvas over it (#311).
   if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push('expected exactly one 3D canvas in #game');
@@ -204,7 +262,7 @@ try {
     if (!chunks || !(chunks.drawn < chunks.total)) errors.push(`chunk culling: drawn ${chunks?.drawn} of ${chunks?.total}`);
   }
 } catch (e) {
-  errors.push(`failed: ${e.message.split('\n')[0]}`);
+  if (!e.quiet) errors.push(`failed: ${e.message.split('\n')[0]}`);
 } finally {
   if (registered) {
     const status = await deleteAccount(page).catch((e) => `error ${e.message}`);

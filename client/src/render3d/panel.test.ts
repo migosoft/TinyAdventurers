@@ -176,6 +176,29 @@ describe('panel', () => {
     expect(row('mistDay').hidden).toBe(false);
   });
 
+  it('the tree rows (#329) show with the sky: a leaf slider with an Own button, and a Plain trees switch', () => {
+    const { host, calls, panel, btn } = setup();
+    const leaf = host.querySelector<HTMLInputElement>('#r3d-leaf')!;
+    expect(leaf.parentElement!.hidden).toBe(true);
+    expect(btn('Plain trees').parentElement!.hidden).toBe(true);
+    panel.setSky(true);
+    expect(leaf.parentElement!.hidden).toBe(false);
+    expect(btn('Plain trees').parentElement!.hidden).toBe(false);
+    expect([leaf.min, leaf.max, leaf.step]).toEqual(['0', '100', '5']);
+    expect(host.textContent).toContain('Leaves own');
+    expect(btn('Own').getAttribute('aria-pressed')).toBe('true');
+    leaf.value = '25';
+    leaf.dispatchEvent(new Event('input'));
+    expect(calls[0].leaf).toBe(25);
+    expect(host.textContent).toContain('Leaves 25');
+    expect(btn('Own').getAttribute('aria-pressed')).toBe('false');
+    btn('Own').click();
+    expect(calls[1].leaf).toBeNull();
+    btn('Plain trees').click();
+    expect(calls[2].plain).toBe(true);
+    expect(btn('Plain trees').getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('the zoom row sets zoom or Auto (null)', () => {
     const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
     expect(btn('3').getAttribute('aria-pressed')).toBe('true');
