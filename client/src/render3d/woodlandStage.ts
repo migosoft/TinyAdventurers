@@ -15,7 +15,7 @@ import { Critters3d } from './critters3d';
 import { Figures3d } from './figures';
 import { Fireflies } from './fireflies';
 import { galleryFrame, galleryInit } from './galleryStage';
-import { groundJob, type GroundJob } from './groundJob';
+import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WOODLAND_CLEAR, WORK_AMBIENT } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, movingCands, selectCasters, selectLights } from './lights';
@@ -90,10 +90,10 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   const pixie = new Pixies3d({ x: (KNIGHT_START.x + 3) * TILE, y: (KNIGHT_START.z + 1) * TILE }, (KNIGHT_START.z + 1) * TILE, 1, GROUND_SEED, PIXIE_UP);
 
   // The ground is painted whole at the first build and kept for the rebuilds after a lost device.
-  let job: GroundJob | null = null;
-  const paint = (): GroundJob => {
+  let job: CoverJob | null = null;
+  const paint = (): CoverJob => {
     if (!job) {
-      job = groundJob(map, GROUND_SEED, KNIGHT_START.z);
+      job = coverJob(coverSources(map, { woodland: { seed: GROUND_SEED }, cove: null, spawnRow: KNIGHT_START.z, spots: [] }), GROUND_SEED);
       job.step(Infinity);
     }
     return job;
@@ -126,7 +126,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   return {
     world,
     built(view: View): void {
-      view.setGround(paint().image());
+      view.setGround(paint().result()!.bare!);
     },
     frame(c: StageCtx): number {
       const params = c.params;

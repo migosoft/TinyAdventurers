@@ -8,7 +8,7 @@ import { RulesLog } from '../rulesLog';
 import type { Hud } from '../ui/hud';
 import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
-import { GROUND_BUDGET_MS, groundJob, type GroundJob } from './groundJob';
+import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
 import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
@@ -88,7 +88,7 @@ export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: RunHud; my
 
 export interface RunStage extends Stage {
   readonly runView: RunView3d;
-  readonly job: GroundJob | null;
+  readonly job: CoverJob | null;
 }
 
 /**
@@ -101,13 +101,13 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   const overlay = new Overlay3d(el);
   const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
-  const job = info.woodland ? groundJob(session.map, info.woodland.seed, info.spawn_y / TILE) : null;
+  const job = info.woodland ? coverJob(coverSources(session.map, { woodland: info.woodland, cove: null, spawnRow: info.spawn_y / TILE, spots: [] }), info.woodland.seed) : null;
   // A ground too large for the device: shown once, the run keeps its flat grass.
   let tooLarge = false;
   const upload = (v: View): void => {
     if (!job || tooLarge) return;
     try {
-      v.setGround(job.image());
+      v.setGround(job.result()!.bare!);
     } catch (e) {
       if (!(e instanceof GroundTooLargeError)) throw e;
       tooLarge = true;
@@ -173,7 +173,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       }
       run.input.yaw = (shown * Math.PI) / 180;
       run.input.free = c.params.free;
-      if (job && !job.done && job.step(GROUND_BUDGET_MS) && c.view) upload(c.view);
+      if (job && !job.done && job.step(COVER_BUDGET_MS) && c.view) upload(c.view);
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.dt * 1000);
       const r = window.__r3d;
