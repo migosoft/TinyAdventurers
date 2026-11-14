@@ -34,6 +34,15 @@ describe('airMaterials', () => {
       });
     }
 
+    it(`${B.name}: the haze is lit without the wall-walk shadow loop, the smoke keeps it`, () => {
+      const a = build(false);
+      const loopNames = (m: typeof a.haze, attrs: [string, number][]): string[] =>
+        [...fragment(B, m, { geometry: geometry(attrs) }).matchAll(/\bfor\s*\(\s*(?:int|var)\s+(\w+)/g)].map((x) => x[1]);
+      expect(loopNames(a.haze, HAZE_ATTRS)).not.toContain('ws');
+      expect(loopNames(a.haze, HAZE_ATTRS)).toContain('li');
+      expect(loopNames(a.blend, AIR_ATTRS)).toContain('ws');
+    });
+
     it(`${B.name}: each reads the sight mask once, at the top level`, () => {
       const a = build(false);
       for (const [name, m, attrs] of [['add', a.add, AIR_ATTRS], ['blend', a.blend, AIR_ATTRS], ['haze', a.haze, HAZE_ATTRS]] as const) {

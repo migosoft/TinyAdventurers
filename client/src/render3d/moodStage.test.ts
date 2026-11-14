@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { KIND } from '../generated/defs';
 import { FIRE_EVERY, MOOD_H, MOOD_W, moodMap } from '../game/moodDemoScript';
 import { r3dPage, isR3dDemo, wants3d } from '../r3dFlag';
@@ -13,6 +13,12 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const assets = { image: {} as HTMLImageElement, frames };
 
+/** The stages a test made: each is disposed (its caption removed) when the test ends. */
+const made: Stage[] = [];
+afterEach(() => {
+  for (const s of made.splice(0)) s.dispose();
+});
+
 interface Run { stage: Stage; setAirDev: boolean[]; frames: FrameInput[] }
 
 /** Plays `seconds` of the page for `search` in steps of `dt`, collecting what the view was handed. */
@@ -21,6 +27,7 @@ function play(search: string, seconds: number, dt = 0.05): Run {
   const setAirDev: boolean[] = [];
   const host = { params, setParams(): void {}, setAirDev: (on: boolean) => setAirDev.push(on) };
   const stage = createMoodStage(assets, params, search, host);
+  made.push(stage);
   const out: FrameInput[] = [];
   const view = { draw: (i: FrameInput) => (out.push(structuredCloneAir(i)), 0) };
   const zoom = 2;

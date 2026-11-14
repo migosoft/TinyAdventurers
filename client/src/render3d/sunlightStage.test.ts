@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { KIND } from '../generated/defs';
 import { SECOND, SUN, SUNLIGHT_H, SUNLIGHT_W, sunlightMap } from '../game/sunlightDemoScript';
 import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
@@ -13,9 +13,16 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const assets = { image: {} as HTMLImageElement, frames };
 
+/** The stages a test made: each is disposed (its caption removed) when the test ends. */
+const made: Stage[] = [];
+afterEach(() => {
+  for (const s of made.splice(0)) s.dispose();
+});
+
 function make(search: string): { stage: Stage; draw: (now?: number) => FrameInput; params: R3dParams } {
   const params = parseParams(search);
   const stage = createSunlightStage(assets, params, search);
+  made.push(stage);
   const draw = (now = 0): FrameInput => {
     let f: FrameInput | null = null;
     const view = { draw: (i: FrameInput) => ((f = i), 0) };

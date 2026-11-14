@@ -118,7 +118,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
       const xz = P.xz.mul(1 / PX).div(scale).add(sheet.zw.mul(time).div(scale));
       const n = mx_noise_float(vec3(xz.x, xz.y, 0));
       const pattern = smoothstep(HAZE_LO, HAZE_HI, n.mul(0.5).add(0.5));
-      const hl: N = lighting.lightAt(P, vec3(0, 1, 0), HAZE_WRAP);
+      const hl: N = lighting.lightAt(P, vec3(0, 1, 0), HAZE_WRAP, { noShadow: true });
       const colour = sight.apply(vec3(...HAZE_RGB).mul(hl.rgb), P, hu);
       return vec4(colour, sheet.x.mul(pattern).mul(sight.shown(hu.x, 0)));
     })();
