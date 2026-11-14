@@ -6,7 +6,7 @@ import type { Texture } from 'three/webgpu';
 import { ChunkSync } from './chunks';
 import type { TreeChunk, TreeFrame } from './forest';
 import { paletteBytes } from './palette';
-import { TREE_ORDER, makeTreeShared, type TreeMaterials, type TreeShared } from './treeNodes';
+import { TREE_ORDER, makeTreeShared, packTreeStreams, type TreeMaterials, type TreeShared } from './treeNodes';
 
 /** The palette's size in texels: tones across, ramps down. */
 const PALETTE_W = 5, PALETTE_H = 4;
@@ -14,19 +14,19 @@ const PALETTE_W = 5, PALETTE_H = 4;
 /** The least time between two uploads of one chunk while the forest is still growing (ms, first guess). */
 export const TREE_UPLOAD_MS = 250;
 
-/** One chunk's geometry: the mesh streams, the per-plant `plant` and `look` streams (copied at their used length) and the forest's bounds for culling. */
+/** One chunk's geometry: the mesh streams, the per-plant `plant` and `look` streams (copied at their used length; `packTreeStreams` fits them to the 8 vertex buffers WebGPU allows) and the forest's bounds for culling. */
 export function chunkGeometry(c: TreeChunk): BufferGeometry {
   const m = c.mesh;
   const g = new BufferGeometry();
   const set = (name: string, data: ArrayLike<number>, size: number): void => { g.setAttribute(name, new BufferAttribute(Float32Array.from(data), size)); };
   set('position', m.position, 3);
-  set('normal', m.normal, 3);
+  const packed = packTreeStreams(m.normal, m.sway, c.plant);
+  g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
   set('grad', m.grad, 4);
-  set('sway', m.sway, 2);
   set('part', m.part, 4);
   set('misc', m.misc, 4);
   set('tuft', m.tuft, 4);
-  g.setAttribute('plant', new BufferAttribute(c.plant.slice(), 4));
+  g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
   g.setAttribute('look', new BufferAttribute(c.look.slice(), 4));
   g.setIndex(new BufferAttribute(Uint32Array.from(m.index), 1));
   // The raw positions lack the patches' spread, the sway and the stretched height: the forest's bounds hold them.

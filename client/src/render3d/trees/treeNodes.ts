@@ -62,15 +62,35 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
 
 const hash3 =(c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
 
-/** The per-vertex streams of a tree mesh and the per-plant ones (`plant`: foot x, z, leaf amount, dead; `look`: leaf bright, leaf warm, bark light, bark grey). */
+/**
+ * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,
+ * `tuft`, `plant`, `look`. This packs the two that carry the tree's sway: `nrm` is the normal with the vertex's sway factor in w, and `plant` is
+ * (foot x, foot z, leaf amount or -1 for a dead tree, the vertex's lift height). `plant` is the forest's (foot x, z, leaf, dead) per vertex.
+ */
+export function packTreeStreams(normal: ArrayLike<number>, sway: ArrayLike<number>, plant: ArrayLike<number>): { nrm: Float32Array; plant: Float32Array } {
+  const n = normal.length / 3;
+  const nrm = new Float32Array(n * 4), out = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    nrm[i * 4] = normal[i * 3]; nrm[i * 4 + 1] = normal[i * 3 + 1]; nrm[i * 4 + 2] = normal[i * 3 + 2]; nrm[i * 4 + 3] = sway[i * 2];
+    out[i * 4] = plant[i * 4]; out[i * 4 + 1] = plant[i * 4 + 1];
+    out[i * 4 + 2] = plant[i * 4 + 3] > 0.5 ? -1 : plant[i * 4 + 2];
+    out[i * 4 + 3] = sway[i * 2 + 1];
+  }
+  return { nrm, plant: out };
+}
+
+/** The per-vertex streams of a tree mesh and the per-plant ones (`plant` and `nrm` as `packTreeStreams` says; `look`: leaf bright, leaf warm, bark light, bark grey). */
 function streams() {
   const part = attribute('part', 'vec4');
   const plant = attribute('plant', 'vec4');
+  const nrm = attribute('nrm', 'vec4');
   const shape = part.y;
   return {
-    normal: attribute('normal', 'vec3'), grad: attribute('grad', 'vec4'), sway: attribute('sway', 'vec2'),
+    normal: nrm.xyz, grad: attribute('grad', 'vec4'), sway: vec2(nrm.w, plant.w),
     part, misc: attribute('misc', 'vec4'), tuft: attribute('tuft', 'vec4'), plant, look: attribute('look', 'vec4'),
     foot: plant.xy,
+    dead: plant.z.lessThan(-0.5),
+    leafOwn: max(plant.z, 0),
     isWood: shape.lessThan(1.5),
     isSkirt: shape.greaterThan(1.5).and(shape.lessThan(2.5)),
     isTuft: shape.greaterThan(2.5).and(shape.lessThan(3.5)),
@@ -109,8 +129,8 @@ export function leafGone(threshold: N, leaf: N): N {
  */
 export function treePoint(shared: TreeShared) {
   const s = streams();
-  const dead = s.plant.w.greaterThan(0.5);
-  const leaf = select(shared.leafOverride.greaterThanEqual(0).and(dead.not()), shared.leafOverride, s.plant.z);
+  const dead = s.dead;
+  const leaf = select(shared.leafOverride.greaterThanEqual(0).and(dead.not()), shared.leafOverride, s.leafOwn);
   const gone = s.isFoliage.and(leafGone(s.misc.w, leaf));
   // A dead tree does not sway; a living one with no leaves does. The factor is the vertex's own (already scaled by height).
   const offset = swayNode(s.foot, float(1), float(1), select(dead, float(0), s.sway.x), shared.t, shared.windOn);
@@ -218,7 +238,7 @@ export function treeMaterials(o: {
 
     const level = select(shared.plain.greaterThan(0.5), float(2), select(s.isBark, lb, lvl));
     // A dead plant draws its bark ramp as dead wood.
-    const row = s.part.x.add(select(s.plant.w.greaterThan(0.5).and(s.part.x.equal(RAMP.bark)), float(1), float(0)));
+    const row = s.part.x.add(select(s.dead.and(s.part.x.equal(RAMP.bark)), float(1), float(0)));
     const pal = paletteAt(palette, level, row).toVar('treePalette');
     // The plant's own colour: leaves lighter or darker and warmer or cooler (a patch adds its own shift); bark lighter or darker and greyer or more colourful.
     const bright = s.look.x.add(select(s.isTuft, s.part.w, float(0)));

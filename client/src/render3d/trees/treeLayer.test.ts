@@ -68,6 +68,13 @@ describe('TreeLayer', () => {
     expect(g.boundingSphere!.radius).toBeGreaterThan(0);
   });
 
+  it('uses at most 8 vertex attributes: a WebGPU pipeline takes no more buffers', () => {
+    const { l, scene } = layer(true);
+    l.sync(frame(built(1)));
+    const g = (scene.children[0] as Mesh).geometry;
+    expect(Object.keys(g.attributes).sort()).toEqual(['grad', 'look', 'misc', 'nrm', 'part', 'plant', 'position', 'tuft']);
+  });
+
   it('uploads the used length of the per-plant streams and a matching index', () => {
     const f = built(1);
     const { l, scene } = layer(true);

@@ -6,7 +6,7 @@ import { makeSight } from '../sightNodes';
 import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
-import { makeTreeShared, leafGone, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
+import { makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
 
 /** A small tree: a trunk tube and a lobe of tufts, with the per-plant attributes a forest fills. */
 function treeGeometry(): BufferGeometry {
@@ -17,10 +17,12 @@ function treeGeometry(): BufferGeometry {
   tufts(m, { x: 0, y: 1.2, z: 0, rx: 0.5, ry: 0.5, rz: 0.5, k: 0.1 }, () => [0, 0, 0, 0], 0.5, rnd, RAMP.leaf);
   const g = new BufferGeometry();
   const set = (name: string, data: number[], size: number) => g.setAttribute(name, new BufferAttribute(new Float32Array(data), size));
-  set('position', m.position, 3); set('normal', m.normal, 3); set('grad', m.grad, 4); set('sway', m.sway, 2);
+  set('position', m.position, 3); set('grad', m.grad, 4);
   set('part', m.part, 4); set('misc', m.misc, 4); set('tuft', m.tuft, 4);
   const n = m.verts;
-  set('plant', Array.from({ length: n }, () => [3, 4, 1, 0]).flat(), 4);
+  const packed = packTreeStreams(m.normal, m.sway, Array.from({ length: n }, () => [3, 4, 1, 0]).flat());
+  g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
+  g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
   set('look', Array.from({ length: n }, () => [1, 0, 1, 0]).flat(), 4);
   g.setIndex(m.index);
   return g;
@@ -128,6 +130,14 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     });
   });
 }
+
+describe('packTreeStreams', () => {
+  it('puts the sway factor in the normal\'s w, the lift in the plant\'s w and a dead tree as leaf -1', () => {
+    const p = packTreeStreams([0, 1, 0, 1, 0, 0], [0.1, 2, 0.2, 3], [5, 6, 0.75, 0, 7, 8, 0, 1]);
+    expect(Array.from(p.nrm)).toEqual([0, 1, 0, Math.fround(0.1), 1, 0, 0, Math.fround(0.2)]);
+    expect(Array.from(p.plant)).toEqual([5, 6, 0.75, 2, 7, 8, -1, 3]);
+  });
+});
 
 describe('tree material state', () => {
   it('the colour pass draws at equal depth without writing it; the depth pass writes no colour', () => {
