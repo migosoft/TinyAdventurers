@@ -1,12 +1,13 @@
 // Every 3D material ends with the sight step (#305): the generated code of each carries the sight uniforms. #307 and #308 extend the list.
 import { describe, expect, it } from 'vitest';
-import { DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { cardMaterial, emissiveMaterial, glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { fieldMaterial } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
+import { airMaterials } from './air/airNodes';
 import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
 const lit = () => {
@@ -14,8 +15,18 @@ const lit = () => {
   return makeLighting(heights, { w: 4, h: 3 }, new Texture());
 };
 
+// The air's vertex layouts (airQuads.ts); the builders read the attributes from the geometry.
+const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
+const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
+const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
+  if (!attrs) return undefined;
+  const g = new BufferGeometry();
+  for (const [n, s] of attrs) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
+  return g;
+};
+
 /** Each material of the view, built against one `Sight`. */
-function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
+function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [string, number][] }[] {
   const sight = makeSight();
   const l = lit();
   const toward = viewTowardUniform();
@@ -23,6 +34,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
   // The tree's depth pass stipples by the sight value at the foot; its colour pass ends with the sight step. The sun's pass is depth only and never hidden (plants are scenery).
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
   const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover });
+  const air = airMaterials(l, sight, { sun: false, toward });
   return [
     { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, world: true },
     // The ground cover (#330): sheets and bushels end with the sight step.
@@ -41,14 +53,18 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
     { name: 'tree colour', m: trees.colour, world: false },
     // A falling leaf: lit like the leaves and veiled like every world material.
     { name: 'tree leaf', m: trees.leaf, world: false },
+    // The air (#307): specks and embers (additive), smoke, rings and drops (blended) and the haze sheets.
+    { name: 'air add', m: air.add, world: false, attrs: AIR_ATTRS },
+    { name: 'air blend', m: air.blend, world: false, attrs: AIR_ATTRS },
+    { name: 'air haze', m: air.haze, world: false, attrs: HAZE_ATTRS },
   ];
 }
 
 describe('the sight step in the materials', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`${B.name}: every world material ends with the sight step`, () => {
-      for (const { name, m, world } of materials()) {
-        const code = fragment(B, m);
+      for (const { name, m, world, attrs } of materials()) {
+        const code = fragment(B, m, { geometry: geometryOf(attrs) });
         expect(code, name).toContain('sightMode');
         if (world) {
           // The mask's sampler is a plain `nodeUniformN` in the code; its origin uniform carries the name.
@@ -83,8 +99,8 @@ describe('a world without a sun', () => {
 describe('the uniform buffers of the WebGPU shaders', () => {
   const LIMIT = 12;
   it('no material needs more than the stage limit', () => {
-    for (const { name, m } of materials()) {
-      const code = fragment(WGSLNodeBuilder, m);
+    for (const { name, m, attrs } of materials()) {
+      const code = fragment(WGSLNodeBuilder, m, { geometry: geometryOf(attrs) });
       expect((code.match(/var<uniform>/g) ?? []).length, name).toBeLessThanOrEqual(LIMIT);
     }
   });

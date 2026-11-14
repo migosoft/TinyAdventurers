@@ -33,6 +33,8 @@ export interface Lighting {
   readonly cracks: Cracks;
   /** The shadows switch as a uniform node (1 on, 0 off): the shaft march shadows its samples the same way `lightAt` does. */
   readonly shadowsOn: N;
+  /** The ambient light as a vec3 uniform node (named `lightAmbient`): the dust shader subtracts it from the scene's light (#307). */
+  readonly ambient: N;
   /**
    * 1 when the sun ray from `P` along `dir` (toward the sun) is clear of walls and cards, else 0 (the demo's `sunVis`): the wall walk
    * up to just above the walls, then the card test along nine tiles. `self`: the caster slot the surface belongs to, a float node.
@@ -71,7 +73,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const lPos = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
   const lCol = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
   const uShadows = uniform(1);
-  const uAmbient = uniform(new Vector3(...AMBIENT));
+  const uAmbient = uniform(new Vector3(...AMBIENT)).setName('lightAmbient');
   const ambient = uAmbient;
 
   const cellH = (cell: N): N => {
@@ -318,6 +320,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     sun,
     cracks,
     shadowsOn: uShadows,
+    ambient,
     sunRayVis: (P, dir, self) => sunVisOf(cardVis)(P, dir, self),
     finish,
     shoulder,
