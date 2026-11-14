@@ -14,10 +14,11 @@ export const MOSS = { area: 12, areaCut: 0.62, cornerReach: 12, wallReach: 6, wo
 /** Dark to light. */
 export const MOSS_TONES: Rgb[] = [P['5'], P['0'], P['6'], P['1']];
 
-/** FNV-1a over every tile byte, row-major. */
+/** FNV-1a over the solid/open layout (one byte per tile, 1 where `heightAt > 0`), row-major. Doors, water and lava
+ * change during a run and do not count, so a source rebuilt later grows the same moss. */
 export function tilesSeed(map: TileMap): number {
   let h = 0x811c9dc5;
-  for (let i = 0; i < map.tiles.length; i++) h = Math.imul(h ^ map.tiles[i], 0x01000193) >>> 0;
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) h = Math.imul(h ^ (heightAt(map, x, y) > 0 ? 1 : 0), 0x01000193) >>> 0;
   return h;
 }
 

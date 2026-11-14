@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import type { CoveInfo } from '../../generated/CoveInfo';
+import { noise } from '../../game/covemath';
 import { TILE, TileMap } from '../../sim/map';
 import { COVER } from './kinds';
 import { mossSource, MOSS, MOSS_TONES, tilesSeed } from './moss';
@@ -19,7 +20,7 @@ function roomsMap(tweak = 0): TileMap {
   for (let y = 2; y < 4; y++) for (let x = 2; x < 4; x++) t[(pool.y + y) * W + pool.x + x] = TILE_ID.ShallowWater;
   const c = roomOrigin(4, 4);
   for (let x = c.x + R; x < W - 1; x++) t[(c.y + 3) * W + x] = TILE_ID.Floor; // corridor, 1 wide, from the last room
-  if (tweak) t[tweak] = TILE_ID.Void; // a different border tile: a different seed, the same rooms
+  if (tweak) t[tweak] = TILE_ID.Floor; // an open border tile: a different layout, so a different seed, the same rooms
   return new TileMap(W, H, t);
 }
 const roomOrigin = (rx: number, ry: number) => ({ x: 1 + rx * STEP, y: 1 + ry * STEP });
@@ -60,7 +61,7 @@ describe('mossSource', () => {
     let hits = 0;
     for (const [tx, ty] of bad) px(tx, ty, (i) => { hits += s.allow[i] + s.grow[i]; });
     const c = roomOrigin(4, 4);
-    for (let x = c.x + R + 1; x < W - 1; x++) px(x, c.y + 3, (i) => { hits += s.allow[i]; });
+    for (let x = c.x + R; x < W - 1; x++) px(x, c.y + 3, (i) => { hits += s.allow[i]; });
     expect(hits).toBe(0);
     // the room interior still has allowed ground
     expect(s.allow.reduce((a, v) => a + v, 0)).toBeGreaterThan(0);
@@ -119,13 +120,44 @@ describe('mossSource', () => {
 
   it('colours grown px with the moss tones', () => {
     const s = make(roomsMap(), null, true);
-    let n = 0;
+    let n = 0, bad = 0;
     for (let i = 0; i < s.grow.length; i++) if (s.grow[i]) {
       n++;
-      expect(MOSS_TONES.some((c) => c[0] === s.colour[i * 4] && c[1] === s.colour[i * 4 + 1] && c[2] === s.colour[i * 4 + 2])).toBe(true);
-      expect(s.colour[i * 4 + 3]).toBe(255);
+      if (!MOSS_TONES.some((c) => c[0] === s.colour[i * 4] && c[1] === s.colour[i * 4 + 1] && c[2] === s.colour[i * 4 + 2]) || s.colour[i * 4 + 3] !== 255) bad++;
     }
     expect(n).toBeGreaterThan(0);
-    expect(MOSS.patchR[0]).toBeLessThan(MOSS.patchR[1]);
+    expect(bad).toBe(0);
+  });
+
+  it('keeps free patches inside mossy areas', () => {
+    let checked = 0;
+    for (let seed = 0; seed < 6; seed++) {
+      const m = roomsMap(seed), s = make(m), area = noise(tilesSeed(m), MOSS.area * TILE);
+      const mossy = (tx: number, ty: number) => area(tx * TILE + TILE / 2, ty * TILE + TILE / 2) > MOSS.areaCut;
+      let stray = 0;
+      for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) {
+        let any = false;
+        px(tx, ty, (i) => { if (s.grow[i]) any = true; });
+        if (!any) continue;
+        checked++;
+        let near = false;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mossy(tx + dx, ty + dy)) near = true;
+        if (!near) stray++;
+      }
+      expect(stray).toBe(0);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it('keeps the seed and the moss when doors close or water appears', () => {
+    const m = roomsMap(), t = m.tiles.slice();
+    const d = roomOrigin(0, 0);
+    t[(d.y + 3) * W + d.x + R] = TILE_ID.DoorClosed;
+    const o = roomOrigin(3, 3);
+    t[(o.y + 5) * W + o.x + 5] = TILE_ID.ShallowWater;
+    const m2 = new TileMap(W, H, t);
+    expect(tilesSeed(m2)).toBe(tilesSeed(m));
+    const a = make(m, null, true), b = make(new TileMap(W, H, m.tiles.map((v, i) => (i === (d.y + 3) * W + d.x + R ? TILE_ID.DoorClosed : v))), null, true);
+    expect(Buffer.from(a.grow).equals(Buffer.from(b.grow))).toBe(true);
   });
 });
