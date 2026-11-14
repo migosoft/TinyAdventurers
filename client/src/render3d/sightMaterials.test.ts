@@ -4,6 +4,7 @@ import { DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } 
 import { cardMaterial, emissiveMaterial, glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { makePlantShared, plantCardMaterial } from './plantNodes';
 import { fieldMaterial } from './fieldMesh';
+import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
@@ -19,6 +20,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
   const l = lit();
   const toward = viewTowardUniform();
   const t = new Texture();
+  // The tree's depth pass stipples by the sight value at the foot; its colour pass ends with the sight step. The sun's pass is depth only and never hidden (plants are scenery).
+  const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false });
   return [
     { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight).material, world: true },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },
@@ -32,6 +35,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
     { name: 'force field', m: fieldMaterial(sight), world: false },
     // The plant card ends with the sight step. Its trunk and disc casters (plantNodes.ts) are depth only and never hidden: plants are scenery, which the mist never hides.
     { name: 'plant card', m: plantCardMaterial(t, 64, 64, l, toward, sight, seeUniforms(), t, makePlantShared()), world: false },
+    { name: 'tree depth', m: trees.depth, world: false },
+    { name: 'tree colour', m: trees.colour, world: false },
   ];
 }
 
