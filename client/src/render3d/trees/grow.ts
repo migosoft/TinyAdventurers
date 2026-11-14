@@ -1,21 +1,56 @@
-// The skeleton of a leafy tree (round, wide, tall): the 2D generator's trunk with a root flare, limbs that fork twice in
-// space, a leader, and a crown lobe at the branch ends. Pure geometry in plant-local tiles; no mesh here.
+// The skeletons of the trees. A leafy tree (round, wide, tall): the 2D generator's trunk with a root flare, limbs that fork twice in
+// space, a leader, and a crown lobe at the branch ends. The willow: heavy limbs under curtains of hanging leaf tufts. A conifer or
+// a bush: the 2D recipe's trunk, twigs, lobes and skirts placed in depth. Pure geometry in plant-local tiles; no mesh here.
 import { rng } from '../../game/vegetation/canvas';
-import { drawPlant } from '../../game/vegetation';
+import { drawPlant, drawTree } from '../../game/vegetation';
 import { SWAY } from '../wind';
-import type { Lobe3, P3 } from './mesh';
-import type { TreeSpec } from './spec';
+import { RAMP, type Lobe3, type P3, type SkirtOpts, type TuftPatch } from './mesh';
+import type { TreeForm, TreeSpec } from './spec';
 
 const U = 1 / 16;
+
+/** A spot where a falling leaf may start: a crown lobe, or the end of a limb under a willow's curtains. */
+export interface FallLobe { x: number; y: number; z: number; r: number; th: number }
 
 export interface Skeleton {
   trunk: P3[];
   branches: { pts: P3[]; sides: number }[];
-  /** Crown lobes; `th` is the leaf amount below which a lobe is gone. */
+  /** Crown lobes (a core ball and tufts each); `th` is the leaf amount below which a lobe is gone. */
   lobes: (Lobe3 & { th: number })[];
   /** Root ridges, from the flare outward and down into the ground. */
   roots: P3[][];
+  /** Conifer cones. */
+  skirts: SkirtOpts[];
+  /** A willow's hanging leaf tufts, strand by strand, top down. */
+  curtain: TuftPatch[];
+  /** Where leaves may fall from. */
+  falls: FallLobe[];
   height: number;
+  /** The most any vertex swings, tiles (0 for a dead plant). */
+  amp: number;
+  trunkSides: number;
+  rootSides: number;
+  /** The bark's standing shade on the trunk's top. */
+  trunkShaded: boolean;
+  /** Light lift of the crown lobes. */
+  lift: number;
+}
+
+/** The sway factor (tiles) of a point at height `y` of a plant `height` tall whose top swings `amp`. */
+export const swayK = (amp: number, y: number, height: number): number => amp * (Math.max(0, y) / height) ** 2;
+
+/** How far the top of a plant of this form swings; a dead plant does not sway. */
+function ampOf(form: TreeForm, dead: boolean): number {
+  if (dead) return 0;
+  return form === 'conifer' ? SWAY.conifer : form === 'bush' ? SWAY.small : SWAY.leafy;
+}
+
+/** Every `step`-th point of a stroke, the last one always. */
+function thin<T>(pts: T[], step: number): T[] {
+  const out: T[] = [];
+  for (let i = 0; i < pts.length; i += step) out.push(pts[i]);
+  if ((pts.length - 1) % step !== 0) out.push(pts[pts.length - 1]);
+  return out;
 }
 
 /** The branching table, per form. Lengths and radii in design units (16 per tile at scale 100). */
@@ -147,6 +182,178 @@ export function growLeafy(spec: TreeSpec): Skeleton {
   for (const b of branches) for (const p of b.pts) top = Math.max(top, p.y);
   for (const b of lobes) top = Math.max(top, b.y + b.ry * 1.08);
   const height = Math.max(top, 0.5);
-  for (const b of lobes) b.k = SWAY.leafy * (Math.max(0, b.y) / height) ** 2;
-  return { trunk, branches, lobes, roots, height };
+  for (const b of lobes) b.k = swayK(SWAY.leafy, b.y, height);
+  return {
+    trunk, branches, lobes, roots, skirts: [], curtain: [], height, amp: ampOf(form, spec.dead), trunkSides: 10, rootSides: 5, trunkShaded: true, lift: 0,
+    falls: spec.dead ? [] : lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: b.th })),
+  };
+}
+
+type Recipe = NonNullable<ReturnType<typeof drawPlant>['recipe']>;
+
+/** The generator's roots laid on the ground (picture-down is toward the viewer), and one more to the back for the first and last. */
+function layRoots(rc: Recipe, X: (x: number) => number, minW: number): P3[][] {
+  const out: P3[][] = [];
+  rc.roots.forEach((src, ri) => {
+    const lay = (flip: boolean): P3[] => src.map((p) => {
+      const dx = X(p.x) * 0.65, dz = (p.y - rc.foot.y) * U * 1.6, w = Math.max(minW, p.w * U * 0.8);
+      return flip ? { x: dx * 0.45, y: 0, z: -Math.abs(dx) * 0.8 - dz * 0.3, w } : { x: dx, y: 0, z: dz, w };
+    });
+    out.push(thin(lay(false), 3));
+    if (ri === 0 || ri === rc.roots.length - 1) out.push(thin(lay(true), 3));
+  });
+  return out;
+}
+
+/** How much further a willow strand swings at its tip than at its root, tiles. */
+const CURTAIN_SWING = 0.2; // first guess
+/** A willow leaf's own shift: warmer and lighter than the other trees', a yellow-green. */
+const WILLOW_SHIFT: [number, number] = [0.09, 0.08];
+
+/**
+ * A weeping willow: the generator's old, thick, bent trunk; a few heavy limbs that go up and out and fork; and the crown is
+ * the curtains themselves: dense strands (chains of small leaf tufts) that start all along the limbs, from the very top,
+ * arch outward a little and hang down in overlapping tiers. Strands at the outside reach nearly to the ground, those near the
+ * trunk end higher, so the trunk shows under the middle; one sector of the curtain is parted toward the camera. A strand swings
+ * more the further down it hangs and carries a leaf amount like a leafy tree's lobes. There are no leaf lobes.
+ * All numbers are first guesses (the look was judged as it is).
+ */
+export function growWillow(spec: TreeSpec): Skeleton {
+  const rc = drawTree({ seed: spec.seed, scale: spec.scalePct / 100, shape: 'wide', old: true }).recipe;
+  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const r = rng((spec.seed * 15485863 + 5) >>> 0), du = rc.s * U;
+  const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
+  const bz = (r() - 0.5) * 6 * du, nT = rc.trunk.length;
+  const full: P3[] = rc.trunk.map((p, i) => ({ x: X(p.x), y: Y(p.y), z: bz * Math.sin((Math.PI * i) / Math.max(1, nT - 1)), w: Math.max(minW, p.w * U) }));
+  const fork = full[nT - 1];
+  const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const branches: Skeleton['branches'] = [], hangs: { x: number; y: number; z: number; th: number }[] = [], ends: FallLobe[] = [];
+  const limb = (start: P3, dir0: number[], len: number, w0: number, depth: number): void => {
+    let d = dir0, p = start, minTh = 1;
+    const n = 8, pts: P3[] = [{ ...start, w: w0 }];
+    for (let i = 1; i <= n; i++) {
+      d = norm([d[0] + (r() - 0.5) * 0.22, d[1] - (i <= 3 ? 0.02 : 0.1), d[2] + (r() - 0.5) * 0.22]); // gnarled; goes up and out, only its end levels off
+      p = { x: p.x + d[0] * (len / n), y: p.y + d[1] * (len / n), z: p.z + d[2] * (len / n), w: Math.max(minW, w0 * (1 - 0.6 * (i / n))) };
+      pts.push(p);
+      if (i >= (depth === 0 ? 3 : 2)) for (let k = 0; k < 9; k++) {
+        const h = { x: p.x + (r() - 0.5) * 11 * du, y: p.y + (1 + r() * 3) * du, z: p.z + (r() - 0.5) * 11 * du, th: 0.1 + r() * 0.9 };
+        hangs.push(h);
+        minTh = Math.min(minTh, h.th);
+      }
+    }
+    branches.push({ pts, sides: w0 > 1.5 * U ? 6 : 4 });
+    ends.push({ x: p.x, y: p.y, z: p.z, r: 9 * du, th: minTh });
+    if (depth === 0) for (const sg of [-1, 1]) {
+      const from = pts[sg < 0 ? 3 : 4], a = sg * (0.55 + r() * 0.4), c = Math.cos(a), sn = Math.sin(a);
+      limb(from, norm([dir0[0] * c - dir0[2] * sn, 0.5, dir0[0] * sn + dir0[2] * c]), len * 0.66, from.w * 0.75, 1);
+    }
+  };
+  const limbs = 4 + Math.floor(r() * 2), az0 = r() * Math.PI * 2;
+  for (let i = 0; i < limbs; i++) {
+    const az = az0 + (i / limbs) * Math.PI * 2 + (r() - 0.5) * 0.5, tilt = 0.6 + r() * 0.3;
+    limb(fork, [Math.cos(az) * Math.sin(tilt), Math.cos(tilt), Math.sin(az) * Math.sin(tilt)], (30 + (r() - 0.5) * 6) * du, fork.w * 0.62, 0);
+  }
+  limb(fork, norm([(r() - 0.5) * 0.4, 1, (r() - 0.5) * 0.4]), 15 * du, fork.w * 0.5, 1); // a short leader: the top of the mop
+
+  let top = fork.y, R = 0;
+  for (const b of branches) for (const p of b.pts) top = Math.max(top, p.y);
+  for (const h of hangs) R = Math.max(R, Math.hypot(h.x - fork.x, h.z - fork.z));
+  const height = Math.max(top + 2 * du, 0.5), amp = ampOf('willow', spec.dead), swing = spec.dead ? 0 : CURTAIN_SWING;
+
+  // the curtains
+  const curtain: TuftPatch[] = [];
+  const gapAz = Math.PI / 2 + (r() - 0.5) * 1.2, gapW = 0.4, step = 1.7 * U; // the parted sector faces roughly south, toward the game's camera
+  for (const h of hangs) {
+    let ox = h.x - fork.x, oz = h.z - fork.z;
+    const ol = Math.hypot(ox, oz);
+    if (ol < 1.5 * du) { const a = r() * Math.PI * 2; ox = Math.cos(a); oz = Math.sin(a); } else { ox /= ol; oz /= ol; }
+    const q = Math.min(1, ol / R), reach = (4 + r() * 6 + 4 * q) * du, arc = (8 + r() * 5) * du;
+    const s = Math.min(1, Math.max(0, (q - 0.25) / 0.5)), ss = s * s * (3 - 2 * s);
+    let end = fork.y * 0.85 * (1 - ss) + 3 * du * ss + r() * 7 * du; // outside nearly to the ground, near the trunk only to the fork
+    if (r() < 0.2) end += (6 + r() * 10) * du; // a ragged rim
+    let da = Math.abs(Math.atan2(oz, ox) - gapAz);
+    if (da > Math.PI) da = 2 * Math.PI - da;
+    if (da < gapW && q > 0.35) end = Math.max(end, fork.y * (0.75 + r() * 0.4));
+    const n = Math.floor((h.y - end) / step);
+    if (n < 3) continue;
+    const k0 = swayK(amp, h.y, height), wob = r() * 6, tone = (r() - 0.5) * 0.5; // strands differ in tone, so the curtain reads as streaks
+    for (let j = 0; j < n; j++) {
+      const t = j / n, uu = Math.min(1, (j * step) / arc), out = reach * (1 - (1 - uu) * (1 - uu));
+      const px = h.x + ox * out + Math.sin(j * 0.9 + wob) * 0.6 * U, py = h.y - j * step, pz = h.z + oz * out + Math.cos(j * 0.7 + wob) * 0.6 * U;
+      const size = (1.15 + r() * 0.5 - 0.3 * t) * U, seed = Math.floor(r() * 997);
+      curtain.push({
+        p: [px, py, pz],
+        n: [ox * (0.3 + 0.6 * t), 0.9 - 0.6 * t, oz * (0.3 + 0.6 * t)], // the top of a strand faces the sky, its length faces outward
+        grad: [ox * 0.5 * q, 0.2, oz * 0.5 * q, 0.5 + tone * 2.8 - 0.5 * t - 0.5 * (1 - q)], // brighter at the top and outside, darker inside and below
+        sway: [k0 + swing * t * t, py], // a strand swings more the further down it hangs
+        ramp: RAMP.leaf, shift: WILLOW_SHIFT,
+        noShadow: t > 0.25 && j % 2 === 1, // a curtain lets light through: below its top, every other tuft casts no shadow
+        th: h.th, size, seed,
+      });
+    }
+  }
+  return {
+    trunk: thin(full, Math.max(1, Math.floor(nT / 12))), branches, lobes: [], roots: layRoots(rc, X, minW), skirts: [], curtain, falls: spec.dead ? [] : ends,
+    height, amp: amp + swing, trunkSides: 10, rootSides: 6, trunkShaded: true, lift: 0,
+  };
+}
+
+/** A conifer or a bush from the 2D recipe: its trunk and twigs bent a little in depth, its lobes spread around the crown, its skirts as cones. */
+export function growPlant(spec: TreeSpec): Skeleton {
+  const form = spec.form;
+  if (form !== 'conifer' && form !== 'bush') throw new Error(`trees: ${form} is not a conifer or a bush`);
+  const bush = form === 'bush', rc = drawPlant(form, spec.seed, spec.scalePct).recipe;
+  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const r = rng((spec.seed * 7919 + 13) >>> 0), du = rc.s * U, amp = ampOf(form, spec.dead);
+  const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
+  const picLobes = rc.lobes ?? [], picSkirts = rc.skirts ?? [], picLimbs = rc.limbs ?? [];
+  let top = 0;
+  for (const b of picLobes) top = Math.max(top, Y(b.y - b.ry));
+  for (const s of picSkirts) top = Math.max(top, Y(s.yTop));
+  for (const l of picLimbs) for (const p of l) top = Math.max(top, Y(p.y));
+  for (const p of rc.trunk) top = Math.max(top, Y(p.y));
+
+  // ---- trunk: the picture's path, bent a little in depth as well
+  const bz = (r() - 0.5) * 4 * du, nT = rc.trunk.length;
+  const trunk: P3[] = rc.trunk.map((p, i) => ({ x: X(p.x), y: Y(p.y), z: bz * Math.sin((Math.PI * i) / Math.max(1, nT - 1)), w: Math.max(minW, p.w * U) }));
+  const fork = trunk[nT - 1];
+
+  // ---- twigs: the picture's, spread in depth from the fork
+  const branches: Skeleton['branches'] = picLimbs.map((src) => {
+    const zEnd = (r() - 0.5) * 6 * du;
+    const out: P3[] = src.map((p, i) => { const t = i / Math.max(1, src.length - 1); return { x: X(p.x), y: Y(p.y), z: fork.z + zEnd * t * t, w: Math.max(minW, p.w * U) }; });
+    return { pts: thin(out, Math.max(1, Math.floor(out.length / 6))), sides: 6 };
+  });
+
+  // ---- crown lobes: the picture's, placed in depth, plus one in front or behind for every side lobe so the crown is round from above
+  const lobes: Skeleton['lobes'] = [];
+  if (picLobes.length) {
+    let x0 = Infinity, x1 = -Infinity;
+    for (const b of picLobes) { x0 = Math.min(x0, X(b.x) - b.rx * U); x1 = Math.max(x1, X(b.x) + b.rx * U); }
+    const ccx = (x0 + x1) / 2;
+    for (const b of picLobes) {
+      const x = X(b.x), y = Y(b.y), rx = b.rx * U, ry = b.ry * U, dx = x - ccx;
+      if (Math.abs(dx) < 0.45 * rx) { lobes.push({ x, y, z: (r() - 0.5) * 0.3 * rx, rx, ry, rz: rx, k: 0, th: 0 }); continue; }
+      lobes.push({ x, y, z: (r() - 0.5) * 0.8 * rx, rx, ry, rz: rx, k: 0, th: 0 });
+      const ez = (dx < 0 ? 1 : -1) * Math.abs(dx) * 0.6;
+      lobes.push({ x: ccx + (r() - 0.5) * 0.5 * rx, y: y + (r() - 0.5) * 0.3 * ry + Math.max(0, ez) * 0.45, z: ez, rx, ry, rz: rx, k: 0, th: 0 });
+    }
+  }
+  for (const b of lobes) top = Math.max(top, b.y + b.ry * 1.08);
+  const height = Math.max(top, 0.5);
+  for (const b of lobes) b.k = swayK(amp, b.y, height);
+
+  // ---- conifer skirts: cones with a zigzag hem
+  const skirts: SkirtOpts[] = picSkirts.map((s, si) => {
+    const t = picSkirts.length > 2 ? Math.min(1, si / (picSkirts.length - 2)) : 1, anchor = Math.max(0, Y(s.yTop) - s.h * U);
+    return {
+      radius: s.W * U, top: Y(s.yTop), height: s.h * U, jag: 3.2 * du, droop: 2.6 * du, k: swayK(amp, anchor, height), anchor,
+      dark: 0.05 - 0.3 * (1 - t), teeth: Math.max(5, Math.min(18, Math.round((2 * Math.PI * s.W) / 5.5))),
+    };
+  });
+  return {
+    trunk: thin(trunk, Math.max(1, Math.floor(nT / 12))), branches, lobes, roots: layRoots(rc, X, minW), skirts, curtain: [], height, amp,
+    trunkSides: bush ? 5 : 10, rootSides: 6, trunkShaded: !bush, lift: bush ? 0.3 : 0,
+    falls: lobes.map((b) => ({ x: b.x, y: b.y, z: b.z, r: b.rx, th: 0 })),
+  };
 }

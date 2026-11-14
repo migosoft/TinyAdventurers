@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { growLeafy } from './grow';
+import { growLeafy, growPlant, growWillow } from './grow';
 import type { TreeForm, TreeSpec } from './spec';
 
 const spec = (form: TreeForm, seed: number, scalePct = 100): TreeSpec => ({ form, x: 0, z: 0, seed, scalePct, mirrored: false, leaf: 1, dead: false });
@@ -55,5 +55,26 @@ describe('growLeafy', () => {
 
   it('grows taller with the scale', () => {
     for (const f of FORMS) expect(growLeafy(spec(f, 3, 120)).height).toBeGreaterThan(growLeafy(spec(f, 3, 50)).height);
+  });
+});
+
+describe('growWillow and growPlant', () => {
+  it('are deterministic', () => {
+    expect(growWillow(spec('willow', 5))).toEqual(growWillow(spec('willow', 5)));
+    for (const f of ['conifer', 'bush'] as const) expect(growPlant(spec(f, 5))).toEqual(growPlant(spec(f, 5)));
+  });
+
+  it('refuse the wrong form', () => {
+    expect(() => growPlant(spec('willow', 1))).toThrow(/not a conifer or a bush/);
+    expect(() => growLeafy(spec('bush', 1))).toThrow(/not a leafy tree/);
+  });
+
+  it('give a dead plant no sway at all', () => {
+    for (const f of ['conifer', 'bush'] as const) {
+      const sk = growPlant({ ...spec(f, 3), dead: true });
+      expect(sk.amp).toBe(0);
+      for (const b of sk.lobes) expect(b.k).toBe(0);
+      for (const k of sk.skirts) expect(k.k).toBe(0);
+    }
   });
 });

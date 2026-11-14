@@ -19,10 +19,17 @@ export interface PlantShape {
 /** A stroke point of the recipe: canvas px (before the crop), y down, and half-width. */
 export interface RecipePt { x: number; y: number; w: number }
 /**
- * What a leafy tree was drawn from, for the 3D builder: every length in canvas px before the crop (y down), `foot` in the same px.
- * `s` is the px per design unit (the scale). Only the leafy trees carry one.
+ * What a leafy tree, a conifer or a bush was drawn from, for the 3D builder: every length in canvas px before the crop (y down),
+ * `foot` in the same px. `s` is the px per design unit (the scale). The bare tree carries none.
+ * Only the plants that have them carry `limbs` (a bush's twigs), `lobes` (a bush's crown ellipses) and `skirts` (a conifer's cones:
+ * apex row `yTop`, hem `h` below it, half-width `W`).
  */
-export interface Recipe { foot: { x: number; y: number }; trunk: RecipePt[]; roots: RecipePt[][]; s: number }
+export interface Recipe {
+  foot: { x: number; y: number }; trunk: RecipePt[]; roots: RecipePt[][]; s: number;
+  limbs?: RecipePt[][];
+  lobes?: { x: number; y: number; rx: number; ry: number }[];
+  skirts?: { yTop: number; h: number; W: number }[];
+}
 export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape; recipe?: Recipe }
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],

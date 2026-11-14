@@ -1,6 +1,6 @@
 // Test helper: how much of the crown's picture the leaves cover, seen from the game's camera.
 import type { BuiltTree } from './build';
-import { SHAPE } from './mesh';
+import { CORE_VERTS, SHAPE, TUFT_VERTS } from './mesh';
 
 const PITCH = (55 * Math.PI) / 180;
 const GRID = 96;
@@ -19,13 +19,13 @@ function patches(t: BuiltTree): Patch[] {
     if (shape === SHAPE.tuft) {
       const [x, y] = screen(...at(i));
       out.push({ x, y, r: m.tuft[i * 4 + 2], th: m.misc[i * 4 + 3], round: false });
-      i += 4;
+      i += TUFT_VERTS;
     } else if (shape === SHAPE.core) {
       let cx = 0, cy = 0;
       const pts: [number, number][] = [];
-      for (let k = 0; k < 42; k++) { const p = screen(...at(i + k)); pts.push(p); cx += p[0] / 42; cy += p[1] / 42; }
+      for (let k = 0; k < CORE_VERTS; k++) { const p = screen(...at(i + k)); pts.push(p); cx += p[0] / CORE_VERTS; cy += p[1] / CORE_VERTS; }
       out.push({ x: cx, y: cy, r: Math.max(...pts.map((p) => Math.hypot(p[0] - cx, p[1] - cy))), th: m.misc[i * 4 + 3], round: true });
-      i += 42;
+      i += CORE_VERTS;
     } else i++;
   }
   return out;

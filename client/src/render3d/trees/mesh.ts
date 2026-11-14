@@ -71,6 +71,9 @@ function ico(subs: number): { v: number[][]; f: number[][] } {
   return { v, f };
 }
 const ICO_CORE = ico(1);
+/** Vertices of one tuft patch and of one core ball. */
+export const TUFT_VERTS = 4;
+export const CORE_VERTS = ICO_CORE.v.length;
 
 /** A tube of `sides` along `pts`; `kOf` gives the sway factor at a height, `shade` the bark's standing shade (0..1). */
 export function tube(m: TreeMesh, pts: P3[], sides: number, ramp: number, kOf: (y: number) => number, shade: (i: number) => number, trunk: boolean): void {
@@ -102,13 +105,13 @@ export function tube(m: TreeMesh, pts: P3[], sides: number, ramp: number, kOf: (
 }
 
 /** The solid ball under a lobe's leaf tufts: an icosphere (42 vertices, 80 triangles) of 0.74 of the lobe. */
-export function coreBall(m: TreeMesh, b: Lobe3, ramp: number, grad: GradFn, th: number): void {
+export function coreBall(m: TreeMesh, b: Lobe3, ramp: number, grad: GradFn, th: number, lift = 0): void {
   const base = m.verts;
   for (const d of ICO_CORE.v) {
     push(m, {
       p: [b.x + d[0] * b.rx * 0.74, b.y + d[1] * b.ry * 0.74, b.z + d[2] * b.rz * 0.74], n: [d[0], d[1], d[2]],
       grad: grad(b.x + d[0] * b.rx * 0.74, b.y + d[1] * b.ry * 0.74, b.z + d[2] * b.rz * 0.74),
-      sway: [b.k, b.y], part: [ramp, SHAPE.core, 0, 0], misc: [0, 0, 0, th],
+      sway: [b.k, b.y], part: [ramp, SHAPE.core, 0, 0], misc: [lift, 0, 0, th],
     });
   }
   for (const [a, c, e] of ICO_CORE.f) m.index.push(base + a, base + c, base + e);
@@ -117,22 +120,39 @@ export function coreBall(m: TreeMesh, b: Lobe3, ramp: number, grad: GradFn, th: 
 /**
  * Leaf tufts on a lobe's surface: camera-facing patches spread evenly (a Fibonacci sphere, jittered), 14..64 by size.
  * Each patch carries the ball's direction at its centre as its normal, so the lobe still shades as a round form.
+ * `lift` is the light lift of the lobe's leaves.
  */
-export function tufts(m: TreeMesh, b: Lobe3, grad: GradFn, th: number, rnd: () => number, ramp: number, shift: [number, number] = [0, 0]): void {
+export function tufts(m: TreeMesh, b: Lobe3, grad: GradFn, th: number, rnd: () => number, ramp: number, shift: [number, number] = [0, 0], lift = 0): void {
   const rpx = b.rx / U, n = Math.max(14, Math.min(64, Math.round((rpx * rpx) / 3.2)));
   for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n, rad = Math.sqrt(1 - y * y), a = i * 2.39996 + (rnd() - 0.5) * 0.5;
     const d = [Math.cos(a) * rad, y, Math.sin(a) * rad], out = 0.92 + rnd() * 0.16, size = (3.2 + rnd() * 2.2) * U, seed = Math.floor(rnd() * 997);
-    const px = b.x + d[0] * b.rx * out, py = b.y + d[1] * b.ry * out, pz = b.z + d[2] * b.rz * out, base = m.verts;
-    for (const [ox, oy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      push(m, {
-        p: [px, py, pz], n: [d[0], d[1], d[2]], grad: grad(px, py, pz),
-        sway: [b.k, b.y], part: [ramp, SHAPE.tuft, shift[0], shift[1]], misc: [0, 0, 0, th],
-        tuft: [ox, oy, size, seed],
-      });
-    }
-    m.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    const px = b.x + d[0] * b.rx * out, py = b.y + d[1] * b.ry * out, pz = b.z + d[2] * b.rz * out;
+    tuftPatch(m, { p: [px, py, pz], n: [d[0], d[1], d[2]], grad: grad(px, py, pz), sway: [b.k, b.y], ramp, shift, lift, th, size, seed });
   }
+}
+
+/** One camera-facing leaf patch with its own normal, crown gradient, sway and shift. */
+export interface TuftPatch {
+  p: [number, number, number]; n: [number, number, number]; grad: [number, number, number, number]; sway: [number, number];
+  ramp: number; th: number; size: number; seed: number;
+  /** Own warm and bright shift. */
+  shift?: [number, number];
+  /** Light lift. */
+  lift?: number;
+  /** The patch lets light through: it casts no shadow. */
+  noShadow?: boolean;
+}
+export function tuftPatch(m: TreeMesh, o: TuftPatch): void {
+  const base = m.verts, shift = o.shift ?? [0, 0];
+  for (const [ox, oy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    push(m, {
+      p: o.p, n: o.n, grad: o.grad, sway: o.sway,
+      part: [o.ramp, SHAPE.tuft, shift[0], shift[1]], misc: [o.lift ?? 0, o.noShadow ? 1 : 0, 0, o.th],
+      tuft: [ox, oy, o.size, o.seed],
+    });
+  }
+  m.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
 
 /** A conifer skirt: a cone with a zigzag hem. Sizes in tiles; `radius` is the hem radius, `top` the apex height. */

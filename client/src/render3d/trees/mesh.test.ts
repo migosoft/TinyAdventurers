@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RAMP, SHAPE, TreeMesh, appendAt, coreBall, mirrorX, skirt, tube, tufts, type Lobe3, type P3 } from './mesh';
+import { CORE_VERTS, RAMP, SHAPE, TUFT_VERTS, TreeMesh, appendAt, coreBall, mirrorX, skirt, tube, tuftPatch, tufts, type Lobe3, type P3 } from './mesh';
 
 const grad = () => [0.1, 0.2, 0.3, 0.4] as [number, number, number, number];
 const lens = (m: TreeMesh) => {
@@ -87,5 +87,54 @@ describe('appendAt', () => {
     }
     expect(out.index.slice(i0)).toEqual(m.index.map((i) => i + v0));
     lens(out);
+  });
+});
+
+describe('vertex counts', () => {
+  it('match what the primitives add', () => {
+    const a = new TreeMesh();
+    coreBall(a, lobe, RAMP.leaf, grad, 0);
+    expect(a.verts).toBe(CORE_VERTS);
+    const b = new TreeMesh();
+    tuftPatch(b, { p: [0, 1, 0], n: [0, 1, 0], grad: [0, 0, 0, 0], sway: [0, 1], ramp: RAMP.leaf, th: 0, size: 0.1, seed: 3 });
+    expect(b.verts).toBe(TUFT_VERTS);
+  });
+});
+
+describe('tuftPatch', () => {
+  it('writes one camera-facing patch with its own streams: normal, gradient, shift, no-shadow mark, threshold', () => {
+    const m = new TreeMesh();
+    tuftPatch(m, { p: [1, 2, 3], n: [0.1, 0.9, 0], grad: [0.2, 0.3, 0.4, 0.5], sway: [0.04, 1.5], ramp: RAMP.leaf, shift: [0.09, 0.08], noShadow: true, th: 0.6, size: 0.07, seed: 11 });
+    expect([m.verts, m.tris]).toEqual([4, 2]);
+    lens(m);
+    for (let i = 0; i < 4; i++) {
+      expect(m.position.slice(i * 3, i * 3 + 3)).toEqual([1, 2, 3]);
+      expect(m.normal.slice(i * 3, i * 3 + 3)).toEqual([0.1, 0.9, 0]);
+      expect(m.grad.slice(i * 4, i * 4 + 4)).toEqual([0.2, 0.3, 0.4, 0.5]);
+      expect(m.sway.slice(i * 2, i * 2 + 2)).toEqual([0.04, 1.5]);
+      expect(m.part.slice(i * 4, i * 4 + 4)).toEqual([RAMP.leaf, SHAPE.tuft, 0.09, 0.08]);
+      expect(m.misc.slice(i * 4, i * 4 + 4)).toEqual([0, 1, 0, 0.6]);
+      expect(m.tuft.slice(i * 4 + 2, i * 4 + 4)).toEqual([0.07, 11]);
+    }
+    expect(m.tuft.slice(0, 2)).toEqual([-1, -1]);
+    expect(m.tuft.slice(8, 10)).toEqual([1, 1]);
+  });
+
+  it('casts a shadow unless told otherwise', () => {
+    const m = new TreeMesh();
+    tuftPatch(m, { p: [0, 0, 0], n: [0, 1, 0], grad: [0, 0, 0, 0], sway: [0, 0], ramp: RAMP.leaf, th: 0, size: 0.1, seed: 0 });
+    expect(m.misc[1]).toBe(0);
+    expect(m.misc[0]).toBe(0);
+  });
+});
+
+describe('light lift', () => {
+  it('is 0 by default and set on core balls and tufts when given', () => {
+    const a = new TreeMesh(), b = new TreeMesh();
+    coreBall(a, lobe, RAMP.leaf, grad, 0); tufts(a, lobe, grad, 0, seq(), RAMP.leaf);
+    for (let i = 0; i < a.verts; i++) expect(a.misc[i * 4]).toBe(0);
+    coreBall(b, lobe, RAMP.leaf, grad, 0, 0.3); tufts(b, lobe, grad, 0, seq(), RAMP.leaf, [0, 0], 0.3);
+    for (let i = 0; i < b.verts; i++) expect(b.misc[i * 4]).toBe(0.3);
+    expect(b.position).toEqual(a.position);
   });
 });
