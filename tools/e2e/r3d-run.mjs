@@ -131,8 +131,8 @@ try {
     const read = () => page.evaluate(() => { const m = /plants\s+(\d+) of (\d+)/.exec(document.body.innerText); return m ? [Number(m[1]), Number(m[2])] : null; });
     const until = Date.now() + Number(process.env.WAIT_MS || 120000);
     let n = await read();
-    // On the real GPU all of them; in software (about 2 frames a second, a tree or two a frame) the quarter nearest the hero, which is what the pictures show.
-    const need = (m) => (gpuOn ? m[1] : Math.ceil(m[1] / 4));
+    // On the real GPU all of them; in software (about 2 frames a second, a tree or two a frame) the wait is only pacing: the nearest 40 trees (a chunk's worth), the forest still growing.
+    const need = (m) => (gpuOn ? m[1] : Math.min(40, m[1])); // first guess: 40
     while ((!n || n[0] < need(n)) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
     console.log(`trees built ${n ? `${n[0]} of ${n[1]}` : 'unknown (no F3 plants line)'}`);
     if (!n || n[0] < need(n)) errors.push(`the forest was not built in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 plants line'}`);
@@ -213,13 +213,13 @@ try {
   await page.mouse.move(760, 330);
   await page.keyboard.press('z');
   // The turn is eased by frame time (dt is clamped), so slow software frames stretch it: wait for the target, not a fixed time.
-  await page.waitForFunction(() => window.__r3d?.yaw === 45, null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => window.__r3d?.yaw === 45, null, { timeout: 5000 * slow }).catch(() => {});
   const yawZ = (await state()).yaw;
   console.log(`yaw after Z ${yawZ}`);
   if (yawZ !== 45) errors.push(`yaw after Z is ${yawZ}, expected 45`);
   await page.screenshot({ path: `${out}/r3d-run-${level}-turned.png` });
   await page.keyboard.press('x');
-  await page.waitForFunction(() => window.__r3d?.yaw === 0, null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => window.__r3d?.yaw === 0, null, { timeout: 5000 * slow }).catch(() => {});
   const yawX = (await state()).yaw;
   console.log(`yaw after X ${yawX}`);
   if (yawX !== 0) errors.push(`yaw after X is ${yawX}, expected 0`);

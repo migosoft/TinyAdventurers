@@ -8,7 +8,7 @@ import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
 import { makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
 import { buildTree } from './build';
-import { newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
+import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
 import { leafGeometry } from './treeLayer';
 
 /** The falling leaves of one round tree, with the plant's own values as the forest fills them. */
@@ -140,6 +140,15 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       // The effective leaf amount is the tree shader's: the same override uniform decides.
       expect(vert).toContain('treeLeafOverride');
       for (const m of [mats.depth, mats.colour]) expect(vertex(B, m, { compare: true, geometry: build(true).geometry })).toContain('treeLeafOverride');
+    });
+
+    it('the falling leaf vertex shader carries the constants of leafAt (leaves.ts), so one side cannot change alone', () => {
+      const { mats } = build(true);
+      const vert = vertex(B, mats.leaf, { compare: true, geometry: leafGeometry(leafSample()) });
+      const num = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
+      for (const [name, v] of Object.entries({ LEAF_LIFE, GROUND, LEAF_FALL, LEAF_FADE, LEAF_DRIFT, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, 'LEAF_FALL + LEAF_LIE': LEAF_FALL + LEAF_LIE })) {
+        expect(vert, name).toContain(num(v));
+      }
     });
 
     it('the falling leaf reads the palette once and the sight mask once, at the top level', () => {

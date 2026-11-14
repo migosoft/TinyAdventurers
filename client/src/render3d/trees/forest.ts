@@ -132,7 +132,7 @@ export class Forest {
     // The falling leaves, with the plant's own leaf amount and colour (a willow's leaves carry its own warmer, lighter shift).
     const leaves = slot.chunk.leaves, from = leaves.n;
     pushLeaves(leaves, b.tree, sp.x, sp.z, leafSeed(sp.seed, sp.x, sp.z));
-    const look: [number, number, number, number] = sp.form === 'willow' ? [v[0] + WILLOW_SHIFT[1], v[1] + WILLOW_SHIFT[0], v[2], v[3]] : v;
+    const look: [number, number, number, number] = sp.form === 'willow' ? [v[0] + WILLOW_SHIFT.bright, v[1] + WILLOW_SHIFT.warm, v[2], v[3]] : v;
     for (let k = from; k < leaves.n; k++) { leaves.leaf.push(sp.leaf); leaves.look.push(...look); }
     slot.used += n;
     slot.chunk.plant = slot.plant.subarray(0, slot.used * 4);

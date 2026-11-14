@@ -657,7 +657,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
       if (f.plants) syncPlants(f.plants);
       else if (plantMeshes.size > 0) clearPlants();
-      if (f.trees) trees.sync(f.trees);
+      if (f.trees) { trees.sync(f.trees); void trees.warm(renderer, camera); }
       else if (trees.meshCount > 0) trees.clear();
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);

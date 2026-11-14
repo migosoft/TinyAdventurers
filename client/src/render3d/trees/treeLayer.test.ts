@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DataTexture, Mesh, Scene, Texture } from 'three/webgpu';
+import { Camera, DataTexture, Mesh, Scene, Texture } from 'three/webgpu';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { seeUniforms } from '../materials';
@@ -297,6 +297,28 @@ describe('TreeLayer', () => {
       expect(leafMeshes(scene)[0]).toBe(first); // inside the window: not rebuilt
       now += TREE_UPLOAD_MS; l.sync(frame(f));
       expect(leafMeshes(scene)[0].geometry.getAttribute('position').count).toBeGreaterThan(n1);
+    });
+
+    it('warms the leaf program once: a gone leaf is in the scene during the compile and out after it', async () => {
+      const { l, scene } = layer(true);
+      const seen: number[] = [];
+      const renderer = { compileAsync: async (s: Scene) => { seen.push(s.children.length); } };
+      await l.warm(renderer, new Camera()); // no materials yet: nothing
+      expect(seen).toEqual([]);
+      l.sync(frame(built(1)));
+      const n = scene.children.length;
+      await l.warm(renderer, new Camera());
+      await l.warm(renderer, new Camera());
+      expect(seen).toEqual([n + 1]);
+      expect(scene.children).toHaveLength(n);
+    });
+
+    it('a failing compile leaves the scene as it was', async () => {
+      const { l, scene } = layer(true);
+      l.sync(frame(built(1)));
+      const n = scene.children.length;
+      await l.warm({ compileAsync: async () => { throw new Error('no'); } }, new Camera());
+      expect(scene.children).toHaveLength(n);
     });
 
     it('hands the leaf rate to the shared uniform', () => {

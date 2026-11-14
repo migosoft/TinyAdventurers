@@ -1,7 +1,7 @@
 // The trees in the view's scenes (#329): per changed forest chunk one geometry with three meshes (the depth pass and the colour pass in the
 // scene, the caster in the sun's scene when there is a sun), culled by the chunk's bounds. Holds one palette texture and one material set.
 // A `TreeLayer` belongs to one view: a rebuilt view makes a new one and re-reads every chunk of the same `Forest`.
-import { Box3, BufferAttribute, BufferGeometry, DataTexture, Mesh, NearestFilter, NoColorSpace, RGBAFormat, Scene, Sphere, UnsignedByteType, Vector3 } from 'three/webgpu';
+import { Box3, BufferAttribute, type Camera, BufferGeometry, DataTexture, Mesh, NearestFilter, NoColorSpace, RGBAFormat, Scene, Sphere, UnsignedByteType, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { ChunkSync } from './chunks';
 import type { TreeChunk, TreeFrame } from './forest';
@@ -82,6 +82,7 @@ export class TreeLayer {
   private mats: TreeMaterials | null = null;
   private palette: DataTexture | null = null;
   private paletteId = -1;
+  private warmed = false;
   private readonly meshes = new Map<number, { mesh: Mesh; scene: Scene }[]>();
   private sync_ = new ChunkSync();
   private versionsOf: ReadonlyMap<number, number> | null = null;
@@ -151,6 +152,27 @@ export class TreeLayer {
         list.push({ mesh, scene: this.scene });
       }
       this.meshes.set(k, list);
+    }
+  }
+
+  /**
+   * Compiles the falling leaves' program once, before the first trees come, so it does not add to the frame they appear in: a leaf that is gone
+   * is put in the scene for the compile and taken out again. The renderer keeps the program. Needs the materials (made by the first `sync`).
+   */
+  async warm(renderer: { compileAsync(scene: Scene, camera: Camera): Promise<unknown> }, camera: Camera): Promise<void> {
+    if (!this.mats || this.warmed) return;
+    this.warmed = true;
+    const one: LeafBuf = { start: [0, 0, 0], params: [100, 0, 2, 0], sway: [0], foot: [0, 0], leaf: [0], look: [1, 0, 1, 0], n: 1 }; // threshold 2: gone
+    const mesh = new Mesh(leafGeometry(one), this.mats.leaf);
+    mesh.frustumCulled = false;
+    this.scene.add(mesh);
+    try {
+      await renderer.compileAsync(this.scene, camera);
+    } catch {
+      // The program is then compiled by the first draw, as without the warm-up.
+    } finally {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
     }
   }
 

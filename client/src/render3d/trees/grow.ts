@@ -208,7 +208,8 @@ function layRoots(rc: Recipe, X: (x: number) => number, minW: number): P3[][] {
 /** How much further a willow strand swings at its tip than at its root, tiles. */
 const CURTAIN_SWING = 0.2; // first guess
 /** A willow leaf's own shift: warmer and lighter than the other trees', a yellow-green. */
-export const WILLOW_SHIFT: [number, number] = [0.09, 0.08];
+/** The willow leaves' own shift on top of the plant's colour: warmer by `warm`, lighter by `bright`. */
+export const WILLOW_SHIFT = { warm: 0.09, bright: 0.08 };
 
 /**
  * A weeping willow: the generator's old, thick, bent trunk; a few heavy limbs that go up and out and fork; and the crown is
@@ -287,7 +288,7 @@ export function growWillow(spec: TreeSpec): Skeleton {
         n: [ox * (0.3 + 0.6 * t), 0.9 - 0.6 * t, oz * (0.3 + 0.6 * t)], // the top of a strand faces the sky, its length faces outward
         grad: [ox * 0.5 * q, 0.2, oz * 0.5 * q, 0.5 + tone * 2.8 - 0.5 * t - 0.5 * (1 - q)], // brighter at the top and outside, darker inside and below
         sway: [k0 + swing * t * t, py], // a strand swings more the further down it hangs
-        ramp: RAMP.leaf, shift: WILLOW_SHIFT,
+        ramp: RAMP.leaf, shift: [WILLOW_SHIFT.warm, WILLOW_SHIFT.bright],
         noShadow: t > 0.25 && j % 2 === 1, // a curtain lets light through: below its top, every other tuft casts no shadow
         th: h.th, size, seed,
       });
