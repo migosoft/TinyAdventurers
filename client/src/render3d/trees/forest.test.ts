@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { PITCH_MAX } from '../params';
 import { CHUNK } from '../worldMesh';
 import { buildTree, type BuiltTree } from './build';
+import { SWAY } from '../wind';
 import { ChunkSync } from './chunks';
+import { FLUTTER_PX } from './treeNodes';
 import { Forest } from './forest';
 import type { TreeForm, TreeSpec } from './spec';
 import { plantVariation } from './variation';
@@ -37,8 +39,8 @@ describe('Forest.step', () => {
     expect(f.step({ x: 0, z: 0 }, 0)).toBe(1);
     expect(f.built).toBe(1);
     const n = f.step({ x: 0, z: 0 }, 25);
-    expect(n).toBeGreaterThanOrEqual(1);
-    expect(n).toBeLessThan(7);
+    // Each build costs 10 ms and the slowest seen is 10: a second one fits (10 + 10 <= 25), a third does not (20 + 10 > 25).
+    expect(n).toBe(2);
     expect(f.built).toBe(1 + n);
     while (f.built < 8) f.step({ x: 0, z: 0 }, 25);
     expect(f.step({ x: 0, z: 0 }, 25)).toBe(0);
@@ -105,16 +107,42 @@ describe('Forest.frame', () => {
       const key = Math.min(1, Math.floor(s.z / CHUNK)) * nx + Math.min(nx - 1, Math.floor(s.x / CHUNK));
       const ch = fr.chunks.get(key)!;
       const b = buildTree(s);
-      const sx = b.mesh.position.filter((_, i) => i % 3 === 0).map((v) => v + s.x);
-      const sz = b.mesh.position.filter((_, i) => i % 3 === 2).map((v) => v + s.z);
-      expect(ch.bounds.min.x).toBeLessThanOrEqual(Math.min(...sx) - 0.3 + 1e-6);
-      expect(ch.bounds.max.x).toBeGreaterThanOrEqual(Math.max(...sx) + 0.3 - 1e-6);
-      expect(ch.bounds.min.z).toBeLessThanOrEqual(Math.min(...sz) - 0.3 + 1e-6);
-      expect(ch.bounds.max.z).toBeGreaterThanOrEqual(Math.max(...sz) + 0.3 - 1e-6);
-      expect(ch.bounds.max.y).toBeGreaterThanOrEqual(b.height / COS - 1e-6);
+      // Every patch corner (centre +/- half-size on each axis) plus the sway and the flutter, and at least 0.3 tiles around every vertex.
+      const room = SWAY.leafy + (2 * FLUTTER_PX) / 16;
+      let maxHalf = 0;
+      for (let i = 0; i < b.mesh.verts; i++) {
+        const half = b.mesh.tuft[i * 4 + 2], r = Math.max(0.3, half + room), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
+        maxHalf = Math.max(maxHalf, half);
+        expect(ch.bounds.min.x).toBeLessThanOrEqual(px - r + 1e-6);
+        expect(ch.bounds.max.x).toBeGreaterThanOrEqual(px + r - 1e-6);
+        expect(ch.bounds.min.z).toBeLessThanOrEqual(pz - r + 1e-6);
+        expect(ch.bounds.max.z).toBeGreaterThanOrEqual(pz + r - 1e-6);
+        expect(ch.bounds.max.y).toBeGreaterThanOrEqual(py + half - 1e-6);
+      }
+      expect(maxHalf).toBeGreaterThan(0.1);
+      expect(ch.bounds.max.y).toBeGreaterThanOrEqual((b.height + maxHalf) / COS - 1e-6);
     }
     // the plant on the border reaches past its chunk's cell, and is still inside its own chunk's bounds
     expect(fr.chunks.get(0)!.bounds.max.x).toBeGreaterThan(CHUNK);
+  });
+  it('keeps every chunk consistent after a step without a new frame call', () => {
+    const f = make([spec(2, 2, 1), spec(3, 3, 2), spec(40, 20, 3), spec(20, 3, 4)]);
+    const fr = f.frame({ wind: true, t: 0 });
+    f.step({ x: 0, z: 0 }, 1000);
+    expect(fr.chunks.size).toBe(3);
+    for (const [k, c] of fr.chunks) {
+      expect(c.plant.length / 4).toBe(c.mesh.verts);
+      expect(c.look.length / 4).toBe(c.mesh.verts);
+      expect(fr.versions.has(k)).toBe(true);
+    }
+    for (const k of fr.versions.keys()) expect(fr.chunks.has(k)).toBe(true);
+  });
+  it('gives a living tree with leaf 0 leaf 0 and dead 0 on all its vertices', () => {
+    const f = make([spec(2, 2, 1, { leaf: 0 })]);
+    f.step({ x: 0, z: 0 }, 1000);
+    const ch = f.frame({ wind: true, t: 0 }).chunks.get(0)!;
+    expect(ch.mesh.verts).toBeGreaterThan(0);
+    for (let i = 0; i < ch.mesh.verts; i++) { expect(ch.plant[i * 4 + 2]).toBe(0); expect(ch.plant[i * 4 + 3]).toBe(0); }
   });
   it('leaves leaf 0 on a dead plant whatever its spec says', () => {
     const f = make([spec(2, 2, 1, { dead: true, leaf: 1 })]);

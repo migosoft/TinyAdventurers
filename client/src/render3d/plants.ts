@@ -1,5 +1,5 @@
 // The 3D woodland's plant geometry (#306): the upright card with its root decal, the trunk caster and the clump discs the sun's
-// shadow pass draws, and the chunking of plants. Pure: no three.js, and nothing here depends on the camera.
+// shadow pass draws. Pure: no three.js, and nothing here depends on the camera.
 import type { PlantShape } from '../game/vegetation';
 
 /** Pixels per tile in a plant's image. */

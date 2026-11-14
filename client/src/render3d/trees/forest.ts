@@ -3,7 +3,9 @@
 import { PITCH_MAX } from '../params';
 import { DrawQueue } from '../../game/woodland/plantpages';
 import { buildTree, type BuiltTree } from './build';
+import { SWAY } from '../wind';
 import { plantChunks } from './chunks';
+import { FLUTTER_PX } from './treeNodes';
 import { TreeMesh, appendAt } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
@@ -27,20 +29,29 @@ export interface TreeFrame {
 export const TREE_BUDGET_MS = 3;
 /** Tiles the camera may move before the building order is sorted again. */
 const RESORT = 4;
-/** Tiles of horizontal sway a chunk's bounds allow beyond a tree's vertices. */
-const SWAY_MARGIN = 0.3;
+/** Tiles of horizontal room a chunk's bounds allow beyond a tree's vertices at least. */
+const MIN_MARGIN = 0.3;
 const STRETCH = 1 / Math.cos((PITCH_MAX * Math.PI) / 180);
+/** The flutter moves a patch along and across the wind, each by FLUTTER_PX / 16 tiles at most. */
+const FLUTTER = (2 * FLUTTER_PX) / 16;
 
+/** A built look with its extent (tiles, plant-local) as drawn: the patches' spread, the sway and the flutter included. */
 interface Built { tree: BuiltTree; min: Vec3; max: Vec3 }
-interface Slot { chunk: TreeChunk; plant: number[]; look: number[]; dirty: boolean }
+/** A chunk's growing `plant` and `look` buffers (capacity doubled when full); the chunk exposes views of the used length. */
+interface Slot { chunk: TreeChunk; plant: Float32Array; look: Float32Array; used: number }
 
 function extent(t: BuiltTree): Built {
-  const p = t.mesh.position, min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  const m = t.mesh, p = m.position, min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (let i = 0; i < p.length; i += 3) {
     min.x = Math.min(min.x, p[i]); max.x = Math.max(max.x, p[i]);
     min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
     min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
   }
+  let half = 0;
+  for (let i = 2; i < m.tuft.length; i += 4) half = Math.max(half, m.tuft[i]);
+  const room = Math.max(MIN_MARGIN, half + SWAY.leafy + FLUTTER);
+  min.x -= room; min.z -= room; max.x += room; max.z += room;
+  max.y = Math.max(max.y + half, (t.height + half) * STRETCH);
   return { tree: t, min, max };
 }
 
@@ -85,13 +96,6 @@ export class Forest {
   }
 
   frame(o: { wind: boolean; t: number; leafOverride?: number; plain?: boolean }): TreeFrame {
-    for (const [k, slot] of this.slots) {
-      if (!slot.dirty) continue;
-      slot.dirty = false;
-      slot.chunk.plant = Float32Array.from(slot.plant);
-      slot.chunk.look = Float32Array.from(slot.look);
-      this.chunkMap.set(k, slot.chunk);
-    }
     return { chunks: this.chunkMap, versions: this.versionMap, palette: this.palette, wind: o.wind, t: o.t, leafOverride: o.leafOverride ?? -1, plain: o.plain ?? false };
   }
 
@@ -105,20 +109,28 @@ export class Forest {
     let slot = this.slots.get(chunk);
     if (!slot) {
       const c: TreeChunk = { mesh: new TreeMesh(), plant: new Float32Array(0), look: new Float32Array(0), bounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } } };
-      this.slots.set(chunk, (slot = { chunk: c, plant: [], look: [], dirty: false }));
+      this.slots.set(chunk, (slot = { chunk: c, plant: new Float32Array(0), look: new Float32Array(0), used: 0 }));
+      this.chunkMap.set(chunk, c);
     }
-    const n = b.tree.mesh.verts, v = plantVariation(sp.x, sp.z);
+    const n = b.tree.mesh.verts, v = plantVariation(sp.x, sp.z), need = (slot.used + n) * 4;
+    if (need > slot.plant.length) {
+      const cap = Math.max(need, slot.plant.length * 2);
+      const grow = (a: Float32Array) => { const o = new Float32Array(cap); o.set(a.subarray(0, slot.used * 4)); return o; };
+      slot.plant = grow(slot.plant); slot.look = grow(slot.look);
+    }
     appendAt(slot.chunk.mesh, b.tree.mesh, sp.x, sp.z);
     for (let k = 0; k < n; k++) {
-      slot.plant.push(sp.x, sp.z, sp.dead ? 0 : sp.leaf, sp.dead ? 1 : 0);
-      slot.look.push(v[0], v[1], v[2], v[3]);
+      slot.plant.set([sp.x, sp.z, sp.dead ? 0 : sp.leaf, sp.dead ? 1 : 0], (slot.used + k) * 4);
+      slot.look.set(v, (slot.used + k) * 4);
     }
+    slot.used += n;
+    slot.chunk.plant = slot.plant.subarray(0, slot.used * 4);
+    slot.chunk.look = slot.look.subarray(0, slot.used * 4);
     const bd = slot.chunk.bounds;
-    bd.min.x = Math.min(bd.min.x, b.min.x + sp.x - SWAY_MARGIN); bd.max.x = Math.max(bd.max.x, b.max.x + sp.x + SWAY_MARGIN);
-    bd.min.z = Math.min(bd.min.z, b.min.z + sp.z - SWAY_MARGIN); bd.max.z = Math.max(bd.max.z, b.max.z + sp.z + SWAY_MARGIN);
+    bd.min.x = Math.min(bd.min.x, b.min.x + sp.x); bd.max.x = Math.max(bd.max.x, b.max.x + sp.x);
+    bd.min.z = Math.min(bd.min.z, b.min.z + sp.z); bd.max.z = Math.max(bd.max.z, b.max.z + sp.z);
     bd.min.y = Math.min(bd.min.y, b.min.y);
-    bd.max.y = Math.max(bd.max.y, b.max.y, b.tree.height * STRETCH);
-    slot.dirty = true;
+    bd.max.y = Math.max(bd.max.y, b.max.y);
     this.versionMap.set(chunk, (this.versionMap.get(chunk) ?? 0) + 1);
   }
 }

@@ -28,7 +28,7 @@ export const TREE_LIGHT = {
 export const TREE_ORDER = { depth: -1, colour: 0.5 } as const;
 
 /** How far a leaf patch flutters in a gust (art pixels, along the wind and across it). */
-const FLUTTER_PX = 0.6; // first guess
+export const FLUTTER_PX = 0.6; // first guess
 /** Where a collapsed vertex goes: far below the ground, out of every view. */
 const GONE = [0, -50, 0] as const;
 /** The outer share of a patch's radius that counts as its rim (first guess), and the cell size of the light dabs in art pixels. */
