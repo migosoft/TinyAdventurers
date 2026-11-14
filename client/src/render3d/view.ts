@@ -22,10 +22,11 @@ import {
   Sphere,
   Texture,
   UnsignedByteType,
+  Vector2,
   Vector3,
   Vector4,
   WebGPURenderer,
-  type DepthTexture,
+  DepthTexture,
 } from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
@@ -35,6 +36,8 @@ import type { Dynamic, Quads } from './cards';
 import type { SightMask } from './sightmask';
 import { cssColour, stoneClear, type Light } from './light';
 import type { Crack } from './air/cracks';
+import { makeShaftPass, type ShaftPass } from './air/shaftNodes';
+import { shaftPlan, type ShaftPlan } from './air/shafts';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
@@ -104,6 +107,8 @@ export interface FrameInput {
   cover?: CoverFrame;
   /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
   cracks?: readonly Crack[];
+  /** The light shafts through the cracks (#307); absent = off. The pass also needs at least one crack. */
+  shafts?: boolean;
 }
 
 export { GroundTooLargeError };
@@ -304,6 +309,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   /** One mesh per chunk: static geometry, culled by its bounds. `terrain`: the uv and rect buffers are rewritten (terrain animation). */
   interface ChunkMesh { mesh: Mesh; terrain: TerrainChunk | null; seen: boolean }
   const counters = { drawn: 0 };
+  /** True while the shaft pass's depth pre-pass renders the scene. */
+  let inPrepass = false;
   const worldChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const terrainChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   let clock = 0;
@@ -326,6 +333,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     mesh.frustumCulled = true;
     const cm: ChunkMesh = { mesh, terrain, seen: false };
     mesh.onBeforeRender = () => {
+      // The shaft pass's depth pre-pass draws the chunks again; the readout counts the picture's draw.
+      if (inPrepass) return;
       counters.drawn++;
       cm.seen = true;
     };
@@ -476,6 +485,55 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
 
+  // The light shafts (#307), made when the first frame with cracks and shafts on comes: a depth pre-pass of the opaque scene (layer 0
+  // only, at the art size), the march into a small half-float target, and the additive composite over the picture. A lost device
+  // rebuilds the whole view, these included; `dispose` frees them.
+  interface ShaftKit {
+    pass: ShaftPass; marchQuad: QuadMesh; compositeQuad: QuadMesh;
+    /** The pre-pass camera: the picture's camera on layer 0 only, with the art-size frustum. */
+    cam: OrthographicCamera;
+    w: number; h: number; depthTex: DepthTexture; depth: RenderTarget; shaft: RenderTarget;
+  }
+  let shafts: ShaftKit | null = null;
+  const makeShaftTargets = (sp: ShaftPlan): Pick<ShaftKit, 'w' | 'h' | 'depthTex' | 'depth' | 'shaft'> => {
+    const depthTex = new DepthTexture(sp.artW, sp.artH);
+    depthTex.minFilter = NearestFilter;
+    depthTex.magFilter = NearestFilter;
+    const depth = new RenderTarget(sp.artW, sp.artH, { depthBuffer: true, depthTexture: depthTex, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
+    depth.texture.colorSpace = NoColorSpace;
+    const shaft = new RenderTarget(sp.artW, sp.artH, { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
+    shaft.texture.colorSpace = NoColorSpace;
+    return { w: sp.artW, h: sp.artH, depthTex, depth, shaft };
+  };
+  const freeShaftTargets = (s: Pick<ShaftKit, 'depthTex' | 'depth' | 'shaft'>): void => {
+    s.depth.dispose();
+    s.shaft.dispose();
+    s.depthTex.dispose();
+  };
+  /** The shaft plan of the last frame drawn (null: none ran), so `readback` can lay the shafts over its picture. */
+  let lastShafts: ShaftPlan | null = null;
+  const shaftToward = new Vector3();
+  const shaftUvScale = new Vector2();
+  const shaftTexel = new Vector2();
+  /** The kit for this frame's plan: made at the first use, its targets rebuilt when the art size changes. */
+  const shaftsFor = (sp: ShaftPlan): ShaftKit => {
+    if (!shafts) {
+      const pass = makeShaftPass(lighting, sight);
+      shafts = { pass, marchQuad: new QuadMesh(pass.march), compositeQuad: new QuadMesh(pass.composite), cam: new OrthographicCamera(-1, 1, 1, -1, 0.1, 200), ...makeShaftTargets(sp) };
+    } else if (shafts.w !== sp.artW || shafts.h !== sp.artH) {
+      freeShaftTargets(shafts);
+      Object.assign(shafts, makeShaftTargets(sp));
+    }
+    return shafts;
+  };
+  /** The composite lays the march over what is bound now (no clear). */
+  const compositeShafts = (s: ShaftKit): void => {
+    const auto = renderer.autoClear;
+    renderer.autoClear = false;
+    s.compositeQuad.render(renderer);
+    renderer.autoClear = auto;
+  };
+
   const be = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void; limits?: { maxTextureDimension2D: number } }; gl?: WebGL2RenderingContext };
   // Fixed at creation: whether the backend has a way to fail on purpose, whatever the view's state later.
   const canForceLoss = be.isWebGPUBackend ? !!be.device : !!be.gl?.getExtension('WEBGL_lose_context');
@@ -551,6 +609,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       try {
         renderer.setRenderTarget(rt);
         renderer.render(scene, camera);
+        // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does.
+        if (lastShafts && shafts) compositeShafts(shafts);
         renderer.setRenderTarget(null);
         const data = (await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h)) as Uint8Array;
         // WebGL2 reads the bottom row first, WebGPU the top row first (seen with the same scene on both): make it top first.
@@ -664,17 +724,54 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         renderer.render(sunScene, sunCam);
         timer?.lap('sun');
       }
+      // The light shafts (#307): the depth of the opaque scene at the art size, then the march into the shaft target. The composite comes after the picture.
+      const sp = shaftPlan(f);
+      const sh = sp ? shaftsFor(sp) : null;
+      lastShafts = sp;
+      if (sp && sh) {
+        // The art-size frustum, whatever the picture's: straight to the canvas the picture is a crop of it (the composite's uvScale).
+        sh.cam.copy(camera, false);
+        sh.cam.layers.set(0);
+        sh.cam.left = -sp.artW / 32;
+        sh.cam.right = sp.artW / 32;
+        sh.cam.top = sp.artH / 32;
+        sh.cam.bottom = -sp.artH / 32;
+        sh.cam.updateProjectionMatrix();
+        inPrepass = true;
+        try {
+          renderer.setRenderTarget(sh.depth);
+          renderer.render(scene, sh.cam);
+        } finally {
+          inPrepass = false;
+        }
+        // After the render: the renderer sets the camera's clip space (WebGL's or WebGPU's) on its first use.
+        shaftToward.set(ray[0], ray[1], ray[2]);
+        shaftUvScale.set(sp.uvScale[0], sp.uvScale[1]);
+        shaftTexel.set(sp.texel[0], sp.texel[1]);
+        sh.pass.set({ depth: sh.depthTex, shaft: sh.shaft.texture, projInv: sh.cam.projectionMatrixInverse, camWorld: sh.cam.matrixWorld, toward: shaftToward, top: sp.top, uvScale: shaftUvScale, texel: shaftTexel });
+        renderer.setRenderTarget(sh.shaft);
+        sh.marchQuad.render(renderer);
+        timer?.lap('shafts');
+      }
       if (f.plan.direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
         // High draws straight to the canvas: there is no copy, so 'present' is not booked (it stays 0).
         timer?.lap('scene');
+        if (sh) {
+          compositeShafts(sh);
+          timer?.lap('shafts');
+        }
         return renderer.info.render.drawCalls;
       }
       const p = f.plan;
       renderer.setRenderTarget(targetFor(p.targetW, p.targetH, p.linear));
       renderer.render(scene, camera);
       timer?.lap('scene');
+      if (sh) {
+        compositeShafts(sh);
+        timer?.lap('shafts');
+      }
       renderer.setRenderTarget(null);
       renderer.getViewport(fullViewport);
       // The viewport origin is the top-left corner of the canvas on both backends.
@@ -701,6 +798,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow]) m.dispose();
         for (const dm of [cards, ghosts, decals, shadows, flames, glows]) dm.dispose();
         target?.dispose();
+        if (shafts) {
+          freeShaftTargets(shafts);
+          shafts.pass.dispose();
+          shafts = null;
+        }
         copyMaterial.dispose();
         mask.dispose();
         sunTarget?.dispose();

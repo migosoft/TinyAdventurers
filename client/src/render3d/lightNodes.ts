@@ -31,6 +31,8 @@ export interface Lighting {
   readonly sun: SunLight;
   /** The cracks (#307): openings in the ceiling whose light is a term of `lightAt` (see `air/crackNodes.ts`). */
   readonly cracks: Cracks;
+  /** The shadows switch as a uniform node (1 on, 0 off): the shaft march shadows its samples the same way `lightAt` does. */
+  readonly shadowsOn: N;
   /**
    * 1 when the sun ray from `P` along `dir` (toward the sun) is clear of walls and cards, else 0 (the demo's `sunVis`): the wall walk
    * up to just above the walls, then the card test along nine tiles. `self`: the caster slot the surface belongs to, a float node.
@@ -315,6 +317,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     lightAt,
     sun,
     cracks,
+    shadowsOn: uShadows,
     sunRayVis: (P, dir, self) => sunVisOf(cardVis)(P, dir, self),
     finish,
     shoulder,

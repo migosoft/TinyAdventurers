@@ -36,7 +36,9 @@ const KNIGHT_SPEED = 2;
 const KNIGHT_ID = 100;
 /** The knight's loop in tiles (closed): along the north wall past the first pillar, down the east side past the second, back through the middle of room 1. */
 const LOOP: [number, number][] = [[3.5, 4.5], [10.5, 4.5], [10.5, 14.5], [7.5, 14.5], [7.5, 8.5], [3.5, 8.5]];
-const LOOP_LEN = LOOP.reduce((s, p, i) => s + Math.hypot(LOOP[(i + 1) % LOOP.length][0] - p[0], LOOP[(i + 1) % LOOP.length][1] - p[1]), 0);
+/** The tile of the Daylight crack: on the loop's west leg, so the knight crosses the patch and cuts a gap into the shafts. */
+export const CRACK_TILE: [number, number] = [7, 9];
+const LOOP_LEN =LOOP.reduce((s, p, i) => s + Math.hypot(LOOP[(i + 1) % LOOP.length][0] - p[0], LOOP[(i + 1) % LOOP.length][1] - p[1]), 0);
 
 /** Where the knight is at time `t` (s), in px, and the aim it faces (right, or left while it goes west). */
 export function lightsKnight(t: number): { x: number; y: number; aim: number } {
@@ -105,8 +107,8 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
     if (tc.blue) blueId = lightId;
     lightId++;
   }
-  // One crack in room 1's ceiling (#307), where the knight's circle passes: the patch on the floor and the bounce fill.
-  field.add({ id: lightId++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: 8, y: 7, on: true });
+  // One crack in room 1's ceiling (#307), its patch on the knight's walk: the west leg of the loop (x 7.5, z 8.5 to 14.5) passes tile (7, 9).
+  field.add({ id: lightId++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: CRACK_TILE[0], y: CRACK_TILE[1], on: true });
   for (const l of lavaLights(map)) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x: l.x, y: l.y, on: true });
   const pairs = new TorchPairs();
   let lava = new Float32Array(map.w * map.h * 4);
@@ -157,6 +159,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const dv = dvOf(c.params);
       caption(dv);
       const viewer = viewerAt;
+      mask.update(hardView, null, 0);
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       let cracks: Crack[] = [];
@@ -165,7 +168,8 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
         const sel = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
-        cracks = selectCracks(field, footprint(cam, c.plan.halfW, c.plan.halfH), null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
+        // Only the cracks the viewer sees (as runView3d); the mask is up to date above.
+        cracks = selectCracks(field, footprint(cam, c.plan.halfW, c.plan.halfH), c.params.sight ? mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
         if (field.version !== lavaVersion) {
           lavaVersion = field.version;
           lava = new Float32Array(map.w * map.h * 4);
@@ -176,7 +180,6 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
       assignSkips(lights, carrierMap(lights), casters);
       c.timer.lap('lights');
-      mask.update(hardView, null, 0);
       const sight = c.params.sight
         ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }
         : SIGHT_OFF;
@@ -194,7 +197,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters, sight, cracks,
+          casters, sight, cracks, shafts: true, // Task 8 of #307 puts the real switch here
         },
         c.timer,
       );

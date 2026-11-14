@@ -6,7 +6,7 @@ import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
-import { createLightsStage, lightsEnts, lightsKnight } from './lightsStage';
+import { CRACK_TILE, createLightsStage, lightsEnts, lightsKnight } from './lightsStage';
 import type { FrameInput } from './view';
 import { SIGHT_MARGIN } from './sightmask';
 
@@ -145,5 +145,33 @@ describe('the ?r3d=lights stage', () => {
     expect(ents.filter((e) => e.kind === KIND.Knight)).toHaveLength(1);
     // The torch with a figure each; the lava-side torch has none.
     expect(ents.filter((e) => e.kind === KIND.Torch)).toHaveLength(TORCHES.filter((t) => t.sprite).length);
+  });
+});
+
+describe('the ?r3d=lights stage: the Daylight crack and its shafts', () => {
+  it('asks for the shafts and passes the crack, centred on a tile of the knight\'s west leg', () => {
+    const { f } = drawn('?r3d=lights');
+    expect(f!.shafts).toBe(true);
+    expect(f!.cracks).toHaveLength(1);
+    const c = f!.cracks![0];
+    expect(c.fx).toBe(CRACK_TILE[0] + 0.5);
+    expect(c.fz).toBe(CRACK_TILE[1] + 0.5);
+    // The west leg runs along x 7.5 from z 8.5 to 14.5: the patch's centre lies on it, so the knight crosses the patch.
+    // (7 + 10 + 3 = 20 tiles along the loop at 2 tiles/s: t = 11.5 s is the middle of that leg.)
+    const mid = lightsKnight(11.5);
+    expect(mid.x / 16).toBeCloseTo(7.5, 9);
+    expect(c.fx).toBe(mid.x / 16);
+    expect(c.fz).toBeGreaterThanOrEqual(8.5);
+    expect(c.fz).toBeLessThanOrEqual(14.5);
+  });
+
+  it('sends the crack only if the viewer sees its tile (the stage\'s sight mask), and every crack with sight off', () => {
+    expect(drawn('?r3d=lights&at=7.5,9.5').f!.cracks).toHaveLength(1);
+    expect(drawn('?r3d=lights&at=25,7').f!.cracks).toHaveLength(0);
+    expect(drawn('?r3d=lights&at=25,7&sight=0').f!.cracks).toHaveLength(1);
+  });
+
+  it('sends none in the work light', () => {
+    expect(drawn('?r3d=lights&light=work').f!.cracks).toHaveLength(0);
   });
 });
