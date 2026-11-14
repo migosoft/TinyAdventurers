@@ -2,13 +2,11 @@
 // its cover over the carpet's shape and keeps its colours. The tufts and ferns come in as bushel spots.
 import type { CoveInfo } from '../../generated/CoveInfo';
 import { TILE_ID } from '../../generated/defs';
-import { BASE, coveGrass, coveLayout, paintCove } from '../../game/covemath';
+import { BASE, coveGrass, coveLayout, MARGIN, paintCove } from '../../game/covemath';
 import { TILE, type TileMap } from '../../sim/map';
 import { COVER } from './kinds';
 import type { BushelSpot, CoverSource } from './source';
 
-/** paintCove's transparent margin around the floor area (px). */
-const MARGIN = 32;
 
 export function coveSource(map: TileMap, c: CoveInfo, spots: BushelSpot[]): CoverSource {
   const { spec, origin } = coveLayout(c);
@@ -27,7 +25,7 @@ export function coveSource(map: TileMap, c: CoveInfo, spots: BushelSpot[]): Cove
   const art = paintCove(spec);
   for (let y = 0; y < art.h; y++) for (let x = 0; x < art.w; x++) {
     const a = (y * art.w + x) * 4;
-    if (art.data[a + 3] === 0) continue;
+    if (art.data[a + 3] !== 255) continue; // the 2D stone shadows are partly transparent: the 3D view casts its own
     const wx = origin.x + x - MARGIN, wy = origin.y + y - MARGIN;
     if (wx < 0 || wy < 0 || wx >= w || wy >= h) continue;
     const o = (wy * w + wx) * 4;

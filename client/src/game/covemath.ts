@@ -25,7 +25,7 @@ export const TRUNK_CLEAR = { dx: 36, up: 30, down: 14 };
 export const ROOT_FRINGE = { count: 10, trunkDx: 12, trunkDown: 8 };
 
 /** Transparent margin around the floor area, so blades and shadows over the wall line are kept. */
-const MARGIN = 32;
+export const MARGIN = 32;
 
 export type Rgb = [number, number, number];
 const hex = (s: string): Rgb => [0, 2, 4].map((k) => parseInt(s.slice(k, k + 2), 16)) as Rgb;

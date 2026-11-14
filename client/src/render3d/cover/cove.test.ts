@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoveInfo } from '../../generated/CoveInfo';
 import { TILE_ID } from '../../generated/defs';
-import { BASE, coveGrass, coveLayout, paintCove } from '../../game/covemath';
+import { BASE, coveGrass, coveLayout, MARGIN, paintCove } from '../../game/covemath';
 import { TILE, TileMap } from '../../sim/map';
 import { coveSource } from './cove';
 import { COVER } from './kinds';
@@ -14,7 +14,6 @@ function mapOf(): TileMap {
   for (let y = 0; y < h; y++) { t[y * w] = TILE_ID.Wall; t[y * w + w - 1] = TILE_ID.Wall; }
   return new TileMap(w, h, t);
 }
-const MARGIN = 32;
 
 describe('coveSource', () => {
   const map = mapOf();
@@ -41,11 +40,13 @@ describe('coveSource', () => {
   });
 
   it('grows exactly where coveGrass says, and allows only floor px inside the cove rect', () => {
-    for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
-      const inside = x >= origin.x && x < origin.x + spec.w && y >= origin.y && y < origin.y + spec.h;
-      expect(s.grow[at(x, y)]).toBe(inside && grass(x - origin.x, y - origin.y) ? 1 : 0);
-      expect(s.allow[at(x, y)]).toBe(inside ? 1 : 0);
+    const wantGrow = new Uint8Array(s.w * s.h), wantAllow = new Uint8Array(s.w * s.h);
+    for (let y = origin.y; y < origin.y + spec.h; y++) for (let x = origin.x; x < origin.x + spec.w; x++) {
+      wantAllow[at(x, y)] = 1;
+      if (grass(x - origin.x, y - origin.y)) wantGrow[at(x, y)] = 1;
     }
+    expect(s.grow).toEqual(wantGrow);
+    expect(s.allow).toEqual(wantAllow);
   });
 
   it('allows no px of a non-floor tile in the rect', () => {
@@ -64,5 +65,18 @@ describe('coveSource', () => {
     expect([...s.colour.slice(o, o + 3)]).toEqual([...art.data.slice(a, a + 3)]);
     const c = at(0, 0) * 4;
     expect([...s.colour.slice(c, c + 3)]).toEqual([...BASE]);
+  });
+
+  it('takes no stone-shadow px of paintCove: they stay BASE, never black', () => {
+    const art = paintCove(spec);
+    let shadows = 0;
+    for (let y = 0; y < art.h; y++) for (let x = 0; x < art.w; x++) {
+      const a = (y * art.w + x) * 4;
+      if (art.data[a + 3] === 0 || art.data[a + 3] === 255) continue;
+      shadows++;
+      const o = at(origin.x + x - MARGIN, origin.y + y - MARGIN) * 4;
+      expect([...s.colour.slice(o, o + 3)]).toEqual([...BASE]);
+    }
+    expect(shadows).toBeGreaterThan(0);
   });
 });
