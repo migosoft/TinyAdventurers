@@ -23,6 +23,8 @@ export interface RenderPlan {
   ze: number;
   targetW: number; targetH: number;
   halfW: number; halfH: number;
+  /** The picture's size in art px (one per 1/zoom of the canvas), the same in both modes: the shaft pass works at this size. */
+  artW: number; artH: number;
   linear: boolean;
   dstX: number; dstY: number; dstW: number; dstH: number;
 }
@@ -35,6 +37,7 @@ export function renderPlan(q: Quality, zoom: number, canvasW: number, canvasH: n
   const dstW = artW * zoom;
   const dstH = artH * zoom;
   return {
+    artW, artH,
     direct,
     ze,
     targetW: direct ? canvasW : Math.max(1, artW * ze),

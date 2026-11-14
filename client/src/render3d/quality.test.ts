@@ -24,6 +24,14 @@ describe('pickZoom', () => {
 });
 
 describe('renderPlan', () => {
+  it('holds the art size in both modes', () => {
+    const h = renderPlan('high', 3, 1000, 700);
+    expect([h.artW, h.artH]).toEqual([334, 234]);
+    const hi = renderPlan('high', 4, 1921, 1081), ba = renderPlan('balanced', 4, 1921, 1081);
+    expect([ba.artW, ba.artH]).toEqual([hi.artW, hi.artH]);
+    expect([ba.artW, ba.artH]).toEqual([481, 271]);
+  });
+
   it('copies at the effective zoom when it is lower', () => {
     const p = renderPlan('balanced', 4, 1921, 1081);
     expect(p.direct).toBe(false);

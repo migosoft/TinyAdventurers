@@ -108,6 +108,19 @@ export interface FrameInput {
 
 export { GroundTooLargeError };
 
+/**
+ * The layer of everything the shaft pass's depth pre-pass must not draw (#307): translucent or additive things (shadows, decals, ghosts,
+ * glows, the force field, later the air). The pre-pass camera has layer 0 only; the picture's camera has both. A layer does not reach a
+ * mesh's children, so each mesh is set on its own.
+ */
+export const AIR_SKIP_LAYER = 1;
+
+/** Puts `mesh` on the skip layer only (it is drawn by the picture's camera, not by the pre-pass). */
+export function skipInAirPrepass<T extends Mesh>(mesh: T): T {
+  mesh.layers.set(AIR_SKIP_LAYER);
+  return mesh;
+}
+
 /** A mesh whose vertex buffers are refilled every frame; the buffers grow when a frame needs more. */
 class DynMesh {
   readonly mesh: Mesh;
@@ -355,6 +368,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     fieldMesh = new Mesh(g, fieldMaterial);
     fieldMesh.frustumCulled = false;
     fieldMesh.renderOrder = 2;
+    skipInAirPrepass(fieldMesh);
     scene.add(fieldMesh);
   };
   rebuildField();
@@ -456,9 +470,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return target;
   }
 
+  for (const d of [shadows, decals, ghosts, glows]) skipInAirPrepass(d.mesh);
   scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
+  camera.layers.enable(AIR_SKIP_LAYER);
 
   const be = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void; limits?: { maxTextureDimension2D: number } }; gl?: WebGL2RenderingContext };
   // Fixed at creation: whether the backend has a way to fail on purpose, whatever the view's state later.

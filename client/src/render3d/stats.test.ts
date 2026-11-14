@@ -41,6 +41,11 @@ describe('statsText3d', () => {
   });
 
   it('names the systems in order', () => {
-    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'plants', 'lights', 'sight', 'sun', 'upload', 'scene', 'present', 'hud']);
+    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'plants', 'lights', 'sight', 'air', 'sun', 'shafts', 'upload', 'scene', 'present', 'hud']);
+  });
+
+  it('counts the air lap in the update total, the shafts lap not', () => {
+    const t = statsText3d({ ...base, systems: [['sim', 0.1], ['air', 0.5], ['shafts', 0.7], ['scene', 2]] }).split('\n');
+    expect(t[3]).toBe('update     0.60 ms');
   });
 });
