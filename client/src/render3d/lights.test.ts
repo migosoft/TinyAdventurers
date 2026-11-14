@@ -3,10 +3,11 @@ import { LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { MovingLight } from '../generated/MovingLight';
 import { LightField } from '../game/light';
+import { sunLook } from '../game/sunmath';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Cam } from './camera';
-import { CARRY_PX, DAYLIGHT_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -125,10 +126,34 @@ describe('staticCands', () => {
     expect(torch.shadow).toBe(true);
     expect(torch.radius).toBe(LIGHT[0].radius);
     expect(torch.skip).toBe(-1);
-    expect(day.y).toBe(DAYLIGHT_Y);
+    expect(day.y).toBe(BOUNCE_Y);
+    expect(day.radius).toBe(LIGHT[LIGHT_KIND.Daylight].radius);
     expect([day.x, day.z]).toEqual([6.5, 6.5]);
     expect(fire.y).toBe(1);
     expect([fire.x, fire.z]).toEqual([8.5, 8.5]);
+  });
+});
+
+describe('staticCands: the Daylight bounce fill', () => {
+  it('is BOUNCE_GAIN of the old light, and dimmer inside a cloud', () => {
+    const map = open();
+    const field = new LightField(map);
+    field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true });
+    const tp = new TorchPairs();
+    const full = Math.max(...lightRgb(LIGHT_KIND.Daylight, 0xffffff, 1));
+    const sunny = staticCands(field, tp, map, 0, sunLook)[0];
+    // Long before the first cloud (t < 0 is no cloud): the whole gain.
+    expect(Math.max(sunny.r, sunny.g, sunny.b)).toBeCloseTo(BOUNCE_GAIN * full, 6);
+    expect(sunny.base).toBeCloseTo(BOUNCE_GAIN * full, 6);
+    expect(sunny.shadow).toBe(true);
+    // Find a moment inside a cloud: the colour drops, the ranking base does not.
+    let dimmest = sunny;
+    for (let t = 0; t < 120; t += 0.25) {
+      const c = staticCands(field, tp, map, t, sunLook)[0];
+      if (c.r < dimmest.r) dimmest = c;
+    }
+    expect(dimmest.r).toBeLessThan(sunny.r);
+    expect(dimmest.base).toBe(sunny.base);
   });
 });
 

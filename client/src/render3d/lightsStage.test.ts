@@ -48,10 +48,10 @@ describe('the ?r3d=lights stage', () => {
     expect(Array.from(stage.world.map.tiles)).toEqual(Array.from(map.tiles));
   });
 
-  it('lists the 7 torches and the 2 moving lights at t = 0', () => {
+  it('lists the 7 torches, the daylight crack and the 2 moving lights at t = 0', () => {
     expect(TORCHES).toHaveLength(7);
     const { f } = drawn('?r3d=lights&t=0');
-    expect(f!.lights).toHaveLength(9);
+    expect(f!.lights).toHaveLength(10);
   });
 
   it('misses the blue torch at t = 3.1', () => {
@@ -61,7 +61,7 @@ describe('the ?r3d=lights stage', () => {
     const off = drawn('?r3d=lights&t=3.1').f;
     expect(ids(on)).toContain(blue);
     expect(ids(off)).not.toContain(blue);
-    expect(off!.lights).toHaveLength(8);
+    expect(off!.lights).toHaveLength(9);
   });
 
   it('passes a dark sight mask centred on the viewer, off with sight=0, and on &at', () => {

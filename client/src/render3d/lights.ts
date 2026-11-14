@@ -5,6 +5,7 @@ import { LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { MovingLight } from '../generated/MovingLight';
 import type { LightField, StaticLight } from '../game/light';
+import { cloudAt, lookFor, sunLook, type SunLook } from '../game/sunmath';
 import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import { groundAt, type Cam } from './camera';
@@ -15,8 +16,10 @@ import type { Light } from './light';
 export const LIGHT_GAIN = 1.2;
 /** How far past the game's falloff radius the shader's light reaches, in tiles (first guess). */
 export const LIGHT_MARGIN = 0.5;
-/** Height of a Daylight light (a sun far above the room), of a Blast's flash, in tiles (first guesses). */
-export const DAYLIGHT_Y = 6;
+/** Height of the Daylight bounce fill (the faint light where a crack's patch bounces off the floor) and of a Blast's flash, in tiles (first guesses). */
+export const BOUNCE_Y = 0.7;
+/** The bounce fill's share of the Daylight light's colour (first guess). */
+export const BOUNCE_GAIN = 0.35;
 export const FLASH_Y = 1;
 /** A moving light is carried by the snapshot entity within this many px of it. */
 export const CARRY_PX = 2;
@@ -75,8 +78,12 @@ export interface ShadowCaster { id: number; x: number; z: number; w: number; y0:
 /** A light that may enter the list: its id is stable (`s<lightId>`, `m<entityId>` or `m<n>`). */
 export interface Cand extends Light { id: string; kind: number; /** The brightness without flicker: what `selectLights` ranks by, so the choice does not flutter. */ base: number }
 
-/** Every light of the field that is on, except lava (its glow is the ground's own). Torches sit at their flame. */
-export function staticCands(field: LightField, torches: TorchPairs, map: TileMap, t: number): Cand[] {
+/**
+ * Every light of the field that is on, except lava (its glow is the ground's own). Torches sit at their flame. A Daylight light is
+ * the **bounce fill**: the crack (air/cracks.ts) lights its own patch, this faint light at `BOUNCE_Y` is what that patch bounces
+ * into the room. It dims with the crack's cloud, `base` is its unclouded brightness. `sun` is the 2D sun look the cracks use.
+ */
+export function staticCands(field: LightField, torches: TorchPairs, map: TileMap, t: number, sun: SunLook = sunLook): Cand[] {
   const out: Cand[] = [];
   for (const l of field.lights.values()) {
     if (!l.on || l.kind === LIGHT_KIND.Lava) continue;
@@ -90,9 +97,11 @@ export function staticCands(field: LightField, torches: TorchPairs, map: TileMap
       x = w.x + w.nx * TORCH_STAND + 0.03 * Math.sin(13 * t + ph);
       z = w.z + w.nz * TORCH_STAND;
       y = TORCH_MID + 0.03 * Math.sin(17 * t + ph);
-    } else if (l.kind === LIGHT_KIND.Daylight) y = DAYLIGHT_Y;
-    const [r, g, b] = lightRgb(l.kind, l.colour, lightFlicker(l.kind, t, ph));
-    const base = Math.max(...lightRgb(l.kind, l.colour, 1));
+    } else if (l.kind === LIGHT_KIND.Daylight) y = BOUNCE_Y;
+    const bounce = l.kind === LIGHT_KIND.Daylight ? BOUNCE_GAIN : 1;
+    const cloud = l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, lookFor(l.id, sun)) : 1;
+    const [r, g, b] = lightRgb(l.kind, l.colour, lightFlicker(l.kind, t, ph) * bounce * cloud);
+    const base = Math.max(...lightRgb(l.kind, l.colour, bounce));
     out.push({ id: `s${l.id}`, kind: l.kind, x, y, z, radius: LIGHT[l.kind].radius, r, g, b, shadow: true, skip: -1, base });
   }
   return out;

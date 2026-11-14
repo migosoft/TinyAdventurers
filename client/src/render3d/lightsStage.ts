@@ -3,7 +3,7 @@
 // beside the lava pool without a flame figure), a lava pool, a fireball, a frost bolt and an explosion flash. The lights go through
 // the run's own light-list functions (lights.ts): the static field, the moving lights, the choice for the shader's slots, the lava
 // texels. A knight walks a loop past the pillars so its shadow can be seen. V cycles the viewer's darkvision 0 / 50 / 100 %.
-import { ANIM, CONST, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
+import { ANIM, CONST, KIND, LIGHT, LIGHT_KIND, SIDE } from '../generated/defs';
 import { nextDarkvision } from '../game/darkvisionSteps';
 import { LightField } from '../game/light';
 import { DEFAULT_HAZE } from '../game/sightField';
@@ -17,6 +17,8 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import type { R3dParams } from './params';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
+import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
+import { sunLook } from '../game/sunmath';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
@@ -103,6 +105,8 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
     if (tc.blue) blueId = lightId;
     lightId++;
   }
+  // One crack in room 1's ceiling (#307), where the knight's circle passes: the patch on the floor and the bounce fill.
+  field.add({ id: lightId++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: 8, y: 7, on: true });
   for (const l of lavaLights(map)) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x: l.x, y: l.y, on: true });
   const pairs = new TorchPairs();
   let lava = new Float32Array(map.w * map.h * 4);
@@ -155,11 +159,13 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const viewer = viewerAt;
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
+      let cracks: Crack[] = [];
       if (game) {
         const cands = [...staticCands(field, pairs, map, t), ...movingCands(movingAt(t), [], () => null, t)];
         const sel = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
+        cracks = selectCracks(field, footprint(cam, c.plan.halfW, c.plan.halfH), null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
         if (field.version !== lavaVersion) {
           lavaVersion = field.version;
           lava = new Float32Array(map.w * map.h * 4);
@@ -188,7 +194,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters, sight,
+          casters, sight, cracks,
         },
         c.timer,
       );

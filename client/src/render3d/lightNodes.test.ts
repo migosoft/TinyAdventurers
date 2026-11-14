@@ -46,6 +46,17 @@ describe('the lighting shader', () => {
       for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
     });
 
+    it(`${B.name}: the crack term builds, its loops are named apart, and the sun-ray visibility is built from the wall walk and the card test`, () => {
+      const ls = loops(lightFragment(B));
+      const names = ls.map((l) => l.name);
+      expect(names).toContain('cs');
+      expect(names).toContain('cr');
+      for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+      // Inside the crack loop: the ray loop of the mask, the wall walk and the card test of the sun-ray visibility.
+      const inCs = ls.filter((l) => l.outer.includes('cs')).map((l) => l.name);
+      expect(inCs).toEqual(expect.arrayContaining(['cr', 'ws', 'ci']));
+    });
+
     it(`${B.name}: the own-foot comparison is built only for a material that gives a selfFoot`, () => {
       const without = lightFragment(B);
       const withFoot = lightFragment(B, false, false, true);

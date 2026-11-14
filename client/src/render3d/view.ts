@@ -34,6 +34,7 @@ import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
 import type { SightMask } from './sightmask';
 import { cssColour, stoneClear, type Light } from './light';
+import type { Crack } from './air/cracks';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
@@ -101,6 +102,8 @@ export interface FrameInput {
   trees?: TreeFrame;
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
   cover?: CoverFrame;
+  /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
+  cracks?: readonly Crack[];
 }
 
 export { GroundTooLargeError };
@@ -604,6 +607,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (f.trees) { trees.sync(f.trees); void trees.warm(renderer, camera); }
       else if (trees.meshCount > 0) trees.clear();
       lighting.setLights(f.lights);
+      lighting.cracks.set(f.cracks ?? []);
       lighting.setShadows(f.shadows);
       lighting.setLava(f.lava, f.lavaVersion);
       lighting.setDarkvision(f.darkvision);

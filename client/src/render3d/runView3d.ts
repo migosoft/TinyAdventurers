@@ -27,6 +27,8 @@ import { SHOT_LIFT } from './camera';
 import { isProjectileKind } from '../game/anim/defs';
 import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
+import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
+import { sunLook } from '../game/sunmath';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
@@ -360,6 +362,7 @@ export class RunView3d implements RunView {
     let casters: ShadowCaster[] = [];
     let lava: Float32Array | null = null;
     let darkvision: { x: number; z: number; reach: number } | null = null;
+    let cracks: Crack[] = [];
     this.lightStat = null;
     if (!work) {
       const focus = { x: f.camera.x / TILE, z: f.camera.y / TILE };
@@ -371,6 +374,8 @@ export class RunView3d implements RunView {
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
+      // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees, as their cracks. A woodland has none.
+      if (!skyNow) cracks = selectCracks(this.field, fp, c.params.sight ? this.mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
       // The cove's bushes cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
       const mask = this.mask;
       const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
@@ -405,7 +410,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
       },
       c.timer,
     );

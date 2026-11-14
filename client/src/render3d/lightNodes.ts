@@ -3,6 +3,9 @@ import { DataTexture, DataUtils, HalfFloatType, LinearFilter, NoColorSpace, RGBA
 import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, texture, textureLoad, uniform, uniformArray, dot, vec2, vec3, vec4 } from 'three/tsl';
 import { DV_DARK, EDGE } from '../game/light';
 import { AMBIENT, DV_EYE, DV_FADE, DV_MARGIN, LIGHT_CAP, packLights, type Light } from './light';
+import { makeCracks, type Cracks } from './air/crackNodes';
+import { CRACK_CAP } from './air/cracks';
+import { WALL_H } from './heights';
 import { CASTER_CAP, LIGHT_MARGIN, type ShadowCaster } from './lights';
 import { makeSunLight, type SunLight } from './sunNodes';
 
@@ -26,6 +29,13 @@ export interface Lighting {
   lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } }): { rgb: N; dv: N };
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
+  /** The cracks (#307): openings in the ceiling whose light is a term of `lightAt` (see `air/crackNodes.ts`). */
+  readonly cracks: Cracks;
+  /**
+   * 1 when the sun ray from `P` along `dir` (toward the sun) is clear of walls and cards, else 0 (the demo's `sunVis`): the wall walk
+   * up to just above the walls, then the card test along nine tiles. `self`: the caster slot the surface belongs to, a float node.
+   */
+  sunRayVis(P: N, dir: N, self: N): N;
   /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. `greyAlbedo` (default: `albedo`) is the colour the darkvision grey is made from. */
   finish(albedo: N, lit: { rgb: N; dv: N }, greyAlbedo?: N): N;
   /** The lava light texture (`w * h` half-float rgba texels). */
@@ -177,6 +187,19 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const cardVis = cardVisOf(false);
   let cardVisFoot: N | null = null;
 
+  // The sun ray's visibility: below the wall tops the ray is walked up past them, then the figures are tested along nine tiles.
+  const sunVisOf = (cardTest: N) => (P: N, dir: N, self: N, selfFoot?: N): N => Fn(() => {
+    const v = float(1).toVar();
+    If(P.y.lessThan(WALL_H + 0.05), () => {
+      v.assign(wallVis(P, P.add(dir.mul(float(WALL_H + 0.1).sub(P.y).div(dir.y)))));
+    });
+    If(v.greaterThan(0.5), () => {
+      v.assign(cardTest(P, P.add(dir.mul(9)), self, float(-1), selfFoot ?? vec2(0, 0)));
+    });
+    return v;
+  })();
+  const cracks = makeCracks();
+
   // The lava light: one rgba texel per tile (rgb: the light the tile's lava lights give, a: 1 on a lava tile).
   const lavaTex = new DataTexture(new Uint16Array(map.w * map.h * 4), map.w, map.h, RGBAFormat, HalfFloatType);
   lavaTex.colorSpace = NoColorSpace;
@@ -248,6 +271,22 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
             sum.addAssign(lc.xyz.mul(f.mul(ndl).mul(v)));
           });
         });
+        // The cracks' light: the patch on the floor (and the walls and figures it falls on), shadowed by walls and cards on its way.
+        Loop(named('cs', CRACK_CAP), ({ cs: s }: N) => {
+          If(float(s).greaterThanEqual(cracks.count), () => {
+            Break();
+          });
+          const m = cracks.mask(P, s).toVar();
+          If(m.greaterThan(0.004), () => {
+            const cr = cracks.at(s);
+            const ndl = mix(max(dot(Nrm, cr.dir), 0), float(1), w);
+            const v = float(1).toVar();
+            If(uShadows.greaterThan(0.5), () => {
+              v.assign(sunVisOf(cardTest)(Po, cr.dir, self, selfFoot ?? undefined));
+            });
+            sum.addAssign(cr.rgb.mul(m.mul(ndl).mul(v)));
+          });
+        });
         // Darkvision: a fading disc around the eye that walls block.
         If(uDvReach.greaterThan(0), () => {
           const eyeD = length(P.xz.sub(uDvEye));
@@ -275,6 +314,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   return {
     lightAt,
     sun,
+    cracks,
+    sunRayVis: (P, dir, self) => sunVisOf(cardVis)(P, dir, self),
     finish,
     shoulder,
     cellH,
