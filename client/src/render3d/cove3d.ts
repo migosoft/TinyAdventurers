@@ -86,12 +86,12 @@ export class Cove3d {
     const { spec, origin, foot } = coveLayout(c);
     // The tree: its foot (trunk base) is COVE_TREE_FOOT in the 96 x 100 frame.
     const tree = frames.cove_tree;
-    if (tree) this.items.push({ place: { x: foot.x / TILE, z: foot.y / TILE, mirrored: false, amp: SWAY.coveTree, seed: c.seed }, sprite: { page: -1, rect: tree, foot: COVE_TREE_FOOT, shape: null } });
+    if (tree) this.items.push({ place: { x: foot.x / TILE, z: foot.y / TILE, mirrored: false, amp: SWAY.coveTree, seed: c.seed }, sprite: { rect: tree, foot: COVE_TREE_FOOT } });
     // The plants stand with the bottom centre of their frame on the spot.
     placeCovePlants(spec).forEach((p, i) => {
       const r = frames[p.frame];
       if (!r) return;
-      this.items.push({ place: { x: (origin.x + p.x) / TILE, z: (origin.y + p.y) / TILE, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { page: -1, rect: r, foot: { x: r.w / 2, y: r.h }, shape: null } });
+      this.items.push({ place: { x: (origin.x + p.x) / TILE, z: (origin.y + p.y) / TILE, mirrored: false, amp: SWAY.small, seed: c.seed + i + 1 }, sprite: { rect: r, foot: { x: r.w / 2, y: r.h } } });
     });
     this.pixies = new Pixies3d({ x: foot.x, y: foot.y - CANOPY_UP }, foot.y, PIXIE_COUNT, c.seed);
   }

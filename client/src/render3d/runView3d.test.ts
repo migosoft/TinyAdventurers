@@ -19,6 +19,7 @@ import type { Overlay3d } from './overlay';
 import type { OverlayItem } from './overlayLayout';
 import { SIDE } from '../generated/defs';
 import type { FrameInput } from './view';
+import type { PlantInfo } from '../generated/PlantInfo';
 import { hourLabel, mistLightOf, sky, startHour } from './sun';
 import { WIND } from './wind';
 
@@ -59,8 +60,8 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { cove?: boolean; woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
-  const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
+function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+  const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   const light = new LightField(map);
@@ -111,7 +112,8 @@ describe('the run view and the game lights', () => {
   it('a dungeon with a cove hands over its plants, adds the pixie lights and the plants as casters', () => {
     const { f } = run({ cove: true, params: { sight: false } });
     expect(f?.plants).toBeDefined();
-    expect([...f!.plants!.chunks.values()].flat().every((k) => k.page === -1)).toBe(true);
+    expect(f?.trees).toBeUndefined();
+    expect([...f!.plants!.chunks.values()].every((k) => k.n > 0)).toBe(true);
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
     expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);
     expect(run().f?.plants).toBeUndefined();
@@ -170,7 +172,8 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     expect(f!.sun!.dir).toEqual(s.dir);
     expect(f!.sun!.colour).toEqual(s.colour);
     expect(f!.sun!.fit.size).toBe(2048);
-    expect(f?.plants).toBeDefined();
+    expect(f?.trees).toBeDefined();
+    expect(f?.plants).toBeUndefined();
   });
   it('a snapshot at tick 60 * 720 is one hour later', () => {
     const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });
@@ -201,6 +204,14 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     const { f } = run();
     expect(f?.sun).toBeNull();
     expect(f?.plants).toBeUndefined();
+    expect(f?.trees).toBeUndefined();
+  });
+  it('the forest is built a few trees a frame and the readout counts them', () => {
+    const plants: PlantInfo[] = [[0, 40, 40, 1, 100, false, 100, false], [1, 60, 40, 2, 100, false, 100, false], [4, 80, 40, 3, 100, false, 60, false]];
+    const r = run({ woodland: true, torch: false, plants });
+    expect(r.f!.trees!.chunks.size).toBeGreaterThan(0);
+    expect(r.f!.trees!.palette).toBe(0);
+    expect(r.stats.lines!.find((l) => l.startsWith('plants'))).toMatch(/^plants {5}[1-3] of 3$/);
   });
   it('the readout says the sun and the plants', () => {
     const { stats } = run({ woodland: true, torch: false });

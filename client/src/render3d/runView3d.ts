@@ -30,11 +30,12 @@ import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
-import { PLANT_BUDGET_MS, PlantField } from './plantField';
+import { AtlasPlants } from './atlasPlants';
+import { Forest, TREE_BUDGET_MS } from './trees/forest';
+import { treeSpecOf } from './trees/spec';
 import { Critters3d } from './critters3d';
 import { Fireflies } from './fireflies';
 import { Cove3d } from './cove3d';
-import { lightVector } from '../game/vegetation';
 import type { SunFrame, View } from './view';
 import type { FrameRects } from './worldMesh';
 
@@ -90,12 +91,12 @@ export class RunView3d implements RunView {
   private readonly figures: Figures3d;
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
-  private plants: PlantField | null = null;
+  private forest: Forest | null = null;
   private critters: Critters3d | null = null;
   private fireflies: Fireflies | null = null;
   // The nymph's cove (dungeon runs): its plants as atlas sprites (all ready at once), their casters, the pixies.
   private cove: Cove3d | null = null;
-  private covePlants: PlantField | null = null;
+  private covePlants: AtlasPlants | null = null;
   private coveCasters: ShadowCaster[] = [];
   private readonly frames: FrameRects;
   private hourNow = 0;
@@ -130,14 +131,14 @@ export class RunView3d implements RunView {
     this.woodland = !!wl;
     if (wl) {
       this.clock = new SkyClock(startHour(wl.sun));
-      // The plants are drawn by `step` a few per frame, baked with the level's sun; the field outlives a lost device (the view re-reads every chunk).
-      this.plants = new PlantField(wl.plants, init.map, lightVector(wl.sun));
+      // The trees are grown by `step` a few per frame; the forest outlives a lost device (the view re-reads every chunk).
+      this.forest = new Forest(wl.plants.map(treeSpecOf), init.map, wl.palette);
       this.critters = new Critters3d(init.map, wl.seed);
       this.fireflies = new Fireflies(wl.seed);
     }
     if (init.info.cove) {
       this.cove = new Cove3d(init.info.cove, frames);
-      this.covePlants = PlantField.fromAtlas(this.cove.plants(), init.map);
+      this.covePlants = new AtlasPlants(this.cove.plants(), init.map);
       this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
@@ -332,8 +333,8 @@ export class RunView3d implements RunView {
     this.cove?.push(c.now, cam, fo.glows, fo.ghosts, c.params.sight ? this.mask : null);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
-    // The plants: a few drawn per frame, nearest to the camera first.
-    this.plants?.step(cam, PLANT_BUDGET_MS);
+    // The trees: a few grown per frame, nearest to the camera first.
+    this.forest?.step(cam, TREE_BUDGET_MS);
     c.timer.lap('plants');
     let lights: ReturnType<typeof selectLights>['list'] = [];
     let casters: ShadowCaster[] = [];
@@ -384,7 +385,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.plants ? { plants: this.plants.frame(c.params.wind, c.now) } : this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
       },
       c.timer,
     );
@@ -434,7 +435,7 @@ export class RunView3d implements RunView {
     const ls = this.lightStat;
     const lines = [
       ...(ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : []),
-      ...(this.plants ? skyLines(hourLabel(this.hourNow), this.sunPx, this.plants.drawn, this.plants.total) : []),
+      ...(this.forest ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : []),
     ];
     return {
       lines: lines.length > 0 ? lines : undefined,

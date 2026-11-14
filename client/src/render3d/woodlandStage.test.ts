@@ -117,18 +117,19 @@ describe('the ?r3d=woodland stage', () => {
     const f = run(5, 0.2);
     expect(f.sight!.t).toBe(f.sun!.t);
     expect(f.sight!.t).toBeCloseTo(1, 5);
-    expect(run(1, 0.2).plants!.t).toBeCloseTo(f.sun!.t + 0.2, 5);
+    expect(run(1, 0.2).trees!.t).toBeCloseTo(f.sun!.t + 0.2, 5);
   });
 
-  it('draws the plants a few at a time and hands them to the view with the wind switch', () => {
+  it('grows the trees a few at a time and hands them to the view with the wind switch', () => {
     const { run } = setup('?r3d=woodland&hourRate=0');
-    const first = run(1, 0.016).plants!;
-    expect(first.wind).toBe(true);
-    expect(first.pages.length).toBeGreaterThan(0);
-    const later = run(40, 0.016).plants!;
+    const first = run(1, 0.016);
+    expect(first.plants).toBeUndefined();
+    expect(first.trees!.wind).toBe(true);
+    expect(first.trees!.chunks.size).toBeGreaterThan(0);
+    const later = run(40, 0.016).trees!;
     expect(later.chunks.size).toBeGreaterThan(0);
-    expect(later.t).toBeGreaterThan(first.t);
-    expect(setup('?r3d=woodland&wind=0').run(1, 0.016).plants!.wind).toBe(false);
+    expect(later.t).toBeGreaterThan(first.trees!.t);
+    expect(setup('?r3d=woodland&wind=0').run(1, 0.016).trees!.wind).toBe(false);
   });
 
   it('follows the Wall shadows switch', () => {

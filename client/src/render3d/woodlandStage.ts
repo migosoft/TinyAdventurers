@@ -2,7 +2,7 @@
 // north of it, the ground painted as in a run, a knight to walk with WASD, a few standing figures and a fireball circling, under the
 // sun and sky of the time of day (sun.ts): `?hour=` picks the hour, `?hourRate=` the pace (0 stops time),
 // `?wind=0` and `?clouds=0` switch those off. The daylight mist's sight mask runs around the knight as in a run.
-import { ANIM, CONST, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
+import { ANIM, CONST, KIND, LEAF_PALETTE, LIGHT_KIND, SIDE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import type { MovingLight } from '../generated/MovingLight';
 import type { EntState } from '../game/world';
@@ -29,8 +29,8 @@ import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
 import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
 import { KNIGHT_START, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
-import { PLANT_BUDGET_MS, PlantField } from './plantField';
-import { DEFAULT_LIGHT } from '../game/vegetation';
+import { Forest, TREE_BUDGET_MS } from './trees/forest';
+import { treeSpecOf } from './trees/spec';
 
 const TILE = 16;
 const KNIGHT_ID = 100;
@@ -79,8 +79,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
     mode: 'mist', mask: null, clear: [0, 0, 0], haze: DEFAULT_HAZE, mist: { ...MIST }, mistDay: 1, mistLight: [1, 1, 1], wind: WIND, t: 0,
   };
 
-  // The plants are drawn by `step` a few per frame; the pictures are baked with the stock light (the stage has no run sun to take it from).
-  const plants = new PlantField(WOODLAND_STAGE_PLANTS, map, DEFAULT_LIGHT);
+  // The trees are grown by `step` a few per frame.
+  const forest = new Forest(WOODLAND_STAGE_PLANTS.map(treeSpecOf), map, LEAF_PALETTE.Summer);
 
   const critters = new Critters3d(map, GROUND_SEED);
   const fireflies = new Fireflies(GROUND_SEED);
@@ -165,8 +165,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
-      // The plants: a few drawn per frame, nearest to the knight first.
-      plants.step(cam, PLANT_BUDGET_MS);
+      // The trees: a few grown per frame, nearest to the knight first.
+      forest.step(cam, TREE_BUDGET_MS);
       c.timer.lap('plants');
 
       const viewer = { x: knight.x, z: knight.z };
@@ -213,7 +213,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, plants: plants.frame(params.wind, seconds),
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, trees: forest.frame({ wind: params.wind, t: seconds }),
         },
         c.timer,
       );

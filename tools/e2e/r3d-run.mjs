@@ -1,9 +1,10 @@
 // Headless check of a real run in the 3D view (?r3d): one debug e2e_* account opens a debug room for the level, starts it,
 // waits for drawn frames, walks the hero, switches to the free camera and checks the chunk culling on the dungeon.
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
-// Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). The account is deleted at the end, also on failure.
+// Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
+import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots';
@@ -12,6 +13,8 @@ const browser = await chromium.launch({
   executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+  // GPU=1 (or GPU=uncapped): a visible window on the discrete card with the notebook's start line (gpu.mjs).
+  ...(gpuOn ? gpuLaunch() : {}),
 });
 const errors = [];
 const account = `e2e_${tag()}`;
@@ -68,6 +71,8 @@ page.on('websocket', (ws) => ws.on('framesent', (f) => {
     if (Array.isArray(m) && typeof m[0] === 'number' && m.length >= 9) sentInputs.push(m);
   } catch { /* other messages are not read here */ }
 }));
+// The woodland's trees draw slowly in software (a few frames a second): the walk and the click get longer to be seen (the real GPU needs none of it).
+const slow = level === 'woodland' && !gpuOn ? 4 : 1;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); // window.__r3d.hero / cam are {x, z} in tiles
 const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window.__r3d?.cam, chunks: window.__r3d?.chunks, frames: window.__r3d?.frames, figures: window.__r3d?.figures }));
 let registered = false;
@@ -91,6 +96,9 @@ try {
   await page.click('#start');
   await page.waitForSelector('#game.active', { timeout: 10000 });
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
+  if (gpuOn) await printGpu(page);
+  // The woodland's trees are grown a few per frame: give them time (WAIT_MS overrides) before the pictures.
+  await page.waitForTimeout(Number(process.env.WAIT_MS ?? (level === 'woodland' ? 8000 : 0)));
   // The 3D canvas, plus the overlay canvas over it (#311).
   if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push('expected exactly one 3D canvas in #game');
   if ((await page.locator('#game canvas.r3d-overlay').count()) !== 1) errors.push('expected exactly one overlay canvas in #game');
@@ -104,7 +112,7 @@ try {
   const h0 = (await r3d()).hero;
   if (!h0) errors.push('window.__r3d.hero is not set in a run');
   await page.keyboard.down('d');
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(2000 * slow);
   await page.keyboard.up('d');
   const h1 = (await r3d()).hero;
   if (h0 && h1) {
@@ -153,7 +161,7 @@ try {
   const mark = sentInputs.length;
   await page.mouse.move(800, 300);
   await page.mouse.down();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(300 * slow);
   await page.mouse.up();
   await page.waitForTimeout(200);
   const shots = sentInputs.slice(mark).filter((m) => m[5] != null);

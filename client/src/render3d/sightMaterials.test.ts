@@ -33,7 +33,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
     // Depth only (no colour to veil), but it stipples by the same sight value as the opaque card, so a figure the hero cannot see casts no shadow.
     { name: 'sun caster', m: sunCasterMaterial(t, 64, 64, l.sun, sight), world: false },
     { name: 'force field', m: fieldMaterial(sight), world: false },
-    // The plant card ends with the sight step. Its trunk and disc casters (plantNodes.ts) are depth only and never hidden: plants are scenery, which the mist never hides.
+    // The cove's atlas plant card ends with the sight step (plants are scenery, which the mist never hides).
     { name: 'plant card', m: plantCardMaterial(t, 64, 64, l, toward, sight, seeUniforms(), t, makePlantShared()), world: false },
     { name: 'tree depth', m: trees.depth, world: false },
     { name: 'tree colour', m: trees.colour, world: false },

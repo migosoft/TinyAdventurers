@@ -1,94 +1,32 @@
-// The 3D woodland's plant geometry (#306): the upright card with its root decal, the trunk caster and the clump discs the sun's
-// shadow pass draws. Pure: no three.js, and nothing here depends on the camera.
-import type { PlantShape } from '../game/vegetation';
+// The cove's small plants in the 3D view (#306): an upright atlas card per plant. Pure: no three.js, and nothing here depends on the camera.
 
 /** Pixels per tile in a plant's image. */
 const PX = 16;
 
-/** A plant drawn into a page (page -1: the atlas). rect in page px; foot and shape in the image's px. */
-export interface PlantSprite { page: number; rect: { x: number; y: number; w: number; h: number }; foot: { x: number; y: number }; shape: PlantShape | null }
+/** A plant frame in the atlas. rect in atlas px; foot in the frame's px. */
+export interface PlantSprite { rect: { x: number; y: number; w: number; h: number }; foot: { x: number; y: number } }
 export interface PlantPlace { x: number; z: number; mirrored: boolean; amp: number; seed: number }
-/** Per vertex: foot (x, z), corner (u tiles across the card, signed; y tiles up), uv (page px), sway (amp, card height in tiles), part (0 card, 1 root decal). `n` counts vertices. */
-export interface PlantBuf { foot: number[]; corner: number[]; uv: number[]; sway: number[]; part: number[]; n: number }
-/** A clump disc: centre (x, y, z) world-fixed, radius, phase for the lumpy edge, foot (x, z) and sway (amp, h) for the shadow's sway. `corner` is the quad corner (-1..1). `n` counts vertices. */
-export interface ClumpBuf { centre: number[]; corner: number[]; radius: number[]; phase: number[]; foot: number[]; sway: number[]; n: number }
+/** Per vertex: foot (x, z), corner (u tiles across the card, signed; y tiles up), uv (atlas px), sway (amp, card height in tiles). `n` counts vertices. */
+export interface PlantBuf { foot: number[]; corner: number[]; uv: number[]; sway: number[]; n: number }
 
-export const newPlantBuf = (): PlantBuf => ({ foot: [], corner: [], uv: [], sway: [], part: [], n: 0 });
-export const newClumpBuf = (): ClumpBuf => ({ centre: [], corner: [], radius: [], phase: [], foot: [], sway: [], n: 0 });
-
-/** Tiles: the root decal's height, above the terrain layers' range. */
-export const ROOT_LIE = 0.004;
+export const newPlantBuf = (): PlantBuf => ({ foot: [], corner: [], uv: [], sway: [], n: 0 });
 
 // Corners run top-left, top-right, bottom-right, bottom-left; two triangles (as cards.ts).
 const ORDER = [0, 3, 2, 0, 2, 1];
 
-/**
- * One quad of the image rows `r0..r1` and columns `c0..c1` (px). `foot` is the plant's foot in the image's px; a mirrored
- * plant reads its columns back to front, so its u runs the other way and its uv swaps. `up0`/`up1` are the y of the top and bottom edge in tiles.
- */
-function quad(out: PlantBuf, p: PlantPlace, s: PlantSprite, c0: number, c1: number, r0: number, r1: number, up0: number, up1: number, part: number): void {
-  const fx = s.foot.x;
-  const uL = p.mirrored ? -(c1 - fx) / PX : (c0 - fx) / PX, uR = p.mirrored ? -(c0 - fx) / PX : (c1 - fx) / PX;
-  const xL = p.mirrored ? c1 : c0, xR = p.mirrored ? c0 : c1;
-  const h = s.foot.y / PX;
-  const cs: [number, number][] = [[uL, up0], [uR, up0], [uR, up1], [uL, up1]];
-  const us: [number, number][] = [[xL, r0], [xR, r0], [xR, r1], [xL, r1]];
+/** The upright card: the frame's rows above the foot. A mirrored plant reads its columns back to front, so its u runs the other way and its uv swaps. */
+export function pushPlant(out: PlantBuf, p: PlantPlace, s: PlantSprite): void {
+  const { w } = s.rect, fy = s.foot.y, fx = s.foot.x;
+  const uL = p.mirrored ? -(w - fx) / PX : -fx / PX, uR = p.mirrored ? fx / PX : (w - fx) / PX;
+  const xL = p.mirrored ? w : 0, xR = p.mirrored ? 0 : w;
+  const h = fy / PX;
+  const cs: [number, number][] = [[uL, h], [uR, h], [uR, 0], [uL, 0]];
+  const us: [number, number][] = [[xL, 0], [xR, 0], [xR, fy], [xL, fy]];
   for (const k of ORDER) {
     out.foot.push(p.x, p.z);
     out.corner.push(cs[k][0], cs[k][1]);
     out.uv.push(s.rect.x + us[k][0], s.rect.y + us[k][1]);
     out.sway.push(p.amp, h);
-    out.part.push(part);
   }
   out.n += 6;
-}
-
-/** The upright card (rows 0..foot.y) and the root decal lying flat (rows foot.y..h). */
-export function pushPlant(out: PlantBuf, p: PlantPlace, s: PlantSprite): void {
-  const { w, h } = s.rect, fy = s.foot.y;
-  quad(out, p, s, 0, w, 0, fy, fy / PX, 0, 0);
-  if (h > fy) quad(out, p, s, 0, w, fy, h, 0, -(h - fy) / PX, 1);
-}
-
-/** The trunk caster: rows trunkTop..foot, columns trunkX0..trunkX1; 'whole' plants: the whole card above the foot. Nothing when the plant has no shape or no trunk. */
-export function pushTrunkCaster(out: PlantBuf, p: PlantPlace, s: PlantSprite): void {
-  const sh = s.shape;
-  if (!sh) return;
-  const fy = s.foot.y;
-  if (sh.cast === 'whole') { quad(out, p, s, 0, s.rect.w, 0, fy, fy / PX, 0, 0); return; }
-  if (sh.trunkTop >= fy) return;
-  quad(out, p, s, sh.trunkX0, sh.trunkX1 + 1, sh.trunkTop, fy, (fy - sh.trunkTop) / PX, 0, 0);
-}
-
-function hash(seed: number, i: number): number {
-  let t = (Math.imul(seed | 0, 0x9e3779b1) + Math.imul(i + 1, 0x85ebca6b)) >>> 0;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-/** Seeded depth offset (tiles, toward or away from the camera) of clump i; |d| <= 0.65 and <= `reachPx` (the disc's depth budget, if it has one), 0 on the axis. */
-export function clumpDepth(seed: number, i: number, onAxis: boolean, reachPx = Infinity): number {
-  return onAxis ? 0 : (hash(seed, i) * 2 - 1) * Math.min(0.65, reachPx / PX);
-}
-
-/** One disc per clump, at a world-fixed centre. */
-export function pushClumps(out: ClumpBuf, p: PlantPlace, s: PlantSprite): void {
-  const sh = s.shape;
-  if (!sh) return;
-  const h = s.foot.y / PX;
-  sh.clumps.forEach((c, i) => {
-    const off = (c.x - s.foot.x) / PX;
-    const cx = p.x + (p.mirrored ? -off : off), cy = (s.foot.y - c.y) / PX, cz = p.z + clumpDepth(p.seed, i, Math.abs(c.x - s.foot.x) < 0.5, c.reach);
-    const phase = hash(p.seed, i + 1000) * Math.PI * 2;
-    for (const k of ORDER) {
-      out.centre.push(cx, cy, cz);
-      out.corner.push(k === 0 || k === 3 ? -1 : 1, k < 2 ? 1 : -1);
-      out.radius.push(c.r / PX);
-      out.phase.push(phase);
-      out.foot.push(p.x, p.z);
-      out.sway.push(p.amp, h);
-    }
-    out.n += 6;
-  });
 }

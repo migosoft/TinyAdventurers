@@ -29,9 +29,9 @@ export function lightLines(list: number, inView: number, casters: number, lcap: 
   return [`lights     ${list} of ${inView} (cap ${lcap})`, `shadows    ${casters} cards (cap ${ccap})`];
 }
 
-/** The woodland run's two lines (#306): the hour with the sun map's size, and the plants drawn of all. */
-export function skyLines(hourLabel: string, sunPx: number, drawn: number, total: number): string[] {
-  return [`sun        ${hourLabel} ${sunPx} px`, `plants     ${drawn} of ${total}`];
+/** The woodland run's two lines (#306): the hour with the sun map's size, and the trees built of all. */
+export function skyLines(hourLabel: string, sunPx: number, built: number, total: number): string[] {
+  return [`sun        ${hourLabel} ${sunPx} px`, `plants     ${built} of ${total}`];
 }
 
 const UPDATE = new Set<string>(['sim', 'cards', 'plants', 'lights', 'sight']);

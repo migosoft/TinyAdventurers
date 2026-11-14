@@ -5,7 +5,7 @@ import { makeLighting, type Lighting } from './lightNodes';
 import { makeSunLight } from './sunNodes';
 import { makeSight } from './sightNodes';
 import { seeUniforms, viewTowardUniform } from './materials';
-import { makePlantShared, plantCardMaterial, plantDiscMaterial, plantTrunkMaterial } from './plantNodes';
+import { makePlantShared, plantCardMaterial } from './plantNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** A `Lighting` whose light is a constant, so the only texture reads in a plant material are its own. */
@@ -60,20 +60,5 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(m.alphaTest).toBe(0.5);
     });
 
-    it('the trunk caster is depth only: the page alpha, no colour, no sight step', () => {
-      const m = plantTrunkMaterial(t, 1024, 1024, makeSunLight(), makePlantShared());
-      expect(m.colorWrite).toBe(false);
-      const code = fragment(B, m);
-      expect(code).not.toContain('sightMode');
-      expect([...code.matchAll(B === WGSLNodeBuilder ? /textureSample\(/g : /texture\(/g)]).toHaveLength(1);
-    });
-
-    it('the disc caster is depth only and reads no texture', () => {
-      const m = plantDiscMaterial(makeSunLight(), makePlantShared());
-      expect(m.colorWrite).toBe(false);
-      const code = fragment(B, m);
-      expect(code).not.toContain('sightMode');
-      expect([...code.matchAll(B === WGSLNodeBuilder ? /textureSample\(/g : /texture\(/g)]).toHaveLength(0);
-    });
   });
 }

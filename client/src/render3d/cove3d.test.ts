@@ -5,7 +5,7 @@ import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY, CANOP
 import type { Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
 import { Cove3d, PIXIE_LIGHT, Pixies3d } from './cove3d';
-import { PlantField } from './plantField';
+import { AtlasPlants } from './atlasPlants';
 import { TILE_ID } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { TILE, TileMap } from '../sim/map';
@@ -31,8 +31,6 @@ describe('Cove3d', () => {
     expect(tree.place.x).toBeCloseTo(foot.x / 16, 6);
     expect(tree.place.z).toBeCloseTo(foot.y / 16, 6);
     expect(tree.place.amp).toBe(SWAY.coveTree);
-    expect(tree.sprite.page).toBe(-1);
-    expect(tree.sprite.shape).toBeNull();
     expect(tree.sprite.rect).toEqual(frames.cove_tree);
   });
 
@@ -41,18 +39,15 @@ describe('Cove3d', () => {
     expect(placed.length).toBeGreaterThan(0);
     expect(c.plants()).toHaveLength(placed.length + 1);
     for (const p of c.plants().slice(1)) {
-      expect(p.sprite.page).toBe(-1);
       expect(p.place.amp).toBe(SWAY.small);
       expect(p.sprite.foot.y).toBe(p.sprite.rect.h);
     }
   });
 
-  it('hands over to a plant field that shows every sprite at once', () => {
-    const f = PlantField.fromAtlas(c.plants(), { w: 64, h: 48 });
-    expect(f.drawn).toBe(c.plants().length);
-    const chunks = [...f.frame(true, 1).chunks.values()].flat();
-    expect(chunks.every((k) => k.page === -1)).toBe(true);
-    expect(chunks.reduce((n, k) => n + k.cards.n, 0)).toBeGreaterThan(0);
+  it('hands over to atlas plants that show every sprite at once', () => {
+    const f = new AtlasPlants(c.plants(), { w: 64, h: 48 });
+    const chunks = [...f.frame(true, 1).chunks.values()];
+    expect(chunks.reduce((n, k) => n + k.n, 0)).toBe(c.plants().length * 6);
   });
 
   it('casts one shadow per plant, with negative ids and positive widths', () => {
