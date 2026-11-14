@@ -7,7 +7,7 @@ import { parseMap, MAP_ROWS } from './demoMap';
 function fakeView(): View {
   return {
     backend: 'WebGL2 fallback', setSize: vi.fn(), draw: vi.fn(() => 0), canForceLoss: true, maxTexture: 8192, forceLoss: vi.fn(() => true), readback: vi.fn(async () => null),
-    dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), chunks: { total: 0, drawn: 0 }, meshes: 0,
+    dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), setCover: vi.fn(), chunks: { total: 0, drawn: 0 }, meshes: 0,
   };
 }
 

@@ -39,6 +39,10 @@ import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { makeCoverShared } from './cover/coverRead';
+import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
+import { CoverLayer, type CoverFrame } from './cover/coverLayer';
+import type { CoverResult } from './cover/coverJob';
+import { GroundTooLargeError } from './groundError';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { SUN_TOP, type SunFit, type Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
@@ -102,15 +106,11 @@ export interface FrameInput {
   plants?: AtlasPlantFrame;
   /** The woodland's grown trees (#329); absent: no trees. */
   trees?: TreeFrame;
+  /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
+  cover?: CoverFrame;
 }
 
-/** The ground image is larger than the device's texture limit. */
-export class GroundTooLargeError extends Error {
-  constructor(w: number, h: number, limit: number) {
-    super(`The ground image (${w} x ${h} px) is larger than this device's texture limit (${limit} px).`);
-    this.name = 'GroundTooLargeError';
-  }
-}
+export { GroundTooLargeError };
 
 /** A mesh whose vertex buffers are refilled every frame; the buffers grow when a frame needs more. */
 class DynMesh {
@@ -177,6 +177,8 @@ export interface View {
   tileChanged(x: number, z: number): void;
   /** Uploads the painted ground; throws GroundTooLargeError when it exceeds the device's texture limit. */
   setGround(img: GroundImage): void;
+  /** Builds the ground cover's meshes and uploads its image (#330); throws GroundTooLargeError above the device's texture limit. */
+  setCover(r: CoverResult): void;
   /** Chunk meshes (world and terrain): all of them, and those three drew in the last frame. */
   readonly chunks: { total: number; drawn: number };
   /** Scene objects, for the F3 panel. */
@@ -307,7 +309,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const maskScene = new Scene();
   maskScene.add(maskDiscs.mesh);
   const sight = makeSight();
-  // The ground cover (#330): a 1x1 stand-in with the layer off, until the layer is wired in.
+  // The ground cover (#330): a 1x1 stand-in with the layer off until `setCover` uploads the image.
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType));
   const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
   const material = wm.material;
@@ -453,7 +455,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     plantShared.on.value = pf.wind ? 1 : 0;
   };
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
-  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun }));
+  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover }));
+  // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
+  const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
@@ -563,6 +567,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       for (const t of groundTex) t.dispose();
       groundTex = next;
     },
+    setCover(r) {
+      if (disposed || lost) return;
+      coverLayer.set(r, textureLimit());
+    },
     backend: be.isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
     get maxTexture() {
       return textureLimit();
@@ -617,6 +625,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const d = f.dynamic;
       card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
       plantShared.cosP.value = trees.shared.cosP.value = Math.cos(f.cam.pitch);
+      coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
       clock = f.t;
@@ -749,6 +758,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         clearPlants();
         plantCard.dispose();
         trees.dispose();
+        coverLayer.dispose();
         mm.material.dispose();
         maskDiscs.dispose();
       } finally {
