@@ -11,6 +11,9 @@ import { TREE_ORDER, makeTreeShared, type TreeMaterials, type TreeShared } from 
 /** The palette's size in texels: tones across, ramps down. */
 const PALETTE_W = 5, PALETTE_H = 4;
 
+/** The least time between two uploads of one chunk while the forest is still growing (ms, first guess). */
+export const TREE_UPLOAD_MS = 250;
+
 /** One chunk's geometry: the mesh streams, the per-plant `plant` and `look` streams (copied at their used length) and the forest's bounds for culling. */
 export function chunkGeometry(c: TreeChunk): BufferGeometry {
   const m = c.mesh;
@@ -42,9 +45,16 @@ export class TreeLayer {
   private readonly meshes = new Map<number, { mesh: Mesh; scene: Scene }[]>();
   private sync_ = new ChunkSync();
   private versionsOf: ReadonlyMap<number, number> | null = null;
+  /** Chunks that changed and wait for their upload, and when each chunk was last uploaded. */
+  private readonly dirty = new Set<number>();
+  private readonly uploadedAt = new Map<number, number>();
 
-  /** `sunScene`: the sun's pass, or null without a sun. `make` builds the three materials once, from the palette texture and the shared uniforms. */
-  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly make: (palette: Texture, shared: TreeShared) => TreeMaterials) {}
+  /** `sunScene`: the sun's pass, or null without a sun. `make` builds the three materials once, from the palette texture and the shared uniforms. `now`: the clock in ms. */
+  constructor(
+    private readonly scene: Scene, private readonly sunScene: Scene | null,
+    private readonly make: (palette: Texture, shared: TreeShared) => TreeMaterials,
+    private readonly now: () => number = () => performance.now(),
+  ) {}
 
   /** Meshes held, in both scenes. */
   get meshCount(): number {
@@ -67,10 +77,17 @@ export class TreeLayer {
     this.shared.windOn.value = f.wind ? 1 : 0;
     this.shared.leafOverride.value = f.leafOverride;
     this.shared.plain.value = f.plain ? 1 : 0;
-    for (const k of this.sync_.changed(f.versions)) {
+    for (const k of this.sync_.changed(f.versions)) this.dirty.add(k);
+    const now = this.now();
+    for (const k of this.dirty) {
+      // A chunk never shown is built at once; a shown one that is still growing waits out the window, unless the forest is complete.
+      const last = this.uploadedAt.get(k);
+      if (last !== undefined && !f.complete && now - last < TREE_UPLOAD_MS) continue;
+      this.dirty.delete(k);
       this.drop(k);
       const c = f.chunks.get(k);
       if (!c || c.mesh.verts === 0) continue;
+      this.uploadedAt.set(k, now);
       // The chunk's `plant` and `look` are views the forest re-assigns on every added tree: read them now, from the chunk, never cache them.
       const g = chunkGeometry(c);
       const list: { mesh: Mesh; scene: Scene }[] = [];
@@ -92,6 +109,8 @@ export class TreeLayer {
   clear(): void {
     for (const k of [...this.meshes.keys()]) this.drop(k);
     this.sync_ = new ChunkSync();
+    this.dirty.clear();
+    this.uploadedAt.clear();
   }
 
   dispose(): void {

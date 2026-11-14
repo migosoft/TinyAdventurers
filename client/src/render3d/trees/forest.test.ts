@@ -60,6 +60,15 @@ describe('Forest.step', () => {
 });
 
 describe('Forest.frame', () => {
+  it('says complete once every tree is built', () => {
+    const f = make([spec(2, 2, 1), spec(3, 3, 2)], counting(10));
+    expect(f.frame({ wind: true, t: 0 }).complete).toBe(false);
+    f.step({ x: 0, z: 0 }, 0);
+    expect(f.frame({ wind: true, t: 0 }).complete).toBe(false);
+    f.step({ x: 0, z: 0 }, 1000);
+    expect(f.frame({ wind: true, t: 0 }).complete).toBe(true);
+  });
+
   it('grows a chunk version with each plant added', () => {
     const f = make([spec(2, 2, 1), spec(3, 3, 2), spec(40, 3, 3)]);
     expect(f.frame({ wind: true, t: 0 }).versions.size).toBe(0);

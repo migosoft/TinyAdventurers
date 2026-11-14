@@ -3,17 +3,18 @@ import { DataTexture, Mesh, Scene, Texture } from 'three/webgpu';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { seeUniforms } from '../materials';
+import { buildTree } from './build';
 import { Forest } from './forest';
 import { paletteBytes } from './palette';
 import type { TreeForm, TreeSpec } from './spec';
 import { TREE_ORDER, treeMaterials } from './treeNodes';
-import { TreeLayer } from './treeLayer';
+import { TREE_UPLOAD_MS, TreeLayer } from './treeLayer';
 
 const spec = (x: number, z: number, seed = 1, extra: Partial<TreeSpec> = {}): TreeSpec => ({ form: 'round' as TreeForm, x, z, seed, scalePct: 100, mirrored: false, leaf: 1, dead: false, ...extra });
 const MAP = { w: 48, h: 32 }; // 3 x 2 chunks
 const FEET = [spec(2, 2, 1), spec(20, 3, 2), spec(40, 20, 3)]; // three chunks
 
-function layer(hasSun: boolean): { l: TreeLayer; scene: Scene; sun: Scene | null; made: { n: number } } {
+function layer(hasSun: boolean, now?: () => number): { l: TreeLayer; scene: Scene; sun: Scene | null; made: { n: number } } {
   const scene = new Scene();
   const sun = hasSun ? new Scene() : null;
   const made = { n: 0 };
@@ -21,7 +22,7 @@ function layer(hasSun: boolean): { l: TreeLayer; scene: Scene; sun: Scene | null
   const l = new TreeLayer(scene, sun, (palette, shared) => {
     made.n++;
     return treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette, shared, hasSun });
-  });
+  }, now);
   return { l, scene, sun, made };
 }
 const built = (n: number): Forest => {
@@ -107,6 +108,64 @@ describe('TreeLayer', () => {
     f.step({ x: 0, z: 0 }, 1e6);
     fresh.l.sync(frame(f));
     expect(fresh.scene.children).toHaveLength(3 * 2);
+  });
+
+  describe('uploads of a growing chunk', () => {
+    const SAME = [spec(2, 2, 1), spec(4, 4, 2), spec(6, 6, 3), spec(8, 8, 4)]; // one chunk
+    // A forest on a fake clock that moves 10 ms per reading, so a step with no budget builds exactly one tree.
+    const forest = (): Forest => { let c = 0; return new Forest(SAME, MAP, 0, buildTree, () => (c += 10)); };
+    const grow = (f: Forest) => f.step({ x: 0, z: 0 }, 0); // one tree
+    const verts = (scene: Scene) => ((scene.children[0] as Mesh).geometry.getAttribute('position').count);
+    const total = (f: Forest) => [...f.frame({ wind: false, t: 0 }).chunks.values()][0].mesh.verts;
+
+    it('rebuilds a chunk that gains trees on consecutive frames once inside the window, not per frame', () => {
+      let now = 0;
+      const f = forest();
+      const { l, scene } = layer(true, () => now);
+      grow(f);
+      l.sync(frame(f)); // never shown: built at once
+      const first = scene.children[0] as Mesh;
+      const v1 = verts(scene);
+      for (let i = 0; i < 2; i++) { now += 16; grow(f); l.sync(frame(f)); }
+      expect(scene.children[0]).toBe(first); // same mesh: no rebuild
+      expect(verts(scene)).toBe(v1);
+      expect(scene.children).toHaveLength(2);
+    });
+
+    it('shows every tree after the window', () => {
+      let now = 0;
+      const f = forest();
+      const { l, scene } = layer(true, () => now);
+      grow(f);
+      l.sync(frame(f));
+      now += 16; grow(f); l.sync(frame(f));
+      now += 16; grow(f); l.sync(frame(f));
+      expect(verts(scene)).toBeLessThan(total(f));
+      now += TREE_UPLOAD_MS; // no new tree: the pending change is still uploaded
+      l.sync(frame(f));
+      expect(verts(scene)).toBe(total(f));
+      expect(scene.children).toHaveLength(2);
+    });
+
+    it('is complete on the next sync when the forest is complete, inside the window', () => {
+      let now = 0;
+      const f = forest();
+      const { l, scene } = layer(true, () => now);
+      grow(f);
+      l.sync(frame(f));
+      now += 16; grow(f); grow(f); grow(f);
+      expect(f.built).toBe(f.total);
+      l.sync(frame(f));
+      expect(verts(scene)).toBe(total(f));
+    });
+
+    it('a new layer on the same forest (a lost device) shows everything at once', () => {
+      const f = forest();
+      grow(f); grow(f);
+      const fresh = layer(true, () => 0);
+      fresh.l.sync(frame(f));
+      expect(verts(fresh.scene)).toBe(total(f));
+    });
   });
 
   it('draws the depth pass after the ground (order 0) and the colour pass before the translucent passes (order 1 and up)', () => {

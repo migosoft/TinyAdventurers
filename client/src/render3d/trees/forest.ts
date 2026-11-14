@@ -16,6 +16,8 @@ export interface TreeFrame {
   /** Chunk index to a number that grows when a tree was added to it. */
   versions: ReadonlyMap<number, number>;
   palette: number;
+  /** Every tree of the forest is built: no chunk will change again until the forest does. */
+  complete: boolean;
   wind: boolean;
   t: number;
   /** Leaf amount forced on every living tree; negative: none. */
@@ -96,7 +98,7 @@ export class Forest {
   }
 
   frame(o: { wind: boolean; t: number; leafOverride?: number; plain?: boolean }): TreeFrame {
-    return { chunks: this.chunkMap, versions: this.versionMap, palette: this.palette, wind: o.wind, t: o.t, leafOverride: o.leafOverride ?? -1, plain: o.plain ?? false };
+    return { chunks: this.chunkMap, versions: this.versionMap, palette: this.palette, complete: this.done === this.specs.length, wind: o.wind, t: o.t, leafOverride: o.leafOverride ?? -1, plain: o.plain ?? false };
   }
 
   private add(i: number): void {
