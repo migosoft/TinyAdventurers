@@ -17,9 +17,9 @@ import { Figures3d, type Opener } from './figures';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
-import { WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
+import { WORK_AMBIENT, dungeonAmbient, stoneClear, type Light } from './light';
 import { MIST } from './mist';
-import { WIND } from './wind';
+import { WIND, WIND_DIR } from './wind';
 import { SightMask, hiddenAt } from './sightmask';
 import { hiddenByPicture } from './sightAttrs';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
@@ -27,9 +27,12 @@ import { SHOT_LIFT } from './camera';
 import { isProjectileKind } from '../game/anim/defs';
 import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
+import { Air3d } from './air/air';
+import { MoverTracker, collectAirMovers } from '../game/airmovers';
+import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
+import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
@@ -40,7 +43,7 @@ import { treeSpecOf } from './trees/spec';
 import { Critters3d } from './critters3d';
 import { Fireflies } from './fireflies';
 import { Cove3d } from './cove3d';
-import type { SunFrame, View } from './view';
+import type { FrameInput, SunFrame, View } from './view';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -50,6 +53,8 @@ const FOLLOW_RATE = 6;
 /** The free camera's speed in tiles per second, and with Shift. */
 const FREE_SPEED = 12;
 const FREE_SPEED_FAST = 36;
+/** The woodland's pollen drifts with the wind at this speed, tiles per second (first guess). */
+const POLLEN_DRIFT = 0.25;
 
 /** Keys held -> the fixed step's movement: the screen direction turned by the yaw, rounded to the eight wire directions. */
 export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 | 0 | 1; my: -1 | 0 | 1 } {
@@ -93,6 +98,12 @@ export class RunView3d implements RunView {
   private readonly map: RunViewInit['map'];
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
+  // The dungeon air and the woodland's pollen (#307): simulated here, once per run (a lost device keeps it).
+  private readonly air: Air3d;
+  private readonly moverTracker = new MoverTracker();
+  private readonly airMovers: AirMover[] = [];
+  private readonly myKind: number;
+  private readonly airTorches: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
   private forest: Forest | null = null;
@@ -151,6 +162,8 @@ export class RunView3d implements RunView {
       this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
+    this.myKind = init.myKind;
+    this.air = new Air3d(init.map);
     this.field = init.light;
     this.lava = new Float32Array(init.map.w * init.map.h * 4);
   }
@@ -374,8 +387,6 @@ export class RunView3d implements RunView {
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
-      // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees, as their cracks. A woodland has none.
-      if (!skyNow) cracks = selectCracks(this.field, fp, c.params.sight ? this.mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
       // The cove's bushes cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
       const mask = this.mask;
       const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
@@ -399,6 +410,10 @@ export class RunView3d implements RunView {
     if (sight.mask) hiddenByPicture([dynamic.cards, dynamic.ghosts], sight.mask, this.hiddenSeen, this.hidden);
     this.seen = seenOpeners(fo.openers, this.sightFor(f), this.hidden);
     c.timer.lap('sight');
+    // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees now (this frame's mask), as their cracks. A woodland and the work light have none.
+    if (!work && !skyNow) cracks = selectCracks(this.field, fp, c.params.sight ? this.mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
+    const air = this.airFrame(f, c, fp, lights, cracks, !!skyNow);
+    c.timer.lap('air');
     // The sun or moon of the hour (not with the work light), its map fitted to what the camera sees.
     let sun: SunFrame | null = null;
     this.sunPx = 0;
@@ -410,12 +425,27 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
       },
       c.timer,
     );
     this.paintOverlay(f, c, cam);
     return this.stats(c, view.meshes);
+  }
+
+  /** The air of this frame (#307): the torches, shots and movers of the frame feed the simulation; the haze is for the dungeon only. */
+  private airFrame(f: RunFrame, c: StageCtx, fp: ReturnType<typeof footprint>, lights: readonly Light[], cracks: readonly Crack[], pollen: boolean): NonNullable<FrameInput['air']> {
+    const torches = this.airTorches;
+    torches.length = 0;
+    for (const e of f.ents.values()) if (e.kind === KIND.Torch) torches.push({ ...torchOf(e), lit: e.anim === 1 });
+    const shots: AirShot[] = (f.snap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
+    const p = c.params;
+    const parts = this.air.step({
+      dt: f.dt, t: c.now, fp, mask: p.sight ? this.mask : null, torches, shots, movers: collectAirMovers(f, this.moverTracker, this.myKind, this.airMovers), lights, cracks,
+      on: { dust: p.dust, smoke: p.smoke, embers: p.embers, drips: p.drips, stir: p.stir, draft: p.draft }, respawn: p.respawn,
+      drift: pollen ? (p.wind ? [WIND_DIR[0] * POLLEN_DRIFT, WIND_DIR[1] * POLLEN_DRIFT] : [0, 0]) : null, kinds: pollen ? 'pollen' : 'dungeon',
+    });
+    return { parts, haze: { on: p.haze && !pollen, t: c.now } };
   }
 
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
@@ -481,6 +511,7 @@ export class RunView3d implements RunView {
   }
 
   tileChanged(x: number, y: number, _v: number): void {
+    this.air.mapChanged();
     this.sightKey = ''; // a door or a wall changed: the sight is recomputed
     this.mapVersion++;
     this.softDirty = true;

@@ -197,7 +197,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters, sight, cracks, shafts: true, // Task 8 of #307 puts the real switch here
+          casters, sight, cracks, shafts: c.params.shafts,
         },
         c.timer,
       );

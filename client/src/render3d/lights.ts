@@ -48,16 +48,22 @@ export function lightRgb(kind: number, colour: number | null, k: number): [numbe
 /** A torch's flame on its wall: the point on the wall face, the face's normal (into the room) and the flame's flicker phase. */
 export interface TorchWall { x: number; z: number; nx: number; nz: number; phase: number }
 
+/** A torch entity's flame foot on its wall, the wall's normal (into the room) and the floor tile of its light. */
+export function torchOf(e: EntState): { x: number; z: number; nx: number; nz: number; tx: number; tz: number } {
+  const x = e.x / TILE;
+  const z = e.y / TILE;
+  const [wx, wz, nx, nz] = e.extra === 0 ? [x, Math.floor(z), 0, 1] : e.extra === 1 ? [Math.floor(x), z, 1, 0] : [Math.floor(x) + 1, z, -1, 0];
+  return { x: wx, z: wz, nx, nz, tx: Math.floor(x), tz: Math.floor(z) };
+}
+
 /** Pairs the static torch lights with the torch entities the session has seen (the light only knows its tile, the entity its side). */
 export class TorchPairs {
   private seen = new Map<string, TorchWall>();
 
   /** Remembers a torch entity under its light tile, as `drawTorch` places its flame. */
   see(e: EntState): void {
-    const x = e.x / TILE;
-    const z = e.y / TILE;
-    const [wx, wz, nx, nz] = e.extra === 0 ? [x, Math.floor(z), 0, 1] : e.extra === 1 ? [Math.floor(x), z, 1, 0] : [Math.floor(x) + 1, z, -1, 0];
-    this.seen.set(`${Math.floor(x)},${Math.floor(z)}`, { x: wx, z: wz, nx, nz, phase: e.id * 1.7 });
+    const t = torchOf(e);
+    this.seen.set(`${t.tx},${t.tz}`, { x: t.x, z: t.z, nx: t.nx, nz: t.nz, phase: e.id * 1.7 });
   }
 
   /** The remembered pair of a light, else a guess from the walls beside its tile (north, west, east; none: the tile centre). */

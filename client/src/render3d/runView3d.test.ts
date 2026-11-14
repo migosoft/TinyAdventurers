@@ -62,11 +62,12 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   const light = new LightField(map);
+  if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
   const init: RunViewInit = { info, map, light, myKind: KIND.Wizard };
   const overlay = over.paint ? ({ size() {}, measure: () => 10, paint: (items: OverlayItem[]) => over.paint!.splice(0, over.paint!.length, ...items) } as unknown as Overlay3d) : null;
@@ -78,7 +79,8 @@ function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; p
   const canvasEl = document.createElement('canvas');
   canvasEl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 720 }) as DOMRect;
   const timer = { lap() {}, renderStart() {}, systems: {}, frameMs: 0, renderMs: 0 };
-  v.begin({ now: 0, dt: 1 / 60, params, held: new Set(), canvas: { w: 1280, h: 720 }, zoom: 2, plan, canvasEl, view, timer } as unknown as StageCtx);
+  const ctx = { now: 0, dt: 1 / 60, params, held: new Set(), canvas: { w: 1280, h: 720 }, zoom: 2, plan, canvasEl, view, timer } as unknown as StageCtx;
+  v.begin(ctx);
   const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never, ...(over.tick !== undefined ? { tick: over.tick } : {}) });
   if (over.me) Object.assign(s.me, over.me);
   const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
@@ -91,7 +93,7 @@ function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; p
     v.frame(f);
     return got;
   };
-  return { f: first, stats, own, v, light, again, map };
+  return { f: first, stats, own, v, light, again, map, ctx };
 }
 
 describe('the run view and the game lights', () => {
@@ -361,5 +363,57 @@ describe('what the picture hides has nothing over it (#305)', () => {
     const beyond: OverlayItem[] = [];
     run({ rows: big, daylight: true, figs: [mob(7, 30)], paint: beyond });
     expect(beyond.filter((i) => i.t === 'bar')).toHaveLength(0);
+  });
+});
+
+describe('the air in the run view (#307)', () => {
+  const sunny = (r: ReturnType<typeof run>): void => r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
+  it('a dungeon frame passes the air parts, its haze, the shafts switch and the cracks of the Daylight lights in sight', () => {
+    const r = run({ rows: ['#######', '#.....#', '#.....#', '#.....#', '#######'] });
+    sunny(r);
+    const f = r.again();
+    expect(f?.air?.parts.specks).toBeDefined();
+    expect(f?.air?.haze.on).toBe(true);
+    expect(f?.shafts).toBe(true);
+    expect(f?.cracks).toHaveLength(1);
+    expect(f?.cracks?.[0].fx).toBeCloseTo(3.5);
+  });
+  it('the cracks follow this frame\'s sight: a Daylight light in view is sent from the first frame on', () => {
+    expect(run({ sun: true, rows: ['#######', '#.....#', '#.....#', '#.....#', '#######'] }).f?.cracks).toHaveLength(1);
+  });
+  it('the haze is off with the haze switch and the shafts are off with shafts=0', () => {
+    const f = run({ params: { haze: false, shafts: false } }).f;
+    expect(f?.air?.haze.on).toBe(false);
+    expect(f?.shafts).toBe(false);
+  });
+  it('a woodland frame has the pollen only: no smoke, embers or drips, no haze, no cracks', () => {
+    const r = run({ woodland: true, torch: false });
+    r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 1, on: true });
+    const f = r.again();
+    expect(f?.air).toBeTruthy();
+    expect(f?.air?.haze.on).toBe(false);
+    expect(f?.air?.parts.puffs.count).toBe(0);
+    expect(f?.air?.parts.embers.count).toBe(0);
+    expect(f?.air?.parts.drops.count).toBe(0);
+    expect(f?.cracks ?? []).toHaveLength(0);
+  });
+  it('the work light keeps the air and sends no cracks', () => {
+    const r = run({ params: { light: 'work' } });
+    sunny(r);
+    const f = r.again();
+    expect(f?.air).toBeTruthy();
+    expect(f?.cracks ?? []).toHaveLength(0);
+  });
+  it('a new view after a device loss gets the same air: the clouds go on', () => {
+    const r = run();
+    for (let i = 0; i < 30; i++) r.again();
+    const before = (r.v as unknown as { air: { counts: { clouds: number } } }).air.counts.clouds;
+    const parts = r.again()!.air!.parts;
+    expect(before).toBeGreaterThan(0);
+    let got: FrameInput | null = null;
+    r.ctx.view = { draw: (i: FrameInput) => ((got = i), 0), meshes: 0, tileChanged: () => {} } as never;
+    r.v.begin(r.ctx); // the lost device's replacement
+    r.again(); // draws into the new view
+    expect((got as FrameInput | null)?.air?.parts).toBe(parts);
   });
 });
