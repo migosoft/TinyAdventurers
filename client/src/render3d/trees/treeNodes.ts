@@ -2,6 +2,7 @@
 // All three build their point from one `treePoint`, so the sway, the leaf collapse and the patch spread cannot drift apart. The colour pass
 // is lit by the scene's own light (`Lighting`, shadow map included) and ends with the sight step; the light's brightness picks the ramp step.
 import { DoubleSide, EqualDepth, MeshBasicNodeMaterial } from 'three/webgpu';
+import type { NodeBuilder } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
@@ -24,8 +25,12 @@ export const TREE_LIGHT = {
   barkSteps: [-0.5, 0, 0.55],
 } as const;
 
-/** Draw order of the pre-pass and the colour pass (set on the meshes by the view): ground, tree depth, everything else, tree colour. */
-export const TREE_ORDER = { depth: -1, colour: 0.5 } as const;
+/**
+ * Draw order of the pre-pass and the colour pass (set on the meshes by the view): the opaque world (ground, walls, figures: order 0), the tree depth,
+ * the tree colour, then the translucent passes (shadows 1, decals and the force field 2, ghosts 3, glows 4). The depth pass comes after the ground,
+ * so a pixel the colour pass misses shows the ground, never the clear colour.
+ */
+export const TREE_ORDER = { depth: 0.25, colour: 0.5 } as const;
 
 /** Where a collapsed vertex goes: far below the ground, out of every view. */
 const GONE = [0, -50, 0] as const;
@@ -48,7 +53,15 @@ export interface TreeMaterials {
   sun: MeshBasicNodeMaterial | null;
 }
 
-const hash3 = (c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
+/** A material whose clip position is invariant (GLSL `invariant gl_Position`, WGSL `@invariant`): the depth pass and the colour pass are two programs with different varyings, and the colour pass tests at equal depth, so both must compute the very same position. */
+class TreePassMaterial extends MeshBasicNodeMaterial {
+  setup(builder: NodeBuilder): void {
+    (builder.context as { invariant?: boolean }).invariant = true;
+    super.setup(builder);
+  }
+}
+
+const hash3 =(c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719))).mul(43758.5453));
 
 /** The per-vertex streams of a tree mesh and the per-plant ones (`plant`: foot x, z, leaf amount, dead; `look`: leaf bright, leaf warm, bark light, bark grey). */
 function streams() {
@@ -142,7 +155,7 @@ export function treeMaterials(o: {
   const foot = varying(s.foot, 'treeFoot');
 
   // ---------------------------------------------------------------- the depth pass
-  const depth = new MeshBasicNodeMaterial();
+  const depth = new TreePassMaterial();
   depth.positionNode = p.position;
   depth.colorNode = Fn(() => {
     const unseen = sight.unseenAt(foot);
@@ -156,7 +169,7 @@ export function treeMaterials(o: {
   depth.side = DoubleSide;
 
   // ---------------------------------------------------------------- the colour pass
-  const colour = new MeshBasicNodeMaterial();
+  const colour = new TreePassMaterial();
   colour.positionNode = p.position;
   // One function body: its variables are written in order at the top level, so the light (and its shadow-map and sight-mask reads) is built
   // once, before any of the selects below (a select with nodes in its arms compiles to a branch).
@@ -194,7 +207,8 @@ export function treeMaterials(o: {
     const l: N = fromLight.add(crown).add(select(rim.and(nd.greaterThan(0.3)), float(0.6), float(0))); // first guess: the rim's lift
     const [s0, s1, s2, s3] = TREE_LIGHT.steps;
     let lvl: N = step(s0, l).add(step(s1, l)).add(step(s2, l)).add(step(s3, l));
-    lvl = select(rim.and(nd.lessThan(-0.1)), float(0), lvl);
+    // The dark rim is a step darker, not the darkest tone: a ragged edge leaves single rim cells that would read as black specks inside a crown.
+    lvl = select(rim.and(nd.lessThan(-0.1)), max(lvl.sub(1), 0), lvl); // first guess: one step
     // A skirt's hem is its darkest tone, the row above it at most the second.
     lvl = select(s.isSkirt.and(s.misc.y.greaterThan(0.9)), float(0), select(s.isSkirt.and(s.misc.y.greaterThan(0.8)), min(lvl, 1), lvl));
     const dab = hash3(floor(rest.mul(16 / DAB_CELL)).add(17)).lessThan(0.12).and(dot(nl, ld).greaterThan(0.15)).and(lvl.greaterThan(0.5)).and(fromLight.greaterThan(0));

@@ -109,6 +109,26 @@ describe('TreeLayer', () => {
     expect(fresh.scene.children).toHaveLength(3 * 2);
   });
 
+  it('draws the depth pass after the ground (order 0) and the colour pass before the translucent passes (order 1 and up)', () => {
+    const { l, scene } = layer(true);
+    l.sync(frame(built(1)));
+    const orders = (scene.children as Mesh[]).map((m) => m.renderOrder).sort((a, b) => a - b);
+    expect(orders[0]).toBeGreaterThan(new Mesh().renderOrder);
+    expect(orders[1]).toBeLessThan(1);
+    expect(orders[0]).toBeLessThan(orders[1]);
+  });
+
+  it('starts over when handed another forest', () => {
+    const { l, scene, sun } = layer(true);
+    l.sync(frame(built(3)));
+    expect(scene.children).toHaveLength(6);
+    const other = new Forest([spec(2, 2, 9)], MAP, 0);
+    other.step({ x: 0, z: 0 }, 1e6);
+    l.sync(frame(other));
+    expect(scene.children).toHaveLength(2); // the first forest's chunks are gone
+    expect(sun!.children).toHaveLength(1);
+  });
+
   it('clear and dispose take every mesh out', () => {
     const { l, scene, sun } = layer(true);
     l.sync(frame(built(3)));

@@ -41,6 +41,7 @@ export class TreeLayer {
   private paletteId = -1;
   private readonly meshes = new Map<number, { mesh: Mesh; scene: Scene }[]>();
   private sync_ = new ChunkSync();
+  private versionsOf: ReadonlyMap<number, number> | null = null;
 
   /** `sunScene`: the sun's pass, or null without a sun. `make` builds the three materials once, from the palette texture and the shared uniforms. */
   constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly make: (palette: Texture, shared: TreeShared) => TreeMaterials) {}
@@ -56,6 +57,11 @@ export class TreeLayer {
 
   /** Takes the frame's changed chunks (all of them for a new layer) and sets the shared uniforms. */
   sync(f: TreeFrame): void {
+    // Another forest has other chunks: start over (a forest keeps its own maps for its life).
+    if (this.versionsOf !== f.versions) {
+      if (this.versionsOf) this.clear();
+      this.versionsOf = f.versions;
+    }
     const mats = this.materials(f.palette);
     this.shared.t.value = f.t;
     this.shared.windOn.value = f.wind ? 1 : 0;

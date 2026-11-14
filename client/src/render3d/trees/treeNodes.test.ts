@@ -53,6 +53,11 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       }
     });
 
+    it('the depth and the colour pass compute an invariant clip position, so equal depth matches', () => {
+      const { mats, geometry } = build(true);
+      for (const m of [mats.depth, mats.colour]) expect(vertex(B, m, { compare: true, geometry })).toMatch(wgsl ? /@invariant\s+@builtin\(\s*position\s*\)/ : /invariant gl_Position;/);
+    });
+
     it('without a sun there is no sun material and no shadow-map sampler in the colour shader', () => {
       const { mats, geometry } = build(false);
       expect(mats.sun).toBeNull();
@@ -142,8 +147,10 @@ describe('tree material state', () => {
     const { mats } = build(true);
     expect(mats.depth.alphaTest).toBe(0.5);
     expect(mats.colour.alphaTest).toBe(0);
-    expect(TREE_ORDER.depth).toBeLessThan(0);
-    expect(TREE_ORDER.colour).toBeGreaterThan(0);
+    // After the ground, walls and figures (order 0), before the translucent passes (shadows 1 and up); the depth pass before the colour pass.
+    expect(TREE_ORDER.depth).toBeGreaterThan(0);
+    expect(TREE_ORDER.colour).toBeGreaterThan(TREE_ORDER.depth);
+    expect(TREE_ORDER.colour).toBeLessThan(1);
   });
 
   it('a threshold-0 vertex (a conifer skirt) is gone only when its threshold is above the amount: one plain comparison, no extra clause for leaf 0', () => {

@@ -78,7 +78,7 @@ const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window._
 let registered = false;
 
 try {
-  await page.goto(`${base}?r3d&backend=webgl`);
+  await page.goto(`${base}?r3d&backend=webgl${process.env.R3D_QUERY ?? ''}`); // R3D_QUERY: more page parameters, e.g. "&shadows=0&hour=14"
   await page.waitForSelector('#auth-name');
   await login(page, account, true);
   registered = true;
@@ -97,8 +97,19 @@ try {
   await page.waitForSelector('#game.active', { timeout: 10000 });
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   if (gpuOn) await printGpu(page);
-  // The woodland's trees are grown a few per frame: give them time (WAIT_MS overrides) before the pictures.
-  await page.waitForTimeout(Number(process.env.WAIT_MS ?? (level === 'woodland' ? 8000 : 0)));
+  // The woodland's trees are grown a few per frame: wait until the F3 line `plants <built> of <total>` shows them all (WAIT_MS: the time allowed, default 120 s).
+  if (level === 'woodland') {
+    await page.keyboard.press('F3');
+    const read = () => page.evaluate(() => { const m = /plants\s+(\d+) of (\d+)/.exec(document.body.innerText); return m ? [Number(m[1]), Number(m[2])] : null; });
+    const until = Date.now() + Number(process.env.WAIT_MS || 120000);
+    let n = await read();
+    // On the real GPU all of them; in software (about 2 frames a second, a tree or two a frame) the quarter nearest the hero, which is what the pictures show.
+    const need = (m) => (gpuOn ? m[1] : Math.ceil(m[1] / 4));
+    while ((!n || n[0] < need(n)) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
+    console.log(`trees built ${n ? `${n[0]} of ${n[1]}` : 'unknown (no F3 plants line)'}`);
+    if (!n || n[0] < need(n)) errors.push(`the forest was not built in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 plants line'}`);
+    await page.keyboard.press('F3');
+  }
   // The 3D canvas, plus the overlay canvas over it (#311).
   if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push('expected exactly one 3D canvas in #game');
   if ((await page.locator('#game canvas.r3d-overlay').count()) !== 1) errors.push('expected exactly one overlay canvas in #game');
