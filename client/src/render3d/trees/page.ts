@@ -71,7 +71,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const specs = layout(7, MW - 2 * PADX, MH - 2 * PADZ, 30 * p.mult, 20 * p.mult).map((s) => ({ ...s, x: s.x + PADX, z: s.z + PADZ }));
   // spike/3d-willow: two willows in the clearing, a big one by the path and a smaller one
   const wcx = MW / 2, wcz = PADZ + (MH - 2 * PADZ) * 0.58;
-  specs.push({ kind: 'wide', seed: 4711, scalePct: 110, x: wcx - 1.2, z: wcz - 3.0, willow: true }, { kind: 'wide', seed: 815, scalePct: 85, x: wcx + 6.2, z: wcz - 3.4, willow: true });
+  specs.push({ kind: 'wide', seed: 4711, scalePct: 110, x: wcx - 1.2, z: wcz - 3.0, willow: true }, { kind: 'wide', seed: 815, scalePct: 85, x: wcx + 3.6, z: wcz - 4.6, willow: true });
   const plants: Plant3[] = specs.map((s) => (s.willow ? buildWillow : buildPlant)(new MeshData(), s)); // what the cards and the falling leaves need
   const atlasTex = pixelTexture(new Texture(atlas.img));
   const AW = atlas.img.width, AH = atlas.img.height;
@@ -238,7 +238,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const grade = u.amb.add(u.sunCol.mul(0.75));
     // in shadow the colour takes the sky's light, not the sun's
     // every plant's leaves differ a little: a touch lighter or darker, a touch warmer or cooler (the user, 2026-11-14). From the foot, so no extra data.
-    const bright = hash3((vec3 as N)(aSway.x, aSway.y, 1)).sub(0.5).mul(0.14).add(1), warm = hash3((vec3 as N)(aSway.x, aSway.y, 2)).sub(0.5).mul(0.16);
+    const bright = hash3((vec3 as N)(aSway.x, aSway.y, 1)).sub(0.5).mul(0.14).add(1).add(select(isTuft, aPart.w, float(0))), warm = hash3((vec3 as N)(aSway.x, aSway.y, 2)).sub(0.5).mul(0.16).add(select(isTuft, aPart.z, float(0))); // a tuft may carry its own shift (the willow's yellow-green)
     const tint = select(isBark, vec3(1, 1, 1), (vec3 as N)(bright.mul(warm.add(1)), bright, bright.mul(float(1).sub(warm))));
     const stepped = texture(palTex, vec2(level.add(0.5).div(5), aPart.x.add(0.5).div(4))).rgb.mul(tint).mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), grade));
     // "plain": one flat colour per ramp, lit by the environment light alone, as the ground is

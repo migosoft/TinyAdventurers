@@ -387,7 +387,7 @@ export function buildWillow(m: MeshData, spec: PlantSpec, _tufts = false): Plant
       d = norm([d[0] + (r() - 0.5) * 0.22, d[1] - (i <= 3 ? 0.02 : 0.1), d[2] + (r() - 0.5) * 0.22]); // gnarled; goes up and out, only its end levels off
       p = { x: p.x + d[0] * (len / n), y: p.y + d[1] * (len / n), z: p.z + d[2] * (len / n), w: Math.max(minW, w0 * (1 - 0.6 * (i / n))) };
       pts.push(p);
-      if (i >= (depth === 0 ? 3 : 2)) for (let k = 0; k < 5; k++) hangs.push({ x: p.x + (r() - 0.5) * 11 * du, y: p.y + (1 + r() * 3) * du, z: p.z + (r() - 0.5) * 11 * du, th: 0.1 + r() * 0.9 });
+      if (i >= (depth === 0 ? 3 : 2)) for (let k = 0; k < 9; k++) hangs.push({ x: p.x + (r() - 0.5) * 11 * du, y: p.y + (1 + r() * 3) * du, z: p.z + (r() - 0.5) * 11 * du, th: 0.1 + r() * 0.9 });
     }
     branches.push({ pts, sides: w0 > 1.5 * U ? 6 : 4 });
     ends.push(p);
@@ -420,7 +420,7 @@ export function buildWillow(m: MeshData, spec: PlantSpec, _tufts = false): Plant
   });
 
   // the curtains
-  const gapAz = Math.PI / 2 + (r() - 0.5) * 1.2, gapW = 0.4, step = 2.2 * U; // the parted sector faces roughly south, toward the game's camera
+  const gapAz = Math.PI / 2 + (r() - 0.5) * 1.2, gapW = 0.4, step = 1.7 * U; // the parted sector faces roughly south, toward the game's camera
   for (const h of hangs) {
     let ox = h.x - fork.x, oz = h.z - fork.z; const ol = Math.hypot(ox, oz);
     if (ol < 1.5 * du) { const a = r() * Math.PI * 2; ox = Math.cos(a); oz = Math.sin(a); } else { ox /= ol; oz /= ol; }
@@ -436,13 +436,13 @@ export function buildWillow(m: MeshData, spec: PlantSpec, _tufts = false): Plant
     for (let j = 0; j < n; j++) {
       const t = j / n, uu = Math.min(1, (j * step) / arc), out = reach * (1 - (1 - uu) * (1 - uu));
       const px = h.x + ox * out + Math.sin(j * 0.9 + wob) * 0.6 * U, py = h.y - j * step, pz = h.z + oz * out + Math.cos(j * 0.7 + wob) * 0.6 * U;
-      const size = (1.9 + r() * 0.9 - 0.6 * t) * U, seed = Math.floor(r() * 997), base = m.verts;
+      const size = (1.15 + r() * 0.5 - 0.3 * t) * U, seed = Math.floor(r() * 997), base = m.verts;
       for (const [qx, qy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
         m.pos.push(foot.x + px, py, foot.z + pz);
         m.nrm.push(ox * (0.3 + 0.6 * t), 0.9 - 0.6 * t, oz * (0.3 + 0.6 * t)); // the top of a strand faces the sky, its length faces outward
         m.grad.push(ox * 0.5 * q, 0.2, oz * 0.5 * q, 0.5 + tone * 2.8 - 0.5 * t - 0.5 * (1 - q)); // brighter at the top and outside, darker inside and below
         m.sway.push(foot.x, foot.z, k0 + 0.2 * t * t, py); // a strand swings more the further down it hangs
-        m.part.push(ramp, 3, 0, 0);
+        m.part.push(ramp, 3, 0.09, 0.08); // warmer and lighter than the other trees: a yellow-green
         m.misc.push(0, t > 0.25 && j % 2 ? 1 : 0, 0, h.th); // a curtain lets light through: below its top, every other tuft casts no shadow
         m.tuft.push(qx, qy, size, seed);
       }
