@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MIST } from './mist';
-import { SWAY, WIND, WIND_DIR, sway, swayAmp } from './wind';
+import { SWAY, WIND, WIND_DIR, gust, sway, swayAmp } from './wind';
 
 describe('the wind', () => {
   it('is the mist speed turned 20 degrees, and WIND_DIR is its direction', () => {
@@ -35,5 +35,28 @@ describe('the wind', () => {
     expect(swayAmp('bare')).toBe(0);
     expect(swayAmp('bush')).toBe(SWAY.small);
     for (const k of ['round', 'wide', 'tall'] as const) expect(swayAmp(k)).toBe(SWAY.leafy);
+  });
+
+  it('sways the same as before the gust term was split out', () => {
+    // [x, z, y, h, amp, t, value] recorded from the original formula
+    const pins: [number, number, number, number, number, number, number][] = [
+      [1, 2, 2, 2, 0.11, 3, -0.0361048971443072],
+      [5, -3, 1.5, 3, 0.07, 0.7, -0.01126038752681109],
+      [-4, 8, 2, 2, 0.11, 12.5, -0.0005115673374301521],
+      [10, 10, 0.5, 1, 0.05, 20, 0.0032176971621215135],
+      [0, 0, 1, 1, 0.11, -1.2, 0.08549390312447848],
+    ];
+    for (const [x, z, y, h, a, t, want] of pins) expect(sway(x, z, y, h, a, t)).toBeCloseTo(want, 12);
+  });
+
+  it('has a travelling gust between 0 and 1', () => {
+    expect(gust(0, 0, -1)).toBeCloseTo(0.9850637322122987, 12);
+    expect(gust(0, 0, -5)).toBeCloseTo(0.6811095438559406, 12);
+    expect(gust(6, -2, 10)).toBe(0);
+    for (let i = 0; i < 200; i++) {
+      const g = gust(i * 0.7, i * 0.3, i * 0.2);
+      expect(g).toBeGreaterThanOrEqual(0);
+      expect(g).toBeLessThanOrEqual(1);
+    }
   });
 });

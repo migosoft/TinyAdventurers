@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GLSLNodeBuilder, MeshBasicNodeMaterial, WGSLNodeBuilder } from 'three/webgpu';
-import { float, positionLocal, vec2, vec4 } from 'three/tsl';
-import { swayNode } from './windNodes';
+import { float, positionLocal, vec2, vec3, vec4 } from 'three/tsl';
+import { gustNode, swayNode } from './windNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 describe('the sway node', () => {
@@ -10,6 +10,16 @@ describe('the sway node', () => {
       const m = new MeshBasicNodeMaterial();
       const off = swayNode(vec2(1, 2), positionLocal.y, float(2), float(0.11), float(3), float(1));
       m.colorNode = vec4(off, 1);
+      expect(fragment(B, m).length).toBeGreaterThan(0);
+    });
+  }
+});
+
+describe('the gust node', () => {
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: builds`, () => {
+      const m = new MeshBasicNodeMaterial();
+      m.colorNode = vec4(vec3(gustNode(vec2(1, 2), float(3))), 1);
       expect(fragment(B, m).length).toBeGreaterThan(0);
     });
   }

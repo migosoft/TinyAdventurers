@@ -6,11 +6,16 @@ import { WIND_DIR } from './wind';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
+/** The travelling gust (0..1) at `xz` (x, z) at time `t`: `gust` in wind.ts as a node. */
+export function gustNode(xz: N, t: N): N {
+  return pow(max(0, sin(xz.x.add(xz.y.mul(0.3)).mul(0.33).sub(t.mul(1.5)))), 6);
+}
+
 /** The offset (tiles) of a point `y` up a plant of height `h` whose foot is `foot` (x, z): 0 when `on` < 0.5 or `amp` <= 0. */
 export function swayNode(foot: N, y: N, h: N, amp: N, t: N, on: N): N {
   const k = clamp(y.div(max(h, 1e-4)), 0, 1).toVar('swayK');
   const k2 = k.mul(k);
-  const g = pow(max(0, sin(foot.x.add(foot.y.mul(0.3)).mul(0.33).sub(t.mul(1.5)))), 6);
+  const g = gustNode(foot, t);
   const wave = sin(t.mul(1.3).add(foot.x.mul(0.9)).add(foot.y.mul(0.4))).mul(0.5)
     .add(sin(t.mul(2.9).add(foot.y)).mul(0.25))
     .add(g.mul(1.4));
