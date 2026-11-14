@@ -34,8 +34,7 @@ export const TREE_ORDER = { depth: 0.25, colour: 0.5 } as const;
 
 /** Where a collapsed vertex goes: far below the ground, out of every view. */
 const GONE = [0, -50, 0] as const;
-/** The outer share of a patch's radius that counts as its rim (first guess), and the cell size of the light dabs in art pixels. */
-const RIM_FROM = 0.8;
+/** The cell size of the light dabs in art pixels. */
 const DAB_CELL = 2.3;
 
 /** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp. */
@@ -200,15 +199,10 @@ export function treeMaterials(o: {
     const lp = ld.add(vec3(0, s.misc.x, 0));
     const fromLight = log2(max(b, 1e-4).div(TREE_LIGHT.mid)).mul(TREE_LIGHT.gain).toVar('treeStep');
     const crown = select(s.isBall, float(0.75), float(0.7)).mul(dot(nl, lp)).add(dot(s.grad.xyz, lp).mul(0.45)).add(s.grad.w).add(noise).sub(select(s.isBall, float(0.2), float(0)));
-    // A patch's lit rim and its dark one: the rim cells against the light's direction on the screen.
-    const rimDir = cut.cell.add(0.5).div(max(length(cut.cell.add(0.5)), 1e-4));
-    const nd = dot(rimDir, vec2(dot(ld, axes.right), dot(ld, axes.up)));
-    const rim = s.isTuft.and(cut.rho.greaterThan(RIM_FROM));
-    const l: N = fromLight.add(crown).add(select(rim.and(nd.greaterThan(0.3)), float(0.6), float(0))); // first guess: the rim's lift
+    // Leaf patches have no rim rule: their ragged edge is single cells, and a rim there reads as specks.
+    const l: N = fromLight.add(crown);
     const [s0, s1, s2, s3] = TREE_LIGHT.steps;
     let lvl: N = step(s0, l).add(step(s1, l)).add(step(s2, l)).add(step(s3, l));
-    // The dark rim is a step darker, not the darkest tone: a ragged edge leaves single rim cells that would read as black specks inside a crown.
-    lvl = select(rim.and(nd.lessThan(-0.1)), max(lvl.sub(1), 0), lvl); // first guess: one step
     // A skirt's hem is its darkest tone, the row above it at most the second.
     lvl = select(s.isSkirt.and(s.misc.y.greaterThan(0.9)), float(0), select(s.isSkirt.and(s.misc.y.greaterThan(0.8)), min(lvl, 1), lvl));
     const dab = hash3(floor(rest.mul(16 / DAB_CELL)).add(17)).lessThan(0.12).and(dot(nl, ld).greaterThan(0.15)).and(lvl.greaterThan(0.5)).and(fromLight.greaterThan(0));
