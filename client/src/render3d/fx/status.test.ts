@@ -73,6 +73,22 @@ describe('status marks', () => {
     expect(vines.tris.n).toBeGreaterThan(plain.tris.n);
   });
 
+  it('a shade that died out of sight dissolves at its death spot, not where it was last seen', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 10; i++) fx.frame(frameOf(1 + i * 0.05, [fig(7, KIND.Shade, 0, { x: 5, z: 5 })]), newOut());
+    // hidden for a second (its veil is not updated), then it dies elsewhere (tile 12, 12)
+    for (let i = 0; i < 20; i++) fx.frame(frameOf(1.5 + i * 0.05, [fig(7, KIND.Shade, 0, { x: 5, z: 5 })], [7]), newOut());
+    fx.event({ t: 'Died', id: 7, x: 12 * 16, y: 12 * 16, kind: KIND.Shade } as never, 2.6, false);
+    const out = newOut();
+    fx.frame(frameOf(2.7, []), out);
+    expect(out.tris.n).toBeGreaterThan(0);
+    const fb = { position: [] as number[], rgba: [] as number[], n: 0 };
+    out.tris.flush(fb as never, cam, false);
+    const xs = fb.position.filter((_, i) => i % 3 === 0), zs = fb.position.filter((_, i) => i % 3 === 2);
+    expect(Math.min(...xs)).toBeGreaterThan(9);
+    expect(Math.min(...zs)).toBeGreaterThan(9);
+  });
+
   it('the shade wears a veil, and a dead one dissolves for a second', () => {
     const fx = new Effects3d(map);
     const out = newOut();

@@ -61,6 +61,9 @@ export function flameSpots(bodyW: number, bodyH: number, n: number, seed: number
   return out;
 }
 
+/** The golden afterimage of an Accelerated figure. */
+export const ACCEL_TINT = 0xffe680;
+
 /** The lich's stone gaze: the beam's opacity at time `t` (seconds), pulsing between 0.4 and 0.9. */
 export function gazePulse(t: number): number {
   return 0.65 + 0.25 * Math.sin(t * 12);

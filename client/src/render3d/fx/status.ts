@@ -191,15 +191,21 @@ function veils(out: FxOut, frame: FxFrame): void {
   for (const [id, m] of VEILS) if (now - m.t > 3 || now < m.t - 1) VEILS.delete(id);
 }
 
+/** A veil last updated less than this (s) before the Died event is the one that was drawn. */
+const FRESH = 0.15;
+const RESTING = new WeakMap<FxRec, VeilStrand[]>();
+
 function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
   if (frame.hidden.has(rec.follow)) return;
   const ax = frame.ctx.ax, m = VEILS.get(rec.follow);
   let lines: readonly VeilStrand[], sx: number, sy: number, wx: number, wz: number;
-  if (m) { lines = m.veil.lines; sx = m.sx; sy = m.sy; wx = m.wx; wz = m.wz; }
+  if (m && rec.start - m.t < FRESH) { lines = m.veil.lines; sx = m.sx; sy = m.sy; wx = m.wx; wz = m.wz; }
   else {
-    wx = rec.x; wz = rec.z;
-    sx = (wx * ax.right[0] + wz * ax.right[2]) * TILE; sy = -(wx * ax.up[0] + wz * ax.up[2]) * TILE;
-    lines = restingVeil({ x: sx, y: sy }, 1, rng(rec.seed));
+    // Not seen just before it died (out of sight): a resting cloud at the death spot, built once per record (strands are relative to the feet at 0, 0).
+    wx = rec.x; wz = rec.z; sx = 0; sy = 0;
+    let r = RESTING.get(rec);
+    if (!r) { r = restingVeil({ x: 0, y: 0 }, 1, rng(rec.seed)); RESTING.set(rec, r); }
+    lines = r;
   }
   const d = dissolveVeil(lines, { x: sx, y: sy - 6 }, age / VEIL_DEATH_LIFE);
   drawStrands(out.tris, ax, d.lines, wx, wz, sx, sy, d.alpha);

@@ -11,7 +11,7 @@ import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 import { has } from './effectBits';
 import type { Bounds } from './anim/lying';
 
-import { ENTANGLE_LOOKS, flameSpots, gazePulse, snowflakeAlpha } from './fxLooks';
+import { ACCEL_TINT, ENTANGLE_LOOKS, flameSpots, gazePulse, snowflakeAlpha } from './fxLooks';
 
 export { has, flameSpots, snowflakeAlpha };
 export { lieLayout, lyingPose, type Bounds } from './anim/lying';
@@ -59,7 +59,7 @@ export function drawGazeBeam(g: Phaser.GameObjects.Graphics, lx: number, ly: num
 
 const GHOST_EVERY = 0.08;
 const GHOST_LIFE = 0.2;
-const GHOST_TINT = 0xffe680;
+const GHOST_TINT = ACCEL_TINT;
 const PUFF_N = 3;
 const FLAME_N = 3;
 const FLAME_TEX = 'fx_flame';

@@ -4,6 +4,7 @@
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
 import { has } from '../game/effectBits';
+import { ACCEL_TINT } from '../game/fxLooks';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { VANISH_SECS } from '../game/anim/entityAlpha';
@@ -43,7 +44,6 @@ const AFTER_ALPHA = 0.5;
 const ACCEL_EVERY = 0.08;
 const ACCEL_SECS = 0.2;
 const ACCEL_ALPHA = 0.35;
-const ACCEL_TINT = 0xffe070;
 /** The dying Shade's body fades over this long (s). */
 const SHADE_FADE = 0.3;
 /** Skull tokens kept (the oldest go first). */
