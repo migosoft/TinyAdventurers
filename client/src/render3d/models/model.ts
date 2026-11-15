@@ -238,7 +238,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   // The fit: the standing figure (every piece, the outline hulls included; not a weapon) is `height` px tall once scaled.
   let full = 0;
   for (let i = 1; i < n * 3; i += 3) full = Math.max(full, position[i]);
-  const scale = height !== undefined && full > 0 ? height / full : 1, armLength = d.arms ? d.arms.length : 0;
+  const scale = height !== undefined && height > 0 && full > 0 ? height / full : 1, armLength = d.arms ? d.arms.length : 0;
   return {
     key, position, normal, uv, skin, look, index, ranges,
     pieceIndex, lineIndex,

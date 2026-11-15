@@ -2,6 +2,7 @@
 // `get` never throws and never blocks: until a model has arrived it returns null and the caller draws a sprite card instead.
 
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
+import { boundsOfPixels } from '../atlasBounds';
 import { buildJob, isFigureKey, isWeaponKey } from './build';
 import type { FigureModel } from './model';
 import { FIT_KIND } from './table';
@@ -86,13 +87,12 @@ export const workerRunner = (): BuildRunner => {
 /**
  * The height a standing figure's card shows, in sprite px: from the highest opaque row of its idle frame to the foot row
  * (`FigureDef.footY`, else the frame's bottom), times the game's `FigureDef.scale`. A fully transparent frame counts as fully opaque
- * (as `boundsOfPixels`).
+ * (the rule of `boundsOfPixels`, which does the reading). Null when the height would not be positive (a foot row at or above the top).
  */
-export function cardHeight(d: Pick<FigureDef, 'footY' | 'scale'>, px: SpritePixels): number {
-  let top = px.h;
-  for (let y = 0; y < px.h && top === px.h; y++) for (let x = 0; x < px.w; x++) if (px.data[(y * px.w + x) * 4 + 3] > 0) { top = y; break; }
-  if (top === px.h) top = 0;
-  return ((d.footY ?? px.h) - top) * (d.scale ?? 1);
+export function cardHeight(d: Pick<FigureDef, 'footY' | 'scale'>, px: SpritePixels): number | null {
+  const b = boundsOfPixels(px.data, px.w, { x: 0, y: 0, w: px.w, h: px.h });
+  const height = ((d.footY ?? b.h) - b.t) * (d.scale ?? 1);
+  return height > 0 ? height : null;
 }
 
 export function createKit(sprite: (name: string) => SpritePixels | null, run: BuildRunner = directRunner): FigureKit {

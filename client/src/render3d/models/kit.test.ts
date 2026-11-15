@@ -141,6 +141,23 @@ describe('the height of a figure card', () => {
     expect(cardHeight(base, { w: 16, h: 24, data: new Uint8ClampedArray(16 * 24 * 4) })).toBe(24 * (base.scale ?? 1));   // empty: the whole frame
   });
 
+  it('is null when it would not be positive (the foot row at or above the top), and the kit then builds without a target', async () => {
+    const base = FIGURES[KIND.Wizard];
+    expect(cardHeight({ ...base, footY: 6 }, sprite(24, 6, 23))).toBeNull();
+    expect(cardHeight({ ...base, footY: 3 }, sprite(24, 6, 23))).toBeNull();
+    expect(cardHeight({ ...base, footY: 10, scale: 0 }, sprite(24, 6, 23))).toBeNull();
+    const keep = base.footY;
+    base.footY = 2;
+    try {
+      const jobs: { key: string; height?: number | null }[] = [];
+      const kit = createKit(() => sprite(24, 6, 23), async (job) => { jobs.push(job); return stub(job.key); });
+      kit.get('wizard');
+      await settle();
+      expect(jobs.length).toBe(1);
+      expect(jobs[0].height ?? null).toBeNull();
+    } finally { base.footY = keep; }
+  });
+
   it('is passed to the build of every figure key, from the idle frame of the key\'s fitted kind', async () => {
     const asked: string[] = [];
     const sprites = (name: string): SpritePixels | null => { asked.push(name); return sprite(24, 4, 23); };

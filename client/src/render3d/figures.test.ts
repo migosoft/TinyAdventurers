@@ -7,6 +7,7 @@ import { cardHeight, createKit, directRunner, type FigureKit } from './models/ki
 import { fangTris, newFxBuf, type FxBuf } from './models/fx';
 import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
+import { FIT_KIND, type DescKey } from './models/table';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -622,19 +623,24 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const [name, x, y, w, h] = line.trim().split(/\s+/);
     if (name && h !== undefined) rects.set(name, [+x, +y, +w, +h]);
   }
+  // The wolf is not in the pack's list: its frames are in the game's atlas.
+  const atlas = decodePng(readFileSync(join(__dirname, '../../public/assets/atlas.png')));
+  const atlasFrames = (JSON.parse(readFileSync(join(__dirname, '../../public/assets/atlas.json'), 'utf8')) as { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> }).frames;
   const sprite = (name: string): SpritePixels | null => {
-    const r = rects.get(name);
-    if (!r) return null;
-    const [x, y, w, h] = r;
+    const r = rects.get(name), a = atlasFrames[name]?.frame;
+    const src = r ? sheet : atlas, box = r ?? (a ? [a.x, a.y, a.w, a.h] : null);
+    if (!box) return null;
+    const [x, y, w, h] = box;
     const data = new Uint8ClampedArray(w * h * 4);
-    for (let row = 0; row < h; row++) data.set(sheet.data.subarray(((y + row) * sheet.w + x) * 4, ((y + row) * sheet.w + x + w) * 4), row * w * 4);
+    for (let row = 0; row < h; row++) data.set(src.data.subarray(((y + row) * src.w + x) * 4, ((y + row) * src.w + x + w) * 4), row * w * 4);
     return { w, h, data };
   };
   let kit: FigureKit;
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
-    for (const k of ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard']) kit.get(k);
-    while (kit.version < 6) await new Promise((r) => setTimeout(r, 0));
+    for (const k of BUILT) kit.get(k);
+    while (kit.version < BUILT.length) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
   afterAll(() => kit.dispose());
 
@@ -653,9 +659,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.casters.length).toBe(1);
     expect(out.casters[0].id).toBe(10);
     expect(out.shadows.n).toBe(1);
-    expect(fg.anchors.get(10)!.height).toBeCloseTo(kit.get('elf')!.baseHeight, 6);
     expect(out.fx.n).toBe(0);
-    expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.height / 2 / 16, 6);
+    expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.head / 2 / 16, 6);
     // the model's own scale, not the pose's fall shrink; the radius encloses the silhouette
     const m = kit.get('elf')!;
     expect(out.models[0].scale).toBe(m.scale);
@@ -693,13 +698,40 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     }
   });
 
+  it('gives a model figure the anchor (bar, name, head) the same entity gets as a card, and the opener its mid', () => {
+    for (const kind of [KIND.Wizard, KIND.Barbarian, KIND.DireWolf, KIND.Paladin, KIND.Ogre, KIND.SkeletonWarrior]) {
+      const e = ent(10, kind);
+      const card = make(), model = make();
+      const co = card.frame(frame([e]), cam(), look());
+      const mo = model.frame(frame([e]), cam(), look({ kit, ...all }));
+      expect(mo.models.length, String(kind)).toBeGreaterThan(0);
+      const a = card.anchors.get(10)!, b = model.anchors.get(10)!;
+      expect(b.height, `${kind} height`).toBeCloseTo(a.height, 6);
+      expect(b.tag, `${kind} tag`).toBeCloseTo(a.tag, 6);
+      expect(b.head, `${kind} head`).toBeCloseTo(a.head, 6);
+      expect(mo.openers[0].mid, `${kind} mid`).toBeCloseTo(co.openers[0].mid, 6);
+    }
+  });
+
+  it('fits every description to the standing height of its card, from the real atlas pixels', () => {
+    const want: Record<DescKey, number> = { elf: 19, knight: 20, wizard: 19, dwarf: 21, skelet: 14, ogre: 26, wolf: 17 };
+    for (const key of Object.keys(FIT_KIND) as DescKey[]) {
+      const d = FIGURES[FIT_KIND[key]], card = cardHeight(d, sprite(`${d.idle}0`)!), m = kit.get(key)!;
+      expect(card, `${key} card`).toBe(want[key]);
+      if (card === null) continue;
+      let top = 0;
+      for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
+      expect(top * m.scale, key).toBeCloseTo(want[key], 3);
+    }
+  });
+
   it('fits the body to its card and draws the weapon at the size the card path gives it (the game\'s weapon scale x the figure\'s)', () => {
     const out = make().frame(frame([ranger()]), cam(), look({ kit, ...all }));
     const [body, bow] = out.models, elf = kit.get('elf')!, d = FIGURES[KIND.ElvenRanger];
     const card = cardHeight(d, sprite(`${d.idle}0`)!);
     let top = 0;
     for (let i = 1; i < elf.position.length; i += 3) top = Math.max(top, elf.position[i]);
-    expect(top * body.scale).toBeCloseTo(card, 0);
+    expect(top * body.scale).toBeCloseTo(card!, 3);
     expect(body.scale).not.toBe(1);
     expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * (d.scale ?? 1), 6);
   });
@@ -736,7 +768,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const fg = make(), fs = make();
     fg.frame(frame([ranger()]), cam(), look({ kit, ...all }));
     fs.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })]), cam(), look({ kit, ...all }));
-    // as the card path: only `head` is the body's thickness (twice its side reach); the bar and the name stay at the standing height
+    // as the card path: only `head` is the body's thickness ((2 - LIE_SINK) times its side reach); the bar and the name stay at the standing height
     expect(fs.anchors.get(10)!.head).toBeLessThan(fg.anchors.get(10)!.head);
     expect(fs.anchors.get(10)!.head).toBeCloseTo((2 - LIE_SINK) * sideReach(kit.get('elf')!) * kit.get('elf')!.scale, 6);
     expect(fs.anchors.get(10)!.height).toBe(fg.anchors.get(10)!.height);
@@ -884,7 +916,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     }
   });
 
-  it('leaves a skull instance, no decal, when a model figure dies; and the cap holds', () => {
+  it('leaves a skull instance, no decal, when a model figure dies; every skull has the fitted skeleton\'s scale', () => {
     const fg = make();
     const l = look({ kit, ...all });
     fg.frame(frame([ranger()]), cam(), l);
@@ -892,7 +924,19 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const out = fg.frame(frame([]), cam(), l);
     expect(out.decals.n).toBe(0);
     expect(out.models.map((m) => m.model)).toEqual(['skull']);
-    expect(out.models[0].scale).toBeLessThanOrEqual(1.5);
+    const skelScale = kit.get('skelet')!.scale;
+    expect(skelScale).not.toBe(1);
+    expect(out.models[0].scale).toBe(skelScale);
+    // whoever died: a wizard (hat), an ogre, a wolf
+    const sizes = new Set<number>();
+    for (const kind of [KIND.Wizard, KIND.Ogre, KIND.DireWolf]) {
+      const f2 = make();
+      f2.frame(frame([ent(20, kind)]), cam(), l);
+      f2.event({ t: 'Died', id: 20, x: at(1), y: 8, kind });
+      const o = f2.frame(frame([]), cam(), l);
+      sizes.add(o.models.filter((m) => m.model === 'skull')[0].scale);
+    }
+    expect([...sizes]).toEqual([skelScale]);
     // two skulls never share an owner (so batching can separate them), and every owner is negative
     fg.frame(frame([ent(11, KIND.ElvenRanger), ent(12, KIND.ElvenRanger)]), cam(), l);
     fg.event({ t: 'Died', id: 11, x: at(1), y: 8, kind: KIND.ElvenRanger });

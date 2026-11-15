@@ -178,6 +178,17 @@ describe('attacks', () => {
     expect(poseFigure(m, d, view({ anim: ANIM.Melee, animT: 2 }), 0, settled()).attack).toBeNull();
   }, SLOW);
 
+  it('moves the root by the game\'s scale, as the card scales its steps: a scaled creature lunges and shivers as far as its card', () => {
+    const m = model('wolf'), d = { ...def('wolf'), scale: 2 };
+    expect(poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.075 }), 0, settled()).root.x).toBeCloseTo(2 * def('wolf').lunge!, 5);
+    const k = model('knight');
+    const a = poseFigure(k, { ...def('knight'), scale: 1.5 }, view({ anim: ANIM.Windup }), 0, settled({ clock: 0 }));
+    expect(Math.abs(a.root.z)).toBeCloseTo(1.5, 6);
+    // the fall shrink the card has in its scale too
+    const f = poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.075, fall: 0.5 }), 0, settled());
+    expect(f.root.x).toBeCloseTo(2 * 0.9 * def('wolf').lunge!, 5);
+  }, SLOW);
+
   it('holds the wound-up pose in a wind-up, shivering and leaning back, without an attack for the effects', () => {
     const m = model('knight'), d = def('knight');
     const a = poseFigure(m, d, view({ anim: ANIM.Windup }), 0, settled({ clock: 0 }));

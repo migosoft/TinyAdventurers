@@ -119,10 +119,9 @@ interface Fig {
   def: FigureDef;
   /** The standing body card of the last frame (null while lying, hidden or before the first). */
   body: Card | null;
-  /** The model path's state: its pose memory, whether the last frame drew a model, that model's scale, and the instances of that frame (a vanish image copies them). */
+  /** The model path's state: its pose memory, whether the last frame drew a model, and the instances of that frame (a vanish image copies them). */
   mem3?: Pose3dMemory;
   model?: boolean;
-  modelScale?: number;
   last?: FigureInst[] | null;
 }
 
@@ -131,11 +130,20 @@ interface Image { card: Card; alpha0: number; secs: number; left: number }
 /** The same for a model figure: instances with their own pose copy; each one's alpha is scaled by `left / secs`. */
 interface ModelImage { insts: FigureInst[]; secs: number; left: number }
 /** `model`: the model's scale when the figure that died was drawn as a model (its skull is an instance), else undefined. */
-interface Skull { x: number; z: number; flip: boolean; model?: number }
+/** `model`: the figure that died was drawn as a model, so its skull is an instance (one size for all: the fitted skeleton's scale), not a decal. */
+interface Skull { x: number; z: number; flip: boolean; model?: boolean }
 /** A coin in flight: spot in tiles, launch speed in screen px/s (right, up), `born` null until the next frame stamps it. */
 interface Coin { x: number; z: number; vx: number; vy: number; life: number; born: number | null; frame: string }
 /** A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory. */
 interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean } }
+
+/**
+ * The overlay anchor of a standing figure, 2D's numbers (EntityView): from the opaque bounds `fb` of the frame it shows, its foot row and the
+ * game's figure scale `ds`. The card path and the model path both use it, so a model's bar and name sit where its card's would.
+ */
+function standingAnchor(fb: FrameBounds, footY: number, ds: number): { height: number; tag: number; head: number } {
+  return { height: fb.h * ds, tag: footY * ds + 3, head: (footY - fb.t) * ds };
+}
 
 const rgbOf = (c: number): [number, number, number] => [((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255];
 
@@ -233,7 +241,7 @@ export class Figures3d {
     if (ev.t !== 'Died' || lost === 'lost') return;
     if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return;
     const fig = this.figs.get(ev.id);
-    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5, model: fig?.model ? fig.modelScale : undefined });
+    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5, model: !!fig?.model });
     if (this.skulls.length > SKULL_CAP) this.skulls.shift();
   }
 
@@ -288,12 +296,12 @@ export class Figures3d {
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
       // A model figure leaves the skull model instead of the decal (the same pose for all: turned to face the camera, i.e. along the screen's down on the ground).
-      const sm = sk.model !== undefined ? this.models?.kit.get('skull') : null;
-      if (sk.model !== undefined && sm) {
+      const sm = sk.model ? this.models?.kit.get('skull') : null;
+      if (sk.model && sm) {
         skullPose ??= restPose(sm, cam.yaw + Math.PI / 2);
         out.models.push({
           // Its own negative owner (no entity has one: no caster slot, no sight), so overlapping skulls batch apart.
-          owner: -1 - si, model: 'skull', x, z, lift: this.ground(x, z, 0.3), scale: Math.min(1.5, sk.model), pose: skullPose, bone: -1, boneScale: 1,
+          owner: -1 - si, model: 'skull', x, z, lift: this.ground(x, z, 0.3), scale: this.models?.kit.get('skelet')?.scale ?? 1, pose: skullPose, bone: -1, boneScale: 1,
           tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: silhouetteRadius(sm),
         });
         continue;
@@ -512,7 +520,6 @@ export class Figures3d {
     fig.body = null;
     fig.last = null;
     fig.model = true;
-    fig.modelScale = m.scale;
     if (!pose.visible) return false;
     const p3 = poseFigure(m, d, s, f.dt, (fig.mem3 ??= newPose3dMemory()));
 
@@ -579,11 +586,13 @@ export class Figures3d {
       pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
     }
 
-    // Lying, the bars and names hang from the body on the floor: its thickness (the card path likewise uses the lying frame's width).
-    // As the card path: only `head` changes while lying; the bar and the name stay at the standing height.
-    const h = m.baseHeight;
-    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: pose.lie ? Math.min(h, (2 - LIE_SINK) * sideReach(m) * m.scale) : h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
-    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    // The anchors are the card's, from the standing idle frame the model replaces (`standingAnchor`, the card path's own): the bar and the
+    // name sit where the card's would. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
+    const idle = `${d.idle}0`, ib = this.bounds(idle), foot = d.footY ?? ib.h;
+    const sa = standingAnchor(ib, foot, d.scale ?? 1);
+    this.anchors.set(e.id, { x, z, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
+    const standing = Math.max(0, foot - ib.t - pose.sink) * sc;   // as the card path's `height`: the idle frame's opaque height less the wade, times the pose scale
+    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : standing / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 
@@ -690,9 +699,10 @@ export class Figures3d {
     // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.
     const ds = d.scale ?? 1;
     const mid = pose.left ? fb.w - 1 - (fb.l + fb.r) / 2 : (fb.l + fb.r) / 2;
+    const sa = standingAnchor(fb, pose.footY, ds);
     this.anchors.set(e.id, {
-      x, z, height: fb.h * ds, tag: pose.footY * ds + 3,
-      head: pose.lie ? (fb.r - fb.l + 1) * ds : (pose.footY - fb.t) * ds,
+      x, z, height: sa.height, tag: sa.tag,
+      head: pose.lie ? (fb.r - fb.l + 1) * ds : sa.head,
       cx: pose.lie ? 0 : (mid + 0.5 - pose.originX * fb.w) * ds,
       alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0,
     });

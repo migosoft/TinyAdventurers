@@ -44,7 +44,7 @@ export interface Pose3d {
   /** World heading, radians (0 = +x; the game's y is the world's z). */
   yaw: number;
   /**
-   * In the figure's frame, before the yaw. `x` (jolt, lunge) and `z` (shiver) are unscaled sprite px; `y` (hop height, or the
+   * In the figure's frame, before the yaw. `x` (jolt, lunge) and `z` (shiver) are sprite px already multiplied by the game's `FigureDef.scale` (and the fall shrink), not by the model's `scale`; `y` (hop height, or the
    * lift of a lying figure) is ALREADY multiplied by the model's `scale`, so the instance must not scale it again; `roll` is
    * about x; `sx, sy, sz` are the dash stretch and the fall shrink, WITHOUT the model's `scale` (`skinVertex` multiplies it in).
    */
@@ -461,9 +461,11 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   const R = pose.root, fallK = 1 - fall * 0.2;
   R.sx = fallK; R.sy = fallK; R.sz = fallK;
   if (!asleep && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
-  R.x = num(d.lunge) * lunge - 1.6 * HJ;
+  // The steps (lunge, jolt, shiver) are the game's px, scaled by the game's figure scale and the fall shrink as the card scales its own.
+  const gameScale = (d.scale ?? 1) * fallK;
+  R.x = (num(d.lunge) * lunge - 1.6 * HJ) * gameScale;
   R.y = bob * m.scale;
-  if (windup) R.z = Math.floor(t * 40) % 2 ? 1 : -1;   // the shiver of a wind-up: 1 px to either side at 20 Hz
+  if (windup) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
   if (asleep) {
     R.roll = Math.PI / 2;
     R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground

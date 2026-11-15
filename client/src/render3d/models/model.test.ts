@@ -25,10 +25,13 @@ describe('buildFigure fitted to a card height', () => {
     for (const key of KEYS) {
       for (const target of [20, 31.5]) {
         const m = buildFigure(key, DESCS[key], target);
-        expect(topOf(m) * m.scale, `${key} ${target}`).toBeGreaterThan(target - 0.5);
-        expect(topOf(m) * m.scale, `${key} ${target}`).toBeLessThan(target + 0.5);
+        expect(topOf(m) * m.scale, `${key} ${target}`).toBeCloseTo(target, 4);
       }
     }
+  }, SLOW);
+
+  it('builds at scale 1 for a target that is not positive', () => {
+    for (const target of [0, -3, NaN]) expect(buildFigure('wizard', DESCS.wizard, target).scale, String(target)).toBe(1);
   }, SLOW);
 
   it('has scale 1 without a target', () => {
