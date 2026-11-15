@@ -242,8 +242,12 @@ export class PondLife {
         pushShadow(out.shadows, cam, d.x, d.z, 0.14, 0.05, 0.18);
         up(d.x, d.z, lift, -2, -1, 4, 1, d.colour);
         up(d.x, d.z, lift, d.face > 0 ? 2 : -3, -1, 1, 1, C.flyHead);
-        up(d.x, d.z, lift, -1, beat ? -3 : -2, 3, 1, C.wing, OVER);
-        if (beat) up(d.x, d.z, lift, -1, 0, 3, 1, C.wing, OVER);
+        // Two pairs of long wings across the body, one of each pair on either side; they shorten on every other beat.
+        const len = beat ? 3 : 2;
+        for (const wx of d.face > 0 ? [0, -2] : [-1, 1]) {
+          up(d.x, d.z, lift, wx, -1 - len, 1, len, C.wing, OVER);
+          up(d.x, d.z, lift, wx, 0, 1, len, C.wing, OVER);
+        }
       }
     }
   }

@@ -85,21 +85,21 @@ export function makePondWater(k: { lighting: Lighting; sight: Sight }): PondWate
 
   // The surface's height (arbitrary units): two slow sines and a low noise (calm, large: busy waves read as "worms"), and on the
   // stream a finer noise carried by the current in two phases that cross-fade, so the pattern never stretches.
-  const ph: N = fract(uT.mul(0.35));
-  const ph2: N = fract(uT.mul(0.35).add(0.5));
+  const ph: N = fract(uT.mul(0.62));
+  const ph2: N = fract(uT.mul(0.62).add(0.5));
   const wave = (q: N): N => {
     const calm = sin(q.x.mul(2.1).add(q.y.mul(1.3)).add(uT.mul(0.9))).mul(0.35)
       .add(sin(q.y.mul(2.6).sub(q.x.mul(1.2)).sub(uT.mul(0.7))).mul(0.3))
       .add(vnoise(q.mul(0.8).add(vec2(uT.mul(0.13), uT.mul(-0.09)))).mul(0.9));
-    const a = vnoise(q.sub(flow.mul(ph.mul(2.4))).mul(3.4));
-    const b = vnoise(q.sub(flow.mul(ph2.mul(2.4))).mul(3.4).add(vec2(5.2, 1.3)));
-    const run = mix(a, b, abs(ph.mul(2).sub(1))).mul(2.2);
+    const a = vnoise(q.sub(flow.mul(ph.mul(2.4))).mul(6.8));
+    const b = vnoise(q.sub(flow.mul(ph2.mul(2.4))).mul(6.8).add(vec2(5.2, 1.3)));
+    const run = mix(a, b, abs(ph.mul(2).sub(1))).mul(0.9);
     return calm.mul(float(1).sub(flowAmt.mul(0.6))).add(run.mul(flowAmt));
   };
   // Pale streaks riding the current.
-  const streakA: N = vnoise(p.sub(flow.mul(ph.mul(2.4))).mul(vec2(5, 5)).add(2.2));
-  const streakB: N = vnoise(p.sub(flow.mul(ph2.mul(2.4))).mul(vec2(5, 5)).add(8.9));
-  const streaks: N = smoothstep(0.66, 0.85, mix(streakA, streakB, abs(ph.mul(2).sub(1)))).mul(flowAmt);
+  const streakA: N = vnoise(p.sub(flow.mul(ph.mul(2.4))).mul(vec2(10, 10)).add(2.2));
+  const streakB: N = vnoise(p.sub(flow.mul(ph2.mul(2.4))).mul(vec2(10, 10)).add(8.9));
+  const streaks: N = smoothstep(0.6, 0.8, mix(streakA, streakB, abs(ph.mul(2).sub(1)))).mul(flowAmt);
   const E = 0.06;
   const h0: N = wave(p);
   const hx: N = wave(p.add(vec2(E, 0)));
@@ -176,7 +176,12 @@ export function makePondWater(k: { lighting: Lighting; sight: Sight }): PondWate
   const fres: N = pow(float(1).sub(clamp(dot(uV, Nw), 0, 1)), 5);
   const mirror: N = clamp(fres.mul(6).add(0.2), 0, 0.9);
   const sr: N = max(dot(R, sunDir), 0);
-  const glint: N = sunLit.mul(pow(sr, 700).mul(2.5).add(pow(sr, 90).mul(0.12)));
+  // Glitter, not a mirror: where the waves turn the sun toward the eye, small sparkles that twinkle (a plain lobe on calm waves gave
+  // large white blobs), and a faint sheen around them.
+  const tw1: N = vnoise(p.mul(vec2(5, 9)).add(vec2(uT.mul(0.9), uT.mul(-0.6))));
+  const tw2: N = vnoise(p.mul(vec2(8, 14)).add(vec2(uT.mul(-0.7), uT.mul(1.1))).add(3.3));
+  const sparkle: N = smoothstep(0.6, 0.74, tw1.mul(tw2));
+  const glint: N = sunLit.mul(pow(sr, 320).mul(sparkle).mul(0.75).add(pow(sr, 60).mul(0.04)));
   let water: N = mix(under, skyCol, mirror).add(glint).add(vec3(light).mul(ringLight.mul(0.1).add(streaks.mul(0.22))));
 
   // The edge: the water thins out onto the bank with a pale line, and the earth just outside is wet and darker.
