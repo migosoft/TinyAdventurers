@@ -29,10 +29,13 @@ const still = (f: DrawnFig): boolean => has(f.effects, EFFECT.Petrified) || has(
 /** True the first time an action is seen: a figure's anim and the clock it began at (`now - animT`) make the key. */
 function fresh(fx: Effects3d, f: DrawnFig, now: number): boolean {
   const start = now - f.animT, m = fx.actions.get(f.id);
-  if (m && m.anim === f.anim && Math.abs(m.start - start) < 0.2) return false;
-  if (m) { m.anim = f.anim; m.start = start; } else fx.actions.set(f.id, { anim: f.anim, start });
+  if (m && m.anim === f.anim && Math.abs(m.start - start) < 0.2) { m.seen = now; return false; }
+  if (m) { m.anim = f.anim; m.start = start; m.seen = now; } else fx.actions.set(f.id, { anim: f.anim, start, seen: now });
   return true;
 }
+
+/** A release spark shows only at the release: a figure first seen later in its action (it came into view) gets none. */
+const RELEASE_WINDOW = 0.1;
 
 // ---- the swoosh ----
 /** The swoosh of a melee swing (or the dragon's tail), at the swing's own reach and arc: armed or not, card or model. */
@@ -57,7 +60,8 @@ function releases(fx: Effects3d, f: DrawnFig, now: number, up: number): void {
   const d = f.def, a = f.anim;
   let colour = -1, y = f.hand[1];
   if (a === ANIM.Bite) {
-    if (d.bite && f.animT >= (d.windups?.[ANIM.Bite] ?? 0) && fresh(fx, f, now)) {
+    const wind = d.windups?.[ANIM.Bite] ?? 0;
+    if (d.bite && f.animT >= wind && f.animT - wind < RELEASE_WINDOW && fresh(fx, f, now)) {
       fx.emit(FX_KIND.Spark, now, f.x + Math.cos(f.aim) * d.bite.reach / TILE, f.z + Math.sin(f.aim) * d.bite.reach / TILE, -1, d.bite.color, 6, y);
     }
     return;
@@ -66,7 +70,7 @@ function releases(fx: Effects3d, f: DrawnFig, now: number, up: number): void {
   else if (d.mount === 'staff') {
     if (a === ANIM.Cast || a === ANIM.Shoot || a === ANIM.Channel) { colour = d.weaponTint ?? 0xc0a0ff; y += 10 / TILE * up; }
   } else if (!d.weapon && a === ANIM.Shoot) colour = d.base;
-  if (colour >= 0 && fresh(fx, f, now)) fx.emit(FX_KIND.Spark, now, f.hand[0], f.hand[2], -1, colour, 0, y);
+  if (colour >= 0 && f.animT < RELEASE_WINDOW && fresh(fx, f, now)) fx.emit(FX_KIND.Spark, now, f.hand[0], f.hand[2], -1, colour, 0, y);
 }
 
 /** The Spark record: five short streaks (a hit spark), and motes when `b` asks for them. */
@@ -203,6 +207,7 @@ function drain(out: FxOut, frame: FxFrame): void {
     const g = frame.figs[i], dd = (g.x - lx) ** 2 + (g.z - lz) ** 2;
     if (g.kind === KIND.Lich && dd < best) {
       best = dd;
+      // 3D hides the drain beams while the lich is hidden: the sight rule wins over 2D's drawing above the fog
       if (frame.hidden.has(g.id)) return;
       lx = g.x; lz = g.z;
     }
@@ -239,7 +244,8 @@ const LAND: BurstSpec = { x: 0, y: 0, z: 0, n: 5, speed: [0.6, 1.25], up: [0, 0.
 export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
   const ctx = frame.ctx, now = ctx.now, st = stretchOf(ctx), T = out.tris;
   const cues = frame.cues;
-  if (cues) for (let i = 0; i < cues.length; i++) fx.emit(cues[i].land ? FX_KIND.MimicLand : FX_KIND.MimicWake, now, cues[i].x, cues[i].z);
+  // a mimic the sight hides shows no cue (the record follows its id; the drawers check it too)
+  if (cues) for (let i = 0; i < cues.length; i++) if (!frame.hidden.has(cues[i].id)) fx.emit(cues[i].land ? FX_KIND.MimicLand : FX_KIND.MimicWake, now, cues[i].x, cues[i].z, cues[i].id);
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
     if (frame.hidden.has(f.id) || f.alpha < 0.05 || still(f)) continue;
@@ -260,10 +266,12 @@ export function registerFigureFx(): void {
   registerFrameFx(drawFigureFx);
   registerFx(FX_KIND.Spark, (o, f, r, a) => { drawSpark(o, f, r, a); });
   registerFx(FX_KIND.MimicWake, (o, f, r, a) => {
+    if (f.hidden.has(r.follow)) return;
     WAKE.x = r.x; WAKE.y = 8 / TILE; WAKE.z = r.z; WAKE.n = Math.max(3, Math.round(10 * f.ctx.detail));
     burst(o.tris, f.ctx.ax, WAKE, a, r.seed);
   });
   registerFx(FX_KIND.MimicLand, (o, f, r, a) => {
+    if (f.hidden.has(r.follow)) return;
     LAND.x = r.x; LAND.y = 0.05; LAND.z = r.z; LAND.n = Math.max(2, Math.round(5 * f.ctx.detail));
     burst(o.lit, f.ctx.ax, LAND, a, r.seed);
   });

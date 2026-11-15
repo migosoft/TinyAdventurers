@@ -156,7 +156,8 @@ export class Effects3d {
   private readonly pendAt = new Float64Array(PENDING_MAX);
   private pendN = 0;
   /** The last one-shot action of each figure that was given its spark: its anim and when it began (the run's clock). */
-  readonly actions = new Map<number, { anim: number; start: number }>();
+  readonly actions = new Map<number, { anim: number; start: number; seen: number }>();
+  private pruned = 0;
 
   private pendDrop(i: number): void {
     for (let k = i + 1; k < this.pendN; k++) { this.pendLook[k - 1] = this.pendLook[k]; this.pendAt[k - 1] = this.pendAt[k]; }
@@ -284,8 +285,11 @@ export class Effects3d {
       }
     }
     for (const draw of FRAME_DRAWERS) draw(out, input, this);
-    // a figure that is gone forgets its action
-    if (this.actions.size > 64) for (const id of this.actions.keys()) if (!input.figs.some((f) => f.id === id)) this.actions.delete(id);
+    // an action not seen for a few seconds is forgotten (checked once a second)
+    if (now - this.pruned >= 1 || now < this.pruned) {
+      this.pruned = now;
+      for (const [id, m] of this.actions) if (now - m.seen > 3) this.actions.delete(id);
+    }
     let w = 0;
     for (let i = 0; i < recs.length; i++) {
       const r = recs[i];

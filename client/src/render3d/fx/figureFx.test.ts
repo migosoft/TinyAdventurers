@@ -147,13 +147,41 @@ describe('figure effects', () => {
 
   it('a mimic cue makes a record that draws', () => {
     const fx = new Effects3d(map);
-    fx.frame(frameOf(1, [], { cues: [{ x: 3, z: 3, land: false }, { x: 4, z: 3, land: true }] }), newOut());
+    fx.frame(frameOf(1, [], { cues: [{ id: 8, x: 3, z: 3, land: false }, { id: 9, x: 4, z: 3, land: true }] }), newOut());
     expect(fx.records).toBe(2);
     const out = newOut();
     fx.frame(frameOf(1.1, []), out);
     expect(out.tris.n).toBeGreaterThan(0);
     expect(out.lit.n).toBeGreaterThan(0);
     expect(FX_KIND.MimicWake).not.toBe(FX_KIND.MimicLand);
+  });
+
+  it('a hidden mimic gets no cue', () => {
+    const fx = new Effects3d(map);
+    fx.frame(frameOf(1, [], { hidden: [8], cues: [{ id: 8, x: 3, z: 3, land: false }] }), newOut());
+    expect(fx.records).toBe(0);
+  });
+
+  it('a figure first listed late in its action gets no release spark', () => {
+    for (const anim of [ANIM.Channel, ANIM.Cast]) {
+      const fx = new Effects3d(map);
+      fx.frame(frameOf(10, [fig(2, KIND.Wizard, { anim, animT: 0.5 })]), newOut());
+      expect(fx.records).toBe(anim === ANIM.Channel ? 1 : 0);   // the channel's runes, no spark
+      const out = newOut();
+      fx.frame(frameOf(10.05, []), out);
+      expect(out.tris.n).toBe(0);
+    }
+  });
+
+  it('forgets the actions of figures no longer listed', () => {
+    const fx = new Effects3d(map);
+    const figs = Array.from({ length: 100 }, (_, i) => fig(100 + i, KIND.Wizard, { anim: ANIM.Cast, animT: 0.02 }));
+    fx.frame(frameOf(10, figs), newOut());
+    expect(fx.actions.size).toBe(100);
+    fx.frame(frameOf(12, []), newOut());
+    expect(fx.actions.size).toBe(100);
+    fx.frame(frameOf(14, []), newOut());
+    expect(fx.actions.size).toBe(0);
   });
 
   it('the drain draws a line to the lich per disciple', () => {

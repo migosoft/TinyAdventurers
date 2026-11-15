@@ -419,7 +419,7 @@ export class Figures3d {
     if (p.wakeCue && !f.dark.has(e.id)) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
     const x = e.x / TILE;
     const z = e.y / TILE;
-    if ((p.wakeCue || p.landCue) && !f.dark.has(e.id)) out.cues.push({ x, z, land: !p.wakeCue });
+    if ((p.wakeCue || p.landCue) && !f.dark.has(e.id)) out.cues.push({ id: e.id, x, z, land: !p.wakeCue });
     const [bx, bz] = this.bodyFoot(x, z, cam);
     this.body({
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,

@@ -53,7 +53,7 @@ export interface DrawnFig {
 }
 
 /** A mimic's one-shot cue from its pose: the reveal (gold motes) or the landing (a dust puff), at the foot (tiles). */
-export interface MimicCue { x: number; z: number; land: boolean }
+export interface MimicCue { id: number; x: number; z: number; land: boolean }
 
 /** Budgets (first guesses): blended triangles, lit triangles, records of one kind (the oldest is dropped), client lights per frame. */
 export const FX_TRI_CAP = 24000;
