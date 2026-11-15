@@ -20,7 +20,7 @@ const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0];
 function spec(n: number, speed: readonly [number, number], up: readonly [number, number], life: readonly [number, number], g: number, drag: number, size: number, colours: readonly number[], streakOn: boolean): BurstSpec {
   return { x: 0, y: 0, z: 0, n, speed, up, life, g, drag, size, colours, streak: streakOn };
 }
-function run(T: FxTris, ctx: FxCtx, s: BurstSpec, base: number, x: number, y: number, z: number, age: number, seed: number): void {
+export function run(T: FxTris, ctx: FxCtx, s: BurstSpec, base: number, x: number, y: number, z: number, age: number, seed: number): void {
   s.x = x; s.y = y; s.z = z; s.n = Math.max(1, Math.round(base * ctx.detail));
   burst(T, ctx.ax, s, age, seed);
 }

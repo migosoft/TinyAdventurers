@@ -238,6 +238,14 @@ try {
   if (shots.length === 0) errors.push('a left click sent no primary Input');
   await page.screenshot({ path: `${out}/r3d-run-${level}-aimed.png` });
 
+  // The effects (#308): the hero's cast leaves records alive right after the click (dungeon); no triangle may be refused at the caps.
+  const fx = await page.evaluate(() => window.__r3d.fx);
+  if (!fx) errors.push('window.__r3d.fx is not set in a run');
+  else {
+    console.log(`fx ${fx.records} records, ${fx.tris} tris, ${fx.dropped} dropped`);
+    if (level === 'dungeon' && !(fx.records > 0)) errors.push(`no effect record alive after the click (window.__r3d.fx.records = ${fx.records})`);
+  }
+
   if (level === 'woodland') {
     // Review Focus 3: a lost device mid-run brings back the ground, the plants and the sun's target (compare the two pictures).
     await page.screenshot({ path: `${out}/r3d-run-${level}-before-loss.png` });
@@ -261,6 +269,8 @@ try {
     console.log(`chunks drawn ${chunks?.drawn} of ${chunks?.total}`);
     if (!chunks || !(chunks.drawn < chunks.total)) errors.push(`chunk culling: drawn ${chunks?.drawn} of ${chunks?.total}`);
   }
+  const fxEnd = await page.evaluate(() => window.__r3d?.fx);
+  if (fxEnd && fxEnd.dropped > 0) errors.push(`effect triangles dropped at the caps: ${fxEnd.dropped}`);
 } catch (e) {
   if (!e.quiet) errors.push(`failed: ${e.message.split('\n')[0]}`);
 } finally {

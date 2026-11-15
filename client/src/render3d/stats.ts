@@ -39,7 +39,12 @@ export function treeLine(built: number, total: number): string {
   return `plants     ${built} of ${total}`;
 }
 
-const UPDATE = new Set<string>(['sim', 'cards', 'plants', 'lights', 'sight', 'air']);
+/** The readout's line of the effects (#308): records alive, triangles drawn this frame, triangles dropped at the cap since the run began. */
+export function fxLine(records: number, tris: number, dropped: number): string {
+  return `fx         ${records} rec, ${tris} tris (${dropped} dropped)`;
+}
+
+const UPDATE =new Set<string>(['sim', 'cards', 'plants', 'lights', 'sight', 'air']);
 
 export function statsText3d(s: R3dStats): string {
   const ms = (v: number) => `${v.toFixed(2)} ms`;

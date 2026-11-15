@@ -5,7 +5,7 @@ import { loadAtlas } from '../ui/atlas';
 import { FrameTimer } from '../game/frameTimer';
 import { createPanel, type PageButton } from './panel';
 import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
-import { R3D_SYSTEMS, lightLines, statsText3d, type R3dSystem } from './stats';
+import { R3D_SYSTEMS, fxLine, lightLines, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan, type RenderPlan } from './quality';
 import { frameDt } from './scene';
 import { createRecovery, type Recovery } from './recover';
@@ -26,6 +26,8 @@ declare global {
       yaw?: number; overlay?: number;
       /** ... and the lights in use of those that reach the screen, and the shadow cards (#304). */
       lights?: { list: number; inView: number }; casters?: number;
+      /** ... and the effects (#308): records alive, triangles of the last frame, triangles refused at the caps since the start. */
+      fx?: { records: number; tris: number; dropped: number };
       /** ... and the trees built of all on the woodland dev page (#329), for the pictures script. */
       plants?: { built: number; total: number };
       /** ... and the ground cover's sheets (the tallest kind, art px) and bushels once it is built (#330). */
@@ -386,7 +388,9 @@ export async function startHost(
         zoom,
         quality: params.quality,
         backend: backendName,
-        lines: state.lights ? lightLines(state.lights.list, state.lights.inView, state.casters ?? 0, params.lcap, params.ccap) : undefined,
+        lines: state.lights || state.fx
+          ? [...(state.lights ? lightLines(state.lights.list, state.lights.inView, state.casters ?? 0, params.lcap, params.ccap) : []), ...(state.fx ? [fxLine(state.fx.records, state.fx.tris, state.fx.dropped)] : [])]
+          : undefined,
       });
     }
   };

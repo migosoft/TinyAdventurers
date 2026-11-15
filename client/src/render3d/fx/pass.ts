@@ -61,6 +61,18 @@ export class FxPass {
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }
 
+  /** Triangles of the last frame (blended and lit). */
+  triCount = 0;
+  /** Triangles refused at the caps since the pass began; the F3 line and `window.__r3d.fx` show it, the run check wants 0. */
+  droppedTotal = 0;
+
+  /** Books the frame's triangle count and what the caps refused. */
+  noteFrame(): void {
+    const o = this.out;
+    this.triCount = o.tris.n + o.lit.n;
+    this.droppedTotal += o.tris.dropped + o.lit.dropped;
+  }
+
   /** Draws the effects of the frame; the effect glows are appended to `glows` (the figures'), before the caller copies it. */
   run(fx: Effects3d, p: FxPassIn, glows: GlowBuf): void {
     const ctx = this.ctx, cam = p.cam;
@@ -79,6 +91,7 @@ export class FxPass {
     fin.fp = p.fp;
     const out = this.out;
     fx.frame(fin, out);
+    this.noteFrame();
     const g = out.glows;
     for (let i = 0; i < g.position.length; i++) glows.position.push(g.position[i]);
     for (let i = 0; i < g.uv.length; i++) glows.uv.push(g.uv[i]);

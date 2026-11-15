@@ -33,7 +33,7 @@ import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
-import { R3D_SYSTEMS, lightLines, skyLines, treeLine } from './stats';
+import { R3D_SYSTEMS, fxLine, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
 import type { CoverResult } from './cover/coverJob';
@@ -291,6 +291,11 @@ export class RunView3d implements RunView {
   /** Records of the effects system alive (for tests and `window.__r3d`). */
   get fxRecords(): number {
     return this.fx.records;
+  }
+
+  /** The effects' numbers for the F3 readout and `window.__r3d.fx`: records alive, triangles of the last frame, dropped at the caps since the run began. */
+  get fxStat(): { records: number; tris: number; dropped: number } {
+    return { records: this.fx.records, tris: this.fxPass.triCount, dropped: this.fxPass.droppedTotal };
   }
 
   /** The three.js view of the moment (null while it is restored). */
@@ -553,9 +558,11 @@ export class RunView3d implements RunView {
 
   private stats(c: StageCtx, objects: number): ViewStats {
     const ls = this.lightStat;
+    const fs = this.fxStat;
     const lines = [
       ...(ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : []),
       ...(this.forest && this.woodland ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : this.forest ? [treeLine(this.forest.built, this.forest.total)] : []),
+      fxLine(fs.records, fs.tris, fs.dropped),
     ];
     return {
       lines: lines.length > 0 ? lines : undefined,

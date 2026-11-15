@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { R3D_SYSTEMS, statsText3d, type R3dStats } from './stats';
+import { R3D_SYSTEMS, fxLine, statsText3d, type R3dStats } from './stats';
 
 const base: R3dStats = {
   fps: 59.6,
@@ -47,5 +47,11 @@ describe('statsText3d', () => {
   it('counts the air lap in the update total, the shafts lap not', () => {
     const t = statsText3d({ ...base, systems: [['sim', 0.1], ['air', 0.5], ['shafts', 0.7], ['scene', 2]] }).split('\n');
     expect(t[3]).toBe('update     0.60 ms');
+  });
+});
+
+describe('fxLine', () => {
+  it('prints records, triangles and the dropped count', () => {
+    expect(fxLine(14, 2310, 0)).toBe('fx         14 rec, 2310 tris (0 dropped)');
   });
 });

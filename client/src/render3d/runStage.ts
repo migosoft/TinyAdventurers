@@ -193,6 +193,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         r.cam = runView.cam;
         r.figures = runView.figureCount;
         r.overlay = runView.overlayItems;
+        r.fx = runView.fxStat;
         const ls = runView.lightStat;
         r.lights = ls ? { list: ls.list, inView: ls.inView } : undefined;
         r.casters = ls?.casters;
