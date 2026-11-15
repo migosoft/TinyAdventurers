@@ -42,17 +42,18 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
   const windup = t < (d.windups?.[s.anim] ?? 0);
   const ground = (frame: string, w = false): Picked => ({ frame, lift: 0, windup: w });
 
-  if (s.anim === ANIM.TakeOff) {
+  // A figure without the flight frames (the demon) shows its ground frames in these anims, as the gallery cycles every figure through every state.
+  if (s.anim === ANIM.TakeOff && F.takeoff) {
     // Crouch and beat the wings first; the feet leave the ground halfway.
     const k = t / CONST.DRAGON_TAKEOFF;
     return { frame: at('takeoff', k * F.takeoff!.n), lift: smooth((k - 0.45) / 0.55), windup: false };
   }
-  if (s.anim === ANIM.Land) {
+  if (s.anim === ANIM.Land && F.land) {
     // Glide down with the wings up, touch down in a crouch, settle as the smash hits.
     const k = t / CONST.DRAGON_LAND;
     return { frame: at('land', k < 0.7 ? 0 : k < 0.88 ? 1 : 2), lift: 1 - smooth(k / 0.7), windup: false };
   }
-  if (s.flags & FLAG.AIRBORNE) {
+  if (s.flags & FLAG.AIRBORNE && F.hover && F.hoverbreath) {
     const fire = s.anim === ANIM.Breath && !windup;
     return { frame: loop(fire ? 'hoverbreath' : 'hover', clock), lift: 1, windup: s.anim === ANIM.Breath && windup };
   }

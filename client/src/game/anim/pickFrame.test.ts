@@ -83,6 +83,21 @@ describe('demon frames', () => {
     expect(at(ANIM.Dash, w + CONST.DEMON_SWOOP_TIME + 0.05).frame).toBe('demon_charge_anim_f3');
   });
 
+  it('has no take-off or landing frames, so those anims show it idling (the gallery cycles every figure through every state) (#338)', () => {
+    expect(at(ANIM.TakeOff, 0.1).frame).toBe('demon_idle_anim_f0');
+    expect(at(ANIM.Land, 0.1).frame).toBe('demon_idle_anim_f0');
+    expect(at(ANIM.TakeOff, 0.1, 0, true).frame).toBe('demon_walk_anim_f0');
+  });
+
+  it('never throws, for any figure with own frames in any anim, grounded or airborne', () => {
+    for (const d of Object.values(FIGURES)) {
+      if (!d.frames) continue;
+      for (const anim of Object.values(ANIM)) for (const flags of [0, FLAG.AIRBORNE]) for (const t of [0, 0.3, 2]) {
+        expect(() => pickFrame(d, { anim, animT: t, flags }, 0, 0, false)).not.toThrow();
+      }
+    }
+  });
+
   it('bursts with the ring of fire at the end of the cast wind-up', () => {
     const w = CONST.DEMON_RING_WINDUP;
     expect(at(ANIM.Cast, 0.05).frame).toBe('demon_cast_anim_f0');

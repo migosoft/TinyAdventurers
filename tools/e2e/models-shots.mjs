@@ -43,6 +43,9 @@ shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:8&zoom=6&state
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
+// The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):
+// this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
+shots.push({ name: 'state-cycle', q: '&focus=models&zoom=3&t=12.5&slow=1', need: ALL, until: 16 });
 shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=3&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'torch-light-close', q: `&at=model:3&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: ALL, skull: true });
@@ -148,6 +151,10 @@ for (const s of shots) {
         p = await open(`${base}?r3d=${s.page ?? 'gallery'}${s.q}`, s.name);
         const keys = await built(p, s.need, s.skull);
         if (s.skull) await inDeadHalf(p);
+        if (s.until) {
+          for (let i = 0; i < 800 && !((await p.evaluate(() => window.__r3d.models?.t)) >= s.until); i++) await p.waitForTimeout(250);
+          if (!((await p.evaluate(() => window.__r3d.models?.t)) >= s.until)) throw new Error(`the clock never reached ${s.until} s`);
+        }
         if (s.wait) await p.waitForTimeout(s.wait);
         await p.waitForTimeout(800);
         await snap(p, s.name);
