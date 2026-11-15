@@ -1,5 +1,5 @@
 import { DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
-import { attribute, float, max, min, positionWorld, sin, smoothstep, step, uniform, vec3, vec4 } from 'three/tsl';
+import { attribute, float, max, min, mix, positionWorld, sin, smoothstep, step, uniform, vec3, vec4 } from 'three/tsl';
 import { TILE_ID } from '../generated/defs';
 import type { Sight } from './sightNodes';
 import type { TileMap } from '../sim/map';
@@ -18,6 +18,15 @@ export const FIELD_FADE_IN = 0.5;
 export const FIELD_OLD = 10;
 /** Height of a rim band at the floor and at the top (tiles): one pixel of the pack's 16. */
 const RIM = 1 / 16;
+
+/** Alpha of a layer of alpha `b` lying over alpha `a`. The material builds the same maths from nodes. */
+export function overAlpha(a: number, b: number): number {
+  return b + a * (1 - b);
+}
+/** Share of the layer's colour in the result of a layer (alpha `b`) over (alpha `a`): the colour is `mix(under, layer, overWeight)`. */
+export function overWeight(a: number, b: number): number {
+  return b / Math.max(overAlpha(a, b), 1e-4);
+}
 
 /** The field's animated numbers: `age` seconds since it appeared. Uniforms only, set each frame (nothing is rebuilt). */
 export interface FieldUniforms { age: ReturnType<typeof uniform> }
@@ -40,16 +49,18 @@ export function fieldMaterial(sight: Sight, u: FieldUniforms): MeshBasicNodeMate
   const shown: N = step(y01, k.add(1e-4));
   let a: N = pulse.mul(0.1).add(0.22).mul(k);
   let rgb: N = fill;
-  // composites a layer of colour `c` and alpha `b` over (rgb, a)
+  // a layer of colour `c` and alpha `b` lies over (rgb, a), as 2D draws bands and rims on the fill (`overAlpha`, `overWeight`)
   const over = (c: N, b: N): void => {
-    const a2: N = a.add(b.mul(float(1).sub(a)));
-    rgb = rgb.mul(a).add(c.mul(b.mul(float(1).sub(a)))).div(max(a2, 1e-4));
+    const a2: N = b.add(a.mul(float(1).sub(b)));
+    rgb = mix(rgb, c, b.div(max(a2, 1e-4)));
     a = a2;
   };
+  // the cap (y01 = 1 all over) takes no band
+  const sideOnly: N = float(1).sub(step(0.999, y01));
   for (let i = 0; i < 3; i++) {
-    const p: N = age.mul(0.6 + i * 0.25).add(i / 3).fract();
+    const p: N = float(1).sub(age.mul(0.6 + i * 0.25).add(i / 3).fract());
     const band: N = float(1).sub(smoothstep(0.0, 0.05, p.sub(y01).abs()));
-    over(rim, band.mul(sin(age.mul(5).add(i * 2)).mul(0.2).add(0.25)).mul(k));
+    over(rim, band.mul(sideOnly).mul(sin(age.mul(5).add(i * 2)).mul(0.2).add(0.25)).mul(k));
   }
   over(rim, step(0.9, edge).mul(pulse.mul(0.35).add(0.55)).mul(k));
   const m = new MeshBasicNodeMaterial();

@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { newGlowBuf } from '../cards';
 import { Effects3d, clearFxRegistry, type FxFrame } from './effects3d';
-import { FIELD_BURST, drawField, fieldBurst, registerField } from './field';
+import { FIELD_BURST, fieldBurst, registerField } from './field';
 import { FxTris } from './tris';
 import type { FxOut } from './types';
 
@@ -63,6 +63,5 @@ describe('force field fx', () => {
     const out = newOut();
     fx.frame(frameOf(3), out);
     expect(out.tris.n).toBe(0);
-    expect(typeof drawField).toBe('function');
   });
 });

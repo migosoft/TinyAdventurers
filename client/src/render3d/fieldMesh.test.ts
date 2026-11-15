@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 import { WALL_H } from './heights';
-import { FIELD_EDGE, FIELD_FILL, buildField, sealedCells } from './fieldMesh';
+import { FIELD_EDGE, FIELD_FILL, overAlpha, overWeight, buildField, sealedCells } from './fieldMesh';
 
 const rows = (r: string[]) => {
   const w = r[0].length, t = new Uint8Array(w * r.length);
@@ -52,5 +52,10 @@ describe('fieldMesh', () => {
     expect(lo).toBe(2 * 3);
     expect(hi).toBe(2 * 3 + 6);
     expect(Array.from(f.edge).every((e) => e === 0 || e === 1)).toBe(true);
+  });
+  it('a band over the fill is mostly the band', () => {
+    expect(overWeight(0.3, 0.9)).toBeGreaterThanOrEqual(0.95);
+    expect(overAlpha(0.3, 0.9)).toBeCloseTo(0.93, 9);
+    expect(overWeight(0.3, 0)).toBe(0);
   });
 });
