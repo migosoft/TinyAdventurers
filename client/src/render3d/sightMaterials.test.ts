@@ -1,7 +1,7 @@
 // Every 3D material ends with the sight step (#305): the generated code of each carries the sight uniforms. #307 and #308 extend the list.
 import { describe, expect, it } from 'vitest';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
-import { cardMaterial, emissiveMaterial, fxMaterial, glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { fieldMaterial } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
@@ -49,6 +49,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'shadow', m: shadowMaterial(sight), world: false },
     // The figures' effect triangles (#338): vertex colours, hidden like a glow.
     { name: 'figure fx', m: fxMaterial(sight), world: false, attrs: FX_ATTRS },
+    { name: 'lit fx', m: fxLitMaterial(sight, l), world: false, attrs: FX_ATTRS },
     // Depth only (no colour to veil), but it stipples by the same sight value as the opaque card, so a figure the hero cannot see casts no shadow.
     { name: 'sun caster', m: sunCasterMaterial(t, 64, 64, l.sun, sight), world: false },
     { name: 'force field', m: fieldMaterial(sight), world: false },

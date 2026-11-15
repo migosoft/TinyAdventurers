@@ -5,7 +5,7 @@ import type { FrameBounds } from '../game/anim/pose';
 import { settleOwnAim } from '../run/aim';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
-import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
+import { ART, followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
@@ -13,7 +13,7 @@ import type { EntState } from '../game/world';
 import { Floats, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
-import { Figures3d, type Opener } from './figures';
+import { Figures3d, type FigureOut, type Opener } from './figures';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
@@ -44,6 +44,10 @@ import { Critters3d } from './critters3d';
 import { Fireflies } from './fireflies';
 import { Cove3d } from './cove3d';
 import type { FrameInput, SunFrame, View } from './view';
+import { Effects3d } from './fx/effects3d';
+import { FxPass } from './fx/pass';
+import { Shake, groundShift } from './fx/shake';
+import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -98,6 +102,15 @@ export class RunView3d implements RunView {
   private readonly map: RunViewInit['map'];
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
+  // The effects (#308): owned by the run (a lost device keeps them), drawn into these lists every frame, then flushed to the view's two buffers.
+  private readonly fx: Effects3d;
+  private readonly fxPass: FxPass;
+  /** The camera shake of hits and blasts; only the drawn camera is shifted by it. */
+  readonly shake = new Shake();
+  private readonly shakeAt = { x: 0, y: 0 };
+  private readonly shakeGround = { x: 0, z: 0 };
+  /** The run clock of the last host frame, seconds (events are stamped with it). */
+  private clockNow = 0;
   // The dungeon air and the woodland's pollen (#307): simulated here, once per run (a lost device keeps it).
   private readonly air: Air3d;
   private readonly moverTracker = new MoverTracker();
@@ -165,6 +178,8 @@ export class RunView3d implements RunView {
       this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
+    this.fx = new Effects3d(init.map);
+    this.fxPass = new FxPass(this.hidden);
     this.myKind = init.myKind;
     this.air = new Air3d(init.map);
     this.field = init.light;
@@ -273,6 +288,11 @@ export class RunView3d implements RunView {
     this.coverField = r ? new CoverField(r) : null;
   }
 
+  /** Records of the effects system alive (for tests and `window.__r3d`). */
+  get fxRecords(): number {
+    return this.fx.records;
+  }
+
   /** The three.js view of the moment (null while it is restored). */
   attach(view: View | null): void {
     this.v = view;
@@ -281,6 +301,7 @@ export class RunView3d implements RunView {
   /** Per host frame, before the session's frame: the frame's context. `fast`: Shift is down (the free camera flies faster). */
   begin(c: StageCtx, fast = false): void {
     this.c = c;
+    this.clockNow = c.now;
     this.v = c.view;
     this.fast = fast;
   }
@@ -369,7 +390,16 @@ export class RunView3d implements RunView {
     }
     // The cove's pixies (glows and wings), where the viewer sees.
     this.cove?.push(c.now, cam, fo.glows, fo.ghosts, c.params.sight ? this.mask : null);
-    const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+    // The sight and the ids it hides come first (the effects read them); cards and ghosts are copied once for both uses.
+    const cardsQ = quadsOf(fo.cards), ghostsQ = quadsOf(fo.ghosts);
+    const sight = this.sightFrame(f, c, ambient, skyNow);
+    // The ids over which nothing is drawn: the snapshot's dark ones and what the picture hides (beyond sight, or in a shadow line).
+    this.hidden.clear();
+    for (const id of f.dark) this.hidden.add(id);
+    if (sight.mask) hiddenByPicture([cardsQ, ghostsQ], sight.mask, this.hiddenSeen, this.hidden, fo.models);
+    // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
+    this.fxFrame(f, c, cam, fo);
+    const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
     this.forest?.step(cam, TREE_BUDGET_MS);
@@ -387,6 +417,7 @@ export class RunView3d implements RunView {
         ...staticCands(this.field, this.pairs, this.map, c.now),
         ...movingCands(f.snap?.lights ?? [], f.snap?.ents ?? [], (id) => this.carrier(f, id), c.now),
         ...(this.cove ? this.cove.lights(c.now) : []),
+        ...this.fxPass.out.lights,
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
@@ -406,11 +437,6 @@ export class RunView3d implements RunView {
       this.lightStat = { list: lights.length, inView: sel.inView, casters: casters.length };
     }
     c.timer.lap('lights');
-    const sight = this.sightFrame(f, c, ambient, skyNow);
-    // The ids over which nothing is drawn: the snapshot's dark ones and what the picture hides (beyond sight, or in a shadow line).
-    this.hidden.clear();
-    for (const id of f.dark) this.hidden.add(id);
-    if (sight.mask) hiddenByPicture([dynamic.cards, dynamic.ghosts], sight.mask, this.hiddenSeen, this.hidden, fo.models);
     this.seen = seenOpeners(fo.openers, this.sightFor(f), this.hidden);
     c.timer.lap('sight');
     // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees now (this frame's mask), as their cracks. A woodland and the work light have none.
@@ -424,16 +450,30 @@ export class RunView3d implements RunView {
       sun = sunFrame(skyNow, fp, cam, this.map, c.params, c.now, view.maxTexture);
       this.sunPx = sun.fit.size;
     }
+    // The camera shake shifts the drawn camera only: the pointer, the follow camera and the effects keep the steady one.
+    this.shake.offset(c.now * 1000, c.canvas.w, c.canvas.h, this.shakeAt);
+    let drawCam = cam;
+    if (this.shakeAt.x !== 0 || this.shakeAt.y !== 0) {
+      groundShift(pitch, yaw, this.shakeAt.x, this.shakeAt.y, ART * c.zoom, this.shakeGround);
+      drawCam = { ...cam, x: cam.x + this.shakeGround.x, z: cam.z + this.shakeGround.z };
+    }
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
       },
       c.timer,
     );
-    this.paintOverlay(f, c, cam);
+    this.paintOverlay(f, c, drawCam);
     return this.stats(c, view.meshes);
+  }
+
+  /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */
+  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut): void {
+    this.fxPass.run(this.fx, {
+      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: null,
+    }, fo.glows);
   }
 
   /** The air of this frame (#307): the torches, shots and movers of the frame feed the simulation; the haze is for the dungeon only. */
@@ -523,6 +563,11 @@ export class RunView3d implements RunView {
 
   event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null, dark = false): void {
     this.figures.event(ev);
+    this.fx.event(ev, this.clockNow, dark);
+    // The camera shakes as the 2D view's does: a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
+    if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
+    else if (ev.t === 'Boom' && ev.k === 7) this.shake.kick(120, 0.004);
+    else if (ev.t === 'Boom' && ev.k === 11 && Math.hypot(ev.x - own.x, ev.y - own.y) < CONST.PLAYER_RADIUS * 2) this.shake.kick(100, 0.003);
     // A hit on the own hero is born at the predicted foot (#281).
     this.floats.addPicture(ev, own, server, dark);
   }
@@ -532,11 +577,13 @@ export class RunView3d implements RunView {
     this.sightKey = ''; // a door or a wall changed: the sight is recomputed
     this.mapVersion++;
     this.softDirty = true;
+    this.fx.tileChanged(x, y, _v, this.clockNow);
     this.v?.tileChanged(x, y);
   }
 
-  shotEnded(shot: ShotView, _how: 'wall' | 'enemy' | 'gone'): void {
+  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void {
     this.figures.shotEnded(shot);
+    this.fx.shotEnded(shot, how, this.clockNow);
   }
 
   pointerWorld(): { x: number; y: number } | null {

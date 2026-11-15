@@ -250,7 +250,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          ...(kit ? { models: { insts: fo.models, kit, fx: fo.fx } } : {}),
+          ...(kit ? { models: { insts: fo.models, kit } } : {}),
           lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,

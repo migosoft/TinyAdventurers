@@ -363,7 +363,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       return c.view.draw(
         {
           cam, plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-          see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit, fx: fo.fx },
+          see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit },
         },
         c.timer,
       );

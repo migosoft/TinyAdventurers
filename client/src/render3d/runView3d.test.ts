@@ -126,9 +126,10 @@ describe('the run view and the game lights', () => {
     expect(Array.isArray(r.v.bushelSpots())).toBe(true); // this small cove may place no tuft; Cove3d's own test counts them
     expect(run().v.bushelSpots()).toEqual([]);
   });
-  it('with sight on the cove plants cast only where the picture shows them (none before the mask exists, the seen ones after)', () => {
+  it('with sight on the cove plants cast only where the picture shows them (the mask of this frame: it is filled before the lights, #308)', () => {
     const r = run({ cove: true });
-    expect(r.f?.casters.some((k) => k.id <= -1000)).toBe(false); // the first frame's mask is still blank: everything is hidden
+    expect(r.f?.casters.some((k) => k.id <= -1000)).toBe(true);
+    for (const k of r.f!.casters) if (k.id <= -1000) expect(hiddenAt((r.v as unknown as { mask: SightMask }).mask, k.x, k.z)).toBe(false);
     const again = r.again();
     expect(again?.casters.some((k) => k.id <= -1000)).toBe(true);
     for (const k of again!.casters) if (k.id <= -1000) expect(hiddenAt((r.v as unknown as { mask: SightMask }).mask, k.x, k.z)).toBe(false);
@@ -434,5 +435,39 @@ describe('the air in the run view (#307)', () => {
     r.v.begin(r.ctx); // the lost device's replacement
     r.again(); // draws into the new view
     expect((got as FrameInput | null)?.air?.parts).toBe(parts);
+  });
+});
+
+describe('the run view and the effects (#308)', () => {
+  it('effects survive a view swap', () => {
+    const r = run();
+    r.v.event({ t: 'Boom', x: 60, y: 30, k: 0, r: 32 } as never, { x: 56, y: 24 });
+    expect(r.v.fxRecords).toBe(1);
+    r.v.attach(null);
+    r.again();
+    r.v.attach(r.ctx.view);
+    expect(r.v.fxRecords).toBe(1);
+    expect(r.again()?.fx).toBeDefined();
+  });
+
+  it('hands the view the two effect buffers, empty while no drawer is registered', () => {
+    const { f } = run();
+    expect(f?.fx?.tris.n).toBe(0);
+    expect(f?.fx?.lit.n).toBe(0);
+  });
+
+  it('a hit on the own hero shakes only the drawn camera, and the shake ends', () => {
+    const r = run();
+    const steady = r.f!.cam;
+    r.v.event({ t: 'Dmg', x: 56, y: 14, v: 3, p: true, imm: false, ty: 0 } as never, { x: 56, y: 24 });
+    let shifted = false;
+    for (let i = 0; i < 4; i++) {
+      r.ctx.now += 0.016;
+      const c = r.again()!.cam;
+      if (c.x !== steady.x || c.z !== steady.z) shifted = true;
+    }
+    expect(shifted).toBe(true);
+    r.ctx.now += 0.2;
+    expect(r.again()!.cam.x).toBeCloseTo(steady.x, 3);
   });
 });

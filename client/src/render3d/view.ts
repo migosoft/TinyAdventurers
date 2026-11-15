@@ -51,7 +51,7 @@ import { GroundTooLargeError } from './groundError';
 import { AIR_ORDER, airMaterials } from './air/airNodes';
 import { airQuads, hazeQuads, newAirBuffers } from './air/airQuads';
 import type { AirParts } from './air/airParts';
-import { cardMaterial, emissiveMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
@@ -89,8 +89,8 @@ export interface SunFrame {
   /** The wind in tiles per second, and the seconds the clouds drift by. */
   wind: [number, number]; t: number;
 }
-/** The 3D figures of a frame (#338): what to draw, the kit that holds their models and the effect triangles (swoosh, fangs, swirl). */
-export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit; fx?: FxBuf }
+/** The 3D figures of a frame (#338): what to draw and the kit that holds their models. */
+export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit }
 
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
@@ -116,6 +116,8 @@ export interface FrameInput {
   trees?: TreeFrame;
   /** The 3D figures (#338); absent: none. */
   models?: FigureFrame;
+  /** The effects (#308): blended triangles (unlit) and lit triangles; absent: none. */
+  fx?: { tris: FxBuf; lit: FxBuf };
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
   cover?: CoverFrame;
   /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
@@ -443,14 +445,27 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
   const flames = new DynMesh([['position', 3], ['uv', 2], ['sight', 3]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3], ['sight', 2]], glow);
+  // The effects (#308): flat-coloured triangles, blended (`fxMat`) and lit (`fxLitMat`), each with its own growing upload arrays.
   const fxMat = fxMaterial(sight);
-  const fxDyn = new DynMesh([['position', 3], ['rgba', 4], ['sight', 2]], fxMat);   // the figures' swoosh, fangs and swirl (#338)
-  let fxPos = new Float32Array(0), fxRgba = new Float32Array(0), fxSight = new Float32Array(0);
+  const fxLitMat = fxLitMaterial(sight, lighting);
+  const fxAttrs: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
+  const fxDyn = new DynMesh(fxAttrs, fxMat);
+  const fxLitDyn = new DynMesh(fxAttrs, fxLitMat);
+  const fxArrays = new Map<DynMesh, { pos: Float32Array; rgba: Float32Array; sight: Float32Array }>();
+  const fxUpload = (dyn: DynMesh, buf: FxBuf | undefined, mask: SightMask | null): void => {
+    let a = fxArrays.get(dyn);
+    if (!a) fxArrays.set(dyn, (a = { pos: new Float32Array(0), rgba: new Float32Array(0), sight: new Float32Array(0) }));
+    const n = (buf?.n ?? 0) * 3;
+    if (buf && a.pos.length < n * 3) { a.pos = new Float32Array(n * 6); a.rgba = new Float32Array(n * 8); a.sight = new Float32Array(n * 4); }
+    if (buf) { a.pos.set(buf.position); a.rgba.set(buf.rgba); }
+    dyn.set({ position: a.pos, rgba: a.rgba, sight: buf ? fxSightData(buf, mask, a.sight) : a.sight }, n);
+  };
   shadows.mesh.renderOrder = 1;
   decals.mesh.renderOrder = 2;
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
   fxDyn.mesh.renderOrder = 5;
+  fxLitDyn.mesh.renderOrder = 5;
   // The air (#307): specks and embers (additive), smoke, rings and drops (blended) as camera-facing quads, and the haze sheets.
   const air = airMaterials(lighting, sight, { sun: world.painted, toward });
   const airBuf = newAirBuffers();
@@ -515,8 +530,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return target;
   }
 
-  for (const d of [shadows, decals, ghosts, glows, fxDyn]) skipInAirPrepass(d.mesh);
-  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, fxDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
+  for (const d of [shadows, decals, ghosts, glows, fxDyn, fxLitDyn]) skipInAirPrepass(d.mesh);
+  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, fxDyn.mesh, fxLitDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
@@ -721,10 +736,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
-      const fx = f.models?.fx, fxN = (fx?.n ?? 0) * 3;   // the figures' effect triangles (#338)
-      if (fx && fxPos.length < fxN * 3) { fxPos = new Float32Array(fxN * 6); fxRgba = new Float32Array(fxN * 8); fxSight = new Float32Array(fxN * 4); }
-      if (fx) { fxPos.set(fx.position); fxRgba.set(fx.rgba); }
-      fxDyn.set({ position: fxPos, rgba: fxRgba, sight: fx ? fxSightData(fx, frameMask, fxSight) : fxSight }, fxN);
+      fxUpload(fxDyn, f.fx?.tris, frameMask);   // the effects (#308): blended, then lit
+      fxUpload(fxLitDyn, f.fx?.lit, frameMask);
       // The air (#307): the camera's right and up spread the quads; no air frame hides the meshes.
       const ca = Math.cos(f.cam.yaw), sa = Math.sin(f.cam.yaw), spa = Math.sin(f.cam.pitch);
       air.right.value.set(ca, 0, sa);
@@ -862,8 +875,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldMaterial.dispose();
         material.dispose();
         sight.dispose();
-        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, air.add, air.blend, air.haze]) m.dispose();
-        for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
+        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
+        for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
         target?.dispose();
         if (shafts) {
           freeShaftTargets(shafts);

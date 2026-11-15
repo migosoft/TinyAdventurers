@@ -7,6 +7,7 @@ import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
+import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
 import { createMoodStage } from './moodStage';
@@ -62,6 +63,13 @@ export async function bootSunlight(el: HTMLElement, search: string): Promise<voi
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createSunlightStage(assets, p, s, host));
+}
+
+/** `?r3d=fx` (#308): the 3D effects of every group in small rooms side by side, no server needed. Zoom 4 unless the URL picks one. */
+export async function bootFx(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=4`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets, host) => createFxStage(assets, p, s, host));
 }
 
 export interface Run3d {

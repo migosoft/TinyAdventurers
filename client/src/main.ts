@@ -134,9 +134,9 @@ async function main(): Promise<void> {
   if (isR3dDemo(location.search)) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
-    const { bootCove, bootDemo, bootGallery, bootLights, bootMood, bootSunlight, bootWoodland } = await import('./render3d/boot');
+    const { bootCove, bootDemo, bootFx, bootGallery, bootLights, bootMood, bootSunlight, bootWoodland } = await import('./render3d/boot');
     const page = r3dPage(location.search);
-    const boot = ({ gallery: bootGallery, lights: bootLights, woodland: bootWoodland, cove: bootCove, mood: bootMood, sunlight: bootSunlight } as Record<string, typeof bootDemo>)[page ?? ''] ?? bootDemo;
+    const boot = ({ gallery: bootGallery, lights: bootLights, woodland: bootWoodland, cove: bootCove, mood: bootMood, sunlight: bootSunlight, fx: bootFx } as Record<string, typeof bootDemo>)[page ?? ''] ?? bootDemo;
     return boot(host, location.search);
   }
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();

@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
-import { fangTris, newFxBuf, type FxBuf } from './models/fx';
 import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { DESCS, FIT_KIND, modelKeyOf, type DescKey } from './models/table';
@@ -659,7 +658,6 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.casters.length).toBe(1);
     expect(out.casters[0].id).toBe(10);
     expect(out.shadows.n).toBe(1);
-    expect(out.fx.n).toBe(0);
     expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.head / 2 / 16, 6);
     // the model's own scale, not the pose's fall shrink; the radius encloses the silhouette
     const m = kit.get('elf')!;
@@ -822,107 +820,24 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect([...tints]).toEqual([[0xa0, 0xc8, 0xff].map((v) => (v / 255).toFixed(3)).join()]);
   });
 
-  describe('the small effects of the model figures (#338)', () => {
-    const wolfAt = (o: Partial<EntState> = {}) => ent(12, KIND.DireWolf, o);
-    const stone = 1 << EFFECT.Petrified, ice = 1 << EFFECT.Frozen;
-    const paladin = (o: Partial<EntState> = {}) => ent(11, KIND.Paladin, o);
-    const lowest = (b: { position: number[] }) => Math.min(...b.position.filter((_, i) => i % 3 === 1));
+  // The swoosh, fangs and swirl of the model figures (#338) are drawn by the effects system from Task 10 of #308 on (`models/fx.ts` keeps the shapes).
+  it('figs lists each drawn figure once, as a card and as a model, and a hidden one too', () => {
+    const e = (id: number, kind: number, tx: number) => ent(id, kind, { x: at(tx) });
+    const cards = make().frame(frame([e(10, KIND.ElvenRanger, 0), e(11, KIND.Paladin, 1)], { dark: new Set([11]) }), cam(), look());
+    expect(cards.figs.map((f) => [f.id, f.kind, f.model])).toEqual([[10, KIND.ElvenRanger, false], [11, KIND.Paladin, false]]);
+    expect(cards.figs[0].top).toBeGreaterThan(0.5);
+    expect(cards.figs[0].x).toBeCloseTo(at(0) / TILE);
+    const models = make().frame(frame([e(10, KIND.ElvenRanger, 0), e(11, KIND.Paladin, 1)]), cam(), look({ kit, ...all }));
+    expect(models.figs.map((f) => [f.id, f.model])).toEqual([[10, true], [11, true]]);
+    expect(models.figs[1].def).toBe(FIGURES[KIND.Paladin]);
+  });
 
-    it('gives a swinging model figure the swoosh, at the hand, and none outside the sweep', () => {
-      const mid = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
-      expect(mid.fx.n).toBeGreaterThan(0);
-      expect(lowest(mid.fx)).toBeGreaterThan(0.2);
-      const done = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 500 })]), cam(), look({ kit, ...all }));
-      expect(done.fx.n).toBe(0);
-      expect(make().frame(frame([paladin()]), cam(), look({ kit, ...all })).fx.n).toBe(0);
-    });
-
-    it('hangs the swoosh at the drawn shoulder: the anchor height over cos(pitch), as the camera stretches the figure', () => {
-      const knight = kit.get('knight')!;
-      const out = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
-      const want = ((knight.shoulderY * knight.scale) / 16) / Math.cos(cam().pitch);
-      for (let i = 1; i < out.fx.position.length; i += 3) expect(out.fx.position[i]).toBeCloseTo(want, 5);
-    });
-
-    it('hangs the fangs and the swirl at the stretched heights too', () => {
-      const wolf = kit.get('wolf')!;
-      const bite = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
-      const fangs = bite.fx.position.filter((_, i) => i % 3 === 1);
-      // the card's up axis has a y part of cos(pitch): the plane's middle sits at 0.8 x shoulder / cos(pitch) plus the lift along the view ray
-      const mean = (Math.max(...fangs) + Math.min(...fangs)) / 2;
-      expect(mean).toBeGreaterThan(((0.8 * wolf.shoulderY * wolf.scale) / 16) / Math.cos(cam().pitch) - 0.01);
-      const wiz = kit.get('wizard')!;
-      const swirl = make().frame(frame([ent(13, KIND.Wizard, { anim: ANIM.Channel })]), cam(), look({ kit, ...all }));
-      const top = Math.max(...swirl.fx.position.filter((_, i) => i % 3 === 1));
-      expect(top).toBeGreaterThan(((0.82 * wiz.baseHeight) / 16) / Math.cos(cam().pitch));
-    });
-
-    it('keeps the wolf\'s fangs in front of its own head when it faces away from the camera', () => {
-      const wolf = kit.get('wolf')!, c = cam();
-      const out = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100, aim: -Math.PI / 2 })]), c, look({ kit, ...all }));
-      const v = [-Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)];
-      const foot = [at(0) / 16, 0, 8 / 16];
-      // no point of the model is nearer the camera than its radius plus its height
-      const bound = wolf.radius + wolf.baseHeight / 16;
-      for (let i = 0; i < out.fx.position.length; i += 3) {
-        const d = (out.fx.position[i] - foot[0]) * v[0] + out.fx.position[i + 1] * v[1] + (out.fx.position[i + 2] - foot[2]) * v[2];
-        expect(d).toBeGreaterThanOrEqual(bound - 1e-6);
-      }
-    });
-
-    it('shows the fangs open in the wolf\'s wind-up', () => {
-      const out = make().frame(frame([wolfAt({ anim: ANIM.Windup, animMs: 100 })]), cam(), look({ kit, ...all }));
-      const ref = newFxBuf();
-      fangTris(ref, [0, 1, 0], cam(), 0.25);
-      expect(ref.n).toBeGreaterThan(0);
-      expect(out.fx.n).toBe(ref.n);
-    });
-
-    it('fades the effects with the figure', () => {
-      const e = paladin({ anim: ANIM.Melee, animMs: 100, effects: 1 << EFFECT.Invisible });
-      const out = make().frame(frame([e]), cam(), look({ kit, ...all }));
-      const a = out.models[0].alpha;
-      expect(a).toBeLessThan(1);
-      const solid = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
-      const top = (b: FxBuf) => Math.max(...b.rgba.filter((_, i) => i % 4 === 3));
-      expect(out.fx.n).toBeGreaterThan(0);
-      expect(top(out.fx)).toBeCloseTo(top(solid.fx) * a, 5);
-    });
-
-    it('gives the wolf clamping fangs and no swoosh', () => {
-      const out = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
-      expect(out.fx.n).toBeGreaterThan(0);
-      const ref = newFxBuf();
-      fangTris(ref, [0, 1, 0], cam(), 0.5);
-      expect(out.fx.n).toBe(ref.n);
-    });
-
-    it('gives a channelling model figure the swirl', () => {
-      const out = make().frame(frame([ent(13, KIND.Wizard, { anim: ANIM.Channel })]), cam(), look({ kit, ...all }));
-      expect(out.fx.n).toBeGreaterThan(0);
-    });
-
-    it('draws none of them on a stone or frozen figure, or on cards', () => {
-      for (const effects of [stone, ice]) {
-        for (const e of [paladin({ anim: ANIM.Melee, animMs: 100, effects }), wolfAt({ anim: ANIM.Melee, animMs: 100, effects }), ent(13, KIND.Wizard, { anim: ANIM.Channel, effects })]) {
-          expect(make().frame(frame([e]), cam(), look({ kit, ...all })).fx.n).toBe(0);
-        }
-      }
-      for (const e of [paladin({ anim: ANIM.Melee, animMs: 100 }), wolfAt({ anim: ANIM.Melee, animMs: 100 }), ent(13, KIND.Wizard, { anim: ANIM.Channel })]) {
-        expect(make().frame(frame([e]), cam(), look()).fx.n).toBe(0);
-      }
-    });
-
-    it('leaves the sleeper\'s Z to the overlay: no float of its own, no triangles', () => {
+  describe('the model figures\' small effects', () => {
+    it('leaves the sleeper\'s Z to the overlay: no float of its own', () => {
       const fg = make();
-      let floats = 0, tris = 0;
-      for (let i = 0; i < 4; i++) {
-        const out = fg.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })], { dt: 0.5 }), cam(), look({ kit, ...all }));
-        floats += out.floats.length;
-        tris += out.fx.n;
-      }
+      let floats = 0;
+      for (let i = 0; i < 4; i++) floats += fg.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })], { dt: 0.5 }), cam(), look({ kit, ...all })).floats.length;
       expect(floats).toBe(0);
-      expect(tris).toBe(0);
     });
   });
 

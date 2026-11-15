@@ -319,6 +319,21 @@ export function fxMaterial(sight: Sight): MeshBasicNodeMaterial {
   return m;
 }
 
+/**
+ * The lit effect triangles (#308: stone chips, dust, smoke, floor marks): the vertex colour lit like a card (the game's lights and
+ * ambient; no card shade and no sun term), its alpha times the picture's sight; translucent, depth tested, not written.
+ */
+export function fxLitMaterial(sight: Sight, lighting: Lighting): MeshBasicNodeMaterial {
+  const c: N = attribute('rgba', 'vec4');
+  const m = new MeshBasicNodeMaterial();
+  m.colorNode = vec4(lighting.finish(c.xyz, lighting.lightAt(positionWorld, vec3(0, 0, 0), 1, { self: float(-1), darkOnly: float(0) })), c.w.mul(sight.shown(attribute('sight', 'vec2').x, 0)));
+  m.transparent = true;
+  m.depthWrite = false;
+  m.forceSinglePass = true;
+  m.side = DoubleSide;
+  return m;
+}
+
 /** Camera-facing glow quads (already moved toward the camera by `buildDynamic`, so no bias here): colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
 export function glowMaterial(sight: Sight): MeshBasicNodeMaterial {
   const g = max(float(1).sub(length(uv())), 0);
