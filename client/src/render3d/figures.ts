@@ -12,7 +12,7 @@ import { figurePose, MELEE_T, newPoseMemory, type FrameBounds, type Pose, type P
 import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
-import { SHOT_LIFT, snapGround, type Cam } from './camera';
+import { SHOT_LIFT, snapGround, viewRay, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WALL_SIGHT_PUSH, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
@@ -34,6 +34,8 @@ const SHADOW_ALPHA = 0.45;
 /** A model figure's small effects (#338): the bite's fangs hang this far (sprite px) in front of the figure; the channel's swirl circles it at this radius (tiles). */
 const BITE_AHEAD = 18.5;
 const SWIRL_RADIUS = 0.6;
+/** The bite's `u` while the wolf holds its wind-up (pose3d's `TIMING.bite.hold`). */
+const BITE_HELD = 0.25;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
 const AFTER_ALPHA = 0.5;
@@ -557,7 +559,7 @@ export class Figures3d {
         if (c) out.casters.push(c);
       }
       fig.last = insts;
-      if (!dark && !pose.lie) this.smallEffects(out.fx, s, d, m, p3, x, z, down);
+      if (!dark && !pose.lie) this.smallEffects(out.fx, cam, s, d, m, p3, x, z, down, pose.alpha * k);
       if (pose.afterimage) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
     }
 
@@ -583,15 +585,21 @@ export class Figures3d {
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
    */
-  private smallEffects(fx: FxBuf, s: ViewState, d: FigureDef, m: FigureModel, p3: Pose3d, x: number, z: number, down: number): void {
+  private smallEffects(fx: FxBuf, cam: Cam, s: ViewState, d: FigureDef, m: FigureModel, p3: Pose3d, x: number, z: number, down: number, alpha: number): void {
     const bits = s.effects ?? 0;
     if (has(bits, EFFECT.Petrified) || has(bits, EFFECT.Frozen)) return;
+    // The camera passes stretch the figure by 1 / cos(pitch) (nodes.ts): the anchor heights are stretched the same way, the shapes are not.
+    const stretch = 1 / Math.cos(cam.pitch);
     const shoulder = (m.shoulderY * m.scale) / TILE;
-    if (p3.attack?.style === 'swing' && s.anim === ANIM.Melee && d.swing) swooshTris(fx, x, z, shoulder - down, p3.yaw, d.swing.reach, d.swing.arc, d.swing.color ?? FX_WHITE, s.animT / MELEE_T);
-    else if (p3.attack?.style === 'bite' && this.cam) {
-      const ahead = BITE_AHEAD / TILE;
-      fangTris(fx, [x + Math.cos(p3.yaw) * ahead, 0.8 * shoulder - down, z + Math.sin(p3.yaw) * ahead], this.cam, p3.attack.u);
-    } else if (p3.channel) swirlTris(fx, x, z, s.animT, d.base, m.baseHeight / TILE, SWIRL_RADIUS);
+    const from = fx.rgba.length;
+    if (p3.attack?.style === 'swing' && s.anim === ANIM.Melee && d.swing) swooshTris(fx, x, z, (shoulder - down) * stretch, p3.yaw, d.swing.reach, d.swing.arc, d.swing.color ?? FX_WHITE, s.animT / MELEE_T);
+    else if (m.armLength === 0 && (p3.attack?.style === 'bite' || s.anim === ANIM.Windup)) {
+      // A bite's wind-up holds the page's u 0.25: the fangs are open. They hang in front of the muzzle, lifted along the view ray (the
+      // view is orthographic: the picture does not change) past everything of the figure, so its own head does not hide them.
+      const ahead = BITE_AHEAD / TILE, lift = ahead + (m.baseHeight / TILE) + m.radius, ray = viewRay(cam.pitch, cam.yaw);
+      fangTris(fx, [x + Math.cos(p3.yaw) * ahead + ray[0] * lift, (0.8 * shoulder - down) * stretch + ray[1] * lift, z + Math.sin(p3.yaw) * ahead + ray[2] * lift], cam, p3.attack?.u ?? BITE_HELD);
+    } else if (p3.channel) swirlTris(fx, x, z, s.animT, d.base, (m.baseHeight / TILE) * stretch, SWIRL_RADIUS, -down * stretch);
+    if (alpha < 1) for (let i = from + 3; i < fx.rgba.length; i += 4) fx.rgba[i] *= alpha;
   }
 
   /** Draws one figure; false when it is not drawn (dead). */

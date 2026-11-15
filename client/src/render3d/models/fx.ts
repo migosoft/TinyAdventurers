@@ -21,9 +21,12 @@ function vert(b: FxBuf, x: number, y: number, z: number, r: number, g: number, b
   b.rgba.push(r, g, bl, a);
 }
 
+/** The corners of a ring's two triangles: along one diagonal, or (the page's swoosh) along the other. */
+const SPLIT_A = [0, 1, 2, 0, 2, 3], SPLIT_B = [0, 1, 3, 1, 2, 3];
+
 /** A quad of corners 0 1 2 3 (in a ring) as two triangles. `c` holds r, g, b; `a` the four alphas. */
-function quad(b: FxBuf, p: ArrayLike<number>, c: ArrayLike<number>, a: ArrayLike<number>): void {
-  for (const i of [0, 1, 2, 0, 2, 3]) vert(b, p[i * 3], p[i * 3 + 1], p[i * 3 + 2], c[0], c[1], c[2], a[i]);
+function quad(b: FxBuf, p: ArrayLike<number>, c: ArrayLike<number>, a: ArrayLike<number>, split = SPLIT_A): void {
+  for (const i of split) vert(b, p[i * 3], p[i * 3 + 1], p[i * 3 + 2], c[0], c[1], c[2], a[i]);
   b.n += 2;
 }
 
@@ -54,7 +57,7 @@ export function swooshTris(b: FxBuf, x: number, z: number, y: number, yaw: numbe
       swooshP[6] = x + ci * R; swooshP[7] = y; swooshP[8] = z + si * R;
       swooshP[9] = x + ci * R * 0.55; swooshP[10] = y; swooshP[11] = z + si * R * 0.55;
       swooshA[0] = 0; swooshA[1] = prevA; swooshA[2] = a; swooshA[3] = 0;
-      quad(b, swooshP, swooshC, swooshA);
+      quad(b, swooshP, swooshC, swooshA, SPLIT_B);   // the page's split: (inner, outer, next inner), (outer, next outer, next inner)
     }
     prevA = a;
     swooshP[0] = x + ci * R * 0.55; swooshP[1] = y; swooshP[2] = z + si * R * 0.55;
@@ -111,12 +114,12 @@ const swirlP = new Array<number>(12), swirlA = new Array<number>(4), swirlC = [0
 
 /**
  * The swirl of a channelling figure: three short arcs circling it at three heights (fractions of `height`, tiles), `radius` tiles from the
- * foot (x, z), each a thin slanted ribbon whose bright head leads and fades behind. `t` is the clock in seconds.
+ * foot (x, z), each a thin slanted ribbon whose bright head leads and fades behind. `t` is the clock in seconds. The heights are `base` plus the fractions of `height`.
  */
-export function swirlTris(b: FxBuf, x: number, z: number, t: number, colour: number, height = 1, radius = 0.45): void {
+export function swirlTris(b: FxBuf, x: number, z: number, t: number, colour: number, height = 1, radius = 0.45, base = 0): void {
   swirlC[0] = (colour >> 16) / 255; swirlC[1] = ((colour >> 8) & 255) / 255; swirlC[2] = (colour & 255) / 255;
   for (let a = 0; a < SWIRL_ARCS.length; a++) {
-    const y = SWIRL_ARCS[a] * height, head = t * SWIRL_RATE * (a % 2 ? -1 : 1) + a * 2.1;
+    const y = base + SWIRL_ARCS[a] * height, head = t * SWIRL_RATE * (a % 2 ? -1 : 1) + a * 2.1;
     const dir = a % 2 ? -1 : 1;
     for (let i = 0; i < SWIRL_STEPS; i++) {
       // from the tail (i = 0) to the head; the head is `head`

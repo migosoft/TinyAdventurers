@@ -443,7 +443,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
   const flames = new DynMesh([['position', 3], ['uv', 2], ['sight', 3]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3], ['sight', 2]], glow);
-  const fxDyn = new DynMesh([['position', 3], ['rgba', 4], ['sight', 2]], fxMaterial(sight));   // the figures' swoosh, fangs and swirl (#338)
+  const fxMat = fxMaterial(sight);
+  const fxDyn = new DynMesh([['position', 3], ['rgba', 4], ['sight', 2]], fxMat);   // the figures' swoosh, fangs and swirl (#338)
   let fxPos = new Float32Array(0), fxRgba = new Float32Array(0), fxSight = new Float32Array(0);
   shadows.mesh.renderOrder = 1;
   decals.mesh.renderOrder = 2;
@@ -861,7 +862,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldMaterial.dispose();
         material.dispose();
         sight.dispose();
-        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxDyn.mesh.material as NodeMaterial, air.add, air.blend, air.haze]) m.dispose();
+        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, air.add, air.blend, air.haze]) m.dispose();
         for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
         target?.dispose();
         if (shafts) {

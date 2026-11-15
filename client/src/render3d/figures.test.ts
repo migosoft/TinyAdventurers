@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { createKit, directRunner, type FigureKit } from './models/kit';
-import { fangTris, newFxBuf } from './models/fx';
+import { fangTris, newFxBuf, type FxBuf } from './models/fx';
 import { BONES } from './models/model';
 import { sideReach } from './models/pose3d';
 import type { SpritePixels } from './models/weapons';
@@ -755,6 +755,58 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       const done = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 500 })]), cam(), look({ kit, ...all }));
       expect(done.fx.n).toBe(0);
       expect(make().frame(frame([paladin()]), cam(), look({ kit, ...all })).fx.n).toBe(0);
+    });
+
+    it('hangs the swoosh at the drawn shoulder: the anchor height over cos(pitch), as the camera stretches the figure', () => {
+      const knight = kit.get('knight')!;
+      const out = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
+      const want = ((knight.shoulderY * knight.scale) / 16) / Math.cos(cam().pitch);
+      for (let i = 1; i < out.fx.position.length; i += 3) expect(out.fx.position[i]).toBeCloseTo(want, 5);
+    });
+
+    it('hangs the fangs and the swirl at the stretched heights too', () => {
+      const wolf = kit.get('wolf')!;
+      const bite = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
+      const fangs = bite.fx.position.filter((_, i) => i % 3 === 1);
+      // the card's up axis has a y part of cos(pitch): the plane's middle sits at 0.8 x shoulder / cos(pitch) plus the lift along the view ray
+      const mean = (Math.max(...fangs) + Math.min(...fangs)) / 2;
+      expect(mean).toBeGreaterThan(((0.8 * wolf.shoulderY * wolf.scale) / 16) / Math.cos(cam().pitch) - 0.01);
+      const wiz = kit.get('wizard')!;
+      const swirl = make().frame(frame([ent(13, KIND.Wizard, { anim: ANIM.Channel })]), cam(), look({ kit, ...all }));
+      const top = Math.max(...swirl.fx.position.filter((_, i) => i % 3 === 1));
+      expect(top).toBeGreaterThan(((0.82 * wiz.baseHeight) / 16) / Math.cos(cam().pitch));
+    });
+
+    it('keeps the wolf\'s fangs in front of its own head when it faces away from the camera', () => {
+      const wolf = kit.get('wolf')!, c = cam();
+      const out = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100, aim: -Math.PI / 2 })]), c, look({ kit, ...all }));
+      const v = [-Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)];
+      const foot = [at(0) / 16, 0, 8 / 16];
+      // no point of the model is nearer the camera than its radius plus its height
+      const bound = wolf.radius + wolf.baseHeight / 16;
+      for (let i = 0; i < out.fx.position.length; i += 3) {
+        const d = (out.fx.position[i] - foot[0]) * v[0] + out.fx.position[i + 1] * v[1] + (out.fx.position[i + 2] - foot[2]) * v[2];
+        expect(d).toBeGreaterThanOrEqual(bound - 1e-6);
+      }
+    });
+
+    it('shows the fangs open in the wolf\'s wind-up', () => {
+      const out = make().frame(frame([wolfAt({ anim: ANIM.Windup, animMs: 100 })]), cam(), look({ kit, ...all }));
+      const ref = newFxBuf();
+      fangTris(ref, [0, 1, 0], cam(), 0.25);
+      expect(ref.n).toBeGreaterThan(0);
+      expect(out.fx.n).toBe(ref.n);
+    });
+
+    it('fades the effects with the figure', () => {
+      const e = paladin({ anim: ANIM.Melee, animMs: 100, effects: 1 << EFFECT.Invisible });
+      const out = make().frame(frame([e]), cam(), look({ kit, ...all }));
+      const a = out.models[0].alpha;
+      expect(a).toBeLessThan(1);
+      const solid = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
+      const top = (b: FxBuf) => Math.max(...b.rgba.filter((_, i) => i % 4 === 3));
+      expect(out.fx.n).toBeGreaterThan(0);
+      expect(top(out.fx)).toBeCloseTo(top(solid.fx) * a, 5);
     });
 
     it('gives the wolf clamping fangs and no swoosh', () => {
