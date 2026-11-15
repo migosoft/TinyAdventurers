@@ -228,11 +228,12 @@ function bowParts(W: WeaponDesc, h: number): { mesh: Mesh3; colour: Float32Array
 /** One piece of a weapon: a mesh, its outline width, and how its vertices look (flat colours, or the paint with a steel flag). */
 interface Piece { mesh: Mesh3; line: number; flat: Float32Array | null; steel: Uint8Array | null }
 
-/** The 3D model of a pack weapon: `name` is the sprite's name, `px` its pixels (the redrawn big hammer ignores them). */
-export function buildWeapon(name: string, px: SpritePixels): FigureModel {
+/** The 3D model of a pack weapon: `name` is the sprite's name, `px` its pixels (the redrawn big hammer ignores them and may get null; any other weapon needs them). */
+export function buildWeapon(name: string, px: SpritePixels | null): FigureModel {
   const W = WEAPONS[name];
   if (!W) throw new Error(`${name} is not a pack weapon`);
-  const src = W.art ? artPixels(W.art) : px;
+  if (!W.art && !px) throw new Error(`${name} needs its sprite pixels`);
+  const src = W.art ? artPixels(W.art) : px!;
   let pieces: Piece[], paint: { w: number; h: number; data: Uint8Array };
   if (W.rod) {
     pieces = bowParts(W, src.h).map((p) => ({ mesh: p.mesh, line: p.line, flat: p.colour, steel: null }));

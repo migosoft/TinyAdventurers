@@ -71,6 +71,11 @@ describe('buildWeapon', () => {
     }
   }, SLOW);
 
+  it('needs pixels unless the weapon is redrawn', () => {
+    expect(() => buildWeapon('weapon_knight_sword', null)).toThrow(/pixels/);
+    expect(buildWeapon('weapon_big_hammer', null).position.length).toBeGreaterThan(24);
+  });
+
   it('is deterministic', () => {
     const a = buildWeapon('weapon_knight_sword', sprite('weapon_knight_sword')), b = model('weapon_knight_sword');
     expect(a.position).toEqual(b.position);
