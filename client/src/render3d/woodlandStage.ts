@@ -21,6 +21,8 @@ import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WOODLAND_CLEAR, WORK_AMBIENT } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, movingCands, selectCasters, selectLights } from './lights';
 import { MIST } from './mist';
+import type { FigureKit } from './models/kit';
+import { createStageKit, modelsReadout } from './stageKit';
 import { seenOpeners } from './openers';
 import { DEFAULT_HOUR, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
@@ -54,14 +56,35 @@ const ent = (id: number, kind: number, x: number, z: number, o: Partial<EntState
 /** The figures that stand about: [kind, x, z] in tiles. */
 const STANDING: [number, number, number][] = [[KIND.Wizard, 17, 12], [KIND.Paladin, 23, 12.5], [KIND.Barbarian, 14, 18], [KIND.ElvenRanger, 26, 18.5]];
 
+/** With `models=1` (#338) the Paladin walks and three monsters pace about: [kind, centre x, z, amplitude, rad/s]. The other heroes stand. */
+const PACING: [number, number, number, number, number][] = [[KIND.SkeletonWarrior, 12, 14.5, 1.5, 0.9], [KIND.Ogre, 30, 15, 2, 0.5], [KIND.DireWolf, 8, 12, 2.5, 1.4]];
+
+/** The figures of the stage at time `t` (s) around the walking `knight`: the card version, or with `models` the seven of the model line-up. */
+export function woodlandEnts(models: boolean, t: number, knight: { x: number; z: number; aim: number; moving: boolean }): EntState[] {
+  const walker = ent(KNIGHT_ID, models ? KIND.Paladin : KIND.Knight, knight.x, knight.z, { anim: knight.moving ? ANIM.Move : ANIM.Idle, animMs: t * 1000, aim: knight.aim });
+  const standing = models ? STANDING.filter(([k]) => k !== KIND.Paladin) : STANDING;
+  const ents = [walker, ...standing.map(([kind, x, z], i) => ent(KNIGHT_ID + 1 + i, kind, x, z, { animMs: t * 1000 }))];
+  if (models) {
+    PACING.forEach(([kind, x, z, amp, w], i) => {
+      const a = w * t + i;
+      ents.push(ent(KNIGHT_ID + 10 + i, kind, x + amp * Math.sin(a), z, { anim: ANIM.Move, animMs: t * 1000, aim: Math.cos(a) >= 0 ? 0 : Math.PI, side: SIDE.Hostile }));
+    });
+  }
+  return ents;
+}
+
 /** The fireball at stage time `t` (s): one moving light on a circle. */
 export function fireballAt(t: number): MovingLight {
   const a = (t / FIRE.period) * 2 * Math.PI;
   return [(FIRE.x + FIRE.r * Math.cos(a)) * TILE, (FIRE.z + FIRE.r * Math.sin(a)) * TILE, LIGHT_KIND.Fire, FIREBALL_COLOUR];
 }
 
-export function createWoodlandStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setDaylight' | 'setSky'>): Stage {
+/** `?models=1` draws the figures as 3D models (#338); `deps.kit` is for tests (the stage then leaves it alone at the end). */
+export function createWoodlandStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setDaylight' | 'setSky'>, deps: { kit?: FigureKit } = {}): Stage {
   const map = woodlandStageMap();
+  const useModels = /[?&]models=1(&|$)/.test(search);
+  // One kit for the stage, kept across a rebuilt view.
+  const kit = useModels ? deps.kit ?? createStageKit(assets) : null;
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures of the line-ups.
   const at = /[?&]at=(\d+),(\d+)/.exec(search);
   const start = at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
@@ -156,15 +179,14 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       }
       cam.x = knight.x;
       cam.z = knight.z;
-      const ents: EntState[] = [ent(KNIGHT_ID, KIND.Knight, knight.x, knight.z, { anim: knight.moving ? ANIM.Move : ANIM.Idle, animMs: c.now * 1000, aim: knight.aim })];
-      STANDING.forEach(([kind, x, z], i) => ents.push(ent(KNIGHT_ID + 1 + i, kind, x, z, { animMs: c.now * 1000 })));
+      const ents = woodlandEnts(useModels, c.now, knight);
       c.timer.lap('sim');
       if (!c.view) return 0;
 
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
       const ground = field && params.cover ? (x: number, z: number, rad: number): number => field!.topAt(x, z, rad, params.gh) : undefined;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1, ground });
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1, ground, ...(kit ? { models: { kit, is: () => true } } : {}) });
       // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const seenMask = params.sight ? mask : null;
@@ -215,6 +237,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
+        if (kit) r.models = modelsReadout(kit, c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 });
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
         r.plants = { built: forest.built, total: forest.total };
@@ -226,6 +249,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
+          ...(kit ? { models: { insts: fo.models, kit } } : {}),
           lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,
@@ -233,6 +257,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
     },
     dispose(): void {
       label.remove();
+      if (kit && !deps.kit) kit.dispose();
     },
   };
 }

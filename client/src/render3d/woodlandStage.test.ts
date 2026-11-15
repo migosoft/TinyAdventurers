@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { TILE_ID } from '../generated/defs';
+import { KIND, SIDE, TILE_ID } from '../generated/defs';
+import { FIGURES } from '../game/anim/defs';
+import type { FigureKit } from './models/kit';
 import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { parseParams } from './params';
 import { renderPlan } from './quality';
@@ -9,18 +11,23 @@ import { SUN_MAP, fitSunMap, mistLightOf, sky, sunView } from './sun';
 import { footprint } from './lights';
 import type { FrameInput } from './view';
 import { WIND } from './wind';
-import { WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS } from './woodlandMap';
-import { createWoodlandStage } from './woodlandStage';
+import { WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { createWoodlandStage, woodlandEnts } from './woodlandStage';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
+for (const d of Object.values(FIGURES)) {
+  for (let i = 0; i < 4; i++) for (const q of [d.idle, d.run]) frames[`${q}${i}`] = { x: 0, y: 0, w: 16, h: 28 };
+  for (const q of [d.hit, d.weapon, d.meleeWeapon]) if (q) frames[q] = { x: 0, y: 0, w: 8, h: 20 };
+  for (const a of Object.values(d.frames ?? {})) for (let i = 0; i < a.n; i++) frames[`${a.prefix}${i}`] = { x: 0, y: 0, w: 86, h: 54 };
+}
 const assets = { image: {} as HTMLImageElement, frames };
 
-/** A stage built for `search`; `run(n, dt)` runs n frames and returns the last one handed to the view. */
-function setup(search: string, start = 0) {
+/** A stage built for `search`; `run(n, dt)` runs n frames and returns the last one handed to the view. `kit` stands in for the model kit. */
+function setup(search: string, start = 0, kit?: FigureKit) {
   const p = parseParams(search);
   const host = { setDaylight: vi.fn(), setSky: vi.fn() };
-  const stage: Stage = createWoodlandStage(assets, p, search, host);
+  const stage: Stage = createWoodlandStage(assets, p, search, host, { kit });
   let f: FrameInput | null = null;
   const view = { draw: (i: FrameInput) => ((f = i), 0), maxTexture: 512, setGround: vi.fn(), setCover: vi.fn() };
   let now = start;
@@ -196,6 +203,33 @@ describe('the ?r3d=woodland stage', () => {
     const m = f.sight!.mask!;
     expect(m.daylight).toBe(true);
     expect(m.ox + m.size / 2).toBeCloseTo(20.5, 0);
+  });
+
+  it('hands seven model figures to Figures3d with models=1: the walking paladin, three heroes, a skeleton, the ogre and the wolf (#338)', () => {
+    const asked: string[] = [];
+    const kit = { get: (k: string) => (asked.push(k), null), known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
+    const { run } = setup('?r3d=woodland&models=1', 0, kit);
+    const f = run(2, 0.016);
+    expect(new Set(asked)).toEqual(new Set(['knight', 'wizard', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf']));
+    expect(f.models!.kit).toBe(kit);
+    expect(f.models!.insts).toEqual([]); // nothing is built yet: they are cards until then
+  });
+
+  it('keeps cards for every figure without models=1, and makes no kit', () => {
+    const asked: string[] = [];
+    const kit = { get: (k: string) => (asked.push(k), null), known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
+    const { run } = setup('?r3d=woodland', 0, kit);
+    expect(run(2, 0.016).models).toBeUndefined();
+    expect(asked).toEqual([]);
+  });
+
+  it('puts the seven where a figure can stand, and the monsters on the hostile side', () => {
+    expect(woodlandEnts(true, 0, { x: 20, z: 13, aim: 0, moving: false }).length).toBe(7);
+    const es = woodlandEnts(true, 0, { x: 20, z: 13, aim: 0, moving: false });
+    expect(es.filter((e) => e.side === SIDE.Hostile).map((e) => e.kind).sort()).toEqual([KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf].sort());
+    expect(woodlandEnts(false, 0, { x: 20, z: 13, aim: 0, moving: false }).map((e) => e.kind)).toEqual([KIND.Knight, KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger]);
+    const map = woodlandStageMap();
+    for (let t = 0; t < 20; t += 1.7) for (const e of woodlandEnts(true, t, { x: 20, z: 13, aim: 0, moving: false })) expect(map.blocks(Math.floor(e.x / 16), Math.floor(e.y / 16), 'hero')).toBe(false);
   });
 
   it('shows no sight with sight=0 but still a sun', () => {

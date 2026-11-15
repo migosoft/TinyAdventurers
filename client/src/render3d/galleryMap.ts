@@ -6,6 +6,7 @@
 //   z 6..10    world objects (feet z 8) and the projectiles (feet z 9.5)
 //   z 12..     one cell per figure kind, 8 to a row, 3 x 3 tiles each
 //   below      the effect groups: 4 cells each, 5 groups to a row (the wading group stands on shallow water)
+//   below      the model block (#338): the kinds, the effect rows, the dying row and the crowd (see MODEL_PITCH)
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 
@@ -27,14 +28,35 @@ export const GROUP_PITCH = 9;
 export const GROUP_ROW_PITCH = 3;
 export const EFFECT_GROUPS = 10;
 
+/**
+ * The model block (#338), below the effect groups: a row of model kinds (pitch 3), two pillars with a torch each (so torch light and
+ * torch shadows fall on figures), `MODEL_EFFECT_ROWS` rows of `MODEL_EFFECT_COLS` figures under one effect each, a row of figures that
+ * die in turn, and the crowd's grid (2 tiles) of `CROWD_PER_ROW` x `CROWD_ROWS` places.
+ */
+export const MODEL_PITCH = 3;
+export const MODEL_EFFECT_ROWS = 9;
+export const MODEL_EFFECT_COLS = 7;
+export const CROWD_PER_ROW = 23;
+export const CROWD_ROWS = 8;
+export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
+/** The pillars' columns (tiles) in the model block: between the kind cells 2/3 and 5/6. */
+export const PILLAR_X = [11, 20] as const;
+
 export interface Layout {
   map: TileMap;
   /** Foot of figure cell `i`, in tiles. */
   figure(i: number): { x: number; z: number };
   /** Foot of cell `k` (0..3) of effect group `g` (0..9), in tiles. */
   effect(g: number, k: number): { x: number; z: number };
+  /** Foot of model kind `i`'s cell, of column `col` in effect row `row`, of the figure `i` that dies, and of crowd place `i`, in tiles. */
+  model(i: number): { x: number; z: number };
+  modelEffect(row: number, col: number): { x: number; z: number };
+  dying(i: number): { x: number; z: number };
+  crowd(i: number): { x: number; z: number };
+  /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
+  pillarTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
-  focus: Record<'figures' | 'corridor' | 'effects' | 'objects', { x: number; z: number }>;
+  focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models', { x: number; z: number }>;
 }
 
 export function layoutOf(nFigures: number): Layout {
@@ -42,7 +64,13 @@ export function layoutOf(nFigures: number): Layout {
   const figTop = 12;
   const effTop = figTop + rows * FIG_PITCH + 1;
   const groupRows = Math.ceil(EFFECT_GROUPS / GROUPS_PER_ROW);
-  const h = effTop + groupRows * GROUP_ROW_PITCH + 3;
+  // The model block: the pillars' row, the kinds one pitch below, then the effect rows, the dying row and the crowd.
+  const mTop = effTop + groupRows * GROUP_ROW_PITCH + 1;
+  const kindZ = mTop + 3.5;
+  const effTop2 = mTop + 5;
+  const dyingZ = effTop2 + MODEL_EFFECT_ROWS * MODEL_PITCH + 0.5;
+  const crowdTop = dyingZ + 3;
+  const h = Math.ceil(crowdTop + CROWD_ROWS * 2) + 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
   const floor = (x0: number, x1: number, z0: number, z1: number, t: number = TILE_ID.Floor): void => {
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) tiles[z * GALLERY_W + x] = t;
@@ -53,6 +81,7 @@ export function layoutOf(nFigures: number): Layout {
     x: 2 + (g % GROUPS_PER_ROW) * GROUP_PITCH + k * CELL + 1,
     z: effTop + Math.floor(g / GROUPS_PER_ROW) * GROUP_ROW_PITCH + 1.5,
   });
+  for (const x of PILLAR_X) tiles[mTop * GALLERY_W + x] = TILE_ID.Wall;
   // Group 8 wades: shallow water under its four cells.
   const w = effect(8, 0);
   floor(Math.floor(w.x) - 1, Math.floor(w.x) - 1 + GROUP_CELLS * CELL - 1, Math.floor(w.z) - 1, Math.floor(w.z), TILE_ID.ShallowWater);
@@ -60,7 +89,13 @@ export function layoutOf(nFigures: number): Layout {
     map: new TileMap(GALLERY_W, h, tiles),
     figure: (i) => ({ x: 2 + (i % PER_ROW) * FIG_PITCH + 1.5, z: figTop + Math.floor(i / PER_ROW) * FIG_PITCH + 2 }),
     effect,
+    model: (i) => ({ x: 2 + i * MODEL_PITCH + 1.5, z: kindZ }),
+    modelEffect: (row, col) => ({ x: 2 + col * MODEL_PITCH + 1.5, z: effTop2 + row * MODEL_PITCH + 2 }),
+    dying: (i) => ({ x: 2 + i * MODEL_PITCH + 1.5, z: dyingZ }),
+    crowd: (i) => ({ x: 2 + (i % CROWD_PER_ROW) * 2 + 1, z: crowdTop + Math.floor(i / CROWD_PER_ROW) * 2 + 1 }),
+    pillarTorches: PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + 1 })),
     focus: {
+      models: { x: 2 + (9 * MODEL_PITCH) / 2, z: kindZ },
       figures: { x: 2 + (PER_ROW * FIG_PITCH) / 2, z: figTop + (rows * FIG_PITCH) / 2 },
       corridor: { x: 18, z: 3.5 },
       effects: { x: 24, z: effTop + 2 },

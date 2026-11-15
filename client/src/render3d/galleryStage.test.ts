@@ -5,7 +5,9 @@ import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
-import { GALLERY, ID, STATES, galleryEnts, galleryFrame, galleryInit, parseGallery } from './galleryStage';
+import { CROWD_MAX } from './galleryMap';
+import { GALLERY, ID, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, modelsOf, parseGallery } from './galleryStage';
+import { MODEL_OF_KIND, modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 import type { Cam } from './camera';
 
@@ -85,7 +87,7 @@ describe('the gallery stage', () => {
     for (const k of [KIND.Chest, KIND.Barrel, KIND.Mimic, KIND.Torch]) expect(ents.some((e) => e.kind === k), `${k}`).toBe(true);
     expect(ents.filter((e) => e.kind === KIND.Mimic && e.flags & FLAG.HIDING).length).toBeGreaterThan(0);
     expect(ents.filter((e) => e.kind === KIND.Mimic && !(e.flags & FLAG.HIDING)).length).toBeGreaterThan(0);
-    expect(ents.filter((e) => e.kind === KIND.Torch).map((e) => e.anim).sort()).toEqual([0, 1]);
+    expect(ents.filter((e) => e.kind === KIND.Torch && e.id < ID.model).map((e) => e.anim).sort()).toEqual([0, 1]);
     const shots = ents.filter((e) => inRange(e.id, ID.shot, 100)).map((e) => e.kind).sort((a, b) => a - b);
     expect(shots).toEqual(Object.keys(PROJECTILES).map(Number).sort((a, b) => a - b));
   });
@@ -99,7 +101,7 @@ describe('the gallery stage', () => {
   it('opens the walls for the corridor walkers, but not for the barrel or the Neutral knight, at any time', () => {
     for (const t of [0, 1.7, 5.3, 9]) {
       const fg = make();
-      const ents = galleryEnts(t, null).filter((e) => e.id >= ID.corridor);
+      const ents = galleryEnts(t, null).filter((e) => inRange(e.id, ID.corridor, 1000));
       const out = fg.frame(galleryFrame(ents, t, 0.016), cam());
       const ids = out.openers.map((o) => o.id).sort((a, b) => a - b);
       expect(ids).toEqual(ID.corridorOpeners);
@@ -111,7 +113,7 @@ describe('the gallery stage', () => {
       expect(seenOpeners(out.openers, { isVisible: () => true }, new Set())).toHaveLength(out.openers.length);
     }
     // the walkers: a hero, five skeletons, a wolf, a chest and a closed mimic
-    const w = galleryEnts(0, null).filter((e) => e.id >= ID.corridor);
+    const w = galleryEnts(0, null).filter((e) => inRange(e.id, ID.corridor, 1000));
     expect(w.filter((e) => e.kind === KIND.SkeletonWarrior)).toHaveLength(5);
     expect(w.filter((e) => e.kind === KIND.DireWolf)).toHaveLength(1);
     expect(w.find((e) => e.kind === KIND.Mimic)!.flags & FLAG.HIDING).toBeTruthy();
@@ -133,9 +135,101 @@ describe('the gallery stage', () => {
   });
 
   it('reads the URL: state, slow and focus', () => {
-    expect(parseGallery('?r3d=gallery')).toEqual({ state: null, slow: 1, focus: 'figures', start: 0 });
-    expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
-    expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual({ state: null, slow: 1, focus: 'figures', start: 0 });
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', light: 'work', at: null };
+    expect(parseGallery('?r3d=gallery')).toEqual(d);
+    expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
+    expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
+  });
+
+  it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
+    expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', light: 'torch', at: { x: 12.5, z: 60 },
+    });
+    expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
+    expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));
+    expect(parseGallery('?at=dying:1').at).toEqual(GALLERY.dying(1));
+    expect(parseGallery('?at=crowd:7').at).toEqual(GALLERY.crowd(7));
+    expect(parseGallery('?crowd=-3&crowdAs=x&light=y&at=1').crowd).toBe(0);
+    expect(parseGallery('?crowd=100000').crowd).toBe(CROWD_MAX);
+    const q = parseGallery('?crowd=2.7&crowdAs=x&light=y&at=1');
+    expect([q.crowd, q.crowdAs, q.light, q.at]).toEqual([2, 'models', 'work', null]);
+  });
+
+  it('has the model block: 9 kinds from ID.model, each cycling through the states like the card rows', () => {
+    const rows = galleryEnts(0.1, null).filter((e) => inRange(e.id, ID.model, 9));
+    expect(rows.map((e) => e.id)).toEqual(Array.from({ length: 9 }, (_, i) => 4000 + i));
+    expect(ID.model).toBe(4000);
+    expect(rows.map((e) => modelKeyOf(e.kind)).every((k) => k !== null)).toBe(true);
+    expect(new Set(rows.map((e) => modelKeyOf(e.kind))).size).toBe(7);
+    expect(rows.map((e) => e.kind).sort((a, b) => a - b)).toEqual(Object.keys(MODEL_OF_KIND).map(Number).sort((a, b) => a - b));
+    const anim = (t: number, s: string | null) => galleryEnts(t, s).find((e) => e.id === ID.model)!.anim;
+    expect(anim(0.1, null)).toBe(ANIM.Idle);
+    expect(anim(1.3, null)).toBe(ANIM.Move);
+    expect(anim(5, 'melee')).toBe(ANIM.Melee);
+    // the hurt flag of the card rows
+    const fig = galleryEnts(0.1, null).find((e) => e.id === ID.figure)!;
+    expect(rows[0].flags).toBe(fig.flags);
+    expect(rows[0].flags & FLAG.HURT).toBeTruthy();
+    // each stands on its own cell, on a floor
+    for (const e of rows) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+  });
+
+  it('has the effect block: 9 effect rows of the four heroes, a skeleton, the ogre and the wolf', () => {
+    const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, 200));
+    expect(ents).toHaveLength(9 * 7);
+    const kinds = ents.slice(0, 7).map((e) => e.kind);
+    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf]);
+    for (const eff of ['Sleep', 'Petrified', 'Frozen', 'Slowed', 'Poisoned', 'Chilled', 'Tainted', 'Invisible'] as const) {
+      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(7);
+    }
+    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(7);
+    for (const e of ents) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+  });
+
+  it('lets one figure of each kind die every 6 s and leave its skull', () => {
+    const alive = (t: number) => galleryEnts(t, null).filter((e) => inRange(e.id, ID.dying, 100));
+    expect(alive(1)).toHaveLength(9);
+    expect(alive(4)).toHaveLength(0);
+    expect(alive(7)).toHaveLength(9);
+    expect(diedBetween(2.9, 3.1)).toHaveLength(9);
+    expect(diedBetween(3.1, 5)).toHaveLength(0);
+    expect(diedBetween(8.9, 9.1)).toHaveLength(9);
+    const ev = diedBetween(2.9, 3.1)[0];
+    expect(ev.t).toBe('Died');
+    const e = alive(1)[0];
+    expect([ev.id, ev.kind, ev.x, ev.y]).toEqual([e.id, e.kind, e.x, e.y]);
+  });
+
+  it('adds `crowd` walking model figures on a 2 tile grid, none by default', () => {
+    expect(galleryEnts(0, null).some((e) => e.id >= ID.crowd)).toBe(false);
+    const c = galleryEnts(1, null, 40).filter((e) => e.id >= ID.crowd);
+    expect(c).toHaveLength(40);
+    expect(c.every((e) => e.anim === ANIM.Move && modelKeyOf(e.kind) !== null)).toBe(true);
+    const home = GALLERY.crowd(5);
+    expect(Math.abs(c[5].x / 16 - home.x)).toBeLessThan(1);
+    expect(GALLERY.crowd(1).x - GALLERY.crowd(0).x).toBe(2);
+    for (let i = 0; i < CROWD_MAX; i += 17) expect(GALLERY.map.tileAt(GALLERY.crowd(i).x * 16, GALLERY.crowd(i).z * 16)).toBe(TILE_ID.Floor);
+  });
+
+  it('draws as models exactly the ids of the model blocks and the crowd, and not a crowd that is cards', () => {
+    const o = parseGallery('?crowd=5');
+    const is = modelsOf(o);
+    const ents = galleryEnts(0, null, 5);
+    const yes = ents.filter(is).map((e) => e.id);
+    expect(yes.every((id) => id >= ID.model)).toBe(true);
+    expect(yes.filter((id) => inRange(id, ID.model, 9))).toHaveLength(9);
+    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(63);
+    expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
+    expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);
+    const cards = modelsOf(parseGallery('?crowd=5&crowdAs=cards'));
+    expect(ents.filter(cards).some((e) => e.id >= ID.crowd)).toBe(false);
+    expect(ents.filter(cards).filter((e) => e.id < ID.crowd)).toHaveLength(yes.length - 5);
+  });
+
+  it('has a lit torch on each pillar of the model block, on a wall', () => {
+    const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 2));
+    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual([[KIND.Torch, 1, 0], [KIND.Torch, 1, 0]]);
+    for (const e of t) expect(GALLERY.map.get(Math.floor(e.x / 16), Math.floor(e.y / 16) - 1)).toBe(TILE_ID.Wall);
   });
 
   it('is its own ?r3d page, a server-free one like the demo', () => {

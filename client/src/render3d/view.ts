@@ -211,6 +211,8 @@ export interface View {
   readonly chunks: { total: number; drawn: number };
   /** Scene objects, for the F3 panel. */
   readonly meshes: number;
+  /** What the 3D figure layer drew in the last frame: instances, batches and draws (#338; for `window.__r3d.models`). */
+  readonly figuresDrawn?: Readonly<{ figures: number; batches: number; draws: number }>;
 }
 
 /** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
@@ -581,6 +583,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     chunks,
     get meshes() {
       return scene.children.length;
+    },
+    get figuresDrawn() {
+      return figures.drawn;
     },
     tileChanged(x, z) {
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;

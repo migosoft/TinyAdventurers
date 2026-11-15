@@ -30,6 +30,8 @@ declare global {
       plants?: { built: number; total: number };
       /** ... and the ground cover's sheets (the tallest kind, art px) and bushels once it is built (#330). */
       cover?: { sheets: number; bushels: number };
+      /** ... and the 3D figures of a dev stage (#338): instances, batches and draws of the last frame, and the build time (ms) of each model built so far. */
+      models?: { figures: number; batches: number; draws: number; builtMs: Record<string, number> };
     };
   }
 }
