@@ -99,6 +99,35 @@ describe('runes', () => {
     }
   });
 
+  it('a monster primary with a wind-up releases with its bolt and breaks off like a wind-up', () => {
+    const fx = new Effects3d(map);
+    cast(fx, 350, true);                                  // release at 1.35, vortex pops in at 1.15
+    expect(run(fx, 1.14, [fig({ anim: ANIM.Cast })]).tris.n).toBe(0);
+    expect(run(fx, 1.25, [fig({ anim: ANIM.Cast })]).tris.n).toBeGreaterThan(0);
+    const b = new Effects3d(map);
+    cast(b, 350, true);
+    run(b, 1.2, [fig({ anim: ANIM.Cast })]);
+    run(b, 1.25, [fig({ anim: ANIM.Idle })]);              // broken off at 0.25
+    expect(run(b, 1.5, [fig({ anim: ANIM.Idle })]).tris.n).toBe(0);
+    expect(b.records).toBe(0);
+    const c = new Effects3d(map);
+    cast(c, 350, true);
+    run(c, 1.2, [fig({ anim: ANIM.Cast })]);
+    expect(run(c, 1.4, [fig({ anim: ANIM.Cast })]).tris.n).toBeGreaterThan(0);   // released
+  });
+
+  it('cast records have their own cap and keep the boss and the own hero', () => {
+    const fx = new Effects3d(map);
+    const BOSS = 99, YOU = 5;
+    fx.event({ t: 'Cast', id: BOSS, x: 16, y: 16, look: RUNE_LOOK.Fire, windup_ms: 2000, primary: false, aim: 0 }, 1, false);
+    run(fx, 1, [fig({ id: YOU })], { you: YOU, ownCast: { seq: 1, look: RUNE_LOOK.Fire, primary: true, aim: 0 }, ents: new Map([[YOU, ent({ id: YOU })]]) });
+    for (let i = 0; i < 30; i++) fx.event({ t: 'Cast', id: 100 + i, x: 16, y: 16, look: RUNE_LOOK.Fire, windup_ms: 0, primary: false, aim: 0 }, 1.01 + i * 0.001, false);
+    const ids = fx.castRecords().map((r) => r.rune?.caster);
+    expect(ids.length).toBe(24);
+    expect(ids).toContain(BOSS);
+    expect(ids).toContain(YOU);
+  });
+
   it('hidden caster draws nothing and adds no light, also after the release', () => {
     const fx = new Effects3d(map);
     cast(fx, 1200);

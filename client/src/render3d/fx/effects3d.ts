@@ -9,10 +9,10 @@ import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
 import type { Footprint } from '../lights';
-import { castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
+import { BURST_MAX, castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
-import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
+import { FX_CAST_CAP, FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
 
 /** Every kind of record. Boom is split by its `k`. */
 export const FX_KIND = {
@@ -194,7 +194,19 @@ export class Effects3d {
     // the oldest of a kind goes first (records are in start order)
     let count = 0;
     for (const r of this.recs) if (r.kind === kind) count++;
-    if (count >= FX_KIND_CAP) {
+    if (kind === FX_KIND.Cast) {
+      if (count >= FX_CAST_CAP) {
+        // the record with the least time left goes, never the own hero's nor an open channel
+        let at = -1, least = Infinity;
+        for (let i = 0; i < this.recs.length; i++) {
+          const r = this.recs[i], ru = r.rune;
+          if (r.kind !== kind || !ru || ru.mode === 'channel' || ru.caster === this.you) continue;
+          const left = ru.end !== null ? ru.end + WINK : ru.release !== null ? ru.release + BURST_MAX : Infinity;
+          if (left < least) { least = left; at = i; }
+        }
+        if (at >= 0) this.recs.splice(at, 1);
+      }
+    } else if (count >= FX_KIND_CAP) {
       const at = this.recs.findIndex((r) => r.kind === kind);
       this.recs.splice(at, 1);
     }

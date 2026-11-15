@@ -59,4 +59,6 @@ export interface MimicCue { id: number; x: number; z: number; land: boolean }
 export const FX_TRI_CAP = 24000;
 export const FX_LIT_CAP = 6000;
 export const FX_KIND_CAP = 12;
+/** Cast records have their own cap (decision on #308): a crowd of casters must not push out a boss's wind-up. */
+export const FX_CAST_CAP = 24;
 export const FX_LIGHT_CAP = 6;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newFxBuf } from '../models/fx';
-import { burst, crystal, groundRing, screenAxes, type BurstSpec, type MAxes } from './shapes';
+import { burst, crystal, thrown, groundRing, screenAxes, type BurstSpec, type MAxes } from './shapes';
 import { FxTris } from './tris';
 
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
@@ -54,4 +54,12 @@ describe('shapes', () => {
       }
     });
   }
+  it('thrown stays finite for a downward throw without gravity', () => {
+    const o: [number, number, number] = [0, 0, 0];
+    for (const t of [0, 0.1, 0.5, 2]) {
+      thrown([1, 0.1, 2], [0.3, -2, 0.1], 0, t, o);
+      expect(o.every(Number.isFinite)).toBe(true);
+      expect(o[1]).toBeGreaterThanOrEqual(0.03);
+    }
+  });
 });

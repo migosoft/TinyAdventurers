@@ -167,7 +167,8 @@ function face(T: FxTris, ax: number, ay: number, az: number, bx_: number, by_: n
 /** A point thrown from `p0` with velocity `v` under gravity `g`, bouncing once on the floor (y 0.03); written into `out`. */
 export function thrown(p0: V3, v: V3, g: number, t: number, out: MV3): MV3 {
   let y = p0[1] + v[1] * t - 0.5 * g * t * t;
-  if (y < 0.03) {
+  if (y < 0.03 && g <= 0) y = 0.03;   // no gravity: no bounce, it only rests on the floor
+  else if (y < 0.03) {
     const tl = (v[1] + Math.sqrt(v[1] * v[1] + 2 * g * (p0[1] - 0.03))) / g, t2 = t - tl, vy = (g * tl - v[1]) * 0.35;
     y = Math.max(0.03, 0.03 + vy * t2 - 0.5 * g * t2 * t2);
   }

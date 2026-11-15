@@ -96,11 +96,12 @@ const GRACE = 0.15;
 /** A caster missing from the drawn figures for longer than this has left: its runes wink out. */
 const LEAVE = 0.25;
 /** The longest burst of a rune (sphere 0.3 to 0.6 s, primary 0.35 to 0.5 s). */
-const BURST_MAX = 0.6;
+export const BURST_MAX = 0.6;
 const LIGHT_Y = 0.9, LIGHT_RADIUS = 4.5;
 
 export function newRune(caster: number, look: number, mode: Exclude<RuneMode, 'channel'>, start: number, windupS: number, aim: number, x: number, z: number, seed: number): RuneRec {
-  const swirl = mode === 'windup' ? windupS : mode === 'primary' ? PRIMARY_SWIRL : INSTANT_SWIRL;
+  // a primary releases with its bolt: after its wind-up if it has one (a monster's), else after the short swirl (a hero's)
+  const swirl = mode === 'windup' ? windupS : mode === 'primary' ? Math.max(windupS, PRIMARY_SWIRL) : INSTANT_SWIRL;
   return { caster, look, mode, start, release: start + swirl, end: null, aim, x, z, seed, lost: -1, pal: null };
 }
 
@@ -152,7 +153,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
   for (let i = i0; i < i1; i++) {
     const glyph = GLYPHS[Math.floor(hash3(seed, i, 0) * GLYPHS.length)];
     // when it shows: one by one over the wind-up, or all at once (staggered a little) for an instant cast
-    const born = channel ? i * CHANNEL_GAP : r.mode === 'windup' ? (i / n) * W * 0.75 + hash3(seed, i, 1) * 0.12 : hash3(seed, i, 1) * 0.05;
+    const born = channel ? i * CHANNEL_GAP : r.mode === 'windup' ? (i / n) * W * 0.75 + hash3(seed, i, 1) * 0.12 : hash3(seed, i, 1) * 0.05 + (prim ? Math.max(0, releaseRel - PRIMARY_SWIRL) : 0);   // a primary's vortex pops in PRIMARY_SWIRL before its release
     // during a wind-up a few wink out early, irregularly; the rest burst on the release
     const early = r.mode === 'windup' && hash3(seed, i, 2) < 0.25 ? born + 0.3 + hash3(seed, i, 3) * 0.4 : Infinity;
     const life = prim ? 0.35 + hash3(seed, i, 4) * 0.15 : 0.3 + hash3(seed, i, 4) * 0.3;   // the burst's length, uneven per rune
@@ -276,7 +277,7 @@ function judge(r: RuneRec, frame: FxFrame, fig: DrawnFig | null, now: number): v
   r.lost = -1;
   if (r.mode === 'channel') {
     if (fig.anim !== ANIM.Channel) r.end = now;
-  } else if (r.mode === 'windup' && now - r.start > GRACE) {
+  } else if ((r.mode === 'windup' || (r.mode === 'primary' && r.release !== null && r.release - r.start > PRIMARY_SWIRL + 1e-6)) && now - r.start > GRACE) {
     if (fig.anim === ANIM.Idle || fig.anim === ANIM.Move || (e && (e.flags & FLAG.HURT) !== 0)) r.end = now;
   }
 }
@@ -301,8 +302,10 @@ export function drawRunes(out: FxOut, frame: FxFrame, rec: FxRec): boolean {
   if (k > 0.02 && out.lights.length < FX_LIGHT_CAP) {
     const pal = r.mode === 'channel' ? r.pal : RUNE_PALETTES[r.look as RuneLookId] ?? RUNE_PALETTES[RUNE_LOOK.Fire];
     if (pal) {
+      // like the runes, the light follows the caster until the release (or the end), then stays at the spot
+      const following = fig !== null && (r.release === null || now < r.release) && (r.end === null || now < r.end);
       const lc: Cand = {
-        id: `m${r.caster}.9`, kind: LIGHT_KIND.Magic, x: fig ? fig.x : r.x, y: LIGHT_Y, z: fig ? fig.z : r.z, radius: LIGHT_RADIUS,
+        id: `m${r.caster}.9`, kind: LIGHT_KIND.Magic, x: following ? fig.x : r.x, y: LIGHT_Y, z: following ? fig.z : r.z, radius: LIGHT_RADIUS,
         r: pal.light[0] * k, g: pal.light[1] * k, b: pal.light[2] * k, shadow: true, skip: -1, base: Math.max(pal.light[0], pal.light[1], pal.light[2]) * k,
       };
       out.lights.push(lc);
