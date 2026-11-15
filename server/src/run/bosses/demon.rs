@@ -9,7 +9,8 @@ use crate::defs::bosses::{DEMON_CLEAVE_RECOVER, DEMON_RING_RECOVER, DEMON_SWOOP_
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::kinds::Anim;
 use crate::math::Vec2;
-use crate::run::abilities::tick_monster_dash;
+use crate::run::abilities::{announce_cast, tick_monster_dash};
+use crate::run::effects::Creature;
 use crate::run::ai::path_toward;
 use crate::run::Run;
 
@@ -57,7 +58,10 @@ impl Demon {
     }
 
     fn start(&mut self, run: &mut Run, bi: usize, action: Action, id: AbilityId, anim: Anim) {
-        self.action = Some((action, kit(run, bi, id).windup));
+        let windup = kit(run, bi, id).windup;
+        self.action = Some((action, windup));
+        let aim = run.monsters[bi].aim;
+        announce_cast(run, Creature::Monster(bi), id, windup, aim);
         set_anim(run, bi, anim);
     }
 }

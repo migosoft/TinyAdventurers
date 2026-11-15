@@ -323,6 +323,7 @@ impl Run {
             res: prof.res,
             traits: prof.traits,
             invis_cd: 0.0,
+            announced: None,
             races: enemies::races(t),
             etype: Some(t),
             kind: d.kind,
@@ -502,6 +503,7 @@ impl Run {
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
                 self.monsters[mi].slam = None;
                 self.monsters[mi].ai.cast = None;
+                self.monsters[mi].announced = None;
                 self.monsters[mi].dodge = None;
                 continue; // slid and sunk below
             }
@@ -510,6 +512,7 @@ impl Run {
                 let m = &mut self.monsters[mi];
                 m.ai.windup = None;
                 m.ai.cast = None;
+                m.announced = None;
                 m.slam = None;
                 m.dodge = None;
                 if m.anim != Anim::Idle {
@@ -767,6 +770,7 @@ impl Run {
             m.knock = Vec2::ZERO;
             m.ai.windup = None;
             m.ai.cast = None;
+            m.announced = None;
             m.anim = Anim::Idle;
             m.anim_start = self.time;
             let id = m.id;

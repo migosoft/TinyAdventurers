@@ -1,6 +1,6 @@
 //! Raising minions: what Raise Dead and Summon Imps do, for every caster.
 
-use super::abilities::monster_use;
+use super::abilities::{announce_cast, monster_use};
 use super::ai::set_anim;
 use super::charm;
 use super::effects::Creature;
@@ -53,6 +53,8 @@ pub fn act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
         });
         if let Some(a) = raise {
             run.monsters[mi].ai.cast = Some((a.id, a.windup));
+            let aim = run.monsters[mi].aim;
+            announce_cast(run, Creature::Monster(mi), a.id, a.windup, aim);
             set_anim(run, mi, Anim::Windup);
             return true;
         }
@@ -118,6 +120,47 @@ mod tests {
 
     fn living_of(run: &Run, id: u32) -> usize {
         run.monsters.iter().filter(|m| m.owner == Some(id) && m.alive).count()
+    }
+
+    fn casts(run: &Run) -> Vec<(f32, u8, u16, bool)> {
+        run.events.iter().filter_map(|(e, _)| if let Ev::Cast { windup_ms, look, primary, aim, .. } = e { Some((*aim, *look, *windup_ms, *primary)) } else { None }).collect()
+    }
+
+    #[test]
+    fn a_monster_wind_up_announces_once() {
+        let (mut run, _id, ni, _ppos) = caster(EnemyType::Necromancer);
+        let windup = run.monsters[ni].kit.get(AbilityId::RaiseDead).unwrap().windup;
+        let seen = Some(Creature::Player(0));
+        run.events.clear();
+        assert!(act(&mut run, ni, crate::run::DT, seen));
+        let c = casts(&run);
+        assert_eq!(c.len(), 1, "announced at the wind-up start: {c:?}");
+        assert_eq!((c[0].1, c[0].2), (crate::defs::looks::RuneLook::Gloom as u8, (windup * 1000.0).round() as u16));
+        assert_eq!(run.monsters[ni].announced, Some(AbilityId::RaiseDead));
+        // The wind-up runs on without another announcement, and the landing adds none.
+        for _ in 0..((windup / crate::run::DT).ceil() as usize + 2) {
+            act(&mut run, ni, crate::run::DT, seen);
+        }
+        assert_eq!(casts(&run).len(), 1, "none at the landing");
+        assert!(owned(&run, run.monsters[ni].id, EnemyType::RaisedSkeleton) > 0, "it landed");
+        assert_eq!(run.monsters[ni].announced, None);
+    }
+
+    #[test]
+    fn a_cancelled_wind_up_clears_the_announcement() {
+        use crate::defs::effects::EffectKind;
+        let (mut run, _id, ni, _ppos) = caster(EnemyType::Necromancer);
+        let seen = Some(Creature::Player(0));
+        assert!(act(&mut run, ni, crate::run::DT, seen));
+        assert_eq!(run.monsters[ni].announced, Some(AbilityId::RaiseDead));
+        run.apply_effect(Creature::Monster(ni), EffectKind::Sleep, Some(5.0));
+        run.step();
+        assert_eq!(run.monsters[ni].announced, None, "frozen: the wind-up is cancelled");
+        assert!(run.monsters[ni].ai.cast.is_none());
+        run.monsters[ni].effects.remove(EffectKind::Sleep);
+        run.events.clear();
+        assert!(act(&mut run, ni, crate::run::DT, seen));
+        assert_eq!(casts(&run).len(), 1, "a new cast announces again");
     }
 
     #[test]

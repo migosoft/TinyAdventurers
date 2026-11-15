@@ -497,6 +497,29 @@ mod tests {
     }
 
     #[test]
+    fn cast_is_dark_where_unseen() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        run.layout.map.set(tx + 5, ty, crate::dungeon::Tile::Wall);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, PLAYER_FOV_RADIUS);
+        let hidden = Map::center_of(tx + 7, ty);
+        let dark_tile = Map::center_of(tx + 2, ty);
+        let cast = |at: Vec2| Ev::Cast { id: 9, x: at.x as f32, y: at.y as f32, look: 0, windup_ms: 0, primary: false, aim: 0.0 };
+        run.events.clear();
+        run.on_hero.clear();
+        run.events.push((cast(hidden), Some(hidden)));
+        run.events.push((cast(dark_tile), Some(dark_tile)));
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+        let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(snap[5].as_array().unwrap().len(), 1, "the one behind the wall is not sent");
+        assert_eq!(snap[11], serde_json::json!([0]), "the one on a dark tile is marked dark");
+    }
+
+    #[test]
     fn hurt_and_heal_on_a_hero_are_marked_as_hero_events() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         run.events.clear();

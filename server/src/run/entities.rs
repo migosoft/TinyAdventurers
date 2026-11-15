@@ -283,6 +283,9 @@ pub struct Monster {
     pub traits: Traits,
     /// Seconds until the Invisibility trait may be used again; counts down only while Invisible is off.
     pub invis_cd: f64,
+    /// The magic ability whose wind-up it announced (`Ev::Cast`) and has not yet released: the release does not
+    /// announce again. Cleared when the wind-up is cancelled.
+    pub announced: Option<AbilityId>,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,
     pub kind: EntityKind,

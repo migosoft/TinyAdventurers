@@ -375,6 +375,10 @@ pub enum Ev {
     Effect { id: u32, kind: u8, on: bool, look: u8 },
     /// Chain Spark jumps from (x, y) to (x2, y2); sent to the whole party like hero hits.
     Zap { x: f32, y: f32, x2: f32, y2: f32 },
+    /// Figure `id`, standing at (x, y), starts a magic cast: `look` is its `RuneLook`, `windup_ms` the wind-up before
+    /// the release (0: none), `primary` whether the ability is a primary one (the small front burst), `aim` the cast
+    /// direction in radians. Positional: sent where the point is in sight.
+    Cast { id: u32, x: f32, y: f32, look: u8, windup_ms: u16, primary: bool, aim: f32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

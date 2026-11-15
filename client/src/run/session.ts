@@ -553,6 +553,7 @@ export class RunSession {
       case 'Raise':
       case 'Immune':
       case 'Effect':
+      case 'Cast':
         this.view?.event(ev, this.pred.state, this.serverOwn, dark);
         break;
       case 'Tile': {

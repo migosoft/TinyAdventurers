@@ -337,11 +337,36 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     true
 }
 
+/// Tells the clients that `caster` starts the magic ability `id` (`Ev::Cast`), with `windup` seconds before the
+/// release (0: it releases now) toward `aim`. Nothing for an ability without runes (a weapon attack). A wind-up
+/// is remembered on a monster (`announced`), so its release does not announce again.
+pub(crate) fn announce_cast(run: &mut Run, caster: Creature, id: AbilityId, windup: f64, aim: f64) {
+    let Some(rune) = looks::look(figure_of(run, caster), id).rune else { return };
+    let pos = run.creature_pos(caster);
+    let sid = run.creature_id(caster);
+    let windup_ms = (windup * 1000.0).round().clamp(0.0, u16::MAX as f64) as u16;
+    let primary = ab::def(id).slot == ab::AbilitySlot::Primary;
+    run.event(Ev::Cast { id: sid, x: pos.x as f32, y: pos.y as f32, look: rune as u8, windup_ms, primary, aim: aim as f32 }, Some(pos));
+    if windup > 0.0 {
+        if let Creature::Monster(mi) = caster {
+            run.monsters[mi].announced = Some(id);
+        }
+    }
+}
+
 /// Uses ability `a` for user `c`: the executor of its shape does the effect and returns the user's
 /// animation. Cooldowns, the ranged-in-melee fallback and keystones are the caller's.
 fn use_ability(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
     if ab::is_attack(&ab::def(a.id)) {
         run.act(c); // an attack ends Invisible; Haste or Purify do not
+    }
+    // A cast whose wind-up was announced is not announced again at its release.
+    let announced = match c {
+        Creature::Monster(mi) => run.monsters[mi].announced.take(),
+        Creature::Player(_) => None,
+    };
+    if announced != Some(a.id) {
+        announce_cast(run, c, a.id, 0.0, aim_of(run, c));
     }
     match ab::def(a.id).shape {
         Shape::Projectile => use_projectile(run, c, a, shot),
@@ -1413,6 +1438,53 @@ mod tests {
             run.tick_effects();
         }
         assert!(monster_use(&mut run, mi, AbilityId::Vanish, Vec2::new(0.0, 0.0)), "ready again once it has been visible for the cooldown");
+    }
+
+    fn casts(run: &Run) -> Vec<Ev> {
+        run.events.iter().filter(|(e, _)| matches!(e, Ev::Cast { .. })).map(|(e, _)| e.clone()).collect()
+    }
+
+    #[test]
+    fn a_hero_spell_announces_its_cast() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        put_monster_near(&mut run, 0, 60.0);
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        let (id, pos) = (run.players[0].id, run.players[0].pos());
+        match casts(&run).as_slice() {
+            [Ev::Cast { id: c, x, y, look, windup_ms, primary, aim }] => {
+                assert_eq!((*c, *look, *windup_ms, *primary), (id, crate::defs::looks::RuneLook::Arcane as u8, 0, true));
+                assert_eq!((*x, *y), (pos.x as f32, pos.y as f32));
+                assert_eq!(*aim, run.players[0].aim as f32);
+            }
+            other => panic!("one Cast expected: {other:?}"),
+        }
+        // A secondary is announced as not primary.
+        run.players[0].cd2 = 0.0;
+        run.events.clear();
+        try_use(&mut run, 0, false, 2);
+        assert!(matches!(casts(&run).as_slice(), [Ev::Cast { primary: false, .. }]), "{:?}", casts(&run));
+    }
+
+    #[test]
+    fn a_weapon_attack_announces_nothing() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        put_monster_near(&mut run, 0, 60.0);
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        assert!(!run.projectiles.is_empty(), "Shoot fired");
+        assert!(casts(&run).is_empty(), "Shoot: {:?}", casts(&run));
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        put_monster_near(&mut run, 0, 10.0);
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        assert!(casts(&run).is_empty(), "Strike in melee: {:?}", casts(&run));
+        // A wizard's magic primary falls back to the staff in melee: no runes.
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        put_monster_near(&mut run, 0, 10.0);
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        assert!(casts(&run).is_empty(), "the fallback Strike: {:?}", casts(&run));
     }
 
     #[test]

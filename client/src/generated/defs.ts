@@ -1072,6 +1072,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
 
 export const EV = {
   "Boom": 2,
+  "Cast": 15,
   "Coins": 8,
   "Died": 3,
   "Dmg": 0,

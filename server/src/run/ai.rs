@@ -3,7 +3,7 @@
 
 use super::ai_shapes::{reach_of, worth_using};
 use super::targets;
-use super::abilities::{monster_use, tick_monster_slam};
+use super::abilities::{announce_cast, monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
 use super::Run;
@@ -99,6 +99,7 @@ pub fn living_pos(run: &Run, id: u32) -> Option<Vec2> {
 pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     run.monsters[mi].ai.windup = None;
     run.monsters[mi].ai.cast = None;
+    run.monsters[mi].announced = None;
     let Some((source, last)) = run.monsters[mi].effects.fear_from() else { return };
     let now = source.and_then(|id| living_pos(run, id));
     // A source standing on the creature gives no direction: keep the remembered spot.
@@ -118,6 +119,7 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
 pub fn flee_from(run: &mut Run, mi: usize, from: Vec2, dt: f64) -> Option<Vec2> {
     run.monsters[mi].ai.windup = None;
     run.monsters[mi].ai.cast = None;
+    run.monsters[mi].announced = None;
     let m = &run.monsters[mi];
     let away = m.pos - from;
     let (dir, behind) = if away.len() < 1.0 {
@@ -271,6 +273,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     let stuck = !can_rest(run, mi, run.monsters[mi].pos);
     if stuck {
         run.monsters[mi].ai.windup = None;
+        run.monsters[mi].announced = None;
     }
     let before = run.monsters[mi].pos;
     tick_monster_inner(run, mi, dt);
@@ -316,6 +319,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         ai.state = AiState::Chase;
         ai.path.clear();
     } else if run.monsters[mi].ai.target.is_some() {
+        run.monsters[mi].announced = None;
         let ai = &mut run.monsters[mi].ai;
         ai.target = None;
         ai.windup = None;
@@ -409,6 +413,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         perform_attack(run, mi, foe, true, None);
                     } else {
                         run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None, id: None });
+                        announce_cast(run, Creature::Monster(mi), alt_id, alt.windup, aim);
                         set_anim(run, mi, Anim::Windup);
                     }
                     return;
@@ -424,6 +429,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     _ => aim,
                 };
                 run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
+                announce_cast(run, Creature::Monster(mi), main.id, main.windup, aim);
                 set_anim(run, mi, Anim::Windup);
                 return;
             }

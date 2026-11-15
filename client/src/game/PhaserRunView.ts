@@ -372,6 +372,8 @@ export class PhaserRunView implements RunView {
         // the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
         this.figures.event(ev, performance.now() / 1000);
         break;
+      case 'Cast':
+        break; // the runes are the 3D view's
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
         {

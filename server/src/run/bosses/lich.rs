@@ -13,7 +13,7 @@ use crate::defs::kinds::Anim;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
-use crate::run::abilities::monster_use;
+use crate::run::abilities::{announce_cast, monster_use};
 use crate::run::ai::{move_toward, path_toward};
 use crate::run::effects::Creature;
 use crate::run::minions;
@@ -104,6 +104,13 @@ impl Lich {
 
     /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is. False if the
     /// kit refuses it (on cooldown, or no room for minions).
+    /// Starts the wind-up of `id` (the cast lands when it ends) and announces it to the clients.
+    fn begin(&mut self, run: &mut Run, bi: usize, id: AbilityId, windup: f64) {
+        self.action = Some((Action::Cast(id), windup));
+        let aim = run.monsters[bi].aim;
+        announce_cast(run, Creature::Monster(bi), id, windup, aim);
+    }
+
     fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) -> bool {
         let used = monster_use(run, bi, id, at);
         // Unlike `use_in_pose`, the pose is forced: every lich ability plays the same cast pose.
@@ -190,15 +197,15 @@ impl BossBehaviour for Lich {
         run.monsters[bi].aim = pos.angle_to(ppos);
         let raise = kit(run, bi, AbilityId::RaiseDead);
         if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 {
-            self.action = Some((Action::Cast(AbilityId::RaiseDead), raise.windup));
+            self.begin(run, bi, AbilityId::RaiseDead, raise.windup);
             set_anim(run, bi, Anim::Windup);
         } else if self.ready(run, bi, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
-            self.action = Some((Action::Cast(AbilityId::Nova), kit(run, bi, AbilityId::Nova).windup));
+            self.begin(run, bi, AbilityId::Nova, kit(run, bi, AbilityId::Nova).windup);
             set_anim(run, bi, Anim::Slam);
         } else if let Some((s, pi)) = self.ready_spell(run, bi) {
             run.monsters[bi].aim = pos.angle_to(run.players[pi].pos());
-            self.action = Some((Action::Cast(s), kit(run, bi, s).windup));
+            self.begin(run, bi, s, kit(run, bi, s).windup);
             if s == AbilityId::StoneGaze {
                 self.gaze = Some(run.players[pi].id);
                 set_anim(run, bi, Anim::Gaze);
@@ -208,7 +215,7 @@ impl BossBehaviour for Lich {
                 set_anim(run, bi, Anim::Windup);
             }
         } else if self.ready(run, bi, AbilityId::GloomBolts) {
-            self.action = Some((Action::Cast(AbilityId::GloomBolts), kit(run, bi, AbilityId::GloomBolts).windup));
+            self.begin(run, bi, AbilityId::GloomBolts, kit(run, bi, AbilityId::GloomBolts).windup);
             set_anim(run, bi, Anim::Windup);
         } else {
             let speed = run.monsters[bi].speed;
@@ -357,6 +364,25 @@ pub(crate) mod tests {
         assert!(!run.monsters[bi].cds.ready(AbilityId::Nova), "its cooldown runs from the cast");
         let (_, extra) = *l.not_before.iter().find(|&&(i, _)| i == AbilityId::Nova).expect("a random extra wait");
         assert!((0.0..LICH_NOVA_EXTRA_WAIT).contains(&extra), "{extra}");
+    }
+
+    #[test]
+    fn the_lich_announces_the_nova_at_its_slam_start() {
+        let (mut run, bi) = lich_with(&[Vec2::new(30.0, 0.0)]);
+        for id in SPELLS.into_iter().chain([AbilityId::GloomBolts]) {
+            run.monsters[bi].cds.start(id, 99.0);
+        }
+        let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, 99.0)], ..Lich::default() };
+        let nova = nova_of(&run, bi);
+        run.events.clear();
+        l.tick(&mut run, DT);
+        let casts = |run: &Run| run.events.iter().filter_map(|(e, _)| if let Ev::Cast { id, look, windup_ms, primary, .. } = e { Some((*id, *look, *windup_ms, *primary)) } else { None }).collect::<Vec<_>>();
+        assert_eq!(casts(&run), vec![(run.monsters[bi].id, crate::defs::looks::RuneLook::Gloom as u8, 1200, false)], "one Cast at the Slam start");
+        assert_eq!(nova.windup, 1.2);
+        while l.action.is_some() {
+            l.tick(&mut run, DT);
+        }
+        assert_eq!(casts(&run).len(), 1, "none at the landing");
     }
 
     #[test]

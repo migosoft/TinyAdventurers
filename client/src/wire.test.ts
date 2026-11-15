@@ -4,6 +4,7 @@
 import { decode } from '@msgpack/msgpack';
 import { describe, expect, it } from 'vitest';
 import { CONST, EFFECT, EFFECT_LOOK } from './generated/defs';
+import type { Ev } from './generated/Ev';
 import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
 import fixtures from './generated/wire-fixtures.json';
@@ -16,7 +17,7 @@ function close(got: unknown, want: unknown, path: string): void {
   if (typeof want === 'number') {
     expect(typeof got, path).toBe('number');
     let d = Math.abs((got as number) - want);
-    if (/^ents\.\d+\.6$/.test(path)) {
+    if (/^(ents\.\d+\.6|ev\.\d+\.aim)$/.test(path)) {
       d = Math.min(d, 2 * Math.PI - d);
       expect(d, path).toBeLessThanOrEqual(AIM_TOL);
     } else if (/^(ents\.\d+\.[23]|ev\.\d+\.[xy]|drain\.\d+\.[01]|lights\.\d+\.[01])$/.test(path)) {
@@ -95,6 +96,16 @@ describe('wire', () => {
     const z = zaps[0] as { x: number; y: number; x2: number; y2: number };
     expect(z.x).toBeCloseTo(100.03, 1);
     expect(z.y2).toBeCloseTo(190.25, 1);
+  });
+
+  it('decodes the Cast event', () => {
+    const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[0].bytes)) as SnapW);
+    const casts = snap.ev.filter((e) => e.t === 'Cast');
+    expect(casts).toHaveLength(1);
+    const c = casts[0] as Extract<Ev, { t: 'Cast' }>;
+    expect([c.id, c.look, c.windup_ms, c.primary]).toEqual([2, 1, 600, true]);
+    expect(c.x).toBeCloseTo(130.03, 1);
+    expect(c.aim).toBeCloseTo(-1.2, 1);
   });
 
   it('packs inputs in field order with null for no shot', () => {

@@ -12,7 +12,8 @@ use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
 use crate::defs::kinds::Anim;
 use crate::math::angle_diff;
-use crate::run::abilities::monster_use;
+use crate::run::abilities::{announce_cast, monster_use};
+use crate::run::effects::Creature;
 use crate::run::ai::path_toward;
 use crate::run::Run;
 use rand::Rng;
@@ -211,6 +212,7 @@ impl BossBehaviour for Dragon {
         let (breath, bite, claw) = (kit(run, bi, AbilityId::FireBreath), kit(run, bi, AbilityId::Bite), kit(run, bi, AbilityId::Strike));
         if self.ready(run, bi, AbilityId::FireBreath) && dist < breath.range {
             self.start(run, bi, Action::BreathWindup, breath.windup, Anim::Breath);
+            announce_cast(run, Creature::Monster(bi), AbilityId::FireBreath, breath.windup, to_target);
         } else if air {
             // Flying: hover after the party.
             if dist > HOVER_KEEP {
@@ -226,6 +228,7 @@ impl BossBehaviour for Dragon {
             self.start(run, bi, Action::Claw, claw.windup, Anim::Melee);
         } else if self.ready(run, bi, AbilityId::Fireball) {
             self.start(run, bi, Action::Fireball, FIREBALL_POSE, Anim::Windup);
+            announce_cast(run, Creature::Monster(bi), AbilityId::Fireball, FIREBALL_POSE, to_target);
         } else if dist > 60.0 {
             let speed = run.monsters[bi].speed;
             path_toward(run, bi, ppos, speed, dt);
@@ -282,6 +285,19 @@ mod tests {
 
     fn windup(run: &Run, bi: usize, id: AbilityId) -> f64 {
         kit(run, bi, id).windup
+    }
+
+    #[test]
+    fn the_dragon_announces_its_breath_at_the_wind_up() {
+        let (mut run, mut d, bi) = dragon_with_ready(&[Vec2::new(100.0, 0.0)], &[AbilityId::FireBreath]);
+        let w = windup(&run, bi, AbilityId::FireBreath);
+        run.events.clear();
+        d.tick(&mut run, DT);
+        assert_eq!(run.monsters[bi].anim, Anim::Breath);
+        let casts = |run: &Run| run.events.iter().filter_map(|(e, _)| if let Ev::Cast { id, look, windup_ms, .. } = e { Some((*id, *look, *windup_ms)) } else { None }).collect::<Vec<_>>();
+        assert_eq!(casts(&run), vec![(run.monsters[bi].id, crate::defs::looks::RuneLook::Fire as u8, (w * 1000.0).round() as u16)]);
+        ticks(&mut run, &mut d, w + 0.5);
+        assert_eq!(casts(&run).len(), 1, "the breath itself adds none");
     }
 
     #[test]
