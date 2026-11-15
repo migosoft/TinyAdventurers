@@ -5,7 +5,7 @@
 // function of the figure's `animT` (and the clock for pulses); the one-shot sparks are records, started once per action.
 import { ANIM, EFFECT, KIND } from '../../generated/defs';
 import { has } from '../../game/effectBits';
-import { GLOOM } from '../../game/fxLooks';
+import { GLOOM, gazePulse } from '../../game/fxLooks';
 import { MELEE_T } from '../../game/anim/pose';
 import { TILE } from '../../sim/map';
 import { pushGlow } from '../cards';
@@ -187,7 +187,7 @@ function gaze(out: FxOut, frame: FxFrame, f: DrawnFig): void {
   }
   gazeA[0] = f.x; gazeA[1] = f.top - 0.15; gazeA[2] = f.z;
   gazeB[0] = tx; gazeB[1] = ty; gazeB[2] = tz;
-  const a = 0.65 + 0.25 * Math.sin(frame.ctx.now * 12);
+  const a = gazePulse(frame.ctx.now);
   streak(out.tris, frame.ctx.ax, gazeA, gazeB, 0.05, GAZE_GREY, a, a);
   streak(out.tris, frame.ctx.ax, gazeA, gazeB, 0.02, GAZE_CORE, a * 0.8, a * 0.8);
 }

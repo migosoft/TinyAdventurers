@@ -8,6 +8,7 @@ import type { EntState } from '../../game/world';
 import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
+import type { Footprint } from '../lights';
 import { castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
@@ -41,6 +42,8 @@ export const FX_KIND = {
   /** A mimic's reveal (gold motes) and landing (dust). */
   MimicWake: 20,
   MimicLand: 21,
+  /** The Shade's veil drifting apart after its death (follows the Shade's id). */
+  ShadeVeil: 22,
 } as const;
 export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
@@ -68,6 +71,7 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.Spark]: 0.35,
   [FX_KIND.MimicWake]: 0.6,
   [FX_KIND.MimicLand]: 0.4,
+  [FX_KIND.ShadeVeil]: 1,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */
@@ -100,6 +104,8 @@ export interface FxFrame {
   ownCast: OwnCast | null;
   /** The mimics' one-shot cues of this frame. */
   cues?: readonly MimicCue[];
+  /** The ground the screen shows (tiles): the hazards draw only inside it. Undefined: no limit. */
+  fp?: Footprint;
 }
 
 /** Draws one record at `age` seconds into its life. Returning `false` retires the record at once (it has nothing left to draw). */
@@ -221,7 +227,8 @@ export class Effects3d {
       }
       case 'Zap': this.add(FX_KIND.Zap, now, x, z, -1, ev.x2 / TILE, ev.y2 / TILE); break;
       case 'Died': {
-        if (ev.kind === KIND.Shade || isProjectileKind(ev.kind)) break;
+        if (ev.kind === KIND.Shade) { this.add(FX_KIND.ShadeVeil, now, x, z, ev.id); break; }
+        if (isProjectileKind(ev.kind)) break;
         const k = ev.kind === KIND.Ghost ? FX_KIND.DiedGhost : isBossKind(ev.kind) ? FX_KIND.DiedBoss : FX_KIND.Died;
         this.add(k, now, x, z, ev.id, ev.kind);
         break;

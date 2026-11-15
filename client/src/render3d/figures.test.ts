@@ -436,6 +436,27 @@ describe('Figures3d anchors (#311)', () => {
   });
 });
 
+describe('Figures3d status looks (#308)', () => {
+  const look = { ambient: [1, 1, 1] as [number, number, number], dark: 'shape' as const, torchGlow: true, oval: 1 };
+  it('frozen card is tinted', () => {
+    const plain = make().frame(frame([ent(10, KIND.Knight)]), cam(), look);
+    const iced = make().frame(frame([ent(10, KIND.Knight, { effects: 1 << EFFECT.Frozen })]), cam(), look);
+    expect(plain.cards.look[0]).toBeCloseTo(1, 6);
+    expect(iced.cards.look[0]).toBeCloseTo(0xa8 / 255, 6);
+    expect(iced.cards.look[1]).toBeCloseTo(0xd8 / 255, 6);
+  });
+  it('an accelerated figure leaves a golden afterimage every 0.08 s', () => {
+    const fg = make();
+    const n = (t: number, dt: number) => fg.frame(frame([ent(10, KIND.Knight, { effects: 1 << EFFECT.Accelerated })], { dt, now: t }), cam(), look).ghosts.n;
+    let frames = 0;
+    for (let i = 0; i < 30; i++) if (n(1 + i * 0.016, 0.016) > 0) frames++;
+    // an image lives 0.2 s (12 frames); a new one is due every 0.08 s (5 frames): copies are on screen in every frame after the first
+    expect(frames).toBe(30);
+    const none = make().frame(frame([ent(10, KIND.Knight)], { dt: 0.016 }), cam(), look);
+    expect(none.ghosts.n).toBe(0);
+  });
+});
+
 describe('Figures3d in the dark (#304)', () => {
   const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade', torchGlow = true) => ({ ambient, dark, torchGlow, oval: 1 });
   const alphas = (b: CardBuf): number[] => b.look.filter((_, i) => i % 5 === 4);

@@ -398,7 +398,7 @@ export class RunView3d implements RunView {
     for (const id of f.dark) this.hidden.add(id);
     if (sight.mask) hiddenByPicture([cardsQ, ghostsQ], sight.mask, this.hiddenSeen, this.hidden, fo.models);
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
-    this.fxFrame(f, c, cam, fo);
+    this.fxFrame(f, c, cam, fo, fp);
     const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
@@ -470,9 +470,9 @@ export class RunView3d implements RunView {
   }
 
   /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */
-  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut): void {
+  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut, fp: ReturnType<typeof footprint>): void {
     this.fxPass.run(this.fx, {
-      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues,
+      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues, fp,
     }, fo.glows);
   }
 

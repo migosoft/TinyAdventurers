@@ -3,7 +3,7 @@
 // A group of rows is shown side by side; the page runs them through `galleryFrame`, `Figures3d.frame` and the same `Effects3d.frame`
 // as a run (`FxPass`). The clock is the page's own: `&t=<s>` pins it (the same picture again), `&fx=<group>` picks the group,
 // `Slow` runs it five times slower, `Cast now` restarts every row. Each later task of #308 adds its rows to `FX_ROWS`.
-import { ANIM, FLAG, KIND, LIGHT_KIND, RUNE_LOOK, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, EFFECT, EFFECT_LOOK, FLAG, KIND, LIGHT_KIND, RUNE_LOOK, SIDE, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { LightField } from '../game/light';
 import type { EntState } from '../game/world';
@@ -132,7 +132,49 @@ export const FX_ROWS: FxRow[] = [
   ...eventRows(),
   ...figureRows(),
   ...bossRows(),
+  ...hazardRows(),
+  ...statusRows(),
 ];
+
+/** The ground hazards (#308): each kind at full life, and a fire patch burning out (strength follows the life left, `extra` ms). */
+function hazardRows(): FxRow[] {
+  const one = (name: string, kind: number, aim: number, life: (t: number) => number, period = 4): FxRow => ({
+    group: 'hazards', name, period,
+    at: (t) => ({ ents: [fxEnt(900, kind, IMPACT.x - 1, IMPACT.z - 1, { aim, extra: life(t), side: SIDE.Neutral })], events: [] }),
+  });
+  return [
+    one('fire patch', KIND.FirePatch, 24, () => 2000),
+    one('fire patch burning out', KIND.FirePatch, 24, (t) => 1500 - 400 * t),
+    one('holy ground', KIND.HolyGround, 48, () => 2000),
+    one('holy ground fading', KIND.HolyGround, 48, (t) => 1500 - 400 * t),
+    one('roots', KIND.Roots, 40, () => 2000),
+    one('roots fading', KIND.Roots, 40, (t) => 1500 - 400 * t),
+  ];
+}
+
+/** The status marks (#308): the caster wears each effect in turn (one row each), and the Shade's veil and death. */
+function statusRows(): FxRow[] {
+  const worn = (name: string, ...fx: number[]): FxRow => ({
+    group: 'status', name, period: 3,
+    at: () => ({ ents: [fxEnt(CASTER_ID, KIND.Wizard, CASTER.x, CASTER.z, { effects: fx.reduce((a, e) => a | (1 << e), 0) })], events: [] }),
+  });
+  return [
+    worn('blind', EFFECT.Blind), worn('burning', EFFECT.Burning), worn('frozen', EFFECT.Frozen), worn('poisoned', EFFECT.Poisoned),
+    worn('chilled', EFFECT.Chilled), worn('singed', EFFECT.Singed), worn('weakened', EFFECT.Weakened), worn('coated', EFFECT.Coated),
+    worn('entangled', EFFECT.Entangled), worn('warded', EFFECT.Warded), worn('accelerated', EFFECT.Accelerated),
+    {
+      group: 'status', name: 'entangled (vines)', period: 3,
+      at: () => ({ ents: [fxEnt(CASTER_ID, KIND.Wizard, CASTER.x, CASTER.z, { effects: 1 << EFFECT.Entangled, entangled: EFFECT_LOOK.Vines })], events: [] }),
+    },
+    {
+      group: 'status', name: 'shade and its death', period: 4,
+      at: (t) => ({
+        ents: t < 2.5 ? [fxEnt(800, KIND.Shade, CASTER.x + 1 + 1.5 * Math.sin(t * 1.5), CASTER.z + 0.5)] : [],
+        events: [{ at: 2.5, ev: { t: 'Died', id: 800, kind: KIND.Shade, x: px(CASTER.x + 1 + 1.5 * Math.sin(2.5 * 1.5)), y: px(CASTER.z + 0.5) } as PictureEv }],
+      }),
+    },
+  ];
+}
 
 /** The figure rows (#308): a swoosh, a wolf's bite, a ranger's release spark and a mimic's reveal. */
 function figureRows(): FxRow[] {
@@ -394,7 +436,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const frame = galleryFrame(ents, t, dt);
       if (extras.drain || extras.lights) frame.snap = snap({ drain: extras.drain ?? null, lights: extras.lights ?? [] }) as unknown as Snapshot;
       const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, models: { kit, is: (e) => e.kind !== KIND.Torch } });
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues }, fo.glows);
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues, fp: footprint(cam, c.plan.halfW, c.plan.halfH) }, fo.glows);
 
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');

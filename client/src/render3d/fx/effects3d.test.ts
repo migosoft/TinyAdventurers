@@ -56,10 +56,11 @@ describe('Effects3d', () => {
     fx.event({ t: 'Died', id: 6, x: 0, y: 0, kind: KIND.Shade }, 0, false);
     fx.event({ t: 'Cast', id: 7, x: 0, y: 0, look: 1, windup_ms: 600, primary: false, aim: 0 }, 0, false);
     fx.event({ t: 'Heal', x: 0, y: 0, v: 1, p: false }, 0, false);
-    expect(fx.records).toBe(5);
+    // the Shade's death leaves its veil drifting apart (a record), the Heal nothing
+    expect(fx.records).toBe(6);
     fx.shotEnded({ shot: 1, kind: 0, x: 16, y: 16, vx: 0, vy: 0 }, 'wall', 0);
     fx.shotEnded({ shot: 2, kind: 0, x: 16, y: 16, vx: 0, vy: 0 }, 'enemy', 0);
-    expect(fx.records).toBe(6);
+    expect(fx.records).toBe(7);
     expect(boomKind(3)).toBeNull();
   });
 });

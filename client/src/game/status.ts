@@ -11,16 +11,12 @@ import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 import { has } from './effectBits';
 import type { Bounds } from './anim/lying';
 
-export { has };
+import { ENTANGLE_LOOKS, flameSpots, gazePulse, snowflakeAlpha } from './fxLooks';
+
+export { has, flameSpots, snowflakeAlpha };
 export { lieLayout, lyingPose, type Bounds } from './anim/lying';
 
 type Look = (typeof EFFECT_LOOK)[keyof typeof EFFECT_LOOK];
-
-/** How Entangled is drawn around the feet, by look (a later web is one more entry; the compiler lists the missing ones). */
-const ENTANGLE: Record<Look, { color: number; vines: boolean }> = {
-  [EFFECT_LOOK.Plain]: { color: 0xa8a8b0, vines: false },
-  [EFFECT_LOOK.Vines]: { color: 0x4fa83a, vines: true },
-};
 
 const boundsCache = new Map<string, Bounds>();
 
@@ -57,41 +53,8 @@ export function frameBounds(frame: Phaser.Textures.Frame): Bounds {
  * (14 px above its feet) to the middle of the hero it stares at. `t`: seconds.
  */
 export function drawGazeBeam(g: Phaser.GameObjects.Graphics, lx: number, ly: number, tx: number, ty: number, t: number): void {
-  g.lineStyle(1, 0xb0b0b0, 0.65 + 0.25 * Math.sin(t * 12));
+  g.lineStyle(1, 0xb0b0b0, gazePulse(t));
   g.lineBetween(Math.round(lx), Math.round(ly - 14), Math.round(tx), Math.round(ty - 8));
-}
-
-/**
- * Opacity of a snowflake `age` s into its `life`: fades in over the first
- * quarter, holds, fades out over the last quarter (0 outside the life).
- */
-export function snowflakeAlpha(age: number, life: number): number {
-  if (life <= 0 || age <= 0 || age >= life) return 0;
-  const k = age / life;
-  return Math.min(1, k / 0.25, (1 - k) / 0.25);
-}
-
-/** Deterministic 0..1 from a seed and an index (a small integer hash). */
-function hash01(seed: number, i: number): number {
-  let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(i + 1, 0xc2b2ae35);
-  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
-  h ^= h >>> 13;
-  return (h >>> 0) / 0x100000000;
-}
-
-/**
- * `n` points on a body `bodyW` x `bodyH` px (feet at y 0, upwards negative,
- * x centred), mostly on its lower two thirds: where the flames of a burning
- * figure sit. Deterministic for a `seed`.
- */
-export function flameSpots(bodyW: number, bodyH: number, n: number, seed: number): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  for (let i = 0; i < n; i++) {
-    const u = hash01(seed, i * 2);
-    const v = hash01(seed, i * 2 + 1);
-    out.push([(u - 0.5) * bodyW * 0.8, -bodyH * (0.1 + 0.75 * v * v)]);
-  }
-  return out;
 }
 
 const GHOST_EVERY = 0.08;
@@ -513,7 +476,7 @@ export class StatusView {
     const cx = Math.round(a.x + a.cx);
     if (look !== undefined) {
       // `?? Plain`: a newer server may send a look id this client does not know.
-      const { color, vines } = ENTANGLE[look as Look] ?? ENTANGLE[EFFECT_LOOK.Plain];
+      const { color, vines } = ENTANGLE_LOOKS[look as Look] ?? ENTANGLE_LOOKS[EFFECT_LOOK.Plain];
       const rx = Math.round(a.w / 2) + 1;
       const fy = Math.round(a.y);
       // Two bands one above the other, round the ankles.

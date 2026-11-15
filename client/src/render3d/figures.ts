@@ -39,6 +39,13 @@ const SHADOW_ALPHA = 0.45;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
 const AFTER_ALPHA = 0.5;
+/** An Accelerated figure leaves a golden copy every 0.08 s; it lives 0.2 s and starts at 0.35 (2D `status.ts`). */
+const ACCEL_EVERY = 0.08;
+const ACCEL_SECS = 0.2;
+const ACCEL_ALPHA = 0.35;
+const ACCEL_TINT = 0xffe070;
+/** The dying Shade's body fades over this long (s). */
+const SHADE_FADE = 0.3;
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
 /** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
@@ -124,6 +131,8 @@ interface Fig {
   body: Card | null;
   /** The model path's state: its pose memory, whether the last frame drew a model, and the instances of that frame (a vanish image copies them). */
   mem3?: Pose3dMemory;
+  /** Seconds until the next Accelerated afterimage. */
+  accelT?: number;
   model?: boolean;
   last?: FigureInst[] | null;
 }
@@ -249,7 +258,14 @@ export class Figures3d {
     const lost = this.states.event(ev, this.now);
     if (ev.t !== 'Died') return false;
     if (lost === 'lost') return true;
-    if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return false;
+    if (ev.kind === KIND.Shade) {
+      // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart (2D `Effects.shadeDeath`).
+      const fig = this.figs.get(ev.id);
+      if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, alpha: i.alpha * 0.75 }))), secs: SHADE_FADE, left: SHADE_FADE });
+      else if (fig?.body) this.images.push({ card: { ...fig.body }, alpha0: 0.75, secs: SHADE_FADE, left: SHADE_FADE });
+      return false;
+    }
+    if (ev.kind === KIND.Ghost || isProjectileKind(ev.kind)) return false;
     const fig = this.figs.get(ev.id);
     this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5, model: !!fig?.model });
     if (this.skulls.length > SKULL_CAP) this.skulls.shift();
@@ -589,6 +605,7 @@ export class Figures3d {
       }
       fig.last = insts;
       if (pose.afterimage) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
+      if (this.accelDue(fig, s, f.dt)) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
     }
 
     if (pose.shadow.visible && this.shadowed(e.id)) {
@@ -649,6 +666,16 @@ export class Figures3d {
     f.mouth = this.point(this.mouthPool, f.x + Math.cos(yaw) * ahead + ray[0] * l, y + ray[1] * l, f.z + Math.sin(yaw) * ahead + ray[2] * l);
   }
 
+  /** True when an Accelerated figure is due its next golden afterimage (a stone, frozen or sleeping one holds still and leaves none). */
+  private accelDue(fig: Fig, s: ViewState, dt: number): boolean {
+    const fx = s.effects ?? 0;
+    if (!has(fx, EFFECT.Accelerated) || has(fx, EFFECT.Petrified) || has(fx, EFFECT.Frozen) || has(fx, EFFECT.Sleep)) { fig.accelT = 0; return false; }
+    fig.accelT = (fig.accelT ?? 0) - dt;
+    if (fig.accelT > 0) return false;
+    fig.accelT = ACCEL_EVERY;
+    return true;
+  }
+
   /** Draws one figure; false when it is not drawn (dead). */
   private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
     const base = FIGURES[e.kind];
@@ -664,6 +691,9 @@ export class Figures3d {
     const z = s.y / TILE;
     const sc = pose.scale;
     const { tint, mode } = lookOf(pose.tint, pose.grey);
+    // A frozen body wears the cool tint, as the model does (a fill, the hurt flash, stays).
+    const iced = has(s.effects ?? 0, EFFECT.Frozen);
+    if (iced && mode !== 1) { const t = rgbOf(FROZEN_TINT); tint[0] *= t[0]; tint[1] *= t[1]; tint[2] *= t[2]; }
     const down = (pose.sink + pose.drop) / TILE;
     // The sight mask's wide-figure rule (`footSight`): half the body frame's opaque width, in tiles, on the body and its weapon.
     const reach = ((fb.r - fb.l + 1) * sc) / 2 / TILE;
@@ -706,6 +736,10 @@ export class Figures3d {
           const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
           this.images.push({ card: { ...l.card, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA * k, secs: AFTER_SECS, left: AFTER_SECS });
         }
+        if (this.accelDue(fig, s, f.dt)) {
+          const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
+          this.images.push({ card: { ...l.card, tint: rgbOf(ACCEL_TINT), mode: 0 }, alpha0: ACCEL_ALPHA * pose.alpha * k, secs: ACCEL_SECS, left: ACCEL_SECS });
+        }
       }
     }
 
@@ -714,6 +748,7 @@ export class Figures3d {
       // The weapon is a child of the figure in 2D: its offset is in figure px (scaled by the figure), not moved by the body's step.
       const wsc = wp.scale * sc;
       const wt = pose.weaponTint !== null ? rgbOf(pose.weaponTint) : ([1, 1, 1] as [number, number, number]);
+      if (iced) { const t = rgbOf(FROZEN_TINT); wt[0] *= t[0]; wt[1] *= t[1]; wt[2] *= t[2]; }
       into({
         frame: wp.frame, x, z, lift: -down, flip: wp.flipX, originX: wp.originX, footY: wp.originY, scale: wsc, angle: wp.rot, offset: [wp.x / wp.scale, wp.y / wp.scale],
         tint: wt, mode: pose.grey ? 2 : 0, alpha: wp.alpha * pose.alpha, bias: wp.behind ? -WEAPON_BIAS : WEAPON_BIAS, reach,

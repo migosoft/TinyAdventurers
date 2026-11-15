@@ -4,7 +4,7 @@
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
 import { ANIM, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
-import { SKELETAL } from './fxLooks';
+import { HAZARD_LOOKS, SKELETAL } from './fxLooks';
 import { PhaserTags } from '../rulesLog/phaserTags';
 import type { RulesLog } from '../rulesLog';
 import { SHOT_LIFT_PX, settleOwnAim } from '../run/aim';
@@ -43,15 +43,6 @@ import { FONT_TEXT } from '../fonts';
 import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import type { EntState } from './world';
 
-/**
- * How each hazard looks: glow tint, base radius (px, used when the server sends none), the glow's
- * squash, its strength, and its rising sparks (chance per frame, speed, colors).
- */
-const HAZARD_LOOKS: Record<number, { tint: number; r: number; sx: number; sy: number; alpha: number; sparks: number; rise: number; colors: number[] }> = {
-  [KIND.FirePatch]: { tint: 0xff5010, r: 10, sx: 1.75, sy: 0.98, alpha: 1, sparks: 0.5, rise: 25, colors: [0xff7020, 0xffd040] },
-  [KIND.HolyGround]: { tint: 0xffd040, r: 40, sx: 1, sy: 0.7, alpha: 0.45, sparks: 0.15, rise: 15, colors: [0xffd040, 0xfff0a0] },
-  [KIND.Roots]: { tint: 0x40a040, r: 36, sx: 1, sy: 0.7, alpha: 0.5, sparks: 0.2, rise: 10, colors: [0x60c050, 0x90e070] },
-};
 
 
 export class PhaserRunView implements RunView {

@@ -5,6 +5,9 @@ import type { Snapshot } from '../../generated/Snapshot';
 import type { EntState } from '../../game/world';
 import type { OwnCast, ShotView } from '../../run/view';
 import type { Cam } from '../camera';
+import type { Footprint } from '../lights';
+import { registerHazards } from './hazards';
+import { registerStatus } from './status';
 import { newGlowBuf, type GlowBuf } from '../cards';
 import { newFxBuf, type FxBuf } from '../models/fx';
 import type { Quality } from '../quality';
@@ -33,6 +36,8 @@ export interface FxPassIn {
   ownCast: OwnCast | null;
   /** The mimics' one-shot cues of this frame (`FigureOut.cues`). */
   cues?: readonly MimicCue[];
+  /** The ground the screen shows (tiles). */
+  fp?: Footprint;
 }
 
 export class FxPass {
@@ -49,6 +54,8 @@ export class FxPass {
     registerBursts();
     registerBooms();
     registerFigureFx();
+    registerHazards();
+    registerStatus();
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }
 
@@ -67,6 +74,7 @@ export class FxPass {
     fin.figs = p.figs; fin.ents = p.ents; fin.shots = p.shots; fin.hiddenShots = p.hiddenShots; fin.snap = p.snap; fin.you = p.you; fin.ownCast = p.ownCast;
     fin.hidden = p.hidden;
     fin.cues = p.cues;
+    fin.fp = p.fp;
     const out = this.out;
     fx.frame(fin, out);
     const g = out.glows;
