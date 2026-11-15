@@ -56,6 +56,10 @@ import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
+import type { FigureInst } from './models/instances';
+import type { FigureKit } from './models/kit';
+import { FigureLayer, figureLooks } from './models/layer';
+import { figureMaterials } from './models/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -84,6 +88,9 @@ export interface SunFrame {
   /** The wind in tiles per second, and the seconds the clouds drift by. */
   wind: [number, number]; t: number;
 }
+/** The 3D figures of a frame (#338): what to draw and the kit that holds their models. */
+export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit }
+
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
   cam: Cam; plan: RenderPlan; dynamic: Dynamic; lights: Light[]; ambient: [number, number, number];
@@ -106,6 +113,8 @@ export interface FrameInput {
   sun?: SunFrame | null;
   /** The woodland's grown trees (#329); absent: no trees. */
   trees?: TreeFrame;
+  /** The 3D figures (#338); absent: none. */
+  models?: FigureFrame;
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
   cover?: CoverFrame;
   /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
@@ -421,6 +430,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
   const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover }));
+  // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
+  let figureTex: ReturnType<typeof figureLooks> | null = null;
+  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, (rows, paint) => figureMaterials({ lighting, sight, hasSun, rows, paint, ...(figureTex ??= figureLooks()), shared: figures.shared }));
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
   const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
@@ -656,6 +668,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const d = f.dynamic;
       card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
       trees.shared.cosP.value = Math.cos(f.cam.pitch);
+      figures.shared.cosP.value = Math.cos(f.cam.pitch);
       coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
@@ -718,6 +731,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       hazeDyn.mesh.visible = fa !== null && fa.haze.on;
       if (f.trees) { trees.sync(f.trees); void trees.warm(renderer, camera); }
       else if (trees.meshCount > 0) trees.clear();
+      timer?.lap('upload');
+      figures.frame(f.models, f.cam, (id) => slotOf.get(id) ?? -1);
+      timer?.lap('models');
       lighting.setLights(f.lights);
       lighting.cracks.set(f.cracks ?? []);
       lighting.setShadows(f.shadows);
@@ -846,6 +862,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunStandIn.dispose();
         casterMaterial?.dispose();
         trees.dispose();
+        figures.dispose();
+        figureTex?.dispose();
         coverLayer.dispose();
         mm.material.dispose();
         maskDiscs.dispose();

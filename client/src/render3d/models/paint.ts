@@ -79,3 +79,95 @@ export function paintOf(d: FigureDesc, grid: Int32Array, alpha: Uint8Array, pow:
   const raise = (u: number, v: number): number => up[Math.min(h - 1, Math.max(0, Math.floor((1 - v) * h))) * w + Math.min(w - 1, Math.floor(u * w))];
   return { w, h, data: new Uint8Array(out.buffer), raise };
 }
+
+/** Plain RGBA bytes of a picture, `w * h` pixels, row 0 on top. */
+export interface PaintImage { w: number; h: number; data: Uint8Array }
+
+/**
+ * Stone (the page's `stoneTex`, seed 11): one grey with lighter and darker flecks and nine dark cracks, the size of a figure's paint.
+ * The page draws it on a canvas; here every pixel is computed by hand from the same random numbers in the same order. The flecks are
+ * rectangles with fractional edges (a pixel takes the covered share of its area, as the canvas antialiases them); a crack is the
+ * union of round-capped 3 px wide segments (a pixel takes the share the distance to the nearest segment leaves, over one pixel of
+ * soft edge). The canvas's own antialiasing differs from that only in the last grey value of an edge pixel. The two corner patches
+ * are plain grey: a piece without paint reads the corner of its texture.
+ */
+export function stonePaint(): PaintImage {
+  const w = FW * PS, h = FH * PS, data = new Uint8Array(w * h * 4);
+  const base = [0x8f, 0x92, 0x8c], light = [0x9b, 0x9e, 0x98], dark = [0x84, 0x87, 0x7f], crack = [0x4a, 0x4c, 0x48];
+  for (let i = 0; i < w * h; i++) data.set([...base, 255], i * 4);
+  const blend = (i: number, c: number[], a: number): void => { for (let k = 0; k < 3; k++) data[i * 4 + k] = Math.round(data[i * 4 + k] * (1 - a) + c[k] * a); };
+  let seed = 11;
+  const rnd = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rect = (x: number, y: number, rw: number, rh: number, c: number[]): void => {
+    for (let py = Math.max(0, Math.floor(y)); py < Math.min(h, Math.ceil(y + rh)); py++) {
+      const oy = Math.min(py + 1, y + rh) - Math.max(py, y);
+      for (let px = Math.max(0, Math.floor(x)); px < Math.min(w, Math.ceil(x + rw)); px++) blend(py * w + px, c, oy * (Math.min(px + 1, x + rw) - Math.max(px, x)));
+    }
+  };
+  for (let i = 0; i < 70; i++) {
+    const c = rnd() < 0.5 ? light : dark;
+    const x = 4 + rnd() * (w - 10), y = 4 + rnd() * (h - 10), rw = 2 + rnd() * 5, rh = 2 + rnd() * 3;
+    rect(x, y, rw, rh, c);
+  }
+  // The cracks: each path is a list of sub-paths (a branch starts a new one); the line is 3 px wide with round caps and joins.
+  const cov = new Float32Array(w * h);
+  for (let i = 0; i < 9; i++) {
+    let x = 6 + rnd() * (w - 12), y = 8 + (i / 9) * (h - 30) + rnd() * 10, a = rnd() * 6.28;
+    const subs: [number, number][][] = [[[x, y]]];
+    for (let k = 0; k < 4 + Math.floor(rnd() * 3); k++) {
+      a += (rnd() - 0.5) * 1.6; x += Math.cos(a) * (5 + rnd() * 6); y += Math.abs(Math.sin(a)) * (5 + rnd() * 7);
+      subs[subs.length - 1].push([x, y]);
+      if (k === 1 && rnd() < 0.6) {
+        subs[subs.length - 1].push([x + 5 + rnd() * 4, y - 3 - rnd() * 3]);
+        subs.push([[x, y]]);
+      }
+    }
+    let x0 = w, x1 = 0, y0 = h, y1 = 0;
+    for (const s of subs) for (let j = 0; j < s.length; j++) {
+      const [ax, ay] = s[j], [bx, by] = s[Math.min(j + 1, s.length - 1)];
+      const px0 = Math.max(0, Math.floor(Math.min(ax, bx) - 2.5)), px1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx) + 2.5));
+      const py0 = Math.max(0, Math.floor(Math.min(ay, by) - 2.5)), py1 = Math.min(h - 1, Math.ceil(Math.max(ay, by) + 2.5));
+      x0 = Math.min(x0, px0); x1 = Math.max(x1, px1); y0 = Math.min(y0, py0); y1 = Math.max(y1, py1);
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+      for (let py = py0; py <= py1; py++) for (let px = px0; px <= px1; px++) {
+        const qx = px + 0.5 - ax, qy = py + 0.5 - ay, t = len2 > 0 ? Math.max(0, Math.min(1, (qx * dx + qy * dy) / len2)) : 0;
+        const d = Math.hypot(qx - t * dx, qy - t * dy), c = Math.max(0, Math.min(1, 2 - d));   // half width 1.5, one pixel of soft edge
+        if (c > cov[py * w + px]) cov[py * w + px] = c;
+      }
+    }
+    for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) {
+      const j = py * w + px;
+      if (cov[j] > 0) { blend(j, crack, cov[j]); cov[j] = 0; }
+    }
+  }
+  for (let py = 0; py < 4; py++) for (let px = 0; px < 4; px++) { data.set([...base, 255], (py * w + px) * 4); data.set([...base, 255], ((h - 1 - py) * w + px) * 4); }
+  return { w, h, data };
+}
+
+/**
+ * What polished metal mirrors (the page's `envTex`): a 128 x 64 equirectangular picture of a bright sky, a horizon and dark ground, with a white
+ * ellipse of sun at (40, 12), 14 by 7. The gradient has the page's stops, read at the centre of each row; the ellipse has an edge one texel soft.
+ */
+export function skyPaint(): PaintImage {
+  const w = 128, h = 64, data = new Uint8Array(w * h * 4);
+  const stops: [number, number[]][] = [[0, [0xff, 0xff, 0xff]], [0.3, [0xe3, 0xee, 0xf7]], [0.5, [0xb4, 0xc6, 0xd4]], [0.58, [0x7d, 0x8c, 0x78]], [1, [0x5d, 0x6b, 0x58]]];
+  const gradient = (t: number): number[] => {
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) { const [t0, c0] = stops[i - 1], [t1, c1] = stops[i], f = (t - t0) / (t1 - t0); return c0.map((v, k) => v + (c1[k] - v) * f); }
+    }
+    return stops[stops.length - 1][1];
+  };
+  const cx = 40, cy = 12, rx = 14, ry = 7;
+  for (let y = 0; y < h; y++) {
+    const g = gradient((y + 0.5) / h);
+    for (let x = 0; x < w; x++) {
+      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+      // The signed distance to the ellipse, to first order: f / |grad f| with f = (dx/rx)^2 + (dy/ry)^2 - 1.
+      const f = (dx / rx) ** 2 + (dy / ry) ** 2 - 1, grad = 2 * Math.hypot(dx / (rx * rx), dy / (ry * ry));
+      const a = grad > 0 ? Math.max(0, Math.min(1, 0.5 - f / grad)) : 1;
+      for (let k = 0; k < 3; k++) data[(y * w + x) * 4 + k] = Math.round(g[k] + (255 - g[k]) * a);
+      data[(y * w + x) * 4 + 3] = 255;
+    }
+  }
+  return { w, h, data };
+}
