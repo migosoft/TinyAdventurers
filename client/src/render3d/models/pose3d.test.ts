@@ -3,7 +3,7 @@ import { ANIM, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { GAIT, HIT_SECS, TURN_RATE, newPose3dMemory, poseFigure, restPose, type Pose3d, type Pose3dMemory } from './pose3d';
+import { ATTACK_IN_SECS, GAIT, HIT_SECS, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 
@@ -188,10 +188,84 @@ describe('attacks', () => {
     expect(a.bones[bone('body') * 12 + 4]).toBeGreaterThan(0.05);   // leaning back: turned anticlockwise about z
   }, SLOW);
 
-  it('raises both arms in a slam', () => {
-    const m = model('ogre'), d = def('ogre');
-    const p = poseFigure(m, d, view({ anim: ANIM.Slam, animT: 0.4 }), 0, settled());
-    for (const side of ['R', 'L'] as const) expect(hand(m, p, side)[1]).toBeGreaterThan(pivot(m, `arm${side}`)[1]);
+  it('fits the slam to the ogre\'s own slam time: raised by 0.75 t, smashed down at t, held down after', () => {
+    const m = model('ogre'), d = def('ogre'), t = d.slam!.t;
+    expect(t).toBeGreaterThan(0);
+    const at = (animT: number): Pose3d => poseFigure(m, d, view({ anim: ANIM.Slam, animT }), 0, settled());
+    for (const side of ['R', 'L'] as const) {
+      const shoulder = pivot(m, `arm${side}`)[1];
+      expect(hand(m, at(0.5 * t), side)[1], `raised at 0.5 t ${side}`).toBeGreaterThan(shoulder);
+      expect(hand(m, at(0.75 * t), side)[1], `up at 0.75 t ${side}`).toBeGreaterThan(shoulder + 2);
+      expect(hand(m, at(t), side)[1], `down at t ${side}`).toBeLessThan(shoulder);
+      expect(hand(m, at(2 * t), side)[1], `held down ${side}`).toBeCloseTo(hand(m, at(t), side)[1], 4);
+    }
+  }, SLOW);
+
+  it('without a slam time in the description, takes SLAM_DEFAULT_SECS', () => {
+    const m = model('ogre'), d = { ...def('ogre'), slam: undefined };
+    const p = poseFigure(m, d, view({ anim: ANIM.Slam, animT: SLAM_DEFAULT_SECS }), 0, settled());
+    expect(hand(m, p, 'R')[1]).toBeLessThan(pivot(m, 'armR')[1]);
+  }, SLOW);
+
+  it('runs a swing\'s sweep in MELEE_T and its return in MELEE_T', () => {
+    const m = model('knight'), d = def('knight');
+    const u = (animT: number): number | undefined => poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, settled()).attack?.u;
+    expect(u(0)).toBeCloseTo(0.2, 6);
+    expect(u(MELEE_T)).toBeCloseTo(0.56, 6);
+    expect(u(1.5 * MELEE_T)).toBeCloseTo(0.78, 6);
+    expect(u(2 * MELEE_T - 1e-6)).toBeGreaterThan(0.999);
+    expect(poseFigure(m, d, view({ anim: ANIM.Melee, animT: 2 * MELEE_T }), 0, settled()).attack).toBeNull();
+  }, SLOW);
+
+  it('blends an attack in over ATTACK_IN_SECS after idling, but not after a wind-up', () => {
+    const m = model('knight'), d = def('knight');
+    const rest = pivot(m, 'handR');
+    const idleHand = hand(m, poseFigure(m, d, view(), 0, settled()), 'R');
+    const cold = (animT: number): [number, number, number] => hand(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, settled()), 'R');
+    // After idling: at animT 0 the arm is at rest, at ATTACK_IN_SECS it is on the full curve.
+    cold(0).forEach((v, i) => expect(v).toBeCloseTo(idleHand[i], 4));
+    const mem = settled({ woundUp: true });
+    const full = (animT: number): [number, number, number] => hand(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, mem), 'R');
+    cold(ATTACK_IN_SECS).forEach((v, i) => expect(v).toBeCloseTo(full(ATTACK_IN_SECS)[i], 4));
+    // Half-way it is between the two.
+    const mid = cold(ATTACK_IN_SECS / 2), f = full(ATTACK_IN_SECS / 2);
+    expect(Math.hypot(mid[0] - f[0], mid[1] - f[1], mid[2] - f[2])).toBeGreaterThan(0.1);
+    // After a wind-up frame the first Melee frame is the full curve, and the memory keeps it so.
+    const wm = settled();
+    poseFigure(m, d, view({ anim: ANIM.Windup }), 0, wm);
+    const first = hand(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, wm), 'R');
+    const ref = full(0);
+    first.forEach((v, i) => expect(v).toBeCloseTo(ref[i], 5));
+    expect(Math.abs(first[0] - idleHand[0]) + Math.abs(first[1] - idleHand[1]) + Math.abs(first[2] - idleHand[2])).toBeGreaterThan(0.5);
+    expect(rest).toBeDefined();
+    // It goes back to blending once the figure has done something else.
+    poseFigure(m, d, view(), 0, wm);
+    hand(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, wm), 'R').forEach((v, i) => expect(v).toBeCloseTo(idleHand[i], 4));
+  }, SLOW);
+
+  it('freezes a figure in its swing: the pose of the frame the ice began in, attack and all', () => {
+    const m = model('knight'), d = def('knight'), mem = settled();
+    const a = poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2, effects: 1 << EFFECT.Frozen }), 1 / 60, mem);
+    expect(hand(m, a, 'R')[0]).toBeGreaterThan(pivot(m, 'handR')[0] + 0.5);
+    const hx = hand(m, a, 'R');
+    const b = poseFigure(m, d, view({ anim: ANIM.Idle, effects: 1 << EFFECT.Frozen }), 0.5, mem);
+    hand(m, b, 'R').forEach((v, i) => expect(v).toBeCloseTo(hx[i], 6));
+    expect(b.attack).toEqual(a.attack);
+  }, SLOW);
+
+  it('writes the same pose object each call (owned by the memory) and copyPose keeps one', () => {
+    const m = model('wizard'), d = def('wizard'), mem = settled();
+    const a = poseFigure(m, d, view({ anim: ANIM.Move, x: 2 }), 1 / 60, mem);
+    const kept = copyPose(a);
+    const b = poseFigure(m, d, view({ anim: ANIM.Cast, animT: 0.05, x: 4 }), 1 / 60, mem);
+    expect(b).toBe(a);
+    expect(kept.bones).not.toEqual(b.bones);
+    expect(kept.attack).toBeNull();
+    const into = copyPose(b, kept);
+    expect(into).toBe(kept);
+    expect(kept.bones).toEqual(b.bones);
+    expect(kept.attack).toEqual(b.attack);
+    expect(kept.attack).not.toBe(b.attack);
   }, SLOW);
 
   it('stretches the dash along the heading', () => {

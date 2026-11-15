@@ -7,8 +7,9 @@
 // frame; the instance turns it by `yaw` (see `skinVertex` in rig.ts). The page turns its figures with three.js's rotation.y, which
 // takes +x to -z; the game's yaw takes +x to +z (the game's y axis is the world's z axis), so the page's turn rate is `-mem.turn`.
 //
-// Purity: `poseFigure` changes only `mem`. It returns a new `Pose3d` each call (a held pose is the same object, kept in `mem`).
-// The module-level scratch objects below hold nothing between calls.
+// Purity: `poseFigure` changes only `mem`. The `Pose3d` it returns is owned by `mem` (it is written into the same object every
+// call, to save allocations): it is valid until the next call with that memory, and a caller that keeps one (a vanish copy) must
+// `copyPose` it. A held pose (stone, frozen) is a copy kept in `mem.held`. The module-level scratch objects hold nothing between calls.
 
 import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
@@ -19,20 +20,33 @@ import { composeBones, identityLocal, type BoneLocal } from './rig';
 
 /** The approved skip; the bound uses the same numbers. */
 export const GAIT = { rate: 1.4, stride: 1, armSwing: 1.2, bounce: 1, loose: 1.5 } as const;
-export const TURN_RATE = 12, BLEND_SECS = 0.2, HIT_SECS = 0.26;
-/** The page blends the walk in and out by `dt * 9` per frame (an exponential: 0.2 s is about 1.8 time constants). */
+export const TURN_RATE = 12, HIT_SECS = 0.26;
+/** The walk blends in and out by `dt * 9` per frame, as on the page (the page wins over the brief's 0.2 s): an exponential, 83 % after 0.2 s. */
 const BLEND_RATE = 9;
+/** A strike's pose is blended in over this long, unless the figure was already holding the wound-up pose (a Windup before it). */
+export const ATTACK_IN_SECS = 0.04;
+/** The slam without a `FigureDef.slam`: how long the Slam animation is taken to last (s). Arms are up by 0.75 of it, down at its end. */
+export const SLAM_DEFAULT_SECS = 0.4;
+const SLAM_UP_AT = 0.75;
 
-export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: number; faced: boolean; lastX: number; lastY: number; speed: number; turn: number; hitT: number; wasHurt: boolean; held: Pose3d | null }
+export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: number; faced: boolean; lastX: number; lastY: number; speed: number; turn: number; hitT: number; wasHurt: boolean; held: Pose3d | null;
+  /** The pose `poseFigure` returns (written anew each call), and its attack object. */
+  out: Pose3d | null; atk: { style: AttackStyle; u: number };
+  /** A Windup came before this attack (the figure already holds the wound-up pose): no blend-in. */
+  woundUp: boolean }
 export function newPose3dMemory(): Pose3dMemory {
-  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null };
+  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false };
 }
 
 export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite';
 export interface Pose3d {
   /** World heading, radians (0 = +x; the game's y is the world's z). */
   yaw: number;
-  /** Sprite px in the figure's frame: jolt and lunge shift (x), shiver (z), hop height or lying (y), lying (roll about x), dash stretch and fall shrink (s). */
+  /**
+   * In the figure's frame, before the yaw. `x` (jolt, lunge) and `z` (shiver) are unscaled sprite px; `y` (hop height, or the
+   * lift of a lying figure) is ALREADY multiplied by the model's `scale`, so the instance must not scale it again; `roll` is
+   * about x; `sx, sy, sz` are the dash stretch and the fall shrink, WITHOUT the model's `scale` (`skinVertex` multiplies it in).
+   */
   root: { x: number; y: number; z: number; roll: number; sx: number; sy: number; sz: number };
   /** MAX_BONES x 12, from `composeBones`. */
   bones: Float32Array;
@@ -187,10 +201,13 @@ function attackPose(style: AttackStyle, u: number, arc: number): void {
   }
 }
 
-/** The slam (new, not on the page): both arms raise the weapon over 0.3 s; past the wind-up (`d.slam.t`) they bring it down over 0.12 s. */
-const SLAM_RAISE = 0.3, SLAM_DOWN = 0.12;
+/**
+ * The slam (new, not on the page), fitted to `d.slam.t`, the length of the Slam animation (it ends as the blow lands): both arms
+ * raise the weapon by 0.75 of it, smash it down between 0.75 and 1, and hold it down after.
+ */
 function slamPose(d: FigureDef, t: number): void {
-  const up = ease(t / SLAM_RAISE), down = d.slam ? ease((t - d.slam.t) / SLAM_DOWN) : 0;
+  const total = d.slam ? d.slam.t : SLAM_DEFAULT_SECS;
+  const up = ease(t / (SLAM_UP_AT * total)), down = ease((t - SLAM_UP_AT * total) / ((1 - SLAM_UP_AT) * total));
   AP.k = up; AP.useRight = AP.useLeft = true; AP.hand = 0;
   norm(set3(AP.right, 0.3 + 0.9 * down, 1 - 1.5 * down, 0.1)); norm(set3(AP.left, 0.3 + 0.9 * down, 1 - 1.5 * down, -0.1));
   norm(set3(AP.b, 0.3 + 0.6 * down, 1 - 1.5 * down, 0)); AP.n[0] = SIDE[0]; AP.n[1] = SIDE[1]; AP.n[2] = SIDE[2];
@@ -198,15 +215,22 @@ function slamPose(d: FigureDef, t: number): void {
   AP.longR = AP.longL = 1.4; AP.lunge = 0; AP.head = 0;
 }
 
-/** Each style's clock: the page's normalised time `u` at `animT = 0`, how long the rest of the page's curve (1 - u0) lasts here (s), and the `u` a wind-up holds. */
+/**
+ * Each style's clock: the page's normalised time `u` at `animT = 0`, how long the rest of the page's curve (1 - u0) lasts here
+ * (s; for the swing see `uOf`), and the `u` a wind-up holds.
+ */
 const TIMING: Record<AttackStyle, { u0: number; secs: number; hold: number }> = {
-  // The swing starts at the wound-up pose (the page's u = 0.2; a Windup before it holds the same pose): the sweep (0.36 of the
-  // page's time) lasts MELEE_T, and so does the return.
-  swing: { u0: 0.2, secs: 0.8 * MELEE_T / 0.36, hold: 0.2 },
+  swing: { u0: 0.2, secs: 2 * MELEE_T, hold: 0.2 },   // starts at the wound-up pose (page u 0.2, which a Windup holds)
   shot: { u0: 0.55, secs: 0.25, hold: 0.55 },          // the shot starts at the release and the figure recovers in 0.25 s
   cast: { u0: 0.42, secs: 0.25, hold: 0.42 },          // the cast starts as the light leaves
   bite: { u0: 0.25, secs: 0.3, hold: 0.25 },           // the head is reared; the snap and the return last 0.3 s
 };
+/** The page's `u` at `animT` seconds into a style's attack. The swing: u 0.2 to 0.56 (the sweep) over `MELEE_T`, then 0.56 to 1 (the return) over `MELEE_T`. */
+function uOf(style: AttackStyle, animT: number): number {
+  const T = TIMING[style];
+  if (style === 'swing') return animT <= MELEE_T ? 0.2 + 0.36 * animT / MELEE_T : 0.56 + 0.44 * (animT - MELEE_T) / MELEE_T;
+  return T.u0 + (1 - T.u0) * animT / T.secs;
+}
 const LUNGE_SECS = 0.15;
 const ATTACK_ANIMS = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Bite]);
 const FACE_AIM = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Channel, ANIM.Windup, ANIM.Slam, ANIM.Bite]);
@@ -237,7 +261,16 @@ function sideReach(m: FigureModel): number {
 
 const locals: BoneLocal[] = Array.from({ length: MAX_BONES }, identityLocal);
 const qa: Q4 = [0, 0, 0, 1], qt: Q4 = [0, 0, 0, 1], qr: Q4 = [0, 0, 0, 1], qw: Q4 = [0, 0, 0, 1], qrel: Q4 = [0, 0, 0, 1];
+/** An angle turned into [-PI, PI). */
 const wrapPi = (a: number): number => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+
+/** One preallocated quaternion per bone, for the bones that take a quaternion (`useQ` hands it to the local). */
+const qStore: Q4[] = Array.from({ length: MAX_BONES }, () => [0, 0, 0, 1] as Q4);
+function useQ(b: number, q: Q4): void {
+  const s = qStore[b];
+  s[0] = q[0]; s[1] = q[1]; s[2] = q[2]; s[3] = q[3];
+  locals[b].q = s;
+}
 
 function resetLocals(): void {
   for (const L of locals) { L.rx = L.ry = L.rz = L.tx = L.ty = L.tz = 0; L.sx = L.sy = L.sz = 1; L.q = undefined; }
@@ -247,7 +280,29 @@ function newPose(yaw: number): Pose3d {
   return { yaw, root: { x: 0, y: 0, z: 0, roll: 0, sx: 1, sy: 1, sz: 1 }, bones: new Float32Array(MAX_BONES * 12), bends: new Float32Array(MAX_BENDS * 4), robe: [0, 0, 0], air: 0, attack: null, asleep: false, channel: false };
 }
 
-/** The standing figure without any life in it: identity bones, no bends, on the ground (the skull, tests). */
+/** A pose back to "nothing happens", in place. */
+function clearPose(p: Pose3d, yaw: number): Pose3d {
+  p.yaw = yaw;
+  const R = p.root;
+  R.x = R.y = R.z = R.roll = 0; R.sx = R.sy = R.sz = 1;
+  p.bends.fill(0);
+  p.robe[0] = p.robe[1] = p.robe[2] = 0;
+  p.air = 0; p.attack = null; p.asleep = false; p.channel = false;
+  return p;
+}
+
+/** A copy of a pose into `dst` (a new one when it is omitted): for callers that keep a pose past the next `poseFigure` of its memory. */
+export function copyPose(src: Pose3d, dst: Pose3d = newPose(0)): Pose3d {
+  dst.yaw = src.yaw;
+  Object.assign(dst.root, src.root);
+  dst.bones.set(src.bones); dst.bends.set(src.bends);
+  dst.robe[0] = src.robe[0]; dst.robe[1] = src.robe[1]; dst.robe[2] = src.robe[2];
+  dst.air = src.air; dst.asleep = src.asleep; dst.channel = src.channel;
+  dst.attack = src.attack ? { style: src.attack.style, u: src.attack.u } : null;
+  return dst;
+}
+
+/** The standing figure without any life in it: identity bones, no bends, on the ground (the skull, tests). A new pose each call. */
 export function restPose(m: FigureModel, yaw: number): Pose3d {
   const p = newPose(yaw);
   resetLocals();
@@ -302,20 +357,25 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   mem.faced = true;
 
   // ---- the attack ----
-  const still = asleep || stone || iced;
+  // A sleeper does not attack. Stone and ice are posed like anything else on the frame they begin (that frame is then held).
   const style = styleOf(m, d, anim);
   const arc = s.swingArc ?? d.swing?.arc ?? 1.75;
   let u = -1, windup = false, slam = false, struck = false;
-  if (!still) {
+  if (!asleep) {
     const T = TIMING[style];
-    if (ATTACK_ANIMS.has(anim)) { u = T.u0 + (1 - T.u0) * animT / T.secs; struck = u < 1; if (!struck) u = -1; }
+    if (ATTACK_ANIMS.has(anim)) { u = uOf(style, animT); struck = u < 1; if (!struck) u = -1; }
     else if (anim === ANIM.Windup) { u = T.hold; windup = true; }
     else if (anim === ANIM.Channel) u = T.hold;
     else if (anim === ANIM.Slam) { slam = true; windup = true; }
   }
+  // Remember a wind-up for the strike after it: the pose is held already, so the strike needs no blend-in.
+  if (anim === ANIM.Windup) mem.woundUp = true;
+  else if (!ATTACK_ANIMS.has(anim)) mem.woundUp = false;
+  const weight = struck && !mem.woundUp ? Math.min(1, animT / ATTACK_IN_SECS) : 1;
   if (slam) slamPose(d, animT); else attackPose(style, u, arc);
+  AP.k *= weight; AP.head *= weight;
   // The game's lunge: out and back over 0.15 s at the start of a melee animation.
-  const lunge = !still && anim === ANIM.Melee && d.lunge ? Math.sin(Math.min(animT / LUNGE_SECS, 1) * Math.PI) : 0;
+  const lunge = !asleep && anim === ANIM.Melee && d.lunge ? Math.sin(Math.min(animT / LUNGE_SECS, 1) * Math.PI) * weight : 0;
   AP.lunge = lunge;
   const leanBack = windup ? 0.12 : 0;
 
@@ -370,16 +430,14 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * air * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
       if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) slerp(qa, fromDown(side === 0 ? AP.right : AP.left, qt), k);
       const long = 1 + ((side === 0 ? AP.longR : AP.longL) - 1) * k, more = (long - 1) * (m.armLength - m.armRadius);
-      const arm = locals[ARM[side]], hand = locals[HAND[side]], weapon = locals[WEAPON[side]];
-      arm.q = [qa[0], qa[1], qa[2], qa[3]]; arm.sy = long;   // the arm grows ...
+      const arm = locals[ARM[side]], hand = locals[HAND[side]];
+      useQ(ARM[side], qa); arm.sy = long;                   // the arm grows ...
       hand.sy = 1 / long; hand.ty = -more / long;           // ... and the hand moves out with its end, at its own size
       // The weapon keeps its carrying pose in the body's frame while the hand under it swings; an attack turns it from there.
       const kind = side === 1 ? 'bow' : d.mount === 'staff' ? 'cast' : 'melee';
       basisQ(REST[kind], SIDE, qr);
       if (k > 0 && AP.hand === side && basisQ(AP.b, AP.n, qw)) slerp(qr, qw, k);
-      weapon.q = [0, 0, 0, 1];
-      relQ(qa, qr, qrel);
-      weapon.q[0] = qrel[0]; weapon.q[1] = qrel[1]; weapon.q[2] = qrel[2]; weapon.q[3] = qrel[3];
+      useQ(WEAPON[side], relQ(qa, qr, qrel));
     }
   }
 
@@ -394,10 +452,10 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
 
   // ---- the root: shift, hop, lying, stretch ----
   const fall = clamp01(num(s.fall));
-  const pose = newPose(mem.yaw);
+  const pose = clearPose(mem.out ??= newPose(mem.yaw), mem.yaw);
   const R = pose.root, fallK = 1 - fall * 0.2;
   R.sx = fallK; R.sy = fallK; R.sz = fallK;
-  if (!still && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
+  if (!asleep && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
   R.x = num(d.lunge) * lunge - 1.6 * HJ;
   R.y = bob * m.scale;
   if (windup) R.z = Math.floor(t * 40) % 2 ? 1 : -1;   // the shiver of a wind-up: 1 px to either side at 20 Hz
@@ -407,7 +465,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   }
   pose.air = asleep ? 0 : air * w * lim;
   pose.asleep = asleep; pose.channel = anim === ANIM.Channel;
-  pose.attack = struck && !still ? { style, u } : null;
+  if (struck && !asleep) { mem.atk.style = style; mem.atk.u = u; pose.attack = mem.atk; }
 
   // ---- bends and the robe ----
   for (let i = 0; i < m.bends.length && i < MAX_BENDS; i++) {
@@ -426,6 +484,6 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   }
 
   composeBones(m, locals, pose.bones);
-  if (stone || iced) mem.held = pose;
+  if (stone || iced) return (mem.held = copyPose(pose));   // the frame it began in (an attack and all), kept
   return pose;
 }
