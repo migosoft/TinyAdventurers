@@ -74,7 +74,8 @@ describe('runes', () => {
     run(c, 1.4);
     run(c, 1.5, []);
     run(c, 1.8, []);
-    expect(run(c, 1.81, []).tris.n).toBe(0);
+    expect(run(c, 1.82, []).tris.n).toBeGreaterThan(0);   // winking out from the 0.25 s mark, not popping
+    expect(run(c, 1.8 + 0.21, []).tris.n).toBe(0);
     expect(c.records).toBe(0);
 
     const d = new Effects3d(map);
@@ -140,6 +141,7 @@ describe('runes', () => {
     expect(run(fx, 12, [fig({ anim: ANIM.Channel })]).tris.n).toBeGreaterThan(0);   // longer than the record's life cap
     expect(fx.records).toBe(1);
     run(fx, 12.1, [fig({ anim: ANIM.Idle })]);
+    expect(run(fx, 12.15, [fig({ anim: ANIM.Idle })]).tris.n).toBeGreaterThan(0);   // past the life cap, still winking out
     expect(run(fx, 12.4, [fig({ anim: ANIM.Idle })]).tris.n).toBe(0);
     expect(fx.records).toBe(0);
     const p = channelPalette(0x4a7aff);

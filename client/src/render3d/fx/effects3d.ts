@@ -8,7 +8,7 @@ import type { EntState } from '../../game/world';
 import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
-import { castMode, newChannel, newRune, type RuneRec } from './runes';
+import { castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { ANIM } from '../../generated/defs';
 import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
 
@@ -207,7 +207,7 @@ export class Effects3d {
     for (let i = 0; i < recs.length; i++) {
       const r = recs[i];
       // an unbroken channel lasts as long as the figure channels
-      const open = r.rune !== null && r.rune.mode === 'channel' && r.rune.end === null;
+      const open = r.rune !== null && r.rune.mode === 'channel' && (r.rune.end === null || now - r.rune.end <= WINK);
       if (now - r.start > FX_LIFE[r.kind] && !open) continue;
       const draw = DRAWERS[r.kind];
       if (draw && now >= r.start && draw(out, input, r, now - r.start) === false) continue;

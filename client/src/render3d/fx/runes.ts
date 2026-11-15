@@ -270,7 +270,7 @@ function judge(r: RuneRec, frame: FxFrame, fig: DrawnFig | null, now: number): v
   }
   if (!fig) {
     if (r.lost < 0) r.lost = now;
-    else if (now - r.lost > LEAVE) r.end = r.lost;
+    else if (now - r.lost > LEAVE) r.end = now;
     return;
   }
   r.lost = -1;
