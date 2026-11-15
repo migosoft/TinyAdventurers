@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { decodePng } from '../../scripts/png';
+import { ROW, ROW_TEXELS, packInstance } from './models/instances';
+import { createKit, directRunner, type FigureKit } from './models/kit';
+import { BONES } from './models/model';
+import type { SpritePixels } from './models/weapons';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import { INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
@@ -604,3 +611,150 @@ describe('Figures3d ground ovals (#306)', () => {
     expect(calls).toContain(0.3);
   });
 });
+
+describe('Figures3d hands chosen figures to the model layer (#338)', () => {
+  const PACK = join(__dirname, '../../assets-src/0x72');
+  const sheet = decodePng(readFileSync(join(PACK, '0x72_DungeonTilesetII_v1.7.png')));
+  const rects = new Map<string, [number, number, number, number]>();
+  for (const line of readFileSync(join(PACK, 'tile_list_v1.7'), 'utf8').split(/\r?\n/)) {
+    const [name, x, y, w, h] = line.trim().split(/\s+/);
+    if (name && h !== undefined) rects.set(name, [+x, +y, +w, +h]);
+  }
+  const sprite = (name: string): SpritePixels | null => {
+    const r = rects.get(name);
+    if (!r) return null;
+    const [x, y, w, h] = r;
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let row = 0; row < h; row++) data.set(sheet.data.subarray(((y + row) * sheet.w + x) * 4, ((y + row) * sheet.w + x + w) * 4), row * w * 4);
+    return { w, h, data };
+  };
+  let kit: FigureKit;
+  beforeAll(async () => {
+    kit = createKit(sprite, directRunner);
+    for (const k of ['elf', 'weapon_bow', 'skull', 'knight']) kit.get(k);
+    while (kit.version < 4) await new Promise((r) => setTimeout(r, 0));
+  }, 120000);
+  afterAll(() => kit.dispose());
+
+  const look = (models?: { kit: FigureKit; is(e: EntState): boolean }) => ({ ambient: AMBIENT, dark: 'shape' as const, torchGlow: true, oval: 1, models });
+  const all = { is: () => true };
+  const ranger = (o: Partial<EntState> = {}) => ent(10, KIND.ElvenRanger, o);
+  const owned = (b: CardBuf, id: number): number => b.owner.filter((v) => v === id).length;
+  const unbuilt: FigureKit = { get: () => null, known: () => true, times: new Map(), version: 0, dispose: () => {} };
+
+  it('gives a built figure one body and one bow instance, no card, one caster, one shadow and the model height as anchor', () => {
+    const fg = make();
+    const out = fg.frame(frame([ranger()]), cam(), look({ kit, ...all }));
+    expect(out.models.map((m) => [m.owner, m.model, m.bone])).toEqual([[10, 'elf', -1], [10, 'weapon_bow', BONES.indexOf('weaponL')]]);
+    expect(owned(out.cards, 10) + owned(out.ghosts, 10)).toBe(0);
+    expect(total(out)).toBe(0);
+    expect(out.casters.length).toBe(1);
+    expect(out.casters[0].id).toBe(10);
+    expect(out.shadows.n).toBe(1);
+    expect(fg.anchors.get(10)!.height).toBeCloseTo(15.3, 0);
+    expect(Math.abs(fg.anchors.get(10)!.height - 15.3)).toBeLessThan(0.2);
+    expect(out.fx.n).toBe(0);
+    expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.height / 2 / 16, 6);
+    // the model's own scale, not the pose's fall shrink; the radius encloses the silhouette
+    const m = kit.get('elf')!;
+    expect(out.models[0].scale).toBe(m.scale);
+    expect(out.models[0].radius).toBeGreaterThanOrEqual(m.baseHeight / 16 / 2);
+    expect(out.models[0].radius).toBeGreaterThanOrEqual(m.radius);
+  });
+
+  it('draws the card when the model is not built, or the kind has no description: the same output as without models', () => {
+    const plain = make().frame(frame([ranger(), ent(11, KIND.Lich, { x: at(1) })]), cam(), look());
+    const a = make().frame(frame([ranger(), ent(11, KIND.Lich, { x: at(1) })]), cam(), look({ kit: unbuilt, ...all }));
+    expect(a).toEqual(plain);
+    expect(a.models).toEqual([]);
+    const b = make().frame(frame([ent(11, KIND.Lich)]), cam(), look({ kit, ...all }));
+    expect(b).toEqual(make().frame(frame([ent(11, KIND.Lich)]), cam(), look()));
+    // not chosen: cards, and the kit is not asked
+    const c = make().frame(frame([ranger()]), cam(), look({ kit, is: () => false }));
+    expect(c).toEqual(make().frame(frame([ranger()]), cam(), look()));
+  });
+
+  it('draws a figure without a weapon, and warns once, when its weapon sprite has no model', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const keep = FIGURES[KIND.Paladin];
+    frames['weapon_lich_staff'] = { x: 0, y: 0, w: 8, h: 20 };
+    FIGURES[KIND.Paladin] = { ...keep, weapon: 'weapon_lich_staff' };
+    try {
+      const fg = make();
+      for (let i = 0; i < 3; i++) fg.frame(frame([ent(10, KIND.Paladin)]), cam(), look({ kit, ...all }));
+      const out = make().frame(frame([ent(10, KIND.Paladin)]), cam(), look({ kit, ...all }));
+      expect(out.models.map((m) => m.model)).toEqual(['knight']);
+      expect(warn.mock.calls.filter((c) => String(c[0]).includes('weapon_lich_staff')).length).toBe(1);
+    } finally {
+      FIGURES[KIND.Paladin] = keep;
+      delete frames['weapon_lich_staff'];
+      warn.mockRestore();
+    }
+  });
+
+  it('hangs the bow on the wielder\'s hand: its origin lands on the weaponL pivot', () => {
+    const out = make().frame(frame([ranger()]), cam(), look({ kit, ...all }));
+    const [body, bow] = out.models;
+    const elf = kit.get('elf')!, hand = BONES.indexOf('weaponL');
+    expect(bow.pivot).toEqual([elf.pivots[hand * 3], elf.pivots[hand * 3 + 1], elf.pivots[hand * 3 + 2]]);
+    expect(bow.pivot![0] !== 0 || bow.pivot![1] !== 0).toBe(true);
+    expect(bow.boneScale).toBeCloseTo(0.48, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon)
+    expect(bow.scale).toBe(elf.scale);
+    const row = new Float32Array(ROW_TEXELS * 4);
+    packInstance(row, 0, bow, 0);
+    const o = ROW.bones * 4;
+    const origin = [row[o + 3], row[o + 7], row[o + 11]];
+    // the wielder's hand bone at its pivot, through the same bone matrix
+    const M = body.pose.bones, b = hand * 12, p = bow.pivot!;
+    const want = [0, 1, 2].map((r) => M[b + r * 4] * p[0] + M[b + r * 4 + 1] * p[1] + M[b + r * 4 + 2] * p[2] + M[b + r * 4 + 3]);
+    for (let i = 0; i < 3; i++) expect(origin[i]).toBeCloseTo(want[i], 4);
+    // and that is at the hand: within a few sprite px of where the hand bone's own pivot goes
+    const h = BONES.indexOf('handL'), hb = h * 12;
+    const hp = [elf.pivots[h * 3], elf.pivots[h * 3 + 1], elf.pivots[h * 3 + 2]];
+    const handAt = [0, 1, 2].map((r) => M[hb + r * 4] * hp[0] + M[hb + r * 4 + 1] * hp[1] + M[hb + r * 4 + 2] * hp[2] + M[hb + r * 4 + 3]);
+    expect(Math.hypot(origin[0] - handAt[0], origin[1] - handAt[1], origin[2] - handAt[2])).toBeLessThan(6);
+  });
+
+  it('leaves a skull instance, no decal, when a model figure dies; and the cap holds', () => {
+    const fg = make();
+    const l = look({ kit, ...all });
+    fg.frame(frame([ranger()]), cam(), l);
+    fg.event({ t: 'Died', id: 10, x: at(1), y: 8, kind: KIND.ElvenRanger });
+    const out = fg.frame(frame([]), cam(), l);
+    expect(out.decals.n).toBe(0);
+    expect(out.models.map((m) => m.model)).toEqual(['skull']);
+    expect(out.models[0].scale).toBeLessThanOrEqual(1.5);
+    // a card figure still leaves the decal
+    const cards = make();
+    cards.frame(frame([ranger()]), cam(), look());
+    cards.event({ t: 'Died', id: 10, x: at(1), y: 8, kind: KIND.ElvenRanger });
+    const c = cards.frame(frame([]), cam(), look({ kit, ...all }));
+    expect(c.decals.n).toBe(1);
+    expect(c.models).toEqual([]);
+    for (let i = 0; i < 300; i++) fg.event({ t: 'Died', id: 100 + i, x: at(1), y: 8, kind: KIND.Knight });
+    expect(fg.frame(frame([]), cam(), l).decals.n).toBeLessThanOrEqual(256);
+  });
+
+  it('leaves a fading copy of a model figure that went invisible, and dash copies tinted with its base colour', () => {
+    const fg = make();
+    const l = look({ kit, ...all });
+    fg.frame(frame([ranger()]), cam(), l);
+    fg.event({ t: 'Effect', id: 10, kind: EFFECT.Invisible, on: true, look: 0 });
+    const gone = fg.frame(frame([], { dt: 0.1, now: 10.1 }), cam(), l);
+    expect(gone.models.map((m) => m.model)).toEqual(['elf', 'weapon_bow']);
+    expect(gone.models[0].alpha).toBeGreaterThan(0.3);
+    expect(gone.ghosts.n).toBe(0);
+    const later = fg.frame(frame([], { dt: VANISH_SECS / 2, now: 10.2 }), cam(), l);
+    expect(later.models[0].alpha).toBeLessThan(gone.models[0].alpha);
+    expect(later.models[0].alpha).toBeGreaterThan(0);
+    fg.frame(frame([], { dt: VANISH_SECS, now: 10.5 }), cam(), l);
+    expect(fg.frame(frame([], { dt: 0.016, now: 10.52 }), cam(), l).models).toEqual([]);
+    const dash = make().frame(frame([ranger({ anim: ANIM.Dash })]), cam(), l);
+    const copies = dash.models.filter((m) => m.alpha === 0.5);
+    expect(copies.length).toBeGreaterThan(0);
+    const base = FIGURES[KIND.ElvenRanger].base;
+    expect(copies[0].tint[0]).toBeCloseTo(((base >> 16) & 255) / 255, 6);
+    expect(dash.models.some((m) => m.alpha === 1)).toBe(true);
+  });
+});
+

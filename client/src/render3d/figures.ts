@@ -2,12 +2,13 @@
 // PhaserRunView. The look of a figure is `figurePose` (game/anim/pose.ts), shared with the 2D view; this file turns the pose
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
-import { ANIM, FLAG, KIND, SIDE } from '../generated/defs';
+import { ANIM, EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
+import { has } from '../game/effectBits';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { VANISH_SECS } from '../game/anim/entityAlpha';
 import { FigureStates } from '../game/anim/figureState';
-import { figurePose, newPoseMemory, type FrameBounds, type PoseMemory, type Tint } from '../game/anim/pose';
+import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
@@ -16,6 +17,13 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
+import { newFxBuf, type FxBuf } from './models/fx';
+import type { FigureInst } from './models/instances';
+import type { FigureKit } from './models/kit';
+import { BONES, type FigureModel } from './models/model';
+import { copyPose, newPose3dMemory, poseFigure, restPose, type Pose3d, type Pose3dMemory } from './models/pose3d';
+import { modelKeyOf } from './models/table';
+import { WEAPONS } from './models/weapons';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -61,6 +69,12 @@ export interface FigureLook {
   oval: number;
   /** The ground cover's top (tiles) under a spot with a reach `r`: ovals, lying bodies and skulls are lifted onto it (#330). Absent: 0. */
   ground?: (x: number, z: number, r: number) => number;
+  /**
+   * The 3D models (#338): the entities `is` chooses are handed to the model layer as `FigureInst`s (`FigureOut.models`) instead of
+   * cards, once their model is built (until then they are cards). Absent: every figure is a card. The stage alone decides, so a run
+   * never mixes the two by accident.
+   */
+  models?: { kit: FigureKit; is(e: EntState): boolean };
 }
 const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true, oval: 1 };
 
@@ -90,6 +104,9 @@ export interface FigureOut {
   casters: ShadowCaster[];
   /** Floating words born this frame (the mimic's wake cue): simulation px, `up` art px above the spot. */
   floats: Array<{ x: number; y: number; text: string; color: string; kind: WorldTextKind; up: number }>;
+  /** The figures drawn as 3D models this frame (the model layer's input; empty without `FigureLook.models`), and the effect triangles for them (filled by a later task). */
+  models: FigureInst[];
+  fx: FxBuf;
 }
 
 interface Fig {
@@ -97,11 +114,19 @@ interface Fig {
   def: FigureDef;
   /** The standing body card of the last frame (null while lying, hidden or before the first). */
   body: Card | null;
+  /** The model path's state: its pose memory, whether the last frame drew a model, that model's scale, and the instances of that frame (a vanish image copies them). */
+  mem3?: Pose3dMemory;
+  model?: boolean;
+  modelScale?: number;
+  last?: FigureInst[] | null;
 }
 
 /** An image left behind: a vanished figure fading out, or a dash afterimage. */
 interface Image { card: Card; alpha0: number; secs: number; left: number }
-interface Skull { x: number; z: number; flip: boolean }
+/** The same for a model figure: instances with their own pose copy; each one's alpha is scaled by `left / secs`. */
+interface ModelImage { insts: FigureInst[]; secs: number; left: number }
+/** `model`: the model's scale when the figure that died was drawn as a model (its skull is an instance), else undefined. */
+interface Skull { x: number; z: number; flip: boolean; model?: number }
 /** A coin in flight: spot in tiles, launch speed in screen px/s (right, up), `born` null until the next frame stamps it. */
 interface Coin { x: number; z: number; vx: number; vy: number; life: number; born: number | null; frame: string }
 /** A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory. */
@@ -118,6 +143,39 @@ function lookOf(t: Tint, grey: boolean): { tint: [number, number, number]; mode:
 /** Not a figure: its own look is the object's (torches, chests, barrels, mimics, hazards) or the shot's. */
 const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Chest || k === KIND.Barrel || k === KIND.Mimic || isHazardKind(k) || isProjectileKind(k));
 
+/** The frozen figure's cool tint (multiplies), as in the 2D view. */
+const FROZEN_TINT = 0xa8d8ff;
+
+/**
+ * The tint of a model figure: the pose's multiply tint. A fill (the hurt flash, a silhouette) and the wind-up's red flash are not
+ * carried over (the model shows hits and wind-ups by moving), so a wind-up wears the figure's own tint; frozen adds a cool one.
+ * Whatever else `figurePose` chose (poison, slowed, the dark of a fall) is passed on as it is; nothing is added for minions.
+ */
+function modelTint(pose: Pose, d: FigureDef, s: ViewState): [number, number, number] {
+  let rgb = pose.tint.mode === 'mul' ? pose.tint.rgb : 0xffffff;
+  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown) rgb = d.tint ?? 0xffffff;
+  const t = rgbOf(rgb);
+  if (has(s.effects ?? 0, EFFECT.Frozen)) { const f = rgbOf(FROZEN_TINT); t[0] *= f[0]; t[1] *= f[1]; t[2] *= f[2]; }
+  return t;
+}
+
+const silhouettes = new WeakMap<FigureModel, number>();
+/**
+ * The radius batching needs (tiles): the screen circle is centred `radius` above the foot, so it encloses the whole figure when it is
+ * at least half the figure's height, add-ons (hat, horns) included, and at least the model's reach from its axis. The top of the
+ * geometry is found once per model (`baseHeight` leaves the add-ons out).
+ */
+function silhouetteRadius(m: FigureModel): number {
+  let r = silhouettes.get(m);
+  if (r === undefined) {
+    let top = 0;
+    for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
+    r = Math.max(m.radius, (top * m.scale) / TILE / 2);
+    silhouettes.set(m, r);
+  }
+  return r;
+}
+
 export class Figures3d {
   /** Figures drawn last frame. */
   count = 0;
@@ -126,6 +184,8 @@ export class Figures3d {
   private readonly states: FigureStates;
   private readonly figs = new Map<number, Fig>();
   private images: Image[] = [];
+  private modelImages: ModelImage[] = [];
+  private models: FigureLook['models'] | null = null;
   private skulls: Skull[] = [];
   private coins: Coin[] = [];
   private readonly mimics = new Map<number, MimicMem>();
@@ -163,7 +223,8 @@ export class Figures3d {
     const lost = this.states.event(ev, this.now);
     if (ev.t !== 'Died' || lost === 'lost') return;
     if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return;
-    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5 });
+    const fig = this.figs.get(ev.id);
+    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5, model: fig?.model ? fig.modelScale : undefined });
     if (this.skulls.length > SKULL_CAP) this.skulls.shift();
   }
 
@@ -179,13 +240,14 @@ export class Figures3d {
     this.torchGlow = look.torchGlow;
     this.oval = look.oval;
     this.ground = look.ground ?? (() => 0);
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [] };
+    this.models = look.models ?? null;
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], fx: newFxBuf() };
     const seen = new Set<number>();
     this.anchors.clear();
     let drawn = 0;
     for (const e of f.ents.values()) {
       seen.add(e.id);
-      if (isFigureKind(e.kind)) { if (this.drawFigure(e, f, cam, out)) drawn++; }
+      if (isFigureKind(e.kind)) { if (this.figure(e, f, cam, out)) drawn++; }
       else if (e.kind === KIND.Torch) this.drawTorch(e, f.now, cam, out);
       else if (e.kind === KIND.Chest) this.drawChest(e, cam, out);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e, cam, out);
@@ -195,23 +257,36 @@ export class Figures3d {
     // The own figure is always drawn from prediction.
     if (!seen.has(f.you) && f.own.alive) {
       seen.add(f.you);
-      if (this.drawFigure(this.states.ownEntity(f, this.myKind), f, cam, out)) drawn++;
+      if (this.figure(this.states.ownEntity(f, this.myKind), f, cam, out)) drawn++;
     }
     this.count = drawn;
     this.states.prune(f.now);
     for (const [id, fig] of this.figs) {
       if (seen.has(id)) continue;
       // A figure that went invisible leaves its image fading out where it was last drawn.
-      if (this.states.takeVanish(id, f.now) && fig.body) this.images.push({ card: fig.body, alpha0: fig.body.alpha, secs: VANISH_SECS, left: VANISH_SECS });
+      const vanished = this.states.takeVanish(id, f.now);
+      if (vanished && fig.body) this.images.push({ card: fig.body, alpha0: fig.body.alpha, secs: VANISH_SECS, left: VANISH_SECS });
+      else if (vanished && fig.last) this.modelImages.push({ insts: this.copied(fig.last), secs: VANISH_SECS, left: VANISH_SECS });
       this.figs.delete(id);
     }
 
     this.drawImages(f.dt, cam, out);
     this.drawShots(f, cam, out);
+    let skullPose: Pose3d | null = null;
     for (const sk of this.skulls) {
       // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
+      // A model figure leaves the skull model instead of the decal (the same pose for all: turned to face the camera, i.e. along the screen's down on the ground).
+      const sm = sk.model !== undefined ? this.models?.kit.get('skull') : null;
+      if (sk.model !== undefined && sm) {
+        skullPose ??= restPose(sm, cam.yaw + Math.PI / 2);
+        out.models.push({
+          owner: -1, model: 'skull', x, z, lift: this.ground(x, z, 0.3), scale: Math.min(1.5, sk.model), pose: skullPose, bone: -1, boneScale: 1,
+          tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: silhouetteRadius(sm),
+        });
+        continue;
+      }
       pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true, base: this.ground(x, z, 0.3) }, this.frames, cam);
     }
     this.drawCoins(f.now, cam, out);
@@ -376,10 +451,22 @@ export class Figures3d {
     return { x: foot.x + Math.cos(cam.yaw) * a, y: c.lift + b, z: foot.z + Math.sin(cam.yaw) * a };
   }
 
-  /** Draws one figure; false when it is not drawn (dead). */
-  private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
-    const base = FIGURES[e.kind];
-    if (!base) return false;
+  /**
+   * One figure, as a model when the stage chose it (`look.models.is`), its kind has a description and the model is built; else as
+   * cards. A figure that is drawn as cards forgets the model path's last instances (a vanish image would copy stale ones).
+   */
+  private figure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
+    const key = this.models && FIGURES[e.kind] && this.models.is(e) ? modelKeyOf(e.kind) : null;
+    const m = key ? this.models!.kit.get(key) : null;
+    if (key && m) return this.drawModel(e, f, cam, out, key, m, this.models!.kit);
+    const drawn = this.drawFigure(e, f, cam, out);
+    const fig = this.figs.get(e.id);
+    if (fig) { fig.last = null; fig.model = false; }
+    return drawn;
+  }
+
+  /** The figure's state and its memory (made on the first frame), with the reappear rule: the lookup both ways of drawing share. */
+  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig } {
     const { s } = this.states.stateOf(e, f, f.now);
     let fig = this.figs.get(e.id);
     if (!fig) {
@@ -393,6 +480,95 @@ export class Figures3d {
     }
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
     if (this.states.takeReappear(e.id, f.now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) fig.mem.appearLeft = VANISH_SECS;
+    return { s, fig };
+  }
+
+  /** Instances with a pose of their own, for an image that outlives the memory's pose (all of a figure's instances share one pose). */
+  private copied(insts: readonly FigureInst[]): FigureInst[] {
+    const pose = copyPose(insts[0].pose);
+    return insts.map((i) => ({ ...i, pose, tint: [...i.tint], sight: { ...i.sight } }));
+  }
+
+  /**
+   * Draws one figure as 3D model instances (#338): `figurePose` still gives the alpha, sink, drop, visibility, shadow and tint, and
+   * `poseFigure` the bones. No card is pushed. The root's hop (`pose.root.y`) is not in `lift`: the instance row adds it itself.
+   * False when it is not drawn (dead).
+   */
+  private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
+    const { s, fig } = this.figOf(e, f, FIGURES[e.kind]);
+    const d = fig.def;
+    const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    fig.body = null;
+    fig.last = null;
+    fig.model = true;
+    fig.modelScale = m.scale;
+    if (!pose.visible) return false;
+    const p3 = poseFigure(m, d, s, f.dt, (fig.mem3 ??= newPose3dMemory()));
+
+    const x = s.x / TILE;
+    const z = s.y / TILE;
+    const sc = pose.scale;
+    const down = (pose.sink + pose.drop) / TILE;
+    const dark = this.dark.has(e.id);
+    const k = dark && this.darkFade ? this.fadeAlpha : 1;
+    const sunk = pose.sink >= pose.footY;   // wholly below the surface: nothing of the figure is drawn (as the card's empty crop)
+    const radius = silhouetteRadius(m);
+    const tint = modelTint(pose, d, s);
+    const insts: FigureInst[] = [];
+    const body: FigureInst = {
+      owner: e.id, model: key, x, z, lift: -down, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius,
+    };
+    if (!sunk) {
+      out.models.push(body);
+      insts.push(body);
+      const wp = pose.weapon;
+      if (wp && !pose.lie) {
+        // The kit logs a weapon it cannot make (once) and gives nothing until the model is built; the figure goes without it.
+        const wm = kit.get(wp.frame);
+        if (wm) {
+          const bone = BONES.indexOf(WEAPONS[wp.frame]?.kind === 'bow' ? 'weaponL' : 'weaponR');
+          const w: FigureInst = {
+            owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: wp.scale, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
+            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius,
+          };
+          if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
+          out.models.push(w);
+          insts.push(w);
+        }
+      }
+      // The shadow caster: the box of the standing idle card at the foot (no card is pushed).
+      if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id)) {
+        const cf = `${d.idle}0`, cb = this.bounds(cf), foot = d.footY ?? cb.h;
+        const card: Card = { frame: cf, x, z, lift: -down, flip: pose.left, originX: pose.originX, footY: foot / cb.h, scale: sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
+        if (pose.sink > 0) card.crop = { x: 0, y: 0, w: cb.w, h: foot - pose.sink };
+        const c = casterOf(card, e.id, this.frames, cam);
+        if (c) out.casters.push(c);
+      }
+      fig.last = insts;
+      if (pose.afterimage) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
+    }
+
+    if (pose.shadow.visible && this.shadowed(e.id)) {
+      const foot = snapGround(cam.pitch, cam.yaw, x, z);
+      const r = (d.baseR * sc) / TILE;
+      // A hop shrinks the oval by how high the figure is; a lying figure's oval is stretched (the pose's own numbers).
+      const hop = 1 - 0.35 * p3.air;
+      const rx = r * (pose.lie ? pose.shadow.sx : hop);
+      pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
+    }
+
+    const h = m.baseHeight;
+    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
+    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    return true;
+  }
+
+  /** Draws one figure; false when it is not drawn (dead). */
+  private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
+    const base = FIGURES[e.kind];
+    if (!base) return false;
+    const { s, fig } = this.figOf(e, f, base);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     fig.body = null;
@@ -491,6 +667,14 @@ export class Figures3d {
       if (im.left > 0) keep.push(im);
     }
     this.images = keep;
+    const keepModels: ModelImage[] = [];
+    for (const im of this.modelImages) {
+      const k = im.left / im.secs;
+      for (const i of im.insts) out.models.push({ ...i, alpha: i.alpha * k });
+      im.left -= dt;
+      if (im.left > 0) keepModels.push(im);
+    }
+    this.modelImages = keepModels;
   }
 
   /** Server shots that are not the own hero's cosmetic copies, and the own predicted shots. */
