@@ -3,7 +3,7 @@ import type { FigureDesc } from '../desc';
 const S10 = '...ssssssssss...';
 
 export const elf: FigureDesc = {
-  name: 'Elven Ranger', outline: 0x222222, centre: 8,
+  name: 'Elven Ranger', size: 0.87,outline: 0x222222, centre: 8,
   colours: { h: 0xfacb3e, s: 0xfccba3, g: 0x4ba747, k: 0x314152, d: 0x3d734f },
   firstRow: 11,
   side: ['....ssssssss....', S10, S10, S10, S10, S10, S10, S10,

@@ -1,7 +1,7 @@
 import type { FigureDesc } from '../desc';
 
 export const ogre: FigureDesc = {
-  name: 'Ogre', outline: 0x222222, centre: 8,
+  name: 'Ogre', size: 0.87,outline: 0x222222, centre: 8,
   colours: { g: 0x3d734f, f: 0x8f4029, d: 0x62232f, e: 0xfdf7ed, k: 0x222222 },
   firstRow: 0, side: [],
   // Each part has its own side view. The head is a squarish ball set to the front of the body; the body is a cylinder

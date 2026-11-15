@@ -7,7 +7,7 @@ import { cardHeight, createKit, directRunner, type FigureKit } from './models/ki
 import { fangTris, newFxBuf, type FxBuf } from './models/fx';
 import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
-import { FIT_KIND, type DescKey } from './models/table';
+import { DESCS, FIT_KIND, modelKeyOf, type DescKey } from './models/table';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -705,12 +705,21 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       const co = card.frame(frame([e]), cam(), look());
       const mo = model.frame(frame([e]), cam(), look({ kit, ...all }));
       expect(mo.models.length, String(kind)).toBeGreaterThan(0);
-      const a = card.anchors.get(10)!, b = model.anchors.get(10)!;
-      expect(b.height, `${kind} height`).toBeCloseTo(a.height, 6);
-      expect(b.tag, `${kind} tag`).toBeCloseTo(a.tag, 6);
-      expect(b.head, `${kind} head`).toBeCloseTo(a.head, 6);
-      expect(mo.openers[0].mid, `${kind} mid`).toBeCloseTo(co.openers[0].mid, 6);
+      const a = card.anchors.get(10)!, b = model.anchors.get(10)!, size = kit.get(modelKeyOf(kind)!)!.size;
+      expect(b.height, `${kind} height`).toBeCloseTo(a.height * size, 6);
+      expect(b.tag, `${kind} tag`).toBeCloseTo((a.tag - 3) * size + 3, 6);   // the name's 3 px gap is not scaled
+      expect(b.head, `${kind} head`).toBeCloseTo(a.head * size, 6);
+      expect(mo.openers[0].mid, `${kind} mid`).toBeCloseTo(co.openers[0].mid * size, 6);
+      // the shadow oval and the light's caster box shrink with the figure; the card path is what it was
+      const sw = (b: FigureOut): number => Math.hypot(b.shadows.position[3] - b.shadows.position[0], b.shadows.position[5] - b.shadows.position[2]);
+      expect(sw(mo), `${kind} oval`).toBeCloseTo(sw(co) * size, 6);
+      expect(mo.casters[0].w, `${kind} caster w`).toBeCloseTo(co.casters[0].w * size, 6);
+      expect(mo.casters[0].y1 - mo.casters[0].y0, `${kind} caster h`).toBeCloseTo((co.casters[0].y1 - co.casters[0].y0) * size, 6);
     }
+    // the wizard is the one description at 1: model and card agree exactly
+    expect(kit.get('wizard')!.size).toBe(1);
+    expect(kit.get('dwarf')!.size).toBe(0.77);
+    expect(kit.get('knight')!.size).toBe(0.87);
   });
 
   it('fits every description to the standing height of its card, from the real atlas pixels', () => {
@@ -721,7 +730,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       if (card === null) continue;
       let top = 0;
       for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
-      expect(top * m.scale, key).toBeCloseTo(want[key], 3);
+      expect(top * m.scale, key).toBeCloseTo(want[key] * (DESCS[key].size ?? 1), 3);   // the card's height times the description's size
+      expect(m.size, key).toBe(DESCS[key].size ?? 1);
     }
   });
 
@@ -731,9 +741,11 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const card = cardHeight(d, sprite(`${d.idle}0`)!);
     let top = 0;
     for (let i = 1; i < elf.position.length; i += 3) top = Math.max(top, elf.position[i]);
-    expect(top * body.scale).toBeCloseTo(card!, 3);
+    expect(top * body.scale).toBeCloseTo(card! * elf.size, 3);
     expect(body.scale).not.toBe(1);
-    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * (d.scale ?? 1), 6);
+    expect(elf.size).toBe(0.87);
+    // the weapon shrinks with the figure: the card's weapon size times the figure's size
+    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * (d.scale ?? 1) * elf.size, 6);
   });
 
   it('hangs the bow on the wielder\'s hand: its origin lands on the weaponL pivot', () => {
@@ -742,7 +754,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const elf = kit.get('elf')!, hand = BONES.indexOf('weaponL');
     expect(bow.pivot).toEqual([elf.pivots[hand * 3], elf.pivots[hand * 3 + 1], elf.pivots[hand * 3 + 2]]);
     expect(bow.pivot![0] !== 0 || bow.pivot![1] !== 0).toBe(true);
-    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon), whatever the body's fit
+    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * elf.size, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon) times the figure's size, whatever the body's fit
     expect(bow.scale).toBe(elf.scale);
     const row = new Float32Array(ROW_TEXELS * 4);
     packInstance(row, 0, bow, 0);

@@ -276,6 +276,6 @@ export function buildWeapon(name: string, px: SpritePixels | null): FigureModel 
     pivots: new Float32Array(MAX_BONES * 3), parents: new Int8Array(MAX_BONES).fill(-1),
     bends: [], robeTop: null, paint,
     baseHeight: top, radius: reach / 16, hatSway: 0,
-    shoulderY: 0, handY: 0, armLength: 0, armRadius: 0, quad: false, scale: 1, hipY: 0, neck: [0, 0],
+    shoulderY: 0, handY: 0, armLength: 0, armRadius: 0, quad: false, scale: 1, size: 1, hipY: 0, neck: [0, 0],
   };
 }

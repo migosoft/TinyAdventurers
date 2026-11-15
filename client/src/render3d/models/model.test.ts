@@ -21,13 +21,30 @@ const topOf = (m: FigureModel): number => {
 };
 
 describe('buildFigure fitted to a card height', () => {
-  it('is exactly as tall as the target for every description (within 0.5 sprite px)', () => {
+  it('is exactly as tall as the target times its size for every description', () => {
     for (const key of KEYS) {
       for (const target of [20, 31.5]) {
         const m = buildFigure(key, DESCS[key], target);
-        expect(topOf(m) * m.scale, `${key} ${target}`).toBeCloseTo(target, 4);
+        expect(topOf(m) * m.scale, `${key} ${target}`).toBeCloseTo(target * (DESCS[key].size ?? 1), 4);
       }
     }
+  }, SLOW);
+
+  it('is as tall as the target times the description\'s size, exactly; the model says its size', () => {
+    for (const [key, size] of [['wizard', 0.5], ['elf', 0.87], ['ogre', 1.25]] as [DescKey, number][]) {
+      const m = buildFigure(key, { ...DESCS[key], size }, 20);
+      expect(topOf(m) * m.scale, key).toBeCloseTo(20 * size, 4);
+      expect(m.size, key).toBe(size);
+    }
+    const plain = buildFigure('wizard', DESCS.wizard, 20);
+    expect(plain.size).toBe(1);
+    expect(topOf(plain) * plain.scale).toBeCloseTo(20, 4);
+  }, SLOW);
+
+  it('has scale 1 without a target, whatever the size (the size is a share of a target)', () => {
+    const m = buildFigure('elf', { ...DESCS.elf, size: 0.5 });
+    expect(m.scale).toBe(1);
+    expect(m.size).toBe(0.5);
   }, SLOW);
 
   it('builds at scale 1 for a target that is not positive', () => {

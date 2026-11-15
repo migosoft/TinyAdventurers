@@ -1,7 +1,7 @@
 import type { FigureDesc } from '../desc';
 
 export const wolf: FigureDesc = {
-  name: 'Dire Wolf', quad: true, outline: 0x222222, centre: 8,
+  name: 'Dire Wolf', size: 0.87,quad: true, outline: 0x222222, centre: 8,
   colours: { c: 0x483b3a, b: 0x775c55, n: 0x62232f },
   firstRow: 0, side: [],
   // The head stands, as on every figure. The body lies (`lie`): its side view is drawn as the sprite shows it, the front on

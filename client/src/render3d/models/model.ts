@@ -42,6 +42,8 @@ export interface FigureModel {
   radius: number;
   /** How much the hat rocks (the description's `hat.sway`; 0 without a hat). */
   hatSway: number;
+  /** The description's `size`: how big the model is against its card (1 = as tall). The model path scales the card's weapon, anchors, shadow and light caster by it. */
+  size: number;
   shoulderY: number; handY: number; armLength: number; armRadius: number; quad: boolean; scale: number; hipY: number; neck: [number, number];
 }
 
@@ -238,7 +240,8 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   // The fit: the standing figure (every piece, the outline hulls included; not a weapon) is `height` px tall once scaled.
   let full = 0;
   for (let i = 1; i < n * 3; i += 3) full = Math.max(full, position[i]);
-  const scale = height !== undefined && height > 0 && full > 0 ? height / full : 1, armLength = d.arms ? d.arms.length : 0;
+  const size = d.size ?? 1;   // a share of the target: without a target there is nothing to take a share of, so the scale stays 1
+  const scale = height !== undefined && height > 0 && full > 0 ? (height * size) / full : 1, armLength = d.arms ? d.arms.length : 0;
   return {
     key, position, normal, uv, skin, look, index, ranges,
     pieceIndex, lineIndex,
@@ -248,7 +251,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
     radius: (reachPx + armLength * 2.3) / 16 * scale,
     shoulderY: d.arms ? FH - d.arms.row : built.neck[1] + 1, handY: built.handY, armLength, armRadius: d.arms ? d.arms.radius : 0,
     hatSway: d.hat ? d.hat.sway ?? 0 : 0,
-    quad: !!d.quad, scale, hipY: built.hipY, neck: built.neck,
+    quad: !!d.quad, scale, size, hipY: built.hipY, neck: built.neck,
   };
 }
 

@@ -152,6 +152,8 @@ export interface VisorDesc {
 
 export interface FigureDesc {
   name: string;
+  /** How big the model is against its card's standing height: 1 = as tall as the card (the default). A round body covers more of the screen than a flat card, so bulky creatures take less. Tuned by eye. */
+  size?: number;
   outline: number;
   centre: number;
   /** Polished steel instead of flat colours. */

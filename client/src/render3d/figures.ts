@@ -551,8 +551,9 @@ export class Figures3d {
         if (wm) {
           const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
           // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
-          // draws: the game's weapon scale times the figure's `FigureDef.scale` (the fall shrink is in the root), so `boneScale` makes up the difference.
-          const bs = (wp.scale * (d.scale ?? 1)) / m.scale;
+          // draws (the game's weapon scale times the figure's `FigureDef.scale`; the fall shrink is in the root), shrunk with the figure by its
+          // `size`, so `boneScale` makes up the difference.
+          const bs = (wp.scale * (d.scale ?? 1) * m.size) / m.scale;
           const w: FigureInst = {
             owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
             tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
@@ -567,7 +568,8 @@ export class Figures3d {
       // The shadow caster: the box of the standing idle card at the foot (no card is pushed).
       if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id)) {
         const cf = `${d.idle}0`, cb = this.bounds(cf), foot = d.footY ?? cb.h;
-        const card: Card = { frame: cf, x, z, lift: -down, flip: pose.left, originX: pose.originX, footY: foot / cb.h, scale: sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
+        // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
+        const card: Card = { frame: cf, x, z, lift: -down, flip: pose.left, originX: pose.originX, footY: foot / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
         if (pose.sink > 0) card.crop = { x: 0, y: 0, w: cb.w, h: foot - pose.sink };
         const c = casterOf(card, e.id, this.frames, cam);
         if (c) out.casters.push(c);
@@ -579,7 +581,7 @@ export class Figures3d {
 
     if (pose.shadow.visible && this.shadowed(e.id)) {
       const foot = snapGround(cam.pitch, cam.yaw, x, z);
-      const r = (d.baseR * sc) / TILE;
+      const r = (d.baseR * sc * m.size) / TILE;
       // A hop shrinks the oval by how high the figure is; a lying figure's oval is stretched (the pose's own numbers).
       const hop = 1 - 0.35 * p3.air;
       const rx = r * (pose.lie ? pose.shadow.sx : hop);
@@ -589,9 +591,9 @@ export class Figures3d {
     // The anchors are the card's, from the standing idle frame the model replaces (`standingAnchor`, the card path's own): the bar and the
     // name sit where the card's would. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), foot = d.footY ?? ib.h;
-    const sa = standingAnchor(ib, foot, d.scale ?? 1);
+    const sa = standingAnchor(ib, foot, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     this.anchors.set(e.id, { x, z, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
-    const standing = Math.max(0, foot - ib.t - pose.sink) * sc;   // as the card path's `height`: the idle frame's opaque height less the wade, times the pose scale
+    const standing = Math.max(0, foot - ib.t - pose.sink) * sc * m.size;   // as the card path's `height`: the idle frame's opaque height less the wade, times the pose scale
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : standing / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }

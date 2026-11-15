@@ -40,6 +40,11 @@ describe('figure descriptions', () => {
     expect(DESCS.ogre.spikes?.[0].row).toBe(17.2);
   });
 
+  it('sizes: the wizard is as tall as its card, the dwarf takes the least, the rest a little less', () => {
+    const want: Record<DescKey, number | undefined> = { wizard: undefined, dwarf: 0.77, elf: 0.87, knight: 0.87, skelet: 0.87, ogre: 0.87, wolf: 0.87 };
+    for (const key of Object.keys(DESCS) as DescKey[]) expect(DESCS[key].size, key).toBe(want[key]);
+  });
+
   it('every description is fitted to a kind that wears it', () => {
     for (const key of Object.keys(DESCS) as DescKey[]) expect(modelKeyOf(FIT_KIND[key]), key).toBe(key);
   });
