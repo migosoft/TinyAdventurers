@@ -34,6 +34,8 @@ export const EFFECT_GROUPS = 10;
  * die in turn, and the crowd's grid (2 tiles) of `CROWD_PER_ROW` x `CROWD_ROWS` places.
  */
 export const MODEL_PITCH = 3;
+/** The effect rows are 4 tiles apart: the ogre stands taller than 3 tiles on the screen. */
+export const MODEL_ROW_PITCH = 4;
 export const MODEL_EFFECT_ROWS = 9;
 export const MODEL_EFFECT_COLS = 7;
 export const CROWD_PER_ROW = 23;
@@ -68,7 +70,7 @@ export function layoutOf(nFigures: number): Layout {
   const mTop = effTop + groupRows * GROUP_ROW_PITCH + 1;
   const kindZ = mTop + 3.5;
   const effTop2 = mTop + 5;
-  const dyingZ = effTop2 + MODEL_EFFECT_ROWS * MODEL_PITCH + 0.5;
+  const dyingZ = effTop2 + MODEL_EFFECT_ROWS * MODEL_ROW_PITCH + 1.5;
   const crowdTop = dyingZ + 3;
   const h = Math.ceil(crowdTop + CROWD_ROWS * 2) + 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
@@ -90,7 +92,7 @@ export function layoutOf(nFigures: number): Layout {
     figure: (i) => ({ x: 2 + (i % PER_ROW) * FIG_PITCH + 1.5, z: figTop + Math.floor(i / PER_ROW) * FIG_PITCH + 2 }),
     effect,
     model: (i) => ({ x: 2 + i * MODEL_PITCH + 1.5, z: kindZ }),
-    modelEffect: (row, col) => ({ x: 2 + col * MODEL_PITCH + 1.5, z: effTop2 + row * MODEL_PITCH + 2 }),
+    modelEffect: (row, col) => ({ x: 2 + col * MODEL_PITCH + 1.5, z: effTop2 + row * MODEL_ROW_PITCH + 3 }),
     dying: (i) => ({ x: 2 + i * MODEL_PITCH + 1.5, z: dyingZ }),
     crowd: (i) => ({ x: 2 + (i % CROWD_PER_ROW) * 2 + 1, z: crowdTop + Math.floor(i / CROWD_PER_ROW) * 2 + 1 }),
     pillarTorches: PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + 1 })),
