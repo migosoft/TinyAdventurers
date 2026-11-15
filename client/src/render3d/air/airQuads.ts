@@ -97,8 +97,11 @@ export function airQuads(parts: AirParts, out: AirBuffers): { add: number; blend
 
 /** The haze sheets' heights above the floor (tiles; first guess). */
 export const HAZE_Y = [0.35, 0.9] as const;
-/** The two haze sheets as the 2D `HAZE`: alpha, scale, and drift (px/s, x and z) of the cloud pattern. */
-export const HAZE = [[0.1, 1.6, 2.2, 0.6], [0.07, 1.1, -1.4, 1.1]] as const;
+/**
+ * The two haze sheets: alpha, scale, and drift (px/s, x and z) of the cloud pattern. Scale and drift are the 2D `HAZE`'s;
+ * the alphas are 3x the 2D ones (0.1 and 0.07 barely showed in 3D; the user's play-test, first guess).
+ */
+export const HAZE = [[0.3, 1.6, 2.2, 0.6], [0.21, 1.1, -1.4, 1.1]] as const;
 /** Tiles the haze sheets reach beyond the view. */
 export const HAZE_GROW = 2;
 

@@ -13,7 +13,8 @@ import { RING_PAD } from './airQuads';
 type N = any;
 
 /** The haze's colour (the 2D tint 0x8a7c6c) and how bright the light it takes from the scene is (first guess: the demo's wrap of 0.35). */
-const HAZE_RGB: [number, number, number] = [0x8a / 255, 0x7c / 255, 0x6c / 255];
+// Paler than the lit floor, so the veil shows (0x8a7c6c, near the floor's own colour, did not; first guess).
+const HAZE_RGB: [number, number, number] = [0xd0 / 255, 0xc4 / 255, 0xb4 / 255];
 const HAZE_WRAP = 0.35;
 /** The smoke blob, the haze texture's size (art px) and the haze's noise mapping (first guesses for the 2D blob texture). */
 const HAZE_TEX_PX = 128;
