@@ -176,14 +176,14 @@ describe('Figures3d', () => {
     const server = ent(20, KIND.Missile);
     const hidden = make().frame(frame([server], { hiddenShots: new Set([20]) }), cam());
     expect(hidden.glows.n).toBe(0);
-    expect(make().frame(frame([server]), cam()).glows.n).toBe(1);
+    // glow shots leave the card glow list: the effects system draws them
+    expect(make().frame(frame([server]), cam()).glows.n).toBe(0);
     const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0 };
     const out = make().frame(frame([ent(20, KIND.Arrow)], { hiddenShots: new Set([20]), shots: [shot] }), cam());
     expect(out.cards.n).toBe(1);
     expect(mid(ys(out.cards))).toBeCloseTo(0.5, 6);
-    // a glow shot of the own hero: size scale * 7 / 16 tiles
     const g = make().frame(frame([], { shots: [{ ...shot, kind: KIND.Fireball }] }), cam());
-    expect(g.glows.n).toBe(1);
+    expect(g.glows.n).toBe(0);
   });
 
   it('keeps the facing inside the dead zone when the aim runs into the screen', () => {

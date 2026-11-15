@@ -8,7 +8,7 @@ import type { Snapshot } from '../generated/Snapshot';
 import { LightField } from '../game/light';
 import type { EntState } from '../game/world';
 import { snap } from '../run/testing';
-import type { PictureEv } from '../run/view';
+import type { PictureEv, ShotView } from '../run/view';
 import { TILE, TileMap } from '../sim/map';
 import { atlasBounds } from './atlasBounds';
 import { freeClamp, keysToWorld } from './camera';
@@ -58,6 +58,8 @@ export interface SnapExtras { drain?: NonNullable<Snapshot['drain']>; lights?: S
 export interface FxScene {
   ents: EntState[];
   events: Array<{ at: number; ev: PictureEv }>;
+  /** Shots that end at `at` seconds (local px); the stage calls `Effects3d.shotEnded` for them. */
+  shotEnds?: Array<{ at: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }>;
   snapExtras?: SnapExtras;
 }
 
@@ -91,6 +93,24 @@ function runeRows(): FxRow[] {
   ];
 }
 
+/** The shot rows (#308): a shot flies from the caster to the far wall in 1.2 s (the wall at tile x 13), then hits it. */
+function shotRows(): FxRow[] {
+  const FLY = 1.2, X1 = 13.8;
+  const one = (name: string, kind: number): FxRow => ({
+    group: 'shots', name, period: 2.4,
+    at: (t) => {
+      const k = Math.min(1, t / FLY), x = CASTER.x + 1 + (X1 - CASTER.x - 1) * k;
+      return {
+        ents: t < FLY ? [fxEnt(300, kind, x, CASTER.z, { aim: 0 })] : [],
+        events: [],
+        shotEnds: [{ at: FLY, shot: { shot: 1, kind, x: px(X1), y: px(CASTER.z), vx: 1, vy: 0 }, how: 'wall' }],
+      };
+    },
+  });
+  return [one('fire bolt', KIND.FireBolt), one('fireball', KIND.Fireball), one('dragon fireball', KIND.DragonFireball), one('frost bolt', KIND.FrostBolt),
+    one('magic missile', KIND.Missile), one('gloom bolt', KIND.GloomBolt), one('shadow bolt', KIND.ShadowBolt), one('judgement', KIND.Judgement)];
+}
+
 /** The rows. Each later task of #308 adds the ones of its group. */
 export const FX_ROWS: FxRow[] = [
   {
@@ -104,6 +124,7 @@ export const FX_ROWS: FxRow[] = [
     }),
   },
   ...runeRows(),
+  ...shotRows(),
   {
     group: 'booms', name: 'Frost nova', period: 5,
     at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(2.5), k: 10 } }] }),
@@ -186,7 +207,21 @@ export function eventsBetween(row: FxRow, scene: FxScene, from: number, to: numb
   return out.sort((a, b) => a.abs - b.abs);
 }
 
-const ALL_VISIBLE = { isVisible: (): boolean => true };
+/** The shot ends of a row in (`from`, `to`] of the row's clock, like `eventsBetween`. */
+export function endsBetween(row: FxRow, scene: FxScene, from: number, to: number): Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }> {
+  const out: Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }> = [];
+  if (!scene.shotEnds) return out;
+  const P = row.period;
+  for (let k = Math.floor(from / P); k <= Math.floor(to / P); k++) {
+    for (const e of scene.shotEnds) {
+      const abs = k * P + e.at;
+      if (abs > from && abs <= to) out.push({ abs, shot: e.shot, how: e.how });
+    }
+  }
+  return out;
+}
+
+const ALL_VISIBLE ={ isVisible: (): boolean => true };
 const NONE: ReadonlySet<number> = new Set();
 
 export function createFxStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons'>): Stage {
@@ -263,6 +298,9 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
           const ev = placeEvent(e.ev, slot);
           figures.event(ev);
           fx.event(ev, origin + e.abs, false);
+        }
+        for (const e of endsBetween(row, scene, prev, rt)) {
+          fx.shotEnded({ ...e.shot, x: e.shot.x + px(o.x), y: e.shot.y + px(o.z) }, e.how, origin + e.abs);
         }
       });
       prev = rt;

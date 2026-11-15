@@ -751,8 +751,7 @@ export class Figures3d {
       // Pack arrows point up; a spinning axe turns with the clock.
       const angle = pd.spin ? now * 14 : screenAim(cam.yaw, aim) + Math.PI / 2;
       pushCard(out.cards, { frame: pd.frame, x, z, lift: SHOT_LIFT, flip: false, originX: 0.5, footY: 0.5, scale: pd.scale, angle, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
-    } else if (pd.glow !== undefined) {
-      pushGlow(out.glows, x, SHOT_LIFT, z, (pd.scale * 7) / TILE, rgbOf(pd.glow), cam);
     }
+    // glowing shots are drawn by the effects system (`fx/shots.ts`)
   }
 }

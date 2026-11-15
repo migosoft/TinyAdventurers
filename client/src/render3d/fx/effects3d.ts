@@ -9,6 +9,7 @@ import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
 import { castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
+import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
 import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
 
@@ -225,6 +226,8 @@ export class Effects3d {
     const g = out.glows;
     g.position.length = 0; g.uv.length = 0; g.color.length = 0; g.foot.length = 0; g.n = 0;
     const now = input.ctx.now, recs = this.recs;
+    // the glowing shots in flight (hidden ones draw nothing)
+    drawShots(out, input);
     this.you = input.you;
     const oc = input.ownCast;
     if (oc && oc.seq !== this.ownSeq) {

@@ -10,6 +10,7 @@ import { newFxBuf, type FxBuf } from '../models/fx';
 import type { Quality } from '../quality';
 import type { Effects3d, FxFrame } from './effects3d';
 import { registerRunes } from './runes';
+import { registerShots } from './shots';
 import type { MV3 } from './shapes';
 import { FxTris } from './tris';
 import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
@@ -39,6 +40,7 @@ export class FxPass {
 
   constructor(hidden: ReadonlySet<number>) {
     registerRunes();
+    registerShots();
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }
 
