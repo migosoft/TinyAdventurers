@@ -722,6 +722,20 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(kit.get('knight')!.size).toBe(0.87);
   });
 
+  it('keeps the waterline of a wading model figure the card\'s: the caster\'s lower edge and the opener\'s mid are cut by the real sink, not the scaled one', () => {
+    const e = (x: number) => ent(10, KIND.Barbarian, { x });
+    const card = make().frame(frame([e(at(3))]), cam(), look());
+    const model = make().frame(frame([e(at(3))]), cam(), look({ kit, ...all }));
+    const dryCard = make().frame(frame([e(at(0))]), cam(), look());
+    const size = kit.get('dwarf')!.size;
+    expect(size).toBeLessThan(1);
+    expect(card.casters.length).toBe(1);
+    expect(model.casters.length).toBe(1);
+    expect(model.casters[0].y0, 'caster lower edge').toBeCloseTo(card.casters[0].y0, 6);
+    // the standing height is the card's times size; the wade (3 px, in the shallows) is not scaled
+    expect(model.openers[0].mid, 'mid').toBeCloseTo(dryCard.openers[0].mid * size - 3 / 2 / TILE, 6);
+  });
+
   it('fits every description to the standing height of its card, from the real atlas pixels', () => {
     const want: Record<DescKey, number> = { elf: 19, knight: 20, wizard: 19, dwarf: 21, skelet: 14, ogre: 26, wolf: 17 };
     for (const key of Object.keys(FIT_KIND) as DescKey[]) {

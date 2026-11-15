@@ -1,7 +1,7 @@
 import type { FigureDesc } from '../desc';
 
 export const dwarf: FigureDesc = {
-  name: 'Barbarian', size: 0.77,outline: 0x222222, centre: 8,
+  name: 'Barbarian', size: 0.77, outline: 0x222222, centre: 8,
   colours: { s: 0xd8a57d, r: 0xda4e38, a: 0x7b8994, n: 0x775c55 },
   firstRow: 14,
   side: ['...ssssssssss...', '..ssssssssssss..', '..ssssssssssss..', '..ssssssssssss..', '..ssssssssssss..', '..ssssssssssss..', '..ssssssssssss..', '..ssssssssssss..',

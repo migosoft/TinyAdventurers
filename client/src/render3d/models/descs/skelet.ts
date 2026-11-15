@@ -1,7 +1,7 @@
 import type { FigureDesc } from '../desc';
 
 export const skelet: FigureDesc = {
-  name: 'Skeleton', size: 0.87,outline: 0x222222, centre: 8,
+  name: 'Skeleton', size: 0.87, outline: 0x222222, centre: 8,
   colours: { c: 0xfdf7ed, k: 0x3a3a3a },
   firstRow: 16,
   side: ['.....cccccc.....', '....cccccccc....', '....cccccccc....', '....cccccccc....', '....cccccccc....', '.....cccccc.....',

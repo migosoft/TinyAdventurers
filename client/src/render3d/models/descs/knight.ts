@@ -1,7 +1,7 @@
 import type { FigureDesc } from '../desc';
 
 export const knight: FigureDesc = {
-  name: 'Paladin', size: 0.87,outline: 0x222222, centre: 8, metal: true,
+  name: 'Paladin', size: 0.87, outline: 0x222222, centre: 8, metal: true,
   visor: { rows: [15, 18], half: 50, line: 0.6, slits: 3, slitWide: 0.8, frame: 0x2b3a4c, slit: 0x1a222c },   // the visor's painted lines, narrower than a sprite pixel
   colours: { m: 0xdfe6ec, v: 0x2b3a4c, x: 0x1a222c, r: 0xda4e38, l: 0x417089 },   // v: the visor's frame and the belt; x: the slits
   firstRow: 13,

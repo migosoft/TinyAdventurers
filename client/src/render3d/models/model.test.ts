@@ -41,10 +41,16 @@ describe('buildFigure fitted to a card height', () => {
     expect(topOf(plain) * plain.scale).toBeCloseTo(20, 4);
   }, SLOW);
 
-  it('has scale 1 without a target, whatever the size (the size is a share of a target)', () => {
+  it('has scale 1 and size 1 without a target, whatever the description\'s size (the model records what was applied)', () => {
     const m = buildFigure('elf', { ...DESCS.elf, size: 0.5 });
     expect(m.scale).toBe(1);
-    expect(m.size).toBe(0.5);
+    expect(m.size).toBe(1);
+    expect(buildFigure('elf', DESCS.elf, 0).size).toBe(1);
+  }, SLOW);
+
+  it('the skull model has size 1 (its scale is the skeleton\'s, set by the figure)', () => {
+    expect(DESCS.skelet.size).toBe(0.87);
+    expect(buildSkull().size).toBe(1);
   }, SLOW);
 
   it('builds at scale 1 for a target that is not positive', () => {

@@ -570,7 +570,7 @@ export class Figures3d {
         const cf = `${d.idle}0`, cb = this.bounds(cf), foot = d.footY ?? cb.h;
         // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
         const card: Card = { frame: cf, x, z, lift: -down, flip: pose.left, originX: pose.originX, footY: foot / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
-        if (pose.sink > 0) card.crop = { x: 0, y: 0, w: cb.w, h: foot - pose.sink };
+        if (pose.sink > 0) card.crop = { x: 0, y: 0, w: cb.w, h: foot - pose.sink / m.size };   // the box is scaled by `size`, so the waterline (the real sink) is cut at sink / size
         const c = casterOf(card, e.id, this.frames, cam);
         if (c) out.casters.push(c);
       }
@@ -588,12 +588,12 @@ export class Figures3d {
       pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
     }
 
-    // The anchors are the card's, from the standing idle frame the model replaces (`standingAnchor`, the card path's own): the bar and the
-    // name sit where the card's would. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
+    // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
+    // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), foot = d.footY ?? ib.h;
     const sa = standingAnchor(ib, foot, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     this.anchors.set(e.id, { x, z, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
-    const standing = Math.max(0, foot - ib.t - pose.sink) * sc * m.size;   // as the card path's `height`: the idle frame's opaque height less the wade, times the pose scale
+    const standing = Math.max(0, (foot - ib.t) * m.size - pose.sink) * sc;   // as the card path's `height`: the smaller model's opaque height less the wade (not scaled), times the pose scale
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : standing / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }

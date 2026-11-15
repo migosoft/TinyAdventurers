@@ -240,8 +240,11 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   // The fit: the standing figure (every piece, the outline hulls included; not a weapon) is `height` px tall once scaled.
   let full = 0;
   for (let i = 1; i < n * 3; i += 3) full = Math.max(full, position[i]);
-  const size = d.size ?? 1;   // a share of the target: without a target there is nothing to take a share of, so the scale stays 1
-  const scale = height !== undefined && height > 0 && full > 0 ? (height * size) / full : 1, armLength = d.arms ? d.arms.length : 0;
+  // `size` is a share of the target: without a fit (no target, or an unusable one; the skull) there is nothing to take a share of,
+  // so the scale is 1 and the size recorded is the one applied: 1.
+  const fitted = height !== undefined && height > 0 && full > 0;
+  const size = fitted ? d.size ?? 1 : 1;
+  const scale = fitted ? (height * size) / full : 1, armLength = d.arms ? d.arms.length : 0;
   return {
     key, position, normal, uv, skin, look, index, ranges,
     pieceIndex, lineIndex,
@@ -257,7 +260,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
 
 /**
  * The 3D model of the figure a description tells of. `height` (sprite px, the target): the model's `scale` is fitted so that its full
- * standing height times `scale` equals it; without one (tests, node) `scale` is 1.
+ * standing height times `scale` equals the target times the description's `size`; without one (tests, node) `scale` and `size` are 1.
  */
 export function buildFigure(key: string, d: FigureDesc, height?: number): FigureModel {
   return assemble(key, d, figurePieces(d), null, null, height);
