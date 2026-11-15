@@ -3,7 +3,7 @@
 
 import { loadAtlas } from '../ui/atlas';
 import { FrameTimer } from '../game/frameTimer';
-import { createPanel } from './panel';
+import { createPanel, type PageButton } from './panel';
 import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
 import { R3D_SYSTEMS, lightLines, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan, type RenderPlan } from './quality';
@@ -71,6 +71,9 @@ export interface Host {
   setSky(on: boolean): void;
   /** Shows the panel's Stir and Draft switches: the mood page (#307). */
   setAirDev(on: boolean): void;
+  /** A dev page's own buttons in the panel (the sunlight page's crack keys, #307); `syncPageButtons` after the page changed them by key. */
+  setPageButtons(list: PageButton[]): void;
+  syncPageButtons(): void;
   stop(): void;
 }
 
@@ -255,6 +258,8 @@ export async function startHost(
     setDaylight: (on) => panel.setDaylight(on),
     setSky: (on) => panel.setSky(on),
     setAirDev: (on) => panel.setAirDev(on),
+    setPageButtons: (list) => panel.setPageButtons(list),
+    syncPageButtons: () => panel.syncPageButtons(),
     stop: () => stop(),
   };
 

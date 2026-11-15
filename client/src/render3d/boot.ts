@@ -61,7 +61,7 @@ export async function bootMood(el: HTMLElement, search: string): Promise<void> {
 export async function bootSunlight(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
-  await startHost(el, s, 'demo', (assets) => createSunlightStage(assets, p, s));
+  await startHost(el, s, 'demo', (assets, host) => createSunlightStage(assets, p, s, host));
 }
 
 export interface Run3d {

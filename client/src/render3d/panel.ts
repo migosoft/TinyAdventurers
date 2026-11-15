@@ -14,11 +14,18 @@ export interface Panel {
   setSky(on: boolean): void;
   /** Shows the mood page's Stir and Draft switches next to the Air group (#307). Off by default. */
   setAirDev(on: boolean): void;
+  /** A dev page's own buttons in a row of their own (the sunlight page's crack keys, #307); an empty list hides the row. */
+  setPageButtons(list: PageButton[]): void;
+  /** Re-reads the page buttons' `pressed` after the page changed them itself (a key). */
+  syncPageButtons(): void;
 }
+
+/** A dev page's button: `pressed` null is an action button (no aria-pressed). */
+export interface PageButton { name: string; pressed: (() => boolean) | null; press: () => void }
 
 const PITCHES = [30, 45, 48.6];
 const QUALITIES: [Quality, string][] = [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']];
-const ZOOMS = [1, 2, 3, 4];
+const ZOOMS = [1, 2, 3, 4, 6, 8];
 const SEE_MODES: [SeeMode, string][] = [['soft', 'Soft'], ['lattice', 'Lattice'], ['off', 'Off']];
 const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: number; max: number; step: number }[] = [
   { key: 'seeR', name: 'Radius', min: 0.5, max: 3, step: 0.1 },
@@ -152,6 +159,13 @@ export function createPanel(
   const airDevRow = el('div', 'r3d-row');
   for (const sw of AIR_DEV_SWITCHES) button(airDevRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
   airDevRow.hidden = true;
+  // A dev page's own buttons (setPageButtons), hidden while it has none.
+  const pageRow = el('div', 'r3d-row');
+  pageRow.hidden = true;
+  const pagePressed: { btn: HTMLButtonElement; test: () => boolean }[] = [];
+  const syncPage = (): void => {
+    for (const { btn, test } of pagePressed) btn.setAttribute('aria-pressed', String(test()));
+  };
 
   // Ground cover (#330): the height factor.
   const ghRow = el('div', 'r3d-row');
@@ -235,7 +249,7 @@ export function createPanel(
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, airRow, airDevRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, airRow, airDevRow, pageRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -309,5 +323,23 @@ export function createPanel(
     setAirDev(on) {
       airDevRow.hidden = !on;
     },
+    setPageButtons(list) {
+      pageRow.replaceChildren();
+      pagePressed.length = 0;
+      for (const b of list) {
+        const btn = el('button', undefined, b.name);
+        btn.type = 'button';
+        btn.addEventListener('click', () => {
+          b.press();
+          syncPage();
+          btn.blur();
+        });
+        if (b.pressed) pagePressed.push({ btn, test: b.pressed });
+        pageRow.appendChild(btn);
+      }
+      pageRow.hidden = list.length === 0;
+      syncPage();
+    },
+    syncPageButtons: syncPage,
   };
 }

@@ -6,6 +6,7 @@ import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
+import type { PageButton } from './panel';
 import { createSunlightStage, parseSunLook, sunlightEnts } from './sunlightStage';
 import type { FrameInput } from './view';
 
@@ -73,6 +74,31 @@ describe('the ?r3d=sunlight stage', () => {
     expect(two.some((c) => c.fx === SECOND.x + 0.5 && c.fz === SECOND.y + 0.5)).toBe(true);
     key(stage, 'Digit2');
     expect(draw().cracks).toHaveLength(1);
+  });
+
+  it('gives the panel Second crack, Reroll and Vary, which act as the keys 2, R and V; a key syncs the panel', () => {
+    let buttons: PageButton[] = [];
+    let syncs = 0;
+    const host = { setPageButtons: (l: PageButton[]) => { buttons = l; }, syncPageButtons: () => { syncs++; } };
+    const search = '?r3d=sunlight&vary=0';
+    const params = parseParams(search);
+    const stage = createSunlightStage(assets, params, search, host);
+    made.push(stage);
+    expect(buttons.map((b) => b.name)).toEqual(['Second crack', 'Reroll', 'Vary']);
+    const [second, reroll, vary] = buttons;
+    expect(second.pressed!()).toBe(false);
+    second.press();
+    expect(second.pressed!()).toBe(true);
+    expect(reroll.pressed).toBeNull();
+    expect(vary.pressed!()).toBe(false);
+    vary.press();
+    expect(vary.pressed!()).toBe(true);
+    key(stage, 'KeyV');
+    expect(vary.pressed!()).toBe(false);
+    expect(syncs).toBe(1);
+    stage.dispose();
+    made.pop();
+    expect(buttons).toEqual([]);
   });
 
   it('starts with the second crack for second=1', () => {

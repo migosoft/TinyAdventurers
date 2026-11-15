@@ -19,7 +19,7 @@ import { freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
-import { MOVE_KEYS, type Stage, type StageCtx } from './host';
+import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
@@ -86,7 +86,8 @@ export function parseSunLook(search: string): SunLook {
 
 const ALL_VISIBLE = { isVisible: (): boolean => true };
 
-export function createSunlightStage(assets: Assets, p: R3dParams, search: string): Stage {
+/** `host`: the panel gets the page's three buttons (Second crack, Reroll, Vary), the same as the keys 2, R and V. */
+export function createSunlightStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons'>): Stage {
   const map = sunlightMap();
   const world: WorldInput = { map, painted: false, clear: 'stone' };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
@@ -129,6 +130,15 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
     const s = `sunlight demo in 3D: vary ${look.vary ? 'on' : 'off'} (V), reroll #${roll} (R), second crack ${second ? 'on' : 'off'} (2); WASD pans`;
     if (s !== shown) label.textContent = shown = s;
   };
+  const changed = (): void => {
+    placeSuns();
+    caption();
+  };
+  host?.setPageButtons([
+    { name: 'Second crack', pressed: () => second, press: () => { second = !second; changed(); } },
+    { name: 'Reroll', pressed: null, press: () => { roll++; changed(); } },
+    { name: 'Vary', pressed: () => look.vary, press: () => { look.vary = !look.vary; changed(); } },
+  ]);
 
   return {
     world,
@@ -207,12 +217,13 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       else if (e.code === 'KeyR') roll++;
       else if (e.code === 'KeyV') look.vary = !look.vary;
       else return false;
-      placeSuns();
-      caption();
+      changed();
+      host?.syncPageButtons();
       return true;
     },
     dispose(): void {
       label.remove();
+      host?.setPageButtons([]);
     },
   };
 }

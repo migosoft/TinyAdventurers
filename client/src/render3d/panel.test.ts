@@ -231,6 +231,33 @@ describe('panel', () => {
     btn('Auto').click();
     expect(calls[1].zoom).toBeNull();
     expect(btn('Auto').getAttribute('aria-pressed')).toBe('true');
+    btn('8').click();
+    expect(calls[2].zoom).toBe(8);
+  });
+
+  it('shows a dev page\'s own buttons only while it has some (#307)', () => {
+    const { calls, panel, btn } = setup();
+    let on = false;
+    let presses = 0;
+    panel.setPageButtons([
+      { name: 'Toggle', pressed: () => on, press: () => { on = !on; } },
+      { name: 'Act', pressed: null, press: () => { presses++; } },
+    ]);
+    expect(btn('Toggle').parentElement!.hidden).toBe(false);
+    expect(btn('Toggle').getAttribute('aria-pressed')).toBe('false');
+    btn('Toggle').click();
+    expect(btn('Toggle').getAttribute('aria-pressed')).toBe('true');
+    btn('Act').click();
+    expect(presses).toBe(1);
+    expect(btn('Act').hasAttribute('aria-pressed')).toBe(false);
+    on = false; // changed by the page (a key)
+    panel.syncPageButtons();
+    expect(btn('Toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(calls).toEqual([]); // page buttons are not params
+    const row = btn('Toggle').parentElement!;
+    panel.setPageButtons([]);
+    expect(row.hidden).toBe(true);
+    expect(row.childElementCount).toBe(0);
   });
 
   it('destroy removes the root from the host', () => {
