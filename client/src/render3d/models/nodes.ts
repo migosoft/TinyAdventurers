@@ -154,7 +154,9 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
 
   // ---------------------------------------------------------------- the outline and its seal
   const line = make(p.screen);
-  line.colorNode = vec4(sight.apply(vec3(...rgbOf(OUTLINE)), p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
+  // Not lit by the lamps, but dimmed by the ambient light like everything else: in the dark a flat 0x222222 would show as a grey outline on black.
+  const outline = lighting.finish(vec3(...rgbOf(OUTLINE)), { rgb: lighting.ambient, dv: float(0) });
+  line.colorNode = vec4(sight.apply(outline, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   line.depthWrite = false;
 
   const seal = make(p.screen);

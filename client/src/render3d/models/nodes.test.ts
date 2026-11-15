@@ -153,6 +153,14 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(line).not.toMatch(shadowMap);
     });
 
+    it('the outline is dimmed by the ambient light alone, so it is no brighter than the dark ground where nothing lights the figure (#338)', () => {
+      const { mats } = make(true);
+      const line = fragment(B, mats.line, { compare: true, geometry: geometryOf(elf, 'line') });
+      expect(line).toMatch(/lightAmbient/);
+      // ... and still no lamp: no light list, no lava texture read.
+      expect(line).not.toMatch(/lightPos|lightCol|lava/i);
+    });
+
     it('the piece without a sun carries no shadow-map sampler', () => {
       const { mats } = make(false);
       const shadowMap = wgsl ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/;
