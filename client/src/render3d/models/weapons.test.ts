@@ -94,14 +94,14 @@ describe('buildWeapon', () => {
     expect(zMax(model('weapon_hammer'))).toBeGreaterThan(1.2);
   }, SLOW);
 
-  it('the grip is the origin: the knight sword (29 px tall, gripped at 14.5) spans -14.5 to 14.5', () => {
+  it('the grip is the origin: the knight sword (29 px tall, held 3 px above its foot) spans -3 to 26', () => {
     const m = model('weapon_knight_sword');
     let hi = -Infinity, lo = Infinity;
     for (let i = 1; i < m.position.length; i += 3) { hi = Math.max(hi, m.position[i]); lo = Math.min(lo, m.position[i]); }
-    expect(hi).toBeGreaterThan(13);
-    expect(hi).toBeLessThan(15);
-    expect(lo).toBeLessThan(-13);
-    expect(lo).toBeGreaterThan(-15);
+    expect(hi).toBeGreaterThan(24);
+    expect(hi).toBeLessThan(27);
+    expect(lo).toBeLessThan(-2);
+    expect(lo).toBeGreaterThan(-4);
   }, SLOW);
 
   it('bows are rods: a limb and a string, the second bow drawn back', () => {
@@ -117,9 +117,8 @@ describe('buildWeapon', () => {
       for (let i = 0; i < m.position.length; i += 3) lo = Math.min(lo, m.position[i]);
       return lo;
     };
-    // The string's middle lies at x 0.7 (page pixels) from the grip at 7: 6.3 behind it, and the first bow's at 7.6 - 7 = 0.6.
-    expect(reach('weapon_bow_2')).toBeLessThan(reach('weapon_bow') - 5);
-    expect(reach('weapon_bow_2')).toBeCloseTo(0.7 - 7 - 0.3 - 0.4, 0);
+    // The string's middle lies at sprite x 7.6 on the first bow and 0.7 on the drawn one: 6.9 further back, whatever the grip.
+    expect(reach('weapon_bow') - reach('weapon_bow_2')).toBeCloseTo(6.9, 0);
   }, SLOW);
 
   it('the big hammer is the redrawn one: a wide head', () => {
@@ -140,33 +139,33 @@ describe('buildWeapon', () => {
       hash[k] = h.toString(16);
     }
     expect(hash).toEqual({
-      weapon_anime_sword: '7b02de30',
-      weapon_arrow: '8478eb8c',
-      weapon_axe: '28d28f28',
-      weapon_baton_with_spikes: 'a58d900d',
+      weapon_anime_sword: '23d3dd2a',
+      weapon_arrow: '6bcd7da',
+      weapon_axe: '11d06939',
+      weapon_baton_with_spikes: '90f66b93',
       weapon_big_hammer: 'cc284e7e',
-      weapon_bow: '1035686d',
-      weapon_bow_2: 'cdf981cf',
-      weapon_cleaver: '2a39021a',
-      weapon_double_axe: '3eac3171',
-      weapon_duel_sword: '78c80cf9',
-      weapon_golden_sword: '956d5b65',
-      weapon_green_magic_staff: '5b93139c',
-      weapon_hammer: '538a0a8',
-      weapon_katana: 'e8da15',
-      weapon_knife: '54765edd',
-      weapon_knight_sword: 'fe3c9413',
-      weapon_lavish_sword: 'b7496b8',
-      weapon_mace: 'a02e878d',
-      weapon_machete: '8be45cb3',
-      weapon_red_gem_sword: 'fb561021',
-      weapon_red_magic_staff: 'be2479bc',
-      weapon_regular_sword: 'be91faf1',
-      weapon_rusty_sword: 'be91faf1',
-      weapon_saw_sword: 'f0670150',
-      weapon_spear: '4a481407',
-      weapon_throwing_axe: '537da371',
-      weapon_waraxe: 'd005a126',
+      weapon_bow: 'e40c2577',
+      weapon_bow_2: '7bb337b',
+      weapon_cleaver: '9f7db9dd',
+      weapon_double_axe: 'bb7e00ac',
+      weapon_duel_sword: '8a72a8a0',
+      weapon_golden_sword: '6a31e7ff',
+      weapon_green_magic_staff: 'b9e7871',
+      weapon_hammer: '7b4d03ce',
+      weapon_katana: '4958e9c3',
+      weapon_knife: '7347c9ed',
+      weapon_knight_sword: 'a22e5484',
+      weapon_lavish_sword: 'c5ce2d69',
+      weapon_mace: '8c027cd1',
+      weapon_machete: 'b23948af',
+      weapon_red_gem_sword: 'c581c80f',
+      weapon_red_magic_staff: '4b161b6e',
+      weapon_regular_sword: '41563999',
+      weapon_rusty_sword: '41563999',
+      weapon_saw_sword: '3aa71b98',
+      weapon_spear: '2b07440c',
+      weapon_throwing_axe: '5c5528a7',
+      weapon_waraxe: 'aeea1920',
     });
   }, SLOW);
 });
