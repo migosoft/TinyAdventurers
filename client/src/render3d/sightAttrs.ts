@@ -1,6 +1,7 @@
 // The per-vertex sight attributes of the dynamic meshes (#305): one `footSight` read per quad, copied to its six vertices.
 // The caller owns `out` (reused every frame, so nothing is allocated per quad); it must hold `count * 6` vertices.
 import type { Glows, Quads, Shadows } from './cards';
+import type { FxBuf } from './models/fx';
 import type { FigureInst } from './models/instances';
 import { footSight, thingHard, type SightMask } from './sightmask';
 
@@ -42,6 +43,17 @@ function pairSightData(foot: Float32Array, count: number, mask: SightMask | null
       out[i] = hard;
       out[i + 1] = soft;
     }
+  }
+  return out;
+}
+
+/** `sight` (hard, soft) per vertex of the figures' effect triangles (#338), read once at the triangle's first corner; zeros when `mask` is null. `out` holds `fx.n * 6` floats. */
+export function fxSightData(fx: FxBuf, mask: SightMask | null, out: Float32Array): Float32Array {
+  if (!mask) return out.fill(0, 0, fx.n * 6);
+  for (let k = 0; k < fx.n; k++) {
+    const s = footSight(mask, fx.position[k * 9], fx.position[k * 9 + 2], 0);
+    const hard = thingHard(mask, s.hard);
+    for (let i = k * 6; i < k * 6 + 6; i += 2) { out[i] = hard; out[i + 1] = s.soft; }
   }
   return out;
 }

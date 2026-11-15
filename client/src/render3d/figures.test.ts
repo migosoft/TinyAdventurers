@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { createKit, directRunner, type FigureKit } from './models/kit';
+import { fangTris, newFxBuf } from './models/fx';
 import { BONES } from './models/model';
 import { sideReach } from './models/pose3d';
 import type { SpritePixels } from './models/weapons';
@@ -632,8 +633,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   let kit: FigureKit;
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
-    for (const k of ['elf', 'weapon_bow', 'skull', 'knight']) kit.get(k);
-    while (kit.version < 4) await new Promise((r) => setTimeout(r, 0));
+    for (const k of ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard']) kit.get(k);
+    while (kit.version < 6) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
   afterAll(() => kit.dispose());
 
@@ -739,6 +740,58 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const stone = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow | (1 << EFFECT.Petrified) })]), cam(), look({ kit, ...all }));
     expect(stone.models[0].tint[0]).toBeCloseTo(0xa0 / 255, 6);
     expect(stone.models[0].stone).toBe(true);
+  });
+
+  describe('the small effects of the model figures (#338)', () => {
+    const wolfAt = (o: Partial<EntState> = {}) => ent(12, KIND.DireWolf, o);
+    const stone = 1 << EFFECT.Petrified, ice = 1 << EFFECT.Frozen;
+    const paladin = (o: Partial<EntState> = {}) => ent(11, KIND.Paladin, o);
+    const lowest = (b: { position: number[] }) => Math.min(...b.position.filter((_, i) => i % 3 === 1));
+
+    it('gives a swinging model figure the swoosh, at the hand, and none outside the sweep', () => {
+      const mid = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
+      expect(mid.fx.n).toBeGreaterThan(0);
+      expect(lowest(mid.fx)).toBeGreaterThan(0.2);
+      const done = make().frame(frame([paladin({ anim: ANIM.Melee, animMs: 500 })]), cam(), look({ kit, ...all }));
+      expect(done.fx.n).toBe(0);
+      expect(make().frame(frame([paladin()]), cam(), look({ kit, ...all })).fx.n).toBe(0);
+    });
+
+    it('gives the wolf clamping fangs and no swoosh', () => {
+      const out = make().frame(frame([wolfAt({ anim: ANIM.Melee, animMs: 100 })]), cam(), look({ kit, ...all }));
+      expect(out.fx.n).toBeGreaterThan(0);
+      const ref = newFxBuf();
+      fangTris(ref, [0, 1, 0], cam(), 0.5);
+      expect(out.fx.n).toBe(ref.n);
+    });
+
+    it('gives a channelling model figure the swirl', () => {
+      const out = make().frame(frame([ent(13, KIND.Wizard, { anim: ANIM.Channel })]), cam(), look({ kit, ...all }));
+      expect(out.fx.n).toBeGreaterThan(0);
+    });
+
+    it('draws none of them on a stone or frozen figure, or on cards', () => {
+      for (const effects of [stone, ice]) {
+        for (const e of [paladin({ anim: ANIM.Melee, animMs: 100, effects }), wolfAt({ anim: ANIM.Melee, animMs: 100, effects }), ent(13, KIND.Wizard, { anim: ANIM.Channel, effects })]) {
+          expect(make().frame(frame([e]), cam(), look({ kit, ...all })).fx.n).toBe(0);
+        }
+      }
+      for (const e of [paladin({ anim: ANIM.Melee, animMs: 100 }), wolfAt({ anim: ANIM.Melee, animMs: 100 }), ent(13, KIND.Wizard, { anim: ANIM.Channel })]) {
+        expect(make().frame(frame([e]), cam(), look()).fx.n).toBe(0);
+      }
+    });
+
+    it('leaves the sleeper\'s Z to the overlay: no float of its own, no triangles', () => {
+      const fg = make();
+      let floats = 0, tris = 0;
+      for (let i = 0; i < 4; i++) {
+        const out = fg.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })], { dt: 0.5 }), cam(), look({ kit, ...all }));
+        floats += out.floats.length;
+        tris += out.fx.n;
+      }
+      expect(floats).toBe(0);
+      expect(tris).toBe(0);
+    });
   });
 
   it('batches by the weapon too: the circle is the same for the figure and its bow and bigger than the body alone', () => {

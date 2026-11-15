@@ -8,7 +8,7 @@ import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFra
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { VANISH_SECS } from '../game/anim/entityAlpha';
 import { FigureStates } from '../game/anim/figureState';
-import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
+import { figurePose, MELEE_T, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
@@ -17,7 +17,7 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
-import { newFxBuf, type FxBuf } from './models/fx';
+import { fangTris, FX_WHITE, newFxBuf, swirlTris, swooshTris, type FxBuf } from './models/fx';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { BONES, type FigureModel } from './models/model';
@@ -31,6 +31,9 @@ const rad = (deg: number): number => (deg * Math.PI) / 180;
 /** The 2D ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
 const SHADOW_DEPTH = 0.45;
 const SHADOW_ALPHA = 0.45;
+/** A model figure's small effects (#338): the bite's fangs hang this far (sprite px) in front of the figure; the channel's swirl circles it at this radius (tiles). */
+const BITE_AHEAD = 18.5;
+const SWIRL_RADIUS = 0.6;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
 const AFTER_ALPHA = 0.5;
@@ -554,6 +557,7 @@ export class Figures3d {
         if (c) out.casters.push(c);
       }
       fig.last = insts;
+      if (!dark && !pose.lie) this.smallEffects(out.fx, s, d, m, p3, x, z, down);
       if (pose.afterimage) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
     }
 
@@ -572,6 +576,22 @@ export class Figures3d {
     this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: pose.lie ? Math.min(h, 2 * sideReach(m) * m.scale) : h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
+  }
+
+  /**
+   * What an attack or a channel adds round a model figure (#338): the swoosh of a melee swing at the shoulder, the wolf's fangs in front
+   * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
+   * (`overlayLayout`), from the anchor's effects.
+   */
+  private smallEffects(fx: FxBuf, s: ViewState, d: FigureDef, m: FigureModel, p3: Pose3d, x: number, z: number, down: number): void {
+    const bits = s.effects ?? 0;
+    if (has(bits, EFFECT.Petrified) || has(bits, EFFECT.Frozen)) return;
+    const shoulder = (m.shoulderY * m.scale) / TILE;
+    if (p3.attack?.style === 'swing' && s.anim === ANIM.Melee && d.swing) swooshTris(fx, x, z, shoulder - down, p3.yaw, d.swing.reach, d.swing.arc, d.swing.color ?? FX_WHITE, s.animT / MELEE_T);
+    else if (p3.attack?.style === 'bite' && this.cam) {
+      const ahead = BITE_AHEAD / TILE;
+      fangTris(fx, [x + Math.cos(p3.yaw) * ahead, 0.8 * shoulder - down, z + Math.sin(p3.yaw) * ahead], this.cam, p3.attack.u);
+    } else if (p3.channel) swirlTris(fx, x, z, s.animT, d.base, m.baseHeight / TILE, SWIRL_RADIUS);
   }
 
   /** Draws one figure; false when it is not drawn (dead). */

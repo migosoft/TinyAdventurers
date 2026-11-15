@@ -304,6 +304,21 @@ export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number,
   return m;
 }
 
+/**
+ * The figures' effect triangles (#338: swoosh, fangs, swirl): their vertex colours (`rgba`), unlit, translucent, depth tested but not
+ * written, hidden by the picture's sight like a glow. Drawn by the view after the glows.
+ */
+export function fxMaterial(sight: Sight): MeshBasicNodeMaterial {
+  const c: N = attribute('rgba', 'vec4');
+  const m = new MeshBasicNodeMaterial();
+  m.colorNode = vec4(c.xyz, c.w.mul(sight.shown(attribute('sight', 'vec2').x, 0)));
+  m.transparent = true;
+  m.depthWrite = false;
+  m.forceSinglePass = true;
+  m.side = DoubleSide;
+  return m;
+}
+
 /** Camera-facing glow quads (already moved toward the camera by `buildDynamic`, so no bias here): colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
 export function glowMaterial(sight: Sight): MeshBasicNodeMaterial {
   const g = max(float(1).sub(length(uv())), 0);

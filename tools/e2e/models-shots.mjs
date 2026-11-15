@@ -35,6 +35,11 @@ for (const [i, [name, desc]] of KINDS.entries()) {
   for (const s of STATES) shots.push({ name: `kind-${name}-${s}`, q: `&focus=models&at=model:${i}&zoom=6&state=${s}${still(s)}`, need: [desc], wait: s === 'dash' ? 6000 : 0 });
 }
 for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=3&state=${s}${still(s)}`, need: ALL, wait: s === 'dash' ? 6000 : 0 });
+// The small effects (Task 11): the channel swirl, the wolf's bite state and the swing's swoosh from the south (aim 90).
+shots.push({ name: 'kind-wizard-channel', q: `&focus=models&at=model:0&zoom=6&state=channel${STILL}`, need: ['wizard'] });
+shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:8&zoom=6&state=bite${STILL}`, need: ['wolf'] });
+shots.push({ name: 'swoosh-paladin-south', q: `&focus=models&at=model:1&zoom=6&state=melee&aim=90${STILL}`, need: ['knight'] });
+shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:8&zoom=6&state=melee&aim=90${STILL}`, need: ['wolf'] });
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });

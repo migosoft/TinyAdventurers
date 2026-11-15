@@ -40,7 +40,8 @@ import { makeShaftPass, type ShaftPass } from './air/shaftNodes';
 import { shaftPlan, type ShaftPlan } from './air/shafts';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, footprint, type ShadowCaster } from './lights';
-import { cardSightData, figureSight, glowSightData, shadowSightData } from './sightAttrs';
+import { cardSightData, figureSight, fxSightData, glowSightData, shadowSightData } from './sightAttrs';
+import type { FxBuf } from './models/fx';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { makeCoverShared } from './cover/coverRead';
 import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
@@ -50,7 +51,7 @@ import { GroundTooLargeError } from './groundError';
 import { AIR_ORDER, airMaterials } from './air/airNodes';
 import { airQuads, hazeQuads, newAirBuffers } from './air/airQuads';
 import type { AirParts } from './air/airParts';
-import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
@@ -88,8 +89,8 @@ export interface SunFrame {
   /** The wind in tiles per second, and the seconds the clouds drift by. */
   wind: [number, number]; t: number;
 }
-/** The 3D figures of a frame (#338): what to draw and the kit that holds their models. */
-export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit }
+/** The 3D figures of a frame (#338): what to draw, the kit that holds their models and the effect triangles (swoosh, fangs, swirl). */
+export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit; fx?: FxBuf }
 
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
@@ -442,10 +443,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
   const flames = new DynMesh([['position', 3], ['uv', 2], ['sight', 3]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3], ['sight', 2]], glow);
+  const fxDyn = new DynMesh([['position', 3], ['rgba', 4], ['sight', 2]], fxMaterial(sight));   // the figures' swoosh, fangs and swirl (#338)
+  let fxPos = new Float32Array(0), fxRgba = new Float32Array(0), fxSight = new Float32Array(0);
   shadows.mesh.renderOrder = 1;
   decals.mesh.renderOrder = 2;
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
+  fxDyn.mesh.renderOrder = 5;
   // The air (#307): specks and embers (additive), smoke, rings and drops (blended) as camera-facing quads, and the haze sheets.
   const air = airMaterials(lighting, sight, { sun: world.painted, toward });
   const airBuf = newAirBuffers();
@@ -510,8 +514,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return target;
   }
 
-  for (const d of [shadows, decals, ghosts, glows]) skipInAirPrepass(d.mesh);
-  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
+  for (const d of [shadows, decals, ghosts, glows, fxDyn]) skipInAirPrepass(d.mesh);
+  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, fxDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
@@ -716,6 +720,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
+      const fx = f.models?.fx, fxN = (fx?.n ?? 0) * 3;   // the figures' effect triangles (#338)
+      if (fx && fxPos.length < fxN * 3) { fxPos = new Float32Array(fxN * 6); fxRgba = new Float32Array(fxN * 8); fxSight = new Float32Array(fxN * 4); }
+      if (fx) { fxPos.set(fx.position); fxRgba.set(fx.rgba); }
+      fxDyn.set({ position: fxPos, rgba: fxRgba, sight: fx ? fxSightData(fx, frameMask, fxSight) : fxSight }, fxN);
       // The air (#307): the camera's right and up spread the quads; no air frame hides the meshes.
       const ca = Math.cos(f.cam.yaw), sa = Math.sin(f.cam.yaw), spa = Math.sin(f.cam.pitch);
       air.right.value.set(ca, 0, sa);
@@ -853,8 +861,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldMaterial.dispose();
         material.dispose();
         sight.dispose();
-        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, air.add, air.blend, air.haze]) m.dispose();
-        for (const dm of [cards, ghosts, decals, shadows, flames, glows, airAdd, airBlend, hazeDyn]) dm.dispose();
+        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxDyn.mesh.material as NodeMaterial, air.add, air.blend, air.haze]) m.dispose();
+        for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
         target?.dispose();
         if (shafts) {
           freeShaftTargets(shafts);
