@@ -11,7 +11,7 @@ import { TILE } from '../../sim/map';
 import { castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
-import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
+import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
 
 /** Every kind of record. Boom is split by its `k`. */
 export const FX_KIND = {
@@ -36,6 +36,11 @@ export const FX_KIND = {
   /** The runes of a cast (their own life is managed by the runes' drawer; this is the upper bound). */
   Cast: 17,
   ShotHit: 18,
+  /** A hit spark (a=colour 0xrrggbb, b=motes, c=height in tiles) at x, z: a release, a dragon's bite. */
+  Spark: 19,
+  /** A mimic's reveal (gold motes) and landing (dust). */
+  MimicWake: 20,
+  MimicLand: 21,
 } as const;
 export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
@@ -60,6 +65,9 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.Immune]: 0.3,
   [FX_KIND.Cast]: 8,
   [FX_KIND.ShotHit]: 0.45,
+  [FX_KIND.Spark]: 0.35,
+  [FX_KIND.MimicWake]: 0.6,
+  [FX_KIND.MimicLand]: 0.4,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */
@@ -90,19 +98,30 @@ export interface FxFrame {
   hidden: ReadonlySet<number>;
   you: number;
   ownCast: OwnCast | null;
+  /** The mimics' one-shot cues of this frame. */
+  cues?: readonly MimicCue[];
 }
 
 /** Draws one record at `age` seconds into its life. Returning `false` retires the record at once (it has nothing left to draw). */
 export type FxDrawer = (out: FxOut, frame: FxFrame, rec: FxRec, age: number) => void | boolean;
 
+/** Draws what belongs to the figures of the frame, not to a record (the figure effects); runs before the records. May add records. */
+export type FxFrameDrawer = (out: FxOut, frame: FxFrame, fx: Effects3d) => void;
+
 const DRAWERS: (FxDrawer | undefined)[] = [];
+const FRAME_DRAWERS: FxFrameDrawer[] = [];
 /** Registers the drawer of a kind (a second registration replaces the first). */
 export function registerFx(kind: FxKind, draw: FxDrawer): void {
   DRAWERS[kind] = draw;
 }
+/** Registers a per-frame drawer (a second registration of the same function is ignored). */
+export function registerFrameFx(draw: FxFrameDrawer): void {
+  if (!FRAME_DRAWERS.includes(draw)) FRAME_DRAWERS.push(draw);
+}
 /** Empties the registry (tests). */
 export function clearFxRegistry(): void {
   DRAWERS.length = 0;
+  FRAME_DRAWERS.length = 0;
 }
 
 /** The record kind of a Boom `k`, or null when 3D draws nothing for it (k 3 has no sender on the server). */
@@ -136,6 +155,8 @@ export class Effects3d {
   private readonly pendLook = new Int32Array(PENDING_MAX);
   private readonly pendAt = new Float64Array(PENDING_MAX);
   private pendN = 0;
+  /** The last one-shot action of each figure that was given its spark: its anim and when it began (the run's clock). */
+  readonly actions = new Map<number, { anim: number; start: number }>();
 
   private pendDrop(i: number): void {
     for (let k = i + 1; k < this.pendN; k++) { this.pendLook[k - 1] = this.pendLook[k]; this.pendAt[k - 1] = this.pendAt[k]; }
@@ -174,6 +195,11 @@ export class Effects3d {
     const rec: FxRec = { kind, start: now, x, z, seed, follow, a, b, c, d, rune: null };
     this.recs.push(rec);
     return rec;
+  }
+
+  /** Adds a record from outside the events (the figure effects). Numbers as `add`. */
+  emit(kind: FxKind, now: number, x: number, z: number, follow = -1, a = 0, b = 0, c = 0, d = 0): FxRec {
+    return this.add(kind, now, x, z, follow, a, b, c, d);
   }
 
   /** Events in the dark make nothing. Positions are simulation px; records hold tiles. Numbers: Boom a=k b=r (tiles); Zap a,b=x2,z2;
@@ -257,6 +283,9 @@ export class Effects3d {
         rec.rune = newChannel(f.id, now, f.x, f.z, rec.seed);
       }
     }
+    for (const draw of FRAME_DRAWERS) draw(out, input, this);
+    // a figure that is gone forgets its action
+    if (this.actions.size > 64) for (const id of this.actions.keys()) if (!input.figs.some((f) => f.id === id)) this.actions.delete(id);
     let w = 0;
     for (let i = 0; i < recs.length; i++) {
       const r = recs[i];

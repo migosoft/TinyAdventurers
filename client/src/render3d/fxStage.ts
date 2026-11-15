@@ -3,7 +3,7 @@
 // A group of rows is shown side by side; the page runs them through `galleryFrame`, `Figures3d.frame` and the same `Effects3d.frame`
 // as a run (`FxPass`). The clock is the page's own: `&t=<s>` pins it (the same picture again), `&fx=<group>` picks the group,
 // `Slow` runs it five times slower, `Cast now` restarts every row. Each later task of #308 adds its rows to `FX_ROWS`.
-import { ANIM, KIND, LIGHT_KIND, RUNE_LOOK, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, FLAG, KIND, LIGHT_KIND, RUNE_LOOK, SIDE, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { LightField } from '../game/light';
 import type { EntState } from '../game/world';
@@ -45,8 +45,8 @@ export const CASTER_ID = 100, TARGET_ID = 110;
 /** The bosses of the corner, in the bay. */
 const BOSSES: [number, number, number][] = [[KIND.Lich, 3.5, 6], [KIND.Dragon, 7, 6.5], [KIND.Demon, 10.5, 6], [KIND.Ogre, 12, 9]];
 
-export type FxGroup = 'spells' | 'booms' | 'shots' | 'figures' | 'hazards' | 'status' | 'objects';
-export const FX_GROUPS: FxGroup[] = ['spells', 'booms', 'shots', 'figures', 'hazards', 'status', 'objects'];
+export type FxGroup = 'spells' | 'booms' | 'shots' | 'figures' | 'bosses' | 'hazards' | 'status' | 'objects';
+export const FX_GROUPS: FxGroup[] = ['spells', 'booms', 'shots', 'figures', 'bosses', 'hazards', 'status', 'objects'];
 
 /** What a row changes in the snapshot (the drain beams and the moving lights; px, local to the room). */
 export interface SnapExtras { drain?: NonNullable<Snapshot['drain']>; lights?: Snapshot['lights'] }
@@ -130,7 +130,59 @@ export const FX_ROWS: FxRow[] = [
     at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(r), k } }] }),
   })),
   ...eventRows(),
+  ...figureRows(),
+  ...bossRows(),
 ];
+
+/** The figure rows (#308): a swoosh, a wolf's bite, a ranger's release spark and a mimic's reveal. */
+function figureRows(): FxRow[] {
+  const at = { x: IMPACT.x - 1.4, z: IMPACT.z };
+  /** An attacker that holds `anim` for `len` s from 0.3 s into the period. */
+  const act = (name: string, kind: number, anim: number, len: number, period = 2.5, o: Partial<EntState> = {}): FxRow => ({
+    group: 'figures', name, period,
+    at: (t) => ({ ents: [fxEnt(CASTER_ID, kind, at.x, at.z, t >= 0.3 && t < 0.3 + len ? { anim, animMs: (t - 0.3) * 1000, ...o } : o)], events: [] }),
+  });
+  return [
+    act('swoosh (Paladin)', KIND.Paladin, ANIM.Melee, 0.5),
+    act('bite (Dire Wolf)', KIND.DireWolf, ANIM.Melee, 0.6),
+    act('release (Ranger shot)', KIND.ElvenRanger, ANIM.Shoot, 0.4),
+    {
+      group: 'figures', name: 'mimic wakes', period: 3,
+      at: (t) => ({ ents: [fxEnt(700, KIND.Mimic, at.x, at.z, t < 0.5 ? { flags: FLAG.HIDING, aim: Math.PI } : { aim: Math.PI, animMs: (t - 0.5) * 1000 })], events: [] }),
+    },
+  ];
+}
+
+/** The rows of the bosses (#308): the lich's nova, gaze and drain, the dragon's breath, bite, tail and landing, the ogre's slam, the demon's claw. */
+function bossRows(): FxRow[] {
+  const mid = { x: 7.5, z: 7.5 };
+  const boss = (name: string, kind: number, spec: (t: number) => Partial<EntState>, period = 3.5, o: { x?: number; z?: number; snap?: SnapExtras } = {}): FxRow => ({
+    group: 'bosses', name, period,
+    at: (t) => ({ ents: [fxEnt(CASTER_ID, kind, o.x ?? mid.x, o.z ?? mid.z, spec(t))], events: [], ...(o.snap ? { snapExtras: o.snap } : {}) }),
+  });
+  const hold = (anim: number, from: number, len: number) => (t: number): Partial<EntState> => (t >= from && t < from + len ? { anim, animMs: (t - from) * 1000 } : {});
+  const lichPx = { x: px(mid.x), y: px(mid.z) };
+  return [
+    boss('lich nova', KIND.Lich, hold(ANIM.Slam, 0.3, 1.5)),
+    {
+      group: 'bosses', name: 'lich gaze', period: 3.5,
+      at: (t) => ({
+        ents: [
+          fxEnt(CASTER_ID, KIND.Lich, 5, 7, t >= 0.3 && t < 2.5 ? { anim: ANIM.Gaze, animMs: (t - 0.3) * 1000, extra: TARGET_ID } : {}),
+          fxEnt(TARGET_ID, KIND.Paladin, 10, 8, { side: SIDE.Friendly, aim: Math.PI }),
+        ],
+        events: [],
+      }),
+    },
+    boss('lich drain', KIND.Lich, () => ({}), 3.5, { snap: { drain: [[lichPx.x, lichPx.y], [px(3.5), px(5)], [px(11), px(5.5)]] } }),
+    boss('dragon breath', KIND.Dragon, (t) => (t >= 0.3 && t < 1.1 ? { anim: ANIM.Windup, animMs: (t - 0.3) * 1000 } : t >= 1.1 && t < 2.8 ? { anim: ANIM.Breath, animMs: (t - 1.1) * 1000 } : {}), 4, { x: 4.5 }),
+    boss('dragon bite', KIND.Dragon, hold(ANIM.Bite, 0.3, 1), 3, { x: 5 }),
+    boss('dragon tail', KIND.Dragon, hold(ANIM.Tail, 0.3, 1), 3, { x: 7.5 }),
+    boss('dragon landing', KIND.Dragon, hold(ANIM.Land, 0.3, 1), 3),
+    boss('ogre slam', KIND.Ogre, hold(ANIM.Slam, 0.3, 1.2), 3),
+    boss('demon claw', KIND.Demon, hold(ANIM.Melee, 0.3, 0.8), 2.5),
+  ];
+}
 
 /** The rows of the other events (#308): chain spark, deaths, raise, immune, hit sparks. */
 function eventRows(): FxRow[] {
@@ -200,7 +252,8 @@ export function placeEvent(ev: PictureEv, slot: number): PictureEv {
 /** A scene's entity moved into the slot's room. */
 export function placeEnt(e: EntState, slot: number): EntState {
   const o = slotOrigin(slot);
-  return { ...e, id: slotId(slot, e.id), x: e.x + px(o.x), y: e.y + px(o.z) };
+  // a gaze's `extra` is the target's id: it moves into the slot with it
+  return { ...e, id: slotId(slot, e.id), x: e.x + px(o.x), y: e.y + px(o.z), extra: e.anim === ANIM.Gaze ? slotId(slot, e.extra) : e.extra };
 }
 
 /** The entities of one slot: the still caster and targets (replaced by the scene's own of the same id), the scene's others, the torches. */
@@ -250,7 +303,11 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
   const world: WorldInput = { map, painted: false, clear: 'stone' };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const kit = createStageKit(assets);
-  const cam = { x: 7.5, z: 7.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
+  // `&at=<slot>` starts the camera over that slot's room (the default is the corner of the first four)
+  const atSlot = Number(new URLSearchParams(search).get('at') ?? NaN);
+  const homeAt = Number.isInteger(atSlot) && atSlot >= 0 && atSlot <= BAY ? slotOrigin(atSlot) : null;
+  const homeX = homeAt ? homeAt.x + 7.5 : 7.5, homeZ = homeAt ? homeAt.z + 7.6 : 7.6;
+  const cam = { x: homeX, z: homeZ, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pass = new FxPass(NONE);
   let fx = new Effects3d(map);
   let group = opts.group;
@@ -276,7 +333,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
   document.body.appendChild(label);
 
   const rowsOf = (g: FxGroup): FxRow[] => FX_ROWS.filter((r) => r.group === g).slice(0, SLOTS);
-  const home = (): void => { cam.x = 7.5; cam.z = 7.6; };
+  const home = (): void => { cam.x = homeX; cam.z = homeZ; };
   host?.setPageButtons([
     ...FX_GROUPS.map((g) => ({
       name: g[0].toUpperCase() + g.slice(1), pressed: () => group === g,
@@ -337,7 +394,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const frame = galleryFrame(ents, t, dt);
       if (extras.drain || extras.lights) frame.snap = snap({ drain: extras.drain ?? null, lights: extras.lights ?? [] }) as unknown as Snapshot;
       const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, models: { kit, is: (e) => e.kind !== KIND.Torch } });
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null }, fo.glows);
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues }, fo.glows);
 
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');

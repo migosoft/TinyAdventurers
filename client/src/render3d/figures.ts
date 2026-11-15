@@ -12,12 +12,12 @@ import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory
 import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
-import { SHOT_LIFT, snapGround, type Cam } from './camera';
+import { SHOT_LIFT, snapGround, viewRay, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WALL_SIGHT_PUSH, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
-import type { DrawnFig } from './fx/types';
+import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
@@ -28,6 +28,10 @@ import { modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
+/** A biter's fangs hang this far (sprite px) in front of the figure; the bite's `u` while it holds its wind-up (the page's `u0`); a card wolf's bite lasts this long (s). */
+const BITE_AHEAD = 18.5;
+const BITE_HELD = 0.25;
+const BITE_SECS = 0.3;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
 /** The 2D ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
 const SHADOW_DEPTH = 0.45;
@@ -109,6 +113,8 @@ export interface FigureOut {
   models: FigureInst[];
   /** Every figure drawn this frame, card or model, for the effects tied to one (#308). The objects are reused: valid until the next frame. */
   figs: DrawnFig[];
+  /** The mimics' one-shot cues of this frame (the reveal and the landing), for the effects. */
+  cues: MimicCue[];
 }
 
 interface Fig {
@@ -202,6 +208,9 @@ export class Figures3d {
   /** The `DrawnFig` objects, reused every frame, and how many this frame used. */
   private readonly figPool: DrawnFig[] = [];
   private figUsed = 0;
+  /** The mouth and nostril vectors of the listed figures, by slot (reused). */
+  private readonly mouthPool: MV3[] = [];
+  private readonly nostrilPool: MV3[] = [];
   private models: FigureLook['models'] | null = null;
   private skulls: Skull[] = [];
   private coins: Coin[] = [];
@@ -260,7 +269,7 @@ export class Figures3d {
     this.oval = look.oval;
     this.ground = look.ground ?? (() => 0);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [] };
     this.figUsed = 0;
     const seen = new Set<number>();
     this.anchors.clear();
@@ -410,6 +419,7 @@ export class Figures3d {
     if (p.wakeCue && !f.dark.has(e.id)) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
     const x = e.x / TILE;
     const z = e.y / TILE;
+    if ((p.wakeCue || p.landCue) && !f.dark.has(e.id)) out.cues.push({ x, z, land: !p.wakeCue });
     const [bx, bz] = this.bodyFoot(x, z, cam);
     this.body({
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
@@ -595,7 +605,11 @@ export class Figures3d {
     const idle = `${d.idle}0`, ib = this.bounds(idle), foot = d.footY ?? ib.h;
     const sa = standingAnchor(ib, foot, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     this.anchors.set(e.id, { x, z, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
-    this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha * k, true);
+    // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
+    const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
+    const bite = m.armLength > 0 ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
+    const lf = this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, (shoulder - down) * stretch, bite);
+    if (bite >= 0) this.muzzle(lf, cam, p3.yaw, (0.8 * shoulder - down) * stretch, m.baseHeight / TILE + m.radius);
     const standing = Math.max(0, (foot - ib.t) * m.size - pose.sink) * sc;   // as the card path's `height`: the smaller model's opaque height less the wade (not scaled), times the pose scale
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : standing / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
@@ -606,18 +620,33 @@ export class Figures3d {
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
    */
-  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, height: number, alpha: number, model: boolean): void {
+  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number): DrawnFig {
     // The camera passes stretch the figure by 1 / cos(pitch) (nodes.ts): so is the top.
     const top = height / TILE / Math.cos(cam.pitch);
-    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, model: false, side: 0, def: d });
+    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1 });
     this.figUsed++;
     f.id = e.id; f.kind = e.kind; f.x = x; f.z = z; f.top = top;
-    // The weapon hand or staff tip: a hand's reach in front of the body at about two thirds of its height (a first guess; no bone is read).
-    const h = f.hand as MV3;
-    h[0] = x + Math.cos(s.aim) * 0.3; h[1] = top * 0.62; h[2] = z + Math.sin(s.aim) * 0.3;
+    // The weapon hand (the model's shoulder, the card's hand height): a hand's reach in front of the body, along its facing.
+    const h = f.hand as MV3, reach = model ? 0.3 : 10 / TILE;
+    h[0] = x + Math.cos(yaw) * reach; h[1] = handY; h[2] = z + Math.sin(yaw) * reach;
     f.aim = s.aim; f.anim = s.anim; f.animT = s.animT; f.effects = s.effects ?? 0; f.alpha = alpha; f.model = model; f.side = e.side; f.def = d;
-    delete f.mouth; delete f.nostril;
+    f.yaw = yaw; f.swingY = handY; f.arc = s.swingArc ?? d.swing?.arc ?? 0; f.bite = bite;
+    f.mouth = undefined; f.nostril = undefined;
     out.figs.push(f);
+    return f;
+  }
+
+  /** Sets the mouth or nostril of the figure just listed to a point in the pooled vectors of its slot. */
+  private point(pool: MV3[], x: number, y: number, z: number): MV3 {
+    const v = (pool[this.figUsed - 1] ??= [0, 0, 0]);
+    v[0] = x; v[1] = y; v[2] = z;
+    return v;
+  }
+
+  /** A biter's fangs hang in front of its muzzle, lifted along the view ray (the view is orthographic: the picture does not change) past everything of the figure, so its own head does not hide them. */
+  private muzzle(f: DrawnFig, cam: Cam, yaw: number, y: number, lift: number): void {
+    const ahead = BITE_AHEAD / TILE, ray = viewRay(cam.pitch, cam.yaw), l = ahead + lift;
+    f.mouth = this.point(this.mouthPool, f.x + Math.cos(yaw) * ahead + ray[0] * l, y + ray[1] * l, f.z + Math.sin(yaw) * ahead + ray[2] * l);
   }
 
   /** Draws one figure; false when it is not drawn (dead). */
@@ -709,7 +738,16 @@ export class Figures3d {
       alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0,
     });
 
-    this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha, false);
+    // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.
+    const stretch = 1 / Math.cos(cam.pitch), wolf = e.kind === KIND.DireWolf;
+    const bite = !wolf ? -1 : s.anim === ANIM.Windup ? BITE_HELD : s.anim === ANIM.Melee ? BITE_HELD + (1 - BITE_HELD) * (s.animT / BITE_SECS) : -1;
+    const lf = this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha, false, s.aim, (d.handY * ds * stretch) / TILE, bite);
+    if (bite >= 0) this.muzzle(lf, cam, s.aim, lf.top * 0.55, 0.4);
+    if (d.mouth && !pose.lie) {
+      const mp = this.framePoint(e.id, d.mouth), np = this.framePoint(e.id, d.nostrils);
+      if (mp) lf.mouth = this.point(this.mouthPool, mp.x, mp.y * stretch, mp.z);
+      if (np) lf.nostril = this.point(this.nostrilPool, np.x, np.y * stretch, np.z);
+    }
     const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;
     // Falling or drowning stops it opening walls; wading (pose.sink) does not.
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : height / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);

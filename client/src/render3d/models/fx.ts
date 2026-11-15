@@ -1,8 +1,9 @@
-// The effect triangles of the figures (#338): flat-coloured triangles the model layer draws with the figures' own pass (`fxMaterial`).
-// The shapes that fill the buffer are the swoosh of a melee swing, the clamping fangs of a bite and the swirl round a channelling figure;
-// the swoosh and the fangs are ported from the approved try-out page (`makeFx` and `effects`). Nothing is allocated per triangle:
-// the numbers go straight into the buffer's arrays.
+// The effect triangles of the figures (#338): flat-coloured triangles the effects pass draws with the figures' own pass (`fxMaterial`).
+// The shapes are the swoosh of a melee swing, the clamping fangs of a bite and the swirl round a channelling figure (#308: they write
+// into the effects' `FxTris`, for cards and models alike); the swoosh and the fangs are ported from the approved try-out page
+// (`makeFx` and `effects`). Nothing is allocated per triangle.
 import type { Cam } from '../camera';
+import type { FxTris } from '../fx/tris';
 
 /** Triangles as three corners of x, y, z each in `position` and four numbers r, g, b, a per corner in `rgba`; `n` is the triangle count. */
 export interface FxBuf { position: number[]; rgba: number[]; n: number }
@@ -16,18 +17,15 @@ const ease = (v: number): number => { v = Math.max(0, Math.min(1, v)); return v 
 /** The soft white of the swoosh and the fangs. */
 export const FX_WHITE = 0xfff8e0;
 
-function vert(b: FxBuf, x: number, y: number, z: number, r: number, g: number, bl: number, a: number): void {
-  b.position.push(x, y, z);
-  b.rgba.push(r, g, bl, a);
-}
-
 /** The corners of a ring's two triangles: along one diagonal, or (the page's swoosh) along the other. */
 const SPLIT_A = [0, 1, 2, 0, 2, 3], SPLIT_B = [0, 1, 3, 1, 2, 3];
 
 /** A quad of corners 0 1 2 3 (in a ring) as two triangles. `c` holds r, g, b; `a` the four alphas. */
-function quad(b: FxBuf, p: ArrayLike<number>, c: ArrayLike<number>, a: ArrayLike<number>, split = SPLIT_A): void {
-  for (const i of split) vert(b, p[i * 3], p[i * 3 + 1], p[i * 3 + 2], c[0], c[1], c[2], a[i]);
-  b.n += 2;
+function quad(b: FxTris, p: ArrayLike<number>, c: ArrayLike<number>, a: ArrayLike<number>, split = SPLIT_A): void {
+  for (let k = 0; k < 6; k += 3) {
+    const i = split[k], j = split[k + 1], l = split[k + 2];
+    b.tri(p[i * 3], p[i * 3 + 1], p[i * 3 + 2], p[j * 3], p[j * 3 + 1], p[j * 3 + 2], p[l * 3], p[l * 3 + 1], p[l * 3 + 2], c[0], c[1], c[2], a[i], a[j], a[l]);
+  }
 }
 
 const SWOOSH_SEGMENTS = 28;
@@ -39,7 +37,7 @@ const swooshP = new Array<number>(12), swooshA = new Array<number>(4), swooshC =
  * arc fades while the weapon returns. `k` is the seconds into the swing over `MELEE_T` (the sweep is 0 to 1, the return 1 to 2);
  * nothing before the sweep starts and once the arc has faded (k about 1.61: the page's fade, a little after the sweep).
  */
-export function swooshTris(b: FxBuf, x: number, z: number, y: number, yaw: number, reach: number, arc: number, colour: number, k: number): void {
+export function swooshTris(b: FxTris, x: number, z: number, y: number, yaw: number, reach: number, arc: number, colour: number, k: number): void {
   if (k <= 0) return;
   const s = ease(k);
   const u = k <= 1 ? 0.2 + 0.36 * k : 0.56 + 0.44 * (k - 1);   // the page's u (pose3d's `uOf`)
@@ -73,7 +71,7 @@ const fangP = new Array<number>(12), fangA = new Array<number>(4), fangC = [0xff
  * One row of the fangs, in the card's plane at `at`: `sign` 1 is the upper row (the teeth hang down from `open`), -1 the lower one
  * (turned over, set off sideways by 1.2). All sizes are sprite px times `S`; `right` and `up` are the card's axes.
  */
-function jawRow(b: FxBuf, at: readonly [number, number, number], right: readonly [number, number, number], up: readonly [number, number, number], S: number, open: number, sign: number, jaw: number): void {
+function jawRow(b: FxTris, at: readonly [number, number, number], right: readonly [number, number, number], up: readonly [number, number, number], S: number, open: number, sign: number, jaw: number): void {
   const pt = (lx: number, ly: number, o: number): void => {
     const X = (lx + (sign < 0 ? 1.2 : 0)) * S * PX, Y = (open * sign + ly * sign) * S * PX;
     fangP[o] = at[0] + right[0] * X + up[0] * Y; fangP[o + 1] = at[1] + right[1] * X + up[1] * Y; fangP[o + 2] = at[2] + right[2] * X + up[2] * Y;
@@ -81,8 +79,7 @@ function jawRow(b: FxBuf, at: readonly [number, number, number], right: readonly
   for (const [x, wd, ln] of JAW_TEETH) {
     pt(x - wd / 2, 0, 0); pt(x + wd / 2, 0, 3); pt(x, -ln, 6);
     fangA[0] = 0.6 * jaw; fangA[1] = 0.6 * jaw; fangA[2] = jaw;
-    for (let i = 0; i < 3; i++) vert(b, fangP[i * 3], fangP[i * 3 + 1], fangP[i * 3 + 2], fangC[0], fangC[1], fangC[2], fangA[i]);
-    b.n++;
+    b.tri(fangP[0], fangP[1], fangP[2], fangP[3], fangP[4], fangP[5], fangP[6], fangP[7], fangP[8], fangC[0], fangC[1], fangC[2], fangA[0], fangA[1], fangA[2]);
   }
   for (let i = 0; i < 3; i++) {
     pt(GLOW_X[i], 0, 0); pt(GLOW_X[i + 1], 0, 3); pt(GLOW_X[i + 1], 1.8, 6); pt(GLOW_X[i], 1.8, 9);
@@ -95,7 +92,7 @@ function jawRow(b: FxBuf, at: readonly [number, number, number], right: readonly
  * The bite's sign: two rows of fangs in the card's plane (facing the camera) at `at` (tiles), which appear open, clamp shut and fade.
  * `k` is the bite's `u` (the page's): visible from 0.16, shut between 0.30 and 0.46, gone by 0.92.
  */
-export function fangTris(b: FxBuf, at: readonly [number, number, number], cam: Cam, k: number): void {
+export function fangTris(b: FxTris, at: readonly [number, number, number], cam: Cam, k: number): void {
   const jaw = ease((k - 0.16) / 0.1) * (1 - ease((k - 0.62) / 0.3));
   if (jaw <= 0.01) return;
   let s = ease((k - 0.3) / 0.16);
@@ -116,7 +113,7 @@ const swirlP = new Array<number>(12), swirlA = new Array<number>(4), swirlC = [0
  * The swirl of a channelling figure: three short arcs circling it at three heights (fractions of `height`, tiles), `radius` tiles from the
  * foot (x, z), each a thin slanted ribbon whose bright head leads and fades behind. `t` is the clock in seconds. The heights are `base` plus the fractions of `height`.
  */
-export function swirlTris(b: FxBuf, x: number, z: number, t: number, colour: number, height = 1, radius = 0.45, base = 0): void {
+export function swirlTris(b: FxTris, x: number, z: number, t: number, colour: number, height = 1, radius = 0.45, base = 0): void {
   swirlC[0] = (colour >> 16) / 255; swirlC[1] = ((colour >> 8) & 255) / 255; swirlC[2] = (colour & 255) / 255;
   for (let a = 0; a < SWIRL_ARCS.length; a++) {
     const y = base + SWIRL_ARCS[a] * height, head = t * SWIRL_RATE * (a % 2 ? -1 : 1) + a * 2.1;

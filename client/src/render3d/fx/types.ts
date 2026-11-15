@@ -39,9 +39,21 @@ export interface DrawnFig {
   model: boolean;
   side: number;
   def: FigureDef;
+  /** The dragon's mouth and nostril, or the muzzle a biter's fangs hang before (world, stretched); `undefined` when the figure has none. */
   mouth?: V3;
   nostril?: V3;
+  /** Facing, world rad: a model's drawn yaw, else the aim. */
+  yaw: number;
+  /** World y the swoosh lies at: the model's shoulder, the card's hand. */
+  swingY: number;
+  /** The swoosh's arc (rad): the swing's own for an armed figure, else the definition's. */
+  arc: number;
+  /** A biter's (wolf's) bite progress `u` (0.25 held in the wind-up), -1 for a figure that does not bite with fangs. */
+  bite: number;
 }
+
+/** A mimic's one-shot cue from its pose: the reveal (gold motes) or the landing (a dust puff), at the foot (tiles). */
+export interface MimicCue { x: number; z: number; land: boolean }
 
 /** Budgets (first guesses): blended triangles, lit triangles, records of one kind (the oldest is dropped), client lights per frame. */
 export const FX_TRI_CAP = 24000;

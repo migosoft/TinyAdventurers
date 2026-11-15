@@ -11,11 +11,12 @@ import type { Quality } from '../quality';
 import type { Effects3d, FxFrame } from './effects3d';
 import { registerBooms } from './booms';
 import { registerBursts } from './bursts';
+import { registerFigureFx } from './figureFx';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
 import { FxTris } from './tris';
-import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
+import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
 
 export interface FxPassIn {
   cam: Cam;
@@ -30,6 +31,8 @@ export interface FxPassIn {
   hidden: ReadonlySet<number>;
   you: number;
   ownCast: OwnCast | null;
+  /** The mimics' one-shot cues of this frame (`FigureOut.cues`). */
+  cues?: readonly MimicCue[];
 }
 
 export class FxPass {
@@ -45,6 +48,7 @@ export class FxPass {
     registerShots();
     registerBursts();
     registerBooms();
+    registerFigureFx();
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }
 
@@ -62,6 +66,7 @@ export class FxPass {
     const fin = this.input;
     fin.figs = p.figs; fin.ents = p.ents; fin.shots = p.shots; fin.hiddenShots = p.hiddenShots; fin.snap = p.snap; fin.you = p.you; fin.ownCast = p.ownCast;
     fin.hidden = p.hidden;
+    fin.cues = p.cues;
     const out = this.out;
     fx.frame(fin, out);
     const g = out.glows;

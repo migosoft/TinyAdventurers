@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { fangTris, newFxBuf, swirlTris, swooshTris } from './fx';
+import { FxTris } from '../fx/tris';
+import { fangTris, newFxBuf, swirlTris, swooshTris, type FxBuf } from './fx';
 
 const cam = { x: 0, z: 0, pitch: Math.PI / 4, yaw: 0 };
 const WHITE = 0xfff8e0;
+
+/** Runs a shape into a triangle list and flushes it, unsorted, into a buffer. */
+const made = (draw: (T: FxTris) => void, c = cam): FxBuf => {
+  const T = new FxTris(20000), b = newFxBuf();
+  draw(T);
+  T.flush(b, c, false);
+  return b;
+};
 
 /** The corners of the buffer: x, y, z of every vertex. */
 const corners = (b: { position: number[] }): Array<[number, number, number]> => {
@@ -14,16 +23,14 @@ const corners = (b: { position: number[] }): Array<[number, number, number]> => 
 describe('swooshTris', () => {
   it('adds nothing before the sweep starts or once the swoosh has faded', () => {
     for (const k of [0, 1.7, 3]) {
-      const b = newFxBuf();
-      swooshTris(b, 0, 0, 1, 0, 28, 1.75, WHITE, k);
+      const b = made((T) => swooshTris(T, 0, 0, 1, 0, 28, 1.75, WHITE, k));
       expect(b.n).toBe(0);
       expect(b.position.length).toBe(0);
     }
   });
 
   it('keeps its position and colour arrays in step with the triangle count', () => {
-    const b = newFxBuf();
-    swooshTris(b, 0, 0, 1, 0, 28, 1.75, WHITE, 0.6);
+    const b = made((T) => swooshTris(T, 0, 0, 1, 0, 28, 1.75, WHITE, 0.6));
     expect(b.n).toBeGreaterThan(0);
     expect(b.position.length).toBe(b.n * 9);
     expect(b.rgba.length).toBe(b.n * 12);
@@ -31,8 +38,7 @@ describe('swooshTris', () => {
 
   it('lies at the given height, its outer edge `reach / 16` tiles from the foot and within the arc', () => {
     const arc = 1.75, reach = 28, yaw = 0.7, x = 3, z = 4;
-    const b = newFxBuf();
-    swooshTris(b, x, z, 1.1, yaw, reach, arc, WHITE, 0.8);
+    const b = made((T) => swooshTris(T, x, z, 1.1, yaw, reach, arc, WHITE, 0.8));
     let outer = 0;
     for (const [px, py, pz] of corners(b)) {
       expect(py).toBeCloseTo(1.1, 6);
@@ -49,8 +55,7 @@ describe('swooshTris', () => {
 
   it('grows along the arc as the swing goes on', () => {
     const span = (k: number) => {
-      const b = newFxBuf();
-      swooshTris(b, 0, 0, 1, 0, 28, 1.75, WHITE, k);
+      const b = made((T) => swooshTris(T, 0, 0, 1, 0, 28, 1.75, WHITE, k));
       let lit = 0;
       for (let i = 0; i < b.n * 3; i++) if (b.rgba[i * 4 + 3] > 0.05) lit++;
       return lit;
@@ -61,20 +66,16 @@ describe('swooshTris', () => {
 
 describe('fangTris', () => {
   const rows = (k: number): number => {
-    const b = newFxBuf();
-    fangTris(b, [0, 1, 0], cam, k);
+    const b = made((T) => fangTris(T, [0, 1, 0], cam, k));
     const ys = corners(b).map((c) => c[1]);
     return b.n === 0 ? 0 : Math.max(...ys) - Math.min(...ys);
   };
 
   it('adds nothing before 0.16 and after 0.92', () => {
     for (const k of [0, 0.1, 0.16, 0.92, 0.99]) {
-      const b = newFxBuf();
-      fangTris(b, [0, 1, 0], cam, k);
-      expect(b.n).toBe(0);
+      expect(made((T) => fangTris(T, [0, 1, 0], cam, k)).n).toBe(0);
     }
-    const b = newFxBuf();
-    fangTris(b, [0, 1, 0], cam, 0.4);
+    const b = made((T) => fangTris(T, [0, 1, 0], cam, 0.4));
     expect(b.n).toBeGreaterThan(0);
     expect(b.rgba.length).toBe(b.n * 12);
   });
@@ -86,8 +87,7 @@ describe('fangTris', () => {
   it('faces the camera: every corner is in the plane through the middle across the view', () => {
     for (const yaw of [0, 1.1, -2]) {
       const c = { ...cam, yaw };
-      const b = newFxBuf();
-      fangTris(b, [2, 1, 3], c, 0.3);
+      const b = made((T) => fangTris(T, [2, 1, 3], c, 0.3), c);
       // the direction from the target toward the camera is perpendicular to the plane
       const v: [number, number, number] = [-Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)];
       for (const [px, py, pz] of corners(b)) {
@@ -99,9 +99,7 @@ describe('fangTris', () => {
 
 describe('swirlTris', () => {
   it('adds arcs round the figure at three heights in the figure\'s colour, and turns with time', () => {
-    const a = newFxBuf(), c = newFxBuf();
-    swirlTris(a, 2, 3, 0, 0x4a7aff, 1, 0.5);
-    swirlTris(c, 2, 3, 0.4, 0x4a7aff, 1, 0.5);
+    const a = made((T) => swirlTris(T, 2, 3, 0, 0x4a7aff, 1, 0.5)), c = made((T) => swirlTris(T, 2, 3, 0.4, 0x4a7aff, 1, 0.5));
     expect(a.n).toBeGreaterThan(0);
     expect(a.position.length).toBe(a.n * 9);
     expect(a.rgba.slice(0, 3)).toEqual([0x4a / 255, 0x7a / 255, 1].map((v) => expect.closeTo(v, 5)));
