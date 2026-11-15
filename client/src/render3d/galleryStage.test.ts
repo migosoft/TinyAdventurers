@@ -135,7 +135,7 @@ describe('the gallery stage', () => {
   });
 
   it('reads the URL: state, slow and focus', () => {
-    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', light: 'work', at: null };
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', light: 'work', at: null, aim: null };
     expect(parseGallery('?r3d=gallery')).toEqual(d);
     expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
@@ -143,12 +143,19 @@ describe('the gallery stage', () => {
 
   it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
     expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
-      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', light: 'torch', at: { x: 12.5, z: 60 },
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', light: 'torch', at: { x: 12.5, z: 60 }, aim: null,
     });
     expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
     expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));
     expect(parseGallery('?at=dying:1').at).toEqual(GALLERY.dying(1));
     expect(parseGallery('?at=crowd:7').at).toEqual(GALLERY.crowd(7));
+    // `aim=<deg>` pins the aim of the figure rows and the model rows (a figure that faces the camera shows its front)
+    expect(parseGallery('?aim=90').aim).toBeCloseTo(Math.PI / 2, 9);
+    expect(parseGallery('?aim=x').aim).toBeNull();
+    expect(parseGallery('?').aim).toBeNull();
+    const pinned = galleryEnts(3.3, null, 0, 1.2);
+    expect(pinned.filter((e) => inRange(e.id, ID.model, 9) || inRange(e.id, ID.figure, 100)).every((e) => e.aim === 1.2)).toBe(true);
+    expect(galleryEnts(3.3, null).find((e) => e.id === ID.model)!.aim).not.toBe(1.2);
     expect(parseGallery('?crowd=-3&crowdAs=x&light=y&at=1').crowd).toBe(0);
     expect(parseGallery('?crowd=100000').crowd).toBe(CROWD_MAX);
     const q = parseGallery('?crowd=2.7&crowdAs=x&light=y&at=1');

@@ -4,6 +4,7 @@
 // lost-device warning (but in the `lose` run, where the loss is on purpose).
 // Usage: node models-shots.mjs [baseUrl] [outDir] [mode]     mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan)
 // Env: BROWSER (the executable), HEADED=1 (a visible window; with mode webgpu on the real GPU), GPU=1 (gpu.mjs: the notebook's start line),
+//      GPU=1 (a visible window on the real GPU with the notebook's start line, gpu.mjs; headless SwiftShader loses the WebGPU device),
 //      READBACK=1 (also saves <name>-readback.png: the frame re-drawn off-screen and read back, for WebGPU), R3D_W / R3D_H (1280x768),
 //      ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on).
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -25,16 +26,21 @@ const KINDS = [
 const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
 // A still picture: the clock nearly stopped (slow) at t = 0.6 (past the hurt flash).
 const STILL = '&slow=1000&t=0.6';
+// A dash leaves copies that fade in 0.25 s of the stage's clock, so a stopped clock would keep the copies of the first frames (drawn as cards
+// before the models were built) for ever: a dash runs slowly instead (the copies of the first frames are gone when the picture is taken).
+const still = (state) => (state === 'dash' ? '&slow=4&t=0.6' : STILL);
 
 const shots = [];
 for (const [i, [name, desc]] of KINDS.entries()) {
-  for (const s of STATES) shots.push({ name: `kind-${name}-${s}`, q: `&focus=models&at=model:${i}&zoom=6&state=${s}${STILL}`, need: [desc] });
+  for (const s of STATES) shots.push({ name: `kind-${name}-${s}`, q: `&focus=models&at=model:${i}&zoom=6&state=${s}${still(s)}`, need: [desc], wait: s === 'dash' ? 6000 : 0 });
 }
-for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=3&state=${s}${STILL}`, need: ALL });
+for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=3&state=${s}${still(s)}`, need: ALL, wait: s === 'dash' ? 6000 : 0 });
+// Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
+for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
 shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=3&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'torch-light-close', q: `&at=model:3&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
-shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=0.5&slow=8', need: ALL, skull: true });
+shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.3&slow=1', need: ALL, skull: true });
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });
 shots.push({ name: 'crowd-cards', q: '&crowd=40&crowdAs=cards&at=crowd:20&zoom=3&slow=1000&t=0.6', need: [], readout: true });
 shots.push({ name: 'crowd-models-many', q: '&crowd=184&at=crowd:90&zoom=2&slow=1000&t=0.6', need: ALL, readout: true });
@@ -52,6 +58,8 @@ const b = await chromium.launch({
   args,
   ...(gpuOn ? gpuLaunch() : {}),
 });
+// GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
+const backend = gpuOn && mode === 'webgl' ? '&backend=webgl' : '';
 const errs = [];
 const failures = [];
 const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 };
@@ -66,7 +74,7 @@ async function open(url, tag, lose = false) {
     if (m.type() === 'warning' && !lose && /device lost/i.test(t)) errs.push(`${tag}: ${t}`);
     if (m.type() === 'warning' && /^3D model /.test(t)) errs.push(`${tag}: ${t}`);
   });
-  await p.goto(url);
+  await p.goto(url + backend);
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });
   return p;
 }
@@ -113,18 +121,26 @@ await first.close();
 for (const s of shots) {
   if (only && !only.test(s.name)) continue;
   const t0 = Date.now();
+  let p = null;
   try {
-    const p = await open(`${base}?r3d=${s.page ?? 'gallery'}${s.q}`, s.name);
-    const keys = await built(p, s.need, s.skull);
-    if (s.wait) await p.waitForTimeout(s.wait);
-    await p.waitForTimeout(800);
-    await snap(p, s.name);
-    const m = await p.evaluate(() => window.__r3d.models ?? null);
-    console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys || 'nothing'}${m ? `, drew ${m.figures} figures in ${m.batches} batches, ${m.draws} draws` : ''}`);
-    await p.close();
+    // One shot may take at most 4 minutes (a page of software-rendered frames can stall).
+    await Promise.race([
+      (async () => {
+        p = await open(`${base}?r3d=${s.page ?? 'gallery'}${s.q}`, s.name);
+        const keys = await built(p, s.need, s.skull);
+        if (s.wait) await p.waitForTimeout(s.wait);
+        await p.waitForTimeout(800);
+        await snap(p, s.name);
+        const m = await p.evaluate(() => window.__r3d.models ?? null);
+        console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys ? keys.split(',').length : 0} models${m ? `, drew ${m.figures} figures in ${m.batches} batches, ${m.draws} draws` : ''}`);
+      })(),
+      new Promise((_, no) => setTimeout(() => no(new Error('timeout: the shot took more than 4 minutes')), 240000)),
+    ]);
   } catch (e) {
     failures.push(`${s.name}: ${e.message}`);
     errs.push(`${s.name}: ${e.message}`);
+  } finally {
+    await p?.close().catch(() => {});
   }
 }
 

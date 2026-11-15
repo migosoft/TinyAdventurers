@@ -76,6 +76,8 @@ export interface GalleryOpts {
   light: 'work' | 'torch';
   /** The camera's start in tiles (overrides the focus). */
   at: { x: number; z: number } | null;
+  /** `&aim=<deg>` (radians here): pins the aim of the figure rows and the model rows (90 faces the camera). */
+  aim: number | null;
 }
 
 /**
@@ -111,6 +113,7 @@ export function parseGallery(search: string): GalleryOpts {
     crowdAs: q.get('crowdAs') === 'cards' ? 'cards' : 'models',
     light: q.get('light') === 'torch' ? 'torch' : 'work',
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
+    aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
   };
 }
 
@@ -171,13 +174,13 @@ function barrelAt(t: number): { anim: number; animMs: number } {
 }
 
 /** Every entity of the stage at gallery time `t` (s); `state` pins a state (else the 1.2 s cycle); `crowd` walking model figures are added. */
-export function galleryEnts(t: number, state: string | null, crowd = 0): EntState[] {
+export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: number | null = null): EntState[] {
   const out: EntState[] = [];
   // Figure rows: the state cycle, the hurt flash every 3 s, the aim swinging and turning every 4 s.
   const only = STATES.findIndex(([n]) => n === state);
   const [, anim] = STATES[only >= 0 ? only : Math.floor(t / 1.2) % STATES.length];
   const animMs = ((t % 1.2) % 0.5) * 1000;
-  const aim = Math.sin(t * 0.7) * 0.6 + (Math.floor(t / 4) % 2 ? Math.PI : 0);
+  const aim = aimPin ?? Math.sin(t * 0.7) * 0.6 + (Math.floor(t / 4) % 2 ? Math.PI : 0);
   const hurt = Math.floor(t * 2) % 6 === 0 ? FLAG.HURT : 0;
   Object.keys(FIGURES).map(Number).forEach((k, i) => {
     const p = GALLERY.figure(i);
@@ -329,7 +332,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (!c.view) return 0;
       // The figures that died since the last frame leave their skulls; the event comes before the frame that no longer has them.
       for (const ev of diedBetween(t0, t)) figures.event(ev);
-      const ents = galleryEnts(t, opts.state, opts.crowd);
+      const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim);
       const torch = opts.light === 'torch';
       if (torch) for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
