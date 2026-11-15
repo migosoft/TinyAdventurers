@@ -724,10 +724,12 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const fg = make(), fs = make();
     fg.frame(frame([ranger()]), cam(), look({ kit, ...all }));
     fs.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })]), cam(), look({ kit, ...all }));
-    // the body's thickness (twice its side reach), lower than the standing height
+    // as the card path: only `head` is the body's thickness (twice its side reach); the bar and the name stay at the standing height
     expect(fs.anchors.get(10)!.head).toBeLessThan(fg.anchors.get(10)!.head);
     expect(fs.anchors.get(10)!.head).toBeCloseTo(2 * sideReach(kit.get('elf')!) * kit.get('elf')!.scale, 6);
-    expect(fs.anchors.get(10)!.height).toBe(fs.anchors.get(10)!.head);
+    expect(fs.anchors.get(10)!.height).toBe(fg.anchors.get(10)!.height);
+    expect(fs.anchors.get(10)!.tag).toBe(fg.anchors.get(10)!.tag);
+    expect(fs.anchors.get(10)!.cx).toBe(0);
   });
 
   it('keeps the tint figurePose chose for a stone figure in a wind-up, and drops the red flash for a living one', () => {
@@ -742,9 +744,17 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   it('batches by the weapon too: the circle is the same for the figure and its bow and bigger than the body alone', () => {
     const [body, bow] = make().frame(frame([ranger()]), cam(), look({ kit, ...all })).models;
     expect(bow.radius).toBe(body.radius);
-    expect(body.radius).toBeGreaterThan(kit.get('elf')!.radius);
-    expect(body.reach).toBe(kit.get('elf')!.radius);
-    expect(bow.reach).toBe(body.reach);
+    const elf = kit.get('elf')!, wm = kit.get('weapon_bow')!;
+    expect(body.radius).toBeCloseTo(Math.max(elf.radius, elf.baseHeight / 16 / 2) + wm.radius * bow.boneScale * elf.scale, 6);
+  });
+
+  it('gives a model figure the sight reach its card gets for the same entity', () => {
+    for (const e of [ranger(), ranger({ effects: 1 << EFFECT.Sleep }), ent(11, KIND.Paladin)]) {
+      const card = make().frame(frame([e]), cam(), look());
+      const [body, ...rest] = make().frame(frame([e]), cam(), look({ kit, ...all })).models;
+      expect(body.reach).toBeCloseTo(card.cards.foot[2] ?? card.decals.foot[2], 6);
+      for (const w of rest) expect(w.reach).toBe(body.reach);
+    }
   });
 
   it('leaves a skull instance, no decal, when a model figure dies; and the cap holds', () => {

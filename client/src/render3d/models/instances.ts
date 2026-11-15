@@ -25,7 +25,7 @@ export interface FigureInst {
   cut: boolean;             // nothing below the ground is drawn (sinking, drowning)
   sight: { hard: number; soft: number };
   radius: number;           // tiles, for batching
-  /** Tiles: the model's own horizontal reach from the foot, for the sight mask's wide-figure rule (not the enlarged batching radius). 0 when absent. */
+  /** Tiles: for the sight mask's wide-figure rule, what the figure's card would use (half the opaque width of its body frame x the pose scale), so it is seen and hidden where the card would be. Not the batching radius. 0 when absent. */
   reach?: number;
 }
 

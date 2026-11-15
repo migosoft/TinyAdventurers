@@ -515,12 +515,15 @@ export class Figures3d {
     const k = dark && this.darkFade ? this.fadeAlpha : 1;
     const sunk = pose.sink >= pose.footY;   // wholly below the surface: nothing of the figure is drawn (as the card's empty crop)
     const radius = silhouetteRadius(m);
+    // The sight reach is the card's: half the opaque width of the body frame the card would show, in tiles.
+    const fb = this.bounds(pose.frame);
+    const reach = pose.lie ? 0 : ((fb.r - fb.l + 1) * sc) / 2 / TILE;   // a lying card (a decal) carries none
     const tint = modelTint(pose, d, s);
     const insts: FigureInst[] = [];
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
       owner: e.id, model: key, x, z, lift: (pose.lie ? this.ground(x, z, 0.3) : 0) - down, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
-      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach: m.radius,
+      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
     };
     if (!sunk) {
       out.models.push(body);
@@ -533,10 +536,10 @@ export class Figures3d {
           const bone = BONES.indexOf(WEAPONS[wp.frame]?.kind === 'bow' ? 'weaponL' : 'weaponR');
           const w: FigureInst = {
             owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: wp.scale, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach: m.radius,
+            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
           };
           // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
-          body.radius = w.radius = radius + wm.radius * wp.scale;
+          body.radius = w.radius = radius + wm.radius * wp.scale * m.scale;
           if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
           out.models.push(w);
           insts.push(w);
@@ -564,8 +567,9 @@ export class Figures3d {
     }
 
     // Lying, the bars and names hang from the body on the floor: its thickness (the card path likewise uses the lying frame's width).
-    const h = pose.lie ? Math.min(m.baseHeight, 2 * sideReach(m) * m.scale) : m.baseHeight;
-    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
+    // As the card path: only `head` changes while lying; the bar and the name stay at the standing height.
+    const h = m.baseHeight;
+    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: pose.lie ? Math.min(h, 2 * sideReach(m) * m.scale) : h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
