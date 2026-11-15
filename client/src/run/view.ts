@@ -26,6 +26,10 @@ export interface ShotView {
   readonly vy: number;
 }
 
+/** The own hero's predicted cast, as the view may read it (type only for now; the session fills it in a later task of #308):
+ *  `seq` counts the casts, `look` is a `RUNE_LOOK` number, `aim` the world radians of the aim. */
+export interface OwnCast { seq: number; look: number; primary: boolean; aim: number }
+
 /** The own hero as drawn this frame (predicted, or the interpolated hero while charmed). */
 export interface OwnHero {
   x: number;
