@@ -2,7 +2,7 @@
 // texture the vertex shader reads) and the batches that keep figures which overlap on screen apart. Pure maths.
 
 import { project, type Cam } from '../camera';
-import { MAX_BENDS, MAX_BONES } from './model';
+import { MAX_BENDS, MAX_BONES } from './bones';
 import type { Pose3d } from './pose3d';
 
 export interface FigureInst {

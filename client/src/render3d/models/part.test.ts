@@ -30,9 +30,12 @@ describe('buildPart', () => {
       expect(rows.length, key).toBeGreaterThan(5);
       expect(mesh.normal.length).toBe(mesh.position.length);
       expect(mesh.uv!.length).toBe(n * 2);
-      for (const idx of mesh.index) expect(idx).toBeLessThan(n);
-      for (const v of mesh.position) expect(Number.isFinite(v)).toBe(true);
-      for (const v of mesh.normal) expect(Number.isFinite(v)).toBe(true);
+      let outside = 0, infinite = 0;   // one assertion per check, not per element (vitest's worker RPC)
+      for (const idx of mesh.index) if (!(idx < n)) outside++;
+      for (const v of mesh.position) if (!Number.isFinite(v)) infinite++;
+      for (const v of mesh.normal) if (!Number.isFinite(v)) infinite++;
+      expect(outside, key).toBe(0);
+      expect(infinite, key).toBe(0);
     }
   }, SLOW);
 

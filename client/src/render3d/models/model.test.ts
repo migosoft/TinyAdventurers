@@ -31,8 +31,12 @@ describe('buildFigure', () => {
       expect(m.uv.length, key).toBe(n * 2);
       expect(m.skin.length, key).toBe(n * 4);
       expect(m.look.length, key).toBe(n * 4);
-      for (const i of m.index) expect(i).toBeLessThan(n);
-      for (const a of [m.position, m.normal, m.uv, m.skin, m.look]) for (const v of a) expect(Number.isFinite(v)).toBe(true);
+      // One assertion per check, not per element: a reported assertion each overloads vitest's worker RPC.
+      let outside = 0, infinite = 0;
+      for (const i of m.index) if (!(i < n)) outside++;
+      for (const a of [m.position, m.normal, m.uv, m.skin, m.look]) for (const v of a) if (!Number.isFinite(v)) infinite++;
+      expect(outside, key).toBe(0);
+      expect(infinite, key).toBe(0);
       expect(m.paint.data.length, key).toBe(m.paint.w * m.paint.h * 4);
     }
   }, SLOW);
@@ -61,15 +65,18 @@ describe('buildFigure', () => {
   it('flags hull vertices only in line ranges and gives them the outline colour', () => {
     for (const key of KEYS) {
       const m = model(key);
+      const bad: string[] = [];
+      const near = (a: number, b: number): boolean => Math.abs(a - b) < 0.5 * 10 ** -3;   // toBeCloseTo(_, 3)
       for (const r of m.ranges) for (let k = r.start; k < r.start + r.count; k++) {
         const v = m.index[k];
-        expect(m.skin[v * 4 + 1], `${key} stage ${r.stage}`).toBe(r.line ? 1 : 0);
+        if (m.skin[v * 4 + 1] !== (r.line ? 1 : 0)) bad.push(`${key} stage ${r.stage}: hull flag ${m.skin[v * 4 + 1]} at vertex ${v}`);
         if (r.line) {
           const o = DESCS[key].outline;
-          expect(m.look[v * 4] * 255).toBeCloseTo(o >> 16, 3);
-          expect(m.look[v * 4 + 2] * 255).toBeCloseTo(o & 255, 3);
+          if (!near(m.look[v * 4] * 255, o >> 16) || !near(m.look[v * 4 + 2] * 255, o & 255)) bad.push(`${key} stage ${r.stage}: outline colour at vertex ${v}`);
         }
+        if (bad.length > 5) break;
       }
+      expect(bad).toEqual([]);
     }
   }, SLOW);
 
@@ -80,12 +87,13 @@ describe('buildFigure', () => {
       if (d.arms) for (const n of ['armR', 'handR', 'armL', 'handL'] as const) has.add(bone(n));
       if (d.legs) for (let i = 0; i < (d.legs.at ? d.legs.at.length * 2 : 2); i++) has.add(bone(`leg${i}` as (typeof BONES)[number]));
       const used = new Set<number>();
+      let notBone = 0;
       for (let i = 0; i < m.skin.length; i += 4) {
         const b = m.skin[i];
-        expect(Number.isInteger(b)).toBe(true);
-        expect(b).toBeLessThan(MAX_BONES);
+        if (!Number.isInteger(b) || !(b < MAX_BONES)) notBone++;
         used.add(b);
       }
+      expect(notBone, key).toBe(0);
       for (const b of used) expect(has.has(b), `${key}: bone ${BONES[b]}`).toBe(true);
       if (d.quad) for (const n of ['leg0', 'leg1', 'leg2', 'leg3'] as const) expect(used.has(bone(n)), `${key} ${n}`).toBe(true);
       expect(MAX_BONES).toBe(BONES.length);
@@ -98,11 +106,12 @@ describe('buildFigure', () => {
       const m = model(key);
       expect(m.bends.length, key).toBe(want[key]);
       expect(m.bends.length).toBeLessThanOrEqual(MAX_BENDS);
+      let badSkin = 0;
       for (let i = 0; i < m.skin.length; i += 4) {
-        const b = m.skin[i + 2];
-        if (b >= 0) { expect(b).toBeLessThan(m.bends.length); expect(m.skin[i + 3]).toBeGreaterThanOrEqual(0); expect(m.skin[i + 3]).toBeLessThanOrEqual(1); }
-        else expect([-1, -2]).toContain(b);
+        const b = m.skin[i + 2], along = m.skin[i + 3];
+        if (b >= 0 ? !(b < m.bends.length && along >= 0 && along <= 1) : b !== -1 && b !== -2) badSkin++;
       }
+      expect(badSkin, key).toBe(0);
       for (const b of m.bends) { expect(b.len).toBeGreaterThan(0); expect(Math.hypot(...b.dir)).toBeCloseTo(1, 5); }
     }
   }, SLOW);
@@ -111,12 +120,13 @@ describe('buildFigure', () => {
     const collar = STAGES.indexOf('collar');
     for (const key of KEYS) {
       const m = model(key);
-      let unlit = 0;
+      let unlit = 0, wrong = 0;
       for (const r of m.ranges) for (let k = r.start; k < r.start + r.count; k++) {
         const w = m.look[m.index[k] * 4 + 3];
-        if (w === 2) { unlit++; expect(r.stage, key).toBe(collar); expect(r.line, key).toBe(false); }
-        else expect([0, 1], key).toContain(w);
+        if (w === 2) { unlit++; if (r.stage !== collar || r.line) wrong++; }
+        else if (w !== 0 && w !== 1) wrong++;
       }
+      expect(wrong, key).toBe(0);
       if (key === 'elf' || key === 'knight') expect(unlit, key).toBeGreaterThan(0);
       else if (key === 'skelet' || key === 'wolf') expect(unlit, key).toBe(0);
     }
@@ -190,7 +200,9 @@ describe('buildFigure', () => {
       for (let i = 0; i < m.look.length; i += 4) { if (m.look[i] < 0) paint++; else flat++; }
       expect(paint, key).toBeGreaterThan(1000);
       expect(flat, key).toBeGreaterThan(100);
-      for (let i = 0; i < m.uv.length; i++) { expect(m.uv[i]).toBeGreaterThanOrEqual(0); expect(m.uv[i]).toBeLessThanOrEqual(1); }
+      let outsideUv = 0;
+      for (let i = 0; i < m.uv.length; i++) if (!(m.uv[i] >= 0 && m.uv[i] <= 1)) outsideUv++;
+      expect(outsideUv, key).toBe(0);
     }
   }, SLOW);
 

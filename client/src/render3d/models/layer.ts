@@ -5,7 +5,7 @@ import {
   BufferAttribute, ClampToEdgeWrapping, DataTexture, FloatType, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter,
   Mesh, NearestFilter, NoColorSpace, RGBAFormat, RepeatWrapping, UnsignedByteType, type Scene, type Texture,
 } from 'three/webgpu';
-import { batchFigures, growRows, packInstance, ROW_TEXELS } from './instances';
+import { batchFigures, growRows, packInstance, ROW_TEXELS, type FigureInst } from './instances';
 import type { Cam } from '../camera';
 import type { FigureFrame } from '../view';
 import { FIGURE_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
@@ -102,6 +102,9 @@ interface Entry {
 const orderOf = (batch: number, stage: number, line: boolean): number => FIGURE_ORDER + batch + (2 * stage + (line ? 0 : 1)) / 64;
 const SEAL_ORDER = 63 / 64;
 
+const NO_INSTS: FigureInst[] = [];
+const NO_BATCHES = new Int32Array(0);
+
 export class FigureLayer {
   /** The uniforms the materials share; the view sets `cosP` each frame. */
   readonly shared: FigureShared = makeFigureShared();
@@ -111,6 +114,10 @@ export class FigureLayer {
   private readonly rowsTex: DataTexture;
   private readonly models = new Map<string, ModelRes>();
   private readonly entries = new Map<string, Entry>();
+  /** Per-frame scratch, cleared at the top of `frame` so a frame allocates no containers. */
+  private readonly groups = new Map<string, { batch: number; key: string; model: FigureModel; list: number[] }>();
+  private readonly live = new Set<Entry>();
+  private readonly usedBatches = new Set<number>();
 
   /**
    * `sunScene`: the sun's pass, or null without a sun. `make` builds the four materials of a model from the rows texture and the model's paint
@@ -139,9 +146,12 @@ export class FigureLayer {
    * skipped (the caller draws its card). `slotOf`: the caster slot of an entity (-1 none).
    */
   frame(f: FigureFrame | undefined, cam: Cam, slotOf: (id: number) => number): void {
-    const insts = f ? f.insts : [];
-    const batches = insts.length > 0 ? batchFigures(insts, cam) : new Int32Array(0);
-    const groups = new Map<string, { batch: number; key: string; model: FigureModel; list: number[] }>();
+    const insts = f ? f.insts : NO_INSTS;
+    // Nothing to draw and nothing drawn last frame: nothing to hide either (the common run without models).
+    if (insts.length === 0 && this.drawn.draws === 0 && this.drawn.figures === 0) return;
+    const batches = insts.length > 0 ? batchFigures(insts, cam) : NO_BATCHES;
+    const groups = this.groups, live = this.live, usedBatches = this.usedBatches;
+    groups.clear(); live.clear(); usedBatches.clear();
     let ready = 0;
     for (let i = 0; i < insts.length; i++) {
       const m = f!.kit.get(insts[i].model);
@@ -154,7 +164,6 @@ export class FigureLayer {
     }
     this.fit(ready);
     let row = 0;
-    const live = new Set<Entry>(), usedBatches = new Set<number>();
     let draws = 0;
     for (const g of groups.values()) {
       const e = this.entry(g.batch, g.key, g.model, g.list.length);

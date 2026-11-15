@@ -20,10 +20,10 @@ import { opensWalls } from './openers';
 import { fangTris, FX_WHITE, newFxBuf, swirlTris, swooshTris, type FxBuf } from './models/fx';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
-import { BONES, type FigureModel } from './models/model';
+import { BONES, BOW_WEAPONS } from './models/bones';
+import type { FigureModel } from './models/model';
 import { copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
 import { modelKeyOf } from './models/table';
-import { WEAPONS } from './models/weapons';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -34,7 +34,7 @@ const SHADOW_ALPHA = 0.45;
 /** A model figure's small effects (#338): the bite's fangs hang this far (sprite px) in front of the figure; the channel's swirl circles it at this radius (tiles). */
 const BITE_AHEAD = 18.5;
 const SWIRL_RADIUS = 0.6;
-/** The bite's `u` while the wolf holds its wind-up (pose3d's `TIMING.bite.hold`). */
+/** The bite's `u` while the wolf holds its wind-up (the page's `u0`, 0.25). */
 const BITE_HELD = 0.25;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
@@ -157,7 +157,9 @@ const FROZEN_TINT = 0xa8d8ff;
  * Whatever else `figurePose` chose (poison, slowed, the dark of a fall) is passed on as it is; nothing is added for minions.
  */
 function modelTint(pose: Pose, d: FigureDef, s: ViewState): [number, number, number] {
-  let rgb = pose.tint.mode === 'mul' ? pose.tint.rgb : 0xffffff;
+  // The hurt flash is a fill: the tint the pose chose without it is worn instead (a silhouette's fill stays a fill and is dropped as before).
+  const chosen = pose.tint.mode === 'fill' && pose.tintUnhurt.mode === 'mul' ? pose.tintUnhurt : pose.tint;
+  let rgb = chosen.mode === 'mul' ? chosen.rgb : 0xffffff;
   const fx = s.effects ?? 0, iced = has(fx, EFFECT.Frozen);
   // The red flash is only shown by `figurePose` when the figure is neither stone nor ice (pose.ts), so only then is there something to undo.
   if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = d.tint ?? 0xffffff;
@@ -280,7 +282,8 @@ export class Figures3d {
     this.drawImages(f.dt, cam, out);
     this.drawShots(f, cam, out);
     let skullPose: Pose3d | null = null;
-    for (const sk of this.skulls) {
+    for (let si = 0; si < this.skulls.length; si++) {
+      const sk = this.skulls[si];
       // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
@@ -289,7 +292,8 @@ export class Figures3d {
       if (sk.model !== undefined && sm) {
         skullPose ??= restPose(sm, cam.yaw + Math.PI / 2);
         out.models.push({
-          owner: -1, model: 'skull', x, z, lift: this.ground(x, z, 0.3), scale: Math.min(1.5, sk.model), pose: skullPose, bone: -1, boneScale: 1,
+          // Its own negative owner (no entity has one: no caster slot, no sight), so overlapping skulls batch apart.
+          owner: -1 - si, model: 'skull', x, z, lift: this.ground(x, z, 0.3), scale: Math.min(1.5, sk.model), pose: skullPose, bone: -1, boneScale: 1,
           tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: silhouetteRadius(sm),
         });
         continue;
@@ -538,7 +542,7 @@ export class Figures3d {
         // The kit logs a weapon it cannot make (once) and gives nothing until the model is built; the figure goes without it.
         const wm = kit.get(wp.frame);
         if (wm) {
-          const bone = BONES.indexOf(WEAPONS[wp.frame]?.kind === 'bow' ? 'weaponL' : 'weaponR');
+          const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
           const w: FigureInst = {
             owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: wp.scale, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
             tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,

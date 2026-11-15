@@ -1,7 +1,8 @@
 // The skeleton of a figure (#338): how the per-bone turns, scales and shifts of a pose become one matrix per bone, and the CPU
 // reference of what the vertex shader does with them. Pure typed-array maths, so it runs under node and in a worker.
 
-import { MAX_BONES, type FigureModel } from './model';
+import { MAX_BONES } from './bones';
+import type { FigureModel } from './model';
 import type { Pose3d } from './pose3d';
 
 /**

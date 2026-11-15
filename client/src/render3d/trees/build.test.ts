@@ -68,7 +68,7 @@ describe('buildTree', () => {
         expect(c0[i]).toBeLessThan(c25[i]);
       });
     }
-  });
+  }, 30000);   // CPU-bound (about 1.7 s alone): the 5 s default fails when the whole suite shares the cores
 
   it('tells the three silhouettes apart by shape: crown width over height', () => {
     const tall = ratio('tall'), round = ratio('round'), wide = ratio('wide');
@@ -153,7 +153,7 @@ describe('the willow', () => {
       expect(mir.mesh.normal).toEqual(mirrorX(a).normal);
       expect(mir.mesh.grad).toEqual(mirrorX(a).grad);
     }
-  });
+  }, 30000);
 
   it('is all curtains: no core balls, at least 300 patches, every leaf in the leaf ramp with its own warm and bright shift', () => {
     for (const s of SEEDS3) {

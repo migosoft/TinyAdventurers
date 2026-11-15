@@ -113,6 +113,8 @@ export interface Pose {
   drop: number;
   lie: null | { angle: number; squash: number; cropX: number; cropW: number; x: number; y: number };
   tint: Tint;
+  /** The tint chosen without the hurt flash (the same as `tint` outside a flash frame). */
+  tintUnhurt: Tint;
   weaponTint: number | null;
   grey: boolean;
   silhouette: boolean;
@@ -158,6 +160,7 @@ function hidden(d: FigureDef, m: PoseMemory): Pose {
     drop: 0,
     lie: null,
     tint: { mode: 'none' },
+    tintUnhurt: { mode: 'none' },
     weaponTint: null,
     grey: false,
     silhouette: false,
@@ -234,13 +237,16 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   // The ambush wind-up of a silhouette figure (the Shade): a flat dark shape, no eyes, fainter than the real thing.
   const silhouette = !!d.silhouette && s.anim === ANIM.Ambush;
   let tint: Tint;
-  if (hurt && !d.hit && Math.floor(m.clock * 30) % 2 === 0) tint = { mode: 'fill', rgb: 0xffffff };
-  else if (silhouette) tint = { mode: 'fill', rgb: SILHOUETTE_FILL };
+  // The hurt flash (every other 1/30 s for a figure without a hit frame) wins over the rest; `tintUnhurt` is what is chosen without it.
+  const flash = hurt && !d.hit && Math.floor(m.clock * 30) % 2 === 0;
+  if (silhouette) tint = { mode: 'fill', rgb: SILHOUETTE_FILL };
   else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
     // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
     tint = { mode: 'mul', rgb: Math.floor(m.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff) };
-    bx = Math.floor(m.clock * 40) % 2 ? 1 : -1;
-    if (own) by += Math.floor(m.clock * 40) % 2;
+    if (!flash) {
+      bx = Math.floor(m.clock * 40) % 2 ? 1 : -1;
+      if (own) by += Math.floor(m.clock * 40) % 2;
+    }
   } else if (poisoned) tint = { mode: 'mul', rgb: shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(m.clock * Math.PI * 3)) };
   else if (slowed) tint = { mode: 'mul', rgb: 0xa0c8ff };
   else if (chilled) tint = { mode: 'mul', rgb: 0xd8ecff };
@@ -250,6 +256,8 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   // Into the dark (chasm) or the deep (water): the figure darkens as it goes.
   if (fall > 0) tint = { mode: 'mul', rgb: shade(1 - fall * 0.95, 0, 0) };
   else if (drown > 0) tint = { mode: 'mul', rgb: shade(1, 0x243f4c, Math.min(1, drown * 1.5)) };
+  const tintUnhurt = tint;
+  if (flash && fall <= 0 && drown <= 0) tint = { mode: 'fill', rgb: 0xffffff };
   const weaponTint = fall > 0 ? shade(1 - fall * 0.95, 0, 0) : (d.weaponTint ?? null);
 
   let shadowSx = 1 - 0.3 * lift;
@@ -354,6 +362,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
     drop: Math.round(fall * 6),
     lie,
     tint,
+    tintUnhurt,
     weaponTint,
     grey: stone,
     silhouette,

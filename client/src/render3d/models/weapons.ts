@@ -6,7 +6,8 @@
 import { CatmullRomCurve3, Vector3 } from 'three/webgpu';
 import { blur } from './grid';
 import { hull } from './addons';
-import { MAX_BONES, STAGES, type FigureModel, type ModelRange } from './model';
+import { MAX_BONES, STAGES } from './bones';
+import { splitIndex, type FigureModel, type ModelRange } from './model';
 import { vertexNormals, type Mesh3 } from './part';
 
 /** A bow made of rods: the limb and the string are smooth lines through points read off the sprite (x, y from its top left). */
@@ -267,11 +268,11 @@ export function buildWeapon(name: string, px: SpritePixels | null): FigureModel 
     }
     v0 += c;
   }
-  const index = Uint32Array.from(all), pieceIndex: number[] = [], lineIndex: number[] = [];
-  for (const r of ranges) (r.line ? lineIndex : pieceIndex).push(...index.subarray(r.start, r.start + r.count));
+  const index = Uint32Array.from(all);
+  const { pieceIndex, lineIndex } = splitIndex(index, ranges);
   return {
     key: name, position, normal, uv, skin, look, index, ranges,
-    pieceIndex: Uint32Array.from(pieceIndex), lineIndex: Uint32Array.from(lineIndex),
+    pieceIndex, lineIndex,
     pivots: new Float32Array(MAX_BONES * 3), parents: new Int8Array(MAX_BONES).fill(-1),
     bends: [], robeTop: null, paint,
     baseHeight: top, radius: reach / 16, hatSway: 0,

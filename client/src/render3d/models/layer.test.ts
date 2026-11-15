@@ -185,6 +185,23 @@ describe('FigureLayer', () => {
     layer.dispose();
   }, SLOW);
 
+  it('an empty frame after an empty frame creates nothing; an empty frame after a drawn one hides the meshes', () => {
+    const { layer, scene, made } = layerOf(false);
+    layer.frame(frame([]), cam, slot);
+    layer.frame(undefined, cam, slot);
+    expect(meshes(scene)).toHaveLength(0);
+    expect(made).toBe(0);
+    expect(layer.drawn).toEqual({ figures: 0, batches: 0, draws: 0 });
+    layer.frame(frame([inst('elf')]), cam, slot);
+    expect(meshes(scene).filter((m) => m.visible).length).toBeGreaterThan(0);
+    layer.frame(frame([]), cam, slot);
+    expect(meshes(scene).filter((m) => m.visible)).toHaveLength(0);
+    expect(layer.drawn).toEqual({ figures: 0, batches: 0, draws: 0 });
+    layer.frame(frame([]), cam, slot);
+    expect(meshes(scene).filter((m) => m.visible)).toHaveLength(0);
+    layer.dispose();
+  }, SLOW);
+
   it('skips an instance whose model has not arrived, and draws it when it has', async () => {
     const { layer } = layerOf(false);
     const late = createKit(sprite, directRunner);

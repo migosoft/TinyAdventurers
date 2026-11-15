@@ -15,7 +15,8 @@ import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import type { FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
-import { BONES, MAX_BENDS, MAX_BONES, type FigureModel } from './model';
+import { BONES, MAX_BENDS, MAX_BONES } from './bones';
+import type { FigureModel } from './model';
 import { composeBones, identityLocal, type BoneLocal } from './rig';
 
 /** The approved skip; the bound uses the same numbers. */
@@ -262,7 +263,8 @@ export function sideReach(m: FigureModel): number {
 const locals: BoneLocal[] = Array.from({ length: MAX_BONES }, identityLocal);
 const qa: Q4 = [0, 0, 0, 1], qt: Q4 = [0, 0, 0, 1], qr: Q4 = [0, 0, 0, 1], qw: Q4 = [0, 0, 0, 1], qrel: Q4 = [0, 0, 0, 1];
 /** An angle turned into [-PI, PI). */
-const wrapPi = (a: number): number => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+/** An angle wrapped into [-π, π). */
+const wrapPi =(a: number): number => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
 
 /** One preallocated quaternion per bone, for the bones that take a quaternion (`useQ` hands it to the local). */
 const qStore: Q4[] = Array.from({ length: MAX_BONES }, () => [0, 0, 0, 1] as Q4);

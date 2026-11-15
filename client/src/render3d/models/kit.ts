@@ -12,7 +12,7 @@ export interface FigureKit {
   known(key: string): boolean;
   /** Build times in ms by key, for the F3 panel and the docs. */
   readonly times: ReadonlyMap<string, number>;
-  /** Bumped when a model arrives (the layer rebuilds its meshes for it). */
+  /** Bumped when a model arrives. Only the dev readout reads it (the layer asks `get` every frame). */
   readonly version: number;
   dispose(): void;
 }
@@ -26,7 +26,7 @@ export type BuildRunner = ((job: { key: string; px: SpritePixels | null }) => Pr
 /** A runner that also reports how long the build took, through `times`. Plain runners are timed by the kit around the call. */
 export type TimedRunner = BuildRunner & { lastMs?: Map<string, number> };
 
-/** Builds at once, on the calling thread (tests; a browser without module workers). */
+/** Builds at once, on the calling thread (tests). It is not a fallback: when the worker dies, `workerRunner` rejects every later job and the figures stay sprite cards. */
 export const directRunner: TimedRunner & { lastMs: Map<string, number> } = Object.assign(
   async (job: { key: string; px: SpritePixels | null }): Promise<FigureModel> => {
     const t = performance.now();

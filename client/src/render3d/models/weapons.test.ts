@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { decodePng } from '../../../scripts/png';
+import { BOW_WEAPONS } from './bones';
 import { STAGES, type FigureModel } from './model';
 import { STEEL, WEAPONS, buildWeapon, type SpritePixels } from './weapons';
 
@@ -46,6 +47,10 @@ describe('the table', () => {
     expect(NAMES.slice().sort()).toEqual(pack);
     for (const k of NAMES) expect(WEAPONS[k].sprite).toBe(k);
   });
+
+  it('marks the same weapons as bows in the table and in bones.ts (the run bundle reads the latter)', () => {
+    expect([...BOW_WEAPONS].sort()).toEqual(NAMES.filter((k) => WEAPONS[k].kind === 'bow').sort());
+  });
 });
 
 describe('buildWeapon', () => {
@@ -57,10 +62,13 @@ describe('buildWeapon', () => {
       expect(m.uv.length).toBe(n * 2);
       expect(m.skin.length).toBe(n * 4);
       expect(m.look.length).toBe(n * 4);
-      for (const v of m.position) expect(Number.isFinite(v), k).toBe(true);
-      for (const v of m.normal) expect(Number.isFinite(v), k).toBe(true);
-      for (const i of m.index) expect(i).toBeLessThan(n);
-      for (let i = 0; i < n; i++) expect(m.skin[i * 4]).toBe(0);
+      // One assertion per check, not one per element (hundreds of thousands of reported assertions overload vitest's worker RPC).
+      const bad: string[] = [];
+      for (const v of m.position) if (!Number.isFinite(v)) { bad.push(`${k}: position ${v}`); break; }
+      for (const v of m.normal) if (!Number.isFinite(v)) { bad.push(`${k}: normal ${v}`); break; }
+      for (const i of m.index) if (!(i < n)) { bad.push(`${k}: index ${i} >= ${n}`); break; }
+      for (let i = 0; i < n; i++) if (m.skin[i * 4] !== 0) { bad.push(`${k}: bone ${m.skin[i * 4]} at ${i}`); break; }
+      expect(bad).toEqual([]);
       for (const r of m.ranges) expect(r.stage).toBe(STAGES.indexOf('weapon'));
       expect(m.pieceIndex.length + m.lineIndex.length).toBe(m.index.length);
       expect(m.robeTop).toBeNull();
@@ -114,7 +122,9 @@ describe('buildWeapon', () => {
       const m = model(k);
       expect(m.ranges.filter((r) => !r.line).length, k).toBe(1);
       expect(m.paint.w * m.paint.h).toBe(1);
-      for (let i = 0; i < m.look.length; i += 4) expect(m.look[i]).toBeGreaterThanOrEqual(0);   // flat colours, no paint lookup
+      let negative = 0;
+      for (let i = 0; i < m.look.length; i += 4) if (m.look[i] < 0) negative++;
+      expect(negative, k).toBe(0);   // flat colours, no paint lookup
     }
     const reach = (k: string): number => {
       const m = model(k);

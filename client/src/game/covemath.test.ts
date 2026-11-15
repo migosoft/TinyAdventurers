@@ -48,7 +48,7 @@ describe('paintCove', () => {
   it('is deterministic per seed', () => {
     expect(paintCove(spec).data).toEqual(paintCove(spec).data);
     expect(paintCove({ ...spec, seed: 2 }).data).not.toEqual(paintCove(spec).data);
-  });
+  }, 30000);   // CPU-bound (about 1.5 s alone): the 5 s default fails when the whole suite shares the cores
 
   it('has a two tile margin on every side', () => {
     const p = paintCove(spec);

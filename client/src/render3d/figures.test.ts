@@ -742,6 +742,17 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(stone.models[0].stone).toBe(true);
   });
 
+  it('does not drop the tint when the hurt flash blinks: a hurt slowed wolf keeps the slowed blue on every frame', () => {
+    const fg = make();
+    const tints = new Set<string>();
+    for (let i = 0; i < 12; i++) {
+      const e = ent(10, KIND.DireWolf, { flags: FLAG.HURT, effects: 1 << EFFECT.Slowed });
+      const out = fg.frame(frame([e], { dt: 0.016, now: 10 + i * 0.016 }), cam(), look({ kit, ...all }));
+      tints.add(out.models.find((m) => m.model === 'wolf')!.tint.map((v) => v.toFixed(3)).join());
+    }
+    expect([...tints]).toEqual([[0xa0, 0xc8, 0xff].map((v) => (v / 255).toFixed(3)).join()]);
+  });
+
   describe('the small effects of the model figures (#338)', () => {
     const wolfAt = (o: Partial<EntState> = {}) => ent(12, KIND.DireWolf, o);
     const stone = 1 << EFFECT.Petrified, ice = 1 << EFFECT.Frozen;
@@ -871,6 +882,14 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.decals.n).toBe(0);
     expect(out.models.map((m) => m.model)).toEqual(['skull']);
     expect(out.models[0].scale).toBeLessThanOrEqual(1.5);
+    // two skulls never share an owner (so batching can separate them), and every owner is negative
+    fg.frame(frame([ent(11, KIND.ElvenRanger), ent(12, KIND.ElvenRanger)]), cam(), l);
+    fg.event({ t: 'Died', id: 11, x: at(1), y: 8, kind: KIND.ElvenRanger });
+    fg.event({ t: 'Died', id: 12, x: at(1), y: 8, kind: KIND.ElvenRanger });
+    const two = fg.frame(frame([]), cam(), l).models.filter((m) => m.model === 'skull').map((m) => m.owner);
+    expect(two.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(two).size).toBe(two.length);
+    expect(two.every((o) => o < 0)).toBe(true);
     // a card figure still leaves the decal
     const cards = make();
     cards.frame(frame([ranger()]), cam(), look());

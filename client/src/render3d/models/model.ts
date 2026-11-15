@@ -9,13 +9,10 @@ import { skelet } from './descs/skelet';
 import { FH } from './grid';
 import { buildPart, type Mesh3 } from './part';
 
-/** The draw order of the pieces: the page's `ORDER`, then the weapon. Within a stage the outline hulls come first, then the pieces. */
-export const STAGES = ['legs', 'body', 'head', 'collar', 'hair', 'hat', 'spikes', 'arms', 'weapon'] as const;
-export const BONES = ['hips', 'body', 'head', 'hat', 'armR', 'handR', 'armL', 'handL', 'leg0', 'leg1', 'leg2', 'leg3', 'weaponR', 'weaponL'] as const;
-export const MAX_BONES = 14, MAX_BENDS = 4;
+import { BONES, MAX_BENDS, MAX_BONES, STAGES, type Bone, type Stage } from './bones';
 
-type Bone = (typeof BONES)[number];
-type Stage = (typeof STAGES)[number];
+// The names live in bones.ts (no builder code); re-exported so the builder's importers keep working.
+export { BONES, MAX_BENDS, MAX_BONES, STAGES };
 
 /** A run of triangles of `FigureModel.index`: the hulls (`line`) or the pieces of one stage. */
 export interface ModelRange { stage: number; line: boolean; start: number; count: number }
@@ -29,7 +26,7 @@ export interface BendDef { bone: number; origin: [number, number, number]; dir: 
 export interface FigureModel {
   key: string;
   position: Float32Array; normal: Float32Array; uv: Float32Array; // uv into `paint`
-  /** 4 per vertex: bone index, 1 on a hull vertex, bend index (-1 none, -2 the robe), how far along the bend (0..1; the robe's weight). */
+  /** 4 per vertex: bone index, 1 on a hull vertex (written, but no shader reads it today), bend index (-1 none, -2 the robe), how far along the bend (0..1; the robe's weight). */
   skin: Float32Array;
   /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 0 lit, 1 polished steel, 2 unlit (the seams). */
   look: Float32Array;
@@ -48,7 +45,20 @@ export interface FigureModel {
   shoulderY: number; handY: number; armLength: number; armRadius: number; quad: boolean; scale: number; hipY: number; neck: [number, number];
 }
 
-const stageOf = (n: Stage): number => STAGES.indexOf(n);
+/** The triangles of `index` as two unbroken lists: the pieces' and the hulls' (copied into preallocated arrays: no spread, so no call-stack limit). */
+export function splitIndex(index: Uint32Array, ranges: ModelRange[]): { pieceIndex: Uint32Array; lineIndex: Uint32Array } {
+  let lines = 0;
+  for (const r of ranges) if (r.line) lines += r.count;
+  const lineIndex = new Uint32Array(lines), pieceIndex = new Uint32Array(index.length - lines);
+  let l = 0, p = 0;
+  for (const r of ranges) {
+    const part = index.subarray(r.start, r.start + r.count);
+    if (r.line) { lineIndex.set(part, l); l += r.count; } else { pieceIndex.set(part, p); p += r.count; }
+  }
+  return { pieceIndex, lineIndex };
+}
+
+const stageOf =(n: Stage): number => STAGES.indexOf(n);
 const boneOf = (n: Bone): number => BONES.indexOf(n);
 const rgb = (hex: number): [number, number, number] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 
@@ -220,8 +230,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
     v0 += c;
   }
   const index = Uint32Array.from(all);
-  const pieceIndex: number[] = [], lineIndex: number[] = [];
-  for (const r of ranges) (r.line ? lineIndex : pieceIndex).push(...index.subarray(r.start, r.start + r.count));
+  const { pieceIndex, lineIndex } = splitIndex(index, ranges);
   // The base height: the head part's top; the radius: the furthest point from the foot axis, plus the arm stretched to 2.3 times.
   let top = 0, reachPx = 0;
   for (let i = 0; i < built.head.mesh.position.length; i += 3) top = Math.max(top, built.head.mesh.position[i + 1]);
@@ -229,7 +238,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   const scale = d.scale ?? 1, armLength = d.arms ? d.arms.length : 0;
   return {
     key, position, normal, uv, skin, look, index, ranges,
-    pieceIndex: Uint32Array.from(pieceIndex), lineIndex: Uint32Array.from(lineIndex),
+    pieceIndex, lineIndex,
     pivots: built.pivots, parents: built.parents, bends: only ? [] : bends, robeTop,
     paint,
     baseHeight: top * scale,
