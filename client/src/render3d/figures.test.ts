@@ -3,10 +3,10 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
-import { createKit, directRunner, type FigureKit } from './models/kit';
+import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { fangTris, newFxBuf, type FxBuf } from './models/fx';
 import { BONES } from './models/model';
-import { sideReach } from './models/pose3d';
+import { LIE_SINK, sideReach } from './models/pose3d';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -653,7 +653,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.casters.length).toBe(1);
     expect(out.casters[0].id).toBe(10);
     expect(out.shadows.n).toBe(1);
-    expect(Math.abs(fg.anchors.get(10)!.height - 15.3)).toBeLessThan(0.2);
+    expect(fg.anchors.get(10)!.height).toBeCloseTo(kit.get('elf')!.baseHeight, 6);
     expect(out.fx.n).toBe(0);
     expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.height / 2 / 16, 6);
     // the model's own scale, not the pose's fall shrink; the radius encloses the silhouette
@@ -693,13 +693,24 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     }
   });
 
+  it('fits the body to its card and draws the weapon at the size the card path gives it (the game\'s weapon scale x the figure\'s)', () => {
+    const out = make().frame(frame([ranger()]), cam(), look({ kit, ...all }));
+    const [body, bow] = out.models, elf = kit.get('elf')!, d = FIGURES[KIND.ElvenRanger];
+    const card = cardHeight(d, sprite(`${d.idle}0`)!);
+    let top = 0;
+    for (let i = 1; i < elf.position.length; i += 3) top = Math.max(top, elf.position[i]);
+    expect(top * body.scale).toBeCloseTo(card, 0);
+    expect(body.scale).not.toBe(1);
+    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * (d.scale ?? 1), 6);
+  });
+
   it('hangs the bow on the wielder\'s hand: its origin lands on the weaponL pivot', () => {
     const out = make().frame(frame([ranger()]), cam(), look({ kit, ...all }));
     const [body, bow] = out.models;
     const elf = kit.get('elf')!, hand = BONES.indexOf('weaponL');
     expect(bow.pivot).toEqual([elf.pivots[hand * 3], elf.pivots[hand * 3 + 1], elf.pivots[hand * 3 + 2]]);
     expect(bow.pivot![0] !== 0 || bow.pivot![1] !== 0).toBe(true);
-    expect(bow.boneScale).toBeCloseTo(0.48, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon)
+    expect(bow.boneScale * bow.scale).toBeCloseTo(0.48, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon), whatever the body's fit
     expect(bow.scale).toBe(elf.scale);
     const row = new Float32Array(ROW_TEXELS * 4);
     packInstance(row, 0, bow, 0);
@@ -727,7 +738,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     fs.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })]), cam(), look({ kit, ...all }));
     // as the card path: only `head` is the body's thickness (twice its side reach); the bar and the name stay at the standing height
     expect(fs.anchors.get(10)!.head).toBeLessThan(fg.anchors.get(10)!.head);
-    expect(fs.anchors.get(10)!.head).toBeCloseTo(2 * sideReach(kit.get('elf')!) * kit.get('elf')!.scale, 6);
+    expect(fs.anchors.get(10)!.head).toBeCloseTo((2 - LIE_SINK) * sideReach(kit.get('elf')!) * kit.get('elf')!.scale, 6);
     expect(fs.anchors.get(10)!.height).toBe(fg.anchors.get(10)!.height);
     expect(fs.anchors.get(10)!.tag).toBe(fg.anchors.get(10)!.tag);
     expect(fs.anchors.get(10)!.cx).toBe(0);

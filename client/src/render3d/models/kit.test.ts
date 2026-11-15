@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKit, directRunner, workerRunner, type BuildRunner, type FigureKit } from './kit';
+import { KIND } from '../../generated/defs';
+import { FIGURES } from '../../game/anim/defs';
+import { cardHeight, createKit, directRunner, workerRunner, type BuildRunner, type FigureKit } from './kit';
 import type { FigureModel } from './model';
+import { DESCS, FIT_KIND, type DescKey } from './table';
+import type { SpritePixels } from './weapons';
 
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const stub = (key: string): FigureModel => ({ key } as FigureModel);
@@ -118,6 +122,46 @@ describe('createKit', () => {
     await settle();
     expect(log).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the height of a figure card', () => {
+  /** A sprite w x h with the opaque rows `from` to `to` (inclusive). */
+  const sprite = (h: number, from: number, to: number): SpritePixels => {
+    const data = new Uint8ClampedArray(16 * h * 4);
+    for (let y = from; y <= to; y++) for (let x = 0; x < 16; x++) data[(y * 16 + x) * 4 + 3] = 255;
+    return { w: 16, h, data };
+  };
+
+  it('is the opaque height from the highest row to the foot row, times the figure scale', () => {
+    const base = FIGURES[KIND.Wizard];
+    expect(cardHeight({ ...base, scale: undefined, footY: undefined }, sprite(24, 6, 23))).toBe(18);
+    expect(cardHeight({ ...base, scale: 1.5, footY: undefined }, sprite(24, 6, 23))).toBe(27);
+    expect(cardHeight({ ...base, scale: 2, footY: 20 }, sprite(24, 6, 23))).toBe(28);
+    expect(cardHeight(base, { w: 16, h: 24, data: new Uint8ClampedArray(16 * 24 * 4) })).toBe(24 * (base.scale ?? 1));   // empty: the whole frame
+  });
+
+  it('is passed to the build of every figure key, from the idle frame of the key\'s fitted kind', async () => {
+    const asked: string[] = [];
+    const sprites = (name: string): SpritePixels | null => { asked.push(name); return sprite(24, 4, 23); };
+    const jobs: { key: string; height?: number | null }[] = [];
+    const kit = createKit(sprites, async (job) => { jobs.push(job); return stub(job.key); });
+    for (const key of Object.keys(DESCS)) kit.get(key);
+    await settle();
+    expect(jobs.length).toBe(Object.keys(DESCS).length);
+    for (const j of jobs) {
+      const def = FIGURES[FIT_KIND[j.key as DescKey]];
+      expect(asked, j.key).toContain(`${def.idle}0`);
+      expect(j.height, j.key).toBeCloseTo(((def.footY ?? 24) - 4) * (def.scale ?? 1), 6);
+    }
+  });
+
+  it('is left out (null) when the sprite is unknown, and for skull and weapons', async () => {
+    const jobs: { key: string; height?: number | null }[] = [];
+    const kit = createKit(noPixels, async (job) => { jobs.push(job); return stub(job.key); });
+    kit.get('elf'); kit.get('skull'); kit.get('weapon_big_hammer');
+    await settle();
+    for (const j of jobs) expect(j.height ?? null, j.key).toBeNull();
   });
 });
 

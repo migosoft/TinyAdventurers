@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
-import { DESCS, MODEL_OF_KIND, modelKeyOf } from './table';
+import { DESCS, FIT_KIND, MODEL_OF_KIND, modelKeyOf, type DescKey } from './table';
 
 describe('figure descriptions', () => {
   it('every description is well formed', () => {
@@ -35,11 +35,13 @@ describe('figure descriptions', () => {
   });
 
   it('the approved numbers', () => {
-    expect(DESCS.elf.scale).toBe(0.9);
-    expect(DESCS.ogre.scale).toBe(1.65);
     expect(DESCS.knight.visor).toEqual({ rows: [15, 18], half: 50, line: 0.6, slits: 3, slitWide: 0.8, frame: 0x2b3a4c, slit: 0x1a222c });
     expect(DESCS.wolf.eyes).toEqual({ rows: [17.1, 17.1], width: 2.5, colour: 0x9f294e, at: 29 });
     expect(DESCS.ogre.spikes?.[0].row).toBe(17.2);
+  });
+
+  it('every description is fitted to a kind that wears it', () => {
+    for (const key of Object.keys(DESCS) as DescKey[]) expect(modelKeyOf(FIT_KIND[key]), key).toBe(key);
   });
 
   it('nine game kinds have a model', () => {

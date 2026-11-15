@@ -5,16 +5,16 @@ import { buildJob, transferList } from './build';
 
 /** The little of the worker scope this file uses (the project's tsconfig has the DOM lib, not WebWorker). */
 interface Scope {
-  onmessage: ((e: { data: { id: number; key: string; px: import('./weapons').SpritePixels | null } }) => void) | null;
+  onmessage: ((e: { data: { id: number; key: string; px: import('./weapons').SpritePixels | null; height?: number | null } }) => void) | null;
   postMessage(message: unknown, transfer: Transferable[]): void;
 }
 const scope = self as unknown as Scope;
 
 scope.onmessage = (e) => {
-  const { id, key, px } = e.data;
+  const { id, key, px, height } = e.data;
   try {
     const t = performance.now();
-    const model = buildJob(key, px);
+    const model = buildJob(key, px, height);
     const ms = performance.now() - t;
     scope.postMessage({ id, model, ms }, transferList(model));
   } catch (err) {

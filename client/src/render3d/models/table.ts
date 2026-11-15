@@ -25,6 +25,20 @@ export const MODEL_OF_KIND: Partial<Record<number, DescKey>> = {
   [KIND.DireWolf]: 'wolf',
 };
 
+/**
+ * The kind whose card a description is fitted to (its model is exactly as tall as that kind's standing idle card). A description worn by
+ * several kinds (the skeleton) is fitted to the first one; a record, so a new description cannot be added without one.
+ */
+export const FIT_KIND: Record<DescKey, number> = {
+  wizard: KIND.Wizard,
+  knight: KIND.Paladin,
+  dwarf: KIND.Barbarian,
+  elf: KIND.ElvenRanger,
+  skelet: KIND.SkeletonWarrior,
+  ogre: KIND.Ogre,
+  wolf: KIND.DireWolf,
+};
+
 export function modelKeyOf(kind: number): DescKey | null {
   return MODEL_OF_KIND[kind] ?? null;
 }

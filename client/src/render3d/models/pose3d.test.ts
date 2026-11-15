@@ -3,7 +3,7 @@ import { ANIM, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { ATTACK_IN_SECS, GAIT, HIT_SECS, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, type Pose3d, type Pose3dMemory } from './pose3d';
+import { ATTACK_IN_SECS, GAIT, HIT_SECS, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 
@@ -327,12 +327,14 @@ describe('held and lying states', () => {
     const p = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 1 / 60, settled());
     expect(p.asleep).toBe(true);
     expect(p.root.roll).toBeCloseTo(Math.PI / 2, 6);
-    // The lowest point of the lying figure is on the ground.
+    // The root is lifted by the side reach, less the sink into the soft ground.
+    expect(LIE_SINK).toBe(0.3);
+    expect(p.root.y).toBeCloseTo(sideReach(m) * m.scale * (1 - LIE_SINK) * p.root.sy, 6);
+    // The lowest point of the lying figure is below the ground by that sink.
     let low = Infinity;
     const out: [number, number, number] = [0, 0, 0];
     for (let i = 0; i < m.position.length / 3; i++) if (m.skin[i * 4 + 1] === 0) { skinVertex(m, p, i, out); low = Math.min(low, out[1]); }   // not the outline hulls
-    expect(low).toBeGreaterThan(-0.05);
-    expect(low).toBeLessThan(0.5);
+    expect(low).toBeCloseTo(-sideReach(m) * m.scale * LIE_SINK * p.root.sy, 2);
   }, SLOW);
 
   it('shrinks a falling figure', () => {

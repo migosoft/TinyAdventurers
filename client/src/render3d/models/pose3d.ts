@@ -246,6 +246,9 @@ function styleOf(m: FigureModel, d: FigureDef, anim: number): AttackStyle {
 
 // ---- lying ----
 
+/** How much of its side reach a lying figure sinks below the ground (the softness of the body); the floor's depth hides the part below. A first guess. */
+export const LIE_SINK = 0.3;
+
 const lieHeights = new WeakMap<FigureModel, number>();
 /** How far the figure reaches to the side (z): lying on that side it needs this much room under it. A pure function of the model; memoised. */
 export function sideReach(m: FigureModel): number {
@@ -463,7 +466,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (windup) R.z = Math.floor(t * 40) % 2 ? 1 : -1;   // the shiver of a wind-up: 1 px to either side at 20 Hz
   if (asleep) {
     R.roll = Math.PI / 2;
-    R.y = sideReach(m) * m.scale * R.sy;   // on its side, on the ground
+    R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground
   }
   pose.air = asleep ? 0 : air * w * lim;
   pose.asleep = asleep; pose.channel = anim === ANIM.Channel;

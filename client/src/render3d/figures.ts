@@ -22,7 +22,7 @@ import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { BONES, BOW_WEAPONS } from './models/bones';
 import type { FigureModel } from './models/model';
-import { copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
+import { LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
 import { modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 
@@ -543,12 +543,15 @@ export class Figures3d {
         const wm = kit.get(wp.frame);
         if (wm) {
           const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
+          // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
+          // draws: the game's weapon scale times the figure's `FigureDef.scale` (the fall shrink is in the root), so `boneScale` makes up the difference.
+          const bs = (wp.scale * (d.scale ?? 1)) / m.scale;
           const w: FigureInst = {
-            owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: wp.scale, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
+            owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
             tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
           };
           // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
-          body.radius = w.radius = radius + wm.radius * wp.scale * m.scale;
+          body.radius = w.radius = radius + wm.radius * bs * m.scale;
           if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
           out.models.push(w);
           insts.push(w);
@@ -579,7 +582,7 @@ export class Figures3d {
     // Lying, the bars and names hang from the body on the floor: its thickness (the card path likewise uses the lying frame's width).
     // As the card path: only `head` changes while lying; the bar and the name stay at the standing height.
     const h = m.baseHeight;
-    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: pose.lie ? Math.min(h, 2 * sideReach(m) * m.scale) : h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
+    this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: pose.lie ? Math.min(h, (2 - LIE_SINK) * sideReach(m) * m.scale) : h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }

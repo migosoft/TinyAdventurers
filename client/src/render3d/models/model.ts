@@ -188,7 +188,7 @@ function figurePieces(d: FigureDesc): { pieces: Piece[]; bends: BendDef[]; pivot
 /** How a point is moved after placing it (the skull is tipped), or nothing. */
 interface Place { pos(p: [number, number, number]): [number, number, number]; nor(n: [number, number, number]): [number, number, number] }
 
-function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePieces>, only: ((p: Piece) => boolean) | null, place: Place | null): FigureModel {
+function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePieces>, only: ((p: Piece) => boolean) | null, place: Place | null, height?: number): FigureModel {
   const { bends, robeTop } = built;
   // Draw order: by stage, the hulls first (the sort is stable, so the page's order within a stage stays).
   const pieces = built.pieces.filter((p) => !only || only(p)).sort((a, b) => a.stage - b.stage || Number(b.line) - Number(a.line));
@@ -235,7 +235,10 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   let top = 0, reachPx = 0;
   for (let i = 0; i < built.head.mesh.position.length; i += 3) top = Math.max(top, built.head.mesh.position[i + 1]);
   for (let i = 0; i < n; i++) if (skin[i * 4 + 1] === 0) reachPx = Math.max(reachPx, Math.hypot(position[i * 3], position[i * 3 + 2]));
-  const scale = d.scale ?? 1, armLength = d.arms ? d.arms.length : 0;
+  // The fit: the standing figure (every piece, the outline hulls included; not a weapon) is `height` px tall once scaled.
+  let full = 0;
+  for (let i = 1; i < n * 3; i += 3) full = Math.max(full, position[i]);
+  const scale = height !== undefined && full > 0 ? height / full : 1, armLength = d.arms ? d.arms.length : 0;
   return {
     key, position, normal, uv, skin, look, index, ranges,
     pieceIndex, lineIndex,
@@ -249,9 +252,12 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
   };
 }
 
-/** The 3D model of the figure a description tells of. */
-export function buildFigure(key: string, d: FigureDesc): FigureModel {
-  return assemble(key, d, figurePieces(d), null, null);
+/**
+ * The 3D model of the figure a description tells of. `height` (sprite px, the target): the model's `scale` is fitted so that its full
+ * standing height times `scale` equals it; without one (tests, node) `scale` is 1.
+ */
+export function buildFigure(key: string, d: FigureDesc, height?: number): FigureModel {
+  return assemble(key, d, figurePieces(d), null, null, height);
 }
 
 /**

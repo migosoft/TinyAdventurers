@@ -152,7 +152,6 @@ export interface VisorDesc {
 
 export interface FigureDesc {
   name: string;
-  scale?: number;
   outline: number;
   centre: number;
   /** Polished steel instead of flat colours. */

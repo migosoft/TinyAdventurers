@@ -1,8 +1,10 @@
 // The figure kit (#338): hands out 3D models, building each one off the frame (in a Web Worker) the first time it is asked for.
 // `get` never throws and never blocks: until a model has arrived it returns null and the caller draws a sprite card instead.
 
+import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { buildJob, isFigureKey, isWeaponKey } from './build';
 import type { FigureModel } from './model';
+import { FIT_KIND } from './table';
 import { WEAPONS, type SpritePixels } from './weapons';
 
 export interface FigureKit {
@@ -18,7 +20,13 @@ export interface FigureKit {
 }
 
 /** Builds one model; resolves with it and the build's own duration (not the queue wait). */
-export type BuildRunner = ((job: { key: string; px: SpritePixels | null }) => Promise<FigureModel>) & {
+export type BuildJob = {
+  key: string;
+  px: SpritePixels | null;
+  /** A figure key only: the standing height (sprite px) of the card the model replaces; null when its sprite is unknown. */
+  height?: number | null;
+};
+export type BuildRunner = ((job: BuildJob) => Promise<FigureModel>) & {
   /** Ends the runner (a worker is terminated); what is pending is rejected. */
   dispose?(): void;
 };
@@ -28,9 +36,9 @@ export type TimedRunner = BuildRunner & { lastMs?: Map<string, number> };
 
 /** Builds at once, on the calling thread (tests). It is not a fallback: when the worker dies, `workerRunner` rejects every later job and the figures stay sprite cards. */
 export const directRunner: TimedRunner & { lastMs: Map<string, number> } = Object.assign(
-  async (job: { key: string; px: SpritePixels | null }): Promise<FigureModel> => {
+  async (job: BuildJob): Promise<FigureModel> => {
     const t = performance.now();
-    const m = buildJob(job.key, job.px);
+    const m = buildJob(job.key, job.px, job.height);
     directRunner.lastMs.set(job.key, Math.max(performance.now() - t, 1e-3));
     return m;
   },
@@ -61,11 +69,11 @@ export const workerRunner = (): BuildRunner => {
     die(`the model worker could not be started (${e instanceof Error ? e.message : String(e)})`);
   }
   const runner: BuildRunner & { lastMs: Map<string, number> } = Object.assign(
-    (job: { key: string; px: SpritePixels | null }) => new Promise<FigureModel>((ok, fail) => {
+    (job: BuildJob) => new Promise<FigureModel>((ok, fail) => {
       if (dead || !worker) { fail(dead ?? new Error('the model worker is closed')); return; }
       const id = next++;
       pending.set(id, { ok, fail, key: job.key });
-      worker.postMessage({ id, key: job.key, px: job.px });
+      worker.postMessage({ id, key: job.key, px: job.px, height: job.height ?? null });
     }),
     {
       lastMs: new Map<string, number>(),
@@ -74,6 +82,18 @@ export const workerRunner = (): BuildRunner => {
   );
   return runner;
 };
+
+/**
+ * The height a standing figure's card shows, in sprite px: from the highest opaque row of its idle frame to the foot row
+ * (`FigureDef.footY`, else the frame's bottom), times the game's `FigureDef.scale`. A fully transparent frame counts as fully opaque
+ * (as `boundsOfPixels`).
+ */
+export function cardHeight(d: Pick<FigureDef, 'footY' | 'scale'>, px: SpritePixels): number {
+  let top = px.h;
+  for (let y = 0; y < px.h && top === px.h; y++) for (let x = 0; x < px.w; x++) if (px.data[(y * px.w + x) * 4 + 3] > 0) { top = y; break; }
+  if (top === px.h) top = 0;
+  return ((d.footY ?? px.h) - top) * (d.scale ?? 1);
+}
 
 export function createKit(sprite: (name: string) => SpritePixels | null, run: BuildRunner = directRunner): FigureKit {
   const models = new Map<string, FigureModel>();
@@ -97,9 +117,17 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
       try { px = pixelsOf(key); } catch (e) { warnOnce(key, `the sprite lookup failed (${e instanceof Error ? e.message : String(e)})`); return; }
       if (!WEAPONS[key].art && !px) { warnOnce(key, 'the weapon has no sprite pixels'); return; }
     }
+    let height: number | null = null;
+    if (isFigureKey(key)) {
+      // The card this model replaces: the idle frame of the kind the description is fitted to. An unknown sprite builds at scale 1.
+      try {
+        const def = FIGURES[FIT_KIND[key]], card = def ? sprite(`${def.idle}0`) : null;
+        if (def && card) height = cardHeight(def, card);
+      } catch (e) { warnOnce(key, `the card sprite lookup failed (${e instanceof Error ? e.message : String(e)})`); }
+    }
     const t0 = performance.now();
     let job: Promise<FigureModel>;
-    try { job = run({ key, px }); } catch (e) { job = Promise.reject(e); }
+    try { job = run({ key, px, height }); } catch (e) { job = Promise.reject(e); }
     job.then((m) => {
       if (disposed) return;
       const own = (run as TimedRunner).lastMs?.get(key);

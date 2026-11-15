@@ -13,6 +13,29 @@ const SLOW = 120000;
 const KEYS = Object.keys(DESCS) as DescKey[];
 const bone = (name: (typeof BONES)[number]): number => BONES.indexOf(name);
 
+/** The full standing height of a built model: the highest vertex of any piece, outline hulls included. */
+const topOf = (m: FigureModel): number => {
+  let top = 0;
+  for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
+  return top;
+};
+
+describe('buildFigure fitted to a card height', () => {
+  it('is exactly as tall as the target for every description (within 0.5 sprite px)', () => {
+    for (const key of KEYS) {
+      for (const target of [20, 31.5]) {
+        const m = buildFigure(key, DESCS[key], target);
+        expect(topOf(m) * m.scale, `${key} ${target}`).toBeGreaterThan(target - 0.5);
+        expect(topOf(m) * m.scale, `${key} ${target}`).toBeLessThan(target + 0.5);
+      }
+    }
+  }, SLOW);
+
+  it('has scale 1 without a target', () => {
+    for (const key of KEYS) expect(model(key).scale, key).toBe(1);
+  }, SLOW);
+});
+
 describe('buildFigure', () => {
   it('is deterministic', () => {
     const a = buildFigure('wizard', DESCS.wizard), b = model('wizard');
@@ -156,8 +179,8 @@ describe('buildFigure', () => {
     }
   }, SLOW);
 
-  it('stands the elf 15.3, the knight 15, the dwarf 14 and the wizard 13 sprite pixels high', () => {
-    expect(Math.abs(model('elf').baseHeight - 15.3)).toBeLessThan(0.2);
+  it('stands the elf 17, the knight 15, the dwarf 14 and the wizard 13 sprite pixels high (unfitted: scale 1)', () => {
+    expect(Math.abs(model('elf').baseHeight - 17)).toBeLessThan(0.2);
     expect(Math.abs(model('knight').baseHeight - 15)).toBeLessThan(0.2);
     expect(Math.abs(model('dwarf').baseHeight - 14)).toBeLessThan(0.2);
     expect(Math.abs(model('wizard').baseHeight - 13)).toBeLessThan(0.2);
@@ -174,7 +197,6 @@ describe('buildFigure', () => {
       expect(m.parents[bone('hat')]).toBe(bone('head'));
       expect(m.parents[bone('handR')]).toBe(bone('armR'));
       expect(m.parents[bone('leg0')]).toBe(bone('hips'));
-      expect(m.scale).toBe(d.scale ?? 1);
       expect(m.quad).toBe(!!d.quad);
       expect(m.pivots[bone('body') * 3 + 1]).toBeCloseTo(m.hipY, 5);
       expect(m.pivots[bone('head') * 3]).toBeCloseTo(m.neck[0], 5);

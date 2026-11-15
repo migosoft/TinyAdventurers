@@ -7,9 +7,9 @@ import { WEAPONS, buildWeapon, type SpritePixels } from './weapons';
 export const isFigureKey = (key: string): key is DescKey => Object.prototype.hasOwnProperty.call(DESCS, key);
 export const isWeaponKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(WEAPONS, key);
 
-/** Builds the model of a figure key, 'skull' or a weapon name; throws for anything else. */
-export function buildJob(key: string, px: SpritePixels | null): FigureModel {
-  if (isFigureKey(key)) return buildFigure(key, DESCS[key]);
+/** Builds the model of a figure key (fitted to `height` sprite px when given), 'skull' or a weapon name; throws for anything else. */
+export function buildJob(key: string, px: SpritePixels | null, height?: number | null): FigureModel {
+  if (isFigureKey(key)) return buildFigure(key, DESCS[key], height ?? undefined);
   if (key === 'skull') return buildSkull();
   if (isWeaponKey(key)) return buildWeapon(key, px);
   throw new Error(`no model for ${key}`);
