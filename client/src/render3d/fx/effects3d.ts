@@ -121,17 +121,39 @@ export function boomKind(k: number): FxKind | null {
   }
 }
 
-/** A server Cast of the own hero within this many seconds of a predicted one with the same look is the same cast. */
-const OWN_CAST_DEDUP = 0.5;
+/** A predicted own cast waits this long for the server's Cast (a refused prediction never gets one). */
+const PENDING_LIFE = 2;
+const PENDING_MAX = 8;
 
 export class Effects3d {
   private recs: FxRec[] = [];
   private seq = 0;
-  /** The own hero's entity id (from the last frame), the last predicted cast seen (`seq`, `look`, time). */
+  /** The own hero's entity id (from the last frame) and the last predicted cast seen (`seq`). */
   private you = -1;
   private ownSeq = 0;
-  private ownLook = -1;
-  private ownAt = -1e9;
+  /** Predicted own casts the server has not echoed yet, oldest first (fixed size, reused): look and time. */
+  private readonly pendLook = new Int32Array(PENDING_MAX);
+  private readonly pendAt = new Float64Array(PENDING_MAX);
+  private pendN = 0;
+
+  private pendDrop(i: number): void {
+    for (let k = i + 1; k < this.pendN; k++) { this.pendLook[k - 1] = this.pendLook[k]; this.pendAt[k - 1] = this.pendAt[k]; }
+    this.pendN--;
+  }
+
+  /** Takes the oldest live pending predicted cast of `look`; false when there is none. */
+  private pendTake(look: number, now: number): boolean {
+    while (this.pendN > 0 && now - this.pendAt[0] > PENDING_LIFE) this.pendDrop(0);
+    for (let i = 0; i < this.pendN; i++) {
+      if (this.pendLook[i] === look && now - this.pendAt[i] <= PENDING_LIFE) { this.pendDrop(i); return true; }
+    }
+    return false;
+  }
+
+  /** The rune records of Cast kind (for tests). */
+  castRecords(): readonly FxRec[] {
+    return this.recs.filter((r) => r.kind === FX_KIND.Cast);
+  }
 
   constructor(readonly map: TileMap) {}
 
@@ -177,8 +199,8 @@ export class Effects3d {
       case 'Raise': this.add(FX_KIND.Raise, now, x, z, -1, ev.k); break;
       case 'Immune': this.add(FX_KIND.Immune, now, x, z, -1); break;
       case 'Cast': {
-        // the own hero's cast was drawn from the key press: the server's copy of it is not drawn twice
-        if (ev.id === this.you && ev.look === this.ownLook && now - this.ownAt < OWN_CAST_DEDUP) break;
+        // the own hero's cast was drawn from the key press: the server's copy takes one predicted cast and draws nothing
+        if (ev.id === this.you && this.pendTake(ev.look, now)) break;
         const rec = this.add(FX_KIND.Cast, now, x, z, ev.id, ev.look, ev.windup_ms / 1000, ev.primary ? 1 : 0, ev.aim);
         rec.rune = newRune(ev.id, ev.look, castMode(ev.primary, ev.windup_ms / 1000), now, ev.windup_ms / 1000, ev.aim, x, z, rec.seed);
         break;
@@ -214,8 +236,8 @@ export class Effects3d {
         if (e) { x = e.x / TILE; z = e.y / TILE; found = true; }
       }
       if (found) {
-        this.ownLook = oc.look;
-        this.ownAt = now;
+        if (this.pendN === PENDING_MAX) this.pendDrop(0);
+        this.pendLook[this.pendN] = oc.look; this.pendAt[this.pendN] = now; this.pendN++;
         const rec = this.add(FX_KIND.Cast, now, x, z, input.you, oc.look, 0, oc.primary ? 1 : 0, oc.aim);
         rec.rune = newRune(input.you, oc.look, castMode(oc.primary, 0), now, 0, oc.aim, x, z, rec.seed);
       }

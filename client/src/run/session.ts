@@ -103,10 +103,10 @@ export class RunSession {
   private lastAim = 0;
   /** The last step's input (the own animation's "moving" and the drawn aim). */
   private lastInput: StepInput = NO_INPUT;
-  /** The own hero's last action animation (the frame's `own`). */
   /** The latest predicted magical use, for the 3D runes (drawing only). */
   private ownCast: OwnCast | null = null;
-  private localAnim:{ anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
+  /** The own hero's last action animation (the frame's `own`). */
+  private localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
   /** The own hero as drawn this frame, rebuilt each frame (`ownHero`). */
   private readonly own: OwnHero = { x: 0, y: 0, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 0, aimFromY: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
   /** `frame`'s own duration, ms, averaged; the HUD shows it. */

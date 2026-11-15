@@ -94,10 +94,37 @@ describe('Effects3d own casts', () => {
     fx.event(serverCast, 1.1, false);
     expect(fx.records).toBe(1);
   });
-  it('a later server cast of the same look is a new one', () => {
+  it('a server cast 0.8 s late is still one record', () => {
     const fx = new Effects3d(map);
     fx.frame(withCast(1, 1), newOut());
     fx.event(serverCast, 1.8, false);
+    expect(fx.records).toBe(1);
+  });
+  it('two predicted casts, two late server events: two records', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    fx.frame(withCast(1.2, 2), newOut());
     expect(fx.records).toBe(2);
+    fx.event(serverCast, 1.9, false);
+    fx.event(serverCast, 2.1, false);
+    expect(fx.records).toBe(2);
+    // a third server cast has no prediction left: it shows
+    fx.event(serverCast, 2.2, false);
+    expect(fx.records).toBe(3);
+  });
+  it('a refused prediction expires: a server cast 2.5 s later shows', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    fx.event(serverCast, 3.5, false);
+    expect(fx.records).toBe(2);
+  });
+  it('the predicted record belongs to the hero with the right look and mode', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    const r = fx.castRecords()[0].rune!;
+    expect(r.caster).toBe(YOU);
+    expect(r.look).toBe(2);
+    expect(r.mode).toBe('primary');
+    expect(r.start).toBe(1);
   });
 });
