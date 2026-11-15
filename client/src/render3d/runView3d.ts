@@ -566,7 +566,8 @@ export class RunView3d implements RunView {
     this.fx.event(ev, this.clockNow, dark);
     // The camera shakes as the 2D view's does: a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
-    else if (ev.t === 'Boom' && ev.k === 7) this.shake.kick(120, 0.004);
+    else if (ev.t === 'Boom' && (ev.k === 0 || ev.k === 4 || ev.k === 7)) this.shake.kick(120, 0.004);
+    else if (ev.t === 'Boom' && ev.k === 10) this.shake.kick(200, 0.007);
     else if (ev.t === 'Boom' && ev.k === 11 && Math.hypot(ev.x - own.x, ev.y - own.y) < CONST.PLAYER_RADIUS * 2) this.shake.kick(100, 0.003);
     // A hit on the own hero is born at the predicted foot (#281).
     this.floats.addPicture(ev, own, server, dark);

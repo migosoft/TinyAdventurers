@@ -9,6 +9,7 @@ import { newGlowBuf, type GlowBuf } from '../cards';
 import { newFxBuf, type FxBuf } from '../models/fx';
 import type { Quality } from '../quality';
 import type { Effects3d, FxFrame } from './effects3d';
+import { registerBursts } from './bursts';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
@@ -41,6 +42,7 @@ export class FxPass {
   constructor(hidden: ReadonlySet<number>) {
     registerRunes();
     registerShots();
+    registerBursts();
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }
 

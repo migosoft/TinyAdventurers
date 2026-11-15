@@ -125,10 +125,10 @@ export const FX_ROWS: FxRow[] = [
   },
   ...runeRows(),
   ...shotRows(),
-  {
-    group: 'booms', name: 'Frost nova', period: 5,
-    at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(2.5), k: 10 } }] }),
-  },
+  ...([['Boom k=0', 0, 1.5], ['Boom k=4', 4, 1.5], ['Boom k=7', 7, 1.2], ['Boom k=10', 10, 2.5]] as const).map(([name, k, r]): FxRow => ({
+    group: 'booms', name, period: 5,
+    at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(r), k } }] }),
+  })),
 ];
 
 export interface FxOpts { group: FxGroup; start: number; pinned: boolean; slow: number }
