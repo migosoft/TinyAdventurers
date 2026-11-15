@@ -1,6 +1,7 @@
 // The per-vertex sight attributes of the dynamic meshes (#305): one `footSight` read per quad, copied to its six vertices.
 // The caller owns `out` (reused every frame, so nothing is allocated per quad); it must hold `count * 6` vertices.
 import type { Glows, Quads, Shadows } from './cards';
+import type { FigureInst } from './models/instances';
 import { footSight, thingHard, type SightMask } from './sightmask';
 
 /** `sight` (hard, soft, scenery) per vertex of a card pass; zeros when `mask` is null (sight off). Returns `out`. */
@@ -19,6 +20,16 @@ export function cardSightData(q: Quads, mask: SightMask | null, out: Float32Arra
     }
   }
   return out;
+}
+
+/** The sight of each model instance (#338), read once at its foot with its `reach` like a card; zeros when `mask` is null (sight off). */
+export function figureSight(insts: readonly FigureInst[], mask: SightMask | null): void {
+  for (const i of insts) {
+    if (!mask) { i.sight.hard = 0; i.sight.soft = 0; continue; }
+    const s = footSight(mask, i.x, i.z, i.reach ?? 0);
+    i.sight.hard = thingHard(mask, s.hard);
+    i.sight.soft = s.soft;
+  }
 }
 
 /** `sight` (hard, soft) per vertex of the shadows or glows (their `foot` is the centre, 2 floats per vertex). Returns `out`. */
@@ -43,8 +54,14 @@ export const glowSightData = (g: Glows, mask: SightMask | null, out: Float32Arra
  * owner's first card (its body; the weapon is pushed after it). Scenery on a daylight map is never hidden (as `cardShown`).
  * `seen` is the caller's scratch set (cleared here), so nothing is allocated per frame.
  */
-export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen: Set<number>, out: Set<number>): void {
+export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen: Set<number>, out: Set<number>, models: readonly FigureInst[] = []): void {
   seen.clear();
+  // A model figure owns no card: its first instance (the body; a weapon or a copy comes after) is read at its foot like a card's.
+  for (const i of models) {
+    if (i.owner < 0 || seen.has(i.owner)) continue;
+    seen.add(i.owner);
+    if (thingHard(mask, footSight(mask, i.x, i.z, i.reach ?? 0).hard) > 0.5) out.add(i.owner);
+  }
   for (const q of passes) {
     for (let k = 0; k < q.count; k++) {
       const id = q.owner[k * 6];

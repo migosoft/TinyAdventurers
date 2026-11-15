@@ -410,7 +410,7 @@ export class RunView3d implements RunView {
     // The ids over which nothing is drawn: the snapshot's dark ones and what the picture hides (beyond sight, or in a shadow line).
     this.hidden.clear();
     for (const id of f.dark) this.hidden.add(id);
-    if (sight.mask) hiddenByPicture([dynamic.cards, dynamic.ghosts], sight.mask, this.hiddenSeen, this.hidden);
+    if (sight.mask) hiddenByPicture([dynamic.cards, dynamic.ghosts], sight.mask, this.hiddenSeen, this.hidden, fo.models);
     this.seen = seenOpeners(fo.openers, this.sightFor(f), this.hidden);
     c.timer.lap('sight');
     // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees now (this frame's mask), as their cracks. A woodland and the work light have none.

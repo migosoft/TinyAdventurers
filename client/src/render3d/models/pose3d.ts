@@ -247,7 +247,7 @@ function styleOf(m: FigureModel, d: FigureDef, anim: number): AttackStyle {
 
 const lieHeights = new WeakMap<FigureModel, number>();
 /** How far the figure reaches to the side (z): lying on that side it needs this much room under it. A pure function of the model; memoised. */
-function sideReach(m: FigureModel): number {
+export function sideReach(m: FigureModel): number {
   let r = lieHeights.get(m);
   if (r === undefined) {
     r = 0;

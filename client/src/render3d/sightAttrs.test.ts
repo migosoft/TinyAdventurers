@@ -3,7 +3,8 @@ import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushGlow, pushShadow, pushWall, quadsOf, type Card } from './cards';
-import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
+import type { FigureInst } from './models/instances';
+import { cardSightData, figureSight, glowSightData, hiddenByPicture, shadowSightData } from './sightAttrs';
 import { footSight, SightMask } from './sightmask';
 import type { Cam } from './camera';
 import type { FrameRects } from './worldMesh';
@@ -125,5 +126,59 @@ describe('daylight things', () => {
     const s = newShadowBuf();
     pushShadow(s, cam, 30.5 + 8.5, 30.5, 0.4, 0.2, 0.45);
     expect(shadowSightData(shadowsOf(s), m, new Float32Array(12))[0]).toBe(0);
+  });
+});
+
+describe('the sight of model figures (#338)', () => {
+  // Only the fields the sight reads matter here.
+  const inst = (owner: number, x: number, z: number, reach = 0): FigureInst => ({ owner, x, z, reach, sight: { hard: 9, soft: 9 } } as unknown as FigureInst);
+
+  it('reads the mask at the foot, like a card: seen, unseen', () => {
+    const m = mask();
+    const list = [inst(1, 20.5, 20.5), inst(2, 38, 38)];
+    figureSight(list, m);
+    const near = footSight(m, 20.5, 20.5, 0), far = footSight(m, 38, 38, 0);
+    expect(list[0].sight.hard).toBeLessThan(0.1);
+    expect(list[0].sight.soft).toBeCloseTo(near.soft, 9);
+    expect(list[1].sight.hard).toBeGreaterThan(0.9);
+    expect(list[1].sight.soft).toBeCloseTo(far.soft, 9);
+  });
+  it('a wide figure uses its reach, as a wide card does', () => {
+    const m = mask();
+    const narrow = [inst(1, 26.2, 20.5, 0)], wide = [inst(1, 26.2, 20.5, 2)];
+    figureSight(narrow, m);
+    figureSight(wide, m);
+    const want = footSight(m, 26.2, 20.5, 2);
+    expect(wide[0].sight.soft).toBeCloseTo(want.soft, 9);
+    expect(narrow[0].sight.soft).toBeCloseTo(footSight(m, 26.2, 20.5, 0).soft, 9);
+  });
+  it('partly shown stays between 0 and 1 for the stipple', () => {
+    const m = mask();
+    // somewhere along the edge of the viewer's 6 tile disc
+    let found = false;
+    for (let x = 24; x < 28 && !found; x += 0.05) {
+      const l = [inst(1, x, 20.5)];
+      figureSight(l, m);
+      if (l[0].sight.hard > 0.05 && l[0].sight.hard < 0.95) found = true;
+    }
+    expect(found).toBe(true);
+  });
+  it('a null mask gives zeros', () => {
+    const l = [inst(1, 38, 38)];
+    figureSight(l, null);
+    expect(l[0].sight).toEqual({ hard: 0, soft: 0 });
+  });
+  it('hides the owner of an unseen model figure, asks once per owner and adds nothing for a seen one', () => {
+    const m = mask();
+    const out = new Set<number>(), seen = new Set<number>();
+    // owner 2: body unseen, weapon (and a copy) at other places: only the first instance counts; owner 1 is seen; owner -1 (a skull) is never hidden
+    const list = [inst(1, 20.5, 20.5), inst(2, 38, 38), inst(2, 20.5, 20.5), inst(1, 38, 38), inst(-1, 38, 38)];
+    hiddenByPicture([], m, seen, out, list);
+    expect([...out]).toEqual([2]);
+    expect(seen.has(2)).toBe(true);
+    // the cards' own rule is unchanged (no models)
+    const none = new Set<number>();
+    hiddenByPicture([], m, seen, none);
+    expect(none.size).toBe(0);
   });
 });

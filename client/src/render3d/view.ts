@@ -40,7 +40,7 @@ import { makeShaftPass, type ShaftPass } from './air/shaftNodes';
 import { shaftPlan, type ShaftPlan } from './air/shafts';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, footprint, type ShadowCaster } from './lights';
-import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
+import { cardSightData, figureSight, glowSightData, shadowSightData } from './sightAttrs';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { makeCoverShared } from './cover/coverRead';
 import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
@@ -732,6 +732,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (f.trees) { trees.sync(f.trees); void trees.warm(renderer, camera); }
       else if (trees.meshCount > 0) trees.clear();
       timer?.lap('upload');
+      if (f.models) figureSight(f.models.insts, frameMask);
       figures.frame(f.models, f.cam, (id) => slotOf.get(id) ?? -1);
       timer?.lap('models');
       lighting.setLights(f.lights);

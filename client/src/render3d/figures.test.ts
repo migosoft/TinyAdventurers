@@ -5,6 +5,7 @@ import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
+import { sideReach } from './models/pose3d';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -651,7 +652,6 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.casters.length).toBe(1);
     expect(out.casters[0].id).toBe(10);
     expect(out.shadows.n).toBe(1);
-    expect(fg.anchors.get(10)!.height).toBeCloseTo(15.3, 0);
     expect(Math.abs(fg.anchors.get(10)!.height - 15.3)).toBeLessThan(0.2);
     expect(out.fx.n).toBe(0);
     expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.height / 2 / 16, 6);
@@ -713,6 +713,38 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const hp = [elf.pivots[h * 3], elf.pivots[h * 3 + 1], elf.pivots[h * 3 + 2]];
     const handAt = [0, 1, 2].map((r) => M[hb + r * 4] * hp[0] + M[hb + r * 4 + 1] * hp[1] + M[hb + r * 4 + 2] * hp[2] + M[hb + r * 4 + 3]);
     expect(Math.hypot(origin[0] - handAt[0], origin[1] - handAt[1], origin[2] - handAt[2])).toBeLessThan(6);
+  });
+
+  it('lays a sleeping model figure on the ground cover, and hangs its anchor from the body on the floor', () => {
+    const ground = (_x: number, _z: number, r: number): number => (r === 0.3 ? 0.2 : 0);
+    const asleep = make().frame(frame([ranger({ effects: 1 << EFFECT.Sleep })]), cam(), { ...look({ kit, ...all }), ground });
+    expect(asleep.models[0].lift).toBeCloseTo(0.2, 6);
+    const standing = make().frame(frame([ranger()]), cam(), { ...look({ kit, ...all }), ground });
+    expect(standing.models[0].lift).toBeCloseTo(0, 6);
+    const fg = make(), fs = make();
+    fg.frame(frame([ranger()]), cam(), look({ kit, ...all }));
+    fs.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })]), cam(), look({ kit, ...all }));
+    // the body's thickness (twice its side reach), lower than the standing height
+    expect(fs.anchors.get(10)!.head).toBeLessThan(fg.anchors.get(10)!.head);
+    expect(fs.anchors.get(10)!.head).toBeCloseTo(2 * sideReach(kit.get('elf')!) * kit.get('elf')!.scale, 6);
+    expect(fs.anchors.get(10)!.height).toBe(fs.anchors.get(10)!.head);
+  });
+
+  it('keeps the tint figurePose chose for a stone figure in a wind-up, and drops the red flash for a living one', () => {
+    const slow = 1 << EFFECT.Slowed;
+    const living = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow })]), cam(), look({ kit, ...all }));
+    expect(living.models[0].tint).toEqual([1, 1, 1]);   // the figure's own tint (none), not the slowed blue or the red flash
+    const stone = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow | (1 << EFFECT.Petrified) })]), cam(), look({ kit, ...all }));
+    expect(stone.models[0].tint[0]).toBeCloseTo(0xa0 / 255, 6);
+    expect(stone.models[0].stone).toBe(true);
+  });
+
+  it('batches by the weapon too: the circle is the same for the figure and its bow and bigger than the body alone', () => {
+    const [body, bow] = make().frame(frame([ranger()]), cam(), look({ kit, ...all })).models;
+    expect(bow.radius).toBe(body.radius);
+    expect(body.radius).toBeGreaterThan(kit.get('elf')!.radius);
+    expect(body.reach).toBe(kit.get('elf')!.radius);
+    expect(bow.reach).toBe(body.reach);
   });
 
   it('leaves a skull instance, no decal, when a model figure dies; and the cap holds', () => {

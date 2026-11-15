@@ -25,6 +25,8 @@ export interface FigureInst {
   cut: boolean;             // nothing below the ground is drawn (sinking, drowning)
   sight: { hard: number; soft: number };
   radius: number;           // tiles, for batching
+  /** Tiles: the model's own horizontal reach from the foot, for the sight mask's wide-figure rule (not the enlarged batching radius). 0 when absent. */
+  reach?: number;
 }
 
 /** Texels per row, 4 floats each. */
@@ -99,7 +101,8 @@ export function batchFigures(insts: readonly FigureInst[], cam: Cam): Int32Array
   const n = insts.length, out = new Int32Array(n);
   const sx = new Float64Array(n), sy = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    const p = project(cam, insts[i].x, insts[i].lift + insts[i].radius, insts[i].z);
+    // The circle rides with the hop: `lift` leaves out the root's rise (`pose.root.y`, sprite px, which the row adds itself).
+    const p = project(cam, insts[i].x, insts[i].lift + insts[i].pose.root.y * PX + insts[i].radius, insts[i].z);
     sx[i] = p.sx; sy[i] = p.sy;
   }
   const owners = new Map<number, number[]>();

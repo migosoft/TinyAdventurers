@@ -21,7 +21,7 @@ import { newFxBuf, type FxBuf } from './models/fx';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { BONES, type FigureModel } from './models/model';
-import { copyPose, newPose3dMemory, poseFigure, restPose, type Pose3d, type Pose3dMemory } from './models/pose3d';
+import { copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
 import { modelKeyOf } from './models/table';
 import { WEAPONS } from './models/weapons';
 import type { FrameRects } from './worldMesh';
@@ -153,9 +153,11 @@ const FROZEN_TINT = 0xa8d8ff;
  */
 function modelTint(pose: Pose, d: FigureDef, s: ViewState): [number, number, number] {
   let rgb = pose.tint.mode === 'mul' ? pose.tint.rgb : 0xffffff;
-  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown) rgb = d.tint ?? 0xffffff;
+  const fx = s.effects ?? 0, iced = has(fx, EFFECT.Frozen);
+  // The red flash is only shown by `figurePose` when the figure is neither stone nor ice (pose.ts), so only then is there something to undo.
+  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = d.tint ?? 0xffffff;
   const t = rgbOf(rgb);
-  if (has(s.effects ?? 0, EFFECT.Frozen)) { const f = rgbOf(FROZEN_TINT); t[0] *= f[0]; t[1] *= f[1]; t[2] *= f[2]; }
+  if (iced) { const f = rgbOf(FROZEN_TINT); t[0] *= f[0]; t[1] *= f[1]; t[2] *= f[2]; }
   return t;
 }
 
@@ -516,8 +518,9 @@ export class Figures3d {
     const tint = modelTint(pose, d, s);
     const insts: FigureInst[] = [];
     const body: FigureInst = {
-      owner: e.id, model: key, x, z, lift: -down, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
-      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius,
+      // A lying body rests on the ground cover, as the lying card does.
+      owner: e.id, model: key, x, z, lift: (pose.lie ? this.ground(x, z, 0.3) : 0) - down, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach: m.radius,
     };
     if (!sunk) {
       out.models.push(body);
@@ -530,8 +533,10 @@ export class Figures3d {
           const bone = BONES.indexOf(WEAPONS[wp.frame]?.kind === 'bow' ? 'weaponL' : 'weaponR');
           const w: FigureInst = {
             owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: wp.scale, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius,
+            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach: m.radius,
           };
+          // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
+          body.radius = w.radius = radius + wm.radius * wp.scale;
           if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
           out.models.push(w);
           insts.push(w);
@@ -558,7 +563,8 @@ export class Figures3d {
       pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
     }
 
-    const h = m.baseHeight;
+    // Lying, the bars and names hang from the body on the floor: its thickness (the card path likewise uses the lying frame's width).
+    const h = pose.lie ? Math.min(m.baseHeight, 2 * sideReach(m) * m.scale) : m.baseHeight;
     this.anchors.set(e.id, { x, z, height: h, tag: h + 3, head: h, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
     this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : h / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;

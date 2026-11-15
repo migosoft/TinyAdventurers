@@ -104,6 +104,15 @@ describe('batchFigures', () => {
     const b = batchFigures([inst({ owner: 1 }), inst({ owner: 1, x: 10 }), inst({ owner: 2, x: 10.2 })], cam);
     expect([...b]).toEqual([0, 0, 1]);
   });
+  it('a hopping figure\'s circle rides with its hop: it overlaps a figure behind it that the grounded circle would miss', () => {
+    // A figure 0.9 tiles behind (z) the first: far enough for circles at the foot-height, close once the first has hopped.
+    const grounded = batchFigures([inst({ owner: 1, radius: 0.4 }), inst({ owner: 2, z: -1.3, radius: 0.4 })], cam);
+    expect([...grounded]).toEqual([0, 0]);
+    const hop = restPose(skelet, 0);
+    hop.root.y = 16 * 1.2;   // 1.2 tiles up
+    const hopping = batchFigures([inst({ owner: 1, radius: 0.4, pose: hop }), inst({ owner: 2, z: -1.3, radius: 0.4 })], cam);
+    expect([...hopping]).toEqual([0, 1]);
+  });
   it('12 overlapping figures: batches 0 to 7, the last five in 7, none dropped', () => {
     const list = Array.from({ length: 12 }, (_, i) => inst({ owner: i + 1, x: i * 0.01 }));
     const b = batchFigures(list, cam);
