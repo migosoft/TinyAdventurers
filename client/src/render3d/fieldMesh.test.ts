@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 import { WALL_H } from './heights';
-import { FIELD_EDGE, FIELD_FILL, overAlpha, overWeight, buildField, sealedCells } from './fieldMesh';
+import { FIELD_EDGE, FIELD_FILL, overLayer, type Ops, buildField, sealedCells } from './fieldMesh';
 
 const rows = (r: string[]) => {
   const w = r[0].length, t = new Uint8Array(w * r.length);
@@ -54,8 +54,11 @@ describe('fieldMesh', () => {
     expect(Array.from(f.edge).every((e) => e === 0 || e === 1)).toBe(true);
   });
   it('a band over the fill is mostly the band', () => {
-    expect(overWeight(0.3, 0.9)).toBeGreaterThanOrEqual(0.95);
-    expect(overAlpha(0.3, 0.9)).toBeCloseTo(0.93, 9);
-    expect(overWeight(0.3, 0)).toBe(0);
+    const num: Ops<number> = { one: 1, eps: 1e-4, add: (a, b) => a + b, sub: (a, b) => a - b, mul: (a, b) => a * b, div: (a, b) => a / b, max: Math.max, mix: (a, b, k) => a + (b - a) * k };
+    // one channel: the fill 0 at alpha 0.3, a layer of 1 at alpha 0.9
+    const [c, a] = overLayer(num, 0.3, 0, 1, 0.9);
+    expect(c).toBeGreaterThanOrEqual(0.95);
+    expect(a).toBeCloseTo(0.93, 9);
+    expect(overLayer(num, 0.3, 0, 1, 0)[0]).toBe(0);
   });
 });

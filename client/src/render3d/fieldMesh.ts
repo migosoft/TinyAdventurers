@@ -19,14 +19,30 @@ export const FIELD_OLD = 10;
 /** Height of a rim band at the floor and at the top (tiles): one pixel of the pack's 16. */
 const RIM = 1 / 16;
 
-/** Alpha of a layer of alpha `b` lying over alpha `a`. The material builds the same maths from nodes. */
-export function overAlpha(a: number, b: number): number {
-  return b + a * (1 - b);
+/** The arithmetic `overLayer` needs: numbers in the test, TSL nodes in the material. */
+export interface Ops<T> {
+  one: T;
+  add(a: T, b: T): T;
+  sub(a: T, b: T): T;
+  mul(a: T, b: T): T;
+  div(a: T, b: T): T;
+  max(a: T, b: T): T;
+  mix(a: T, b: T, k: T): T;
+  /** The floor of the alpha divisor. */
+  eps: T;
 }
-/** Share of the layer's colour in the result of a layer (alpha `b`) over (alpha `a`): the colour is `mix(under, layer, overWeight)`. */
-export function overWeight(a: number, b: number): number {
-  return b / Math.max(overAlpha(a, b), 1e-4);
+
+/** A layer (colour `c`, alpha `b`) lying over (`rgb`, alpha `a`), as 2D draws the bands and rims on the fill: returns [rgb, alpha]. */
+export function overLayer<T>(o: Ops<T>, a: T, rgb: T, c: T, b: T): [T, T] {
+  const a2 = o.add(b, o.mul(a, o.sub(o.one, b)));
+  return [o.mix(rgb, c, o.div(b, o.max(a2, o.eps))), a2];
 }
+
+const NODE_OPS: Ops<N> = {
+  one: float(1), eps: float(1e-4),
+  add: (a, b) => a.add(b), sub: (a, b) => a.sub(b), mul: (a, b) => a.mul(b), div: (a, b) => a.div(b),
+  max: (a, b) => max(a, b), mix: (a, b, k) => mix(a, b, k),
+};
 
 /** The field's animated numbers: `age` seconds since it appeared. Uniforms only, set each frame (nothing is rebuilt). */
 export interface FieldUniforms { age: ReturnType<typeof uniform> }
@@ -49,11 +65,8 @@ export function fieldMaterial(sight: Sight, u: FieldUniforms): MeshBasicNodeMate
   const shown: N = step(y01, k.add(1e-4));
   let a: N = pulse.mul(0.1).add(0.22).mul(k);
   let rgb: N = fill;
-  // a layer of colour `c` and alpha `b` lies over (rgb, a), as 2D draws bands and rims on the fill (`overAlpha`, `overWeight`)
   const over = (c: N, b: N): void => {
-    const a2: N = b.add(a.mul(float(1).sub(b)));
-    rgb = mix(rgb, c, b.div(max(a2, 1e-4)));
-    a = a2;
+    [rgb, a] = overLayer(NODE_OPS, a, rgb, c, b);
   };
   // the cap (y01 = 1 all over) takes no band
   const sideOnly: N = float(1).sub(step(0.999, y01));
