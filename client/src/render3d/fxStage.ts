@@ -478,7 +478,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       assignSkips(lights, carrierMap(lights), casters);
       c.timer.lap('lights');
       const r = window.__r3d;
-      if (r) { r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal }; r.figures = figures.count;r.lights = { list: lights.length, inView: lights.length }; r.casters = casters.length; }
+      if (r) { r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal }; r.figures = figures.count; r.lights = { list: lights.length, inView: lights.length }; r.casters = casters.length; }
       c.timer.renderStart();
       return c.view.draw(
         {

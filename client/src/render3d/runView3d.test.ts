@@ -158,7 +158,7 @@ describe('the run view and the game lights', () => {
   });
   it('the readout lines say the lights in use and the caps', () => {
     const { stats } = run({ params: { lcap: 8, ccap: 4 } });
-    expect(stats.lines).toEqual(['lights     1 of 1 (cap 8)', 'shadows    1 cards (cap 4)', 'fx         0 rec, 0 tris (0 dropped)']);
+    expect(stats.lines).toEqual(['lights     1 of 1 (cap 8)', 'shadows    1 cards (cap 4)', 'fx         0 rec, 0 tris (0 dropped total)']);
   });
   it('a cove shows the trees built line but no sky lines; a level with a woodland and a cove is refused', () => {
     const { stats } = run({ cove: true });

@@ -238,7 +238,12 @@ try {
   if (shots.length === 0) errors.push('a left click sent no primary Input');
   await page.screenshot({ path: `${out}/r3d-run-${level}-aimed.png` });
 
-  // The effects (#308): the hero's cast leaves records alive right after the click (dungeon); no triangle may be refused at the caps.
+  // The effects (#308): the left click is the Paladin's Strike (no rune); the secondary, Holy Light (self area, fresh cooldown), leaves
+  // rune records alive. Wait for them (a short rune ends fast, a slow software frame may miss it); no triangle may be refused at the caps.
+  if (level === 'dungeon') {
+    await page.mouse.click(800, 300, { button: 'right' });
+    await page.waitForFunction(() => (window.__r3d?.fx?.records ?? 0) > 0, null, { timeout: 3000 * slow }).catch(() => {});
+  }
   const fx = await page.evaluate(() => window.__r3d.fx);
   if (!fx) errors.push('window.__r3d.fx is not set in a run');
   else {

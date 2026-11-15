@@ -52,6 +52,6 @@ describe('statsText3d', () => {
 
 describe('fxLine', () => {
   it('prints records, triangles and the dropped count', () => {
-    expect(fxLine(14, 2310, 0)).toBe('fx         14 rec, 2310 tris (0 dropped)');
+    expect(fxLine(14, 2310, 0)).toBe('fx         14 rec, 2310 tris (0 dropped total)');
   });
 });
