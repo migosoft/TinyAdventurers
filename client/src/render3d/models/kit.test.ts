@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKit, directRunner, type BuildRunner } from './kit';
+import { createKit, directRunner, workerRunner, type BuildRunner, type FigureKit } from './kit';
 import type { FigureModel } from './model';
 
 const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
@@ -108,5 +108,109 @@ describe('createKit', () => {
     kit.get('weapon_big_hammer');
     await settle();
     expect(kit.get('weapon_big_hammer')?.key).toBe('weapon_big_hammer');
+  });
+
+  it('a sprite lookup that throws gives null and one warning, not an exception', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const log: string[] = [];
+    const kit = createKit(() => { throw new Error('no atlas'); }, fake(log));
+    for (let i = 0; i < 3; i++) expect(kit.get('weapon_knight_sword')).toBeNull();
+    await settle();
+    expect(log).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A stand-in for the browser's Worker: records what is sent and lets the test answer. */
+class FakeWorker {
+  static all: FakeWorker[] = [];
+  static throwOnNew = false;
+  onmessage: ((e: { data: unknown }) => void) | null = null;
+  onerror: ((e: { message: string }) => void) | null = null;
+  onmessageerror: (() => void) | null = null;
+  sent: { id: number; key: string }[] = [];
+  terminate = vi.fn();
+  constructor() { if (FakeWorker.throwOnNew) throw new Error('no module workers'); FakeWorker.all.push(this); }
+  postMessage(m: { id: number; key: string }): void { this.sent.push(m); }
+  reply(id: number, model: FigureModel, ms: number): void { this.onmessage?.({ data: { id, model, ms } }); }
+}
+
+describe('workerRunner', () => {
+  afterEach(() => { vi.unstubAllGlobals(); FakeWorker.all = []; FakeWorker.throwOnNew = false; });
+  const setup = (): { kit: FigureKit; w: FakeWorker } => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const kit = createKit(noPixels, workerRunner());
+    return { kit, w: FakeWorker.all[0] };
+  };
+
+  it('matches replies to requests by id and reports the worker\'s build time', async () => {
+    const { kit, w } = setup();
+    kit.get('elf'); kit.get('wolf');
+    await settle();
+    expect(w.sent.map((m) => m.key)).toEqual(['elf', 'wolf']);
+    w.reply(w.sent[1].id, stub('wolf'), 42);
+    w.reply(w.sent[0].id, stub('elf'), 17);
+    await settle();
+    expect(kit.get('wolf')?.key).toBe('wolf');
+    expect(kit.get('elf')?.key).toBe('elf');
+    expect(kit.times.get('wolf')).toBe(42);
+    expect(kit.times.get('elf')).toBe(17);
+    expect(kit.version).toBe(2);
+  });
+
+  it('a build error from the worker warns once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { kit, w } = setup();
+    kit.get('elf');
+    w.onmessage?.({ data: { id: w.sent[0].id, error: 'bad' } });
+    await settle();
+    expect(kit.get('elf')).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('after onerror pending and later jobs fail, one warning per key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { kit, w } = setup();
+    kit.get('elf');
+    w.onerror?.({ message: 'load failed' });
+    await settle();
+    kit.get('elf'); kit.get('wolf'); kit.get('wolf');
+    await settle();
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(w.sent.length).toBe(1);
+    expect(kit.version).toBe(0);
+  });
+
+  it('messageerror fails the same way', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { kit, w } = setup();
+    kit.get('elf');
+    w.onmessageerror?.();
+    await settle();
+    kit.get('wolf');
+    await settle();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('a Worker that cannot be created fails every job once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    FakeWorker.throwOnNew = true;
+    vi.stubGlobal('Worker', FakeWorker);
+    const kit = createKit(noPixels, workerRunner());
+    kit.get('elf'); kit.get('elf'); kit.get('wolf');
+    await settle();
+    expect(kit.get('elf')).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('dispose terminates the worker and rejects nothing visibly', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { kit, w } = setup();
+    kit.get('elf');
+    kit.dispose();
+    await settle();
+    expect(w.terminate).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    expect(kit.version).toBe(0);
   });
 });

@@ -18,7 +18,10 @@ export interface FigureKit {
 }
 
 /** Builds one model; resolves with it and the build's own duration (not the queue wait). */
-export type BuildRunner = (job: { key: string; px: SpritePixels | null }) => Promise<FigureModel>;
+export type BuildRunner = ((job: { key: string; px: SpritePixels | null }) => Promise<FigureModel>) & {
+  /** Ends the runner (a worker is terminated); what is pending is rejected. */
+  dispose?(): void;
+};
 
 /** A runner that also reports how long the build took, through `times`. Plain runners are timed by the kit around the call. */
 export type TimedRunner = BuildRunner & { lastMs?: Map<string, number> };
@@ -36,27 +39,38 @@ export const directRunner: TimedRunner & { lastMs: Map<string, number> } = Objec
 
 /** Builds in a module worker; the typed arrays come back transferred. One worker per runner. */
 export const workerRunner = (): BuildRunner => {
-  const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
   const pending = new Map<number, { ok: (m: FigureModel) => void; fail: (e: Error) => void; key: string }>();
-  let next = 0;
-  worker.onmessage = (e: MessageEvent<{ id: number; model?: FigureModel; ms?: number; error?: string }>) => {
-    const d = e.data, p = pending.get(d.id);
-    if (!p) return;
-    pending.delete(d.id);
-    if (d.model) { runner.lastMs.set(p.key, d.ms ?? 0); p.ok(d.model); } else p.fail(new Error(d.error ?? 'build failed'));
-  };
-  worker.onerror = (e) => {
-    const err = new Error(e.message || 'the model worker failed');
-    for (const p of pending.values()) p.fail(err);
+  let next = 0, dead: Error | null = null, worker: Worker | null = null;
+  /** The worker is gone or unusable: everything pending fails, and so does every later job. */
+  const die = (why: string): void => {
+    dead = dead ?? new Error(why);
+    for (const p of pending.values()) p.fail(dead);
     pending.clear();
   };
-  const runner: TimedRunner & { lastMs: Map<string, number> } = Object.assign(
+  try {
+    worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<{ id: number; model?: FigureModel; ms?: number; error?: string }>) => {
+      const d = e.data, p = pending.get(d.id);
+      if (!p) return;
+      pending.delete(d.id);
+      if (d.model) { runner.lastMs.set(p.key, d.ms ?? 0); p.ok(d.model); } else p.fail(new Error(d.error ?? 'build failed'));
+    };
+    worker.onerror = (e) => die(e.message || 'the model worker failed');
+    worker.onmessageerror = () => die('the model worker sent a message that could not be read');
+  } catch (e) {
+    die(`the model worker could not be started (${e instanceof Error ? e.message : String(e)})`);
+  }
+  const runner: BuildRunner & { lastMs: Map<string, number> } = Object.assign(
     (job: { key: string; px: SpritePixels | null }) => new Promise<FigureModel>((ok, fail) => {
+      if (dead || !worker) { fail(dead ?? new Error('the model worker is closed')); return; }
       const id = next++;
       pending.set(id, { ok, fail, key: job.key });
       worker.postMessage({ id, key: job.key, px: job.px });
     }),
-    { lastMs: new Map<string, number>() },
+    {
+      lastMs: new Map<string, number>(),
+      dispose: () => { worker?.terminate(); worker = null; die('the model worker was closed'); },
+    },
   );
   return runner;
 };
@@ -80,7 +94,7 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
     started.add(key);
     let px: SpritePixels | null = null;
     if (isWeaponKey(key)) {
-      px = pixelsOf(key);
+      try { px = pixelsOf(key); } catch (e) { warnOnce(key, `the sprite lookup failed (${e instanceof Error ? e.message : String(e)})`); return; }
       if (!WEAPONS[key].art && !px) { warnOnce(key, 'the weapon has no sprite pixels'); return; }
     }
     const t0 = performance.now();
@@ -109,6 +123,6 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
     known,
     times,
     get version() { return version; },
-    dispose() { disposed = true; models.clear(); times.clear(); },
+    dispose() { disposed = true; models.clear(); times.clear(); run.dispose?.(); },
   };
 }
