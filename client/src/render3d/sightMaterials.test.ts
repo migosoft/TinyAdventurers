@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
-import { fieldMaterial } from './fieldMesh';
+import { fieldMaterial, fieldUniforms } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
@@ -52,7 +52,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'lit fx', m: fxLitMaterial(sight, l), world: false, attrs: FX_ATTRS },
     // Depth only (no colour to veil), but it stipples by the same sight value as the opaque card, so a figure the hero cannot see casts no shadow.
     { name: 'sun caster', m: sunCasterMaterial(t, 64, 64, l.sun, sight), world: false },
-    { name: 'force field', m: fieldMaterial(sight), world: false },
+    { name: 'force field', m: fieldMaterial(sight, fieldUniforms()), world: false },
     { name: 'tree depth', m: trees.depth, world: false },
     { name: 'tree colour', m: trees.colour, world: false },
     // A falling leaf: lit like the leaves and veiled like every world material.

@@ -66,7 +66,7 @@ import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
-import { buildField, fieldMaterial as makeFieldMaterial } from './fieldMesh';
+import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
 
@@ -118,6 +118,8 @@ export interface FrameInput {
   models?: FigureFrame;
   /** The effects (#308): blended triangles (unlit) and lit triangles; absent: none. */
   fx?: { tris: FxBuf; lit: FxBuf };
+  /** The force field's life (#308): `age` seconds since it appeared (absent: an old one, no fade-in), `t` the clock. */
+  field?: { age: number; t: number };
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
   cover?: CoverFrame;
   /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
@@ -381,7 +383,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const chunks = { total: chunkTotal(), drawn: 0 };
 
   // The force field: one unlit, translucent mesh over every closed door cell.
-  const fieldMaterial = makeFieldMaterial(sight);
+  const fieldU = fieldUniforms();
+  const fieldMaterial = makeFieldMaterial(sight, fieldU);
   let fieldMesh: Mesh | null = null;
   const rebuildField = (): void => {
     if (fieldMesh) {
@@ -393,6 +396,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (f.count === 0) return;
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(f.position, 3));
+    g.setAttribute('edge', new BufferAttribute(f.edge, 1));
+    g.setAttribute('y01', new BufferAttribute(f.y01, 1));
     fieldMesh = new Mesh(g, fieldMaterial);
     fieldMesh.frustumCulled = false;
     fieldMesh.renderOrder = 2;
@@ -698,6 +703,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
       clock = f.t;
+      fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
       // A terrain chunk animates only if the last frame drew it; the others catch up when they come into view.
       for (const c of terrainChunks) {
         if (!c) continue;

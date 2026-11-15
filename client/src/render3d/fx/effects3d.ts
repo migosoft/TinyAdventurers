@@ -2,7 +2,7 @@
 // registered for their kind (later tasks register them). A record's picture is a pure function of its age, seed and numbers.
 // Nothing here touches prediction, interpolation or the simulation.
 import { isBossKind, isProjectileKind } from '../../game/anim/defs';
-import { KIND } from '../../generated/defs';
+import { KIND, TILE_ID } from '../../generated/defs';
 import type { Snapshot } from '../../generated/Snapshot';
 import type { EntState } from '../../game/world';
 import type { OwnCast, PictureEv, ShotView } from '../../run/view';
@@ -251,8 +251,28 @@ export class Effects3d {
     if (how === 'wall') this.add(FX_KIND.ShotHit, now, shot.x / TILE, shot.y / TILE, -1, shot.kind);
   }
 
-  /** A tile changed (the force field's cells follow it in a later task). */
-  tileChanged(_x: number, _y: number, _v: number, _now: number): void {}
+  /** The force field (#308): when it appeared (the run's clock; null: it was there at the start) and its sealed cells (rebuilt after a tile changed). */
+  private fieldAt: number | null = null;
+  private cells: [number, number][] | null = null;
+
+  /** A tile changed: a door that closes starts the force field's life (age 0, with its burst). */
+  tileChanged(_x: number, _y: number, v: number, now: number): void {
+    this.cells = null;
+    if (v === TILE_ID.DoorClosed) this.fieldAt = now;
+  }
+
+  /** Seconds since the force field appeared; 10 s or more for one that was there when the run began (no fade-in). */
+  fieldAge(now: number): number {
+    return this.fieldAt === null ? 10 + Math.max(0, now) : now - this.fieldAt;
+  }
+
+  /** The sealed cells of the map (the same array until a tile changes). */
+  sealed(): readonly [number, number][] {
+    if (this.cells) return this.cells;
+    const m = this.map, out: [number, number][] = [];
+    for (let z = 0; z < m.h; z++) for (let x = 0; x < m.w; x++) if (m.get(x, z) === TILE_ID.DoorClosed) out.push([x, z]);
+    return (this.cells = out);
+  }
 
   /** Clears the outputs, drops the records past their life and draws the others. */
   frame(input: FxFrame, out: FxOut): void {

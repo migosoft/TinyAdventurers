@@ -460,13 +460,21 @@ export class RunView3d implements RunView {
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
       },
       c.timer,
     );
     this.paintOverlay(f, c, drawCam);
     return this.stats(c, view.meshes);
+  }
+
+  private readonly fieldFrame = { age: 10, t: 0 };
+  /** The force field's life of this frame (reused object). */
+  private fieldIn(now: number): { age: number; t: number } {
+    this.fieldFrame.age = this.fx.fieldAge(now);
+    this.fieldFrame.t = now;
+    return this.fieldFrame;
   }
 
   /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */

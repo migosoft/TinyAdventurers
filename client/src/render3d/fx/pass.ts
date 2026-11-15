@@ -14,6 +14,7 @@ import type { Quality } from '../quality';
 import type { Effects3d, FxFrame } from './effects3d';
 import { registerBooms } from './booms';
 import { registerBursts } from './bursts';
+import { registerField } from './field';
 import { registerFigureFx } from './figureFx';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
@@ -55,6 +56,7 @@ export class FxPass {
     registerBooms();
     registerFigureFx();
     registerHazards();
+    registerField();
     registerStatus();
     this.input = { ctx: this.ctx, figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden, you: 0, ownCast: null };
   }

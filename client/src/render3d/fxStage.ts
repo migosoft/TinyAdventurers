@@ -61,6 +61,8 @@ export interface FxScene {
   /** Shots that end at `at` seconds (local px); the stage calls `Effects3d.shotEnded` for them. */
   shotEnds?: Array<{ at: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }>;
   snapExtras?: SnapExtras;
+  /** Tiles the row sets (local tiles): the stage changes the map when the cell differs, with `at` the second of the period it changed. */
+  tiles?: Array<{ x: number; z: number; id: number; at: number }>;
 }
 
 export interface FxRow {
@@ -134,7 +136,22 @@ export const FX_ROWS: FxRow[] = [
   ...bossRows(),
   ...hazardRows(),
   ...statusRows(),
+  ...objectRows(),
 ];
+
+/** The objects (#308): the boss hall's force field closing a three-cell gap in the room and opening again. */
+function objectRows(): FxRow[] {
+  const CLOSE = 0.6, OPEN = 4.2;
+  return [
+    {
+      group: 'objects', name: 'force field appears', period: 6,
+      at: (t) => {
+        const id = t >= CLOSE && t < OPEN ? TILE_ID.DoorClosed : TILE_ID.Floor;
+        return { ents: [], events: [], tiles: [6, 7, 8].map((x) => ({ x, z: 7, id, at: id === TILE_ID.DoorClosed ? CLOSE : OPEN })) };
+      },
+    },
+  ];
+}
 
 /** The ground hazards (#308): each kind at full life, and a fire patch burning out (strength follows the life left, `extra` ms). */
 function hazardRows(): FxRow[] {
@@ -423,6 +440,18 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
         }
       });
       prev = rt;
+      // The tiles the rows set (a door that closes starts the force field at its own second, so a pinned clock shows the same age).
+      rows.forEach((row, slot) => {
+        const lt = ((rt % row.period) + row.period) % row.period;
+        const o = slotOrigin(slot);
+        for (const tl of row.at(lt).tiles ?? []) {
+          const x = o.x + tl.x, z = o.z + tl.z;
+          if (map.get(x, z) === tl.id) continue;
+          map.set(x, z, tl.id);
+          fx.tileChanged(x, z, tl.id, origin + Math.floor(rt / row.period) * row.period + tl.at);
+          c.view?.tileChanged(x, z);
+        }
+      });
       // The boss corner and (when the group has no rows) a quiet bay.
       BOSSES.forEach(([kind, x, z], i) => ents.push(placeEnt(fxEnt(200 + i, kind, x, z, { aim: Math.PI, animMs: t * 1000 + i * 90 }), BAY)));
       TORCH_TILES.forEach((tx, i) => ents.push(placeEnt(fxEnt(500 + i, KIND.Torch, tx + 0.5, 3 + 0.5 / TILE, { extra: 0, anim: torchesOn ? 1 : 0 }), BAY)));
@@ -455,7 +484,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, kit }, fx: { tris: pass.blend, lit: pass.lit },
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
         },
         c.timer,
       );
