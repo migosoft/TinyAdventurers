@@ -107,6 +107,31 @@ describe('buildFigure', () => {
     }
   }, SLOW);
 
+  it('marks the seams unlit (look.w 2) in stage collar, on pieces only, and nothing else', () => {
+    const collar = STAGES.indexOf('collar');
+    for (const key of KEYS) {
+      const m = model(key);
+      let unlit = 0;
+      for (const r of m.ranges) for (let k = r.start; k < r.start + r.count; k++) {
+        const w = m.look[m.index[k] * 4 + 3];
+        if (w === 2) { unlit++; expect(r.stage, key).toBe(collar); expect(r.line, key).toBe(false); }
+        else expect([0, 1], key).toContain(w);
+      }
+      if (key === 'elf' || key === 'knight') expect(unlit, key).toBeGreaterThan(0);
+      else if (key === 'skelet' || key === 'wolf') expect(unlit, key).toBe(0);
+    }
+  }, SLOW);
+
+  it('passes on the hat\'s sway', () => {
+    expect(model('wizard').hatSway).toBe(0.3);
+    expect(model('elf').hatSway).toBe(0);
+  }, SLOW);
+
+  it('refuses a description with more bending pieces than the GPU has room for', () => {
+    const spike = { ...DESCS.wolf.spikes![0], sway: 1 };
+    expect(() => buildFigure('many', { ...DESCS.wolf, spikes: Array(MAX_BENDS + 1).fill(spike) })).toThrow(/bending pieces/);
+  }, SLOW);
+
   it('weights only the wizard\'s robe, 0 at the chest and 1 at the hem', () => {
     for (const key of KEYS) {
       const m = model(key);
@@ -122,7 +147,6 @@ describe('buildFigure', () => {
   }, SLOW);
 
   it('stands the elf 15.3, the knight 15, the dwarf 14 and the wizard 13 sprite pixels high', () => {
-    expect(model('elf').baseHeight).toBeCloseTo(15.3, 0);
     expect(Math.abs(model('elf').baseHeight - 15.3)).toBeLessThan(0.2);
     expect(Math.abs(model('knight').baseHeight - 15)).toBeLessThan(0.2);
     expect(Math.abs(model('dwarf').baseHeight - 14)).toBeLessThan(0.2);

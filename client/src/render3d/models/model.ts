@@ -31,7 +31,7 @@ export interface FigureModel {
   position: Float32Array; normal: Float32Array; uv: Float32Array; // uv into `paint`
   /** 4 per vertex: bone index, 1 on a hull vertex, bend index (-1 none, -2 the robe), how far along the bend (0..1; the robe's weight). */
   skin: Float32Array;
-  /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 1 for polished steel. */
+  /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 0 lit, 1 polished steel, 2 unlit (the seams). */
   look: Float32Array;
   index: Uint32Array; ranges: ModelRange[];
   pieceIndex: Uint32Array; lineIndex: Uint32Array; // the same triangles as two unbroken lists (sun pass; seal)
@@ -43,6 +43,8 @@ export interface FigureModel {
   baseHeight: number;
   /** Tiles: the largest reach from the foot axis, add-ons and the stretched arm included (a held weapon is not known here). */
   radius: number;
+  /** How much the hat rocks (the description's `hat.sway`; 0 without a hat). */
+  hatSway: number;
   shoulderY: number; handY: number; armLength: number; armRadius: number; quad: boolean; scale: number; hipY: number; neck: [number, number];
 }
 
@@ -62,6 +64,8 @@ interface Piece {
   flat: [number, number, number] | null;
   paint: 0 | 1;
   steel: boolean;
+  /** Not shaded (the seams). */
+  unlit?: boolean;
   bend: number;
   robe: boolean;
 }
@@ -109,7 +113,7 @@ function figurePieces(d: FigureDesc): { pieces: Piece[]; bends: BendDef[]; pivot
   if (d.collar) add('collar', band(body.rows, cx, pow, d.collar), 0.3, 'body', none, col(d.collar.colour));
   // A dark line between two parts of the base is a thin ring of its own, unlit, in the outline colour (a hull only draws round a piece's outer edge).
   for (const s of d.seams || []) {
-    pieces.push({ stage: stageOf('collar'), bone: boneOf('body'), at: none, flat: rgb(d.outline), paint: 0, steel: false, bend: -1, robe: false, line: false, mesh: ring(body.rows, cx, pow, { row: s.row, like: s.like, out: -0.1, thick: 0.4, high: 0.35 }) });
+    pieces.push({ stage: stageOf('collar'), bone: boneOf('body'), at: none, flat: rgb(d.outline), paint: 0, steel: false, unlit: true, bend: -1, robe: false, line: false, mesh: ring(body.rows, cx, pow, { row: s.row, like: s.like, out: -0.1, thick: 0.4, high: 0.35 }) });
   }
   // Rings round the body that stand clear of it, like ribs round a spine.
   for (const s of d.rings || []) add('collar', ring(body.rows, cx, bpow, s), s.line || 0.3, 'body', none, col(s.colour));
@@ -167,6 +171,7 @@ function figurePieces(d: FigureDesc): { pieces: Piece[]; bends: BendDef[]; pivot
   for (const b of BONES) parents[boneOf(b)] = parent[b] ? boneOf(parent[b]!) : -1;
 
   const robeTop = d.parts[1].open ? FH - (d.parts[1].taper ? d.parts[1].taper.from : (d.parts[1].rows || [0])[0]) : null;
+  if (bends.length > MAX_BENDS) throw new Error(`${d.name}: ${bends.length} bending pieces, at most ${MAX_BENDS} fit the GPU's bend array`);
   return { pieces, bends, pivots, parents, head, body, hipY, neck: [neckX, neckY], handY, robeTop };
 }
 
@@ -205,7 +210,8 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
         bendIdx = -2; along = g * g * (3 - 2 * g);
       }
       skin.set([p.bone, p.line ? 1 : 0, bendIdx, along], o * 4);
-      if (p.flat) look.set([...p.flat, p.steel ? 1 : 0], o * 4); else look.set([-1, -1, -1, p.steel ? 1 : 0], o * 4);
+      const mat = p.unlit ? 2 : p.steel ? 1 : 0;
+      if (p.flat) look.set([...p.flat, mat], o * 4); else look.set([-1, -1, -1, mat], o * 4);
       if (!p.flat && m.uv) {
         const u = m.uv[i * 2], v = m.uv[i * 2 + 1];
         uv[o * 2] = u; uv[o * 2 + 1] = same ? v : p.paint === 0 ? 0.5 + v / 2 : v / 2;
@@ -229,6 +235,7 @@ function assemble(key: string, d: FigureDesc, built: ReturnType<typeof figurePie
     baseHeight: top * scale,
     radius: (reachPx + armLength * 2.3) / 16 * scale,
     shoulderY: d.arms ? FH - d.arms.row : built.neck[1] + 1, handY: built.handY, armLength, armRadius: d.arms ? d.arms.radius : 0,
+    hatSway: d.hat ? d.hat.sway ?? 0 : 0,
     quad: !!d.quad, scale, hipY: built.hipY, neck: built.neck,
   };
 }
