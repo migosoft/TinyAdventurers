@@ -125,11 +125,31 @@ export const FX_ROWS: FxRow[] = [
   },
   ...runeRows(),
   ...shotRows(),
-  ...([['Boom k=0', 0, 1.5], ['Boom k=4', 4, 1.5], ['Boom k=7', 7, 1.2], ['Boom k=10', 10, 2.5]] as const).map(([name, k, r]): FxRow => ({
+  ...([['Boom k=0', 0, 1.5], ['Boom k=4', 4, 1.5], ['Boom k=7', 7, 1.2], ['Boom k=10', 10, 2.5], ['Boom k=1', 1, 2], ['Boom k=13', 13, 2], ['Boom k=2', 2, 1], ['Boom k=5', 5, 2], ['Boom k=6', 6, 2], ['Boom k=8', 8, 1], ['Boom k=9', 9, 1.5], ['Boom k=11', 11, 2.5], ['Boom k=12', 12, 2]] as const).map(([name, k, r]): FxRow => ({
     group: 'booms', name, period: 5,
     at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(r), k } }] }),
   })),
+  ...eventRows(),
 ];
+
+/** The rows of the other events (#308): chain spark, deaths, raise, immune, hit sparks. */
+function eventRows(): FxRow[] {
+  const at = (x: number, z: number): { x: number; y: number } => ({ x: px(x), y: px(z) });
+  const one = (name: string, ev: PictureEv): FxRow => ({ group: 'figures', name, period: 3, at: () => ({ ents: [], events: [{ at: 0.3, ev }] }) });
+  return [
+    one('Zap', { t: 'Zap', ...at(9.5, 7), x2: px(12), y2: px(9.5) } as PictureEv),
+    one('Died', { t: 'Died', id: 400, kind: KIND.OrcWarrior, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Died skeleton', { t: 'Died', id: 401, kind: KIND.SkeletonWarrior, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Died boss', { t: 'Died', id: 402, kind: KIND.Dragon, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Died ghost', { t: 'Died', id: 403, kind: KIND.Ghost, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Raise k=0', { t: 'Raise', k: 0, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Raise k=1', { t: 'Raise', k: 1, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Raise k=2', { t: 'Raise', k: 2, ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Immune', { t: 'Immune', ...at(IMPACT.x, IMPACT.z) } as PictureEv),
+    one('Dmg', { t: 'Dmg', ...at(IMPACT.x, IMPACT.z), amount: 5, crit: false, imm: false, p: false } as unknown as PictureEv),
+    one('Dmg hero', { t: 'Dmg', ...at(IMPACT.x, IMPACT.z), amount: 5, crit: false, imm: false, p: true } as unknown as PictureEv),
+  ];
+}
 
 export interface FxOpts { group: FxGroup; start: number; pinned: boolean; slow: number }
 

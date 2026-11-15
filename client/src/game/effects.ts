@@ -2,6 +2,7 @@
 // Everything is pooled so combat does not allocate per frame.
 import type Phaser from 'phaser';
 import { FONT_TEXT } from '../fonts';
+import { GLOOM, RAISE_LOOKS } from './fxLooks';
 import { EXPLOSION_ART_R, EXPLOSION_STAGES, explosionFrameName, type ExplosionSheet } from './anim/explosionFrames';
 import { dissolveVeil, drawVeil, restingVeil, VEIL_DEATH_LIFE, type VeilStrand } from './shadeHaze';
 import { FLOAT, popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
@@ -55,8 +56,8 @@ export function numberDepth(onHero: boolean): number {
 /** Sound text (the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
 export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
 
-/** The lich's magic: dark purple, gloomy, shimmering. */
-export const GLOOM = { dark: 0x2a0a3a, mid: 0x5a1a8a, light: 0xa060f0, spark: 0xe0c0ff };
+/** The lich's magic: dark purple, gloomy, shimmering (the colours live in `fxLooks.ts`, which the 3D view shares). */
+export { GLOOM };
 
 interface Particle {
   img: Phaser.GameObjects.Image;
@@ -432,7 +433,7 @@ export class Effects {
       return;
     }
     const fire = k === 1;
-    const c = fire ? 0xff7020 : 0x3ad04a;
+    const c = RAISE_LOOKS[fire ? 1 : 0].ring;
     this.ring(x, y, 10, c, 0.5, true);
     for (let i = 0; i < 14; i++) this.particle(x + (Math.random() * 12 - 6), y, 0, -15 - Math.random() * 25, 0.7, fire && i % 2 ? 0xffd040 : c);
   }

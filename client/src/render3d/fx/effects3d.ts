@@ -188,6 +188,8 @@ export class Effects3d {
       case 'Boom': {
         const k = boomKind(ev.k);
         if (k !== null) this.add(k, now, x, z, -1, ev.k, ev.r / TILE);
+        // the barrel's blast throws splinters too (the same spot)
+        if (ev.k === 7) this.add(FX_KIND.Splinters, now, x, z, -1, 8, ev.r / TILE);
         break;
       }
       case 'Zap': this.add(FX_KIND.Zap, now, x, z, -1, ev.x2 / TILE, ev.y2 / TILE); break;

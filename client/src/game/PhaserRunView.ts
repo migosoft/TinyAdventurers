@@ -4,6 +4,7 @@
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
 import { ANIM, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { SKELETAL } from './fxLooks';
 import { PhaserTags } from '../rulesLog/phaserTags';
 import type { RulesLog } from '../rulesLog';
 import { SHOT_LIFT_PX, settleOwnAim } from '../run/aim';
@@ -52,7 +53,6 @@ const HAZARD_LOOKS: Record<number, { tint: number; r: number; sx: number; sy: nu
   [KIND.Roots]: { tint: 0x40a040, r: 36, sx: 1, sy: 0.7, alpha: 0.5, sparks: 0.2, rise: 10, colors: [0x60c050, 0x90e070] },
 };
 
-const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
 export class PhaserRunView implements RunView {
   private readonly log: RulesLog;

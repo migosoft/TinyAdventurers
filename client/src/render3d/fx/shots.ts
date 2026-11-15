@@ -2,6 +2,7 @@
 // bolt a crystal with ice dust, every other glowing shot a pulsing core with a glow and a trail of motes (the lich's gloom shots trail
 // dark wisps). Shots carry the server's light, so none is added here. A shot's picture is a pure function of (clock, seed, place, aim);
 // its trail lies behind the drawn position along the flight, so no history is kept. Frame shots (arrows, the axe) stay cards.
+import { GLOOM } from '../../game/fxLooks';
 import { isProjectileKind, PROJECTILES } from '../../game/anim/defs';
 import { KIND, RUNE_LOOK } from '../../generated/defs';
 import { TILE } from '../../sim/map';
@@ -13,8 +14,7 @@ import { RUNE_PALETTES } from './runes';
 import { BALL1, burst, crystal, dot, fireBall, fireColour, PX, type BurstSpec, type MV3, type V3 } from './shapes';
 import type { FxCtx, FxOut } from './types';
 
-/** The lich's gloom colours (`GLOOM` in `game/effects.ts`, which is Phaser: copied here until the shared module of Task 11). */
-const GLOOM_DARK = 0x2a0a3a, GLOOM_MID = 0x5a1a8a;
+const GLOOM_DARK = GLOOM.dark, GLOOM_MID = GLOOM.mid;
 
 export type ShotLook = 'fire' | 'cold' | 'glow';
 
