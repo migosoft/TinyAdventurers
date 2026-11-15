@@ -63,3 +63,41 @@ describe('Effects3d', () => {
     expect(boomKind(3)).toBeNull();
   });
 });
+
+describe('Effects3d own casts', () => {
+  const YOU = 5;
+  const withCast = (now: number, seq: number): FxFrame => {
+    const f = frameAt(now);
+    f.you = YOU;
+    f.ents = new Map([[YOU, { id: YOU, x: 32, y: 32 } as never]]);
+    f.ownCast = seq ? { seq, look: 2, primary: true, aim: 0 } : null;
+    return f;
+  };
+  const serverCast = { t: 'Cast' as const, id: YOU, x: 32, y: 32, look: 2, windup_ms: 0, primary: true, aim: 0 };
+
+  it('own cast starts on the key press', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    expect(fx.records).toBe(1);
+    fx.frame(withCast(1.016, 1), newOut());
+    expect(fx.records).toBe(1);
+  });
+  it('server cast for own hero is not doubled', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    fx.event(serverCast, 1.1, false);
+    expect(fx.records).toBe(1);
+  });
+  it('unpredicted own cast still shows', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 0), newOut());
+    fx.event(serverCast, 1.1, false);
+    expect(fx.records).toBe(1);
+  });
+  it('a later server cast of the same look is a new one', () => {
+    const fx = new Effects3d(map);
+    fx.frame(withCast(1, 1), newOut());
+    fx.event(serverCast, 1.8, false);
+    expect(fx.records).toBe(2);
+  });
+});

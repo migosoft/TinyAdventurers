@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIM, CONST, EFFECT, KIND, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, EFFECT, KIND, RUNE_LOOK, TILE_ID } from '../generated/defs';
 import type { ClientMsg } from '../generated/ClientMsg';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -317,6 +317,24 @@ describe('RunSession frame', () => {
     session.frame(STEP_MS);
     expect(view.frames.at(-1)!.shots.length).toBe(1);
     expect(view.frames.at(-1)!.shots[0].kind).toBe(KIND.Arrow);
+  });
+
+  it('ownCast follows a predicted primary', () => {
+    const mm = ability('MagicMissile', { projectile: KIND.Missile, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const { session, view } = running(() => ({ ...idle, primary: true }), { abilities: [mm, ability('SummonWolf')] });
+    const hero = session['pred'].state;
+    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y });
+    expect(view.frames.length).toBe(0);
+    session.frame(STEP_MS);
+    const c = view.frames.at(-1)!.ownCast!;
+    expect(c).toMatchObject({ seq: 1, look: RUNE_LOOK.Arcane, primary: true });
+    expect(c.aim).toBeCloseTo(0, 1);
+  });
+
+  it('without a magical use ownCast stays null', () => {
+    const { session, view } = running();
+    session.frame(16);
+    expect(view.frames.at(-1)!.ownCast).toBeNull();
   });
 
   it('without a view the HUD still gets a frame', () => {

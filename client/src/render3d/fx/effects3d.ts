@@ -121,9 +121,17 @@ export function boomKind(k: number): FxKind | null {
   }
 }
 
+/** A server Cast of the own hero within this many seconds of a predicted one with the same look is the same cast. */
+const OWN_CAST_DEDUP = 0.5;
+
 export class Effects3d {
   private recs: FxRec[] = [];
   private seq = 0;
+  /** The own hero's entity id (from the last frame), the last predicted cast seen (`seq`, `look`, time). */
+  private you = -1;
+  private ownSeq = 0;
+  private ownLook = -1;
+  private ownAt = -1e9;
 
   constructor(readonly map: TileMap) {}
 
@@ -169,6 +177,8 @@ export class Effects3d {
       case 'Raise': this.add(FX_KIND.Raise, now, x, z, -1, ev.k); break;
       case 'Immune': this.add(FX_KIND.Immune, now, x, z, -1); break;
       case 'Cast': {
+        // the own hero's cast was drawn from the key press: the server's copy of it is not drawn twice
+        if (ev.id === this.you && ev.look === this.ownLook && now - this.ownAt < OWN_CAST_DEDUP) break;
         const rec = this.add(FX_KIND.Cast, now, x, z, ev.id, ev.look, ev.windup_ms / 1000, ev.primary ? 1 : 0, ev.aim);
         rec.rune = newRune(ev.id, ev.look, castMode(ev.primary, ev.windup_ms / 1000), now, ev.windup_ms / 1000, ev.aim, x, z, rec.seed);
         break;
@@ -193,6 +203,23 @@ export class Effects3d {
     const g = out.glows;
     g.position.length = 0; g.uv.length = 0; g.color.length = 0; g.foot.length = 0; g.n = 0;
     const now = input.ctx.now, recs = this.recs;
+    this.you = input.you;
+    const oc = input.ownCast;
+    if (oc && oc.seq !== this.ownSeq) {
+      this.ownSeq = oc.seq;
+      let x = 0, z = 0, found = false;
+      for (const f of input.figs) if (f.id === input.you) { x = f.x; z = f.z; found = true; break; }
+      if (!found) {
+        const e = input.ents.get(input.you);
+        if (e) { x = e.x / TILE; z = e.y / TILE; found = true; }
+      }
+      if (found) {
+        this.ownLook = oc.look;
+        this.ownAt = now;
+        const rec = this.add(FX_KIND.Cast, now, x, z, input.you, oc.look, 0, oc.primary ? 1 : 0, oc.aim);
+        rec.rune = newRune(input.you, oc.look, castMode(oc.primary, 0), now, 0, oc.aim, x, z, rec.seed);
+      }
+    }
     // a figure that channels gets a swirl of runes of its own, for as long as it channels
     for (const f of input.figs) {
       if (f.anim !== ANIM.Channel) continue;

@@ -26,7 +26,7 @@ export interface ShotView {
   readonly vy: number;
 }
 
-/** The own hero's predicted cast, as the view may read it (type only for now; the session fills it in a later task of #308):
+/** The own hero's predicted cast, as the view may read it (`RunFrame.ownCast`, set by the session):
  *  `seq` counts the casts, `look` is a `RUNE_LOOK` number, `aim` the world radians of the aim. */
 export interface OwnCast { seq: number; look: number; primary: boolean; aim: number }
 
@@ -76,6 +76,8 @@ export interface RunFrame {
   shots: readonly ShotView[];
   hiddenShots: ReadonlySet<number>; // entity ids of server projectiles not to draw
   useHint: UseHint | null;
+  /** The own hero's latest predicted magical use (null before the first); a new `seq` is a new cast. */
+  ownCast: OwnCast | null;
   /**
    * The ids marked as in the dark (`Snapshot.dark`) by the snapshot `ents` are drawn from: sent, but nothing is
    * drawn over them. The set belongs to that snapshot and is valid only during `frame()`: copy it to keep it.

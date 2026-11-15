@@ -2,7 +2,7 @@
 // the light field, the predictor, the interpolator, the HUD and net traffic;
 // a view (the 2D game or the 3D view) draws what the session hands it. The
 // session never imports a view; it asks the view one question (pointerWorld).
-import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ABILITY_RUNES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
 import { has } from '../game/effectBits';
 import { lookOf } from '../game/looks';
 import { pickUseHint } from '../game/useHint';
@@ -22,7 +22,7 @@ import type { Disabled, Hud } from '../ui/hud';
 import { aimAt } from './aim';
 import { NO_INPUT, type StepInput } from './input';
 import { Shots } from './shots';
-import { NO_STATS, type DebugDraw, type OwnHero, type RunView, type RunViewInit } from './view';
+import { NO_STATS, type DebugDraw, type OwnCast, type OwnHero, type RunView, type RunViewInit } from './view';
 
 export type NetLike = Pick<Net, 'on' | 'send' | 'rtt' | 'lastSnapshotBytes'>;
 export type HudLike = Pick<
@@ -104,7 +104,9 @@ export class RunSession {
   /** The last step's input (the own animation's "moving" and the drawn aim). */
   private lastInput: StepInput = NO_INPUT;
   /** The own hero's last action animation (the frame's `own`). */
-  private localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
+  /** The latest predicted magical use, for the 3D runes (drawing only). */
+  private ownCast: OwnCast | null = null;
+  private localAnim:{ anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
   /** The own hero as drawn this frame, rebuilt each frame (`ownHero`). */
   private readonly own: OwnHero = { x: 0, y: 0, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 0, aimFromY: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
   /** `frame`'s own duration, ms, averaged; the HUD shows it. */
@@ -267,6 +269,7 @@ export class RunSession {
           shots: this.shots.live,
           hiddenShots,
           useHint,
+          ownCast: this.ownCast,
           dark: this.interp.drawnDark,
           debug: this.debug,
         })
@@ -487,6 +490,8 @@ export class RunSession {
       }
     }
     this.localAnim = { anim, start: now, arc };
+    const rune = ABILITY_RUNES[a.id];
+    if (rune) this.ownCast = { seq: (this.ownCast?.seq ?? 0) + 1, look: rune.look, primary: rune.primary, aim };
     return this.pred.cooldownOf(slot);
   }
 

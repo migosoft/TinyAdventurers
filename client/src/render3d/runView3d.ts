@@ -472,7 +472,7 @@ export class RunView3d implements RunView {
   /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */
   private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut): void {
     this.fxPass.run(this.fx, {
-      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: null,
+      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast,
     }, fo.glows);
   }
 

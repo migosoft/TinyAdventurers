@@ -53,7 +53,7 @@ const own = (o: Partial<OwnHero> = {}): OwnHero => ({ x: at(0), y: 8, alive: fal
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: at(0), y: 8, hp: 10, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0, ...o });
 const frame = (ents: EntState[], o: Partial<RunFrame> = {}): RunFrame => ({
   dt: 0.016, now: 10, ents: new Map(ents.map((e) => [e.id, e])), you: 1, own: own(), watching: null, camera: { x: 0, y: 0 }, snap: undefined, shots: [], hiddenShots: new Set(),
-  useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] }, ...o,
+  useHint: null, ownCast: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] }, ...o,
 });
 const make = () => new Figures3d(init(), frames, bounds);
 
