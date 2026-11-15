@@ -8,6 +8,8 @@ import type { EntState } from '../../game/world';
 import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
+import { castMode, newChannel, newRune, type RuneRec } from './runes';
+import { ANIM } from '../../generated/defs';
 import { FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut } from './types';
 
 /** Every kind of record. Boom is split by its `k`. */
@@ -72,6 +74,8 @@ export interface FxRec {
   b: number;
   c: number;
   d: number;
+  /** The state of a Cast record's runes (null for the other kinds). */
+  rune: RuneRec | null;
 }
 
 /** What `frame` is handed besides the context. */
@@ -87,8 +91,8 @@ export interface FxFrame {
   ownCast: OwnCast | null;
 }
 
-/** Draws one record at `age` seconds into its life. */
-export type FxDrawer = (out: FxOut, frame: FxFrame, rec: FxRec, age: number) => void;
+/** Draws one record at `age` seconds into its life. Returning `false` retires the record at once (it has nothing left to draw). */
+export type FxDrawer = (out: FxOut, frame: FxFrame, rec: FxRec, age: number) => void | boolean;
 
 const DRAWERS: (FxDrawer | undefined)[] = [];
 /** Registers the drawer of a kind (a second registration replaces the first). */
@@ -127,7 +131,7 @@ export class Effects3d {
     return this.recs.length;
   }
 
-  private add(kind: FxKind, now: number, x: number, z: number, follow: number, a = 0, b = 0, c = 0, d = 0): void {
+  private add(kind: FxKind, now: number, x: number, z: number, follow: number, a = 0, b = 0, c = 0, d = 0): FxRec {
     // the oldest of a kind goes first (records are in start order)
     let count = 0;
     for (const r of this.recs) if (r.kind === kind) count++;
@@ -136,7 +140,9 @@ export class Effects3d {
       this.recs.splice(at, 1);
     }
     const seed = (Math.imul(++this.seq, 2654435761) ^ Math.imul(kind + 1, 40503)) >>> 0;
-    this.recs.push({ kind, start: now, x, z, seed, follow, a, b, c, d });
+    const rec: FxRec = { kind, start: now, x, z, seed, follow, a, b, c, d, rune: null };
+    this.recs.push(rec);
+    return rec;
   }
 
   /** Events in the dark make nothing. Positions are simulation px; records hold tiles. Numbers: Boom a=k b=r (tiles); Zap a,b=x2,z2;
@@ -162,7 +168,11 @@ export class Effects3d {
       }
       case 'Raise': this.add(FX_KIND.Raise, now, x, z, -1, ev.k); break;
       case 'Immune': this.add(FX_KIND.Immune, now, x, z, -1); break;
-      case 'Cast': this.add(FX_KIND.Cast, now, x, z, ev.id, ev.look, ev.windup_ms / 1000, ev.primary ? 1 : 0, ev.aim); break;
+      case 'Cast': {
+        const rec = this.add(FX_KIND.Cast, now, x, z, ev.id, ev.look, ev.windup_ms / 1000, ev.primary ? 1 : 0, ev.aim);
+        rec.rune = newRune(ev.id, ev.look, castMode(ev.primary, ev.windup_ms / 1000), now, ev.windup_ms / 1000, ev.aim, x, z, rec.seed);
+        break;
+      }
       default: break;
     }
   }
@@ -183,16 +193,26 @@ export class Effects3d {
     const g = out.glows;
     g.position.length = 0; g.uv.length = 0; g.color.length = 0; g.foot.length = 0; g.n = 0;
     const now = input.ctx.now, recs = this.recs;
+    // a figure that channels gets a swirl of runes of its own, for as long as it channels
+    for (const f of input.figs) {
+      if (f.anim !== ANIM.Channel) continue;
+      let has = false;
+      for (const r of recs) if (r.rune && r.rune.mode === 'channel' && r.rune.end === null && r.rune.caster === f.id) { has = true; break; }
+      if (!has) {
+        const rec = this.add(FX_KIND.Cast, now, f.x, f.z, f.id);
+        rec.rune = newChannel(f.id, now, f.x, f.z, rec.seed);
+      }
+    }
     let w = 0;
     for (let i = 0; i < recs.length; i++) {
       const r = recs[i];
-      if (now - r.start > FX_LIFE[r.kind]) continue;
+      // an unbroken channel lasts as long as the figure channels
+      const open = r.rune !== null && r.rune.mode === 'channel' && r.rune.end === null;
+      if (now - r.start > FX_LIFE[r.kind] && !open) continue;
+      const draw = DRAWERS[r.kind];
+      if (draw && now >= r.start && draw(out, input, r, now - r.start) === false) continue;
       recs[w++] = r;
     }
     recs.length = w;
-    for (let i = 0; i < w; i++) {
-      const r = recs[i], draw = DRAWERS[r.kind];
-      if (draw && now >= r.start) draw(out, input, r, now - r.start);
-    }
   }
 }

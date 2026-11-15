@@ -22,7 +22,7 @@ describe('Effects3d', () => {
     // the newest are kept
     const seen: number[] = [];
     clearFxRegistry();
-    registerFx(FX_KIND.FireBlast, (_o, _f, r) => seen.push(r.x));
+    registerFx(FX_KIND.FireBlast, (_o, _f, r) => { seen.push(r.x); });
     fx.frame(frameAt(1.1), newOut());
     expect(Math.min(...seen)).toBeCloseTo((100 + 488) / 16, 5);
     clearFxRegistry();
@@ -37,7 +37,7 @@ describe('Effects3d', () => {
     const fx = new Effects3d(map);
     clearFxRegistry();
     const ages: number[] = [];
-    registerFx(FX_KIND.Zap, (_o, _f, _r, age) => ages.push(age));
+    registerFx(FX_KIND.Zap, (_o, _f, _r, age) => { ages.push(age); });
     fx.event({ t: 'Zap', x: 0, y: 0, x2: 16, y2: 16 }, 2, false);
     fx.frame(frameAt(2.1), newOut());
     expect(ages).toEqual([expect.closeTo(0.1, 6)]);

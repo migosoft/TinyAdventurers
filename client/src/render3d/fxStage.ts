@@ -77,6 +77,20 @@ export const fxEnt = (id: number, kind: number, x: number, z: number, o: Partial
 
 const px = (tiles: number): number => tiles * TILE;
 
+/** The rune rows (#308): a wind-up, an instant cast, a primary, a channel and a wind-up that is broken off. */
+function runeRows(): FxRow[] {
+  const cast = (at: number, look: number, windup_ms: number, primary: boolean): { at: number; ev: PictureEv } =>
+    ({ at, ev: { t: 'Cast', id: CASTER_ID, x: px(CASTER.x), y: px(CASTER.z), look, windup_ms, primary, aim: 0 } });
+  const caster = (anim: number, t0: number): EntState[] => [fxEnt(CASTER_ID, KIND.Wizard, CASTER.x, CASTER.z, { anim, animMs: t0 * 1000 })];
+  return [
+    { group: 'spells', name: 'runes: wind-up', period: 4, at: (t) => ({ ents: caster(t >= 0.3 && t < 1.5 ? ANIM.Windup : ANIM.Idle, t - 0.3), events: [cast(0.3, RUNE_LOOK.Fire, 1200, false)] }) },
+    { group: 'spells', name: 'runes: instant', period: 2.5, at: (t) => ({ ents: caster(ANIM.Cast, t), events: [cast(0.3, RUNE_LOOK.Cold, 0, false)] }) },
+    { group: 'spells', name: 'runes: primary', period: 2, at: (t) => ({ ents: caster(ANIM.Cast, t), events: [cast(0.3, RUNE_LOOK.Arcane, 0, true)] }) },
+    { group: 'spells', name: 'runes: channel', period: 5, at: (t) => ({ ents: caster(t >= 0.3 && t < 3.5 ? ANIM.Channel : ANIM.Idle, t), events: [] }) },
+    { group: 'spells', name: 'runes: broken off', period: 4, at: (t) => ({ ents: caster(t >= 0.3 && t < 0.9 ? ANIM.Windup : ANIM.Idle, t - 0.3), events: [cast(0.3, RUNE_LOOK.Holy, 1200, false)] }) },
+  ];
+}
+
 /** The rows. Each later task of #308 adds the ones of its group. */
 export const FX_ROWS: FxRow[] = [
   {
@@ -89,6 +103,7 @@ export const FX_ROWS: FxRow[] = [
       ],
     }),
   },
+  ...runeRows(),
   {
     group: 'booms', name: 'Frost nova', period: 5,
     at: () => ({ ents: [], events: [{ at: 0.2, ev: { t: 'Boom', x: px(IMPACT.x), y: px(IMPACT.z), r: px(2.5), k: 10 } }] }),
