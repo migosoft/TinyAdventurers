@@ -91,10 +91,9 @@ function drawSlam(out: FxOut, f: FxFrame, rec: FxRec, age: number): void {
   const rr = r * easeOut(age / 0.35);
   groundRing(L, rec.x, rec.z, 0.03, Math.max(0, rr - 0.3), rr, DUST_COL, 0, 0.55 * (1 - age / 0.9));
   // the chunks fly with a speed that grows with the radius; the second, smaller dot rides on the first
-  for (const s of [CHUNK_A, CHUNK_B]) {
-    s.speed = r > 0 ? SLAM_SPEED(r) : s.speed;
-    run(L, ctx, s, 14, rec.x, 0.15, rec.z, age, rec.seed);
-  }
+  CHUNK_A.speed = CHUNK_B.speed = SLAM_SPEED(r);
+  run(L, ctx, CHUNK_A, 14, rec.x, 0.15, rec.z, age, rec.seed);
+  run(L, ctx, CHUNK_B, 14, rec.x, 0.15, rec.z, age, rec.seed);
   for (let i = 0; i < 6; i++) {
     const t = age - hash3(sd, i, 0) * 0.15;
     if (t < 0 || t > 0.7) continue;
@@ -106,7 +105,7 @@ const slamSpeeds = new Map<number, readonly [number, number]>();
 function SLAM_SPEED(r: number): readonly [number, number] {
   const key = Math.round(r * 100);
   let v = slamSpeeds.get(key);
-  if (!v) { v = [0.7 * r + 0.5, 1.3 * r + 1]; slamSpeeds.set(key, v); }
+  if (!v) { v = [0.5 * r + 0.3, 0.8 * r + 0.5]; slamSpeeds.set(key, v); }
   return v;
 }
 
@@ -146,7 +145,7 @@ function drawGloom(out: FxOut, f: FxFrame, rec: FxRec, age: number): void {
 }
 
 // ---- Boom k 8 (and the barrel's k 7): wood chips ----
-const CHIPS = spec(16, [2, 4.5], [0.3, 1.3], [0.5, 0.9], 13, 0, 0.07, [0x8a5a2a, 0x6a4020, 0xa0703a, 0x5a3418], false);
+const CHIPS = spec(16, [1.5, 3], [0.3, 1.3], [0.5, 0.9], 13, 0, 0.07, [0x8a5a2a, 0x6a4020, 0xa0703a, 0x5a3418], false);
 function drawSplinters(out: FxOut, f: FxFrame, rec: FxRec, age: number): void {
   run(out.lit, f.ctx, CHIPS, 16, rec.x, 0.25, rec.z, age, rec.seed);
   if (age < 0.7) dot(out.lit, f.ctx.ax, rec.x, 0.2 + age * 0.5, rec.z, 0.3 + age * 0.3, 0.42, 0.34, 0.24, 0.45 * (1 - age / 0.7));

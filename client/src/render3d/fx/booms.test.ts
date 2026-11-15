@@ -46,7 +46,12 @@ const run = (ev: Ev, age: number, hidden: number[] = []): { out: FxOut; fx: Effe
   fx.frame(frameAt(age, hidden), out);
   return { out, fx };
 };
-const lightsOf = (name: string): boolean => rows.find((r) => r[0] === name)![3];
+
+/** The largest reach of each row from the event's point, in tiles (r is 2 tiles): its ring or sphere, or the farthest thing thrown. */
+const REACH: Record<string, number> = {
+  dmg: 1.1, k1: 2, k13: 2, k2: 4.2, k5: 2, k6: 2, k8: 2.7, k9: 2, k11: 2, k12: 2, zap: Math.hypot(3, 1) + 0.15,
+  died: 1.5, skeleton: 1.5, boss: 3.6, ghost: 0.5, raise0: 0.7, raise1: 0.7, raise2: 0.7, immune: 0.45,
+};
 
 describe('booms and other events', () => {
   for (const [name, ev, life] of rows) {
@@ -58,12 +63,11 @@ describe('booms and other events', () => {
         total += out.tris.n + out.lit.n;
         for (const T of [out.tris, out.lit]) {
           const b = newFxBuf(); T.flush(b, cam, false);
-          for (let i = 0; i < b.position.length; i += 3) far = Math.max(far, Math.hypot(b.position[i] - tz * 0 - tx, b.position[i + 2] - tz));
+          for (let i = 0; i < b.position.length; i += 3) far = Math.max(far, Math.hypot(b.position[i] - tx, b.position[i + 2] - tz));
         }
       }
       expect(total).toBeGreaterThan(0);
-      // the largest reach of a kind: 2 r flames, the zap's span, flying chunks
-      expect(far).toBeLessThan(2 * (R / 16) * 2 + 3.5);
+      expect(far).toBeLessThan(REACH[name] + 0.5);
       const end = run(ev, life + 0.05);
       expect(end.out.tris.n + end.out.lit.n).toBe(0);
     });
@@ -99,7 +103,6 @@ describe('booms and other events', () => {
       const { out } = run(ev, 0.05);
       if (name === 'boss') expect(out.lights.length).toBe(1);
       else expect(out.lights.length > 0, name).toBe(lit);
-      expect(lightsOf(name) || name === 'boss' || out.lights.length === 0).toBe(true);
     }
   });
 

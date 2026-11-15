@@ -225,7 +225,7 @@ export class Figures3d {
   }
 
   /** Sink, Invisible and Died bookkeeping; a Died adds a skull unless the figure was lost to a chasm or the deep, or comes apart (Ghost, Shade) or is a shot. */
-  event(ev: PictureEv): void {
+  event(ev: PictureEv): boolean {
     if (ev.t === 'Coins') {
       // Like `fx.coins`: min(10, 3 + v / 4) coins, aimed up the screen within +-0.8 rad, 50..90 px/s, living 0.7..1 s.
       const n = Math.min(10, 3 + Math.floor(ev.v / 4));
@@ -235,14 +235,16 @@ export class Figures3d {
         this.coins.push({ x: ev.x / TILE, z: ev.y / TILE, vx: Math.cos(a) * s, vy: -Math.sin(a) * s, life: 0.7 + Math.random() * 0.3, born: null, frame: `coin_anim_f${i % 4}` });
       }
       if (this.coins.length > COIN_CAP) this.coins.splice(0, this.coins.length - COIN_CAP);
-      return;
+      return false;
     }
     const lost = this.states.event(ev, this.now);
-    if (ev.t !== 'Died' || lost === 'lost') return;
-    if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return;
+    if (ev.t !== 'Died') return false;
+    if (lost === 'lost') return true;
+    if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return false;
     const fig = this.figs.get(ev.id);
     this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5, model: !!fig?.model });
     if (this.skulls.length > SKULL_CAP) this.skulls.shift();
+    return false;
   }
 
   /** The 3D view has no picture for a shot's end yet (the sparks are a later task). */

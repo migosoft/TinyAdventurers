@@ -450,6 +450,18 @@ describe('the run view and the effects (#308)', () => {
     expect(r.again()?.fx).toBeDefined();
   });
 
+  it('a figure lost to a chasm leaves no death effect and no shake', () => {
+    const r = run();
+    const steady = r.f!.cam;
+    r.v.event({ t: 'Sink', id: 77, x: 60, y: 30, how: 0 } as never, { x: 56, y: 24 });
+    r.v.event({ t: 'Died', id: 77, x: 60, y: 30, kind: KIND.Dragon } as never, { x: 56, y: 24 });
+    expect(r.v.fxRecords).toBe(0);
+    r.ctx.now += 0.016;
+    expect(r.again()!.cam.x).toBeCloseTo(steady.x, 6);
+    r.v.event({ t: 'Died', id: 78, x: 60, y: 30, kind: KIND.Dragon } as never, { x: 56, y: 24 });
+    expect(r.v.fxRecords).toBe(1);
+  });
+
   it('hands the view the two effect buffers, empty while no drawer is registered', () => {
     const { f } = run();
     expect(f?.fx?.tris.n).toBe(0);

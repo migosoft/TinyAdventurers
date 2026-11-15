@@ -562,7 +562,8 @@ export class RunView3d implements RunView {
   }
 
   event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null, dark = false): void {
-    this.figures.event(ev);
+    // A figure lost to a chasm or the deep leaves nothing behind: no burst, no light, no shake (as 2D).
+    if (this.figures.event(ev)) return;
     this.fx.event(ev, this.clockNow, dark);
     // The camera shakes as the 2D view's does: a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
