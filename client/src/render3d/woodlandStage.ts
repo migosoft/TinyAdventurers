@@ -22,7 +22,7 @@ import { LIGHT_CAP, WOODLAND_CLEAR, WORK_AMBIENT } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, movingCands, selectCasters, selectLights } from './lights';
 import { MIST } from './mist';
 import type { FigureKit } from './models/kit';
-import { createStageKit, modelsReadout } from './stageKit';
+import { createStageKit, modelsReadouter } from './stageKit';
 import { seenOpeners } from './openers';
 import { DEFAULT_HOUR, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
@@ -85,6 +85,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   const useModels = /[?&]models=1(&|$)/.test(search);
   // One kit for the stage, kept across a rebuilt view.
   const kit = useModels ? deps.kit ?? createStageKit(assets) : null;
+  const readout = kit ? modelsReadouter(kit) : null;
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures of the line-ups.
   const at = /[?&]at=(\d+),(\d+)/.exec(search);
   const start = at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
@@ -237,7 +238,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
-        if (kit) r.models = modelsReadout(kit, c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 });
+        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 });
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
         r.plants = { built: forest.built, total: forest.total };

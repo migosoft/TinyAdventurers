@@ -32,7 +32,14 @@ export function atlasSprites(assets: Assets): (name: string) => SpritePixels | n
 /** One kit for a stage: models built in a worker off the atlas image. The stage keeps it across a rebuilt view and disposes it when it ends. */
 export const createStageKit = (assets: Assets): FigureKit => createKit(atlasSprites(assets), workerRunner());
 
-/** What the stage publishes as `window.__r3d.models`: the layer's counts of the last frame and the kit's build times (ms by key). */
-export function modelsReadout(kit: FigureKit, drawn: { figures: number; batches: number; draws: number }): { figures: number; batches: number; draws: number; builtMs: Record<string, number> } {
-  return { figures: drawn.figures, batches: drawn.batches, draws: drawn.draws, builtMs: Object.fromEntries(kit.times) };
+/**
+ * What the stage publishes as `window.__r3d.models`: the layer's counts of the last frame, the kit's build times (ms by key; the object is
+ * rebuilt only when the kit's `version` changes) and, for a stage with a clock of its own, its time `t` (s).
+ */
+export function modelsReadouter(kit: FigureKit): (drawn: { figures: number; batches: number; draws: number }, t?: number) => NonNullable<Window['__r3d']>['models'] {
+  let version = -1, builtMs: Record<string, number> = {};
+  return (drawn, t) => {
+    if (kit.version !== version) { version = kit.version; builtMs = Object.fromEntries(kit.times); }
+    return { figures: drawn.figures, batches: drawn.batches, draws: drawn.draws, builtMs, ...(t !== undefined ? { t } : {}) };
+  };
 }

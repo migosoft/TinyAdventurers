@@ -21,7 +21,7 @@ import type { FigureKit } from './models/kit';
 import { MODEL_OF_KIND } from './models/table';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
-import { createStageKit, modelsReadout } from './stageKit';
+import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
 
 const TILE = 16;
@@ -287,6 +287,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   const figures = new Figures3d(galleryInit(), assets.frames, atlasBounds(assets.image, assets.frames));
   // One kit for the stage, kept across a rebuilt view (the new layer draws from its cached models).
   const kit = deps.kit ?? createStageKit(assets);
+  const readout = modelsReadouter(kit);
   const is = modelsOf(opts);
   const at = opts.at ?? GALLERY.focus[opts.focus];
   const cam = { x: at.x, z: at.z, pitch: (initial.pitch * Math.PI) / 180, yaw: (initial.yaw * Math.PI) / 180 };
@@ -341,9 +342,12 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let casters: ReturnType<typeof selectCasters> = [];
+      let inView = 0;
       if (torch) {
         const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-        lights = selectLights(staticCands(field, pairs, map, t), fp, { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list;
+        const sel = selectLights(staticCands(field, pairs, map, t), fp, { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
+        lights = sel.list;
+        inView = sel.inView;
         casters = selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap));
         assignSkips(lights, carrierMap(lights), casters);
       }
@@ -351,8 +355,8 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
-        r.models = modelsReadout(kit, c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 });
-        r.lights = { list: lights.length, inView: lights.length };
+        r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 }, t);
+        r.lights = { list: lights.length, inView };
         r.casters = casters.length;
       }
       c.timer.renderStart();

@@ -115,6 +115,8 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     m.side = FrontSide;
     return m;
   };
+  // The light of what no lamp lights (the outline, the unlit seams): the ambient alone.
+  const ambientOnly = { rgb: lighting.ambient, dv: float(0) };
   const gate = (keep: N): N => select(keep, float(1), float(0));
 
   // ---------------------------------------------------------------- the piece
@@ -148,14 +150,14 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour = select(isUnlit, flatColour, lighting.finish(albedo, lit));
+    const colour = select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit));
     return vec4(sight.apply(colour, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   })();
 
   // ---------------------------------------------------------------- the outline and its seal
   const line = make(p.screen);
   // Not lit by the lamps, but dimmed by the ambient light like everything else: in the dark a flat 0x222222 would show as a grey outline on black.
-  const outline = lighting.finish(vec3(...rgbOf(OUTLINE)), { rgb: lighting.ambient, dv: float(0) });
+  const outline = lighting.finish(vec3(...rgbOf(OUTLINE)), ambientOnly);
   line.colorNode = vec4(sight.apply(outline, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   line.depthWrite = false;
 

@@ -3,7 +3,7 @@
 // cards, the woodland at hour 9.5 and 18.5, and a lost device. Fails on any console error, any "3D model" build warning and any
 // lost-device warning (but in the `lose` run, where the loss is on purpose).
 // Usage: node models-shots.mjs [baseUrl] [outDir] [mode]     mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan)
-// Env: BROWSER (the executable), HEADED=1 (a visible window; with mode webgpu on the real GPU), GPU=1 (gpu.mjs: the notebook's start line),
+// Env: BROWSER (the executable), HEADED=1 (a visible window; with mode webgpu on the real GPU),
 //      GPU=1 (a visible window on the real GPU with the notebook's start line, gpu.mjs; headless SwiftShader loses the WebGPU device),
 //      READBACK=1 (also saves <name>-readback.png: the frame re-drawn off-screen and read back, for WebGPU), R3D_W / R3D_H (1280x768),
 //      ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on).
@@ -40,7 +40,7 @@ for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`,
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
 shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=3&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'torch-light-close', q: `&at=model:3&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
-shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.3&slow=1', need: ALL, skull: true });
+shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: ALL, skull: true });
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });
 shots.push({ name: 'crowd-cards', q: '&crowd=40&crowdAs=cards&at=crowd:20&zoom=3&slow=1000&t=0.6', need: [], readout: true });
 shots.push({ name: 'crowd-models-many', q: '&crowd=184&at=crowd:90&zoom=2&slow=1000&t=0.6', need: ALL, readout: true });
@@ -94,6 +94,19 @@ async function built(p, need, skull = false, timeout = 90000) {
   }
 }
 
+/** The dying row is dead (and its skulls lie) in the second half of every 6 s of the gallery's clock: waits for it, and fails loudly if the clock is past it (the figures are back). */
+async function inDeadHalf(p) {
+  for (let i = 0; i < 240; i++) {
+    const t = await p.evaluate(() => window.__r3d.models?.t);
+    if (t === undefined) throw new Error('dying-skulls: the stage publishes no clock');
+    const ph = t % 6;
+    if (ph >= 3.3 && ph < 5.5) return;
+    if (ph >= 5.5 || (t >= 6 && ph < 3)) throw new Error(`dying-skulls: the clock (${t.toFixed(2)} s) is past the dead half, the figures are back`);
+    await p.waitForTimeout(250);
+  }
+  throw new Error('dying-skulls: the clock never reached the dead half');
+}
+
 async function snap(p, name) {
   if (process.env.HIDE !== '0') await p.evaluate(() => { const t = document.querySelector('.r3d-toggle'); if (t && t.textContent === 'Hide') t.click(); });
   await p.waitForTimeout(400);
@@ -122,24 +135,27 @@ for (const s of shots) {
   if (only && !only.test(s.name)) continue;
   const t0 = Date.now();
   let p = null;
+  let cap = null;
   try {
     // One shot may take at most 4 minutes (a page of software-rendered frames can stall).
     await Promise.race([
       (async () => {
         p = await open(`${base}?r3d=${s.page ?? 'gallery'}${s.q}`, s.name);
         const keys = await built(p, s.need, s.skull);
+        if (s.skull) await inDeadHalf(p);
         if (s.wait) await p.waitForTimeout(s.wait);
         await p.waitForTimeout(800);
         await snap(p, s.name);
         const m = await p.evaluate(() => window.__r3d.models ?? null);
         console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys ? keys.split(',').length : 0} models${m ? `, drew ${m.figures} figures in ${m.batches} batches, ${m.draws} draws` : ''}`);
       })(),
-      new Promise((_, no) => setTimeout(() => no(new Error('timeout: the shot took more than 4 minutes')), 240000)),
+      new Promise((_, no) => { cap = setTimeout(() => no(new Error('timeout: the shot took more than 4 minutes')), 240000); }),
     ]);
   } catch (e) {
     failures.push(`${s.name}: ${e.message}`);
     errs.push(`${s.name}: ${e.message}`);
   } finally {
+    clearTimeout(cap);
     await p?.close().catch(() => {});
   }
 }

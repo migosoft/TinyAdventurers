@@ -161,6 +161,13 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(line).not.toMatch(/lightPos|lightCol|lava/i);
     });
 
+    it('the unlit look (the seams) is dimmed by the ambient alone too: the piece finishes its flat colour with the ambient (#338)', () => {
+      const { mats } = make(false);
+      const f = fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf) });
+      // lightAt reads the ambient once; the unlit branch's own finish reads it again (the outline's finish is in the line shader).
+      expect((f.match(/lightAmbient/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    });
+
     it('the piece without a sun carries no shadow-map sampler', () => {
       const { mats } = make(false);
       const shadowMap = wgsl ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/;
