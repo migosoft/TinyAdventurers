@@ -38,11 +38,11 @@ import { cssColour, stoneClear, type Light } from './light';
 import type { Crack } from './air/cracks';
 import { makeShaftPass, type ShaftPass } from './air/shaftNodes';
 import { shaftPlan, type ShaftPlan } from './air/shafts';
-import { makeLighting } from './lightNodes';
+import { makeLighting, type Lighting } from './lightNodes';
 import { CASTER_CAP, footprint, type ShadowCaster } from './lights';
 import { cardSightData, figureSight, fxSightData, glowSightData, shadowSightData } from './sightAttrs';
 import type { FxBuf } from './models/fx';
-import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
+import { makeSight, SIGHT_OFF, type Sight, type SightFrame } from './sightNodes';
 import { makeCoverShared } from './cover/coverRead';
 import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
 import { CoverLayer, type CoverFrame } from './cover/coverLayer';
@@ -208,6 +208,8 @@ export interface View {
   setGround(img: GroundImage): void;
   /** Builds the ground cover's meshes and uploads its image (#330); throws GroundTooLargeError above the device's texture limit. */
   setCover(r: CoverResult): void;
+  /** Spike (#348): a stage's own mesh in the scene, built with the view's light and sight; drawn outside the shaft pre-pass and freed with the view. */
+  addExtra?(build: (k: { lighting: Lighting; sight: Sight }) => Mesh): void;
   /** Chunk meshes (world and terrain): all of them, and those three drew in the last frame. */
   readonly chunks: { total: number; drawn: number };
   /** Scene objects, for the F3 panel. */
@@ -584,6 +586,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return be.gl ? (be.gl.getParameter(be.gl.MAX_TEXTURE_SIZE) as number) : 4096;
   };
 
+  const extras: Mesh[] = [];
   return {
     chunks,
     get meshes() {
@@ -620,6 +623,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     setCover(r) {
       if (disposed || lost) return;
       coverLayer.set(r, textureLimit());
+    },
+    addExtra(build) {
+      if (disposed || lost) return;
+      const m = skipInAirPrepass(build({ lighting, sight }));
+      extras.push(m);
+      scene.add(m);
     },
     backend: be.isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
     get maxTexture() {
@@ -860,6 +869,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         for (const c of [...worldChunks, ...terrainChunks]) c?.mesh.geometry.dispose();
         fieldMesh?.geometry.dispose();
         fieldMaterial.dispose();
+        for (const m of extras) { m.geometry.dispose(); (m.material as { dispose(): void }).dispose(); }
         material.dispose();
         sight.dispose();
         for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, air.add, air.blend, air.haze]) m.dispose();

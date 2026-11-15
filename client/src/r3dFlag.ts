@@ -1,7 +1,7 @@
 /** The server-free dev pages of `?r3d=`: the demo (#301), the gallery (#303), the lights (#304), the woodland (#306), the cove (#329), the mood (#307) and the sunlight (#307). */
-export function r3dPage(search: string): 'demo' | 'gallery' | 'lights' | 'woodland' | 'cove' | 'mood' | 'sunlight' | null {
+export function r3dPage(search: string): 'demo' | 'gallery' | 'lights' | 'woodland' | 'cove' | 'mood' | 'sunlight' | 'pond' | null {
   const p = new URLSearchParams(search).get('r3d');
-  return p === 'demo' || p === 'gallery' || p === 'lights' || p === 'woodland' || p === 'cove' || p === 'mood' || p === 'sunlight' ? p : null;
+  return p === 'demo' || p === 'gallery' || p === 'lights' || p === 'woodland' || p === 'cove' || p === 'mood' || p === 'sunlight' || p === 'pond' ? p : null;
 }
 
 /** `?r3d=demo`, `?r3d=gallery`, `?r3d=lights`, `?r3d=woodland`, `?r3d=cove`, `?r3d=mood` or `?r3d=sunlight`: a dev scene of the 3D view, no server and no login needed. */

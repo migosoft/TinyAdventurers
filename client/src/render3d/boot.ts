@@ -15,6 +15,7 @@ import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
 import { createWoodlandStage } from './woodlandStage';
+import { createPondStage } from './pondStage';
 
 export async function bootDemo(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
@@ -62,6 +63,13 @@ export async function bootSunlight(el: HTMLElement, search: string): Promise<voi
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createSunlightStage(assets, p, s, host));
+}
+
+/** `?r3d=pond` (spike #348): a woodland lake and stream with their plants and animals, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootPond(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets, host) => createPondStage(assets, p, s, host));
 }
 
 export interface Run3d {
