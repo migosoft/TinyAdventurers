@@ -79,7 +79,7 @@ export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
     const look = barOf(e, i.heroNames);
     if (!look) continue;
     const a = i.anchors.get(e.id);
-    if (!a) continue;
+    if (!a || a.descending) continue;   // a falling or drowning figure has no bar or name
     const f = foot(i, a.x, a.z, a.y);
     const x = Math.round(f.px - (look.w * i.zoom) / 2);
     const y = Math.round(f.py - (a.height + BAR_GAP) * i.zoom);

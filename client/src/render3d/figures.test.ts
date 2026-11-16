@@ -451,6 +451,14 @@ describe('Figures3d anchors (#311)', () => {
     fg.frame(f(10), cam());
     fg.frame(f(10.3), cam());
     expect(fg.anchors.get(1)!.tagShown).toBe(false);
+    expect(fg.anchors.get(1)!.descending).toBe(true);
+  });
+  it('a falling barrel is descending, a standing one and a chest are not (F5)', () => {
+    const fg = dipFigs();
+    fg.frame(frame([ent(20, KIND.Barrel, { ...at2(2, 4), anim: 2, side: SIDE.Neutral }), ent(21, KIND.Chest, { ...at2(1, 1), side: SIDE.Neutral }), ent(22, KIND.Barrel, { ...at2(5, 5), side: SIDE.Neutral })]), cam());
+    expect(fg.anchors.get(20)!.descending).toBe(true);
+    expect(fg.anchors.get(21)!.descending).toBe(false);
+    expect(fg.anchors.get(22)!.descending).toBe(false);
   });
 });
 
@@ -1179,6 +1187,23 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const o = run(fg, () => [e], 30, 1 / 60, 10.1, () => ({ dark }));
     expect(low(o.cards) - dryLow).toBeLessThan(-1);
     expect(o.falls).toEqual([]);
+  });
+
+  it('a dark faller stays dark (flag and faded alpha) after the entity is gone (F3)', () => {
+    for (const mode of ['fade', 'shape'] as const) {
+      const fg = dipFigs();
+      const e = knight(2, 4);
+      const look = { ambient: [0, 0, 0] as [number, number, number], dark: mode, torchGlow: true, oval: 1 };
+      fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+      const dark = new Set([10]);
+      run(fg, () => [e], 20, 1 / 60, 10, () => ({ dark }));
+      fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.Knight });
+      const o = fg.frame(frame([], { now: 10.4, dt: 1 / 60 }), cam(), look);   // the entity left the snapshot: its id is no longer in `dark`
+      expect(total(o), mode).toBeGreaterThan(0);
+      const bufs = [o.cards, o.ghosts].filter((b) => b.n > 0);
+      for (const b of bufs) expect(b.dark.every((d) => d === 1), mode).toBe(true);
+      if (mode === 'fade') expect(Math.max(...o.ghosts.look.filter((_, i) => i % 5 === 4))).toBe(0);
+    }
   });
 
   it('drowns onto the bed and leaves nothing', () => {

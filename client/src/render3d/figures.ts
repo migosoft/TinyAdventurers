@@ -111,6 +111,8 @@ export interface FigureAnchor {
   alpha: number;
   /** False while falling or drowning. */
   tagShown: boolean;
+  /** True in a descent (a fall or a drowning, or a pending `Sink`): the HP bar and the name are not drawn. */
+  descending: boolean;
   /** Effect bits (the own hero's from `f.own.effects`). */
   effects: number;
 }
@@ -140,7 +142,7 @@ interface FallCard { base: Card; ox: number; oz: number; dl: number }
 /** The same for a model instance. */
 interface FallInst { base: FigureInst; ox: number; oz: number; dl: number }
 /** What a faller is drawn from once its entity is gone. */
-interface FallParts { cards: FallCard[]; insts: FallInst[] }
+interface FallParts { cards: FallCard[]; insts: FallInst[]; /** Whether the entity was dark when last drawn: its id leaves `dark` with the entity, the faller stays as it was. */ dark: boolean }
 
 /** The foot of a figure or a barrel this frame: where it is drawn, and the descent it is in. */
 interface Foot { x: number; z: number; y: number; d: Descent | undefined; started: boolean; gone: boolean }
@@ -425,8 +427,8 @@ export class Figures3d {
    * A card of a dark entity (lit by the ambient only): flagged `dark`; with `fade` its alpha is scaled by the ambient's brightness and
    * it goes to the translucent pass (`ghost`). Any other card comes back as it is.
    */
-  private lit(c: Card, id: number): { card: Card; ghost: boolean } {
-    if (!this.dark.has(id)) return { card: c, ghost: c.alpha < 1 };
+  private lit(c: Card, id: number, dark = this.dark.has(id)): { card: Card; ghost: boolean } {
+    if (!dark) return { card: c, ghost: c.alpha < 1 };
     return this.darkFade ? { card: { ...c, dark: true, alpha: c.alpha * this.fadeAlpha }, ghost: true } : { card: { ...c, dark: true }, ghost: c.alpha < 1 };
   }
 
@@ -487,14 +489,14 @@ export class Figures3d {
     if (this.frames[frame] && !foot.gone) {
       const card: Card = { frame, x: bx, z: bz, lift: this.lifted(foot.y), flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
       if (falling) {
-        kept = { cards: [{ base: card, ox: card.x - foot.x, oz: card.z - foot.z, dl: card.lift - this.lifted(foot.y) }], insts: [] };
+        kept = { cards: [{ base: card, ox: card.x - foot.x, oz: card.z - foot.z, dl: card.lift - this.lifted(foot.y) }], insts: [], dark: this.dark.has(e.id) };
         const l = this.lit({ ...card, tint: Figures3d.dim(card.tint, depthFade(foot.y)) }, e.id);
         pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, e.id);
       } else this.body(card, e.id, cam, out);
     }
     if (kept) this.parts.set(e.id, kept); else this.parts.delete(e.id);
     if (p.shadow && !foot.d) this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out, foot.y);
-    this.objectAnchor(e, foot.x, foot.z, foot.y);
+    this.objectAnchor(e, foot.x, foot.z, foot.y, !!foot.d);
     this.opener(e, !!foot.d, x, z, foot.y + CHEST_HEIGHT / 2 / TILE, 'object', out);
   }
 
@@ -524,8 +526,8 @@ export class Figures3d {
   }
 
   /** A chest, a barrel or a mimic: 2D's `CHEST_HEIGHT` for the bar and the use hint. */
-  private objectAnchor(e: EntState, x: number, z: number, y: number): void {
-    this.anchors.set(e.id, { x, z, y, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, effects: e.effects });
+  private objectAnchor(e: EntState, x: number, z: number, y: number, descending = false): void {
+    this.anchors.set(e.id, { x, z, y, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, descending, effects: e.effects });
   }
 
   /** Reports a thing as a wall opener when `opensWalls` (openers.ts) says it may; the one rule lives there. */
@@ -681,7 +683,7 @@ export class Figures3d {
     this.descents.stepDetached(dt, this.bedFn, (id, f, parts) => {
       const k = depthFade(f.y);
       for (const c of parts.cards) {
-        const l = this.lit({ ...c.base, x: f.x + c.ox, z: f.z + c.oz, lift: this.lifted(f.y) + c.dl, tint: Figures3d.dim(c.base.tint, k) }, id);
+        const l = this.lit({ ...c.base, x: f.x + c.ox, z: f.z + c.oz, lift: this.lifted(f.y) + c.dl, tint: Figures3d.dim(c.base.tint, k) }, id, parts.dark);
         pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, id);
       }
       for (const i of parts.insts) out.models.push({ ...i.base, x: f.x + i.ox, z: f.z + i.oz, lift: this.lifted(f.y) + i.dl, tint: Figures3d.dim(i.base.tint, k), sight: { ...i.base.sight } });
@@ -711,7 +713,7 @@ export class Figures3d {
 
     const { x, z, y } = foot;
     const falling = foot.d?.kind === 'fall';
-    const kept: FallParts | null = falling ? { cards: [], insts: [] } : null;
+    const kept: FallParts | null = falling ? { cards: [], insts: [], dark: this.dark.has(e.id) } : null;
     const sc = pose.scale;
     const dark = this.dark.has(e.id);
     const k = dark && this.darkFade ? this.fadeAlpha : 1;
@@ -787,7 +789,7 @@ export class Figures3d {
     // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
     const sa = standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
-    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), effects: s.effects ?? 0 });
+    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
     const bite = m.armLength > 0 ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
@@ -856,7 +858,7 @@ export class Figures3d {
     const { x, z, y } = foot;
     const falling = foot.d?.kind === 'fall';
     // A faller's pieces, kept for when its entity is gone; its cards wear the depth's dark.
-    const kept: FallParts | null = falling ? { cards: [], insts: [] } : null;
+    const kept: FallParts | null = falling ? { cards: [], insts: [], dark: this.dark.has(e.id) } : null;
     const fade = falling ? depthFade(y) : 1;
     const sc = pose.scale;
     const { tint, mode } = lookOf(pose.tint, pose.grey);
@@ -938,7 +940,7 @@ export class Figures3d {
       x, z, y, height: sa.height, tag: sa.tag,
       head: pose.lie ? (fb.r - fb.l + 1) * ds : sa.head,
       cx: pose.lie ? 0 : (mid + 0.5 - pose.originX * fb.w) * ds,
-      alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), effects: s.effects ?? 0,
+      alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0,
     });
 
     // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.

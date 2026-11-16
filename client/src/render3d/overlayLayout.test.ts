@@ -17,7 +17,7 @@ const TILE = 16;
 const at = (x: number, z: number) => ({ px: 7 + x * 100, py: 11 + z * 100 });
 
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 5 * TILE, y: 5 * TILE, hp: 0.5, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0, ...o });
-const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, effects: 0, y: 0, ...o });
+const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, descending: false, effects: 0, y: 0, ...o });
 
 function input(ents: EntState[], anchors: [number, FigureAnchor][], o: Partial<LayoutIn> = {}): LayoutIn {
   return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, dark: new Set(), at, zoom: ZOOM, ...o };
@@ -49,6 +49,11 @@ describe('anchor height (#324)', () => {
     const low = only(bars(input(ents, [[7, anchor({ y: -0.5 })]], { at: lifted })), 'bar')[0];
     expect(low.y - flat.y).toBe(50);
     expect(low.x).toBe(flat.x);
+  });
+  it('a descending figure has no bar and no name (F5)', () => {
+    const e = ent(7, KIND.SkeletonWarrior);
+    expect(only(bars(input([e], [[7, anchor()]])), 'bar')).toHaveLength(1);
+    expect(bars(input([e], [[7, anchor({ descending: true })]]))).toEqual([]);
   });
   it('the use hint hangs from the anchor height too', () => {
     const lifted = (x: number, z: number, y: number) => ({ px: 7 + x * 100, py: 11 + z * 100 - y * 100 });

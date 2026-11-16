@@ -49,20 +49,26 @@ export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: 
     const r = rectOf(frames, `terrain_${set}_f${frame[set]}_q${q}`);
     pushQuad(sink, [[x, y, z, r.x, r.y], [x + 1, y, z, r.x + 16, r.y], [x + 1, y, z + 1, r.x + 16, r.y + 16], [x, y, z + 1, r.x, r.y + 16]], [0, 1, 0], KIND.floor, r);
   };
-  /** The cell or one of its eight neighbours is a tile of dip kind `kind`. */
-  const near = (x: number, z: number, kind: DipKind) => {
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dipOf(map.get(x + dx, z + dz)) === kind) return true;
-    return false;
+  /** The dip kinds among the cell and its eight neighbours. */
+  const around = (x: number, z: number): Set<DipKind> => {
+    const kinds = new Set<DipKind>();
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) kinds.add(dipOf(map.get(x + dx, z + dz)));
+    kinds.delete(DIP.none);
+    return kinds;
   };
 
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     if (cellHeight(map.get(x, z)) !== 0) continue;
     const own = dipOf(map.get(x, z));
-    if ((own === DIP.water || own === DIP.none) && near(x, z, DIP.water)) {
+    if (own === DIP.chasm) continue;
+    const kinds = around(x, z);
+    // A floor cell gets a liquid's plate only when no other kind of dip is around it: a full plate would cover the other dip's bulge.
+    if (own === DIP.none && kinds.size > 1) continue;
+    if ((own === DIP.water || own === DIP.none) && kinds.has(DIP.water)) {
       plate('water', x, z, WATER_LEVEL);
       if (map.get(x, z) === TILE_ID.DeepWater) plate('deep', x, z, WATER_LEVEL + LAYER_STEP);
     }
-    if ((own === DIP.lava || own === DIP.none) && near(x, z, DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
+    if ((own === DIP.lava || own === DIP.none) && kinds.has(DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
   }
   if (sink.kind.length === 0) return null;
   return {

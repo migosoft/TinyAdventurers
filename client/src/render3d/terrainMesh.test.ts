@@ -59,9 +59,9 @@ describe('buildTerrainChunk', () => {
     expect(buildTerrainChunk(with_(5, 5, [[2, 2, T.Chasm]]), 0, 0, frames, 0)).toBeNull();
   });
 
-  it('gives a border cell shared by water and lava both plates, and a chasm cell beside water its water plate', () => {
+  it('gives a floor cell beside two dip kinds no plate (the banks show), and a chasm cell none', () => {
     const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.ShallowWater], [4, 2, T.Lava], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
-    // (3, 2) borders both pools: one water and one lava plate; the chasm (3, 3) touches both too
+    // (3, 2) borders water, lava and the chasm: nothing; the chasm (3, 3) never gets one
     const at = (x: number, z: number) => {
       let w = 0, l = 0;
       for (let q = 0; q < quadCount(c); q++) {
@@ -71,10 +71,22 @@ describe('buildTerrainChunk', () => {
       }
       return [w, l];
     };
-    expect(at(3, 2)).toEqual([1, 1]);
+    expect(at(3, 2)).toEqual([0, 0]);
     expect(at(3, 3)).toEqual([0, 0]);
     expect(at(2, 2)).toEqual([1, 0]);
     expect(at(4, 2)).toEqual([0, 1]);
+  });
+
+  it('gives a floor cell beside water and a chasm no water plate, which would cover the chasm\'s corner (F4)', () => {
+    const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.ShallowWater], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
+    const plateAt = (x: number, z: number) => {
+      for (let q = 0; q < quadCount(c); q++) if (c.arrays.position[q * 18] === x && c.arrays.position[q * 18 + 2] === z) return true;
+      return false;
+    };
+    expect(plateAt(3, 2)).toBe(false);   // beside the water (2, 2) and the chasm (3, 3)
+    expect(plateAt(2, 3)).toBe(false);
+    expect(plateAt(1, 1)).toBe(true);    // beside the water only
+    expect(plateAt(2, 2)).toBe(true);    // the water cell itself
   });
 
   it('lays no plate of another kind over a lava or water cell', () => {
@@ -90,7 +102,7 @@ describe('buildTerrainChunk', () => {
     expect(at(2, 1)).toEqual([1, 0]);
     expect(at(3, 1)).toEqual([0, 1]);
     expect(at(1, 1)).toEqual([1, 0]);
-    expect(at(3, 0)).toEqual([1, 1]);
+    expect(at(3, 0)).toEqual([0, 0]);   // a floor cell beside water and lava: the banks show
     expect(at(4, 1)).toEqual([0, 1]);
   });
 
