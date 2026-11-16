@@ -63,10 +63,10 @@ describe('light', () => {
   it('clears to the lit wall top: stone times ambient', () => {
     const c = stoneClear(AMBIENT);
     for (let i = 0; i < 3; i++) expect(c[i]).toBeCloseTo(STONE[i] * AMBIENT[i], 6);
-    for (const v of stoneClear(WORK_AMBIENT)) expect(v).toBeLessThan(0.2);
+    for (const v of stoneClear(WORK_AMBIENT)) expect(v).toBeLessThan(0.3);
   });
-  it('writes a clear colour as CSS bytes (the demo hall: 2, 2, 5)', () => {
-    expect(cssColour(stoneClear(AMBIENT))).toBe('rgb(2, 2, 5)');
+  it('writes a clear colour as CSS bytes (the demo hall: 4, 4, 8)', () => {
+    expect(cssColour(stoneClear(AMBIENT))).toBe('rgb(4, 4, 8)');
     expect(cssColour([2, -1, 0.5])).toBe('rgb(255, 0, 128)');
   });
 });

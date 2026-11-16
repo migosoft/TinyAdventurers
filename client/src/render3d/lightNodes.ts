@@ -27,10 +27,11 @@ export interface Lighting {
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
    * `self`: the caster slot the surface belongs to, a float node, -1 none (its own shadow does not fall on it); `darkOnly` > 0.5: ambient alone, no lights, no lava, no darkvision.
    * `selfFoot`: a vec2 node, the foot (x, z) of the plant card the surface belongs to: the caster standing on that foot (the plant's own) does not shadow it.
+   * `open`: a bool node, true on a wall top: the point lights take no wall and no card test there, only their falloff (#342).
    * `sun`: adds the sun's light (#306): `Ps` is the point the sun's shadow map is read at, `ndl` the surface's cosine term; without it the sun does not touch the surface.
    */
   /** `shadow` (fixed when the shader is built): 'full' (default) walls, cards, sun rays and darkvision; 'walls' only each light's wall test (the haze: no card or sun-ray walk, no darkvision); 'none' only the falloff. */
-  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none' }): { rgb: N; dv: N };
+  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N }): { rgb: N; dv: N };
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
   /** The cracks (#307): openings in the ceiling whose light is a term of `lightAt` (see `air/crackNodes.ts`). */
@@ -228,7 +229,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const sun = makeSunLight();
   const hasSun = opts.sun === true;
 
-  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none' } = {}): { rgb: N; dv: N } => {
+  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N } = {}): { rgb: N; dv: N } => {
     const mode = opts.shadow ?? 'full';
     const shadowed = mode === 'full';
     const wallTest = mode !== 'none';
@@ -273,7 +274,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
             const ndl = mix(max(dot(Nrm, d.div(max(dist, 1e-3))), 0), float(1), w);
             const v = float(1).toVar();
             if (wallTest) {
-              If(lc.w.greaterThan(0.5).and(uShadows.greaterThan(0.5)), () => {
+              const tested: N = lc.w.greaterThan(0.5).and(uShadows.greaterThan(0.5));
+              If(opts.open ? tested.and(opts.open.not()) : tested, () => {
                 v.assign(wallVis(Po, L));
                 // The wall test first: a card is looked at only for a light that still reaches P. The shadow channel is skip + 2.
                 if (shadowed) {

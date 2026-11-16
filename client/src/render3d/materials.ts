@@ -15,6 +15,8 @@ import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 type N = any;
 
 const RIM = [0.4, 0.34, 0.33] as const;
+/** How much of a light a wall top takes although the light hangs below it (0 none, 1 all). */
+const TOP_WRAP = 0.5;
 const PX = 1 / 16;
 
 /** The demo's depth bias, in tiles toward the camera: cards 0.03, flames and glows 0.05 (the world has none). */
@@ -128,12 +130,14 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
   const albedo = select(covered, select(cover.on.greaterThan(0.5), base.mul(kindLook(grown.id).darken), grown.rgb), base);
-  // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
-  const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
+  // Wrap: floor and ground 0.35, wall face 0.5, wall top TOP_WRAP. A top takes the point lights without the wall test (`open`):
+  // the lights hang below it, and the test would cut ragged wedges into it. So the walls around a lit room show as a stone band,
+  // also from behind, where no brick face points at the camera (#342).
+  const wrap = select(isTop, float(TOP_WRAP), select(isFace, float(0.5), float(0.35)));
   const normal = attribute('normal', 'vec3');
   // The sun (#306): the shadow map is read a hair off the surface, and the cosine term wraps like the point lights'.
   const sun = lighting.sun;
-  const lit = lighting.lightAt(wp, normal, wrap, { sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
+  const lit = lighting.lightAt(wp, normal, wrap, { open: isTop, sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
   // Sight (#305): a wall face is seen where the floor at its foot is: its point pushed out along the normal. Floors, ground and tops have an upright normal and read their own point.
   const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 

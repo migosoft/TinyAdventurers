@@ -21,8 +21,8 @@ export function dungeonAmbient(amb: number): [number, number, number] {
 export function darkAlpha(ambient: [number, number, number]): number {
   return Math.min(1, Math.max(ambient[0] / AMBIENT[0], ambient[1] / AMBIENT[1], ambient[2] / AMBIENT[2]));
 }
-/** The wall top's colour. */
-export const STONE: readonly [number, number, number] = [0.115, 0.1, 0.145];
+/** The wall top's colour: a cool stone, darker than the brick faces and unlike the warm floor, so a lit top reads as the wall's top (#342). */
+export const STONE: readonly [number, number, number] = [0.2, 0.18, 0.25];
 /** The painter's base grass colour (0..1), shown by the ground until its image is set. */
 export const GRASS_FLAT: [number, number, number] = [BASE[0] / 255, BASE[1] / 255, BASE[2] / 255];
 export const WOODLAND_CLEAR: [number, number, number] = [0.05, 0.11, 0.06];
