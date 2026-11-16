@@ -3,7 +3,7 @@ import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { bedAt, LAVA_LEVEL } from './shape';
 import {
-  FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
+  DROWN_SINK, FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
 const DROWN_TIME = CONST.DROWN_TIME;
@@ -130,14 +130,18 @@ describe('descent', () => {
 
   it('drowns onto the bed', () => {
     expect(drownY(-0.3, -2.3, 0)).toBe(-0.3);
-    expect(drownY(-0.3, -2.3, DROWN_TIME)).toBe(-2.3);
+    expect(drownY(-0.3, -2.3, DROWN_SINK)).toBe(-2.3);
     expect(drownY(-0.3, -2.3, 9)).toBe(-2.3);
+    expect(DROWN_SINK).toBeLessThan(DROWN_TIME);
     let prev = -0.3;
     for (let i = 1; i <= 20; i++) {
-      const y = drownY(-0.3, -2.3, (DROWN_TIME * i) / 20);
+      const y = drownY(-0.3, -2.3, (DROWN_SINK * i) / 20);
       expect(y).toBeLessThanOrEqual(prev);
       prev = y;
     }
+    // Ease-in: it accelerates (less than half the way down at half the time) and rests on the bed from DROWN_SINK on.
+    expect(drownY(0, -2, DROWN_SINK / 2)).toBeCloseTo(-0.5, 9);
+    expect(drownY(0, -2, DROWN_SINK + 0.01)).toBe(-2);
   });
 
   it('sinks slowly in lava and rises fast', () => {

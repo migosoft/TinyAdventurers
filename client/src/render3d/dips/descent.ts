@@ -1,9 +1,11 @@
 import { CHASM_BED, LAVA_LEVEL } from './shape';
-import { CONST, TILE_ID } from '../../generated/defs';
+import { TILE_ID } from '../../generated/defs';
 import type { TileMap } from '../../sim/map';
 
 // First guesses for the user to tune; every number of the descent lives here.
 export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0.5, FALL_MAX_AGE = 3;
+/** Seconds a drowning figure takes to drop to the bed: a look; the server's rule (CONST.DROWN_TIME) is unchanged. */
+export const DROWN_SINK = 0.4;
 export const LAVA_SINK = 1.05, LAVA_IN = 0.55, LAVA_OUT = 2.5;
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
@@ -64,11 +66,11 @@ export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => n
   return f.y > -FALL_GONE;
 }
 
-/** A drowning foot: from y0 to the bed over DROWN_TIME with a smoothstep, then on the bed. */
+/** A drowning foot: from y0 to the bed over DROWN_SINK (ease-in, u squared: it drops), then it rests on the bed until `Died`. */
 export function drownY(y0: number, bed: number, age: number): number {
-  const u = Math.min(1, Math.max(0, age / CONST.DROWN_TIME));
+  const u = Math.min(1, Math.max(0, age / DROWN_SINK));
   if (u >= 1) return bed;
-  return y0 + (bed - y0) * u * u * (3 - 2 * u);
+  return y0 + (bed - y0) * u * u;
 }
 
 /** The slow sink in lava: toward LAVA_SINK at LAVA_IN per second on a lava tile, toward 0 at LAVA_OUT otherwise (1 - exp(-rate * dt) easing). */
