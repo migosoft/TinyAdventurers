@@ -13,20 +13,14 @@ import { coverHeightNode, type CoverShared } from '../cover/coverRead';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
 import { FLUTTER_PX, RAMP } from './mesh';
+import { NOON_LIGHT, SKY_LEVEL_MIN, TREE_LIGHT } from './tone';
 import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE } from './leaves';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
-/** The light's brightness (`mid`: the brightness that sits on the ramp's middle; `gain`: ramp steps per doubling), the floor under which a tree darkens with the light, and the ramp steps. */
-export const TREE_LIGHT = {
-  mid: 0.7, // first guess
-  gain: 0.8, // first guess
-  floor: 0.12, // first guess
-  steps: [-0.75, -0.3, 0.2, 0.6],
-  barkSteps: [-0.5, 0, 0.55],
-} as const;
+export { TREE_LIGHT };
 
 /**
  * Draw order of the pre-pass and the colour pass (set on the meshes by the view): the opaque world (ground, walls, figures: order 0), the tree depth,
@@ -179,9 +173,15 @@ function treeLightAt(lighting: Lighting, hasSun: boolean, o: { P: N; Ps: N; nl: 
   return { lit, b: dot(lit.rgb, vec3(0.2126, 0.7152, 0.0722)).toVar(`${o.name}Bright`) };
 }
 
-/** The ramp steps the light alone asks for (0 at the brightness `TREE_LIGHT.mid`), as a variable. */
-function lightStep(b: N): N {
-  return log2(max(b, 1e-4).div(TREE_LIGHT.mid)).mul(TREE_LIGHT.gain).toVar('treeStep');
+/**
+ * The tone rule of tone.ts (`skyLevel`, `treeTone`) for a light of brightness `b`, as variables: `rel` is the light against the sky's level
+ * (the ambient light plus the sun's colour over noon's; 1 in a level without a sun), held inside the ramp's range; `step` is the ramp step it
+ * asks for (0 at `TREE_LIGHT.mid`). The palette tone is shown times the light over `rel`.
+ */
+function treeToneNode(lighting: Lighting, hasSun: boolean, b: N): { rel: N; step: N } {
+  const level: N = clamp(dot(lighting.ambient.add(lighting.sun.colour), vec3(0.2126, 0.7152, 0.0722)).div(NOON_LIGHT), SKY_LEVEL_MIN, 1);
+  const rel = clamp(hasSun ? b.div(level) : b, TREE_LIGHT.lo, TREE_LIGHT.hi).toVar('treeRel');
+  return { rel, step: log2(rel.div(TREE_LIGHT.mid)).mul(TREE_LIGHT.gain).toVar('treeStep') };
 }
 
 /** The leaf ramp's tone (0..4) a step value `l` picks. */
@@ -253,7 +253,7 @@ export function treeMaterials(o: {
     // The main light's direction for the crown's form: the sun, or straight up without one.
     const ld: N = hasSun ? sunDir : vec3(0, 1, 0);
     const lp = ld.add(vec3(0, s.misc.x, 0));
-    const fromLight = lightStep(b);
+    const { rel, step: fromLight } = treeToneNode(lighting, hasSun, b);
     const crown = select(s.isBall, float(0.75), float(0.7)).mul(dot(nl, lp)).add(dot(s.grad.xyz, lp).mul(0.45)).add(s.grad.w).add(noise).sub(select(s.isBall, float(0.2), float(0)));
     // Leaf patches have no rim rule: their ragged edge is single cells, and a rim there reads as specks.
     const l: N = fromLight.add(crown);
@@ -282,8 +282,8 @@ export function treeMaterials(o: {
     const grey = vec3(dot(pal, vec3(0.3, 0.59, 0.11)));
     const barkTint = mix(pal, grey, s.look.w).mul(s.look.z);
     const texel = select(shared.plain.greaterThan(0.5), pal, select(s.isBark, barkTint, pal.mul(tint)));
-    // Above the floor the step decides and the light's colour tints it; below it the tree darkens with the light.
-    const albedo = texel.div(max(b, TREE_LIGHT.floor));
+    // The step decides the tone and the light's colour tints it; the tone is as dark as the sky, and darkens or brightens with the light outside the ramp's range.
+    const albedo = texel.div(rel);
     // Darkvision's grey is made from the texel itself: the rescale by the light belongs to the lit colour only.
     return vec4(sight.apply(lighting.finish(albedo, lit, texel), truePos, unseen), 1);
   })();
@@ -360,10 +360,11 @@ export function leafMaterial(o: {
     const Ps = truePos.add(nl.mul(0.05)).add(lighting.sun.dir.mul(0.05)); // first guess: both nudges, as the tree's
     const unseen = sight.unseenAt(foot);
     const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, foot, name: 'leaf' });
-    const level = select(shared.plain.greaterThan(0.5), float(2), leafLevel(lightStep(b)));
+    const tone = treeToneNode(lighting, hasSun, b);
+    const level = select(shared.plain.greaterThan(0.5), float(2), leafLevel(tone.step));
     const pal = paletteAt(palette, level, float(RAMP.leaf)).toVar('leafPalette');
     const texel = select(shared.plain.greaterThan(0.5), pal, pal.mul(leafTint(plantLook.x, plantLook.y)));
-    const albedo = texel.div(max(b, TREE_LIGHT.floor));
+    const albedo = texel.div(tone.rel);
     // The fade: a Bayer pattern thins the leaf out (the world is pixel art, no blending).
     const a = select(bayerAt().lessThan(opacity), float(1), float(0));
     return vec4(sight.apply(lighting.finish(albedo, lit, texel), truePos, unseen), a);

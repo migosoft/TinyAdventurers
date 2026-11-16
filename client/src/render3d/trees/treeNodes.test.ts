@@ -160,15 +160,24 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       topLevel(B, code, reads[0]);
     });
 
-    it('a dungeon colour pass divides the texel only by the floored brightness, and darkvision greys the undivided texel', () => {
+    it('a dungeon colour pass divides the texel only by the relative brightness held in the ramp\'s range, and darkvision greys the undivided texel', () => {
       const { mats, geometry } = build(false);
       const code = fragment(B, mats.colour, { geometry });
-      const div = code.match(/(\w+) \/ vec3(?:<f32>)?\( max\( treeBright, 0\.12 \) \)/);
-      expect(div, 'the albedo is texel / max(brightness, floor)').not.toBeNull();
-      // Every division by the brightness is floored.
-      expect(code.match(/\/ [^;]*treeBright/g) ?? []).toHaveLength(1);
+      const div = code.match(/(\w+) \/ vec3(?:<f32>)?\( treeRel \)/);
+      expect(div, 'the albedo is texel / rel').not.toBeNull();
+      // The light's brightness divides nothing but the relative brightness, which is clamped.
+      expect(code.match(/\/ [^;]*treeBright/g) ?? []).toHaveLength(0);
       // The darkvision grey is the luma of the texel, not of the divided albedo.
       expect(code).toContain(`dot( ${div![1]}, vec3${wgsl ? '<f32>' : ''}( 0.299, 0.587, 0.114 ) )`);
+    });
+
+    it('with a sun the ramp is read against the sky\'s level (ambient plus sun over noon\'s light); without one the level is 1', () => {
+      const sun = build(true), none = build(false);
+      const withSun = fragment(B, sun.mats.colour, { geometry: sun.geometry });
+      expect(withSun).toMatch(/treeRel = clamp\( \( treeBright \/ clamp\( [^;]*lightAmbient[^;]*, 0\.02, 1\.0 \) \), 0\.3, 1\.7 \)/);
+      expect(fragment(B, none.mats.colour, { geometry: none.geometry })).toMatch(/treeRel = clamp\( treeBright, 0\.3, 1\.7 \)/);
+      // The falling leaf follows the same rule.
+      expect(fragment(B, sun.mats.leaf, { geometry: leafGeometry(leafSample()) })).toMatch(/clamp\( \( leafBright \/ clamp\( [^;]*lightAmbient/);
     });
   });
 }
