@@ -4,9 +4,6 @@ import { CONST } from '../../generated/defs';
 // First guesses for the user to tune; every number of the descent lives here.
 export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0.5, FALL_MAX_AGE = 3;
 export const LAVA_SINK = 1.05, LAVA_IN = 0.55, LAVA_OUT = 2.5;
-/** A grounded foot over a bed deeper than this (deeper than any water or lava: a chasm's wall) is falling, whether or not the Sink has come yet. */
-export const FALL_BED = -3;
-
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
 /** A fall starting at (x, z) tiles and height y with the figure's drawn speed (tiles/s, capped at SLIDE_MAX); cx, cz: the centre of the cell it sank in. */

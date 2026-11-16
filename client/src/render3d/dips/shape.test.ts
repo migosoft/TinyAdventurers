@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
   BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, sampleBed, surfaceAt, type DipKind,
+  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, sampleBed, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -142,5 +142,34 @@ describe('dip shape', () => {
     expect(s).toBeLessThanOrEqual(Math.max(...c) + 1e-6);
     expect(sampleBed(f, -5, -5)).toBe(f.data[0]);
     expect(sampleBed(f, 999, 999)).toBe(f.data[f.data.length - 1]);
+  });
+});
+
+describe('walkBedAt', () => {
+  it('is bedAt in water and in lava', () => {
+    for (const c of ['~', 'W', 'L']) {
+      const m = pool(c, 5);
+      for (let i = 0; i <= 80; i++) for (const z of [mid, 3.2, 3.5, 2.9]) {
+        const x = 2 + (i / 80) * 7;
+        expect(walkBedAt(m, x, z)).toBe(bedAt(m, x, z));
+      }
+    }
+  });
+
+  it('is within the roughness and the lip of 0 over a chasm, also where bedAt is its full depth', () => {
+    const m = pool('C', 5);
+    for (let i = 0; i <= 80; i++) for (let j = 0; j <= 80; j++) {
+      const w = walkBedAt(m, 2 + (i / 80) * 7, 2 + (j / 80) * 7);
+      expect(w).toBeGreaterThanOrEqual(-ROUGH - 1e-9);   // the bank's own roughness, no wall
+      expect(w).toBeLessThanOrEqual(LIP + 1e-9);
+    }
+    expect(bedAt(m, mid, mid)).toBeCloseTo(-CHASM_BED, 6);
+    expect(walkBedAt(m, mid, mid)).toBe(0);
+  });
+
+  it('puts a floor cell at an inner corner of the outline on the floor, where bedAt is down the wall', () => {
+    const m = room('....', '.CC.', '.C..', '....');
+    expect(bedAt(m, 2.92, 2.92)).toBeLessThan(-5);
+    expect(Math.abs(walkBedAt(m, 2.92, 2.92))).toBeLessThanOrEqual(LIP + 1e-9);
   });
 });

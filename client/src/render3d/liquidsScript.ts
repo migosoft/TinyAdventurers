@@ -60,10 +60,17 @@ function knightAt(t: number): EntState {
   return ent(KNIGHT_ID, KIND.Knight, K_X1 - (s - K_WAIT - K_LEG - K_STAND) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: Math.PI });
 }
 
+/** Where a pushed thing stops: 0.1 tile inside its target cell (the Sink comes as it crosses the rim, as on the server; the fall's rim pull does the rest). */
+const INSIDE = 0.1;
+function reach(q: Pusher): [number, number] {
+  const dx = Math.sign(q.to[0] - q.from[0]), dy = Math.sign(q.to[1] - q.from[1]);
+  return [q.to[0] - dx * (0.5 - INSIDE), q.to[1] - dy * (0.5 - INSIDE)];
+}
+
 /** Events of a push at `p`: the Sink when the slide ends, the Died after the fall's or the drowning's time. */
 function eventsOf(q: Pusher, p: number): { at: number; ev: PictureEv }[] {
   const at = p + SLIDE_TIME;
-  const [x, y] = [q.to[0] * TILE, q.to[1] * TILE];
+  const [x, y] = [reach(q)[0] * TILE, reach(q)[1] * TILE];
   return [
     { at, ev: { t: 'Sink', id: q.id, x, y, how: q.how } },
     { at: at + q.dur, ev: { t: 'Died', id: q.id, kind: q.kind, x, y } },
@@ -96,11 +103,12 @@ export function liquidsScript(t: number, dt: number, pushes: Record<Push, number
     const rest = ent(q.id, q.kind, q.from[0], q.from[1], q.side);
     if (p === null || t < p) { ents.push(rest); continue; }
     const sink = p + SLIDE_TIME;
+    const [rx, ry] = reach(q);
     if (t < sink) {
       const k = (t - p) / SLIDE_TIME;
-      ents.push({ ...rest, x: (q.from[0] + (q.to[0] - q.from[0]) * k) * TILE, y: (q.from[1] + (q.to[1] - q.from[1]) * k) * TILE, ...(q.kind === KIND.Imp ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
+      ents.push({ ...rest, x: (q.from[0] + (rx - q.from[0]) * k) * TILE, y: (q.from[1] + (ry - q.from[1]) * k) * TILE, ...(q.kind === KIND.Imp ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
     } else if (t < sink + q.dur) {
-      ents.push({ ...rest, x: q.to[0] * TILE, y: q.to[1] * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
+      ents.push({ ...rest, x: rx * TILE, y: ry * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
     } else if (t >= sink + BACK_TIME) ents.push(rest);
     // The server sends no Sink and no Died for a barrel (objects.rs): it only shows anim 2 and is gone.
     if (q.kind !== KIND.Barrel) for (const e of eventsOf(q, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);

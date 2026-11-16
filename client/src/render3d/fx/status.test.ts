@@ -13,7 +13,7 @@ const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), g
 const cam = { x: 5, z: 5, pitch: 0.9, yaw: 0.3 };
 const bit = (...k: number[]): number => k.reduce((a, b) => a | (1 << b), 0);
 const fig = (id: number, kind: number, effects: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
-  id, kind, x: 5, z: 5, top: 1, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects, alpha: 1, model: false, side: 0, def: FIGURES[kind],
+  id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects, alpha: 1, model: false, side: 0, def: FIGURES[kind],
   yaw: 0, swingY: 0.6, arc: 0, bite: -1, ...o,
 });
 const frameOf = (now: number, figs: DrawnFig[], hidden: number[] = []): FxFrame => ({
@@ -50,6 +50,25 @@ describe('status marks', () => {
     fx.frame(frameOf(1, figs), out);
     expect(out.lights.length).toBe(3);
     expect(out.lights.map((l) => l.x).sort((a, b) => a - b)).toEqual([5, 7, 9]);
+  });
+
+  it('a burning figure standing in a dip has its light and flames lowered by its foot height (#324)', () => {
+    const at = (foot: number) => {
+      const fx = new Effects3d(map), out = newOut();
+      fx.frame(frameOf(1, [fig(1, KIND.Paladin, bit(EFFECT.Burning), { foot })]), out);
+      return out;
+    };
+    const dry = at(0), wet = at(-1.2);
+    expect(wet.lights[0].y).toBeCloseTo(dry.lights[0].y - 1.2, 6);
+    const ys = (o: FxOut): number[] => {
+      const a: number[] = [];
+      for (const t of [o.tris, o.lit]) { const pos = (t as unknown as { pos: Float32Array }).pos; for (let i = 0; i < t.n; i++) a.push(...[1, 4, 7].map((k) => pos[i * 9 + k])); }
+      return a;
+    };
+    const dy = ys(dry), wy = ys(wet);
+    expect(wy.length).toBe(dy.length);
+    expect(wy.length).toBeGreaterThan(0);
+    for (let i = 0; i < dy.length; i++) expect(wy[i]).toBeCloseTo(dy[i] - 1.2, 5);
   });
 
   it('a hidden burning figure adds no light and does not take a place', () => {

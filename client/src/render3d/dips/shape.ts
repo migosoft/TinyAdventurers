@@ -62,12 +62,24 @@ const isChasm = (t: number) => t === TILE_ID.Chasm;
 
 /** Height of the ground at (x, z): 0 on plain floor, up to LIP on a rim, negative in a dip. */
 export function bedAt(map: TileMap, x: number, z: number): number {
+  return bed(map, x, z, true);
+}
+
+/**
+ * Where a grounded foot stands: `bedAt` without the chasm's wall. A rounded outline puts the wall inside some floor cells (inner
+ * corners), where the server lets a figure walk; only a Sink (or a barrel's anim 2) makes a figure fall. Water and lava are as in `bedAt`.
+ */
+export function walkBedAt(map: TileMap, x: number, z: number): number {
+  return bed(map, x, z, false);
+}
+
+function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   const mW = maskAt(map, x, z, isWater), mD = maskAt(map, x, z, isDeep);
   const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
   let h = -(SHALLOW_BED * ss(0.5, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(0.5, STEEP.deep, mD))
-    - LAVA_BED * ss(0.5, STEEP.lava, mL) - CHASM_BED * ss(0.5, STEEP.chasm, mC);
+    - LAVA_BED * ss(0.5, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(0.5, STEEP.chasm, mC) : 0);
   h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(0.5, 0.7, any) * (1 - ss(0.56, 0.9, mC));
   // A continuous bump on the outside of the outline: 0 at the cell edge (any 0.5) and beyond 0.25.
   h += LIP * ss(0.25, 0.4, any) * (1 - ss(0.42, 0.5, any)) * (0.4 + 0.6 * vnoise(x * 6, z * 6));

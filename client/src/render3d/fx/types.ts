@@ -26,8 +26,10 @@ export interface DrawnFig {
   kind: number;
   x: number;
   z: number;
-  /** World y of the drawn body's top, stretch included. */
+  /** Height of the drawn body's top above its foot, stretch included (a size; add `foot` for a world height). */
   top: number;
+  /** World y of the foot in tiles (#324): below 0 on the bed of a dip, a faller's height, above the bed floating in lava. A world height is `foot + height * stretch`. */
+  foot: number;
   /** Weapon hand or staff tip, world. */
   hand: V3;
   /** World rad. */

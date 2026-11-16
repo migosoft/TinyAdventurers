@@ -178,14 +178,14 @@ function gaze(out: FxOut, frame: FxFrame, f: DrawnFig): void {
   let tx = 0, ty = 0.5, tz = 0, found = false;
   for (let i = 0; i < frame.figs.length; i++) {
     const g = frame.figs[i];
-    if (g.id === e.extra) { tx = g.x; ty = g.top / 2; tz = g.z; found = true; break; }
+    if (g.id === e.extra) { tx = g.x; ty = g.foot + g.top / 2; tz = g.z; found = true; break; }
   }
   if (!found) {
     const t = frame.ents.get(e.extra);
     if (!t) return;
     tx = t.x / TILE; tz = t.y / TILE; ty = 0.5 * stretchOf(frame.ctx);
   }
-  gazeA[0] = f.x; gazeA[1] = f.top - 0.15; gazeA[2] = f.z;
+  gazeA[0] = f.x; gazeA[1] = f.foot + f.top - 0.15; gazeA[2] = f.z;
   gazeB[0] = tx; gazeB[1] = ty; gazeB[2] = tz;
   const a = gazePulse(frame.ctx.now);
   streak(out.tris, frame.ctx.ax, gazeA, gazeB, 0.05, GAZE_GREY, a, a);
@@ -251,7 +251,7 @@ export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
     if (frame.hidden.has(f.id) || f.alpha < 0.05 || still(f)) continue;
     swoosh(T, f);
     if (f.bite >= 0 && f.mouth) fangTris(T, f.mouth, ctx.cam, f.bite);
-    if (f.anim === ANIM.Channel) swirlTris(T, f.x, f.z, f.animT, f.def.base, f.top, 0.6, 0);
+    if (f.anim === ANIM.Channel) swirlTris(T, f.x, f.z, f.animT, f.def.base, f.top, 0.6, f.foot);
     releases(fx, f, now, st);
     if (f.anim === ANIM.Slam && f.def.mount === 'staff') novaWindup(out, frame, f, 18 / TILE * st);
     telegraph(out, frame, f);

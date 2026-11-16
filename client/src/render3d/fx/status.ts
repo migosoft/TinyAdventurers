@@ -44,7 +44,7 @@ function drift(T: FxTris, frame: FxFrame, f: DrawnFig, w: number, n: number, lif
   const ax = frame.ctx.ax, now = frame.ctx.now;
   for (let i = 0; i < n; i++) {
     const t = now / life + i / n + hash3(f.id, i, salt) * 0.5, cyc = Math.floor(t), ph = t - cyc, sd = f.id * 7 + i + salt * 131;
-    const ox = (hash3(sd, cyc, 0) - 0.5) * w * spread, y = f.top * (yLo + (yHi - yLo) * hash3(sd, cyc, 1)) + rise * ph;
+    const ox = (hash3(sd, cyc, 0) - 0.5) * w * spread, y = f.foot + f.top * (yLo + (yHi - yLo) * hash3(sd, cyc, 1)) + rise * ph;
     rgbIn(cols[Math.floor(hash3(sd, cyc, 2) * cols.length) % cols.length], c0);
     dot(T, ax, f.x + ax.right[0] * ox, y, f.z + ax.right[2] * ox, size, c0[0], c0[1], c0[2], alpha * f.alpha * (1 - ph * ph));
   }
@@ -52,7 +52,7 @@ function drift(T: FxTris, frame: FxFrame, f: DrawnFig, w: number, n: number, lif
 
 /** The icy shell: a box of six quads round the body, shaded face by face. */
 function shell(T: FxTris, f: DrawnFig, now: number): void {
-  const h = f.top, r = (f.top * 0.55) / 2 + PX, x0 = f.x - r, x1 = f.x + r, z0 = f.z - r, z1 = f.z + r;
+  const b = f.foot, h = f.foot + f.top, r = (f.top * 0.55) / 2 + PX, x0 = f.x - r, x1 = f.x + r, z0 = f.z - r, z1 = f.z + r;
   const a = (0.25 + 0.07 * Math.sin(now * 3)) * f.alpha;
   const q = (k: number, ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number, dx: number, dy: number, dz: number): void => {
     const s = k;
@@ -60,11 +60,11 @@ function shell(T: FxTris, f: DrawnFig, now: number): void {
     T.tri(ax, ay, az, cx, cy, cz, dx, dy, dz, ICE[0] * s, ICE[1] * s, ICE[2] * s, a);
   };
   q(1.15, x0, h, z0, x1, h, z0, x1, h, z1, x0, h, z1);
-  q(0.95, x0, 0, z0, x1, 0, z0, x1, h, z0, x0, h, z0);
-  q(0.8, x1, 0, z0, x1, 0, z1, x1, h, z1, x1, h, z0);
-  q(0.9, x1, 0, z1, x0, 0, z1, x0, h, z1, x1, h, z1);
-  q(0.7, x0, 0, z1, x0, 0, z0, x0, h, z0, x0, h, z1);
-  q(0.6, x0, 0.01, z0, x1, 0.01, z0, x1, 0.01, z1, x0, 0.01, z1);
+  q(0.95, x0, b, z0, x1, b, z0, x1, h, z0, x0, h, z0);
+  q(0.8, x1, b, z0, x1, b, z1, x1, h, z1, x1, h, z0);
+  q(0.9, x1, b, z1, x0, b, z1, x0, h, z1, x1, h, z1);
+  q(0.7, x0, b, z1, x0, b, z0, x0, h, z0, x0, h, z1);
+  q(0.6, x0, b + 0.01, z0, x1, b + 0.01, z0, x1, b + 0.01, z1, x0, b + 0.01, z1);
 }
 
 function entangleLook(frame: FxFrame, id: number): number {
@@ -83,7 +83,7 @@ function marks(out: FxOut, frame: FxFrame, f: DrawnFig, idx: number): void {
     rgbIn(GLOOM.dark, c0);
     for (let i = 0; i < 3; i++) {
       const ang = now * 4 + (i * Math.PI * 2) / 3;
-      dot(T, ax, f.x + Math.cos(ang) * 0.25, f.top + 0.2 + Math.sin(ang) * 0.05, f.z + Math.sin(ang) * 0.25, PX * 1.6, c0[0], c0[1], c0[2], 0.85 * a);
+      dot(T, ax, f.x + Math.cos(ang) * 0.25, f.foot + f.top + 0.2 + Math.sin(ang) * 0.05, f.z + Math.sin(ang) * 0.25, PX * 1.6, c0[0], c0[1], c0[2], 0.85 * a);
     }
   }
   if (has(fx, EFFECT.Burning)) {
@@ -93,7 +93,7 @@ function marks(out: FxOut, frame: FxFrame, f: DrawnFig, idx: number): void {
       const cyc = Math.floor(now * 1.4 + i * 0.37);
       flameSpotAt(w, f.top, 0, f.id * 97 + i * 13 + cyc, spot);
       const flick = 1 + 0.2 * Math.sin(now * 63 + i * 2.1);
-      fireBall(T, BALL1, f.x + ax.right[0] * spot[0], -spot[1], f.z + ax.right[2] * spot[0], 0.07 * flick * (a > 0.5 ? 1 : a * 2), now * 1.3 + i, f.id * 5 + i, 0.75, 0, false);
+      fireBall(T, BALL1, f.x + ax.right[0] * spot[0], f.foot - spot[1], f.z + ax.right[2] * spot[0], 0.07 * flick * (a > 0.5 ? 1 : a * 2), now * 1.3 + i, f.id * 5 + i, 0.75, 0, false);
     }
     offerNear(idx, (f.x - ctx.cam.x) ** 2 + (f.z - ctx.cam.z) ** 2);
   }
@@ -105,7 +105,7 @@ function marks(out: FxOut, frame: FxFrame, f: DrawnFig, idx: number): void {
       if (al <= 0) continue;
       const sd = f.id * 11 + i, ox = (hash3(sd, cyc, 0) - 0.5) * (w + 0.75);
       rgbIn(FLAKE[hash3(sd, cyc, 1) < 0.5 ? 0 : 1], c0);
-      dot(T, ax, f.x + ax.right[0] * ox, f.top * hash3(sd, cyc, 2) + 0.1, f.z + ax.right[2] * ox, PX * 1.5, c0[0], c0[1], c0[2], al * a);
+      dot(T, ax, f.x + ax.right[0] * ox, f.foot + f.top * hash3(sd, cyc, 2) + 0.1, f.z + ax.right[2] * ox, PX * 1.5, c0[0], c0[1], c0[2], al * a);
     }
   }
   if (has(fx, EFFECT.Poisoned)) drift(T, frame, f, w, 3, 0.8, 0.3, 0.9, 8 / TILE, 0.8, [BUBBLE], PX * 1.5, 1, 1);
@@ -142,7 +142,7 @@ function marks(out: FxOut, frame: FxFrame, f: DrawnFig, idx: number): void {
   }
   if (has(fx, EFFECT.Warded)) {
     const k = 0.5 + 0.5 * Math.sin(now * 4), r = w / 2 + 2.5 * PX, al = (0.35 + 0.5 * k) * a;
-    groundRing(T, f.x, f.z, f.top / 2, r - PX * 0.4, r + PX * 0.4, WARD_RGB, al, al, 20);
+    groundRing(T, f.x, f.z, f.foot + f.top / 2, r - PX * 0.4, r + PX * 0.4, WARD_RGB, al, al, 20);
   }
 }
 
@@ -223,7 +223,7 @@ export function drawStatus(out: FxOut, frame: FxFrame): void {
   const now = frame.ctx.now;
   for (let k = 0; k < nearN; k++) {
     const f = figs[nearIdx[k]], I = 0.9 + 0.1 * Math.sin(now * 17 + f.id);
-    addLight(out, `bn${f.id}`, f.x, f.top * 0.4, f.z, 2.5, 1.2 * I, 0.6 * I, 0.2 * I, LIGHT_KIND.Fire);
+    addLight(out, `bn${f.id}`, f.x, f.foot + f.top * 0.4, f.z, 2.5, 1.2 * I, 0.6 * I, 0.2 * I, LIGHT_KIND.Fire);
   }
   veils(out, frame);
 }

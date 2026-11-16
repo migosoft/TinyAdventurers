@@ -19,7 +19,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
-import { bedAt, depthFade, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
+import { bedAt, depthFade, LAVA_LEVEL, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
@@ -769,9 +769,20 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(bed).toBeLessThan(-0.3);
     expect(model.casters.length).toBe(1);
     expect(model.casters[0].y0, 'caster lower edge').toBeCloseTo(card.casters[0].y0, 6);
-    expect(model.models[0].lift).toBeCloseTo(bed, 6);
+    expect(model.models[0].lift / Math.cos(Math.PI / 4), 'world height after the stretch').toBeCloseTo(bed, 6);
     expect(model.models[0].cut).toBe(false);
     expect(model.openers[0].mid, 'mid').toBeCloseTo(dryModel.openers[0].mid + bed, 6);
+  });
+
+  it('gives a wading model figure the same foot and hand offsets as its card (R8)', () => {
+    const e = (tx: number, tz: number) => ent(10, KIND.Barbarian, at2(tx, tz));
+    const bed = bedAt(dm, 1.5, 1.5);
+    const wet = dipFigs().frame(frame([e(1, 1)]), cam(), look({ kit, ...all })).figs[0];
+    const dry = dipFigs().frame(frame([e(8, 5)]), cam(), look({ kit, ...all })).figs[0];
+    expect(wet.model).toBe(true);
+    expect(wet.foot).toBeCloseTo(bed, 6);
+    expect(wet.hand[1] - dry.hand[1]).toBeCloseTo(bed, 6);
+    expect(wet.top).toBeCloseTo(dry.top, 9);
   });
 
   it('fits every description to the standing height of its card, from the real atlas pixels', () => {
@@ -947,7 +958,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(last.falls).toHaveLength(1);
     for (let i = 0; i < 30; i++) {
       last = fg.frame(frame([e]), cam(), l);
-      lifts.push(last.models[0].lift);
+      lifts.push(last.models[0].lift / Math.cos(Math.PI / 4));   // the world height (see `low`)
     }
     expect(Math.abs(lifts[29] + 1.75)).toBeLessThan(0.2);
     expect(last.models.every((m) => m.cut === false)).toBe(true);
@@ -958,7 +969,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.ElvenRanger });
     let after = fg.frame(frame([]), cam(), l);
     expect(after.models.length).toBeGreaterThan(0);
-    expect(after.models[0].lift).toBeLessThan(lifts[29]);
+    expect(after.models[0].lift / Math.cos(Math.PI / 4)).toBeLessThan(lifts[29]);
     expect(after.decals.n).toBe(0);
     expect(after.models.some((m) => m.model === 'skull')).toBe(false);
     for (let i = 0; i < 90; i++) after = fg.frame(frame([]), cam(), l);
@@ -1004,7 +1015,12 @@ const dm = dipMap();
 const dipFigs = (): Figures3d => new Figures3d({ ...init(), map: dipMap() }, frames, bounds);
 const at2 = (tx: number, tz: number, o: Partial<EntState> = {}): Partial<EntState> => ({ x: sp(tx, tz)[0], y: sp(tx, tz)[1], ...o });
 const knight = (tx: number, tz: number, o: Partial<EntState> = {}): EntState => ent(10, KIND.Knight, { side: SIDE.Friendly, ...at2(tx, tz), ...o });
-const low = (b: CardBuf, q = 0): number => Math.min(...ys(b, q));
+/**
+ * The lowest y of a quad as the world sees it. A card's `lift` is divided by cos(pitch) by the camera passes (the cards' stretch), so a
+ * foot at world height y is pushed with lift y * cos(pitch); dividing the buffer's y back gives the height the viewer sees.
+ */
+const low = (b: CardBuf, q = 0): number => Math.min(...ys(b, q)) / Math.cos(Math.PI / 4);
+const span = (b: CardBuf): number => Math.max(...ys(b)) - Math.min(...ys(b));
 /** Frames of `dt` seconds from clock `now0`; the last output. */
 function run(fg: Figures3d, mk: (i: number) => EntState[], n: number, dt = 1 / 60, now0 = 10, o: (i: number) => Partial<RunFrame> = () => ({})): FigureOut {
   let out!: FigureOut;
@@ -1022,8 +1038,17 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(bed).toBeLessThan(-0.3);
     expect(low(o.cards) - dryLow).toBeCloseTo(bed, 6);
     const dry = dipFigs().frame(frame([knight(8, 5)]), cam());
-    expect(Math.max(...ys(o.cards)) - low(o.cards)).toBeCloseTo(Math.max(...ys(dry.cards)) - low(dry.cards), 6);
+    expect(span(o.cards)).toBeCloseTo(span(dry.cards), 6);
     expect(fg.anchors.get(10)!.y).toBeCloseTo(bed, 6);
+  });
+
+  it('hangs the effects heights from the foot on the card path and the model path alike (R8)', () => {
+    const bed = bedAt(dm, 1.5, 1.5);
+    const card = (tx: number, tz: number) => dipFigs().frame(frame([ent(10, KIND.Barbarian, at2(tx, tz))]), cam());
+    expect(card(1, 1).figs[0].foot).toBeCloseTo(bed, 6);
+    expect(card(1, 1).figs[0].hand[1] - card(8, 5).figs[0].hand[1]).toBeCloseTo(bed, 6);
+    expect(card(1, 1).figs[0].swingY - card(8, 5).figs[0].swingY).toBeCloseTo(bed, 6);
+    expect(card(1, 1).figs[0].top).toBeCloseTo(card(8, 5).figs[0].top, 9);   // the size is not moved
   });
 
   it('keeps a dashing or incorporeal figure at floor height', () => {
@@ -1116,16 +1141,24 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(total(fg.frame(frame([], { now: 11.1 }), cam()))).toBe(0);
   });
 
-  it('lets a figure over a chasm fall before its Sink has come, and the Sink changes nothing', () => {
-    const fg = dipFigs();
-    const e = knight(2, 4);
-    const first = fg.frame(frame([e]), cam());
-    expect(first.falls).toEqual([{ id: 10, x: 2.5, z: 4.5 }]);
-    const o = run(fg, () => [e], 20, 1 / 60, 10.1);
-    expect(low(o.cards) - dryLow).toBeLessThan(-0.3);
-    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
-    expect(fg.frame(frame([e], { now: 10.5 }), cam()).falls).toEqual([]);
-    expect(fg.fallers).toBe(1);
+  it('does not make a figure fall that the server never sinks: a floor cell the rounded chasm outline reaches stands at floor height (R5)', () => {
+    const t = new Uint8Array(8 * 6).fill(TILE_ID.Floor);
+    for (const [x, z] of [[2, 1], [1, 2], [2, 2]]) t[z * 8 + x] = TILE_ID.Chasm;
+    const m = new TileMap(8, 6, t);
+    expect(bedAt(m, 1.92, 1.92)).toBeLessThan(-5);   // the outline's wall lies in this floor cell (an inner corner)
+    const fg = new Figures3d({ ...init(), map: m }, frames, bounds);
+    const k = (x: number, z: number) => ent(10, KIND.Knight, { side: SIDE.Friendly, x: x * TILE, y: z * TILE });
+    const o = fg.frame(frame([k(1.92, 1.92)]), cam());
+    expect(o.falls).toEqual([]);
+    expect(low(o.cards) - dryLow).toBeCloseTo(walkBedAt(m, 1.92, 1.92), 6);
+    expect(low(o.cards) - dryLow).toBeGreaterThan(-0.1);
+    expect(fg.fallers).toBe(0);
+    let last = o;
+    for (let i = 0; i < 30; i++) last = fg.frame(frame([k(1.92 + i * 0.1, 1.92 + i * 0.07)], { now: 10.1 + i / 60 }), cam());
+    last = fg.frame(frame([k(6, 4)], { now: 11 }), cam());
+    expect(last.falls).toEqual([]);
+    expect(low(last.cards) - dryLow).toBeCloseTo(0, 1);
+    expect(last.cards.n).toBeGreaterThan(0);
   });
 
   it('falls the own hero from prediction', () => {
@@ -1170,7 +1203,7 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     for (let i = 1; i < 31; i++) o = fg.frame(frame([b(2, i * 16)], { now: 10 + i / 60 }), cam());
     expect(o.cards.look[4]).toBe(1);
     expect(Math.abs(low(o.cards) - rest + 1.75)).toBeLessThan(0.25);
-    expect(Math.max(...ys(o.cards)) - low(o.cards)).toBeCloseTo(Math.max(...ys(make().frame(frame([ent(20, KIND.Barrel, { side: SIDE.Neutral })]), cam()).cards)) - rest, 6);
+    expect(span(o.cards)).toBeCloseTo(span(make().frame(frame([ent(20, KIND.Barrel, { side: SIDE.Neutral })]), cam()).cards), 6);
     expect(o.shadows.n).toBe(0);
     o = fg.frame(frame([], { now: 11 }), cam());
     expect(total(o)).toBe(1);
@@ -1185,7 +1218,7 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(bedAt(dm, 0.9, 1.5)).toBeGreaterThanOrEqual(WATER_LEVEL);
     const wade = dipFigs().frame(frame([knight(1, 1)]), cam());
     expect(wade.shadows.n).toBe(0);
-    const air = dipFigs().frame(frame([knight(2, 4, { anim: ANIM.Dash })]), cam());
+    const air = dipFigs().frame(frame([knight(3, 1, { anim: ANIM.Dash })]), cam());   // dashing over the deep: above its bed
     expect(air.shadows.n).toBe(0);
   });
 

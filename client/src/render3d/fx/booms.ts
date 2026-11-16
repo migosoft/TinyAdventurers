@@ -46,7 +46,7 @@ const DMG_WHITE = spec(5, [2, 4], [-0.4, 1.2], [0.15, 0.25], 0, 0, PX, [0xffffff
 const DMG_RED = spec(5, [2, 4], [-0.4, 1.2], [0.15, 0.25], 0, 0, PX, [0xff4040], true);
 function drawDmg(out: FxOut, f: FxFrame, rec: FxRec, age: number): void {
   const fig = figNear(f.figs, rec.x, rec.z, 1);
-  run(out.tris, f.ctx, rec.a ? DMG_RED : DMG_WHITE, 5, rec.x, fig ? fig.top / 2 : 0.5, rec.z, age, rec.seed);
+  run(out.tris, f.ctx, rec.a ? DMG_RED : DMG_WHITE, 5, rec.x, fig ? fig.foot + fig.top / 2 : 0.5, rec.z, age, rec.seed);
 }
 
 // ---- Boom k 1 and 13: the healing ring ----
@@ -215,7 +215,7 @@ const GOLD = spec(24, [1.5, 4], [-0.2, 1.3], [0.4, 0.9], 3, 0, PX, [0xffe060, 0x
 function midOf(f: FxFrame, rec: FxRec): number {
   if (rec.c === 0) {
     const fig = rec.follow >= 0 ? f.figs.find((g) => g.id === rec.follow) : undefined;
-    rec.b = fig ? fig.top / 2 : 0.5;
+    rec.b = fig ? fig.foot + fig.top / 2 : 0.5;
     rec.c = 1;
   }
   return rec.b;
