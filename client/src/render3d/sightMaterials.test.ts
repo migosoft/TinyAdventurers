@@ -7,6 +7,7 @@ import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
+import { dipMaterial } from './dips/dipNodes';
 import { airMaterials } from './air/airNodes';
 import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
@@ -16,6 +17,7 @@ const lit = () => {
 };
 
 // The air's vertex layouts (airQuads.ts); the builders read the attributes from the geometry.
+const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1]];
 const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
@@ -39,6 +41,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
   return [
     { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, world: true },
     // The ground cover (#330): sheets and bushels end with the sight step.
+    // The dips' ground (#324): floor above, bank rock below.
+    { name: 'dip', m: dipMaterial(t, t, 64, 64, l, t, sight).material, world: true, attrs: DIP_ATTRS },
     { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
     { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },

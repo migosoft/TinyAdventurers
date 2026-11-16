@@ -27,11 +27,12 @@ export interface Lighting {
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
    * `self`: the caster slot the surface belongs to, a float node, -1 none (its own shadow does not fall on it); `darkOnly` > 0.5: ambient alone, no lights, no lava, no darkvision.
    * `selfFoot`: a vec2 node, the foot (x, z) of the plant card the surface belongs to: the caster standing on that foot (the plant's own) does not shadow it.
+   * `selfLit` (default true): false leaves out the lava cell's own glow (the `Nrm.y > 0.5` block), decided when the shader is built.
    * `open`: a bool node, true on a wall top: the point lights take no wall and no card test there, only their falloff (#342).
    * `sun`: adds the sun's light (#306): `Ps` is the point the sun's shadow map is read at, `ndl` the surface's cosine term; without it the sun does not touch the surface.
    */
   /** `shadow` (fixed when the shader is built): 'full' (default) walls, cards, sun rays and darkvision; 'walls' only each light's wall test (the haze: no card or sun-ray walk, no darkvision); 'none' only the falloff. */
-  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N }): { rgb: N; dv: N };
+  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N; selfLit?: boolean }): { rgb: N; dv: N };
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
   /** The cracks (#307): openings in the ceiling whose light is a term of `lightAt` (see `air/crackNodes.ts`). */
@@ -229,7 +230,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const sun = makeSunLight();
   const hasSun = opts.sun === true;
 
-  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N } = {}): { rgb: N; dv: N } => {
+  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N; selfLit?: boolean } = {}): { rgb: N; dv: N } => {
     const mode = opts.shadow ?? 'full';
     const shadowed = mode === 'full';
     const wallTest = mode !== 'none';
@@ -250,11 +251,14 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
         sum.addAssign(lavaLight);
         if (sunLight) sum.addAssign(sunLight);
         // Self-lit only on the pool's own surface (an upward face); walls on a cell boundary and cards get the sampled lava light alone.
-        If(Nrm.y.greaterThan(0.5), () => {
-          const lx = int(min(max(floor(P.x), 0), map.w - 1));
-          const lz = int(min(max(floor(P.z), 0), map.h - 1));
-          sum.addAssign(textureLoad(lavaTex, ivec2(lx, lz)).a);
-        });
+        // `selfLit: false` (the dip ground, which draws the lava's own glow itself) leaves the block out when the shader is built.
+        if (opts.selfLit !== false) {
+          If(Nrm.y.greaterThan(0.5), () => {
+            const lx = int(min(max(floor(P.x), 0), map.w - 1));
+            const lz = int(min(max(floor(P.z), 0), map.h - 1));
+            sum.addAssign(textureLoad(lavaTex, ivec2(lx, lz)).a);
+          });
+        }
         Loop(named('li', LIGHT_CAP), ({ li: i }: N) => {
           const lp: N = lPos.element(i);
           const lc: N = lCol.element(i);

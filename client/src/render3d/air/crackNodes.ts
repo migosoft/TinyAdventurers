@@ -3,6 +3,7 @@
 // shaft march reads it again. Only If/Loop control flow and no texture read, so it may sit inside any branch.
 import { Vector4 } from 'three/webgpu';
 import { Break, Fn, If, Loop, atan, cos, float, int, length, max, mix, sin, smoothstep, uniform, uniformArray, vec2 } from 'three/tsl';
+import { CHASM_BED } from '../dips/shape';
 import { CRACK_CAP, RAY_CAP, RIM_HI, RIM_LO, packCracks, type Crack } from './cracks';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,19 +51,22 @@ export function makeCracks(): Cracks {
     const D: N = data.element(si.add(OFF_D));
     const out = float(0).toVar();
     const y = Q.y;
-    If(y.greaterThanEqual(0).and(y.lessThan(A.z)), () => {
+    // A point below the floor (a dip, #324) is lit too: the patch follows the beam's direction down (k keeps the sign of y) but
+    // keeps its floor-level size and ray pattern (`yh`, y clamped at the floor).
+    const yh = max(y, 0);
+    If(y.greaterThanEqual(-(CHASM_BED + 1)).and(y.lessThan(A.z)), () => {
       const k = y.div(B.y);
       const p = vec2(Q.x.sub(B.x.mul(k)).sub(A.x), Q.z.sub(B.z.mul(k)).sub(A.y));
       const cs = cos(D.z);
       const sn = sin(D.z);
-      const sc = float(1).add(A.w.sub(1).mul(y.div(A.z)));
+      const sc = float(1).add(A.w.sub(1).mul(yh.div(A.z)));
       const ex = p.x.mul(cs).add(p.y.mul(sn)).div(D.x.mul(sc));
       const ey = p.y.mul(cs).sub(p.x.mul(sn)).div(D.y.mul(sc));
       const ang = atan(ey, ex);
       const r = length(vec2(ex, ey)).mul(float(1).add(sin(ang.mul(3).add(B.w)).mul(0.13)).add(sin(ang.mul(7).add(1.3)).mul(0.07)));
       const rim = float(1).sub(smoothstep(RIM_LO, RIM_HI, r));
       If(rim.greaterThan(0), () => {
-        const h = y.div(A.z);
+        const h = yh.div(A.z);
         const bands = float(0).toVar();
         // Only the slot's own rays count: an unused zero ray would still pass 0.25 through its soft edges.
         Loop(named('cr', RAY_CAP), ({ cr: j }: N) => {

@@ -5,6 +5,7 @@
 import { LIGHT_KIND } from '../../generated/defs';
 import type { LightField, StaticLight } from '../../game/light';
 import { HEIGHT_RANGE, beamShape, cloudAt, hash01, lookFor, rayGlow, rayShapes, sunLook, type SunLook } from '../../game/sunmath';
+import { CHASM_BED } from '../dips/shape';
 import { lightRgb } from '../lights';
 import type { Footprint } from '../lights';
 import { PITCH_MIN } from '../params';
@@ -97,19 +98,21 @@ export function crackOf(l: StaticLight, base: SunLook, t: number): Crack {
  * by the ray count, times the demo's streak. 0 above the ceiling and below the floor. Keep it branch-light: the shader copies it.
  */
 export function crackMask(c: Crack, x: number, y: number, z: number): number {
-  if (y < 0 || y >= c.ceil) return 0;
+  // Below the floor (a dip, #324) the patch follows the beam down but keeps its floor-level size and ray pattern.
+  if (y < -(CHASM_BED + 1) || y >= c.ceil) return 0;
   const k = y / c.dir[1];
+  const yh = Math.max(y, 0);
   const px = x - c.dir[0] * k - c.fx;
   const pz = z - c.dir[2] * k - c.fz;
   const cs = Math.cos(c.rot), sn = Math.sin(c.rot);
-  const s = 1 + (c.widen - 1) * (y / c.ceil);
+  const s = 1 + (c.widen - 1) * (yh / c.ceil);
   const ex = (px * cs + pz * sn) / (c.rx * s);
   const ey = (-px * sn + pz * cs) / (c.rz * s);
   const ang = Math.atan2(ey, ex);
   const r = Math.hypot(ex, ey) * (1 + 0.13 * Math.sin(3 * ang + c.wave) + 0.07 * Math.sin(7 * ang + 1.3));
   const rim = 1 - smooth(RIM_LO, RIM_HI, r);
   if (rim <= 0) return 0;
-  const h = y / c.ceil;
+  const h = yh / c.ceil;
   let bands = 0;
   for (const [u0, u1, t0, t1] of c.rays) {
     const lo = u0 + (t0 - u0) * h;

@@ -92,6 +92,26 @@ describe('the lighting shader', () => {
   }
 });
 
+describe('the pool glow of a lava cell (selfLit)', () => {
+  const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
+  const code = (B: Builder, selfLit?: boolean): string => {
+    const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), selfLit === undefined ? {} : { selfLit }).rgb, 1);
+    return fragment(B, m);
+  };
+  // The self-light is a texel load of the lava texture (WGSL textureLoad, GLSL texelFetch) inside the `Nrm.y > 0.5` block.
+  const loads = (c: string): number => (c.match(/\b(?:textureLoad|texelFetch)\(/g) ?? []).length;
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: selfLit false leaves out the self-light block, the default and true keep it`, () => {
+      const dflt = code(B);
+      expect(loads(code(B, true))).toBe(loads(dflt));
+      expect(loads(code(B, false))).toBe(loads(dflt) - 1);
+      expect(code(B, false).length).toBeLessThan(dflt.length);
+    });
+  }
+});
+
 describe('finish', () => {
   const finished = (B: Builder, grey?: unknown): string => {
     const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);

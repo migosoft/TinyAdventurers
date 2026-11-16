@@ -5,6 +5,7 @@ import { HEIGHT_RANGE, cloudAt, lookFor, sunLook } from '../../game/sunmath';
 import { TILE, TileMap } from '../../sim/map';
 import { View } from '../../sim/view';
 import { SightMask, type SightLook } from '../sightmask';
+import { CHASM_BED } from '../dips/shape';
 import { CRACK_CAP, CRACK_Z_TILT, RAY_CAP, crackMask, crackOf, packCracks, selectCracks, type Crack } from './cracks';
 
 const sun = (id: number, x = 10, y = 10, on = true): StaticLight => ({ id, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x, y, on });
@@ -63,11 +64,24 @@ describe('crackMask', () => {
   it('is bright at the patch centre on the floor', () => {
     expect(crackMask(plain(), 10.5, 0, 10.5)).toBeGreaterThan(0.5);
   });
-  it('is 0 two tiles beyond rx, above the ceiling and below the floor', () => {
+  it('is 0 two tiles beyond rx, above the ceiling and below the deepest bed', () => {
     const c = plain();
     expect(crackMask(c, c.fx + c.rx + 2, 0, c.fz)).toBe(0);
     expect(crackMask(c, c.fx, c.ceil + 0.1, c.fz)).toBe(0);
-    expect(crackMask(c, c.fx, -0.1, c.fz)).toBe(0);
+    expect(crackMask(c, c.fx, -(CHASM_BED + 1.1), c.fz)).toBe(0);
+  });
+  it('lights a point below the floor (a dip) as the floor point on the same sun ray, keeping the floor size and pattern (#324)', () => {
+    const c = plain();
+    const floor = crackMask(c, c.fx, 0, c.fz);
+    expect(floor).toBeGreaterThan(0.5);
+    for (const y of [-0.1, -1, -CHASM_BED]) {
+      const k = y / c.dir[1];
+      expect(crackMask(c, c.fx + c.dir[0] * k, y, c.fz + c.dir[2] * k)).toBeCloseTo(floor, 9);
+    }
+    // Off the ray the patch ends as it does on the floor: the same offset gives the same value at any depth.
+    const off = crackMask(c, c.fx + 0.6 * c.rx, 0, c.fz);
+    const k = -2 / c.dir[1];
+    expect(crackMask(c, c.fx + 0.6 * c.rx + c.dir[0] * k, -2, c.fz + c.dir[2] * k)).toBeCloseTo(off, 9);
   });
   it('is the same along the sun ray as at its floor point', () => {
     const c = plain();

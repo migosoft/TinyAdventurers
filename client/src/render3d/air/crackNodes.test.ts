@@ -17,6 +17,15 @@ describe('makeCracks', () => {
       const code = fragment(B, m);
       expect(code).toMatch(/\bcr\b/);
     });
+
+    it(`${B.name}: the mask's lower bound reaches below the floor (-(CHASM_BED + 1)), not y >= 0 (#324)`, () => {
+      const cracks = makeCracks();
+      const m = new MeshBasicNodeMaterial();
+      m.colorNode = vec4(cracks.mask(positionWorld, int(0)), 0, 0, 1);
+      const code = fragment(B, m);
+      expect(code).toMatch(/-13\.0/);
+      expect(code).not.toMatch(/>=\s*0\.0\b/);
+    });
   }
 
   it('set writes the count and the slots as packCracks lays them out', () => {

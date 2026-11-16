@@ -1,0 +1,78 @@
+// The dip ground's shader code as three generates it (GLSL and WGSL), built without a GPU (#324).
+import { describe, expect, it } from 'vitest';
+import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
+import { makeLighting, type Lighting } from '../lightNodes';
+import { makeSight } from '../sightNodes';
+import { fragment, type Builder } from '../shaderCode.testutil';
+import { dipMaterial } from './dipNodes';
+
+/** The dip mesh's vertex layout (`DipArrays`). */
+const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1]];
+const geometry = (): BufferGeometry => {
+  const g = new BufferGeometry();
+  for (const [n, s] of DIP_ATTRS) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
+  return g;
+};
+
+/** The material and the options `lightAt` was called with. */
+function build(): { m: ReturnType<typeof dipMaterial>; calls: unknown[] } {
+  const t = new Texture();
+  const real = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
+  const calls: unknown[] = [];
+  const lighting: Lighting = { ...real, lightAt: (p, n, w, o) => { calls.push(o); return real.lightAt(p, n, w, o); } };
+  return { m: dipMaterial(t, t, 64, 64, lighting, t, makeSight()), calls };
+}
+
+/** Each `for` loop's index name and the names of the loops around it (by brace depth). */
+function loops(code: string): { name: string; outer: string[] }[] {
+  const out: { name: string; outer: string[] }[] = [];
+  const open: { name: string; depth: number }[] = [];
+  let depth = 0;
+  for (const line of code.split('\n')) {
+    const m = /\bfor\s*\(\s*(?:int|var)\s+(\w+)/.exec(line);
+    if (m) {
+      out.push({ name: m[1], outer: open.map((o) => o.name) });
+      open.push({ name: m[1], depth });
+    }
+    for (const ch of line) {
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        while (open.length && open[open.length - 1].depth >= depth) open.pop();
+      }
+    }
+  }
+  return out;
+}
+
+describe('dipMaterial', () => {
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: builds`, () => {
+      expect(() => fragment(B, build().m.material, { geometry: geometry() })).not.toThrow();
+    });
+
+    it(`${B.name}: uses no sine hash`, () => {
+      expect(fragment(B, build().m.material, { geometry: geometry() })).not.toContain('43758');
+    });
+
+    it(`${B.name}: keeps its loops apart`, () => {
+      const ls = loops(fragment(B, build().m.material, { geometry: geometry() }));
+      expect(ls.length).toBeGreaterThan(0);
+      for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+    });
+  }
+
+  it('reads the light without the pool glow (selfLit false) and carries the sight step', () => {
+    const { m, calls } = build();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ selfLit: false });
+    expect(fragment(WGSLNodeBuilder, m.material, { geometry: geometry() })).toContain('sightMode');
+  });
+
+  it('hands back the handles the view drives', () => {
+    const { m } = build();
+    expect(m.smooth.value).toBe(0);
+    expect(m.time.value).toBe(0);
+    expect(typeof m.setGround).toBe('function');
+  });
+});

@@ -77,17 +77,23 @@ export interface WorldMaterial {
   setGround(nearest: Texture, linear: Texture): void;
 }
 
-/**
- * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower,
- * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
- * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
- */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared): WorldMaterial {
-  const kind = attribute('kind', 'float');
-  const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
-  const isGround = kind.greaterThan(2.5);
-  const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
+export interface FlatTexel {
+  /** The floor or ground texel (rgba) of the surface point. */
+  texel: N;
+  /** The surface's uv in atlas px. */
+  p0: N;
+  /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
+  smooth: { value: number };
+  /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
+  setGround(nearest: Texture, linear: Texture): void;
+}
 
+/**
+ * The texel code of a flat surface, shared by the world and the dip material: the atlas frame (`kind` 0, floor) or the painted ground
+ * (`kind` > 2.5), read nearest or, with `smooth`, linear at a sharpened position. `kind` is the vertex attribute node. Each call makes its own uniforms.
+ */
+export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, groundStart: Texture, kind: N): FlatTexel {
+  const isGround = kind.greaterThan(2.5);
   const size = vec2(atlasW, atlasH);
   const p0 = uv();
   // Derivatives are taken here, at the top level of the fragment code and outside any branch (WGSL requires uniform control flow).
@@ -111,6 +117,28 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const groundTexel = select(useSmooth, groundLin, groundNear);
   const ground = vec4(select(groundReady.greaterThan(0.5), groundTexel.rgb, vec3(...GRASS_FLAT)), select(groundReady.greaterThan(0.5), groundTexel.a, 1));
   const texel = select(isGround, ground, atlasTexel);
+  return {
+    texel,
+    p0,
+    smooth,
+    setGround(nearest, linear) {
+      groundNear.value = nearest;
+      groundLin.value = linear;
+      groundReady.value = 1;
+    },
+  };
+}
+
+/**
+ * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower,
+ * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
+ * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
+ */
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared): WorldMaterial {
+  const kind = attribute('kind', 'float');
+  const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
+  const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
+  const { texel, p0, smooth, setGround } = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
 
   const wp = positionWorld;
   const cx = floor(wp.x);
@@ -155,11 +183,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
       mode: see.mode, keep: see.keep, target: see.target, ray: see.ray,
     },
     smooth,
-    setGround(nearest, linear) {
-      groundNear.value = nearest;
-      groundLin.value = linear;
-      groundReady.value = 1;
-    },
+    setGround,
   };
 }
 
