@@ -1,0 +1,95 @@
+import { describe, expect, it } from 'vitest';
+import { ANIM, CONST, KIND, TILE_ID } from '../generated/defs';
+import { TILE } from '../sim/map';
+import { liquidsMap } from './liquidsMap';
+import { liquidsScript, type Push } from './liquidsScript';
+
+const none: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
+const map = liquidsMap();
+const tileOf = (e: { x: number; y: number }): number => map.get(Math.floor(e.x / TILE), Math.floor(e.y / TILE));
+const kindOf = (t: number, kind: number) => liquidsScript(t, 0.016, none).ents.filter((e) => e.kind === kind);
+const IMP_CHASM = 102, IMP_WATER = 103, BARREL = 104;
+
+describe('liquidsMap', () => {
+  it('is 18 x 12 with the three dips', () => {
+    expect([map.w, map.h]).toEqual([18, 12]);
+    const count = (id: number): number => Array.from(map.tiles).filter((v) => v === id).length;
+    expect(count(TILE_ID.ShallowWater)).toBeGreaterThan(0);
+    expect(count(TILE_ID.DeepWater)).toBeGreaterThan(0);
+    expect(count(TILE_ID.Lava)).toBeGreaterThan(0);
+    expect(count(TILE_ID.Chasm)).toBeGreaterThanOrEqual(4);
+    // the lava lies against the east wall
+    expect(map.get(16, 4)).toBe(TILE_ID.Lava);
+    expect(map.get(17, 4)).toBe(TILE_ID.Wall);
+  });
+});
+
+describe('liquidsScript', () => {
+  it('has its actors on their terrain', () => {
+    const elf = kindOf(0, KIND.ElvenRanger)[0];
+    expect(tileOf(elf)).toBe(TILE_ID.ShallowWater);
+    const at = (id: number) => liquidsScript(0, 0.016, none).ents.find((e) => e.id === id)!;
+    const dx = (id: number, to: number) => map.get(Math.floor(at(id).x / TILE) + (to === 0 ? 0 : 1), Math.floor(at(id).y / TILE) + (to === 0 ? 1 : 0));
+    for (const id of [IMP_CHASM, IMP_WATER, BARREL]) expect(tileOf(at(id))).toBe(TILE_ID.Floor);
+    expect(dx(IMP_CHASM, 1)).toBe(TILE_ID.Chasm);
+    expect(dx(BARREL, 1)).toBe(TILE_ID.Chasm);
+    expect(dx(IMP_WATER, 0)).toBe(TILE_ID.DeepWater);
+  });
+
+  it('walks the knight into the lava and out', () => {
+    const knightTile = (t: number): number => tileOf(kindOf(t, KIND.Knight)[0]);
+    expect(knightTile(0)).toBe(TILE_ID.Floor);
+    let lava = 0;
+    for (let t = 0; t < 8.4; t += 0.05) if (knightTile(t) === TILE_ID.Lava) lava += 0.05;
+    expect(lava).toBeGreaterThan(5);
+    expect(knightTile(4.5)).toBe(TILE_ID.Lava);
+    expect(knightTile(8.4)).toBe(TILE_ID.Floor); // the loop repeats
+    expect(kindOf(4.5, KIND.Knight)[0].anim).toBe(ANIM.Idle);
+  });
+
+  it('plays a fall', () => {
+    const pushes = { ...none, chasm: 1 };
+    const sinkAt = 1.35;
+    const sinks = liquidsScript(sinkAt, 0.05, pushes).events.filter((e) => e.t === 'Sink');
+    expect(sinks).toHaveLength(1);
+    const s = sinks[0] as Extract<(typeof sinks)[number], { t: 'Sink' }>;
+    expect(s.id).toBe(IMP_CHASM);
+    expect(s.how).toBe(0);
+    expect(map.get(Math.floor(s.x / TILE), Math.floor(s.y / TILE))).toBe(TILE_ID.Chasm);
+    const has = (t: number): boolean => liquidsScript(t, 0.016, pushes).ents.some((e) => e.id === IMP_CHASM);
+    expect(has(sinkAt + CONST.FALL_TIME - 0.01)).toBe(true);
+    expect(has(sinkAt + CONST.FALL_TIME + 0.01)).toBe(false);
+    const died = liquidsScript(sinkAt + CONST.FALL_TIME, 0.05, pushes).events.filter((e) => e.t === 'Died');
+    expect(died).toHaveLength(1);
+    expect(has(sinkAt + 3.2 - 0.01)).toBe(false);
+    expect(has(sinkAt + 3.2 + 0.01)).toBe(true);
+  });
+
+  it('plays a drowning', () => {
+    const pushes = { ...none, water: 2 };
+    const sink = liquidsScript(2.35, 0.05, pushes).events.find((e) => e.t === 'Sink');
+    expect(sink).toMatchObject({ id: IMP_WATER, how: 1 });
+    const s = sink as { x: number; y: number };
+    expect(map.get(Math.floor(s.x / TILE), Math.floor(s.y / TILE))).toBe(TILE_ID.DeepWater);
+    expect(liquidsScript(2.35 + CONST.DROWN_TIME, 0.05, pushes).events.some((e) => e.t === 'Died' && e.id === IMP_WATER)).toBe(true);
+    expect(liquidsScript(2.35 + CONST.DROWN_TIME - 0.05, 0.02, pushes).ents.some((e) => e.id === IMP_WATER)).toBe(true);
+  });
+
+  it('rolls a barrel in and shows its fall anim', () => {
+    const pushes = { ...none, barrel: 1 };
+    const b = liquidsScript(1.35 + 0.2, 0.016, pushes).ents.find((e) => e.id === BARREL)!;
+    expect(b.anim).toBe(2);
+    expect(liquidsScript(1.35 + CONST.FALL_TIME + 0.05, 0.016, pushes).ents.some((e) => e.id === BARREL)).toBe(false);
+  });
+
+  it('emits each event once', () => {
+    const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
+    const dt = 1 / 60;
+    let sinks = 0, died = 0;
+    for (let k = 1; k <= 6 * 60; k++) {
+      for (const e of liquidsScript(k * dt, dt, pushes).events) { if (e.t === 'Sink') sinks++; if (e.t === 'Died') died++; }
+    }
+    expect(sinks).toBe(3);
+    expect(died).toBe(3);
+  });
+});

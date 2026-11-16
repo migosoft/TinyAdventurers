@@ -10,6 +10,7 @@ import { createDemoStage } from './demoStage';
 import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
+import { createLiquidsStage } from './liquidsStage';
 import { createMoodStage } from './moodStage';
 import { createSunlightStage } from './sunlightStage';
 import { parseParams } from './params';
@@ -70,6 +71,13 @@ export async function bootFx(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=4`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createFxStage(assets, p, s, host));
+}
+
+/** `?r3d=liquids` (#324): the sunken water, lava and chasm with wading and pushed figures, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootLiquids(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets, host) => createLiquidsStage(assets, p, s, host));
 }
 
 export interface Run3d {

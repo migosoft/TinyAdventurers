@@ -9,6 +9,13 @@ describe('r3dPage', () => {
   });
 });
 
+describe('r3dPage liquids', () => {
+  it('names the liquids page', () => {
+    expect(r3dPage('?r3d=liquids')).toBe('liquids');
+    expect(isR3dDemo('?r3d=liquids')).toBe(true);
+  });
+});
+
 describe('r3dFlag', () => {
   it('wants3d needs ?r3d and a debug account', () => {
     expect(wants3d('?r3d', true)).toBe(true);

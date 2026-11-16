@@ -1,0 +1,100 @@
+// The script of the ?r3d=liquids page (#324), pure: the actors at time `t` and the events born in (t - dt, t]. Positions are in px (feet).
+import { ANIM, CONST, KIND, SIDE } from '../generated/defs';
+import type { EntState } from '../game/world';
+import type { PictureEv } from '../run/view';
+import { TILE } from '../sim/map';
+
+export type Push = 'chasm' | 'water' | 'barrel';
+export const PUSHES: readonly Push[] = ['chasm', 'water', 'barrel'];
+export interface LiquidsFrame { ents: EntState[]; events: PictureEv[] }
+
+/** Seconds a pushed actor slides to its target cell, and until it is back after the Sink. */
+export const SLIDE_TIME = 0.35;
+export const BACK_TIME = 3.2;
+const EPS = 1e-9;
+
+const ELF_ID = 100, KNIGHT_ID = 101;
+/** The speed of the walkers in tiles per second. */
+const ELF_SPEED = 2, KNIGHT_SPEED = 1.5;
+/** The elf wades up and down the U round the deep: its corners in tiles (all shallow cells). */
+const ELF_PATH: [number, number][] = [[3.5, 5.5], [3.5, 8.5], [6.5, 8.5], [6.5, 5.5]];
+/** The knight's loop: waits, walks into the lava (x 12.5 to 14.5 at y 4.5), stands 5 s, walks out. */
+const K_Y = 4.5, K_X0 = 12.5, K_X1 = 14.5;
+const K_WAIT = 0.6, K_STAND = 5;
+const K_LEG = (K_X1 - K_X0) / KNIGHT_SPEED;
+export const KNIGHT_LOOP = K_WAIT + K_LEG + K_STAND + K_LEG;
+
+interface Pusher { push: Push; id: number; kind: number; from: [number, number]; to: [number, number]; how: number; dur: number; side: number }
+const PUSHERS: readonly Pusher[] = [
+  { push: 'chasm', id: 102, kind: KIND.Imp, from: [9.5, 7.5], to: [10.5, 7.5], how: 0, dur: CONST.FALL_TIME, side: SIDE.Hostile },
+  { push: 'water', id: 103, kind: KIND.Imp, from: [4.5, 4.5], to: [4.5, 5.5], how: 1, dur: CONST.DROWN_TIME, side: SIDE.Hostile },
+  { push: 'barrel', id: 104, kind: KIND.Barrel, from: [9.5, 5.5], to: [10.5, 5.5], how: 0, dur: CONST.FALL_TIME, side: SIDE.Neutral },
+];
+
+const ent = (id: number, kind: number, x: number, y: number, side: number, o: Partial<EntState> = {}): EntState => ({
+  id, kind, x: x * TILE, y: y * TILE, hp: 10, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side, entangled: 0, ...o,
+});
+
+/** The elf on its U, going there and back. */
+function elfAt(t: number): EntState {
+  const legs: number[] = [];
+  for (let i = 1; i < ELF_PATH.length; i++) legs.push(Math.hypot(ELF_PATH[i][0] - ELF_PATH[i - 1][0], ELF_PATH[i][1] - ELF_PATH[i - 1][1]));
+  const len = legs.reduce((a, b) => a + b, 0);
+  let d = (t * ELF_SPEED) % (2 * len);
+  const back = d > len;
+  if (back) d = 2 * len - d;
+  let i = 0;
+  while (i < legs.length - 1 && d > legs[i]) d -= legs[i++];
+  const [a, b] = [ELF_PATH[i], ELF_PATH[i + 1]];
+  const k = legs[i] ? d / legs[i] : 0;
+  const dx = (b[0] - a[0]) * (back ? -1 : 1);
+  return ent(ELF_ID, KIND.ElvenRanger, a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: dx < 0 ? Math.PI : 0 });
+}
+
+/** The knight: floor, into the lava, standing, out again. */
+function knightAt(t: number): EntState {
+  const s = ((t % KNIGHT_LOOP) + KNIGHT_LOOP) % KNIGHT_LOOP;
+  if (s < K_WAIT) return ent(KNIGHT_ID, KIND.Knight, K_X0, K_Y, SIDE.Friendly);
+  if (s < K_WAIT + K_LEG) return ent(KNIGHT_ID, KIND.Knight, K_X0 + (s - K_WAIT) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000 });
+  if (s < K_WAIT + K_LEG + K_STAND) return ent(KNIGHT_ID, KIND.Knight, K_X1, K_Y, SIDE.Friendly);
+  return ent(KNIGHT_ID, KIND.Knight, K_X1 - (s - K_WAIT - K_LEG - K_STAND) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: Math.PI });
+}
+
+/** Events of a push at `p`: the Sink when the slide ends, the Died after the fall's or the drowning's time. */
+function eventsOf(q: Pusher, p: number): { at: number; ev: PictureEv }[] {
+  const at = p + SLIDE_TIME;
+  const [x, y] = [q.to[0] * TILE, q.to[1] * TILE];
+  return [
+    { at, ev: { t: 'Sink', id: q.id, x, y, how: q.how } },
+    { at: at + q.dur, ev: { t: 'Died', id: q.id, kind: q.kind, x, y } },
+  ];
+}
+
+/** How many pushed things are in their fall or drowning at `t`. */
+export function liquidsFalling(t: number, pushes: Record<Push, number | null>): number {
+  let n = 0;
+  for (const q of PUSHERS) {
+    const p = pushes[q.push];
+    if (p !== null && t >= p + SLIDE_TIME - EPS && t < p + SLIDE_TIME + q.dur) n++;
+  }
+  return n;
+}
+
+export function liquidsScript(t: number, dt: number, pushes: Record<Push, number | null>): LiquidsFrame {
+  const ents: EntState[] = [elfAt(t), knightAt(t)];
+  const events: PictureEv[] = [];
+  for (const q of PUSHERS) {
+    const p = pushes[q.push];
+    const rest = ent(q.id, q.kind, q.from[0], q.from[1], q.side);
+    if (p === null || t < p) { ents.push(rest); continue; }
+    const sink = p + SLIDE_TIME;
+    if (t < sink) {
+      const k = (t - p) / SLIDE_TIME;
+      ents.push({ ...rest, x: (q.from[0] + (q.to[0] - q.from[0]) * k) * TILE, y: (q.from[1] + (q.to[1] - q.from[1]) * k) * TILE, ...(q.kind === KIND.Imp ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
+    } else if (t < sink + q.dur) {
+      ents.push({ ...rest, x: q.to[0] * TILE, y: q.to[1] * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
+    } else if (t >= sink + BACK_TIME) ents.push(rest);
+    for (const e of eventsOf(q, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);
+  }
+  return { ents, events };
+}
