@@ -80,6 +80,14 @@ export function liquidsFalling(t: number, pushes: Record<Push, number | null>): 
   return n;
 }
 
+/**
+ * The page's actors at time `t` (s) and the events born in the window (t - dt, t] (each event once when the windows follow each other):
+ * an elf wading up and down the shallow rim, a knight walking into the lava, standing 5 s and walking out, an imp beside the water
+ * and one beside the chasm, a barrel beside the chasm. `pushes`: when each push was asked (s) or null. A pushed imp slides 0.35 s to
+ * its target cell, gets `Sink` (how 0 or 1), stays FALL_TIME or DROWN_TIME, gets `Died` and leaves; it is back after 3.2 s (counted
+ * from the Sink). A pushed barrel rolls in and shows anim 2 for FALL_TIME, then leaves, with no Sink and no Died (as the server does
+ * it); it too is back after 3.2 s, so the button works again.
+ */
 export function liquidsScript(t: number, dt: number, pushes: Record<Push, number | null>): LiquidsFrame {
   const ents: EntState[] = [elfAt(t), knightAt(t)];
   const events: PictureEv[] = [];
@@ -94,7 +102,8 @@ export function liquidsScript(t: number, dt: number, pushes: Record<Push, number
     } else if (t < sink + q.dur) {
       ents.push({ ...rest, x: q.to[0] * TILE, y: q.to[1] * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
     } else if (t >= sink + BACK_TIME) ents.push(rest);
-    for (const e of eventsOf(q, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);
+    // The server sends no Sink and no Died for a barrel (objects.rs): it only shows anim 2 and is gone.
+    if (q.kind !== KIND.Barrel) for (const e of eventsOf(q, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);
   }
   return { ents, events };
 }

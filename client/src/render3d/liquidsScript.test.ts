@@ -79,17 +79,22 @@ describe('liquidsScript', () => {
     const pushes = { ...none, barrel: 1 };
     const b = liquidsScript(1.35 + 0.2, 0.016, pushes).ents.find((e) => e.id === BARREL)!;
     expect(b.anim).toBe(2);
+    expect(liquidsScript(1.35 + CONST.FALL_TIME - 0.01, 0.016, pushes).ents.find((e) => e.id === BARREL)!.anim).toBe(2);
+    let events = 0;
+    for (let k = 1; k <= 6 * 60; k++) events += liquidsScript(k / 60, 1 / 60, pushes).events.length;
+    expect(events).toBe(0);
+    expect(liquidsScript(1.35 + 3.2 + 0.01, 0.016, pushes).ents.some((e) => e.id === BARREL)).toBe(true);
     expect(liquidsScript(1.35 + CONST.FALL_TIME + 0.05, 0.016, pushes).ents.some((e) => e.id === BARREL)).toBe(false);
   });
 
   it('emits each event once', () => {
     const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
     const dt = 1 / 60;
-    let sinks = 0, died = 0;
+    const sinks: number[] = [], died: number[] = [];
     for (let k = 1; k <= 6 * 60; k++) {
-      for (const e of liquidsScript(k * dt, dt, pushes).events) { if (e.t === 'Sink') sinks++; if (e.t === 'Died') died++; }
+      for (const e of liquidsScript(k * dt, dt, pushes).events) { if (e.t === 'Sink') sinks.push(e.id); if (e.t === 'Died') died.push(e.id); }
     }
-    expect(sinks).toBe(3);
-    expect(died).toBe(3);
+    expect(sinks.sort()).toEqual([IMP_CHASM, IMP_WATER]);
+    expect(died.sort()).toEqual([IMP_CHASM, IMP_WATER]); // none for the barrel
   });
 });
