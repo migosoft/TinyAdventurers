@@ -4,7 +4,7 @@ import { coveLayout, placeCovePlants } from '../game/covemath';
 import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from '../game/pixieMath';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
-import type { Cam } from './camera';
+import { project, type Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
 import { CAST_ID0, COVE_PIXIES, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
 import { Forest } from './trees/forest';
@@ -256,6 +256,34 @@ describe('Cove3d', () => {
       expect(ga.n).toBe(2);
       expect(b.n).toBe(0);
       expect(gb.n).toBe(0);
+    }
+  });
+
+  it('keeps the wing pixels beside the orb at every pitch and turn (#340)', () => {
+    const px = 1 / 16;
+    // The screen point of a quad's centre; an upright card is drawn with its height stretched by 1 / cos(pitch) (`cardMaterial`).
+    const centre = (pos: number[], q: number, c: Cam, stretch: boolean) => {
+      let x = 0, y = 0, z = 0;
+      for (let i = 0; i < 6; i++) { x += pos[(q * 6 + i) * 3]; y += pos[(q * 6 + i) * 3 + 1]; z += pos[(q * 6 + i) * 3 + 2]; }
+      const p = project(c, x / 6, (y / 6) / (stretch ? Math.cos(c.pitch) : 1), z / 6);
+      return { sx: p.sx, sy: p.sy };
+    };
+    for (const deg of [30, 45, 48.6]) {
+      for (const yaw of [0, 0.7]) {
+        const c: Cam = { x: 16, z: 12, pitch: (deg * Math.PI) / 180, yaw };
+        const pix = new Pixies3d({ x: 160, y: 100 }, 114, 1, 1, 50);
+        for (const t of [2, 2 + 1 / 60]) {
+          const glows = newGlowBuf(), ghosts = newCardBuf();
+          pix.push(t, c, glows, ghosts, frames, null);
+          const up = pix.at(0, t).wingUp;
+          const orb = centre(glows.position, 1, c, false);
+          const wings = [centre(ghosts.position, 0, c, true), centre(ghosts.position, 1, c, true)].sort((a, b) => a.sx - b.sx);
+          // The card snaps its foot to whole art px on screen, the glow does not: half a px either way.
+          expect(Math.abs(wings[0].sx - (orb.sx - px))).toBeLessThanOrEqual(px / 2 + 1e-6);
+          expect(Math.abs(wings[1].sx - (orb.sx + px))).toBeLessThanOrEqual(px / 2 + 1e-6);
+          for (const w of wings) expect(Math.abs(w.sy - (orb.sy + (up ? px : 0)))).toBeLessThanOrEqual(px / 2 + 1e-6);
+        }
+      }
     }
   });
 

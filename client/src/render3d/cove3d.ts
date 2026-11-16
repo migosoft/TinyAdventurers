@@ -61,9 +61,13 @@ export class Pixies3d {
       pushGlow(glows, p.x, p.y, p.z, GLOW_HALF, [GLOW[0] * PIXIE_GLOW_ALPHA, GLOW[1] * PIXIE_GLOW_ALPHA, GLOW[2] * PIXIE_GLOW_ALPHA], cam);
       pushGlow(glows, p.x, p.y, p.z, CORE_HALF, [CORE[0] * 1.5, CORE[1] * 1.5, CORE[2] * 1.5], cam);
       const oy = p.wingUp ? -1 : 0;
+      // A glow is not stretched, a card's height is (by 1 / cos(pitch), `cardMaterial`): the lift is shrunk by cos(pitch) so the
+      // stretched pixel lands at the orb's own point; the half-px offset centres the 1 px crop (it hangs right of and below its anchor),
+      // one art px to each side of the orb (#340).
+      const lift = p.y * Math.cos(cam.pitch);
       for (const ox of [-1, 1]) {
         pushCard(ghosts, {
-          frame: PX_FRAME, crop: { x: 0, y: 0, w: 1, h: 1 }, x: p.x, z: p.z, lift: p.y, flip: false, originX: 0, footY: 0, scale: 1, offset: [ox, oy],
+          frame: PX_FRAME, crop: { x: 0, y: 0, w: 1, h: 1 }, x: p.x, z: p.z, lift, flip: false, originX: 0, footY: 0, scale: 1, offset: [ox - 0.5, oy - 0.5],
           tint: [1, 1, 1], mode: 1, alpha: PIXIE_WING_ALPHA,
         }, frames, cam);
       }
