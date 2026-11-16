@@ -1,0 +1,98 @@
+import type { TileMap } from '../../sim/map';
+import { cellHeight } from '../heights';
+import { CHUNK, flatSurface, type FrameRects } from '../worldMesh';
+import { bedAt, inDipMesh, kindAt } from './shape';
+
+/** Quads per cell edge of the dip ground. */
+export const DIP_RES = 12;
+
+export interface DipArrays {
+  position: Float32Array;
+  normal: Float32Array;
+  uv: Float32Array;
+  rect: Float32Array;
+  kind: Float32Array;
+  /** The DipKind at each vertex: which bank material it takes. */
+  dip: Float32Array;
+  index: Uint32Array;
+  count: number;
+}
+
+export interface DipChunk { cx: number; cz: number; arrays: DipArrays; min: [number, number, number]; max: [number, number, number] }
+
+const E = 1 / 24;
+// dx, dz of the neighbour, then the inward normal of the edge and the edge's first point (offsets) with its direction.
+const SIDES: { dx: number; dz: number; n: [number, number]; ox: number; oz: number; ax: number; az: number }[] = [
+  { dx: -1, dz: 0, n: [1, 0], ox: 0, oz: 0, ax: 0, az: 1 },
+  { dx: 1, dz: 0, n: [-1, 0], ox: 1, oz: 0, ax: 0, az: 1 },
+  { dx: 0, dz: -1, n: [0, 1], ox: 0, oz: 0, ax: 1, az: 0 },
+  { dx: 0, dz: 1, n: [0, -1], ox: 0, oz: 1, ax: 1, az: 0 },
+];
+
+/** The ground of the dip cells of chunk (cx, cz), or null when it has none. */
+export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): DipChunk | null {
+  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const position: number[] = [], normal: number[] = [], uv: number[] = [], rect: number[] = [], kind: number[] = [], dip: number[] = [];
+  const index: number[] = [];
+  const min: [number, number, number] = [Infinity, Infinity, Infinity], max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  const R = DIP_RES, N = R + 1;
+
+  for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
+    if (!inDipMesh(map, x, z)) continue;
+    const s = flatSurface(map, painted, x, z, frames);
+    const r = s.rect;
+    const push = (px: number, py: number, pz: number, n: [number, number, number]) => {
+      position.push(px, py, pz);
+      normal.push(n[0], n[1], n[2]);
+      uv.push(s.u0 + (px - x) * 16, s.v0 + (pz - z) * 16);
+      rect.push(r.x, r.y, r.w, r.h);
+      kind.push(s.kind);
+      dip.push(kindAt(map, px, pz));
+      min[0] = Math.min(min[0], px); min[1] = Math.min(min[1], py); min[2] = Math.min(min[2], pz);
+      max[0] = Math.max(max[0], px); max[1] = Math.max(max[1], py); max[2] = Math.max(max[2], pz);
+    };
+
+    const base = kind.length;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const px = x + i / R, pz = z + j / R;
+      const dx = (bedAt(map, px + E, pz) - bedAt(map, px - E, pz)) / (2 * E);
+      const dz = (bedAt(map, px, pz + E) - bedAt(map, px, pz - E)) / (2 * E);
+      const len = Math.hypot(dx, 1, dz);
+      push(px, bedAt(map, px, pz), pz, [-dx / len, 1 / len, -dz / len]);
+    }
+    for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
+      const a = base + j * N + i, b = a + 1, c = a + N + 1, d = a + N;
+      index.push(a, c, b, a, d, c);
+    }
+
+    // A skirt closes the slit under a wall (or void) side, where the bed dips below the wall face's foot at y = 0.
+    for (const side of SIDES) {
+      if (cellHeight(map.get(x + side.dx, z + side.dz)) === 0) continue;
+      const pts = Array.from({ length: N }, (_, k) => ({ px: x + side.ox + side.ax * k / R, pz: z + side.oz + side.az * k / R }));
+      const beds = pts.map((p) => bedAt(map, p.px, p.pz));
+      if (beds.every((b) => b >= 0)) continue;
+      const n: [number, number, number] = [side.n[0], 0, side.n[1]];
+      const top = kind.length;
+      for (const p of pts) push(p.px, 0, p.pz, n);
+      const bot = kind.length;
+      pts.forEach((p, k) => push(p.px, Math.min(beds[k], 0), p.pz, n));
+      // (top, bottom, next top) has the normal (-az, 0, ax); flip the winding when that points out of the dip cell.
+      const forward = -side.az * n[0] + side.ax * n[2] > 0;
+      for (let k = 0; k < R; k++) {
+        const t0 = top + k, t1 = t0 + 1, b0 = bot + k, b1 = b0 + 1;
+        if (forward) index.push(t0, b0, t1, t1, b0, b1);
+        else index.push(t0, t1, b0, t1, b1, b0);
+      }
+    }
+  }
+  if (kind.length === 0) return null;
+  return {
+    cx, cz,
+    arrays: {
+      position: new Float32Array(position), normal: new Float32Array(normal), uv: new Float32Array(uv),
+      rect: new Float32Array(rect), kind: new Float32Array(kind), dip: new Float32Array(dip),
+      index: new Uint32Array(index), count: kind.length,
+    },
+    min, max,
+  };
+}

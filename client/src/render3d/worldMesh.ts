@@ -1,6 +1,7 @@
 import { WALL_H, heightAt } from './heights';
 import { isTerrain, type TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
+import { inDipMesh } from './dips/shape';
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
@@ -91,6 +92,20 @@ export function faceFrame(x: number, z: number, side: number, row: number, strai
   return q < 0.015 ? BANNERS[Math.floor(q * 4000) % 4] : 'wall_mid';
 }
 
+/**
+ * What a height-0 cell shows where it is flat: the painted ground (kind ground, the whole image as rect) on a painted map's
+ * GROUND_TILES, else floorFrame(x, z) (kind floor). Terrain cells take the floor frame. (u0, v0) is the uv of the cell's corner (x, z).
+ */
+export function flatSurface(m: TileMap, painted: boolean, x: number, z: number, frames: FrameRects): { kind: number; rect: Rect; u0: number; v0: number } {
+  const t = m.get(x, z);
+  if (painted && !isTerrain(t) && GROUND_TILES.has(t)) {
+    return { kind: KIND.ground, rect: { x: 0, y: 0, w: m.w * 16, h: m.h * 16 }, u0: x * 16, v0: z * 16 };
+  }
+  const r = frames[floorFrame(x, z)];
+  if (!r) throw new Error(`atlas frame missing: ${floorFrame(x, z)}`);
+  return { kind: KIND.floor, rect: r, u0: r.x, v0: r.y };
+}
+
 /** Floor, ground, faces and tops of the cells x in [16cx, min(w, 16cx+16)), z likewise. `painted`: the run has a woodland. */
 export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): Chunk {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(m.w, x0 + CHUNK), z1 = Math.min(m.h, z0 + CHUNK);
@@ -126,15 +141,9 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     const h = heightAt(m, x, z);
     if (h === 0) {
-      const t = m.get(x, z);
-      if (isTerrain(t)) continue;
-      if (painted && GROUND_TILES.has(t)) {
-        const gr: Rect = { x: 0, y: 0, w: m.w * 16, h: m.h * 16 };
-        quad([[x, 0, z, x * 16, z * 16], [x + 1, 0, z, x * 16 + 16, z * 16], [x + 1, 0, z + 1, x * 16 + 16, z * 16 + 16], [x, 0, z + 1, x * 16, z * 16 + 16]], [0, 1, 0], KIND.ground, gr);
-        continue;
-      }
-      const r = frame(floorFrame(x, z));
-      quad([[x, 0, z, r.x, r.y], [x + 1, 0, z, r.x + 16, r.y], [x + 1, 0, z + 1, r.x + 16, r.y + 16], [x, 0, z + 1, r.x, r.y + 16]], [0, 1, 0], KIND.floor, r);
+      if (inDipMesh(m, x, z)) continue;
+      const f = flatSurface(m, painted, x, z, frames), r = f.rect;
+      quad([[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind, r);
       continue;
     }
     quad([[x, h, z, 0, 0], [x + 1, h, z, 0, 0], [x + 1, h, z + 1, 0, 0], [x, h, z + 1, 0, 0]], [0, 1, 0], KIND.top, NO_RECT);

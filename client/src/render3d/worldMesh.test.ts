@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 import { MAP_ROWS, parseMap } from './demoMap';
+import { inDipMesh } from './dips/shape';
 import { WALL_H, heightAt } from './heights';
-import { CHUNK, KIND, buildChunk, chunkGrid, chunksOfTile, faceFrame, floorFrame, tileHash, type Chunk, type FrameRects } from './worldMesh';
+import { CHUNK, KIND, buildChunk, chunkGrid, chunksOfTile, faceFrame, flatSurface, floorFrame, tileHash, type Chunk, type FrameRects } from './worldMesh';
 
 const NAMES = [
   'floor_1', 'floor_2', 'floor_3', 'floor_4', 'floor_5', 'floor_6', 'floor_7', 'floor_8',
@@ -169,6 +170,43 @@ describe('buildChunk', () => {
     for (const tile of [t.ShallowWater, t.DeepWater, t.Lava, t.Chasm]) {
       expect(quads(buildChunk(mapOf(1, 1, [tile]), true, 0, 0, frames)).length, String(tile)).toBe(0);
     }
+  });
+
+  it('leaves every flat cell to exactly one mesh', () => {
+    const t = TILE_ID;
+    const kinds = [t.Floor, t.Floor, t.Floor, t.Wall, t.ShallowWater, t.DeepWater, t.Lava, t.Chasm, t.DoorClosed];
+    let seed = 12345;
+    const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+    const N = 40;
+    const map = mapOf(N, N, Array.from({ length: N * N }, () => kinds[Math.floor(rnd() * kinds.length)]));
+    const check = () => {
+      const { nx, nz } = chunkGrid(map);
+      const floors = new Set<string>();
+      for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) {
+        for (const q of quads(buildChunk(map, false, cx, cz, frames), KIND.floor)) floors.add(`${q.min[0]},${q.min[2]}`);
+      }
+      for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+        if (heightAt(map, x, z) !== 0) continue;
+        expect(floors.has(`${x},${z}`) !== inDipMesh(map, x, z), `cell ${x},${z}`).toBe(true);
+      }
+    };
+    check();
+    for (const [x, z] of [[10, 10], [15, 16], [0, 0], [39, 39], [20, 5]]) {
+      const was = map.get(x, z);
+      map.set(x, z, t.Floor); check();
+      map.set(x, z, t.Chasm); check();
+      map.set(x, z, t.Floor); check();
+      map.set(x, z, was); check();
+    }
+  });
+
+  it('flatSurface gives the floor frame, or the painted ground', () => {
+    const t = TILE_ID;
+    const m = mapOf(3, 1, [t.Floor, t.Chasm, t.Road]);
+    expect(flatSurface(m, false, 0, 0, frames)).toMatchObject({ kind: KIND.floor, rect: frames[floorFrame(0, 0)], u0: frames[floorFrame(0, 0)].x });
+    expect(flatSurface(m, true, 1, 0, frames).kind).toBe(KIND.floor);
+    expect(flatSurface(m, true, 2, 0, frames)).toEqual({ kind: KIND.ground, rect: { x: 0, y: 0, w: 48, h: 16 }, u0: 32, v0: 0 });
+    expect(flatSurface(m, false, 2, 0, frames).kind).toBe(KIND.floor);
   });
 
   it('DoorClosed and DoorOpen are floor', () => {

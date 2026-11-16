@@ -1,6 +1,9 @@
-import { isTerrain, type TileMap } from '../sim/map';
-import { TERRAIN_FPS, terrainLayers } from '../game/terrain-layers';
+import { TILE_ID } from '../generated/defs';
+import type { TileMap } from '../sim/map';
+import { TERRAIN_FPS } from '../game/terrain-layers';
 import { TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainSet } from '../game/terrain-codes';
+import { DIP, LAVA_LEVEL, WATER_LEVEL, dipOf, type DipKind } from './dips/shape';
+import { cellHeight } from './heights';
 import { CHUNK, KIND, pushQuad, type FrameRects, type Rect, type WorldArrays } from './worldMesh';
 
 /** Tiles between the stacked layers of one cell. */
@@ -29,7 +32,10 @@ const rectOf = (frames: FrameRects, name: string): Rect => {
   return r;
 };
 
-/** The terrain layers of the cells in chunk (cx, cz), or null when it has no terrain cell. */
+/**
+ * The liquid plates of chunk (cx, cz): for every cell in the mesh of a water or lava dip (the cell or one of its eight neighbours
+ * is water or lava) the animated base quad(s) at the surface level. No edge overlays, nothing for chasms; null when there is none.
+ */
 export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: FrameRects, clock: number): TerrainChunk | null {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
   const sink = { position: [] as number[], uv: [] as number[], normal: [] as number[], kind: [] as number[], rect: [] as number[] };
@@ -37,20 +43,25 @@ export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: 
   const frame = {} as Record<TerrainSet, number>;
   for (const s of SETS) frame[s] = terrainFrame(s, clock);
 
+  const plate = (set: TerrainSet, x: number, z: number, y: number) => {
+    const p = TERRAIN_PERIOD[set], q = (x % p) + p * (z % p);
+    if (TERRAIN_FRAMES[set] > 1) anim.push({ set, q, first: sink.kind.length });
+    const r = rectOf(frames, `terrain_${set}_f${frame[set]}_q${q}`);
+    pushQuad(sink, [[x, y, z, r.x, r.y], [x + 1, y, z, r.x + 16, r.y], [x + 1, y, z + 1, r.x + 16, r.y + 16], [x, y, z + 1, r.x, r.y + 16]], [0, 1, 0], KIND.floor, r);
+  };
+  /** The cell or one of its eight neighbours is a tile of dip kind `kind`. */
+  const near = (x: number, z: number, kind: DipKind) => {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) if (dipOf(map.get(x + dx, z + dz)) === kind) return true;
+    return false;
+  };
+
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
-    if (!isTerrain(map.get(x, z))) continue;
-    const { base, edges } = terrainLayers(map, x, z);
-    const names: string[] = [];
-    base.forEach((set) => {
-      const p = TERRAIN_PERIOD[set], q = (x % p) + p * (z % p);
-      if (TERRAIN_FRAMES[set] > 1) anim.push({ set, q, first: sink.kind.length + 6 * names.length });
-      names.push(`terrain_${set}_f${frame[set]}_q${q}`);
-    });
-    names.push(...edges);
-    names.forEach((name, i) => {
-      const r = rectOf(frames, name), y = i * LAYER_STEP;
-      pushQuad(sink, [[x, y, z, r.x, r.y], [x + 1, y, z, r.x + 16, r.y], [x + 1, y, z + 1, r.x + 16, r.y + 16], [x, y, z + 1, r.x, r.y + 16]], [0, 1, 0], KIND.floor, r);
-    });
+    if (cellHeight(map.get(x, z)) !== 0) continue;
+    if (near(x, z, DIP.water)) {
+      plate('water', x, z, WATER_LEVEL);
+      if (map.get(x, z) === TILE_ID.DeepWater) plate('deep', x, z, WATER_LEVEL + LAYER_STEP);
+    }
+    if (near(x, z, DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
   }
   if (sink.kind.length === 0) return null;
   return {
