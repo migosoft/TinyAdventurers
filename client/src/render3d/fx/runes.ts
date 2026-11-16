@@ -81,7 +81,7 @@ export const RUNE_N = { windup: 16, instant: 16, primary: 12 } as const;
 const VORTEX_D = 0.5, VORTEX_R = 0.2, VORTEX_SPIN = 9, VORTEX_RUN = 1.6;
 /** A grid unit of a rune in tiles. */
 const RUNE_U = 0.6 * PX;
-/** The sphere's runes are this many times the vortex's (a try for the user to judge, #308: at 1 they were specks on a short cast). */
+/** The sphere's runes are this many times the vortex's (the user approved 2, #308: at 1 they were specks on a short cast). */
 const SPHERE_SIZE = 2;
 /** The centre of the rune sphere above the caster's foot, and its radius range. */
 const SPHERE_Y = 0.75, SPHERE_R0 = 0.85, SPHERE_R1 = 1.2;
