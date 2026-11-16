@@ -4,7 +4,7 @@ import type { Snapshot } from '../../generated/Snapshot';
 import { FIGURES } from '../../game/anim/defs';
 import type { EntState } from '../../game/world';
 import { TileMap } from '../../sim/map';
-import { Effects3d, FX_KIND, clearFxRegistry, type FxFrame } from './effects3d';
+import { Effects3d, FX_KIND, FX_LIFE, clearFxRegistry, type FxFrame } from './effects3d';
 import { registerFigureFx } from './figureFx';
 import { registerBooms } from './booms';
 import { FxTris } from './tris';
@@ -22,10 +22,10 @@ const fig = (id: number, kind: number, o: Partial<DrawnFig> = {}): DrawnFig => (
 
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 80, y: 80, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 1, entangled: 0, ...o });
 
-const frameOf = (now: number, figs: DrawnFig[], o: { ents?: EntState[]; hidden?: number[]; snap?: Partial<Snapshot>; cues?: MimicCue[] } = {}): FxFrame => ({
+const frameOf = (now: number, figs: DrawnFig[], o: { ents?: EntState[]; hidden?: number[]; snap?: Partial<Snapshot>; cues?: MimicCue[]; falls?: Array<{ id: number; x: number; z: number }> } = {}): FxFrame => ({
   ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
   figs, ents: new Map((o.ents ?? []).map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: o.snap as Snapshot | undefined,
-  hidden: new Set(o.hidden ?? []), you: 0, ownCast: null, cues: o.cues,
+  hidden: new Set(o.hidden ?? []), you: 0, ownCast: null, cues: o.cues, falls: o.falls,
 });
 
 beforeEach(() => { clearFxRegistry(); registerFigureFx(); registerBooms(); });
@@ -160,6 +160,21 @@ describe('figure effects', () => {
     const fx = new Effects3d(map);
     fx.frame(frameOf(1, [], { hidden: [8], cues: [{ id: 8, x: 3, z: 3, land: false }] }), newOut());
     expect(fx.records).toBe(0);
+  });
+
+  it('a fall into a chasm makes one dust record at the rim; a hidden id none', () => {
+    const fx = new Effects3d(map);
+    fx.frame(frameOf(1, [], { falls: [{ id: 5, x: 2.5, z: 1.5 }] }), newOut());
+    expect(fx.records).toBe(1);
+    const young = newOut();
+    fx.frame(frameOf(1.1, []), young);
+    expect(young.lit.n + young.tris.n).toBeGreaterThan(0);
+    const old = newOut();
+    fx.frame(frameOf(1 + FX_LIFE[FX_KIND.RimDust] + 0.01, []), old);
+    expect(old.lit.n + old.tris.n).toBe(0);
+    const hid = new Effects3d(map);
+    hid.frame(frameOf(1, [], { hidden: [5], falls: [{ id: 5, x: 2.5, z: 1.5 }] }), newOut());
+    expect(hid.records).toBe(0);
   });
 
   it('a figure first listed late in its action gets no release spark', () => {

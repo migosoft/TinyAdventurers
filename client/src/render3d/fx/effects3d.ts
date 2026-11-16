@@ -44,6 +44,8 @@ export const FX_KIND = {
   MimicLand: 21,
   /** The Shade's veil drifting apart after its death (follows the Shade's id). */
   ShadeVeil: 22,
+  /** The dust where a figure or a barrel goes over a chasm's edge (follows the faller's id; the sight hides it with the figure). */
+  RimDust: 23,
 } as const;
 export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
@@ -72,6 +74,7 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.MimicWake]: 0.6,
   [FX_KIND.MimicLand]: 0.4,
   [FX_KIND.ShadeVeil]: 1,
+  [FX_KIND.RimDust]: 0.4,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */
@@ -104,6 +107,8 @@ export interface FxFrame {
   ownCast: OwnCast | null;
   /** The mimics' one-shot cues of this frame. */
   cues?: readonly MimicCue[];
+  /** The falls into a chasm that began this frame, at the rim (tiles; `FigureOut.falls`). */
+  falls?: readonly { id: number; x: number; z: number }[];
   /** The ground the screen shows (tiles): the hazards draw only inside it. Undefined: no limit. */
   fp?: Footprint;
 }

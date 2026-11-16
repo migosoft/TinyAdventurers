@@ -37,6 +37,8 @@ export interface FxPassIn {
   ownCast: OwnCast | null;
   /** The mimics' one-shot cues of this frame (`FigureOut.cues`). */
   cues?: readonly MimicCue[];
+  /** The falls into a chasm that began this frame (`FigureOut.falls`). */
+  falls?: readonly { id: number; x: number; z: number }[];
   /** The ground the screen shows (tiles). */
   fp?: Footprint;
 }
@@ -88,6 +90,7 @@ export class FxPass {
     fin.figs = p.figs; fin.ents = p.ents; fin.shots = p.shots; fin.hiddenShots = p.hiddenShots; fin.snap = p.snap; fin.you = p.you; fin.ownCast = p.ownCast;
     fin.hidden = p.hidden;
     fin.cues = p.cues;
+    fin.falls = p.falls;
     fin.fp = p.fp;
     const out = this.out;
     fx.frame(fin, out);

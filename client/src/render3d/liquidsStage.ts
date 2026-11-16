@@ -12,6 +12,8 @@ import { atlasBounds } from './atlasBounds';
 import { freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
+import { Effects3d, FX_KIND } from './fx/effects3d';
+import { FxPass } from './fx/pass';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
@@ -28,7 +30,8 @@ import { TILE } from '../sim/map';
 const PAN_SPEED = 12;
 const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
 const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
-const ALL_VISIBLE = { isVisible: (): boolean => true };
+const NONE_IDS: ReadonlySet<number> = new Set();
+const ALL_VISIBLE ={ isVisible: (): boolean => true };
 /**
  * A pinned clock shows a fall in progress: the first frame plays the REPLAY seconds before it as frames of STEP seconds (the events as the
  * script sends them, the figures drawn and thrown away), then the page holds still (the figures get no time).
@@ -58,6 +61,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const cam = { x: map.w / 2, z: map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
   if (opts.push) pushes[opts.push] = 1;
+  const pass = new FxPass(NONE_IDS);
+  const fx = new Effects3d(map);
   let t = opts.start;
   let prev = opts.pinned ? t - STEP : t;
   let warmed = !opts.pinned;
@@ -119,7 +124,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             if (tau < 0) continue;
             const w = liquidsScript(tau, STEP, pushes);
             for (const ev of w.events) figures.event(ev);
-            figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
+            const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
+            for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
           }
           fdt = STEP;
         } else fdt = 0;
@@ -134,9 +140,10 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       if (!c.view) return 0;
 
       const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);
+      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, fp }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
-      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
@@ -159,7 +166,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts,
+          lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
         },
         c.timer,
       );
