@@ -1,4 +1,5 @@
 import { TILE_ID } from '../../generated/defs';
+import { cellHeight } from '../heights';
 import type { TileMap } from '../../sim/map';
 
 /** Which kind of dip a terrain tile makes. */
@@ -93,7 +94,7 @@ export function surfaceAt(map: TileMap, x: number, z: number): number {
 export function inDipMesh(map: TileMap, x: number, z: number): boolean {
   const t = map.get(x, z);
   if (dipOf(t) !== DIP.none) return true;
-  if (t === TILE_ID.Void || t === TILE_ID.Wall || t === TILE_ID.DoorClosed) return false;
+  if (cellHeight(t) !== 0) return false;
   for (let dj = -1; dj <= 1; dj++) {
     for (let di = -1; di <= 1; di++) {
       if ((di || dj) && dipOf(map.get(x + di, z + dj)) !== DIP.none) return true;

@@ -109,6 +109,11 @@ describe('dip shape', () => {
     expect(inDipMesh(w, 0, 0)).toBe(false); // the border wall
     expect(inDipMesh(w, 1, 1)).toBe(true);
     expect(inDipMesh(w, 2, 2)).toBe(true);
+    const d = room('C.', '..');
+    d.set(2, 1, TILE_ID.DoorClosed);
+    d.set(1, 2, TILE_ID.DoorOpen);
+    expect(inDipMesh(d, 2, 1)).toBe(true);
+    expect(inDipMesh(d, 1, 2)).toBe(true);
     const v = room('C.');
     v.set(3, 1, TILE_ID.Void);
     expect(inDipMesh(v, 3, 1)).toBe(false);
