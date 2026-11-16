@@ -1212,6 +1212,35 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(total(o)).toBe(0);
   });
 
+  describe('a barrel pushed into a chasm (F1)', () => {
+    // The drawn spot lags the server's: anim 2 arrives while the interpolated spot is still on the floor cell before the rim (chasm cells 2..3 x 4..5).
+    const push = (startX: number, speed: number, dt: number) => {
+      const fg = dipFigs();
+      const rest = low(make().frame(frame([ent(20, KIND.Barrel, { side: SIDE.Neutral })]), cam()).cards);
+      const barrel = (x: number, anim: number): EntState => ent(20, KIND.Barrel, { x: x * TILE, y: 4.5 * TILE, anim, side: SIDE.Neutral });
+      let now = 10, x = startX - speed * 0.3;
+      while (x < startX - 1e-9) { fg.frame(frame([barrel(x, 0)], { dt, now }), cam()); x += speed * dt; now += dt; }
+      let minLow = Infinity, goneAt = -1, t = 0;
+      for (let i = 0; i < Math.ceil(3 / dt) && goneAt < 0; i++) {
+        const o = fg.frame(frame([barrel(startX, 2)], { dt, now }), cam());
+        t += dt; now += dt;
+        if (total(o) > 0) minLow = Math.min(minLow, low(o.cards) - rest);
+        else goneAt = t;
+      }
+      return { minLow, goneAt };
+    };
+    for (const dt of [1 / 60, 0.05]) {
+      for (const [startX, speed] of [[1.8, 6], [1.5, 0]] as const) {
+        it(`falls into the hole from x = ${startX} at ${speed} tiles/s, dt ${dt}`, () => {
+          const r = push(startX, speed, dt);
+          expect(r.minLow).toBeLessThan(-1);
+          expect(r.goneAt).toBeGreaterThan(0);
+          expect(r.goneAt).toBeLessThan(2.5);
+        });
+      }
+    }
+  });
+
   it('draws no shadow under water or in the air, and one at the bed on the bank above the level', () => {
     const bank = dipFigs().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 0.9 * TILE, y: 1.5 * TILE })]), cam());
     expect(bank.shadows.n).toBe(1);

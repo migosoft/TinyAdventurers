@@ -3,7 +3,7 @@ import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { bedAt, LAVA_LEVEL } from './shape';
 import {
-  FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, standY, startFall, stepFall, stepLavaSink,
+  FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
 const DROWN_TIME = CONST.DROWN_TIME;
@@ -155,5 +155,15 @@ describe('descent', () => {
     expect(standY(-0.4, null)).toBe(-0.4);
     expect(standY(-1.7, 1.05)).toBeCloseTo(LAVA_LEVEL - 1.05);
     expect(standY(-0.1, 1.05)).toBe(-0.1);
+  });
+
+  it('chooses the sink cell: none on a chasm cell or far from one, else the chasm cell the velocity points into', () => {
+    const m = new TileMap(8, 8, new Uint8Array(64).fill(TILE_ID.Floor));
+    m.set(4, 3, TILE_ID.Chasm); m.set(2, 3, TILE_ID.Chasm);
+    expect(sinkCell(m, 4.5, 3.5, 0, 0)).toBeNull();
+    expect(sinkCell(m, 6.5, 6.5, 1, 0)).toBeNull();
+    expect(sinkCell(m, 3.5, 3.5, 3, 0)).toEqual({ cx: 4.5, cz: 3.5 });
+    expect(sinkCell(m, 3.5, 3.5, -3, 0)).toEqual({ cx: 2.5, cz: 3.5 });
+    expect(startFall(3.5, 3.5, 0, 0, 0, { cx: 4.5, cz: 3.5 }).cx).toBe(4.5);
   });
 });

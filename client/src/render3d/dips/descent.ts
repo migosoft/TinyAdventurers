@@ -1,5 +1,6 @@
 import { CHASM_BED, LAVA_LEVEL } from './shape';
-import { CONST } from '../../generated/defs';
+import { CONST, TILE_ID } from '../../generated/defs';
+import type { TileMap } from '../../sim/map';
 
 // First guesses for the user to tune; every number of the descent lives here.
 export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0.5, FALL_MAX_AGE = 3;
@@ -7,10 +8,33 @@ export const LAVA_SINK = 1.05, LAVA_IN = 0.55, LAVA_OUT = 2.5;
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
 /** A fall starting at (x, z) tiles and height y with the figure's drawn speed (tiles/s, capped at SLIDE_MAX); cx, cz: the centre of the cell it sank in. */
-export function startFall(x: number, z: number, y: number, vx: number, vz: number): Faller {
+export function startFall(x: number, z: number, y: number, vx: number, vz: number, cell?: { cx: number; cz: number }): Faller {
   const sp = Math.hypot(vx, vz);
   const k = sp > SLIDE_MAX ? SLIDE_MAX / sp : 1;
-  return { x, z, y, vx: vx * k, vz: vz * k, vy: 0, cx: Math.floor(x) + 0.5, cz: Math.floor(z) + 0.5, age: 0 };
+  return { x, z, y, vx: vx * k, vz: vz * k, vy: 0, cx: cell?.cx ?? Math.floor(x) + 0.5, cz: cell?.cz ?? Math.floor(z) + 0.5, age: 0 };
+}
+
+/**
+ * The cell a fall starting at (x, z) sinks into. A drawn spot can lag the server's (the position is interpolated, the anim is not), so a
+ * barrel's fall may start on the floor before the rim: then the chasm cell nearest to the spot in the 3x3 around it, the one the drawn
+ * velocity points into preferred, gives the centre. Null when the spot is on a chasm cell or no chasm cell is near (the default centre).
+ */
+export function sinkCell(map: TileMap, x: number, z: number, vx: number, vz: number): { cx: number; cz: number } | null {
+  const i0 = Math.floor(x), j0 = Math.floor(z);
+  if (map.get(i0, j0) === TILE_ID.Chasm) return null;
+  const sp = Math.hypot(vx, vz);
+  let best: { cx: number; cz: number } | null = null, bestScore = Infinity;
+  for (let dj = -1; dj <= 1; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      if (map.get(i0 + di, j0 + dj) !== TILE_ID.Chasm) continue;
+      const cx = i0 + di + 0.5, cz = j0 + dj + 0.5;
+      const d = Math.hypot(cx - x, cz - z);
+      const along = sp > 0.5 && d > 0 ? ((cx - x) * vx + (cz - z) * vz) / (d * sp) : 0;
+      const score = d - 0.6 * along;
+      if (score < bestScore) { bestScore = score; best = { cx, cz }; }
+    }
+  }
+  return best;
 }
 
 /** One step. While the bed under it carries it (bed >= y): it is pulled toward (cx, cz) at RIM_PULL and stays on the bed. Else gravity; the sideways step is dropped (and the speed zeroed) when the bed at the new place is above the foot; at the end y is clamped to the bed at the final place, so the foot never ends below the ground. False once it is gone (y <= -FALL_GONE or age > FALL_MAX_AGE). */

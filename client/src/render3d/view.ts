@@ -66,7 +66,7 @@ import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
-import { buildDipChunk, type DipChunk } from './dips/dipMesh';
+import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
 import { LAVA_LEVEL } from './dips/shape';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
@@ -391,13 +391,17 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     c.mesh.geometry.dispose();
     list[i] = null;
   };
-  const buildAt = (cx: number, cz: number): void => {
+  /** The tile of every cell as the chunks were built from it: `tileChanged` rebuilds the dip and plate chunks only when the class changed. */
+  const builtTiles = Uint8Array.from(map.tiles);
+  /** `dips` false: only the world chunk (a change that leaves every cell's dip class alone). */
+  const buildAt = (cx: number, cz: number, dips = true): void => {
     const i = cz * nx + cx;
     dropChunk(worldChunks, i);
-    dropChunk(terrainChunks, i);
-    dropChunk(dipChunks, i);
     const c = buildChunk(map, world.painted, cx, cz, assets.frames);
     if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H, null);
+    if (!dips) return;
+    dropChunk(terrainChunks, i);
+    dropChunk(dipChunks, i);
     const t = buildTerrainChunk(map, cx, cz, assets.frames, clock);
     if (t) terrainChunks[i] = makeChunkMesh(t.arrays, cx, cz, 0, t, LAVA_LEVEL);
     const d = buildDipChunk(map, world.painted, cx, cz, assets.frames);
@@ -641,7 +645,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;
       (heights.image.data as Uint8Array)[z * map.w + x] = Math.round(cellHeight(map.tiles[z * map.w + x]) * 100);
       heights.needsUpdate = true;
-      for (const [cx, cz] of chunksOfTile(map, x, z)) buildAt(cx, cz);
+      const cell = z * map.w + x, was = builtTiles[cell];
+      builtTiles[cell] = map.tiles[cell];
+      const dips = dipClassChanged(was, map.tiles[cell]);
+      for (const [cx, cz] of chunksOfTile(map, x, z)) buildAt(cx, cz, dips);
       rebuildField();
       chunks.total = chunkTotal();
     },

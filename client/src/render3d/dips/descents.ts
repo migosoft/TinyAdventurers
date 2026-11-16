@@ -28,8 +28,8 @@ export class Descents<P> {
   }
 
   /** A fall from (x, z) tiles and height y with the drawn speed (tiles/s): `startFall`'s slide and rim rules. */
-  startFall(id: number, x: number, z: number, y: number, vx: number, vz: number): Descent & { kind: 'fall' } {
-    const d: Descent & { kind: 'fall' } = { kind: 'fall', faller: startFall(x, z, y, vx, vz), gone: false };
+  startFall(id: number, x: number, z: number, y: number, vx: number, vz: number, cell?: { cx: number; cz: number }): Descent & { kind: 'fall' } {
+    const d: Descent & { kind: 'fall' } = { kind: 'fall', faller: startFall(x, z, y, vx, vz, cell), gone: false };
     this.live.set(id, d);
     return d;
   }

@@ -19,7 +19,7 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
-import { drownY, standY, stepLavaSink } from './dips/descent';
+import { drownY, sinkCell, standY, stepLavaSink } from './dips/descent';
 import { bedAt, depthFade, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
@@ -642,7 +642,7 @@ export class Figures3d {
     let d = this.descents.get(id);
     let started = false;
     if (!d && o.start) {
-      d = o.start === 'fall' ? this.descents.startFall(id, x, z, mo.y, mo.vx, mo.vz) : this.descents.startDrown(id, mo.y, now);
+      d = o.start === 'fall' ? this.descents.startFall(id, x, z, mo.y, mo.vx, mo.vz, sinkCell(this.map, x, z, mo.vx, mo.vz) ?? undefined) : this.descents.startDrown(id, mo.y, now);
       started = true;
     }
     if (d?.kind === 'fall') {

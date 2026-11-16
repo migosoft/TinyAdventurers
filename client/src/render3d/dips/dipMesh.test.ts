@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { CHUNK, floorFrame, type FrameRects } from '../worldMesh';
-import { DIP_RES, buildDipChunk, type DipChunk } from './dipMesh';
+import { DIP_RES, buildDipChunk, dipClassChanged, type DipChunk } from './dipMesh';
 import { CHASM_BED, DIP, LIP, bedAt, inDipMesh } from './shape';
 
 const frames: FrameRects = {};
@@ -17,6 +17,20 @@ function open(w: number, h: number, cells: [number, number, number][]) {
   return m;
 }
 const R = DIP_RES, V = (R + 1) * (R + 1);
+
+describe('dipClassChanged (F2)', () => {
+  it('is false for a door toggle and any change that leaves the dip class, height and ground kind alone', () => {
+    expect(dipClassChanged(TILE_ID.DoorOpen, TILE_ID.DoorClosed)).toBe(false);
+    expect(dipClassChanged(TILE_ID.DoorClosed, TILE_ID.DoorOpen)).toBe(false);
+    expect(dipClassChanged(TILE_ID.ShallowWater, TILE_ID.DeepWater)).toBe(false);
+  });
+  it('is true when the dip kind, the height or the painted ground kind changes', () => {
+    expect(dipClassChanged(TILE_ID.Floor, TILE_ID.Chasm)).toBe(true);
+    expect(dipClassChanged(TILE_ID.Lava, TILE_ID.Floor)).toBe(true);
+    expect(dipClassChanged(TILE_ID.Wall, TILE_ID.Floor)).toBe(true);
+    expect(dipClassChanged(TILE_ID.Floor, TILE_ID.DoorClosed)).toBe(true); // a woodland's ground tile becomes a floor frame
+  });
+});
 
 describe('buildDipChunk', () => {
   it('has no chunk without terrain', () => {
@@ -70,6 +84,31 @@ describe('buildDipChunk', () => {
     for (let v = 0; v < c.arrays.count; v++) {
       expect(Math.hypot(n[v * 3], n[v * 3 + 1], n[v * 3 + 2])).toBeCloseTo(1, 5);
       expect(n[v * 3 + 1]).toBeGreaterThan(0);
+    }
+  });
+
+  it('takes the normal by central differences of bedAt at one grid step (1 / DIP_RES), position.y exactly bedAt', () => {
+    const m = open(34, 9, [[15, 4, TILE_ID.Chasm], [16, 4, TILE_ID.Lava], [16, 5, TILE_ID.Lava]]);
+    const h = 1 / R;
+    for (const cx of [0, 1]) {
+      const c = buildDipChunk(m, false, cx, 0, frames)!;
+      const { position: p, normal: n } = c.arrays;
+      let checked = 0;
+      for (let v = 0; v < c.arrays.count; v++) {
+        if (n[v * 3 + 1] === 0) continue; // a skirt vertex (horizontal normal)
+        const x = p[v * 3], z = p[v * 3 + 2];
+        if (Math.abs(p[v * 3 + 1] - bedAt(m, x, z)) > 1e-6) continue; // a skirt's top vertex on the wall side: y = 0
+        const dx = (bedAt(m, x + h, z) - bedAt(m, x - h, z)) / (2 * h);
+        const dz = (bedAt(m, x, z + h) - bedAt(m, x, z - h)) / (2 * h);
+        const len = Math.hypot(dx, 1, dz);
+        // (positions are float32: the point is rounded a little, so the tolerance is not exact)
+        expect(p[v * 3 + 1]).toBeCloseTo(bedAt(m, x, z), 5);
+        expect(n[v * 3]).toBeCloseTo(-dx / len, 3);
+        expect(n[v * 3 + 1]).toBeCloseTo(1 / len, 3);
+        expect(n[v * 3 + 2]).toBeCloseTo(-dz / len, 3);
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(V);
     }
   });
 
