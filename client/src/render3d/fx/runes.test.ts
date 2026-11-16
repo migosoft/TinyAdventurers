@@ -6,7 +6,7 @@ import { TileMap } from '../../sim/map';
 import { newFxBuf } from '../models/fx';
 import { carrierMap } from '../lights';
 import { Effects3d, clearFxRegistry, type FxFrame } from './effects3d';
-import { APPEAR, channelPalette, HOLD, newRune, registerRunes, RUNE_N, RUNE_PALETTES, runeBorn } from './runes';
+import { APPEAR, channelPalette, HOLD, newRune, registerRunes, RUNE_N, RUNE_PALETTES, runeBorn, SPHERE_MIN } from './runes';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -99,6 +99,16 @@ describe('runes', () => {
     // the long wind-up still brings its runes in one by one
     const long = newRune(ID, RUNE_LOOK.Fire, 'windup', 1, 1.2, 0, X, Z, 3);
     expect(runeBorn(long, RUNE_N.windup - 1, RUNE_N.windup)).toBeGreaterThan(runeBorn(long, 0, RUNE_N.windup) + 0.5);
+  });
+
+  it('an instant cast is a short wind-up: the same runes, born over the same share of its time', () => {
+    const instant = newRune(ID, RUNE_LOOK.Holy, 'instant', 1, 0, 0, X, Z, 5), long = newRune(ID, RUNE_LOOK.Holy, 'windup', 1, 1.2, 0, X, Z, 5);
+    expect(instant.release).toBeCloseTo(1 + SPHERE_MIN);
+    expect(RUNE_N.instant).toBe(RUNE_N.windup);
+    const share = (r: typeof long, i: number): number => runeBorn(r, i, RUNE_N.windup) / (r.release! - r.start - APPEAR - HOLD);
+    for (let i = 0; i < RUNE_N.windup; i++) expect(share(instant, i)).toBeCloseTo(share(long, i));
+    // a wind-up shorter than the minimum stands as long as an instant cast
+    expect(newRune(ID, RUNE_LOOK.Holy, 'windup', 1, 0.1, 0, X, Z, 5).release).toBeCloseTo(1 + SPHERE_MIN);
   });
 
   it('primary vortex sits in front', () => {

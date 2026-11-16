@@ -76,17 +76,24 @@ const GLYPHS: readonly (readonly (readonly number[])[])[] = [
   [[0, 4, 0, 1], [0, 1, 1, 0], [1, 0, 2, 1], [2, 1, 2, 4]],
 ];
 
-export const RUNE_N = { windup: 16, instant: 14, primary: 12 } as const;
+export const RUNE_N = { windup: 16, instant: 16, primary: 12 } as const;
 /** The vortex: distance of its ring in front of the caster, the ring's radius, how fast it spins (rad/s), how far it travels. */
 const VORTEX_D = 0.5, VORTEX_R = 0.2, VORTEX_SPIN = 9, VORTEX_RUN = 1.6;
 /** A grid unit of a rune in tiles. */
 const RUNE_U = 0.6 * PX;
 /** The centre of the rune sphere above the caster's foot, and its radius range. */
 const SPHERE_Y = 0.75, SPHERE_R0 = 0.85, SPHERE_R1 = 1.2;
-/** The short swirl of an instant cast before the release, and a primary's before its release. */
-export const INSTANT_SWIRL = 0.25, PRIMARY_SWIRL = 0.2;
-/** A rune grows in over `APPEAR` s and stands whole at least `HOLD` s before it bursts: a rune due later is born earlier (a short cast). */
+/**
+ * One rule for every cast that releases (#308, the user): the runes stand for the cast's wind-up, but never shorter than a minimum
+ * (`SPHERE_MIN` for the sphere, `PRIMARY_SWIRL` for the vortex), so an instant cast is the same picture as a long one, only shorter.
+ * A rune shows at its full size at once and brightens over `APPEAR` s; every rune is whole at least `HOLD` s before the release.
+ */
+export const SPHERE_MIN = 0.3, PRIMARY_SWIRL = 0.2;
 export const APPEAR = 0.1, HOLD = 0.05;
+/** The sphere's runes are born over this share of the time they have; the whole sphere stands for the rest. */
+const BORN_SHARE = 0.85;
+/** The sphere turns faster on a shorter cast: `SPIN_REF / stand time`, between 1 and `SPIN_MAX` times a rune's own rate. */
+const SPIN_REF = 1.2, SPIN_MAX = 4;
 /** A wink-out (a cast broken off) takes this long. */
 export const WINK = 0.2;
 /** The flare around the release (+-). */
@@ -103,7 +110,7 @@ const LIGHT_Y = 0.9, LIGHT_RADIUS = 4.5;
 
 export function newRune(caster: number, look: number, mode: Exclude<RuneMode, 'channel'>, start: number, windupS: number, aim: number, x: number, z: number, seed: number): RuneRec {
   // a primary releases with its bolt: after its wind-up if it has one (a monster's), else after the short swirl (a hero's)
-  const swirl = mode === 'windup' ? windupS : mode === 'primary' ? Math.max(windupS, PRIMARY_SWIRL) : INSTANT_SWIRL;
+  const swirl = Math.max(windupS, mode === 'primary' ? PRIMARY_SWIRL : SPHERE_MIN);
   return { caster, look, mode, start, release: start + swirl, end: null, aim, x, z, seed, lost: -1, pal: null };
 }
 
@@ -120,16 +127,17 @@ const pa: [number, number, number] = [0, 0, 0];
 const pb: [number, number, number] = [0, 0, 0];
 
 /**
- * When rune `i` of `n` shows, seconds after the cast's start: one by one over a wind-up, all at once (staggered a little) for an
- * instant cast, a primary's vortex PRIMARY_SWIRL before its release, one every CHANNEL_GAP for a channel. A rune of a cast that
- * releases is born early enough to grow in whole and stand HOLD s before the burst, also on a short wind-up.
+ * When rune `i` of `n` shows, seconds after the cast's start. The sphere's runes come one by one over the time the cast has (the
+ * same share of it for an instant cast and for a long wind-up); a primary's vortex pops in PRIMARY_SWIRL before its release; a
+ * channel bears one every CHANNEL_GAP. Every rune of a cast that releases is whole (APPEAR) at least HOLD s before the release.
  */
 export function runeBorn(r: RuneRec, i: number, n: number): number {
   const seed = r.seed | 0;
   if (r.mode === 'channel') return i * CHANNEL_GAP;
   const W = r.release === null ? Infinity : r.release - r.start;
-  const due = r.mode === 'windup' ? (i / n) * W * 0.75 + hash3(seed, i, 1) * 0.12 : hash3(seed, i, 1) * 0.05 + (r.mode === 'primary' ? Math.max(0, W - PRIMARY_SWIRL) : 0);
-  return Math.max(0, Math.min(due, W - APPEAR - HOLD));
+  const last = Math.max(0, W - APPEAR - HOLD);
+  if (r.mode === 'primary') return Math.min(hash3(seed, i, 1) * 0.05 + Math.max(0, W - PRIMARY_SWIRL), last);
+  return ((i + hash3(seed, i, 1)) / n) * last * BORN_SHARE;
 }
 
 /** The point of a glyph grid position on the rune's plane (centre `c`, axes `h` and `v`, grid unit `u`, drift `ox`, `oy`), into `p`. */
@@ -168,7 +176,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
     const glyph = GLYPHS[Math.floor(hash3(seed, i, 0) * GLYPHS.length)];
     const born = runeBorn(r, i, n);
     // during a wind-up a few wink out early, irregularly; the rest burst on the release
-    const early = r.mode === 'windup' && hash3(seed, i, 2) < 0.25 ? born + 0.3 + hash3(seed, i, 3) * 0.4 : Infinity;
+    const early = !channel && !prim && hash3(seed, i, 2) < 0.25 ? born + 0.3 + hash3(seed, i, 3) * 0.4 : Infinity;
     const life = prim ? 0.35 + hash3(seed, i, 4) * 0.15 : 0.3 + hash3(seed, i, 4) * 0.3;   // the burst's length, uneven per rune
     const ph = hash3(seed, i, 5) * 6.28;
     if (T < born) continue;
@@ -191,7 +199,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
     const flash = burst ? Math.max(0, 1 - Math.abs(T - releaseRel) / FLARE) : 0;   // they flare as the spell leaves
     const alpha = appear * (1 - dying) * flick;
     if (alpha <= 0.01) continue;
-    const scale = (1 + 0.6 * (1 - appear)) * (1 + 0.4 * (burst ? dying : 0));
+    const scale = 1 + 0.4 * (burst ? dying : 0);   // full size from the first frame; it only grows in the burst
     let cx: number, cy: number, cz: number, face: number;
     if (prim) {
       // a ring round the spell's path spinning in front of the hand; on the release it spirals forward along the path, widening
@@ -212,7 +220,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
       const p0x = pr0 * Math.cos(pa0), p0y = pz0, p0z = pr0 * Math.sin(pa0);
       const rad = SPHERE_R0 + hash3(seed, i, 10) * (SPHERE_R1 - SPHERE_R0);
       const spin = (0.5 + hash3(seed, i, 11) * 0.5) * (i % 2 ? 1 : -1);
-      const rate = channel ? CHANNEL_RATE : r.mode === 'windup' ? 1 : 4;
+      const rate = channel ? CHANNEL_RATE : Math.min(SPIN_MAX, Math.max(1, SPIN_REF / releaseRel));
       const ang = spin * rate * Math.min(age, stop - born), c = Math.cos(ang), s = Math.sin(ang);
       const dot = (p0x * kx_ + p0y * ky_ + p0z * kz_) * (1 - c);
       const tx = p0x * c + (ky_ * p0z - kz_ * p0y) * s + kx_ * dot;
