@@ -3,7 +3,7 @@ import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { bedAt, LAVA_LEVEL } from './shape';
 import {
-  DROWN_SINK, FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
+  DROWN_SINK, FALL_G, FALL_RADIUS, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
 const DROWN_TIME = CONST.DROWN_TIME;
@@ -79,6 +79,31 @@ describe('descent', () => {
       for (const [x, z, vx, vz] of starts) {
         const r = run(bed, startFall(x, z, 0, vx, vz), dt);
         expect(r.gone).toBe(true);
+      }
+    }
+  });
+
+  it('keeps its body (FALL_RADIUS) out of the walls of a chasm one cell wide', () => {
+    const w = 11, h = 11;
+    const tiles = new Uint8Array(w * h).fill(TILE_ID.Floor);
+    for (let j = 0; j < h; j++) tiles[j * w + 5] = TILE_ID.Chasm;
+    const map = new TileMap(w, h, tiles);
+    const bed = (x: number, z: number) => bedAt(map, x, z);
+    const starts: [number, number, number, number][] = [
+      [5.5, 5.5, SLIDE_MAX, 0], [5.5, 5.5, -SLIDE_MAX, 0], [5.05, 5.5, SLIDE_MAX, 0], [5.95, 5.5, -SLIDE_MAX, 0],
+      [5.1, 5.5, 2.1, 2.1], [5.9, 4.5, -2.1, 2.1], [5.5, 5.5, 2.1, 2.1], [5.05, 5.5, 0, 0], [5.95, 5.5, 0, 0], [5.05, 5.5, -1, 2], [5.5, 5.5, 0, SLIDE_MAX],
+    ];
+    for (const dt of [1 / 60, 0.05]) {
+      for (const [x, z, vx, vz] of starts) {
+        const f = startFall(x, z, Math.max(0, bed(x, z)), vx, vz);
+        let steps = 0;
+        const tag = `${x},${z} v ${vx},${vz} dt ${dt}`;
+        while (stepFall(f, dt, bed)) {
+          if (f.y < -1) {
+            for (const dx of [-FALL_RADIUS, 0, FALL_RADIUS]) expect(bed(f.x + dx, f.z), `${tag} at y ${f.y.toFixed(2)} dx ${dx}`).toBeLessThanOrEqual(f.y + 1e-6);
+          }
+          if (++steps > 2000) throw new Error('never gone');
+        }
       }
     }
   });

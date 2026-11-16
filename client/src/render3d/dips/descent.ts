@@ -6,6 +6,8 @@ import type { TileMap } from '../../sim/map';
 export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0.5, FALL_MAX_AGE = 3;
 /** Seconds a drowning figure takes to drop to the bed: a look; the server's rule (CONST.DROWN_TIME) is unchanged. */
 export const DROWN_SINK = 0.4;
+/** The faller's body radius in tiles (a card or model is about 0.6 wide): a falling figure keeps this far from a wall. */
+export const FALL_RADIUS = 0.3;
 export const LAVA_SINK = 1.05, LAVA_IN = 0.55, LAVA_OUT = 2.5;
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
@@ -39,7 +41,7 @@ export function sinkCell(map: TileMap, x: number, z: number, vx: number, vz: num
   return best;
 }
 
-/** One step. While the bed under it carries it (bed >= y): it is pulled toward (cx, cz) at RIM_PULL and stays on the bed. Else gravity; the sideways step is dropped (and the speed zeroed) when the bed at the new place is above the foot; at the end y is clamped to the bed at the final place, so the foot never ends below the ground. False once it is gone (y <= -FALL_GONE or age > FALL_MAX_AGE). */
+/** One step. While the bed under it carries it (bed >= y): it is pulled toward (cx, cz) at RIM_PULL and stays on the bed. Else gravity; each axis' sideways step is dropped (and its speed zeroed) when the bed at the new place or FALL_RADIUS ahead of it is above the foot, and a body overlapping a wall eases toward the cell's centre line at RIM_PULL; at the end y is clamped to the bed at the final place, so the foot never ends below the ground. False once it is gone (y <= -FALL_GONE or age > FALL_MAX_AGE). */
 export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => number): boolean {
   f.age += dt;
   if (f.age > FALL_MAX_AGE) return false;
@@ -55,11 +57,23 @@ export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => n
   }
   const y = f.y + f.vy * dt - 0.5 * FALL_G * dt * dt;
   f.vy -= FALL_G * dt;
-  const nx = f.x + f.vx * dt, nz = f.z + f.vz * dt;
-  if (bed(nx, nz) > y) {
-    f.vx = 0; f.vz = 0;
-  } else {
-    f.x = nx; f.z = nz;
+  // The body has a radius: each axis moves on its own (so a slide along a wall goes on), and is dropped with its speed when the bed
+  // FALL_RADIUS ahead of the new place, or at the place itself, is above the foot.
+  const sx = Math.sign(f.vx), sz = Math.sign(f.vz);
+  const nx = f.x + f.vx * dt;
+  if (f.vx !== 0 && (bed(nx, f.z) > y || bed(nx + sx * FALL_RADIUS, f.z) > y)) f.vx = 0; else f.x = nx;
+  const nz = f.z + f.vz * dt;
+  if (f.vz !== 0 && (bed(f.x, nz) > y || bed(f.x, nz + sz * FALL_RADIUS) > y)) f.vz = 0; else f.z = nz;
+  if (bed(f.x, f.z) > y) { f.vx = 0; f.vz = 0; }
+  // A body that overlaps a wall (a narrow chasm, a sink spot near a bank) eases toward its cell's centre line, on that axis only.
+  const pull = RIM_PULL * dt;
+  if (bed(f.x + FALL_RADIUS, f.z) > y || bed(f.x - FALL_RADIUS, f.z) > y) {
+    const px = f.x + Math.max(-pull, Math.min(pull, f.cx - f.x));
+    if (bed(px, f.z) <= y) f.x = px;
+  }
+  if (bed(f.x, f.z + FALL_RADIUS) > y || bed(f.x, f.z - FALL_RADIUS) > y) {
+    const pz = f.z + Math.max(-pull, Math.min(pull, f.cz - f.z));
+    if (bed(f.x, pz) <= y) f.z = pz;
   }
   const b = bed(f.x, f.z);
   if (y < b) { f.y = b; f.vy = 0; } else f.y = y;
