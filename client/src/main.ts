@@ -328,6 +328,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
             boot3d = null;
             if (mine !== run3dStarts) break;
             console.error('The 3D view could not load:', e);
+            net.send({ t: 'LeaveRun' }); // else the server keeps the hero in the run
             backToLobby();
             lobby.error(`The 3D view could not load: ${String(e)}`);
             break;
