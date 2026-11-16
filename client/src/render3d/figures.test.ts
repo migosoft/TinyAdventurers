@@ -156,6 +156,16 @@ describe('Figures3d', () => {
     expect(out.decals.look[4]).toBeCloseTo(INCORPOREAL_ALPHA, 6);
   });
 
+  it('draws a skull under a figure sleeping on the same spot: the skull comes first in the decals (#318)', () => {
+    const fg = make();
+    fg.event({ t: 'Died', id: 11, x: at(1), y: 8, kind: KIND.Knight });
+    const out = fg.frame(frame([ent(10, KIND.Knight, { effects: 1 << EFFECT.Sleep })]), cam());
+    expect(out.decals.n).toBe(2);
+    // The decal pass draws in buffer order without depth writes: the later quad is on top. The skull's alpha is 0.85, the knight's 1.
+    expect(out.decals.look[4]).toBeCloseTo(0.85, 6);
+    expect(out.decals.look[6 * 5 + 4]).toBeCloseTo(1, 6);
+  });
+
   it('lays a sleeping knight on the floor: body in the decals, every y at LIE_Y', () => {
     const e = ent(10, KIND.Knight, { effects: 1 << EFFECT.Sleep });
     const out = make().frame(frame([e]), cam());

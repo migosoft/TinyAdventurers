@@ -290,6 +290,8 @@ export class Figures3d {
     const seen = new Set<number>();
     this.anchors.clear();
     let drawn = 0;
+    // The skulls first: the floor decals draw in buffer order without depth writes, so a figure sleeping on a skull's spot covers it (2D: the skull is under every figure).
+    this.drawSkulls(cam, out);
     for (const e of f.ents.values()) {
       seen.add(e.id);
       if (isFigureKind(e.kind)) { if (this.figure(e, f, cam, out)) drawn++; }
@@ -317,6 +319,13 @@ export class Figures3d {
 
     this.drawImages(f.dt, cam, out);
     this.drawShots(f, cam, out);
+    this.drawCoins(f.now, cam, out);
+    sortBackToFront(out.ghosts, cam);
+    return out;
+  }
+
+  /** What the fallen left: a skull decal on the floor, or the skull model where the figure was drawn as a model. */
+  private drawSkulls(cam: Cam, out: FigureOut): void {
     let skullPose: Pose3d | null = null;
     for (let si = 0; si < this.skulls.length; si++) {
       const sk = this.skulls[si];
@@ -336,9 +345,6 @@ export class Figures3d {
       }
       pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true, base: this.ground(x, z, 0.3) }, this.frames, cam);
     }
-    this.drawCoins(f.now, cam, out);
-    sortBackToFront(out.ghosts, cam);
-    return out;
   }
 
   /** The torch's foot is the wall's edge: its face plane is the tile line it sits on, and its card hangs `TORCH_OFF` in front. */
