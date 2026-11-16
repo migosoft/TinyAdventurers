@@ -24,7 +24,9 @@ import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
-import type { Assets, WorldInput } from './view';
+import type { Assets, View, WorldInput } from './view';
+import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
+import { tilesSeed } from './cover/moss';
 import { TILE } from '../sim/map';
 
 const PAN_SPEED = 12;
@@ -94,8 +96,18 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   };
   host?.setPageButtons(PUSHES.map((k) => ({ name: NAMES[k], pressed: null, press: () => { ask(k); } })));
 
+  // The page's cover: the moss along the pool (`ignoreLava`: a run's dungeon with lava has no moss, this room shows every terrain),
+  // built whole at the first build and kept for the rebuilds.
+  let job: CoverJob | null = null;
   return {
     world,
+    built(view: View): void {
+      if (!job) {
+        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [] }, { ignoreLava: true }), tilesSeed(map));
+        job.step(Infinity);
+      }
+      view.setCover(job.result()!);
+    },
     frame(c: StageCtx): number {
       const dt = c.dt / opts.slow;
       if (!opts.pinned) t += dt;
@@ -167,6 +179,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
+          cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
         },
         c.timer,
       );

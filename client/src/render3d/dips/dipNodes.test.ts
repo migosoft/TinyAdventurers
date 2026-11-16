@@ -22,7 +22,7 @@ function build(): { m: ReturnType<typeof dipMaterial>; calls: unknown[] } {
   const real = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
   const calls: unknown[] = [];
   const lighting: Lighting = { ...real, lightAt: (p, n, w, o) => { calls.push(o); return real.lightAt(p, n, w, o); } };
-  return { m: dipMaterial(t, t, 64, 64, lighting, t, makeSight()), calls };
+  return { m: dipMaterial(t, t, 64, 64, lighting, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1))), calls };
 }
 
 /** Each `for` loop's index name and the names of the loops around it (by brace depth). */

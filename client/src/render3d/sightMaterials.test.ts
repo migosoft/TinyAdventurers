@@ -42,7 +42,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, world: true },
     // The ground cover (#330): sheets and bushels end with the sight step.
     // The dips' ground (#324): floor above, bank rock below.
-    { name: 'dip', m: dipMaterial(t, t, 64, 64, l, t, sight).material, world: true, attrs: DIP_ATTRS },
+    { name: 'dip', m: dipMaterial(t, t, 64, 64, l, t, sight, cover).material, world: true, attrs: DIP_ATTRS },
     { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
     { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },

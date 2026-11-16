@@ -8,6 +8,7 @@ import { abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld,
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { flatTexel } from '../materials';
+import { coverTexel, kindLook, type CoverShared } from '../cover/coverRead';
 import { fbm2, hash21, vnoise2 } from '../noiseNodes';
 import { LAVA_LEVEL } from './shape';
 
@@ -91,9 +92,6 @@ const SHARD_FREQ = 1.35, CRACK_REACH = 0.9, CRACK_RAGGED = 0.5, CRACK_WIDTH = 0.
 /** The floor by lava: how far the scorching runs (tiles) and how dark it makes the floor, the soot's colour and cover, how far the glow in the tile joints and cracks runs, its colour and the cracks' width (in pieces). */
 const SCORCH_REACH = 0.9, SCORCH_DARK = 0.3, SOOT_COVER = 0.45, EMBER_REACH = 0.5, EMBER_WIDTH = 0.07;
 const SOOT = vec3(0.045, 0.03, 0.026), EMBER = vec3(0.85, 0.24, 0.04);
-/** The floor by water: how far the damp runs (tiles) and how dark it makes the floor, how far the moss grows, its colour and how much of a mossy spot it covers. */
-const DAMP_REACH = 0.8, DAMP_DARK = 0.55, MOSS_REACH = 0.5, MOSS_COVER = 0.85;
-const MOSS = vec3(0.075, 0.12, 0.045);
 /**
  * The piece of a jittered grid `q` lies in (a Voronoi cell: a shard with straight edges): its random id 0..1 and how far `q` is inside
  * its border (0 on the border). Nine cells, unrolled at build time (no shader loop); sine-free hashes only.
@@ -129,7 +127,7 @@ export interface DipMaterial {
  * The dip ground: `mix(floor texel, rock, bank)` by the depth below the floor, lit with `lightAt` (without the lava cell's own glow: the
  * material draws a band of it at the lava's level), then the sight step. Opaque. `time` drives the band.
  */
-export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, sight: Sight): DipMaterial {
+export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, sight: Sight, cover: CoverShared): DipMaterial {
   const kind = attribute('kind', 'float');
   const dip = attribute('dip', 'float');
   const normal = attribute('normal', 'vec3');
@@ -165,8 +163,8 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
 
-  // The floor along a rim is marked by what lies beside it (the three masks of `rimAt`: 0.5 on the outline, 0 half a tile out):
-  // damp and moss by water, soot and glowing cracks by lava, cracks and broken-off pieces by a chasm.
+  // The floor along a rim is marked by what lies beside it: moss by water, soot and glowing cracks by lava, cracks and broken-off
+  // pieces by a chasm.
   // `near` (1 on the dip's cells, 0 one tile away) says how far a mark runs, `rim` (the outline's own mask) where the outline is.
   const rim = attribute('rim', 'vec3');
   const near = attribute('near', 'vec3');
@@ -175,14 +173,14 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const joint = float(1).sub(smoothstep(0.02, 0.09, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
   const patchy = vnoise2(wp.xz.mul(2.6).add(7)).sub(0.5);
 
-  const damp = smoothstep(1 - DAMP_REACH, 1, near.x.add(patchy.mul(0.35)));
-  const mossHere = smoothstep(1 - MOSS_REACH, 0.95, near.x.add(patchy.mul(0.3)));
-  const mossy = smoothstep(0.42, 0.62, vnoise2(wp.xz.mul(4.2).add(3)).add(joint.mul(0.3))).mul(mossHere);
-  const moss = MOSS.mul(float(0.7).add(vnoise2(wp.xz.mul(23).add(1)).mul(0.6)));
-  const byWater = mix(flat.texel.rgb.mul(mix(float(1), float(DAMP_DARK), damp)), moss, mossy.mul(MOSS_COVER));
+  // By water the rim is the game's own moss (the ground cover, #330: `cover/moss.ts` grows it along every pool). The floor under it is
+  // drawn as the world material draws it: darkened under standing cover, or the cover's colour flat while the layer is off.
+  const grown = coverTexel(cover, floor(wp.xz.mul(16)));
+  const covered = grown.h.greaterThan(0.5);
+  const floorTexel = select(covered, select(cover.on.greaterThan(0.5), flat.texel.rgb.mul(kindLook(grown.id).darken), grown.rgb), flat.texel.rgb);
 
   const scorch = smoothstep(1 - SCORCH_REACH, 1, near.y.add(patchy.mul(0.35)));
-  const byLava = mix(byWater.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
+  const byLava = mix(floorTexel.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
   const emberLine = max(joint.mul(0.6), float(1).sub(smoothstep(0, EMBER_WIDTH, sh.edge)));
   const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, 0.98, near.y.add(patchy.mul(0.3)))).mul(float(0.55).add(glowNoise.mul(0.6))).mul(float(1).sub(bank));
 

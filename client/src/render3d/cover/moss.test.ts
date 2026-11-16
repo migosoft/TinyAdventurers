@@ -6,6 +6,7 @@ import { TILE, TileMap } from '../../sim/map';
 import { COVER } from './kinds';
 import { mossSource, MOSS, MOSS_TONES, tilesSeed } from './moss';
 import type { CoverSource } from './source';
+import { rimAt } from '../dips/shape';
 
 // 5 x 5 rooms of 7 x 7 floor, walls between (1 tile), 1-tile doors in the walls between neighbours in a row,
 // a 2 x 2 pool in room (1,1), and a 1-wide corridor leaving the grid at the bottom right.
@@ -46,7 +47,52 @@ describe('mossSource', () => {
     expect(mossSource(new TileMap(W, H, t), null)).toBeNull();
   });
 
-  it('keeps off doors, their neighbours, water and its neighbours, and corridors', () => {
+  it('rims every pool with moss, in a room the area noise leaves bare too, and keeps it off the bank', () => {
+    const m = roomsMap(), s = make(m); // not `everywhere`: only the waterside is certain
+    const pool = roomOrigin(1, 1);
+    // The floor tile left of the pool's upper left water tile: moss at its edge to the water, none at its far edge.
+    const tx = pool.x + 1, ty = pool.y + 2;
+    const at = (lx: number, ly: number) => (ty * TILE + ly) * W * TILE + tx * TILE + lx;
+    let nearEdge = 0, farEdge = 0;
+    for (let ly = 0; ly < TILE; ly++) {
+      for (let lx = TILE - 5; lx < TILE; lx++) nearEdge += s.grow[at(lx, ly)];
+      for (let lx = 0; lx < 2; lx++) farEdge += s.grow[at(lx, ly)];
+    }
+    expect(nearEdge).toBeGreaterThan(20);
+    expect(farEdge).toBe(0);
+    // A tile that touches the pool only by its corner is waterside too.
+    let corner = 0;
+    px(pool.x + 1, pool.y + 1, (i) => { corner += s.grow[i]; });
+    expect(corner).toBeGreaterThan(0);
+    // Inside the pool's rounded outline the ground falls into the water: no moss there and none may creep there.
+    let onBank = 0;
+    for (let ty2 = pool.y + 1; ty2 <= pool.y + 4; ty2++) for (let tx2 = pool.x + 1; tx2 <= pool.x + 4; tx2++) {
+      for (let ly = 0; ly < TILE; ly++) for (let lx = 0; lx < TILE; lx++) {
+        const x = tx2 * TILE + lx, y = ty2 * TILE + ly;
+        if (rimAt(m, (x + 0.5) / TILE, (y + 0.5) / TILE)[0] >= MOSS.waterEdge) onBank += s.grow[y * W * TILE + x] + s.allow[y * W * TILE + x];
+      }
+    }
+    expect(onBank).toBe(0);
+    // Water tiles themselves carry nothing.
+    let inWater = 0;
+    px(pool.x + 2, pool.y + 2, (i) => { inWater += s.grow[i] + s.allow[i]; });
+    expect(inWater).toBe(0);
+  });
+
+  it('grows with lava on the map only when asked to ignore it', () => {
+    const m = roomsMap(), t = m.tiles.slice();
+    t[(roomOrigin(2, 2).y + 1) * W + roomOrigin(2, 2).x + 1] = TILE_ID.Lava;
+    const withLava = new TileMap(W, H, t);
+    expect(mossSource(withLava, null)).toBeNull();
+    const s = run(mossSource(withLava, null, { ignoreLava: true })!);
+    expect(s.grow.reduce((a, v) => a + v, 0)).toBeGreaterThan(0);
+    // The tiles beside the lava stay bare.
+    let byLava = 0;
+    px(roomOrigin(2, 2).x + 2, roomOrigin(2, 2).y + 1, (i) => { byLava += s.grow[i] + s.allow[i]; });
+    expect(byLava).toBe(0);
+  });
+
+  it('keeps off doors, their neighbours, water tiles, non-floor tiles and corridors', () => {
     const m = roomsMap(), s = make(m, null, true);
     const bad: [number, number][] = [];
     for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) {
@@ -54,7 +100,7 @@ describe('mossSource', () => {
       let near = false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         const u = m.get(tx + dx, ty + dy);
-        if (u === TILE_ID.DoorOpen || u === TILE_ID.ShallowWater) near = true;
+        if (u === TILE_ID.DoorOpen) near = true;
       }
       if (near || t !== TILE_ID.Floor) bad.push([tx, ty]);
     }
@@ -139,6 +185,10 @@ describe('mossSource', () => {
         let any = false;
         px(tx, ty, (i) => { if (s.grow[i]) any = true; });
         if (!any) continue;
+        // A waterside tile is mossy whatever the area noise says (the rim of a pool).
+        let wet = false;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (m.get(tx + dx, ty + dy) === TILE_ID.ShallowWater) wet = true;
+        if (wet) continue;
         checked++;
         let near = false;
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (mossy(tx + dx, ty + dy)) near = true;

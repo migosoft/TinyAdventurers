@@ -327,7 +327,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType));
   const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
   const material = wm.material;
-  const dm = dipMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, sight);
+  const dm = dipMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, sight, cover);
 
   const scene = new Scene();
   const { nx, nz } = chunkGrid(map);

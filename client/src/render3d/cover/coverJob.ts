@@ -98,7 +98,7 @@ export function coverJob(sources: readonly CoverSource[], seed: number): CoverJo
 export function coverSources(
   map: TileMap,
   info: { woodland: { seed: number } | null; cove: CoveInfo | null; spawnRow: number; /** The cove's bushel spots (`Cove3d.bushelSpots()`). */ spots: BushelSpot[] },
-  opts?: { everywhere?: boolean },
+  opts?: { everywhere?: boolean; ignoreLava?: boolean },
 ): CoverSource[] {
   if (info.woodland) return [woodlandSource(map, info.woodland.seed, info.spawnRow)];
   const out: CoverSource[] = [];

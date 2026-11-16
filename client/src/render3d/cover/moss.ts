@@ -6,10 +6,11 @@ import { noise, type Rgb } from '../../game/covemath';
 import { P } from '../../game/vegetation/canvas';
 import { TILE, type TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
+import { rimAt } from '../dips/shape';
 import { COVER } from './kinds';
 import type { CoverSource } from './source';
 
-export const MOSS = { area: 12, areaCut: 0.62, cornerReach: 12, wallReach: 6, wobble: 4, patchChance: 0.06, patchR: [4, 9] } as const; // first guesses
+export const MOSS = { area: 12, areaCut: 0.62, cornerReach: 12, wallReach: 6, waterReach: 9, waterEdge: 0.42, wobble: 4, patchChance: 0.06, patchR: [4, 9] } as const; // first guesses
 
 /** Dark to light. */
 export const MOSS_TONES: Rgb[] = [P['5'], P['0'], P['6'], P['1']];
@@ -29,32 +30,43 @@ function hash(seed: number, a: number, b: number, c: number): number {
   return (h >>> 0) / 4294967296;
 }
 
-const BAD_NEIGHBOUR = new Set<number>([TILE_ID.DoorOpen, TILE_ID.DoorClosed, TILE_ID.ShallowWater, TILE_ID.DeepWater, TILE_ID.Lava, TILE_ID.Chasm]);
+const BAD_NEIGHBOUR = new Set<number>([TILE_ID.DoorOpen, TILE_ID.DoorClosed, TILE_ID.Lava, TILE_ID.Chasm]);
+const isWater = (t: number): boolean => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
 
-export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywhere?: boolean }): CoverSource | null {
+/**
+ * `everywhere`: every eligible tile is mossy (the dev scene). `ignoreLava`: a map with lava still grows moss (a dev page that shows
+ * every terrain in one room; a run's dungeon with lava has none).
+ */
+export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywhere?: boolean; ignoreLava?: boolean }): CoverSource | null {
   const everywhere = opts?.everywhere ?? false;
   const { w: tw, h: th } = map;
-  for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === TILE_ID.Lava) return null;
+  if (!opts?.ignoreLava) for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === TILE_ID.Lava) return null;
   const seed = tilesSeed(map);
   const w = tw * TILE, h = th * TILE;
   const wall = (x: number, z: number): boolean => heightAt(map, x, z) > 0;
 
-  const eligible = new Uint8Array(tw * th);
+  // A waterside tile (a Floor tile with water among its eight neighbours) is always mossy, corridor or not: moss rims every pool.
+  const eligible = new Uint8Array(tw * th), waterside = new Uint8Array(tw * th);
   for (let ty = 0; ty < th; ty++) for (let tx = 0; tx < tw; tx++) {
     if (map.get(tx, ty) !== TILE_ID.Floor) continue;
     if (cove && tx >= cove.x && tx < cove.x + cove.w && ty >= cove.y && ty < cove.y + cove.h) continue;
-    let ok = true;
-    for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1; dx++) if (BAD_NEIGHBOUR.has(map.get(tx + dx, ty + dz))) { ok = false; break; }
+    let ok = true, wet = false;
+    for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const t = map.get(tx + dx, ty + dz);
+      if (BAD_NEIGHBOUR.has(t)) { ok = false; break; }
+      if (isWater(t)) wet = true;
+    }
     if (!ok) continue;
-    if ((wall(tx - 1, ty) && wall(tx + 1, ty)) || (wall(tx, ty - 1) && wall(tx, ty + 1))) continue; // corridor
+    if (!wet && ((wall(tx - 1, ty) && wall(tx + 1, ty)) || (wall(tx, ty - 1) && wall(tx, ty + 1)))) continue; // corridor
     eligible[ty * tw + tx] = 1;
+    if (wet) waterside[ty * tw + tx] = 1;
   }
 
   const area = noise(seed, MOSS.area * TILE), wobble = noise(seed + 1, 48), fine = noise(seed + 2, 6);
   const mossy = new Uint8Array(tw * th);
   for (let ty = 0; ty < th; ty++) for (let tx = 0; tx < tw; tx++) {
     const i = ty * tw + tx;
-    if (eligible[i] && (everywhere || area(tx * TILE + TILE / 2, ty * TILE + TILE / 2) > MOSS.areaCut)) mossy[i] = 1;
+    if (eligible[i] && (waterside[i] || everywhere || area(tx * TILE + TILE / 2, ty * TILE + TILE / 2) > MOSS.areaCut)) mossy[i] = 1;
   }
 
   /** One free patch per lucky mossy tile: an ellipse at a hashed point of the tile. */
@@ -87,6 +99,9 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
         const n = fine(x, y) * 0.7 + hash(seed, x, y, 20) * 0.3;
         const tone = MOSS_TONES[Math.min(MOSS_TONES.length - 1, Math.floor(n * n * MOSS_TONES.length))]; // darker tones commoner
         colour[o * 4] = tone[0]; colour[o * 4 + 1] = tone[1]; colour[o * 4 + 2] = tone[2]; colour[o * 4 + 3] = 255;
+        // Beside water the ground falls into the pool inside the rounded outline (dips/shape.ts): no moss on the bank, and none creeps there.
+        const dry = !waterside[i] || rimAt(map, (x + 0.5) / TILE, (y + 0.5) / TILE)[0] < MOSS.waterEdge;
+        if (!dry) continue;
         allow[o] = 1;
         if (!mossy[i]) continue;
         let d = 99;
@@ -99,6 +114,17 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
           }
         }
         let on = reach > 0 && d < reach + (wobble(x, y) - 0.5) * 2 * MOSS.wobble;
+        if (!on && waterside[i]) {
+          // From the water's edge: the distance to the nearest water tile, like the distance to a wall above.
+          let dw = 99;
+          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+            if ((dx || dz) && isWater(map.get(tx + dx, ty + dz))) {
+              const ex = dx < 0 ? lx + 1 : dx > 0 ? TILE - lx : 0, ez = dz < 0 ? ly + 1 : dz > 0 ? TILE - ly : 0;
+              dw = Math.min(dw, Math.hypot(ex, ez));
+            }
+          }
+          on = dw < MOSS.waterReach + (wobble(x, y) - 0.5) * 2 * MOSS.wobble;
+        }
         if (!on) for (const p of patches) if (((x + 0.5 - p.x) / p.rx) ** 2 + ((y + 0.5 - p.y) / p.ry) ** 2 < 1) { on = true; break; }
         if (on) grow[o] = 1;
       }
