@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DRIP_EVERY, MAX_DRIPS } from '../../game/moodmath';
+import { WATER_LEVEL } from '../dips/shape';
 import { newParts } from './airParts';
 import { Drips } from './drips';
 import { seeded } from './air.testutil';
@@ -46,7 +47,7 @@ describe('drips', () => {
     guard = 0;
     while (parts.rings.count === 0 && guard++ < 100) d.step(0.05, w, true, parts);
     expect(parts.rings.count).toBeGreaterThan(0);
-    expect(parts.rings.pos[1]).toBeCloseTo(0.01, 6);
+    expect(parts.rings.pos[1]).toBeCloseTo(WATER_LEVEL + 0.01, 6);
     const r0 = parts.rings.radius[0], a0 = parts.rings.alpha[0];
     d.step(0.2, w, true, parts);
     expect(parts.rings.radius[0]).toBeGreaterThan(r0);

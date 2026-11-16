@@ -1,6 +1,7 @@
 // Water drips (#307): a port of game/mood-drips.ts into world tiles. A drop falls into a pool, leaving two ripple rings (real circles
 // on the water, no 3/4 flattening) and two splash pixels.
 import { DRIP_EVERY, MAX_DRIPS, spawnCount } from '../../game/moodmath';
+import { WATER_LEVEL } from '../dips/shape';
 import { PX } from './airCtx';
 import type { AirParts } from './airParts';
 
@@ -9,8 +10,8 @@ export const DRIP_FALL = 0.35;
 export const DRIP_RING = 1.0;
 /** Where a drop starts: above the wall tops (first guess), tiles. */
 export const DRIP_TOP = 3;
-/** The rings and splash lie this far above the water's surface (tiles; the water is at 0). */
-export const WATER_Y = 0.01;
+/** The rings and splash lie this far above the water's surface (tiles; the surface is at WATER_LEVEL, below the floor). */
+export const WATER_Y = WATER_LEVEL + 0.01;
 /** The drop's width in tiles (1 art px); the splash pixels are the same. */
 export const DROP_SIZE = PX;
 /** The drops' and splash pixels' colour (the 2D 0xd8ecff); the renderer tints them with it. */

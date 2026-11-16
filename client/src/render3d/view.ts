@@ -66,6 +66,9 @@ import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
+import { buildDipChunk, type DipChunk } from './dips/dipMesh';
+import { dipMaterial } from './dips/dipNodes';
+import { LAVA_LEVEL } from './dips/shape';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
@@ -324,6 +327,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType));
   const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
   const material = wm.material;
+  const dm = dipMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, sight);
 
   const scene = new Scene();
   const { nx, nz } = chunkGrid(map);
@@ -334,8 +338,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   let inPrepass = false;
   const worldChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const terrainChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const dipChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   let clock = 0;
-  const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number, terrain: TerrainChunk | null): ChunkMesh => {
+  const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number, terrain: TerrainChunk | null, bottom = 0): ChunkMesh => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(a.position, 3));
     const uvA = new BufferAttribute(a.uv, 2), rectA = new BufferAttribute(a.rect, 4);
@@ -345,12 +350,29 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
     g.setAttribute('rect', rectA);
     const box = new Box3(
-      new Vector3(cx * CHUNK, 0, cz * CHUNK),
+      new Vector3(cx * CHUNK, bottom, cz * CHUNK),
       new Vector3(Math.min(map.w, cx * CHUNK + CHUNK), top, Math.min(map.h, cz * CHUNK + CHUNK)),
     );
+    return finishMesh(g, box, material, terrain);
+  };
+  /** The dip ground of a chunk: six attributes and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
+  const makeDipMesh = (d: DipChunk): ChunkMesh => {
+    const a = d.arrays;
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(a.position, 3));
+    g.setAttribute('normal', new BufferAttribute(a.normal, 3));
+    g.setAttribute('uv', new BufferAttribute(a.uv, 2));
+    g.setAttribute('rect', new BufferAttribute(a.rect, 4));
+    g.setAttribute('kind', new BufferAttribute(a.kind, 1));
+    g.setAttribute('dip', new BufferAttribute(a.dip, 1));
+    g.setIndex(new BufferAttribute(a.index, 1));
+    const box = new Box3(new Vector3(...d.min), new Vector3(...d.max));
+    return finishMesh(g, box, dm.material, null);
+  };
+  const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial, terrain: TerrainChunk | null): ChunkMesh => {
     g.boundingBox = box;
     g.boundingSphere = box.getBoundingSphere(new Sphere());
-    const mesh = new Mesh(g, material);
+    const mesh = new Mesh(g, mat);
     mesh.frustumCulled = true;
     const cm: ChunkMesh = { mesh, terrain, seen: false };
     mesh.onBeforeRender = () => {
@@ -373,13 +395,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const i = cz * nx + cx;
     dropChunk(worldChunks, i);
     dropChunk(terrainChunks, i);
+    dropChunk(dipChunks, i);
     const c = buildChunk(map, world.painted, cx, cz, assets.frames);
     if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H, null);
     const t = buildTerrainChunk(map, cx, cz, assets.frames, clock);
-    if (t) terrainChunks[i] = makeChunkMesh(t.arrays, cx, cz, 0.1, t);
+    if (t) terrainChunks[i] = makeChunkMesh(t.arrays, cx, cz, 0, t, LAVA_LEVEL);
+    const d = buildDipChunk(map, world.painted, cx, cz, assets.frames);
+    if (d) dipChunks[i] = makeDipMesh(d);
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-  const chunkTotal = (): number => worldChunks.filter(Boolean).length + terrainChunks.filter(Boolean).length;
+  const chunkTotal = (): number => worldChunks.filter(Boolean).length + terrainChunks.filter(Boolean).length + dipChunks.filter(Boolean).length;
   const chunks = { total: chunkTotal(), drawn: 0 };
 
   // The force field: one unlit, translucent mesh over every closed door cell.
@@ -634,6 +659,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       };
       const next = [mk(NearestFilter), mk(LinearFilter)];
       wm.setGround(next[0], next[1]);
+      dm.setGround(next[0], next[1]);
       for (const t of groundTex) t.dispose();
       groundTex = next;
     },
@@ -702,6 +728,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
+      dm.smooth.value = wm.smooth.value;
+      dm.time.value = f.t;
       clock = f.t;
       fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
       // A terrain chunk animates only if the last frame drew it; the others catch up when they come into view.
@@ -876,10 +904,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         heights.dispose();
         groundStart.dispose();
         for (const t of groundTex) t.dispose();
-        for (const c of [...worldChunks, ...terrainChunks]) c?.mesh.geometry.dispose();
+        for (const c of [...worldChunks, ...terrainChunks, ...dipChunks]) c?.mesh.geometry.dispose();
         fieldMesh?.geometry.dispose();
         fieldMaterial.dispose();
         material.dispose();
+        dm.material.dispose();
         sight.dispose();
         for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
         for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
