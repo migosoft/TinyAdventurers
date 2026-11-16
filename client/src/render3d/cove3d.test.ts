@@ -101,7 +101,7 @@ describe('the cove tree in the colour pass without a sun', () => {
       g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
       g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
       set('look', Array.from({ length: m.verts }, () => [1, 0, 1, 0]).flat(), 4);
-      g.setIndex(m.index);
+      g.setIndex(new BufferAttribute(m.index, 1));
       for (const mat of [mats.depth, mats.colour]) expect(fragment(B, mat, { geometry: g }).length).toBeGreaterThan(0);
       const leaves = newLeafBuf();
       pushLeaves(leaves, built, 3, 4, 1);

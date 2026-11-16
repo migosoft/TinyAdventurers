@@ -12,7 +12,7 @@ import { hash3 } from '../noiseNodes';
 import { coverHeightNode, type CoverShared } from '../cover/coverRead';
 import { WIND_DIR } from '../wind';
 import { gustNode, swayNode } from '../windNodes';
-import { FLUTTER_PX, RAMP } from './mesh';
+import { FLUTTER_PX, RAMP, packedLeaf } from './mesh';
 import { NOON_LIGHT, SKY_LEVEL_MIN, TREE_LIGHT } from './tone';
 import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE } from './leaves';
 
@@ -62,7 +62,8 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
 /**
  * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,
  * `tuft`, `plant`, `look`. This packs the two that carry the tree's sway: `nrm` is the normal with the vertex's sway factor in w, and `plant` is
- * (foot x, foot z, leaf amount or -1 for a dead tree, the vertex's lift height). `plant` is the forest's (foot x, z, leaf, dead) per vertex.
+ * (foot x, foot z, leaf amount or -1 for a dead tree, the vertex's lift height). `plant` is (foot x, z, leaf, dead) per vertex. The forest's
+ * chunks are kept packed already (`ChunkMesh`); this is for single meshes.
  */
 export function packTreeStreams(normal: ArrayLike<number>, sway: ArrayLike<number>, plant: ArrayLike<number>): { nrm: Float32Array; plant: Float32Array } {
   const n = normal.length / 3;
@@ -70,7 +71,7 @@ export function packTreeStreams(normal: ArrayLike<number>, sway: ArrayLike<numbe
   for (let i = 0; i < n; i++) {
     nrm[i * 4] = normal[i * 3]; nrm[i * 4 + 1] = normal[i * 3 + 1]; nrm[i * 4 + 2] = normal[i * 3 + 2]; nrm[i * 4 + 3] = sway[i * 2];
     out[i * 4] = plant[i * 4]; out[i * 4 + 1] = plant[i * 4 + 1];
-    out[i * 4 + 2] = plant[i * 4 + 3] > 0.5 ? -1 : plant[i * 4 + 2];
+    out[i * 4 + 2] = packedLeaf(plant[i * 4 + 2], plant[i * 4 + 3] > 0.5);
     out[i * 4 + 3] = sway[i * 2 + 1];
   }
   return { nrm, plant: out };

@@ -362,7 +362,8 @@ function fnv(a: ArrayLike<number>, uint = false): number {
 }
 
 describe('chunkGeometry', () => {
-  // Pinned before #335 changed how the streams are kept: the demo woodland's chunk geometries, every stream byte for byte.
+  // The demo woodland's chunk geometries, every stream byte for byte. Re-recorded once by #335 (typed streams): every stream but `position`
+  // stayed byte for byte; positions are now rounded to float32 in the plant's own frame and again after the move to its foot (under 2.4e-7 tiles).
   it('uploads the demo woodland unchanged', () => {
     const lvl = (demo as unknown as { w: number; h: number; woodland: { plants: PlantInfo[]; palette: number } }[])[0];
     const f = new Forest(lvl.woodland.plants.map(treeSpecOf), { w: lvl.w, h: lvl.h }, lvl.woodland.palette);
@@ -376,6 +377,6 @@ describe('chunkGeometry', () => {
       h = fnv([h, k, ...sums], true);
     }
     expect(chunks.size).toBe(36);
-    expect(h.toString(16)).toBe('7eb8a564');
+    expect(h.toString(16)).toBe('1e1c92b4');
   }, 60_000);
 });

@@ -51,9 +51,10 @@ export function buildTree(s: TreeSpec): BuiltTree {
   for (const t of sk.curtain) tuftPatch(m, t);
 
   let height = 0, reach = 0;
-  for (let i = 0; i < m.verts; i++) {
-    height = Math.max(height, m.position[i * 3 + 1]);
-    reach = Math.max(reach, Math.hypot(m.position[i * 3], m.position[i * 3 + 2]));
+  const pos = m.position;
+  for (let i = 0; i < pos.length; i += 3) {
+    height = Math.max(height, pos[i + 1]);
+    reach = Math.max(reach, Math.hypot(pos[i], pos[i + 2]));
   }
   const out: BuiltTree = { mesh: m, height, radius: reach + sk.amp, lobes: sk.falls, drops: !s.dead && (leafy || s.form === 'willow') };
   if (!s.mirrored) return out;

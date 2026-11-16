@@ -90,17 +90,18 @@ describe('Forest.frame', () => {
     f.step({ x: 0, z: 0 }, 1000);
     const ch = f.frame({ wind: true, t: 0 }).chunks.get(0)!;
     const n = ch.mesh.verts;
-    expect(ch.plant.length).toBe(n * 4);
-    expect(ch.look.length).toBe(n * 4);
+    expect(ch.mesh.plant.length).toBe(n * 4);
+    expect(ch.mesh.look.length).toBe(n * 4);
     // Order of appending is nearest first: (2.5,3.25), (7,5), (6.125,9)
     const order = [specs[0], specs[2], specs[1]];
     const counts = order.map((s) => buildTree(s).mesh.verts);
     let at = 0;
     order.forEach((s, k) => {
-      const v = plantVariation(s.x, s.z);
+      const v = plantVariation(s.x, s.z), sway = buildTree(s).mesh.sway;
       for (let i = at; i < at + counts[k]; i++) {
-        expect(Array.from(ch.plant.slice(i * 4, i * 4 + 4))).toEqual([s.x, s.z, s.dead ? 0 : Math.fround(s.leaf), s.dead ? 1 : 0].map(Math.fround));
-        expect(Array.from(ch.look.slice(i * 4, i * 4 + 4))).toEqual(v.map(Math.fround));
+        // Packed: foot x, z, the leaf amount (-1 when dead), the vertex's anchor height.
+        expect(Array.from(ch.mesh.plant.slice(i * 4, i * 4 + 4))).toEqual([s.x, s.z, s.dead ? -1 : s.leaf, sway[(i - at) * 2 + 1]].map(Math.fround));
+        expect(Array.from(ch.mesh.look.slice(i * 4, i * 4 + 4))).toEqual(v.map(Math.fround));
       }
       at += counts[k];
     });
@@ -148,24 +149,26 @@ describe('Forest.frame', () => {
     f.step({ x: 0, z: 0 }, 1000);
     expect(fr.chunks.size).toBe(3);
     for (const [k, c] of fr.chunks) {
-      expect(c.plant.length / 4).toBe(c.mesh.verts);
-      expect(c.look.length / 4).toBe(c.mesh.verts);
+      for (const s of [c.mesh.nrm, c.mesh.grad, c.mesh.part, c.mesh.misc, c.mesh.tuft, c.mesh.plant, c.mesh.look]) expect(s.length / 4).toBe(c.mesh.verts);
+      expect(Math.max(-1, ...c.mesh.index)).toBeLessThan(c.mesh.verts);
       expect(fr.versions.has(k)).toBe(true);
     }
     for (const k of fr.versions.keys()) expect(fr.chunks.has(k)).toBe(true);
   });
-  it('gives a living tree with leaf 0 leaf 0 and dead 0 on all its vertices', () => {
+  it('gives a living tree with leaf 0 leaf 0 (not dead) on all its vertices', () => {
     const f = make([spec(2, 2, 1, { leaf: 0 })]);
     f.step({ x: 0, z: 0 }, 1000);
     const ch = f.frame({ wind: true, t: 0 }).chunks.get(0)!;
     expect(ch.mesh.verts).toBeGreaterThan(0);
-    for (let i = 0; i < ch.mesh.verts; i++) { expect(ch.plant[i * 4 + 2]).toBe(0); expect(ch.plant[i * 4 + 3]).toBe(0); }
+    const plant = ch.mesh.plant;
+    for (let i = 0; i < ch.mesh.verts; i++) expect(plant[i * 4 + 2]).toBe(0);
   });
-  it('leaves leaf 0 on a dead plant whatever its spec says', () => {
+  it('marks a dead plant dead (-1) whatever its spec\'s leaf amount says', () => {
     const f = make([spec(2, 2, 1, { dead: true, leaf: 1 })]);
     f.step({ x: 0, z: 0 }, 1000);
     const ch = f.frame({ wind: true, t: 0 }).chunks.get(0)!;
-    for (let i = 0; i < ch.mesh.verts; i++) { expect(ch.plant[i * 4 + 2]).toBe(0); expect(ch.plant[i * 4 + 3]).toBe(1); }
+    const plant = ch.mesh.plant;
+    for (let i = 0; i < ch.mesh.verts; i++) expect(plant[i * 4 + 2]).toBe(-1);
   });
   it('reports every chunk to a new consumer through ChunkSync', () => {
     const f = make([spec(2, 2, 1), spec(40, 20, 2)]);

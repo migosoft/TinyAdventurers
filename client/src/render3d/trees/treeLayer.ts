@@ -7,7 +7,7 @@ import { ChunkSync } from './chunks';
 import type { TreeChunk, TreeFrame } from './forest';
 import { LEAF_DRIFT, LEAF_FLUTTER, LEAF_HALF, type LeafBuf } from './leaves';
 import { paletteBytes } from './palette';
-import { TREE_ORDER, makeTreeShared, packTreeStreams, type TreeMaterials, type TreeShared } from './treeNodes';
+import { TREE_ORDER, makeTreeShared, type TreeMaterials, type TreeShared } from './treeNodes';
 
 /** The palette's size in texels: tones across, ramps down. */
 const PALETTE_W = 5, PALETTE_H = 4;
@@ -15,21 +15,23 @@ const PALETTE_W = 5, PALETTE_H = 4;
 /** The least time between two uploads of one chunk while the forest is still growing (ms, first guess). */
 export const TREE_UPLOAD_MS = 250;
 
-/** One chunk's geometry: the mesh streams, the per-plant `plant` and `look` streams (copied at their used length; `packTreeStreams` fits them to the 8 vertex buffers WebGPU allows) and the forest's bounds for culling. */
+/**
+ * One chunk's geometry: the chunk's streams (already in the GPU's layout, `ChunkMesh`) and the forest's bounds for culling. The attributes are
+ * views of the forest's streams at their used length, not copies: the forest only appends past them, and stays the source when a new layer
+ * (after a lost device) re-reads the chunk.
+ */
 export function chunkGeometry(c: TreeChunk): BufferGeometry {
   const m = c.mesh;
   const g = new BufferGeometry();
-  const set = (name: string, data: ArrayLike<number>, size: number): void => { g.setAttribute(name, new BufferAttribute(Float32Array.from(data), size)); };
-  set('position', m.position, 3);
-  const packed = packTreeStreams(m.normal, m.sway, c.plant);
-  g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
-  set('grad', m.grad, 4);
-  set('part', m.part, 4);
-  set('misc', m.misc, 4);
-  set('tuft', m.tuft, 4);
-  g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
-  g.setAttribute('look', new BufferAttribute(c.look.slice(), 4));
-  g.setIndex(new BufferAttribute(Uint32Array.from(m.index), 1));
+  g.setAttribute('position', new BufferAttribute(m.position, 3));
+  g.setAttribute('nrm', new BufferAttribute(m.nrm, 4));
+  g.setAttribute('grad', new BufferAttribute(m.grad, 4));
+  g.setAttribute('part', new BufferAttribute(m.part, 4));
+  g.setAttribute('misc', new BufferAttribute(m.misc, 4));
+  g.setAttribute('tuft', new BufferAttribute(m.tuft, 4));
+  g.setAttribute('plant', new BufferAttribute(m.plant, 4));
+  g.setAttribute('look', new BufferAttribute(m.look, 4));
+  g.setIndex(new BufferAttribute(m.index, 1));
   // The raw positions lack the patches' spread, the sway and the stretched height: the forest's bounds hold them.
   const b = c.bounds;
   g.boundingBox = new Box3(new Vector3(b.min.x, b.min.y, b.min.z), new Vector3(b.max.x, b.max.y, b.max.z));
@@ -130,7 +132,7 @@ export class TreeLayer {
       const c = f.chunks.get(k);
       if (!c || c.mesh.verts === 0) continue;
       this.uploadedAt.set(k, now);
-      // The chunk's `plant` and `look` are views the forest re-assigns on every added tree: read them now, from the chunk, never cache them.
+      // The chunk's stream views end at its length now: take them from the chunk at every upload, never cache them.
       const g = chunkGeometry(c);
       const list: { mesh: Mesh; scene: Scene }[] = [];
       const add = (material: Mesh['material'], into: Scene, order: number): void => {

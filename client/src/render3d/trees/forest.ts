@@ -6,14 +6,14 @@ import { buildTree, type BuiltTree } from './build';
 import { plantChunks } from './chunks';
 import { WILLOW_SHIFT } from './grow';
 import { leafSeed, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
-import { FLUTTER_PX, TreeMesh, appendAt } from './mesh';
+import { ChunkMesh, FLUTTER_PX } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
 import { SWAY_WAVE_MAX } from '../wind';
 
 export interface Vec3 { x: number; y: number; z: number }
-/** One world chunk's trees merged: the mesh streams plus, per vertex, `plant` (foot x, z, leaf amount, dead) and `look` (leaf bright, leaf warm, bark light, bark grey), and the falling leaves of its trees (it grows with the chunk). */
-export interface TreeChunk { mesh: TreeMesh; plant: Float32Array; look: Float32Array; leaves: LeafBuf; bounds: { min: Vec3; max: Vec3 } }
+/** One world chunk's trees merged, in the GPU's layout (`ChunkMesh`: the plant's foot, leaf amount and look on every vertex), and the falling leaves of its trees (it grows with the chunk). */
+export interface TreeChunk { mesh: ChunkMesh; leaves: LeafBuf; bounds: { min: Vec3; max: Vec3 } }
 export interface TreeFrame {
   chunks: ReadonlyMap<number, TreeChunk>;
   /** Chunk index to a number that grows when a tree was added to it. */
@@ -42,9 +42,6 @@ const FLUTTER = (2 * FLUTTER_PX) / 16;
 
 /** A built look with its extent (tiles, plant-local) as drawn: the patches' spread, the sway and the flutter included. */
 interface Built { tree: BuiltTree; min: Vec3; max: Vec3 }
-/** A chunk's growing `plant` and `look` buffers (capacity doubled when full); the chunk exposes views of the used length. */
-interface Slot { chunk: TreeChunk; plant: Float32Array; look: Float32Array; used: number }
-
 function extent(t: BuiltTree): Built {
   const m = t.mesh, p = m.position, min = { x: Infinity, y: Infinity, z: Infinity }, max = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (let i = 0; i < p.length; i += 3) {
@@ -53,9 +50,10 @@ function extent(t: BuiltTree): Built {
     min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
   }
   let half = 0, swing = 0;
-  for (let i = 2; i < m.tuft.length; i += 4) half = Math.max(half, m.tuft[i]);
+  const tuft = m.tuft, sway = m.sway;
+  for (let i = 2; i < tuft.length; i += 4) half = Math.max(half, tuft[i]);
   // The sway stream's x is each vertex's sway factor (tiles per unit of wave); the wave reaches SWAY_WAVE_MAX at most.
-  for (let i = 0; i < m.sway.length; i += 2) swing = Math.max(swing, m.sway[i]);
+  for (let i = 0; i < sway.length; i += 2) swing = Math.max(swing, sway[i]);
   // A patch is spread along the camera's right and up axes, whose horizontal parts together reach sqrt 2 times the half-size.
   const room = Math.max(MIN_MARGIN, half * Math.SQRT2 + swing * SWAY_WAVE_MAX + FLUTTER);
   min.x -= room; min.z -= room; max.x += room; max.z += room;
@@ -65,7 +63,6 @@ function extent(t: BuiltTree): Built {
 
 export class Forest {
   private readonly looks = new Map<string, Built>();
-  private readonly slots = new Map<number, Slot>();
   private readonly chunkMap = new Map<number, TreeChunk>();
   private readonly versionMap = new Map<number, number>();
   private readonly chunkOf: number[] = [];
@@ -116,33 +113,19 @@ export class Forest {
     this.pending.delete(i);
     this.done++;
     const chunk = this.chunkOf[i];
-    let slot = this.slots.get(chunk);
-    if (!slot) {
-      const c: TreeChunk = { mesh: new TreeMesh(), plant: new Float32Array(0), look: new Float32Array(0), leaves: newLeafBuf(), bounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } } };
-      this.slots.set(chunk, (slot = { chunk: c, plant: new Float32Array(0), look: new Float32Array(0), used: 0 }));
+    let c = this.chunkMap.get(chunk);
+    if (!c) {
+      c = { mesh: new ChunkMesh(), leaves: newLeafBuf(), bounds: { min: { x: Infinity, y: Infinity, z: Infinity }, max: { x: -Infinity, y: -Infinity, z: -Infinity } } };
       this.chunkMap.set(chunk, c);
     }
-    const n = b.tree.mesh.verts, v = plantVariation(sp.x, sp.z), need = (slot.used + n) * 4;
-    if (need > slot.plant.length) {
-      const cap = Math.max(need, slot.plant.length * 2);
-      const grow = (a: Float32Array) => { const o = new Float32Array(cap); o.set(a.subarray(0, slot.used * 4)); return o; };
-      slot.plant = grow(slot.plant); slot.look = grow(slot.look);
-    }
-    appendAt(slot.chunk.mesh, b.tree.mesh, sp.x, sp.z);
-    for (let k = 0, o = slot.used * 4; k < n; k++, o += 4) {
-      const pl = slot.plant, lk = slot.look;
-      pl[o] = sp.x; pl[o + 1] = sp.z; pl[o + 2] = sp.dead ? 0 : sp.leaf; pl[o + 3] = sp.dead ? 1 : 0;
-      lk[o] = v[0]; lk[o + 1] = v[1]; lk[o + 2] = v[2]; lk[o + 3] = v[3];
-    }
+    const v = plantVariation(sp.x, sp.z);
+    c.mesh.append(b.tree.mesh, sp.x, sp.z, sp.dead ? 0 : sp.leaf, sp.dead, v);
     // The falling leaves, with the plant's own leaf amount and colour (a willow's leaves carry its own warmer, lighter shift).
-    const leaves = slot.chunk.leaves, from = leaves.n;
+    const leaves = c.leaves, from = leaves.n;
     pushLeaves(leaves, b.tree, sp.x, sp.z, leafSeed(sp.seed, sp.x, sp.z));
     const look: [number, number, number, number] = sp.form === 'willow' ? [v[0] + WILLOW_SHIFT.bright, v[1] + WILLOW_SHIFT.warm, v[2], v[3]] : v;
     for (let k = from; k < leaves.n; k++) { leaves.leaf.push(sp.leaf); leaves.look.push(...look); }
-    slot.used += n;
-    slot.chunk.plant = slot.plant.subarray(0, slot.used * 4);
-    slot.chunk.look = slot.look.subarray(0, slot.used * 4);
-    const bd = slot.chunk.bounds;
+    const bd = c.bounds;
     bd.min.x = Math.min(bd.min.x, b.min.x + sp.x); bd.max.x = Math.max(bd.max.x, b.max.x + sp.x);
     bd.min.z = Math.min(bd.min.z, b.min.z + sp.z); bd.max.z = Math.max(bd.max.z, b.max.z + sp.z);
     bd.min.y = Math.min(bd.min.y, b.min.y);

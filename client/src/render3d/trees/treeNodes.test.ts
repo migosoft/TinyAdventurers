@@ -27,7 +27,7 @@ function treeGeometry(): BufferGeometry {
   const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   tufts(m, { x: 0, y: 1.2, z: 0, rx: 0.5, ry: 0.5, rz: 0.5, k: 0.1 }, () => [0, 0, 0, 0], 0.5, rnd, RAMP.leaf);
   const g = new BufferGeometry();
-  const set = (name: string, data: number[], size: number) => g.setAttribute(name, new BufferAttribute(new Float32Array(data), size));
+  const set = (name: string, data: ArrayLike<number>, size: number) => g.setAttribute(name, new BufferAttribute(Float32Array.from(data), size));
   set('position', m.position, 3); set('grad', m.grad, 4);
   set('part', m.part, 4); set('misc', m.misc, 4); set('tuft', m.tuft, 4);
   const n = m.verts;
@@ -35,7 +35,7 @@ function treeGeometry(): BufferGeometry {
   g.setAttribute('nrm', new BufferAttribute(packed.nrm, 4));
   g.setAttribute('plant', new BufferAttribute(packed.plant, 4));
   set('look', Array.from({ length: n }, () => [1, 0, 1, 0]).flat(), 4);
-  g.setIndex(m.index);
+  g.setIndex(new BufferAttribute(m.index, 1));
   return g;
 }
 

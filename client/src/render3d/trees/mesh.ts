@@ -17,23 +17,62 @@ export type GradFn = (x: number, y: number, z: number) => [number, number, numbe
 
 const U = 1 / 16;
 
+type Typed = Float32Array | Uint32Array;
+
 /**
- * One array per vertex stream.
+ * A growable typed stream: `length` values in use, the capacity doubled when full. `view` is the used part; it shares the
+ * stream's memory, and appending writes only past it (a growth moves the stream to a new buffer and leaves old views as they were).
+ */
+export class Stream<T extends Typed> {
+  length = 0;
+  private buf: T;
+  constructor(private readonly alloc: (n: number) => T) { this.buf = alloc(0); }
+  /** Makes room for `n` more values and returns the buffer: write from `length` on, then `commit(n)`. */
+  room(n: number): T {
+    const need = this.length + n;
+    if (need > this.buf.length) {
+      const o = this.alloc(Math.max(need, this.buf.length * 2, 64));
+      o.set(this.buf.subarray(0, this.length));
+      this.buf = o;
+    }
+    return this.buf;
+  }
+  commit(n: number): void { this.length += n; }
+  /** Appends values. */
+  push(...v: number[]): void { this.put(v); }
+  put(v: ArrayLike<number>): void {
+    const b = this.room(v.length);
+    for (let i = 0; i < v.length; i++) b[this.length + i] = v[i];
+    this.length += v.length;
+  }
+  get view(): T { return this.buf.subarray(0, this.length) as T; }
+}
+export const floats = (): Stream<Float32Array> => new Stream((n) => new Float32Array(n));
+export const uints = (): Stream<Uint32Array> => new Stream((n) => new Uint32Array(n));
+
+/** The streams of a tree mesh, named as `TreeMesh` reads them. */
+export const MESH_STREAMS = ['position', 'normal', 'grad', 'sway', 'part', 'misc', 'tuft'] as const;
+
+/**
+ * One typed stream per vertex value; the getters return views of the used part (read them once per loop, not per vertex).
  * position, normal: 3 each. grad: crown gradient xyz and height darkening. sway: sway factor, anchor height.
  * part: ramp row, shape, own warm shift, own bright shift. misc: light lift; wood: standing shade, skirt: hem v,
  * tuft: 1 = casts no shadow; 1 on the trunk; leaf threshold (0 for wood). tuft: corner x, y, half-size, seed.
  */
 export class TreeMesh {
-  position: number[] = [];
-  normal: number[] = [];
-  grad: number[] = [];
-  sway: number[] = [];
-  part: number[] = [];
-  misc: number[] = [];
-  tuft: number[] = [];
-  index: number[] = [];
-  get verts(): number { return this.position.length / 3; }
-  get tris(): number { return this.index.length / 3; }
+  readonly s = {
+    position: floats(), normal: floats(), grad: floats(), sway: floats(), part: floats(), misc: floats(), tuft: floats(), index: uints(),
+  };
+  get position(): Float32Array { return this.s.position.view; }
+  get normal(): Float32Array { return this.s.normal.view; }
+  get grad(): Float32Array { return this.s.grad.view; }
+  get sway(): Float32Array { return this.s.sway.view; }
+  get part(): Float32Array { return this.s.part.view; }
+  get misc(): Float32Array { return this.s.misc.view; }
+  get tuft(): Float32Array { return this.s.tuft.view; }
+  get index(): Uint32Array { return this.s.index.view; }
+  get verts(): number { return this.s.position.length / 3; }
+  get tris(): number { return this.s.index.length / 3; }
 }
 
 interface Vertex {
@@ -42,14 +81,16 @@ interface Vertex {
   tuft?: [number, number, number, number];
 }
 
+const NO_TUFT = [0, 0, 0, 0];
 function push(m: TreeMesh, v: Vertex): void {
-  m.position.push(...v.p);
-  m.normal.push(...v.n);
-  m.grad.push(...v.grad);
-  m.sway.push(...v.sway);
-  m.part.push(...v.part);
-  m.misc.push(...v.misc);
-  m.tuft.push(...(v.tuft ?? [0, 0, 0, 0]));
+  const s = m.s;
+  s.position.put(v.p);
+  s.normal.put(v.n);
+  s.grad.put(v.grad);
+  s.sway.put(v.sway);
+  s.part.put(v.part);
+  s.misc.put(v.misc);
+  s.tuft.put(v.tuft ?? NO_TUFT);
 }
 
 /** Unit icosphere with `subs` subdivisions. */
@@ -102,7 +143,7 @@ export function tube(m: TreeMesh, pts: P3[], sides: number, ramp: number, kOf: (
   }
   for (let i = 0; i + 1 < n; i++) for (let s = 0; s < sides; s++) {
     const a = base + i * sides + s, b = base + i * sides + ((s + 1) % sides), c = a + sides, d = b + sides;
-    m.index.push(a, c, b, b, c, d);
+    m.s.index.push(a, c, b, b, c, d);
   }
 }
 
@@ -116,7 +157,7 @@ export function coreBall(m: TreeMesh, b: Lobe3, ramp: number, grad: GradFn, th: 
       sway: [b.k, b.y], part: [ramp, SHAPE.core, 0, 0], misc: [lift, 0, 0, th],
     });
   }
-  for (const [a, c, e] of ICO_CORE.f) m.index.push(base + a, base + c, base + e);
+  for (const [a, c, e] of ICO_CORE.f) m.s.index.push(base + a, base + c, base + e);
 }
 
 /**
@@ -154,7 +195,7 @@ export function tuftPatch(m: TreeMesh, o: TuftPatch): void {
       tuft: [ox, oy, o.size, o.seed],
     });
   }
-  m.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  m.s.index.push(base, base + 1, base + 2, base, base + 2, base + 3);
 }
 
 /** A conifer skirt: a cone with a zigzag hem. Sizes in tiles; `radius` is the hem radius, `top` the apex height. */
@@ -185,26 +226,64 @@ export function skirt(m: TreeMesh, o: SkirtOpts): void {
   });
   for (let ri = 0; ri < 2; ri++) for (let i = 0; i < n; i++) {
     const a = base + ri * n + i, b = base + ri * n + ((i + 1) % n), c = a + n, d = b + n;
-    m.index.push(a, c, b, b, c, d);
+    m.s.index.push(a, c, b, b, c, d);
   }
 }
 
 /** A mirrored copy: x negated in position, normal and grad, the winding flipped. */
 export function mirrorX(m: TreeMesh): TreeMesh {
   const o = new TreeMesh();
-  o.position = m.position.map((v, i) => (i % 3 === 0 ? -v : v));
-  o.normal = m.normal.map((v, i) => (i % 3 === 0 ? -v : v));
-  o.grad = m.grad.map((v, i) => (i % 4 === 0 ? -v : v));
-  o.sway = m.sway.slice(); o.part = m.part.slice(); o.misc = m.misc.slice(); o.tuft = m.tuft.slice();
-  o.index = m.index.slice();
-  for (let i = 0; i + 2 < o.index.length; i += 3) { const t = o.index[i + 1]; o.index[i + 1] = o.index[i + 2]; o.index[i + 2] = t; }
+  for (const k of MESH_STREAMS) o.s[k].put(m[k]);
+  o.s.index.put(m.index);
+  const neg = (a: Float32Array, step: number) => { for (let i = 0; i < a.length; i += step) a[i] = -a[i]; };
+  neg(o.position, 3); neg(o.normal, 3); neg(o.grad, 4);
+  const idx = o.index;
+  for (let i = 0; i + 2 < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
   return o;
 }
 
-/** Copies `m` into `out`, moved to the foot (x, z). */
-export function appendAt(out: TreeMesh, m: TreeMesh, x: number, z: number): void {
-  const base = out.verts;
-  for (let i = 0; i < m.position.length; i += 3) out.position.push(m.position[i] + x, m.position[i + 1], m.position[i + 2] + z);
-  for (const k of ['normal', 'grad', 'sway', 'part', 'misc', 'tuft'] as const) for (const v of m[k]) out[k].push(v);
-  for (const i of m.index) out.index.push(base + i);
+/** The packed `plant.z`: the leaf amount, or -1 for a dead plant. */
+export const packedLeaf = (leaf: number, dead: boolean): number => (dead ? -1 : leaf);
+
+/**
+ * A world chunk's trees merged, in the layout the GPU takes, so the view can hand these streams to three.js without a copy.
+ * Nine streams fit the 8 vertex buffers WebGPU allows by packing: `nrm` is normal xyz and the sway factor; `plant` is foot x,
+ * z, `packedLeaf` and the anchor height. position, grad, part, misc, tuft: as `TreeMesh`. look: leaf bright, leaf warm, bark
+ * light, bark grey (the plant's variation).
+ */
+export class ChunkMesh {
+  readonly s = {
+    position: floats(), nrm: floats(), grad: floats(), part: floats(), misc: floats(), tuft: floats(), plant: floats(), look: floats(), index: uints(),
+  };
+  get position(): Float32Array { return this.s.position.view; }
+  get nrm(): Float32Array { return this.s.nrm.view; }
+  get grad(): Float32Array { return this.s.grad.view; }
+  get part(): Float32Array { return this.s.part.view; }
+  get misc(): Float32Array { return this.s.misc.view; }
+  get tuft(): Float32Array { return this.s.tuft.view; }
+  get plant(): Float32Array { return this.s.plant.view; }
+  get look(): Float32Array { return this.s.look.view; }
+  get index(): Uint32Array { return this.s.index.view; }
+  get verts(): number { return this.s.position.length / 3; }
+  get tris(): number { return this.s.index.length / 3; }
+
+  /** Appends `m` moved to the foot (x, z), with the plant's leaf amount, dead mark and look on every vertex. */
+  append(m: TreeMesh, x: number, z: number, leaf: number, dead: boolean, look: readonly [number, number, number, number]): void {
+    const s = this.s, n = m.verts, base = this.verts, pl = packedLeaf(leaf, dead);
+    const src = m.position, normal = m.normal, sway = m.sway;
+    const pos = s.position.room(n * 3), p0 = s.position.length;
+    for (let i = 0; i < n * 3; i += 3) { pos[p0 + i] = src[i] + x; pos[p0 + i + 1] = src[i + 1]; pos[p0 + i + 2] = src[i + 2] + z; }
+    s.position.commit(n * 3);
+    const nrm = s.nrm.room(n * 4), plant = s.plant.room(n * 4), lk = s.look.room(n * 4), o0 = s.nrm.length;
+    for (let i = 0, o = o0; i < n; i++, o += 4) {
+      nrm[o] = normal[i * 3]; nrm[o + 1] = normal[i * 3 + 1]; nrm[o + 2] = normal[i * 3 + 2]; nrm[o + 3] = sway[i * 2];
+      plant[o] = x; plant[o + 1] = z; plant[o + 2] = pl; plant[o + 3] = sway[i * 2 + 1];
+      lk[o] = look[0]; lk[o + 1] = look[1]; lk[o + 2] = look[2]; lk[o + 3] = look[3];
+    }
+    s.nrm.commit(n * 4); s.plant.commit(n * 4); s.look.commit(n * 4);
+    s.grad.put(m.grad); s.part.put(m.part); s.misc.put(m.misc); s.tuft.put(m.tuft);
+    const idx = m.index, out = s.index.room(idx.length), i0 = s.index.length;
+    for (let i = 0; i < idx.length; i++) out[i0 + i] = base + idx[i];
+    s.index.commit(idx.length);
+  }
 }

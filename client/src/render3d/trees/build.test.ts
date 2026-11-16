@@ -49,7 +49,7 @@ describe('buildTree', () => {
       // the mesh agrees with the lobe list
       const th = new Set<number>();
       for (let i = 0; i < t.mesh.verts; i++) if (t.mesh.part[i * 4 + 1] === SHAPE.tuft || t.mesh.part[i * 4 + 1] === SHAPE.core) th.add(t.mesh.misc[i * 4 + 3]);
-      expect([...th].sort()).toEqual([...new Set(t.lobes.map((l) => l.th))].sort());
+      expect([...th].sort()).toEqual([...new Set(t.lobes.map((l) => Math.fround(l.th)))].sort()); // the streams are float32
     }
   });
 
@@ -84,7 +84,7 @@ describe('buildTree', () => {
     for (const s of seeds) {
       const live = buildTree(spec('round', s)).mesh, dead = buildTree(spec('round', s, 100, { dead: true })).mesh;
       const wood = (m: typeof live) => { const out: number[] = []; for (let i = 0; i < m.verts; i++) if (m.part[i * 4 + 1] === SHAPE.wood) out.push(...m.position.slice(i * 3, i * 3 + 3)); return out; };
-      expect(dead.position).toEqual(wood(live));
+      expect(Array.from(dead.position)).toEqual(wood(live));
       for (let i = 0; i < dead.verts; i++) {
         expect(dead.part[i * 4 + 1]).toBe(SHAPE.wood);
         expect(dead.part[i * 4]).toBe(RAMP.dead);
@@ -137,7 +137,7 @@ function patchesOf(t: Built) {
   for (let i = 0; i < m.verts; i += 1) {
     if (m.part[i * 4 + 1] !== SHAPE.tuft) continue;
     if (m.tuft[i * 4] !== -1 || m.tuft[i * 4 + 1] !== -1) continue; // the first corner of a patch
-    out.push({ x: m.position[i * 3], y: m.position[i * 3 + 1], z: m.position[i * 3 + 2], noShadow: m.misc[i * 4 + 1], th: m.misc[i * 4 + 3], part: m.part.slice(i * 4, i * 4 + 4) });
+    out.push({ x: m.position[i * 3], y: m.position[i * 3 + 1], z: m.position[i * 3 + 2], noShadow: m.misc[i * 4 + 1], th: m.misc[i * 4 + 3], part: Array.from(m.part.slice(i * 4, i * 4 + 4)) });
   }
   return out;
 }
@@ -163,7 +163,7 @@ describe('the willow', () => {
       expect(patchesOf(t).length).toBeGreaterThanOrEqual(300);
       expect(countShape(t, SHAPE.tuft) / TUFT_VERTS).toBe(patchesOf(t).length);
       for (let i = 0; i < m.verts; i++) {
-        if (m.part[i * 4 + 1] === SHAPE.tuft) expect(m.part.slice(i * 4, i * 4 + 4)).toEqual([RAMP.leaf, SHAPE.tuft, 0.09, 0.08]);
+        if (m.part[i * 4 + 1] === SHAPE.tuft) expect(Array.from(m.part.slice(i * 4, i * 4 + 4))).toEqual([RAMP.leaf, SHAPE.tuft, 0.09, 0.08].map(Math.fround));
         else expect(m.part[i * 4]).toBe(RAMP.bark);
       }
     }
@@ -247,7 +247,7 @@ describe('the bush', () => {
         if (shape === SHAPE.core || shape === SHAPE.tuft) {
           expect(m.part[i * 4]).toBe(RAMP.leaf);
           expect(m.misc[i * 4 + 3]).toBe(0);
-          expect(m.misc[i * 4]).toBe(0.3);
+          expect(m.misc[i * 4]).toBe(Math.fround(0.3));
         }
         top = Math.max(top, m.sway[i * 2]);
       }
