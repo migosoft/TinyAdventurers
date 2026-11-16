@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
   BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, sampleBed, surfaceAt, walkBedAt, type DipKind,
+  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, nearAt, rimAt, sampleBed, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -98,6 +98,21 @@ describe('dip shape', () => {
     expect(bedAt(b, 4.5, 4.5)).not.toBe(bedAt(a, 4.5, 4.5));
   });
 
+  it('measures how near a dip is, per kind', () => {
+    const m = pool('C', 5);
+    expect(nearAt(m, mid, mid)).toEqual([0, 0, 1]);                    // in the chasm: no water, no lava
+    expect(nearAt(m, edgeX, mid)[2]).toBe(1);                          // on the cell's edge
+    expect(nearAt(m, edgeX - 0.25, mid)[2]).toBeCloseTo(0.75, 9);      // 1 minus the distance in tiles
+    expect(nearAt(m, edgeX - 1, mid)[2]).toBeCloseTo(0, 9);            // one tile out: where the dip mesh ends
+    expect(nearAt(m, edgeX - 1.5, mid)[2]).toBe(0);
+    expect(nearAt(m, cornerX - 0.3, cornerZ - 0.4)[2]).toBeCloseTo(0.5, 9);   // to the corner, straight
+    const two = room('~.L');
+    expect(nearAt(two, 2.5, 1.5)).toEqual([0.5, 0.5, 0]);              // the floor cell between water and lava
+    // The outline's own masks: 0.5 on a straight edge, 0 half a tile out, 1 well inside.
+    expect(rimAt(m, edgeX, mid)[2]).toBeCloseTo(0.5, 9);
+    expect(rimAt(m, edgeX - 0.5, mid)[2]).toBe(0);
+    expect(rimAt(m, mid, mid)).toEqual([0, 0, 1]);
+  });
   it('names the kind', () => {
     const m = pool('C', 5);
     expect(kindAt(m, mid, mid)).toBe(DIP.chasm);

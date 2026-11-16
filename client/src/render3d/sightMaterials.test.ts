@@ -17,7 +17,7 @@ const lit = () => {
 };
 
 // The air's vertex layouts (airQuads.ts); the builders read the attributes from the geometry.
-const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1]];
+const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1], ['rim', 3], ['near', 3]];
 const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];

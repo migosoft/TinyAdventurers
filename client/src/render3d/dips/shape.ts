@@ -87,6 +87,29 @@ function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
 }
 
 /** The kind whose mask is largest at (x, z), none below 0.15 (the bank material's choice). */
+/**
+ * How near (x, z) lies to each kind of dip: the three masks (water, lava, chasm). 0.5 on a straight outline, falling to 0 half a tile
+ * out on the floor and rising to 1 inside. The dip material marks the floor along a rim with them (cracks, scorching, damp).
+ */
+export function rimAt(map: TileMap, x: number, z: number): [number, number, number] {
+  return [maskAt(map, x, z, isWater), maskAt(map, x, z, isLava), maskAt(map, x, z, isChasm)];
+}
+/**
+ * How far the marks of each kind of dip reach at (x, z): for water, lava and chasm, 1 minus the distance in tiles to the nearest cell of
+ * that kind (its square), so 1 in and on such a cell, falling to 0 one tile away. One tile is how far the dip mesh reaches (the cells
+ * beside terrain), so the marks end where the world mesh's plain floor begins.
+ */
+export function nearAt(map: TileMap, x: number, z: number): [number, number, number] {
+  const cx = Math.floor(x), cz = Math.floor(z);
+  const d: [number, number, number] = [1, 1, 1];
+  for (let j = cz - 1; j <= cz + 1; j++) for (let i = cx - 1; i <= cx + 1; i++) {
+    const kind = dipOf(map.get(i, j));
+    if (kind === DIP.none) continue;
+    const dist = Math.hypot(Math.max(i - x, 0, x - i - 1), Math.max(j - z, 0, z - j - 1));
+    d[kind - 1] = Math.min(d[kind - 1], dist);
+  }
+  return [1 - d[0], 1 - d[1], 1 - d[2]];
+}
 export function kindAt(map: TileMap, x: number, z: number): DipKind {
   const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava), c = maskAt(map, x, z, isChasm);
   const best = Math.max(w, l, c);

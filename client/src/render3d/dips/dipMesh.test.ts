@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { CHUNK, floorFrame, type FrameRects } from '../worldMesh';
 import { DIP_RES, buildDipChunk, dipClassChanged, type DipChunk } from './dipMesh';
-import { CHASM_BED, DIP, LIP, bedAt, inDipMesh } from './shape';
+import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, nearAt, rimAt } from './shape';
 
 const frames: FrameRects = {};
 for (let i = 1; i <= 8; i++) frames[`floor_${i}`] = { x: 100 + i * 16, y: 200 + i * 32, w: 16, h: 16 };
@@ -140,6 +140,22 @@ describe('buildDipChunk', () => {
     expect([...rect.slice(first * 4, first * 4 + 4)]).toEqual([r.x, r.y, r.w, r.h]);
   });
 
+  it('carries the rim masks and the nearness of every vertex', () => {
+    const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
+    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const { position: p, rim, near, count } = c.arrays;
+    expect(rim.length).toBe(count * 3);
+    expect(near.length).toBe(count * 3);
+    for (let v = 0; v < count; v++) {
+      const want = rimAt(m, p[v * 3], p[v * 3 + 2]), wantNear = nearAt(m, p[v * 3], p[v * 3 + 2]);
+      for (let k = 0; k < 3; k++) {
+        expect(rim[v * 3 + k]).toBeCloseTo(want[k], 6);
+        expect(near[v * 3 + k]).toBeCloseTo(wantNear[k], 6);
+      }
+    }
+    // The marks end where the mesh ends: on the outer border of the cells beside the chasm nothing is near.
+    for (let v = 0; v < count; v++) if (p[v * 3] === 3 || p[v * 3] === 6 || p[v * 3 + 2] === 3 || p[v * 3 + 2] === 6) expect(near[v * 3 + 2]).toBeCloseTo(0, 6);
+  });
   it('names the bank', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
     const c = buildDipChunk(m, false, 0, 0, frames)!;

@@ -9,7 +9,7 @@ import { fragment, type Builder } from '../shaderCode.testutil';
 import { dipMaterial } from './dipNodes';
 
 /** The dip mesh's vertex layout (`DipArrays`). */
-const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1]];
+const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1], ['rim', 3], ['near', 3]];
 const geometry = (): BufferGeometry => {
   const g = new BufferGeometry();
   for (const [n, s] of DIP_ATTRS) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));

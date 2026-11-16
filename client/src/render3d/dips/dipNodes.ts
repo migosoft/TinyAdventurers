@@ -4,7 +4,7 @@
 // sloped ground and on the vertical skirts along walls. The numbers are first guesses from the mockup, to be tuned by eye.
 import type { NodeMaterial, Texture } from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { abs, attribute, exp, float, floor, min, mix, positionWorld, select, sign, smoothstep, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, select, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { flatTexel } from '../materials';
@@ -82,6 +82,39 @@ function slabs(s: N, y: N): N {
   return tone.mul(facet).mul(shadow).mul(broken).add(lip.mul(tone)).mul(line).mul(mottle).mul(broad).mul(grain);
 }
 
+/**
+ * The broken pieces of the floor along a rim: pieces per world unit. A chasm's cracks: how far they run from the chasm's cells (tiles),
+ * how unevenly (a share of that, by the piece), their width at the rim (in pieces: about 1.5 art pixels), their darkness; how deep into
+ * the outline's mask the pieces at the rim break off; and the dust that dulls the floor at the rim.
+ */
+const SHARD_FREQ = 1.35, CRACK_REACH = 0.9, CRACK_RAGGED = 0.5, CRACK_WIDTH = 0.11, CRACK_DARK = 0.95, CHIP = 0.3, RIM_DUST = 0.3;
+/** The floor by lava: how far the scorching runs (tiles) and how dark it makes the floor, the soot's colour and cover, how far the glow in the tile joints and cracks runs, its colour and the cracks' width (in pieces). */
+const SCORCH_REACH = 0.9, SCORCH_DARK = 0.3, SOOT_COVER = 0.45, EMBER_REACH = 0.5, EMBER_WIDTH = 0.07;
+const SOOT = vec3(0.045, 0.03, 0.026), EMBER = vec3(0.85, 0.24, 0.04);
+/** The floor by water: how far the damp runs (tiles) and how dark it makes the floor, how far the moss grows, its colour and how much of a mossy spot it covers. */
+const DAMP_REACH = 0.8, DAMP_DARK = 0.55, MOSS_REACH = 0.5, MOSS_COVER = 0.85;
+const MOSS = vec3(0.075, 0.12, 0.045);
+/**
+ * The piece of a jittered grid `q` lies in (a Voronoi cell: a shard with straight edges): its random id 0..1 and how far `q` is inside
+ * its border (0 on the border). Nine cells, unrolled at build time (no shader loop); sine-free hashes only.
+ */
+function shards(q: N): { id: N; edge: N } {
+  const ip: N = floor(q), fp: N = fract(q);
+  let f1: N = float(8), f2: N = float(8), id: N = float(0);
+  for (let oy = -1; oy <= 1; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const c = ip.add(vec2(ox, oy));
+      const rx = float(ox).add(hash21(c)).sub(fp.x), ry = float(oy).add(hash21(c.add(vec2(37.2, 17.7)))).sub(fp.y);
+      const dd = rx.mul(rx).add(ry.mul(ry));
+      const near = step(dd, f1);
+      f2 = mix(min(f2, dd), f1, near);
+      f1 = min(f1, dd);
+      id = mix(id, hash21(c.add(vec2(5.3, 71.9))), near);
+    }
+  }
+  return { id, edge: sqrt(f2).sub(sqrt(f1)) };
+}
+
 export interface DipMaterial {
   material: NodeMaterial;
   /** 0 or 1: the floor texel above the lip reads the linear texture at a sharpened position. */
@@ -132,11 +165,41 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
 
+  // The floor along a rim is marked by what lies beside it (the three masks of `rimAt`: 0.5 on the outline, 0 half a tile out):
+  // damp and moss by water, soot and glowing cracks by lava, cracks and broken-off pieces by a chasm.
+  // `near` (1 on the dip's cells, 0 one tile away) says how far a mark runs, `rim` (the outline's own mask) where the outline is.
+  const rim = attribute('rim', 'vec3');
+  const near = attribute('near', 'vec3');
+  const sh = shards(wp.xz.mul(SHARD_FREQ));
+  const cellXZ: N = fract(wp.xz);
+  const joint = float(1).sub(smoothstep(0.02, 0.09, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
+  const patchy = vnoise2(wp.xz.mul(2.6).add(7)).sub(0.5);
+
+  const damp = smoothstep(1 - DAMP_REACH, 1, near.x.add(patchy.mul(0.35)));
+  const mossHere = smoothstep(1 - MOSS_REACH, 0.95, near.x.add(patchy.mul(0.3)));
+  const mossy = smoothstep(0.42, 0.62, vnoise2(wp.xz.mul(4.2).add(3)).add(joint.mul(0.3))).mul(mossHere);
+  const moss = MOSS.mul(float(0.7).add(vnoise2(wp.xz.mul(23).add(1)).mul(0.6)));
+  const byWater = mix(flat.texel.rgb.mul(mix(float(1), float(DAMP_DARK), damp)), moss, mossy.mul(MOSS_COVER));
+
+  const scorch = smoothstep(1 - SCORCH_REACH, 1, near.y.add(patchy.mul(0.35)));
+  const byLava = mix(byWater.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
+  const emberLine = max(joint.mul(0.6), float(1).sub(smoothstep(0, EMBER_WIDTH, sh.edge)));
+  const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, 0.98, near.y.add(patchy.mul(0.3)))).mul(float(0.55).add(glowNoise.mul(0.6))).mul(float(1).sub(bank));
+
+  // Cracks run out from the chasm along the edges of the floor's pieces, each piece as far as its own id lets them, widening toward
+  // the rim; the pieces at the rim have broken off (the dark rock under the floor shows), which makes the break line jagged.
+  const reach = smoothstep(1 - CRACK_REACH, 0.95, near.z.add(sh.id.sub(0.5).mul(CRACK_RAGGED)));
+  const crackWidth = max(reach.mul(CRACK_WIDTH), 1e-3);
+  const crack = float(1).sub(smoothstep(crackWidth.mul(0.5), crackWidth, sh.edge)).mul(step(1e-3, reach));
+  const brokenOff = step(float(0.5).sub(smoothstep(0.25, 0.75, sh.id).mul(CHIP)), rim.z);
+  const dusty = float(1).sub(smoothstep(0.5, 1, near.z).mul(RIM_DUST));
+  const byChasm = mix(byLava.mul(float(1).sub(crack.mul(CRACK_DARK))).mul(dusty), CHASM_ROCK.mul(0.35), brokenOff);
+
   const rock = select(dip.lessThan(1.5), waterRock, select(dip.lessThan(2.5), lavaRock, chasmRock));
-  const albedo = mix(flat.texel.rgb, rock, bank);
+  const albedo = mix(byChasm, rock, bank);
 
   const lit = lighting.lightAt(wp, normal, WRAP, { selfLit: false });
-  const base = lighting.finish(albedo, lit);
+  const base = lighting.finish(albedo, lit).add(ember);
 
   // The lava's glowing band at its own level, and the chasm's cool self-light, then its fade with depth (the twin of `depthFade`).
   const band = vec3(1.1, 0.22, 0.02)
