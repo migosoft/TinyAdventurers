@@ -1220,6 +1220,20 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(wade.shadows.n).toBe(0);
     const air = dipFigs().frame(frame([knight(3, 1, { anim: ANIM.Dash })]), cam());   // dashing over the deep: above its bed
     expect(air.shadows.n).toBe(0);
+    const void_ = dipFigs().frame(frame([knight(2, 4, { anim: ANIM.Dash })]), cam());   // dashing over the chasm: nothing to lie on
+    expect(void_.shadows.n).toBe(0);
+  });
+
+  it('gives the knight at an inner corner of the chasm outline floor height and no oval (R9)', () => {
+    const t = new Uint8Array(8 * 6).fill(TILE_ID.Floor);
+    for (const [x, z] of [[2, 1], [1, 2], [2, 2]]) t[z * 8 + x] = TILE_ID.Chasm;
+    const m = new TileMap(8, 6, t);
+    const fg = new Figures3d({ ...init(), map: m }, frames, bounds);
+    const o = fg.frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 1.92 * TILE, y: 1.92 * TILE })]), cam());
+    expect(low(o.cards) - dryLow).toBeCloseTo(0, 1);
+    expect(o.shadows.n).toBe(0);
+    const away = fg.frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 6 * TILE, y: 4 * TILE })], { now: 11 }), cam());
+    expect(away.shadows.n).toBe(1);
   });
 
   it('lifts a chest, a skull and a lying body onto the bed', () => {

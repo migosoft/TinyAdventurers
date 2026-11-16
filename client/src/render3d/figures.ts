@@ -663,9 +663,12 @@ export class Figures3d {
     return { x, z, y: mo.y, d: undefined, started, gone: false };
   }
 
-  /** Whether the oval under a foot is drawn: the foot stands on the bed (not hovering over a chasm or floating in lava) and is not under a liquid. */
+  /**
+   * Whether the oval under a foot is drawn: it lies on the ground as drawn (the real bed, a chasm's wall included), so the foot must stand
+   * on it (not hover over a chasm, nor stand on the walk ground above a rendered wall, nor float in lava) and not be under a liquid.
+   */
   private ovalOk(x: number, z: number, y: number): boolean {
-    return y - this.bedAt(x, z) <= 0.05 && y >= surfaceAt(this.map, x, z);
+    return y - this.bedFn(x, z) <= 0.05 && y >= surfaceAt(this.map, x, z);
   }
 
   /** The tint of a faller: the depth's dark (`depthFade` of its height) on each channel. */
