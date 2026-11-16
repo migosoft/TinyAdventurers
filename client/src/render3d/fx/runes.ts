@@ -84,7 +84,9 @@ const RUNE_U = 0.6 * PX;
 /** The centre of the rune sphere above the caster's foot, and its radius range. */
 const SPHERE_Y = 0.75, SPHERE_R0 = 0.85, SPHERE_R1 = 1.2;
 /** The short swirl of an instant cast before the release, and a primary's before its release. */
-export const INSTANT_SWIRL = 0.15, PRIMARY_SWIRL = 0.2;
+export const INSTANT_SWIRL = 0.25, PRIMARY_SWIRL = 0.2;
+/** A rune grows in over `APPEAR` s and stands whole at least `HOLD` s before it bursts: a rune due later is born earlier (a short cast). */
+export const APPEAR = 0.1, HOLD = 0.05;
 /** A wink-out (a cast broken off) takes this long. */
 export const WINK = 0.2;
 /** The flare around the release (+-). */
@@ -117,6 +119,19 @@ const core: [number, number, number] = [0, 0, 0];
 const pa: [number, number, number] = [0, 0, 0];
 const pb: [number, number, number] = [0, 0, 0];
 
+/**
+ * When rune `i` of `n` shows, seconds after the cast's start: one by one over a wind-up, all at once (staggered a little) for an
+ * instant cast, a primary's vortex PRIMARY_SWIRL before its release, one every CHANNEL_GAP for a channel. A rune of a cast that
+ * releases is born early enough to grow in whole and stand HOLD s before the burst, also on a short wind-up.
+ */
+export function runeBorn(r: RuneRec, i: number, n: number): number {
+  const seed = r.seed | 0;
+  if (r.mode === 'channel') return i * CHANNEL_GAP;
+  const W = r.release === null ? Infinity : r.release - r.start;
+  const due = r.mode === 'windup' ? (i / n) * W * 0.75 + hash3(seed, i, 1) * 0.12 : hash3(seed, i, 1) * 0.05 + (r.mode === 'primary' ? Math.max(0, W - PRIMARY_SWIRL) : 0);
+  return Math.max(0, Math.min(due, W - APPEAR - HOLD));
+}
+
 /** The point of a glyph grid position on the rune's plane (centre `c`, axes `h` and `v`, grid unit `u`, drift `ox`, `oy`), into `p`. */
 function gridPoint(p: [number, number, number], gx: number, gy: number, cx: number, cy: number, cz: number, hx: number, hy: number, hz: number,
   vx: number, vy: number, vz: number, u: number, ox: number, oy: number): void {
@@ -140,7 +155,6 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
   const n = channel ? 0 : RUNE_N[r.mode as 'windup' | 'instant' | 'primary'];
   const seed = r.seed | 0;
   const T_ = out.tris, ax = ctx.ax;
-  const W = releaseRel;
   // channel: the runes alive now are those born in the last CHANNEL_LIFE seconds
   let i0 = 0, i1 = n;
   if (channel) {
@@ -152,8 +166,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
   let sum = 0;
   for (let i = i0; i < i1; i++) {
     const glyph = GLYPHS[Math.floor(hash3(seed, i, 0) * GLYPHS.length)];
-    // when it shows: one by one over the wind-up, or all at once (staggered a little) for an instant cast
-    const born = channel ? i * CHANNEL_GAP : r.mode === 'windup' ? (i / n) * W * 0.75 + hash3(seed, i, 1) * 0.12 : hash3(seed, i, 1) * 0.05 + (prim ? Math.max(0, releaseRel - PRIMARY_SWIRL) : 0);   // a primary's vortex pops in PRIMARY_SWIRL before its release
+    const born = runeBorn(r, i, n);
     // during a wind-up a few wink out early, irregularly; the rest burst on the release
     const early = r.mode === 'windup' && hash3(seed, i, 2) < 0.25 ? born + 0.3 + hash3(seed, i, 3) * 0.4 : Infinity;
     const life = prim ? 0.35 + hash3(seed, i, 4) * 0.15 : 0.3 + hash3(seed, i, 4) * 0.3;   // the burst's length, uneven per rune
@@ -173,7 +186,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
       if (outS > (burst ? life : WINK)) continue;
       dying = outS > 0 ? clamp01(outS / (burst ? life : WINK)) : 0;
     }
-    const appear = clamp01(age / 0.1);
+    const appear = clamp01(age / APPEAR);
     const flick = 0.82 + 0.18 * Math.sin(age * 23 + ph) * Math.sin(age * 7.1 + ph * 2);
     const flash = burst ? Math.max(0, 1 - Math.abs(T - releaseRel) / FLARE) : 0;   // they flare as the spell leaves
     const alpha = appear * (1 - dying) * flick;

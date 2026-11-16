@@ -92,6 +92,35 @@ function runeRows(): FxRow[] {
     { group: 'spells', name: 'runes: primary', period: 2, at: (t) => ({ ents: caster(ANIM.Cast, t), events: [cast(0.3, RUNE_LOOK.Arcane, 0, true)] }) },
     { group: 'spells', name: 'runes: channel', period: 5, at: (t) => ({ ents: caster(t >= 0.3 && t < 3.5 ? ANIM.Channel : ANIM.Idle, t), events: [] }) },
     { group: 'spells', name: 'runes: broken off', period: 4, at: (t) => ({ ents: caster(t >= 0.3 && t < 0.9 ? ANIM.Windup : ANIM.Idle, t - 0.3), events: [cast(0.3, RUNE_LOOK.Holy, 1200, false)] }) },
+    ...spellRows(),
+  ];
+}
+
+/** The game's own spells (#308), one per room: the caster's figure, rune look, wind-up and mode as the server sends them. */
+function spellRows(): FxRow[] {
+  const spell = (name: string, kind: number, look: number, windupMs: number, primary: boolean): FxRow => ({
+    group: 'spells', name, period: 2.5,
+    at: (t) => {
+      const w = windupMs / 1000, s = t - 0.3;
+      const o: Partial<EntState> = s >= 0 && s < w ? { anim: ANIM.Windup, animMs: s * 1000 } : s >= w && s < w + 0.3 ? { anim: ANIM.Cast, animMs: (s - w) * 1000 } : {};
+      const side = kind === KIND.Paladin || kind === KIND.ElvenRanger ? { side: SIDE.Friendly } : {};
+      return {
+        ents: [fxEnt(CASTER_ID, kind, CASTER.x, CASTER.z, { ...side, ...o })],
+        events: [{ at: 0.3, ev: { t: 'Cast', id: CASTER_ID, x: px(CASTER.x), y: px(CASTER.z), look, windup_ms: windupMs, primary, aim: 0 } }],
+      };
+    },
+  });
+  return [
+    spell('Holy Light (Paladin)', KIND.Paladin, RUNE_LOOK.Holy, 0, false),
+    spell('Judgement (Paladin)', KIND.Paladin, RUNE_LOOK.Holy, 0, true),
+    spell('Haste (Wizard)', KIND.Wizard, RUNE_LOOK.Arcane, 0, false),
+    spell('Magic Missile (Wizard)', KIND.Wizard, RUNE_LOOK.Arcane, 0, true),
+    spell('Frost Nova (Wizard)', KIND.Wizard, RUNE_LOOK.Cold, 0, false),
+    spell('Frost Shard (Wizard)', KIND.Wizard, RUNE_LOOK.Cold, 0, true),
+    spell('Entangle (Ranger)', KIND.ElvenRanger, RUNE_LOOK.Nature, 0, false),
+    spell('Charm, 0.6 s wind-up', KIND.Wizard, RUNE_LOOK.Arcane, 600, false),
+    spell('Shadow Bolt (necromancer)', KIND.Necromancer, RUNE_LOOK.Gloom, 500, true),
+    spell('Fire Bolt (imp)', KIND.Imp, RUNE_LOOK.Fire, 350, true),
   ];
 }
 

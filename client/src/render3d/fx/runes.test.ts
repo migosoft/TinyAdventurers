@@ -6,7 +6,7 @@ import { TileMap } from '../../sim/map';
 import { newFxBuf } from '../models/fx';
 import { carrierMap } from '../lights';
 import { Effects3d, clearFxRegistry, type FxFrame } from './effects3d';
-import { channelPalette, registerRunes, RUNE_PALETTES } from './runes';
+import { APPEAR, channelPalette, HOLD, newRune, registerRunes, RUNE_N, RUNE_PALETTES, runeBorn } from './runes';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -85,6 +85,20 @@ describe('runes', () => {
     run(d, 1.5, [fig()], { ents: ent2 });
     expect(run(d, 1.71, [fig()], { ents: ent2 }).tris.n).toBe(0);
     expect(d.records).toBe(0);
+  });
+
+  it('every rune of a released cast stands whole before the burst, also on a short cast', () => {
+    const casts: Array<['instant' | 'primary' | 'windup', number]> = [['instant', 0], ['primary', 0], ['primary', 0.35], ['windup', 0.3], ['windup', 0.6], ['windup', 1.2]];
+    for (const [mode, w] of casts) {
+      for (let seed = 1; seed < 40; seed++) {
+        const r = newRune(ID, RUNE_LOOK.Holy, mode, 1, w, 0, X, Z, seed);
+        const n = RUNE_N[mode];
+        for (let i = 0; i < n; i++) expect(1 + runeBorn(r, i, n) + APPEAR + HOLD, `${mode} ${w} rune ${i}`).toBeLessThanOrEqual(r.release! + 1e-9);
+      }
+    }
+    // the long wind-up still brings its runes in one by one
+    const long = newRune(ID, RUNE_LOOK.Fire, 'windup', 1, 1.2, 0, X, Z, 3);
+    expect(runeBorn(long, RUNE_N.windup - 1, RUNE_N.windup)).toBeGreaterThan(runeBorn(long, 0, RUNE_N.windup) + 0.5);
   });
 
   it('primary vortex sits in front', () => {
