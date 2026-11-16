@@ -1,0 +1,129 @@
+import { TILE_ID } from '../../generated/defs';
+import type { TileMap } from '../../sim/map';
+
+/** Which kind of dip a terrain tile makes. */
+export const DIP = { none: 0, water: 1, lava: 2, chasm: 3 } as const;
+export type DipKind = (typeof DIP)[keyof typeof DIP];
+
+// First guesses for the user to tune; every number of the shape lives here.
+export const WATER_LEVEL = -0.08, LAVA_LEVEL = -0.15;
+export const SHALLOW_BED = 0.55, DEEP_BED = 2.3, LAVA_BED = 1.7, CHASM_BED = 12;
+/** The mask value at which each bed reaches its full depth (the slope of the bank). */
+export const STEEP = { water: 0.85, deep: 0.95, lava: 0.8, chasm: 0.56 } as const;
+export const ROUGH = 0.06, LIP = 0.05;
+
+/** The dip kind of a tile id: ShallowWater and DeepWater water, Lava lava, Chasm chasm, everything else none. */
+export function dipOf(tile: number): DipKind {
+  switch (tile) {
+    case TILE_ID.ShallowWater:
+    case TILE_ID.DeepWater: return DIP.water;
+    case TILE_ID.Lava: return DIP.lava;
+    case TILE_ID.Chasm: return DIP.chasm;
+    default: return DIP.none;
+  }
+}
+
+function ss(a: number, b: number, t: number): number {
+  const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+}
+
+/** Smooth membership of the cells around (x, z) in tiles: 0.5 on a straight cell edge. Outside the map is no member. */
+export function maskAt(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
+  const u = x - 0.5, v = z - 0.5;
+  const i = Math.floor(u), j = Math.floor(v);
+  const fx = ss(0, 1, u - i), fz = ss(0, 1, v - j);
+  const m = (a: number, b: number) => (member(map.get(a, b)) ? 1 : 0);
+  const top = m(i, j) * (1 - fx) + m(i + 1, j) * fx;
+  const bot = m(i, j + 1) * (1 - fx) + m(i + 1, j + 1) * fx;
+  return top * (1 - fz) + bot * fz;
+}
+
+function lattice(i: number, j: number): number {
+  let n = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) | 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177) | 0;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Value noise on an integer-lattice hash, smoothstep-interpolated, in 0..1. */
+function vnoise(x: number, z: number): number {
+  const i = Math.floor(x), j = Math.floor(z);
+  const fx = ss(0, 1, x - i), fz = ss(0, 1, z - j);
+  const a = lattice(i, j) * (1 - fx) + lattice(i + 1, j) * fx;
+  const b = lattice(i, j + 1) * (1 - fx) + lattice(i + 1, j + 1) * fx;
+  return a * (1 - fz) + b * fz;
+}
+
+const isWater = (t: number) => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
+const isDeep = (t: number) => t === TILE_ID.DeepWater;
+const isLava = (t: number) => t === TILE_ID.Lava;
+const isChasm = (t: number) => t === TILE_ID.Chasm;
+
+/** Height of the ground at (x, z): 0 on plain floor, up to LIP on a rim, negative in a dip. */
+export function bedAt(map: TileMap, x: number, z: number): number {
+  const mW = maskAt(map, x, z, isWater), mD = maskAt(map, x, z, isDeep);
+  const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
+  const any = Math.max(mW, mL, mC);
+  if (any === 0) return 0;
+  let h = -(SHALLOW_BED * ss(0.5, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(0.5, STEEP.deep, mD))
+    - LAVA_BED * ss(0.5, STEEP.lava, mL) - CHASM_BED * ss(0.5, STEEP.chasm, mC);
+  h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(0.5, 0.7, any) * (1 - ss(0.56, 0.9, mC));
+  // A continuous bump on the outside of the outline: 0 at the cell edge (any 0.5) and beyond 0.25.
+  h += LIP * ss(0.25, 0.4, any) * (1 - ss(0.42, 0.5, any)) * (0.4 + 0.6 * vnoise(x * 6, z * 6));
+  return h;
+}
+
+/** The kind whose mask is largest at (x, z), none below 0.15 (the bank material's choice). */
+export function kindAt(map: TileMap, x: number, z: number): DipKind {
+  const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava), c = maskAt(map, x, z, isChasm);
+  const best = Math.max(w, l, c);
+  if (best < 0.15) return DIP.none;
+  return c === best ? DIP.chasm : l === best ? DIP.lava : DIP.water;
+}
+
+/** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > 0.5), else -Infinity. */
+export function surfaceAt(map: TileMap, x: number, z: number): number {
+  const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava);
+  if (w > 0.5 && w >= l) return WATER_LEVEL;
+  if (l > 0.5) return LAVA_LEVEL;
+  return -Infinity;
+}
+
+/** A height-0 cell the dip mesh draws: a terrain cell, or a non-terrain cell with a terrain cell among its eight neighbours. */
+export function inDipMesh(map: TileMap, x: number, z: number): boolean {
+  const t = map.get(x, z);
+  if (dipOf(t) !== DIP.none) return true;
+  if (t === TILE_ID.Void || t === TILE_ID.Wall || t === TILE_ID.DoorClosed) return false;
+  for (let dj = -1; dj <= 1; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      if ((di || dj) && dipOf(map.get(x + di, z + dj)) !== DIP.none) return true;
+    }
+  }
+  return false;
+}
+
+/** exp fade of anything deep in a chasm: 0.03 + 0.97 * exp(0.55 * min(y, 0)). */
+export function depthFade(y: number): number {
+  return 0.03 + 0.97 * Math.exp(0.55 * Math.min(y, 0));
+}
+
+export const BED_RES = 4;
+
+/** bedAt on a grid of BED_RES texels per tile, (map.w * BED_RES + 1) by (map.h * BED_RES + 1), row by row. */
+export function bedField(map: TileMap): { w: number; h: number; data: Float32Array } {
+  const w = map.w * BED_RES + 1, h = map.h * BED_RES + 1;
+  const data = new Float32Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) data[j * w + i] = bedAt(map, i / BED_RES, j / BED_RES);
+  return { w, h, data };
+}
+
+/** Bilinear, clamp-to-edge read of a bed field at (x, z) tiles: the CPU twin of the read #345's shader does by hand. */
+export function sampleBed(f: { w: number; h: number; data: Float32Array }, x: number, z: number): number {
+  const u = Math.min(f.w - 1, Math.max(0, x * BED_RES)), v = Math.min(f.h - 1, Math.max(0, z * BED_RES));
+  const i = Math.min(f.w - 2, Math.floor(u)), j = Math.min(f.h - 2, Math.floor(v));
+  const fx = u - i, fz = v - j;
+  const at = (a: number, b: number) => f.data[b * f.w + a];
+  const top = at(i, j) * (1 - fx) + at(i + 1, j) * fx;
+  const bot = at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx;
+  return top * (1 - fz) + bot * fz;
+}

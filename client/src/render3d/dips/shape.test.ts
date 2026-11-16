@@ -1,0 +1,141 @@
+import { describe, expect, it } from 'vitest';
+import { TILE_ID } from '../../generated/defs';
+import { TileMap } from '../../sim/map';
+import {
+  BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
+  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, sampleBed, surfaceAt, type DipKind,
+} from './shape';
+
+const CH: Record<string, number> = {
+  '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, W: TILE_ID.DeepWater,
+  L: TILE_ID.Lava, C: TILE_ID.Chasm, ' ': TILE_ID.Void,
+};
+
+/** Rows of characters inside a one-cell wall border. */
+function room(...rows: string[]): TileMap {
+  const w = rows[0].length + 2, h = rows.length + 2;
+  const m = new TileMap(w, h, new Uint8Array(w * h).fill(TILE_ID.Wall));
+  rows.forEach((r, j) => [...r].forEach((c, i) => m.set(i + 1, j + 1, CH[c])));
+  return m;
+}
+
+/** An n x n pool of one terrain character in a floor room with two floor cells all round. */
+function pool(c: string, n: number): TileMap {
+  const s = n + 4;
+  return room(...Array.from({ length: s }, (_, j) =>
+    Array.from({ length: s }, (_, i) => (i >= 2 && i < 2 + n && j >= 2 && j < 2 + n ? c : '.')).join('')));
+}
+
+// Pool of 5: cells 3..7 (border 1 + margin 2), centre 5.5, left edge 3, top edge 3.
+const mid = 5.5, edgeX = 3, cornerX = 3, cornerZ = 3;
+
+describe('dip shape', () => {
+  it('is flat floor away from terrain', () => expect(Math.abs(bedAt(room('...', '...', '...'), 1.5, 1.5))).toBe(0));
+
+  it('reaches the full depth in the middle of a wide pool', () => {
+    expect(bedAt(pool('C', 5), mid, mid)).toBeCloseTo(-CHASM_BED, 5);
+    expect(bedAt(pool('~', 5), mid, mid)).toBeGreaterThan(-SHALLOW_BED - ROUGH);
+    expect(bedAt(pool('~', 5), mid, mid)).toBeLessThan(-SHALLOW_BED + ROUGH);
+    expect(bedAt(pool('W', 5), mid, mid)).toBeLessThan(-DEEP_BED + ROUGH);
+    expect(bedAt(pool('L', 5), mid, mid)).toBeLessThan(-LAVA_BED + ROUGH);
+  });
+
+  it('meets the floor on a straight cell edge', () => expect(Math.abs(bedAt(pool('C', 5), edgeX, mid))).toBeLessThan(1e-9));
+  it('is exactly 0 half a tile outside the outline', () => expect(Math.abs(bedAt(pool('C', 5), edgeX - 0.5, mid))).toBe(0));
+
+  it('never rises above the lip and is finite everywhere', () => {
+    const maps = [
+      room('...', '.C.', '...'),
+      room('.....', '.CCC.', '.....'),
+      room('.....', '.C...', '..C..', '.....'),
+      room('C~W', 'CCL', '#LL'),
+      room('~~~~', 'WWLL', 'LLCC', 'CC..'),
+      room('C', 'C'),
+      room('~W', 'L.'),
+    ];
+    for (const m of maps) {
+      for (let z = -0.5; z <= m.h + 0.5; z += 0.125) {
+        for (let x = -0.5; x <= m.w + 0.5; x += 0.125) {
+          const h = bedAt(m, x, z);
+          expect(Number.isFinite(h)).toBe(true);
+          expect(h).toBeLessThanOrEqual(LIP);
+          expect(h).toBeGreaterThanOrEqual(-CHASM_BED - ROUGH);
+        }
+      }
+    }
+  });
+
+  it('rounds a convex corner inward', () => expect(bedAt(pool('C', 5), cornerX + 0.08, cornerZ + 0.08)).toBeGreaterThan(-0.5));
+
+  it('is a pure function of the point', () => {
+    const m = pool('C', 5);
+    const a = bedAt(m, edgeX, 4.25), b = bedAt(m, edgeX, 4.25);
+    expect(a).toBe(b);
+    // The same point reached from either neighbouring cell's local grid (offset + fraction).
+    expect(bedAt(m, 2 + 1, 4.25)).toBe(bedAt(m, 3 + 0, 2 + 2.25));
+  });
+
+  it('names the kind', () => {
+    const m = pool('C', 5);
+    expect(kindAt(m, mid, mid)).toBe(DIP.chasm);
+    expect(kindAt(m, edgeX - 1.5, mid)).toBe(DIP.none);
+    const want: Record<keyof typeof TILE_ID, DipKind> = {
+      Barrier: DIP.none, Chasm: DIP.chasm, DeepWater: DIP.water, DoorClosed: DIP.none, DoorOpen: DIP.none,
+      Floor: DIP.none, Lava: DIP.lava, Road: DIP.none, ShallowWater: DIP.water, Thicket: DIP.none,
+      Trunk: DIP.none, Void: DIP.none, Wall: DIP.none,
+    };
+    for (const [name, id] of Object.entries(TILE_ID)) {
+      expect(want[name as keyof typeof TILE_ID], `${name} is listed`).toBeDefined();
+      expect(dipOf(id)).toBe(want[name as keyof typeof TILE_ID]);
+    }
+  });
+
+  it('gives the surface only inside a liquid', () => {
+    expect(surfaceAt(pool('~', 5), mid, mid)).toBe(WATER_LEVEL);
+    expect(surfaceAt(pool('W', 5), mid, mid)).toBe(WATER_LEVEL);
+    expect(surfaceAt(pool('L', 5), mid, mid)).toBe(LAVA_LEVEL);
+    expect(surfaceAt(pool('C', 5), mid, mid)).toBe(-Infinity);
+    expect(surfaceAt(pool('L', 5), 1.5, 1.5)).toBe(-Infinity);
+  });
+
+  it('lists the mesh cells', () => {
+    const m = room('.......', '.......', '...C...', '.......', '.......', '.......', '#.....#');
+    m.set(1, 1, TILE_ID.Void);
+    // Chasm at (4,3). Neighbours 3..5 x 2..4 are in, floor two away is not.
+    for (let j = 2; j <= 4; j++) for (let i = 3; i <= 5; i++) expect(inDipMesh(m, i, j)).toBe(true);
+    expect(inDipMesh(m, 6, 3)).toBe(false);
+    expect(inDipMesh(m, 4, 5)).toBe(false);
+    const w = room('C.', '..');
+    expect(inDipMesh(w, 0, 0)).toBe(false); // the border wall
+    expect(inDipMesh(w, 1, 1)).toBe(true);
+    expect(inDipMesh(w, 2, 2)).toBe(true);
+    const v = room('C.');
+    v.set(3, 1, TILE_ID.Void);
+    expect(inDipMesh(v, 3, 1)).toBe(false);
+  });
+
+  it('fades with depth', () => {
+    expect(depthFade(0)).toBe(1);
+    expect(depthFade(-12)).toBeLessThan(0.035);
+    expect(depthFade(3)).toBe(1);
+  });
+
+  it('samples its field like bedAt', () => {
+    const m = pool('W', 3);
+    const f = bedField(m);
+    expect(f.w).toBe(m.w * BED_RES + 1);
+    expect(f.h).toBe(m.h * BED_RES + 1);
+    expect(f.data.length).toBe(f.w * f.h);
+    for (const [i, j] of [[0, 0], [13, 9], [20, 20], [25, 26], [f.w - 1, f.h - 1]]) {
+      expect(sampleBed(f, i / BED_RES, j / BED_RES)).toBeCloseTo(bedAt(m, i / BED_RES, j / BED_RES), 5);
+    }
+    const x = 3.4, z = 5.3;
+    const x0 = Math.floor(x * BED_RES), z0 = Math.floor(z * BED_RES);
+    const c = [f.data[z0 * f.w + x0], f.data[z0 * f.w + x0 + 1], f.data[(z0 + 1) * f.w + x0], f.data[(z0 + 1) * f.w + x0 + 1]];
+    const s = sampleBed(f, x, z);
+    expect(s).toBeGreaterThanOrEqual(Math.min(...c) - 1e-6);
+    expect(s).toBeLessThanOrEqual(Math.max(...c) + 1e-6);
+    expect(sampleBed(f, -5, -5)).toBe(f.data[0]);
+    expect(sampleBed(f, 999, 999)).toBe(f.data[f.data.length - 1]);
+  });
+});
