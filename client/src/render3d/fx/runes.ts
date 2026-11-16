@@ -81,6 +81,8 @@ export const RUNE_N = { windup: 16, instant: 16, primary: 12 } as const;
 const VORTEX_D = 0.5, VORTEX_R = 0.2, VORTEX_SPIN = 9, VORTEX_RUN = 1.6;
 /** A grid unit of a rune in tiles. */
 const RUNE_U = 0.6 * PX;
+/** The sphere's runes are this many times the vortex's (a try for the user to judge, #308: at 1 they were specks on a short cast). */
+const SPHERE_SIZE = 2;
 /** The centre of the rune sphere above the caster's foot, and its radius range. */
 const SPHERE_Y = 0.75, SPHERE_R0 = 0.85, SPHERE_R1 = 1.2;
 /**
@@ -237,10 +239,11 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
     if (prim) { hx = ax.right[0]; hy = ax.right[1]; hz = ax.right[2]; vx = ax.up[0]; vy = ax.up[1]; vz = ax.up[2]; }
     else { hx = -Math.sin(face); hy = 0; hz = Math.cos(face); vx = 0; vy = 1; vz = 0; }
     const nx = hy * vz - hz * vy, ny = hz * vx - hx * vz, nz = hx * vy - hy * vx;
-    const u = RUNE_U * scale;
+    const big = prim ? 1 : SPHERE_SIZE;
+    const u = RUNE_U * scale * big;
     const col = pal.runes[Math.floor(hash3(seed, i, 16) * pal.runes.length) % pal.runes.length];
     core[0] = lerp(pal.core[0], 1, flash); core[1] = lerp(pal.core[1], 1, flash); core[2] = lerp(pal.core[2], 1, flash);
-    const wide = 0.7 * PX * scale, wideExt = 0.25 * PX, thin = 0.28 * PX * scale, thinExt = 0.12 * PX;
+    const wide = 0.7 * PX * scale * big, wideExt = 0.25 * PX * big, thin = 0.28 * PX * scale * big, thinExt = 0.12 * PX * big;
     const bandA = (prim ? 0.5 : 0.35) * alpha, coreA = 0.95 * alpha;
     for (let k = 0; k < glyph.length; k++) {
       const st = glyph[k];
@@ -257,7 +260,7 @@ export function runeTris(out: FxOut, ctx: FxCtx, r: RuneRec, fig: DrawnFig | nul
     }
     const g = bandA * (1 + flash);
     rgb[0] = col[0] * g; rgb[1] = col[1] * g; rgb[2] = col[2] * g;
-    pushGlow(out.glows, cx, cy, cz, prim ? 0.15 : 0.12, rgb, ctx.cam);
+    pushGlow(out.glows, cx, cy, cz, prim ? 0.15 : 0.12 * big, rgb, ctx.cam);
     sum += alpha * (1 + flash);
   }
   const k = Math.min(1.6, sum / ((channel ? CHANNEL_LIFE / CHANNEL_GAP : n) * 0.6));
