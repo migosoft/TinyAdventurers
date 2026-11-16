@@ -14,7 +14,7 @@ export function startFall(x: number, z: number, y: number, vx: number, vz: numbe
   return { x, z, y, vx: vx * k, vz: vz * k, vy: 0, cx: Math.floor(x) + 0.5, cz: Math.floor(z) + 0.5, age: 0 };
 }
 
-/** One step. While the bed under it carries it (bed >= y): it is pulled toward (cx, cz) at RIM_PULL and stays on the bed. Else gravity; the sideways step is dropped (and the speed zeroed) when the bed at the new place is above the foot. False once it is gone (y <= -FALL_GONE or age > FALL_MAX_AGE). */
+/** One step. While the bed under it carries it (bed >= y): it is pulled toward (cx, cz) at RIM_PULL and stays on the bed. Else gravity; the sideways step is dropped (and the speed zeroed) when the bed at the new place is above the foot; at the end y is clamped to the bed at the final place, so the foot never ends below the ground. False once it is gone (y <= -FALL_GONE or age > FALL_MAX_AGE). */
 export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => number): boolean {
   f.age += dt;
   if (f.age > FALL_MAX_AGE) return false;
@@ -23,15 +23,13 @@ export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => n
     const s = Math.min(d, RIM_PULL * dt);
     const nx = d > 0 ? f.x + (dx / d) * s : f.x, nz = d > 0 ? f.z + (dz / d) * s : f.z;
     f.vy = 0;
-    // The bed ahead may be higher than the foot (a bump): then stay where it carries.
-    if (bed(nx, nz) <= Math.max(bed(f.x, f.z), f.y) + 1e-9) {
-      f.x = nx; f.z = nz;
-    }
-    f.y = bed(f.x, f.z);
+    // On the ground: follow the bed up (a lip), but never snap down it; when the bed drops away the next step falls.
+    f.x = nx; f.z = nz;
+    f.y = Math.max(bed(f.x, f.z), f.y);
     return f.y > -FALL_GONE;
   }
+  const y = f.y + f.vy * dt - 0.5 * FALL_G * dt * dt;
   f.vy -= FALL_G * dt;
-  const y = f.y + f.vy * dt;
   const nx = f.x + f.vx * dt, nz = f.z + f.vz * dt;
   if (bed(nx, nz) > y) {
     f.vx = 0; f.vz = 0;

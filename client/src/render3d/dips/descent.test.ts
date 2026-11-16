@@ -3,10 +3,34 @@ import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { bedAt, LAVA_LEVEL } from './shape';
 import {
-  FALL_GONE, FALL_MAX_AGE, LAVA_SINK, SLIDE_MAX, drownY, standY, startFall, stepFall, stepLavaSink,
+  FALL_G, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
 const DROWN_TIME = CONST.DROWN_TIME;
+
+function block3(): (x: number, z: number) => number {
+  const w = 10, h = 10;
+  const tiles = new Uint8Array(w * h).fill(TILE_ID.Floor);
+  for (let j = 3; j < 6; j++) for (let i = 3; i < 6; i++) tiles[j * w + i] = TILE_ID.Chasm;
+  const map = new TileMap(w, h, tiles);
+  return (x, z) => bedAt(map, x, z);
+}
+
+/** Steps a faller to the end, checking every step: never in rock (also on the step that returns false), no drop beyond free fall. */
+function run(bed: (x: number, z: number) => number, f: Faller, dt: number) {
+  let time = 0, minVy = 0, steps = 0, gone = false;
+  for (;;) {
+    const y0 = f.y, vy0 = f.vy;
+    const alive = stepFall(f, dt, bed);
+    expect(bed(f.x, f.z)).toBeLessThanOrEqual(f.y + 1e-6);
+    expect(y0 - f.y).toBeLessThanOrEqual(Math.abs(vy0) * dt + 0.5 * FALL_G * dt * dt + 1e-6);
+    minVy = Math.min(minVy, f.vy);
+    if (!alive) { gone = f.y <= -FALL_GONE + 1e-9; break; }
+    time += dt;
+    if (++steps > 2000) throw new Error('never gone');
+  }
+  return { time, minVy, gone };
+}
 
 describe('descent', () => {
   it('drops with gravity over the hole', () => {
@@ -46,12 +70,15 @@ describe('descent', () => {
     for (let j = 0; j < h; j++) tiles[j * w + 5] = TILE_ID.Chasm;
     const map = new TileMap(w, h, tiles);
     const bed = (x: number, z: number) => bedAt(map, x, z);
+    // Across from the middle, from near one bank toward the other, and diagonally.
+    const starts: [number, number, number, number][] = [
+      [5.5, 5.5, SLIDE_MAX, 0], [5.05, 5.5, SLIDE_MAX, 0], [5.95, 5.5, -SLIDE_MAX, 0],
+      [5.1, 5.5, 2.1, 2.1], [5.9, 4.5, -2.1, 2.1], [5.5, 5.5, 0, SLIDE_MAX],
+    ];
     for (const dt of [1 / 60, 0.05]) {
-      const f = startFall(5.5, 5.5, 0, SLIDE_MAX, 0);
-      let steps = 0;
-      while (stepFall(f, dt, bed)) {
-        expect(bed(f.x, f.z)).toBeLessThanOrEqual(f.y + 1e-6);
-        if (++steps > 1000) throw new Error('never gone');
+      for (const [x, z, vx, vz] of starts) {
+        const r = run(bed, startFall(x, z, 0, vx, vz), dt);
+        expect(r.gone).toBe(true);
       }
     }
   });
@@ -66,18 +93,39 @@ describe('descent', () => {
     const sx = 3.08, sz = 3.08;
     expect(Math.abs(bed(sx, sz))).toBeLessThan(0.1);
     const f = startFall(sx, sz, bed(sx, sz), 0, 0);
-    let t = 0;
     const d0 = Math.hypot(f.x - f.cx, f.z - f.cz);
     expect(stepFall(f, 1 / 60, bed)).toBe(true);
     // First step: pulled toward the cell centre, still standing on the bed.
     expect(Math.hypot(f.x - f.cx, f.z - f.cz)).toBeLessThan(d0);
-    expect(f.y).toBeCloseTo(bed(f.x, f.z), 9);
+    expect(f.y).toBeGreaterThanOrEqual(bed(f.x, f.z));
+    expect(f.y).toBeGreaterThan(-0.05);
     expect(f.vy).toBe(0);
-    while (stepFall(f, 1 / 60, bed)) {
-      t += 1 / 60;
-      expect(bed(f.x, f.z)).toBeLessThanOrEqual(f.y + 1e-6);
+    const r = run(bed, startFall(sx, sz, bed(sx, sz), 0, 0), 1 / 60);
+    expect(r.gone).toBe(true);
+    expect(r.minVy).toBeLessThan(0);
+  });
+
+  it('reaches the hole from the outer corner cell', () => {
+    const bed = block3();
+    for (const [x, z] of [[3.05, 3.05], [3.05, 5.95], [3.15, 3.05], [5.95, 5.95]]) {
+      const r = run(bed, startFall(x, z, Math.max(0, bed(x, z)), 0, 0), 1 / 60);
+      expect(r.gone).toBe(true);
+      expect(r.time).toBeLessThan(2);
+      expect(r.minVy).toBeLessThan(0);
     }
-    expect(t).toBeLessThan(FALL_MAX_AGE);
+  });
+
+  it('never ages out or jumps from any start in a 3x3 chasm', () => {
+    const bed = block3();
+    for (const dt of [1 / 60, 0.05]) {
+      for (let x = 3.05; x < 6; x += 0.1) {
+        for (let z = 3.05; z < 6; z += 0.1) {
+          const r = run(bed, startFall(x, z, Math.max(0, bed(x, z)), 0, 0), dt);
+          expect(r.gone, `${x.toFixed(2)},${z.toFixed(2)} dt ${dt}`).toBe(true);
+          expect(r.time).toBeLessThan(FALL_MAX_AGE);
+        }
+      }
+    }
   });
 
   it('drowns onto the bed', () => {
