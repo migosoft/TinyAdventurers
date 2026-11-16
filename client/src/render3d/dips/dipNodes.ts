@@ -1,60 +1,85 @@
 // The ground of the dips in TSL (#324): the floor's own texel above the lip, the bank rock below it (mud for water, basalt for lava,
-// layered slate chasm rock), lit like the world, with the lava's band of glow and the chasm's depth fade. The mesh (dipMesh.ts) carries the
+// jagged slabs of chasm rock), lit like the world, with the lava's band of glow and the chasm's depth fade. The mesh (dipMesh.ts) carries the
 // world material's `kind` and `rect` plus a per-vertex `dip` kind; the rock reads the world position only, so it looks the same on the
 // sloped ground and on the vertical skirts along walls. The numbers are first guesses from the mockup, to be tuned by eye.
 import type { NodeMaterial, Texture } from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { abs, attribute, dot, exp, float, fract, length, max, min, mix, positionWorld, select, smoothstep, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { abs, attribute, exp, float, floor, min, mix, positionWorld, select, sign, smoothstep, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { flatTexel } from '../materials';
-import { fbm2, vnoise2 } from '../noiseNodes';
+import { fbm2, hash21, vnoise2 } from '../noiseNodes';
 import { LAVA_LEVEL } from './shape';
 
 /** The light's wrap on a dip surface (like a floor's). */
 const WRAP = 0.35;
 
-/** The chasm rock's albedo (lit by the game light), and its own cool light per unit of relief shading, which makes the shape read with no torch near. */
-const CHASM_ROCK = vec3(0.09, 0.088, 0.086);
-const CHASM_SELF = vec3(0.17, 0.18, 0.205);
-/** The strata: layers per world unit and the tilt (tan of the angle, rising to the right) of the main set and of the second, shallower set that breaks it up where a noise mask says so; the low-frequency warp of the layer coordinate (frequency, amount in layers: it varies the layers' thickness about 3 to 1) and a mid-frequency one. */
-const STRATA_FREQ = 1.9, STRATA_TILT = 0.7, STRATA2_FREQ = 1.3, STRATA2_TILT = 0.2;
-const STRATA_WARP_FREQ = 0.45, STRATA_WARP = 3.2, STRATA_WARP2_FREQ = 1.3, STRATA_WARP2 = 0.7;
-/** One layer's profile: the share of it that is the shaded underside (a ramp that steepens to the overhang's lip), the ledge height (scaled by a low-frequency noise so ledges fade out and begin), the chips on the faces (frequency, height). */
-const STRATA_SHADE = 0.42, STRATA_LEDGE = 0.4, STRATA_LEDGE_VAR = 1.3, STRATA_CHIP_FREQ = 8, STRATA_CHIP = 0.3;
-/** The relief: the step of the finite differences, the slope's weight, the light's direction in the wall's frame (along the wall, up it, out of it), the ambient share, the face tone's range from a low-frequency noise, the grain's strength and frequency. */
-const STRATA_EPS = 0.05, STRATA_RELIEF = 0.8;
-const STRATA_LIGHT = vec3(-0.45, 0.55, 0.7);
-const STRATA_AMBIENT = 0.08, STRATA_TONE = 0.7, STRATA_GRAIN = 0.3, STRATA_GRAIN_FREQ = 20;
+/** The chasm rock's albedo (lit by the game light), and its own cool light per unit of slab shading, which makes the shape read with no torch near. Dark charcoal: a slab's face is about a tenth of full brightness at the rim, its lit lip up to a fifth. */
+const CHASM_ROCK = vec3(0.07, 0.069, 0.068);
+const CHASM_SELF = vec3(0.155, 0.162, 0.178);
+/** The ledges: the tilt of the layers (cos, sin of about 25 degrees, rising to the right), layers per world unit across them (a chasm shows only its top two or three tiles, so the layers are a third to half a tile), and the low-frequency warp that keeps them from running parallel (frequency, amount in world units). */
+const LEDGE_COS = 0.906, LEDGE_SIN = 0.423, LEDGE_ACROSS = 2.3, LEDGE_WARP_FREQ = 0.6, LEDGE_WARP = 0.4;
+/** A layer's lower edge, in layers: a long angular swing and a shorter one (frequency along the layer, range), and chipped notches (steps). The ranges sum to under 1, so layers never cross; a layer's thickness varies from a sliver to nearly two layers. */
+const EDGE_F1 = 0.8, EDGE_A1 = 0.42, EDGE_F2 = 2.6, EDGE_A2 = 0.3, EDGE_F3 = 5, EDGE_A3 = 0.09;
+/** A layer is broken into slabs along its length: slabs per world unit, how far the breaks slant, a break's width (most are hairline, a few are wide recesses) and its darkness. */
+const SLAB_FREQ = 0.9, SLAB_SLANT = 0.9, BREAK_NARROW = 0.015, BREAK_WIDE = 0.16, BREAK_DARK = 0.12;
+/**
+ * A slab's look: the darkest tone a slab takes (the lightest is 1); the undercut at its foot (depth, and its width in layers: some slabs
+ * overhang deeply, some barely); the black line under it; the lip at its top that catches the light (strength, width); how much a slab,
+ * a flat plate, is turned to or from the light along its length.
+ */
+const SLAB_TONE_LOW = 0.38, UNDERCUT = 0.95, UNDERCUT_NARROW = 0.12, UNDERCUT_WIDE = 0.85, LEDGE_LINE = 0.05, LIP = 0.5, LIP_WIDTH = 0.1, SLAB_FACET = 0.45;
+/** The mottling, the broad variation of tone across the face and the fine grain (frequency, range each). */
+const ROCK_MOTTLE_FREQ = 4.5, ROCK_MOTTLE = 0.35, ROCK_BROAD_FREQ = 0.4, ROCK_BROAD = 0.5, ROCK_GRAIN_FREQ = 21, ROCK_GRAIN = 0.3;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
-/** The slowly varying noise of the rock face, evaluated once per pixel and shared by the three height reads: the two warps, the set mask and the ledge amplitude. */
-interface StrataNoise { w1: N; w2: N; mask: N; amp: N }
-const strataNoise = (s: N, y: N): StrataNoise => {
-  const p = vec2(s, y);
-  return {
-    w1: vnoise2(p.mul(STRATA_WARP_FREQ)).sub(0.5).mul(STRATA_WARP),
-    w2: vnoise2(p.mul(STRATA_WARP2_FREQ).add(7)).sub(0.5).mul(STRATA_WARP2),
-    mask: vnoise2(p.mul(0.6).add(3)),
-    amp: vnoise2(p.mul(0.8).add(11)),
-  };
+/** Angular 1D noise of layer `k` at `x`: the lattice values joined by straight lines (no smoothing), so an edge drawn with it has corners. */
+const lin = (x: N, k: N): N => {
+  const i = floor(x);
+  return mix(hash21(vec2(i, k)), hash21(vec2(i.add(1), k)), x.sub(i));
 };
-/** One layer's height at a layer coordinate `a`: a ramp up (the shaded underside, steepening to the lip) over STRATA_SHADE of the layer, then a longer lit slope back down. */
-const saw = (a: N): N => {
-  const f = fract(a);
-  return select(f.lessThan(STRATA_SHADE), f.div(STRATA_SHADE).pow(2), float(1).sub(f).div(1 - STRATA_SHADE));
-};
+/** The lower edge of layer `k` at `u` along it, as an offset in layers: a long angular swing, a shorter one, and chipped notches. Each layer has its own, so the layers pinch and swell. */
+const ledgeEdge = (u: N, k: N): N =>
+  lin(u.mul(EDGE_F1).add(k.mul(13.7)), k).sub(0.5).mul(EDGE_A1)
+    .add(lin(u.mul(EDGE_F2).add(k.mul(5.1)).add(3), k.add(57)).sub(0.5).mul(EDGE_A2))
+    .add(hash21(vec2(floor(u.mul(EDGE_F3).add(k.mul(9.3))), k.add(113))).sub(0.5).mul(EDGE_A3));
 /**
- * The height of the rock face at (s, y), s along the wall: two sets of layers (tilted differently, warped at low frequency) mixed by a
- * noise mask, each layer a `saw`, scaled by a ledge amplitude that fades ledges in and out, plus chips. Sine-free noise only.
+ * The chasm rock's shading (0 to about 1.2) at (s, y), s along the wall and y up it: overlapping jagged slabs of layered rock. The face is
+ * a stack of tilted layers, each with its own angular lower edge; the layer over a point is the highest one whose edge lies below it
+ * (four candidates, unrolled: no shader loop). A layer is broken along its length into slabs, each a flat plate with its own tone and
+ * turn; every slab has a lit lip at its top and a dark undercut at its foot, where it overhangs the layer below. Mottling, a broad
+ * variation and fine grain lie over it. Sine-free hashes only.
  */
-function strata(s: N, y: N, n: StrataNoise): N {
-  const a1 = y.sub(s.mul(STRATA_TILT)).mul(STRATA_FREQ).add(n.w1).add(n.w2);
-  const a2 = y.sub(s.mul(STRATA2_TILT)).mul(STRATA2_FREQ).add(n.w2.mul(2)).sub(n.w1.mul(0.5));
-  const h = mix(saw(a1), saw(a2), smoothstep(0.45, 0.6, n.mask));
-  const amp = float(STRATA_LEDGE).mul(float(0.25).add(smoothstep(0.2, 0.7, n.amp).mul(STRATA_LEDGE_VAR)));
-  return h.mul(amp).add(vnoise2(vec2(s, y).mul(STRATA_CHIP_FREQ)).mul(STRATA_CHIP));
+function slabs(s: N, y: N): N {
+  const p = vec2(s, y);
+  const u = s.mul(LEDGE_COS).add(y.mul(LEDGE_SIN));
+  const v = y.mul(LEDGE_COS).sub(s.mul(LEDGE_SIN)).add(vnoise2(p.mul(LEDGE_WARP_FREQ).add(vec2(2, 9))).sub(0.5).mul(LEDGE_WARP));
+  const a = v.mul(LEDGE_ACROSS), K = floor(a);
+  const e0 = K.sub(1).add(ledgeEdge(u, K.sub(1))), e1 = K.add(ledgeEdge(u, K)), e2 = K.add(1).add(ledgeEdge(u, K.add(1))), e3 = K.add(2).add(ledgeEdge(u, K.add(2)));
+  // Which layer covers the point: the one above (in2), the point's own (in1) or the one below; its own edge and the edge of the layer over it.
+  const in2 = step(e2, a), in1 = float(1).sub(in2).mul(step(e1, a));
+  const own = mix(mix(e0, e1, in1), e2, in2), over = mix(mix(e1, e2, in1), e3, in2);
+  const k = K.sub(1).add(in1).add(in2.mul(2));
+  const t = a.sub(own), up = over.sub(a);
+  // The slabs of the layer: breaks along it, slanted by the layer's own amount.
+  const sc = u.mul(SLAB_FREQ).add(hash21(vec2(k, 7.7)).mul(9)).add(t.mul(hash21(vec2(k, 91.3)).sub(0.5)).mul(2 * SLAB_SLANT));
+  const m = floor(sc), fu = sc.sub(m);
+  const id = hash21(vec2(k.mul(3.17).add(0.5), m.mul(5.31).add(0.5)));
+  const id2 = hash21(vec2(k.mul(7.3).add(2.5), m.mul(1.9).add(4.5)));
+  const id3 = hash21(vec2(k.mul(1.3).add(8.5), m.mul(9.7).add(1.5)));
+  const tone = float(SLAB_TONE_LOW).add(id.mul(1 - SLAB_TONE_LOW));
+  const breakWidth = float(BREAK_NARROW).add(id3.mul(id3).mul(id3).mul(BREAK_WIDE - BREAK_NARROW));
+  const broken = float(BREAK_DARK).add(smoothstep(0, breakWidth, min(fu, float(1).sub(fu))).mul(1 - BREAK_DARK));
+  const undercutWidth = float(UNDERCUT_NARROW).add(id2.mul(id2).mul(UNDERCUT_WIDE - UNDERCUT_NARROW));
+  const shadow = float(1).sub(float(1).sub(smoothstep(0, undercutWidth, t)).mul(UNDERCUT));
+  const line = smoothstep(0, LEDGE_LINE, t);
+  const lip = float(1).sub(smoothstep(0, LIP_WIDTH, up)).mul(LIP);
+  const facet = float(1).add(fu.sub(0.5).mul(mix(float(-SLAB_FACET), float(SLAB_FACET), step(0.5, id2))));
+  const mottle = float(1 - ROCK_MOTTLE / 2).add(vnoise2(p.mul(ROCK_MOTTLE_FREQ).add(5)).mul(ROCK_MOTTLE));
+  const broad = float(1 - ROCK_BROAD / 2).add(vnoise2(p.mul(ROCK_BROAD_FREQ).add(11)).mul(ROCK_BROAD));
+  const grain = float(1 - ROCK_GRAIN / 2).add(vnoise2(p.mul(ROCK_GRAIN_FREQ)).mul(ROCK_GRAIN));
+  return tone.mul(facet).mul(shadow).mul(broken).add(lip.mul(tone)).mul(line).mul(mottle).mul(broad).mul(grain);
 }
 
 export interface DipMaterial {
@@ -98,19 +123,11 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
 
   const lavaRock = vec3(0.045, 0.038, 0.036).mul(float(0.6).add(rough.mul(0.9))).mul(float(0.75).add(vnoise2(pp.mul(23)).mul(0.5)));
 
-  // The chasm's rock: layered ledges. The height field is read at the point and one step along the wall and one step down it; its
-  // slope, lit from the upper left, gives the relief (a ledge's top bright, its undercut underside black).
-  const s0 = wp.x.sub(wp.z);
-  const sn = strataNoise(s0, y);
-  const h0 = strata(s0, y, sn);
-  const hs = strata(s0.add(STRATA_EPS), y, sn);
-  const hy = strata(s0, y.add(STRATA_EPS), sn);
-  const gs = hs.sub(h0).div(STRATA_EPS).mul(STRATA_RELIEF), gy = hy.sub(h0).div(STRATA_EPS).mul(STRATA_RELIEF);
-  const nrm = vec3(gs.negate(), gy.negate(), 1);
-  const lamb = max(float(0), dot(nrm, STRATA_LIGHT)).div(length(nrm));
-  const grain = float(1 - STRATA_GRAIN).add(vnoise2(vec2(s0, y).mul(STRATA_GRAIN_FREQ)).mul(2 * STRATA_GRAIN));
-  const tone = float(1 - STRATA_TONE / 2).add(sn.amp.mul(STRATA_TONE));
-  const ridges = float(STRATA_AMBIENT).add(lamb.mul(1 - STRATA_AMBIENT)).mul(grain).mul(tone);
+  // The chasm's rock: jagged slabs, in the wall's own frame (along it, to the right seen from inside the chasm, and up it). A wall that
+  // runs along x takes x, one along z takes z, a rounded corner blends the two by the normal (a single coordinate would mirror there).
+  const nx2 = normal.x.mul(normal.x), nz2 = normal.z.mul(normal.z);
+  const alongZ = smoothstep(0.3, 0.7, nx2.div(nx2.add(nz2).add(1e-4)));
+  const ridges = mix(slabs(wp.x.mul(sign(normal.z)), y), slabs(wp.z.mul(sign(normal.x)).negate(), y), alongZ);
   const chasmRock = CHASM_ROCK.mul(ridges);
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
