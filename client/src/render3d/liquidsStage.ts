@@ -17,7 +17,7 @@ import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
-import { BACK_TIME, SLIDE_TIME, liquidsFalling, liquidsScript, PUSHES, type Push } from './liquidsScript';
+import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
 import { seeLook } from './seeThrough';
@@ -29,8 +29,12 @@ const PAN_SPEED = 12;
 const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
 const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
 const ALL_VISIBLE = { isVisible: (): boolean => true };
-/** The seconds before the first frame whose events are sent again when the clock is pinned (a pinned page shows a fall in progress). */
+/**
+ * A pinned clock shows a fall in progress: the first frame plays the REPLAY seconds before it as frames of STEP seconds (the events as the
+ * script sends them, the figures drawn and thrown away), then the page holds still (the figures get no time).
+ */
 const REPLAY = 6;
+const STEP = 1 / 60;
 
 export interface LiquidsOpts { push: Push | null; start: number; pinned: boolean; slow: number }
 
@@ -55,7 +59,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
   if (opts.push) pushes[opts.push] = 1;
   let t = opts.start;
-  let prev = opts.pinned ? t - REPLAY : t;
+  let prev = opts.pinned ? t - STEP : t;
+  let warmed = !opts.pinned;
 
   // The field: the wall torches, then a light on every lava tile (ids from 1, as in 2D).
   const field = new LightField(map);
@@ -101,6 +106,24 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         cam.x = q.x;
         cam.z = q.z;
       }
+      const game = c.params.light === 'game';
+      const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
+      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 };
+      // A pinned page plays the seconds before its clock once, then holds still.
+      let fdt = dt;
+      if (opts.pinned) {
+        if (!warmed) {
+          warmed = true;
+          for (let k = Math.ceil(REPLAY / STEP); k >= 1; k--) {
+            const tau = t - k * STEP;
+            if (tau < 0) continue;
+            const w = liquidsScript(tau, STEP, pushes);
+            for (const ev of w.events) figures.event(ev);
+            figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
+          }
+          fdt = STEP;
+        } else fdt = 0;
+      }
       // The actors and the events born since the last frame, sent to the figures as a run sends them.
       const sc = liquidsScript(t, Math.max(0, t - prev), pushes);
       prev = t;
@@ -110,9 +133,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       c.timer.lap('sim');
       if (!c.view) return 0;
 
-      const game = c.params.light === 'game';
-      const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 });
+      const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
@@ -131,7 +152,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
-        r.liquids = { t, fallers: liquidsFalling(t, pushes) };
+        r.liquids = { t, fallers: figures.fallers };
       }
       c.timer.renderStart();
       return c.view.draw(

@@ -2,21 +2,25 @@
 // PhaserRunView. The look of a figure is `figurePose` (game/anim/pose.ts), shared with the 2D view; this file turns the pose
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
-import { ANIM, EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
+import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
-import { VANISH_SECS } from '../game/anim/entityAlpha';
+import { skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
 import { FigureStates } from '../game/anim/figureState';
 import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import type { EntState } from '../game/world';
+import type { TileMap } from '../sim/map';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, viewRay, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WALL_SIGHT_PUSH, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
+import { Descents, type Descent } from './dips/descents';
+import { drownY, FALL_BED, standY, stepLavaSink } from './dips/descent';
+import { bedAt, depthFade, surfaceAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
@@ -96,6 +100,8 @@ export interface Opener { id: number; x: number; z: number; mid: number; who: 'h
 /** Where overlays hang from a drawn thing (#311). Foot in tiles; heights in art px above the foot on screen. */
 export interface FigureAnchor {
   x: number; z: number;
+  /** The drawn foot's height in tiles: the bed of a dip under it, a faller's height, 0 in the air (#324). */
+  y: number;
   /** 2D's view `height`: body frame height x scale (EntityView), CHEST_HEIGHT for chests, barrels, mimics. */
   height: number;
   /** 2D's name-tag offset: (footY ?? frame h) x scale + 3. */
@@ -122,7 +128,22 @@ export interface FigureOut {
   figs: DrawnFig[];
   /** The mimics' one-shot cues of this frame (the reveal and the landing), for the effects. */
   cues: MimicCue[];
+  /** The falls into a chasm that began this frame (a figure or a barrel the hero can see), at the rim they began on, in tiles. */
+  falls: Array<{ id: number; x: number; z: number }>;
 }
+
+/** A thing's drawn motion: where it was drawn last frame, its eased speed (tiles/s), its foot's last height and its lava sink. */
+interface Motion { px: number; pz: number; vx: number; vz: number; y: number; lava: number }
+
+/** One card of a faller, as it was drawn: the card before the dark of the depth, and its offsets from the faller's spot. */
+interface FallCard { base: Card; ox: number; oz: number; dl: number }
+/** The same for a model instance. */
+interface FallInst { base: FigureInst; ox: number; oz: number; dl: number }
+/** What a faller is drawn from once its entity is gone. */
+interface FallParts { cards: FallCard[]; insts: FallInst[] }
+
+/** The foot of a figure or a barrel this frame: where it is drawn, and the descent it is in. */
+interface Foot { x: number; z: number; y: number; d: Descent | undefined; started: boolean; gone: boolean }
 
 interface Fig {
   mem: PoseMemory;
@@ -145,7 +166,7 @@ interface ModelImage { insts: FigureInst[]; secs: number; left: number }
 /** `model`: the figure that died was drawn as a model, so its skull is an instance (one size for all: the fitted skeleton's scale), not a decal. */
 interface Skull { x: number; z: number; flip: boolean; model?: boolean }
 /** A coin in flight: spot in tiles, launch speed in screen px/s (right, up), `born` null until the next frame stamps it. */
-interface Coin { x: number; z: number; vx: number; vy: number; life: number; born: number | null; frame: string }
+interface Coin { x: number; z: number; /** The bed under its spot (tiles): where it rests. */ bed: number; vx: number; vy: number; life: number; born: number | null; frame: string }
 /** A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory. */
 interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean } }
 
@@ -233,14 +254,31 @@ export class Figures3d {
   private fadeAlpha = 1;
   private torchGlow = true;
   private oval = 1;
-  private ground: (x: number, z: number, r: number) => number = () => 0;
+  /** The height of what stands at a spot: the ground cover's top (#330) plus the bed of a dip. */
+  private ground: (x: number, z: number, r: number) => number = (x, z) => this.bedAt(x, z);
   private readonly myKind: number;
   private readonly players: RunViewInit['info']['players'];
+  private readonly map: TileMap;
+  /** The descents (falls into a chasm, drownings) of the entities and the fallers that outlived theirs (#324). */
+  private readonly descents = new Descents<FallParts>();
+  /** The motion of every figure and barrel drawn, and the pieces a falling one was drawn from last frame (by id). */
+  private readonly motions = new Map<number, Motion>();
+  private readonly parts = new Map<number, FallParts>();
+  /** The falls that began this frame (the output's). */
+  private falls: FigureOut['falls'] = [];
+  /** The things falling this frame: entities and the fallers that outlived theirs. */
+  fallers = 0;
 
   constructor(init: RunViewInit, private readonly frames: FrameRects, private readonly bounds: (frame: string) => FrameBounds) {
     this.states = new FigureStates(init.map);
+    this.map = init.map;
     this.myKind = init.myKind;
     this.players = init.info.players;
+  }
+
+  /** The bed of the ground at a spot (tiles): 0 on the floor, down in a dip. */
+  private bedAt(x: number, z: number): number {
+    return bedAt(this.map, x, z);
   }
 
   /** Sink, Invisible and Died bookkeeping; a Died adds a skull unless the figure was lost to a chasm or the deep, or comes apart (Ghost, Shade) or is a shot. */
@@ -248,15 +286,18 @@ export class Figures3d {
     if (ev.t === 'Coins') {
       // Like `fx.coins`: min(10, 3 + v / 4) coins, aimed up the screen within +-0.8 rad, 50..90 px/s, living 0.7..1 s.
       const n = Math.min(10, 3 + Math.floor(ev.v / 4));
+      const bed = this.bedAt(ev.x / TILE, ev.y / TILE);
       for (let i = 0; i < n; i++) {
         const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
         const s = 50 + Math.random() * 40;
-        this.coins.push({ x: ev.x / TILE, z: ev.y / TILE, vx: Math.cos(a) * s, vy: -Math.sin(a) * s, life: 0.7 + Math.random() * 0.3, born: null, frame: `coin_anim_f${i % 4}` });
+        this.coins.push({ x: ev.x / TILE, z: ev.y / TILE, bed, vx: Math.cos(a) * s, vy: -Math.sin(a) * s, life: 0.7 + Math.random() * 0.3, born: null, frame: `coin_anim_f${i % 4}` });
       }
       if (this.coins.length > COIN_CAP) this.coins.splice(0, this.coins.length - COIN_CAP);
       return false;
     }
     const lost = this.states.event(ev, this.now);
+    // A debug climb-out: the figure is back on safe ground, its fall (and a faller that outlived it) ends.
+    if (ev.t === 'Sink' && ev.how === 2) { this.descents.end(ev.id); this.parts.delete(ev.id); }
     if (ev.t !== 'Died') return false;
     if (lost === 'lost') return true;
     if (ev.kind === KIND.Shade) {
@@ -284,9 +325,11 @@ export class Figures3d {
     this.fadeAlpha = darkAlpha(look.ambient);
     this.torchGlow = look.torchGlow;
     this.oval = look.oval;
-    this.ground = look.ground ?? (() => 0);
+    const cover = look.ground ?? (() => 0);
+    this.ground = (x, z, r) => cover(x, z, r) + this.bedAt(x, z);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [], falls: [] };
+    this.falls = out.falls;
     this.figUsed = 0;
     const seen = new Set<number>();
     this.anchors.clear();
@@ -298,7 +341,7 @@ export class Figures3d {
       if (isFigureKind(e.kind)) { if (this.figure(e, f, cam, out)) drawn++; }
       else if (e.kind === KIND.Torch) this.drawTorch(e, f.now, cam, out);
       else if (e.kind === KIND.Chest) this.drawChest(e, cam, out);
-      else if (e.kind === KIND.Barrel) this.drawBarrel(e, cam, out);
+      else if (e.kind === KIND.Barrel) this.drawBarrel(e, f, cam, out);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, f, cam, out);
     }
     for (const id of this.mimics.keys()) if (!seen.has(id)) this.mimics.delete(id);
@@ -317,7 +360,16 @@ export class Figures3d {
       else if (vanished && fig.last) this.modelImages.push({ insts: this.copied(fig.last), secs: VANISH_SECS, left: VANISH_SECS });
       this.figs.delete(id);
     }
+    // An entity that is gone: a falling one lives on with the pieces it was last drawn from, a drowning one is dropped.
+    for (const id of this.descents.ids()) {
+      if (seen.has(id)) continue;
+      this.descents.detach(id, this.parts.get(id));
+      this.parts.delete(id);
+    }
+    for (const id of this.motions.keys()) if (!seen.has(id)) this.motions.delete(id);
 
+    this.drawFallen(f.dt, cam, out);
+    this.fallers = this.descents.falling;
     this.drawImages(f.dt, cam, out);
     this.drawShots(f, cam, out);
     this.drawCoins(f.now, cam, out);
@@ -394,8 +446,8 @@ export class Figures3d {
     return [x - Math.sin(cam.yaw) / TILE, z + Math.cos(cam.yaw) / TILE];
   }
 
-  private objShadow(id: number, x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
-    if (!this.shadowed(id)) return;
+  private objShadow(id: number, x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut, y = this.bedAt(x, z)): void {
+    if (!this.shadowed(id) || !this.ovalOk(x, z, y)) return;
     const foot = snapGround(cam.pitch, cam.yaw, x, z);
     const rx = (OBJ_SHADOW_RX * scale) / TILE;
     pushShadow(out.shadows, cam, foot.x, foot.z, rx, (OBJ_SHADOW_RY * scale) / TILE, alpha * this.oval, this.ground(foot.x, foot.z, rx));
@@ -405,29 +457,42 @@ export class Figures3d {
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
-    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
-    this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
-    this.objectAnchor(e, x, z);
-    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
+    const bed = this.bedAt(x, z);
+    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: bed, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
+    this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out, bed);
+    this.objectAnchor(e, x, z, bed);
+    this.opener(e, false, x, z, bed + CHEST_HEIGHT / 2 / TILE, 'chest', out);
   }
 
-  private drawBarrel(e: EntState, cam: Cam, out: FigureOut): void {
-    const p = barrelPose(e.anim, e.animMs);
+  /**
+   * A barrel: the fuse's flash and shake (anim 0 and 1, `barrelPose`); anim 2 is a fall into a chasm and anim 3 a drowning, drawn as a
+   * figure's are (a fall starts from the barrel's drawn speed, a drowning sinks onto the bed): the server sends it no Sink and no Died.
+   */
+  private drawBarrel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): void {
+    const p = barrelPose(e.anim === 2 || e.anim === 3 ? 0 : e.anim, e.animMs);
+    const ex = e.x / TILE;
+    const ez = e.y / TILE;
+    const foot = this.foot(e.id, ex, ez, f.dt, f.now, { skims: false, start: e.anim === 2 ? 'fall' : e.anim === 3 ? 'drown' : null });
+    if (foot.started && foot.d?.kind === 'fall' && !this.dark.has(e.id)) this.falls.push({ id: e.id, x: foot.x, z: foot.z });
+    const falling = foot.d?.kind === 'fall';
     // The fuse's shake moves the body along screen right.
-    const x = e.x / TILE + (Math.cos(cam.yaw) * p.dx) / TILE;
-    const z = e.y / TILE + (Math.sin(cam.yaw) * p.dx) / TILE;
+    const x = foot.x + (Math.cos(cam.yaw) * p.dx) / TILE;
+    const z = foot.z + (Math.sin(cam.yaw) * p.dx) / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
     const frame = 'barrel_explosive';
-    const fr = this.frames[frame];
-    if (fr) {
-      const card: Card = { frame, x: bx, z: bz, lift: -p.dy / TILE, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
-      // Sinking in deep water: the part below the surface is cut off, not drawn under the floor.
-      if (p.dy > 0) card.crop = { x: 0, y: 0, w: fr.w, h: Math.max(0, fr.h - p.dy) };
-      if (!card.crop || card.crop.h > 0) this.body(card, e.id, cam, out);
+    let kept: FallParts | null = null;
+    if (this.frames[frame] && !foot.gone) {
+      const card: Card = { frame, x: bx, z: bz, lift: foot.y, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
+      if (falling) {
+        kept = { cards: [{ base: card, ox: card.x - foot.x, oz: card.z - foot.z, dl: card.lift - foot.y }], insts: [] };
+        const l = this.lit({ ...card, tint: Figures3d.dim(card.tint, depthFade(foot.y)) }, e.id);
+        pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, e.id);
+      } else this.body(card, e.id, cam, out);
     }
-    if (p.shadow) this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
-    this.objectAnchor(e, e.x / TILE, e.y / TILE);
-    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'object', out);
+    if (kept) this.parts.set(e.id, kept); else this.parts.delete(e.id);
+    if (p.shadow && !foot.d) this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out, foot.y);
+    this.objectAnchor(e, foot.x, foot.z, foot.y);
+    this.opener(e, !!foot.d, x, z, foot.y + CHEST_HEIGHT / 2 / TILE, 'object', out);
   }
 
   private drawMimic(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): void {
@@ -445,18 +510,19 @@ export class Figures3d {
     const z = e.y / TILE;
     if ((p.wakeCue || p.landCue) && !f.dark.has(e.id)) out.cues.push({ id: e.id, x, z, land: !p.wakeCue });
     const [bx, bz] = this.bodyFoot(x, z, cam);
+    const bed = this.bedAt(x, z);
     this.body({
-      frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
+      frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: bed + p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
       angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: !!(e.flags & FLAG.HIDING), // a revealed mimic is a creature
     }, e.id, cam, out);
-    this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out);
-    this.objectAnchor(e, x, z);
-    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'mimic', out);
+    this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out, bed);
+    this.objectAnchor(e, x, z, bed);
+    this.opener(e, false, x, z, bed + CHEST_HEIGHT / 2 / TILE, 'mimic', out);
   }
 
   /** A chest, a barrel or a mimic: 2D's `CHEST_HEIGHT` for the bar and the use hint. */
-  private objectAnchor(e: EntState, x: number, z: number): void {
-    this.anchors.set(e.id, { x, z, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, effects: e.effects });
+  private objectAnchor(e: EntState, x: number, z: number, y: number): void {
+    this.anchors.set(e.id, { x, z, y, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, effects: e.effects });
   }
 
   /** Reports a thing as a wall opener when `opensWalls` (openers.ts) says it may; the one rule lives there. */
@@ -476,9 +542,9 @@ export class Figures3d {
       const right = (c.vx * t) / TILE;
       const up = (6 + c.vy * t - 0.5 * COIN_GRAVITY * t * t) / TILE;
       // The card's middle sits on the foot point (footY 0.5): never lower than half its height, so a landed coin rests on the floor.
-      const rest = (this.frames[c.frame]?.h ?? 0) / 2 / TILE;
+      const rest = c.bed + (this.frames[c.frame]?.h ?? 0) / 2 / TILE;
       pushCard(out.ghosts, {
-        frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(rest, up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
+        frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(rest, c.bed + up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
         tint: [1, 1, 1], mode: 0, alpha: 1 - t / c.life, scenery: true,
       }, this.frames, cam);
     }
@@ -522,8 +588,14 @@ export class Figures3d {
   }
 
   /** The figure's state and its memory (made on the first frame), with the reappear rule: the lookup both ways of drawing share. */
-  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig } {
-    const { s } = this.states.stateOf(e, f, f.now);
+  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig; foot: Foot } {
+    const st = this.states.stateOf(e, f, f.now);
+    // The 3D view stands the figure on the bed and lets it fall by itself: the pose gets no sink, fall or drown (#324).
+    const s: ViewState = { ...st.s, sink: 0, fall: 0, drown: 0 };
+    const flags = st.s.flags ?? 0;
+    const skims = skimsTerrain(flags, st.predicted ? f.own.dashing : e.anim === ANIM.Dash) || (flags & FLAG.AIRBORNE) !== 0;
+    const foot = this.foot(e.id, st.s.x / TILE, st.s.y / TILE, f.dt, f.now, { skims, start: this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null });
+    if (foot.started && foot.d?.kind === 'fall' && !this.dark.has(e.id)) this.falls.push({ id: e.id, x: foot.x, z: foot.z });
     let fig = this.figs.get(e.id);
     if (!fig) {
       const pi = isPlayerKind(e.kind) ? this.players.find((p) => p.ent === e.id) : undefined;
@@ -536,7 +608,71 @@ export class Figures3d {
     }
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
     if (this.states.takeReappear(e.id, f.now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) fig.mem.appearLeft = VANISH_SECS;
-    return { s, fig };
+    return { s, fig, foot };
+  }
+
+  private readonly bedFn = (x: number, z: number): number => this.bedAt(x, z);
+
+  /**
+   * Where a figure or a barrel is drawn and how high its foot is this frame (#324). In a descent: the faller's spot and height (a fall),
+   * or `drownY` from the height it began at (a drowning). Else it stands on the bed of the dip under it, floats in lava (`standY`), or
+   * is at 0 when it skims the terrain or flies. `o.start` begins a descent on the first frame it is asked for, from the foot's last
+   * height and its drawn speed (which are not updated once it is in one). A fall is not stepped on its first frame.
+   */
+  private foot(id: number, x: number, z: number, dt: number, now: number, o: { skims: boolean; start: 'fall' | 'drown' | null }): Foot {
+    let mo = this.motions.get(id);
+    if (!mo) this.motions.set(id, (mo = { px: x, pz: z, vx: 0, vz: 0, y: 0, lava: 0 }));
+    let d = this.descents.get(id);
+    let started = false;
+    let start = o.start;
+    // Over a chasm's wall without a Sink (yet): a snapshot's interpolation can bring the figure over the rim before the event. It falls.
+    let bed = Number.NaN;
+    if (!d && !o.skims) {
+      bed = this.bedAt(x, z);
+      if (!start && bed < FALL_BED) start = 'fall';
+    }
+    if (!d && start) {
+      d = start === 'fall' ? this.descents.startFall(id, x, z, mo.y, mo.vx, mo.vz) : this.descents.startDrown(id, mo.y, now);
+      started = true;
+    }
+    if (d?.kind === 'fall') {
+      if (!started && !d.gone) d.gone = !this.descents.advance(d.faller, dt, this.bedFn);
+      return { x: d.faller.x, z: d.faller.z, y: d.faller.y, d, started, gone: d.gone };
+    }
+    if (d) return { x, z, y: drownY(d.y0, this.bedAt(x, z), now - d.t0), d, started, gone: false };
+    if (dt > 0) {
+      const k = 1 - Math.exp(-dt * 20);
+      mo.vx += ((x - mo.px) / dt - mo.vx) * k;
+      mo.vz += ((z - mo.pz) / dt - mo.vz) * k;
+    }
+    mo.px = x;
+    mo.pz = z;
+    const inLava = !o.skims && this.map.get(Math.floor(x), Math.floor(z)) === TILE_ID.Lava;
+    mo.lava = stepLavaSink(mo.lava, inLava, dt);
+    mo.y = o.skims ? 0 : standY(bed, inLava || mo.lava > 0.001 ? mo.lava : null);
+    return { x, z, y: mo.y, d: undefined, started, gone: false };
+  }
+
+  /** Whether the oval under a foot is drawn: the foot stands on the bed (not hovering over a chasm or floating in lava) and is not under a liquid. */
+  private ovalOk(x: number, z: number, y: number): boolean {
+    return y - this.bedAt(x, z) <= 0.05 && y >= surfaceAt(this.map, x, z);
+  }
+
+  /** The tint of a faller: the depth's dark (`depthFade` of its height) on each channel. */
+  private static dim(t: readonly [number, number, number], k: number): [number, number, number] {
+    return [t[0] * k, t[1] * k, t[2] * k];
+  }
+
+  /** The detached fallers of this frame: stepped, then drawn from their pieces as the entity's were (no oval, caster, opener or image). */
+  private drawFallen(dt: number, cam: Cam, out: FigureOut): void {
+    this.descents.stepDetached(dt, this.bedFn, (id, f, parts) => {
+      const k = depthFade(f.y);
+      for (const c of parts.cards) {
+        const l = this.lit({ ...c.base, x: f.x + c.ox, z: f.z + c.oz, lift: f.y + c.dl, tint: Figures3d.dim(c.base.tint, k) }, id);
+        pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, id);
+      }
+      for (const i of parts.insts) out.models.push({ ...i.base, x: f.x + i.ox, z: f.z + i.oz, lift: f.y + i.dl, tint: Figures3d.dim(i.base.tint, k), sight: { ...i.base.sight } });
+    });
   }
 
   /** Instances with a pose of their own, for an image that outlives the memory's pose (all of a figure's instances share one pose). */
@@ -551,22 +687,21 @@ export class Figures3d {
    * False when it is not drawn (dead).
    */
   private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
-    const { s, fig } = this.figOf(e, f, FIGURES[e.kind]);
+    const { s, fig, foot } = this.figOf(e, f, FIGURES[e.kind]);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     fig.body = null;
     fig.last = null;
     fig.model = true;
-    if (!pose.visible) return false;
+    if (!pose.visible || foot.gone) return false;
     const p3 = poseFigure(m, d, s, f.dt, (fig.mem3 ??= newPose3dMemory()));
 
-    const x = s.x / TILE;
-    const z = s.y / TILE;
+    const { x, z, y } = foot;
+    const falling = foot.d?.kind === 'fall';
+    const kept: FallParts | null = falling ? { cards: [], insts: [] } : null;
     const sc = pose.scale;
-    const down = (pose.sink + pose.drop) / TILE;
     const dark = this.dark.has(e.id);
     const k = dark && this.darkFade ? this.fadeAlpha : 1;
-    const sunk = pose.sink >= pose.footY;   // wholly below the surface: nothing of the figure is drawn (as the card's empty crop)
     const radius = silhouetteRadius(m);
     // The sight reach is the card's: half the opaque width of the body frame the card would show, in tiles.
     const fb = this.bounds(pose.frame);
@@ -575,11 +710,16 @@ export class Figures3d {
     const insts: FigureInst[] = [];
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: (pose.lie ? this.ground(x, z, 0.3) : 0) - down, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
-      cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.ground(x, z, 0.3) : y, scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
     };
-    if (!sunk) {
-      out.models.push(body);
+    /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
+    const push = (i: FigureInst): void => {
+      kept?.insts.push({ base: i, ox: i.x - x, oz: i.z - z, dl: i.lift - y });
+      out.models.push(falling ? { ...i, tint: Figures3d.dim(i.tint, depthFade(y)) } : i);
+    };
+    {
+      push(body);
       insts.push(body);
       const wp = pose.weapon;
       if (wp && !pose.lie) {
@@ -588,55 +728,60 @@ export class Figures3d {
         if (wm) {
           const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
           // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
-          // draws (the game's weapon scale times the figure's `FigureDef.scale`; the fall shrink is in the root), shrunk with the figure by its
+          // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
           // `size`, so `boneScale` makes up the difference.
           const bs = (wp.scale * (d.scale ?? 1) * m.size) / m.scale;
           const w: FigureInst = {
-            owner: e.id, model: wp.frame, x, z, lift: -down, scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: pose.sink > 0, sight: { hard: 0, soft: 0 }, radius, reach,
+            owner: e.id, model: wp.frame, x, z, lift: y, scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
+            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
           };
           // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
           body.radius = w.radius = radius + wm.radius * bs * m.scale;
           if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
-          out.models.push(w);
+          push(w);
           insts.push(w);
         }
       }
-      // The shadow caster: the box of the standing idle card at the foot (no card is pushed).
-      if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id)) {
-        const cf = `${d.idle}0`, cb = this.bounds(cf), foot = d.footY ?? cb.h;
+      // The shadow caster: the box of the standing idle card at the foot (no card is pushed); a faller casts none.
+      if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
+        const cf = `${d.idle}0`, cb = this.bounds(cf), fy = d.footY ?? cb.h;
         // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
-        const card: Card = { frame: cf, x, z, lift: -down, flip: pose.left, originX: pose.originX, footY: foot / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
-        if (pose.sink > 0) card.crop = { x: 0, y: 0, w: cb.w, h: foot - pose.sink / m.size };   // the box is scaled by `size`, so the waterline (the real sink) is cut at sink / size
+        const card: Card = { frame: cf, x, z, lift: y, flip: pose.left, originX: pose.originX, footY: fy / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
         const c = casterOf(card, e.id, this.frames, cam);
         if (c) out.casters.push(c);
       }
       fig.last = insts;
-      if (pose.afterimage) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
-      if (this.accelDue(fig, s, f.dt)) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
+      if (pose.afterimage && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
+      if (this.accelDue(fig, s, f.dt) && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
     }
+    if (kept) {
+      // The pose is shared by the instances and mutated by the memory: a copy outlives the entity.
+      const frozen = copyPose(p3);
+      for (const i of kept.insts) i.base = { ...i.base, pose: frozen, sight: { ...i.base.sight } };
+      this.parts.set(e.id, kept);
+    } else this.parts.delete(e.id);
 
-    if (pose.shadow.visible && this.shadowed(e.id)) {
-      const foot = snapGround(cam.pitch, cam.yaw, x, z);
+    if (pose.shadow.visible && this.shadowed(e.id) && !foot.d && this.ovalOk(x, z, y)) {
+      const gf = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc * m.size) / TILE;
       // A hop shrinks the oval by how high the figure is; a lying figure's oval is stretched (the pose's own numbers).
       const hop = 1 - 0.35 * p3.air;
       const rx = r * (pose.lie ? pose.shadow.sx : hop);
-      pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
+      pushShadow(out.shadows, cam, gf.x, gf.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
     // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
     // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
-    const idle = `${d.idle}0`, ib = this.bounds(idle), foot = d.footY ?? ib.h;
-    const sa = standingAnchor(ib, foot, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
-    this.anchors.set(e.id, { x, z, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0 });
+    const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
+    const sa = standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
+    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
     const bite = m.armLength > 0 ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, (shoulder - down) * stretch, bite);
-    if (bite >= 0) this.muzzle(lf, cam, p3.yaw, (0.8 * shoulder - down) * stretch, m.baseHeight / TILE + m.radius);
-    const standing = Math.max(0, (foot - ib.t) * m.size - pose.sink) * sc;   // as the card path's `height`: the smaller model's opaque height less the wade (not scaled), times the pose scale
-    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : standing / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    const lf = this.listFig(out, cam, e, s, d, x, z, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, (shoulder + y) * stretch, bite);
+    if (bite >= 0) this.muzzle(lf, cam, p3.yaw, (0.8 * shoulder + y) * stretch, m.baseHeight / TILE + m.radius);
+    const standing = Math.max(0, (footY - ib.t) * m.size) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
+    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 
@@ -688,26 +833,29 @@ export class Figures3d {
   private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
     const base = FIGURES[e.kind];
     if (!base) return false;
-    const { s, fig } = this.figOf(e, f, base);
+    const { s, fig, foot } = this.figOf(e, f, base);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     fig.body = null;
-    if (!pose.visible) return false;
+    if (!pose.visible || foot.gone) return false;
 
     const fb = this.bounds(pose.frame);
-    const x = s.x / TILE;
-    const z = s.y / TILE;
+    const { x, z, y } = foot;
+    const falling = foot.d?.kind === 'fall';
+    // A faller's pieces, kept for when its entity is gone; its cards wear the depth's dark.
+    const kept: FallParts | null = falling ? { cards: [], insts: [] } : null;
+    const fade = falling ? depthFade(y) : 1;
     const sc = pose.scale;
     const { tint, mode } = lookOf(pose.tint, pose.grey);
     // A frozen body wears the cool tint, as the model does (a fill, the hurt flash, stays).
     const iced = has(s.effects ?? 0, EFFECT.Frozen);
     if (iced && mode !== 1) { const t = rgbOf(FROZEN_TINT); tint[0] *= t[0]; tint[1] *= t[1]; tint[2] *= t[2]; }
-    const down = (pose.sink + pose.drop) / TILE;
     // The sight mask's wide-figure rule (`footSight`): half the body frame's opaque width, in tiles, on the body and its weapon.
     const reach = ((fb.r - fb.l + 1) * sc) / 2 / TILE;
-    /** The weapon card is owned by its wielder (it is not shadowed by the wielder), but casts nothing of its own. */
+    /** The weapon card is owned by its wielder (it is not shadowed by the wielder), but casts nothing of its own. A faller's cards are kept as they were (before the depth's dark). */
     const into = (c: Card): void => {
-      const l = this.lit(c, e.id);
+      kept?.cards.push({ base: c, ox: c.x - x, oz: c.z - z, dl: c.lift - y });
+      const l = this.lit(falling ? { ...c, tint: Figures3d.dim(c.tint, fade) } : c, e.id);
       pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, e.id);
     };
 
@@ -727,24 +875,23 @@ export class Figures3d {
       // `aimStep` is 2D's screen step: the melee step is (3, 1.5) along the aim (y halved for the foreshortening) but the
       // wolf's lunge is not, so the factor is not uniform and it is applied here as it is.
       const body: Card = {
-        frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: -down, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
+        frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: y, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
         scale: sc, sx: pose.body.sx, sy: pose.body.sy, angle: rad(pose.body.angle), offset: [pose.body.x, pose.body.y - 1], tint, mode, alpha: pose.alpha, reach,
       };
-      if (pose.sink > 0) body.crop = { x: 0, y: 0, w: fb.w, h: pose.footY - pose.sink };
-      if (!body.crop || body.crop.h > 0) {
+      {
         into(body);
-        if (body.alpha >= 1 && this.shadowed(e.id)) {
+        if (body.alpha >= 1 && this.shadowed(e.id) && !falling) {
           const k = casterOf(body, e.id, this.frames, cam);
           if (k) out.casters.push(k);
         }
         // The stored card is the lit one: a vanish image inherits `dark` and the faded alpha (`framePoint` reads geometry only).
         const l = this.lit(body, e.id);
         fig.body = l.card;
-        if (pose.afterimage) {
+        if (pose.afterimage && !falling) {
           const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
           this.images.push({ card: { ...l.card, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA * k, secs: AFTER_SECS, left: AFTER_SECS });
         }
-        if (this.accelDue(fig, s, f.dt)) {
+        if (this.accelDue(fig, s, f.dt) && !falling) {
           const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
           this.images.push({ card: { ...l.card, tint: rgbOf(ACCEL_TINT), mode: 0 }, alpha0: ACCEL_ALPHA * pose.alpha * k, secs: ACCEL_SECS, left: ACCEL_SECS });
         }
@@ -758,16 +905,16 @@ export class Figures3d {
       const wt = pose.weaponTint !== null ? rgbOf(pose.weaponTint) : ([1, 1, 1] as [number, number, number]);
       if (iced) { const t = rgbOf(FROZEN_TINT); wt[0] *= t[0]; wt[1] *= t[1]; wt[2] *= t[2]; }
       into({
-        frame: wp.frame, x, z, lift: -down, flip: wp.flipX, originX: wp.originX, footY: wp.originY, scale: wsc, angle: wp.rot, offset: [wp.x / wp.scale, wp.y / wp.scale],
+        frame: wp.frame, x, z, lift: y, flip: wp.flipX, originX: wp.originX, footY: wp.originY, scale: wsc, angle: wp.rot, offset: [wp.x / wp.scale, wp.y / wp.scale],
         tint: wt, mode: pose.grey ? 2 : 0, alpha: wp.alpha * pose.alpha, bias: wp.behind ? -WEAPON_BIAS : WEAPON_BIAS, reach,
       });
     }
 
-    if (pose.shadow.visible && this.shadowed(e.id)) {
-      const foot = snapGround(cam.pitch, cam.yaw, x, z);
+    if (pose.shadow.visible && this.shadowed(e.id) && !foot.d && this.ovalOk(x, z, y)) {
+      const gf = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc) / TILE;
       const rx = r * pose.shadow.sx;
-      pushShadow(out.shadows, cam, foot.x, foot.z, rx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(foot.x, foot.z, rx));
+      pushShadow(out.shadows, cam, gf.x, gf.z, rx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
     // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.
@@ -775,10 +922,10 @@ export class Figures3d {
     const mid = pose.left ? fb.w - 1 - (fb.l + fb.r) / 2 : (fb.l + fb.r) / 2;
     const sa = standingAnchor(fb, pose.footY, ds);
     this.anchors.set(e.id, {
-      x, z, height: sa.height, tag: sa.tag,
+      x, z, y, height: sa.height, tag: sa.tag,
       head: pose.lie ? (fb.r - fb.l + 1) * ds : sa.head,
       cx: pose.lie ? 0 : (mid + 0.5 - pose.originX * fb.w) * ds,
-      alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0,
+      alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), effects: s.effects ?? 0,
     });
 
     // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.
@@ -791,9 +938,10 @@ export class Figures3d {
       if (mp) lf.mouth = this.point(this.mouthPool, mp.x, mp.y * stretch, mp.z);
       if (np) lf.nostril = this.point(this.nostrilPool, np.x, np.y * stretch, np.z);
     }
-    const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;
-    // Falling or drowning stops it opening walls; wading (pose.sink) does not.
-    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : height / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    if (kept) this.parts.set(e.id, kept); else this.parts.delete(e.id);
+    const height = Math.max(0, pose.footY - fb.t) * sc;
+    // Falling or drowning stops it opening walls; wading does not.
+    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : height / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 

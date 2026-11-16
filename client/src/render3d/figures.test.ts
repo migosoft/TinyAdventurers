@@ -8,7 +8,7 @@ import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { DESCS, FIT_KIND, modelKeyOf, type DescKey } from './models/table';
 import type { SpritePixels } from './models/weapons';
-import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import { INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
 import type { FrameBounds } from '../game/anim/pose';
@@ -19,6 +19,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
+import { bedAt, depthFade, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
@@ -45,8 +46,8 @@ const bounds = (f: string): FrameBounds => {
 const at = (tx: number) => tx * TILE + TILE / 2;
 const cam = (yaw = 0): Cam => ({ x: 5, z: 5, pitch: Math.PI / 4, yaw });
 
-/** A 4x1 map: floor, deep water, chasm, shallow water. */
-const map = (): TileMap => new TileMap(4, 1, Uint8Array.from([TILE_ID.Floor, TILE_ID.DeepWater, TILE_ID.Chasm, TILE_ID.ShallowWater]));
+/** A 4x1 map of floor: the tests that need terrain use `dipMap` below. */
+const map = (): TileMap => new TileMap(4, 1, new Uint8Array(4).fill(TILE_ID.Floor));
 const init = (): RunViewInit => ({ info: startInfo(['....']), map: map(), light: {} as RunViewInit['light'], myKind: KIND.Wizard });
 
 const own = (o: Partial<OwnHero> = {}): OwnHero => ({ x: at(0), y: 8, alive: false, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false, aimsAtPointer: false, aimFromX: at(0), aimFromY: 8, ...o });
@@ -240,17 +241,6 @@ describe('Figures3d', () => {
     expect(a.cards.n).toBe(b.cards.n);
   });
 
-  it('cuts the body of a wading knight by the sink and lowers it by the same', () => {
-    const dry = make().frame(frame([ent(10, KIND.Knight, { x: at(0) })]), cam());
-    const wet = make().frame(frame([ent(10, KIND.Knight, { x: at(3) })]), cam());
-    const sink = 3 / TILE; // shallow water
-    expect(Math.max(...ys(dry.cards)) - Math.max(...ys(wet.cards))).toBeCloseTo(sink, 6);
-    expect(Math.min(...ys(wet.cards))).toBeCloseTo(0, 6);
-    expect(Math.min(...ys(dry.cards))).toBeCloseTo(0, 6);
-    expect(wet.shadows.n).toBe(0);
-    expect(dry.shadows.n).toBe(1);
-  });
-
   it("places the dragon's mouth above its foot on the side it faces, and has none for a frame without a point", () => {
     const fg = make();
     const d = FIGURES[KIND.Dragon];
@@ -353,13 +343,14 @@ describe('Figures3d', () => {
     expect(co.shadows.n).toBe(1);
     expect(co.openers[0].who).toBe('chest');
 
-    // barrels: a flash frame of the fuse is a fill, a resting one is not, a sinking one is translucent and sunk
+    // barrels: a flash frame of the fuse is a fill, a resting one is not, a drowning one is whole and opaque (#324: it sinks by height, no fade)
     const barrel = (anim: number, animMs: number) => ent(32, KIND.Barrel, { anim, animMs, side: SIDE.Neutral });
     expect(make().frame(frame([barrel(1, 0)]), cam()).cards.look[3]).toBe(1);
     expect(make().frame(frame([barrel(0, 0)]), cam()).cards.look[3]).toBe(0);
     const sunk = make().frame(frame([barrel(3, 200)]), cam());
-    expect(sunk.ghosts.n).toBe(1);
-    expect(sunk.cards.n).toBe(0);
+    expect(sunk.ghosts.n).toBe(0);
+    expect(sunk.cards.n).toBe(1);
+    expect(sunk.cards.look[4]).toBe(1);
     expect(sunk.shadows.n).toBe(0);
     expect(sunk.openers).toEqual([]); // nor does a barrel
 
@@ -552,11 +543,13 @@ describe('Figures3d in the dark (#304)', () => {
     expect(o.cards.n).toBe(3);
   });
   it('a card in the ghost pass casts no shadow', () => {
-    // anim 2: a barrel falling into a chasm fades out
+    // a barrel falling into a chasm is opaque (#324) but casts none; a dark fading one is in the ghost pass and casts none
     const o = make().frame(frame([ent(21, KIND.Barrel, { side: SIDE.Neutral, anim: 2, animMs: 200 })]), cam(), look(AMBIENT));
-    expect(o.ghosts.n).toBe(1);
-    expect(o.cards.n).toBe(0);
+    expect(o.cards.n).toBe(1);
     expect(o.casters).toEqual([]);
+    const d = make().frame(frame([ent(22, KIND.Barrel, { side: SIDE.Neutral })], { dark: new Set([22]) }), cam(), { ...look(AMBIENT), dark: 'fade' });
+    expect(d.ghosts.n).toBe(1);
+    expect(d.casters).toEqual([]);
   });
   it('a lit torch gives a glow quad with torchGlow and none without', () => {
     for (const n of torchFrames) frames[n] = { x: 500, y: 20, w: 16, h: 16 };
@@ -767,18 +760,18 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(kit.get('knight')!.size).toBe(0.87);
   });
 
-  it('keeps the waterline of a wading model figure the card\'s: the caster\'s lower edge and the opener\'s mid are cut by the real sink, not the scaled one', () => {
-    const e = (x: number) => ent(10, KIND.Barbarian, { x });
-    const card = make().frame(frame([e(at(3))]), cam(), look());
-    const model = make().frame(frame([e(at(3))]), cam(), look({ kit, ...all }));
-    const dryCard = make().frame(frame([e(at(0))]), cam(), look());
-    const size = kit.get('dwarf')!.size;
-    expect(size).toBeLessThan(1);
-    expect(card.casters.length).toBe(1);
+  it('stands a wading model figure on the bed, uncropped: the caster and the opener follow the foot', () => {
+    const e = (tx: number, tz: number) => ent(10, KIND.Barbarian, at2(tx, tz));
+    const card = dipFigs().frame(frame([e(1, 1)]), cam(), look());
+    const model = dipFigs().frame(frame([e(1, 1)]), cam(), look({ kit, ...all }));
+    const dryModel = dipFigs().frame(frame([e(8, 5)]), cam(), look({ kit, ...all }));
+    const bed = bedAt(dm, 1.5, 1.5);
+    expect(bed).toBeLessThan(-0.3);
     expect(model.casters.length).toBe(1);
     expect(model.casters[0].y0, 'caster lower edge').toBeCloseTo(card.casters[0].y0, 6);
-    // the standing height is the card's times size; the wade (3 px, in the shallows) is not scaled
-    expect(model.openers[0].mid, 'mid').toBeCloseTo(dryCard.openers[0].mid * size - 3 / 2 / TILE, 6);
+    expect(model.models[0].lift).toBeCloseTo(bed, 6);
+    expect(model.models[0].cut).toBe(false);
+    expect(model.openers[0].mid, 'mid').toBeCloseTo(dryModel.openers[0].mid + bed, 6);
   });
 
   it('fits every description to the standing height of its card, from the real atlas pixels', () => {
@@ -944,6 +937,34 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(fg.frame(frame([]), cam(), l).decals.n).toBeLessThanOrEqual(256);
   });
 
+  it('does the same for a model figure: the instance follows the faller, is never cut and outlives the entity (#324)', () => {
+    const fg = dipFigs();
+    const l = look({ kit, ...all });
+    const e = ranger({ x: sp(2, 4)[0], y: sp(2, 4)[1] });
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    const lifts: number[] = [];
+    let last = fg.frame(frame([e]), cam(), l);
+    expect(last.falls).toHaveLength(1);
+    for (let i = 0; i < 30; i++) {
+      last = fg.frame(frame([e]), cam(), l);
+      lifts.push(last.models[0].lift);
+    }
+    expect(Math.abs(lifts[29] + 1.75)).toBeLessThan(0.2);
+    expect(last.models.every((m) => m.cut === false)).toBe(true);
+    expect(last.models[0].tint[0]).toBeCloseTo(depthFade(lifts[29]) * make().frame(frame([ranger()]), cam(), l).models[0].tint[0], 6);
+    expect(last.casters).toEqual([]);
+    expect(last.shadows.n).toBe(0);
+    expect(last.openers).toEqual([]);
+    fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.ElvenRanger });
+    let after = fg.frame(frame([]), cam(), l);
+    expect(after.models.length).toBeGreaterThan(0);
+    expect(after.models[0].lift).toBeLessThan(lifts[29]);
+    expect(after.decals.n).toBe(0);
+    expect(after.models.some((m) => m.model === 'skull')).toBe(false);
+    for (let i = 0; i < 90; i++) after = fg.frame(frame([]), cam(), l);
+    expect(after.models).toEqual([]);
+  });
+
   it('leaves a fading copy of a model figure that went invisible, and dash copies tinted with its base colour', () => {
     const fg = make();
     const l = look({ kit, ...all });
@@ -967,3 +988,211 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   });
 });
 
+
+// ---- sunken terrain (#324) ----
+const sp = (tx: number, tz: number): [number, number] => [(tx + 0.5) * TILE, (tz + 0.5) * TILE];
+/** 10 x 7: shallow water (1..2, 1) and deep water (3, 1), a lava pool (6..7, 1..2), a chasm (2..3, 4..5), floor elsewhere. */
+const dipMap = (): TileMap => {
+  const t = new Uint8Array(10 * 7).fill(TILE_ID.Floor);
+  const put = (x: number, z: number, id: number) => { t[z * 10 + x] = id; };
+  put(1, 1, TILE_ID.ShallowWater); put(2, 1, TILE_ID.ShallowWater); put(3, 1, TILE_ID.DeepWater);
+  for (const [x, z] of [[6, 1], [7, 1], [6, 2], [7, 2]]) put(x, z, TILE_ID.Lava);
+  for (const [x, z] of [[2, 4], [3, 4], [2, 5], [3, 5]]) put(x, z, TILE_ID.Chasm);
+  return new TileMap(10, 7, t);
+};
+const dm = dipMap();
+const dipFigs = (): Figures3d => new Figures3d({ ...init(), map: dipMap() }, frames, bounds);
+const at2 = (tx: number, tz: number, o: Partial<EntState> = {}): Partial<EntState> => ({ x: sp(tx, tz)[0], y: sp(tx, tz)[1], ...o });
+const knight = (tx: number, tz: number, o: Partial<EntState> = {}): EntState => ent(10, KIND.Knight, { side: SIDE.Friendly, ...at2(tx, tz), ...o });
+const low = (b: CardBuf, q = 0): number => Math.min(...ys(b, q));
+/** Frames of `dt` seconds from clock `now0`; the last output. */
+function run(fg: Figures3d, mk: (i: number) => EntState[], n: number, dt = 1 / 60, now0 = 10, o: (i: number) => Partial<RunFrame> = () => ({})): FigureOut {
+  let out!: FigureOut;
+  for (let i = 0; i < n; i++) out = fg.frame(frame(mk(i), { dt, now: now0 + i * dt, ...o(i) }), cam());
+  return out;
+}
+const dryLow = low(make().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly })]), cam()).cards);
+const dryLook = make().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly })]), cam()).cards.look[0];
+
+describe('Figures3d on the bed of a dip (#324)', () => {
+  it('stands a wading figure on the bed, uncropped', () => {
+    const fg = dipFigs();
+    const o = fg.frame(frame([knight(1, 1)]), cam());
+    const bed = bedAt(dm, 1.5, 1.5);
+    expect(bed).toBeLessThan(-0.3);
+    expect(low(o.cards) - dryLow).toBeCloseTo(bed, 6);
+    const dry = dipFigs().frame(frame([knight(8, 5)]), cam());
+    expect(Math.max(...ys(o.cards)) - low(o.cards)).toBeCloseTo(Math.max(...ys(dry.cards)) - low(dry.cards), 6);
+    expect(fg.anchors.get(10)!.y).toBeCloseTo(bed, 6);
+  });
+
+  it('keeps a dashing or incorporeal figure at floor height', () => {
+    const dash = dipFigs().frame(frame([knight(1, 1, { anim: ANIM.Dash })]), cam());
+    const dashDry = dipFigs().frame(frame([knight(8, 5, { anim: ANIM.Dash })]), cam());
+    expect(low(dash.cards)).toBeCloseTo(low(dashDry.cards), 6);
+    const fg = dipFigs();
+    fg.frame(frame([knight(2, 4, { flags: FLAG.INCORPOREAL })]), cam());
+    expect(fg.anchors.get(10)!.y).toBe(0);
+    const fly = dipFigs();
+    fly.frame(frame([knight(2, 4, { flags: FLAG.AIRBORNE })]), cam());
+    expect(fly.anchors.get(10)!.y).toBe(0);
+  });
+
+  it('sinks slowly into lava and comes back up', () => {
+    const fg = dipFigs();
+    let o = run(fg, () => [knight(6, 1)], 120);
+    const lift = low(o.cards) - dryLow;
+    expect(lift).toBeGreaterThan(LAVA_LEVEL - 1.05);
+    expect(lift).toBeLessThan(LAVA_LEVEL - 0.5);
+    expect(fg.anchors.get(10)!.y).toBeCloseTo(lift, 6);
+    o = run(fg, () => [knight(8, 5)], 60, 1 / 60, 12);
+    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 8.5, 5.5), 6);
+  });
+
+  it('drops a falling figure with gravity, darker with depth, no shadow, no caster, no opener, one fall cue', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    const first = fg.frame(frame([e], { now: 10 }), cam());
+    expect(first.falls).toEqual([{ id: 10, x: 2.5, z: 4.5 }]);
+    const o = run(fg, () => [e], 30, 1 / 60, 10 + 1 / 60);
+    expect(o.falls).toEqual([]);
+    const lift = low(o.cards) - dryLow;
+    expect(Math.abs(lift + 1.75)).toBeLessThan(0.2);
+    expect(o.cards.look[0] / dryLook).toBeCloseTo(depthFade(lift), 6);
+    expect(o.shadows.n).toBe(0);
+    expect(o.casters).toEqual([]);
+    expect(o.openers).toEqual([]);
+    expect(fg.fallers).toBe(1);
+    expect(fg.anchors.get(10)!.tagShown).toBe(false);
+  });
+
+  it('goes on falling after the entity is gone, and leaves no skull', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    let o = run(fg, () => [e], 43);   // 0.7 s of fall
+    const at07 = low(o.cards) - dryLow;
+    fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.Knight });
+    o = fg.frame(frame([], { now: 11, dt: 1 / 60 }), cam());
+    expect(total(o)).toBeGreaterThan(0);
+    for (let i = 0; i < 17; i++) o = fg.frame(frame([], { now: 11 + i / 60, dt: 1 / 60 }), cam());   // 1.0 s
+    expect(total(o)).toBeGreaterThan(0);
+    expect(low(o.cards.n ? o.cards : o.ghosts) - dryLow).toBeLessThan(at07);
+    expect(o.decals.n).toBe(0);
+    expect(o.shadows.n).toBe(0);
+    expect(o.casters).toEqual([]);
+    for (let i = 0; i < 40; i++) o = fg.frame(frame([], { now: 12 + i / 60, dt: 1 / 60 }), cam());   // 1.7 s
+    expect(total(o)).toBe(0);
+    expect(fg.fallers).toBe(0);
+  });
+
+  it('starts a fall that came before the first frame at that frame', () => {
+    const e = knight(2, 4);
+    const early = dipFigs();
+    early.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    const o = early.frame(frame([e], { now: 50 }), cam());
+    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 2.5, 4.5) > 0 ? bedAt(dm, 2.5, 4.5) : 0, 1);
+    expect(o.falls).toHaveLength(1);
+    const next = early.frame(frame([e], { now: 50.016, dt: 0.016 }), cam());
+    expect(low(next.cards) - dryLow).toBeLessThan(0);
+    expect(low(next.cards) - dryLow).toBeGreaterThan(-0.1);
+  });
+
+  it('ignores a second Sink and ends on a climb-out', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    let cues = fg.frame(frame([e]), cam()).falls.length;
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    for (let i = 0; i < 24; i++) cues += fg.frame(frame([e], { now: 10.1 + i / 60 }), cam()).falls.length;
+    expect(cues).toBe(1);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 2 });
+    const back = knight(8, 5);
+    const o = fg.frame(frame([back], { now: 11 }), cam());
+    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 8.5, 5.5), 6);
+    expect(o.shadows.n).toBe(1);
+    expect(total(fg.frame(frame([], { now: 11.1 }), cam()))).toBe(0);
+  });
+
+  it('lets a figure over a chasm fall before its Sink has come, and the Sink changes nothing', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    const first = fg.frame(frame([e]), cam());
+    expect(first.falls).toEqual([{ id: 10, x: 2.5, z: 4.5 }]);
+    const o = run(fg, () => [e], 20, 1 / 60, 10.1);
+    expect(low(o.cards) - dryLow).toBeLessThan(-0.3);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    expect(fg.frame(frame([e], { now: 10.5 }), cam()).falls).toEqual([]);
+    expect(fg.fallers).toBe(1);
+  });
+
+  it('falls the own hero from prediction', () => {
+    const fg = dipFigs();
+    const [x, y] = sp(2, 4);
+    const f = (i: number) => frame([], { now: 10 + i / 60, own: own({ alive: true, x, y, sinking: true }) });
+    let o = fg.frame(f(0), cam());
+    for (let i = 1; i < 31; i++) o = fg.frame(f(i), cam());
+    expect(Math.abs(low(o.cards) - dryLow + 1.75)).toBeLessThan(0.25);
+  });
+
+  it('gives a dark figure no fall cue, and it still falls', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    const dark = new Set([10]);
+    expect(fg.frame(frame([e], { dark }), cam()).falls).toEqual([]);
+    const o = run(fg, () => [e], 30, 1 / 60, 10.1, () => ({ dark }));
+    expect(low(o.cards) - dryLow).toBeLessThan(-1);
+    expect(o.falls).toEqual([]);
+  });
+
+  it('drowns onto the bed and leaves nothing', () => {
+    const fg = dipFigs();
+    const e = knight(3, 1);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
+    const n = Math.ceil((CONST.DROWN_TIME + 0.1) * 60);
+    const o = run(fg, () => [e], n);
+    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 3.5, 1.5), 6);
+    expect(o.falls).toEqual([]);
+    fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.Knight });
+    expect(total(fg.frame(frame([], { now: 20 }), cam()))).toBe(0);
+    expect(total(fg.frame(frame([], { now: 20.1 }), cam()))).toBe(0);
+  });
+
+  it('falls a barrel: whole size, opaque, below the floor, drawn after the entity is gone', () => {
+    const fg = dipFigs();
+    const b = (anim: number, ms: number): EntState => ent(20, KIND.Barrel, { ...at2(2, 4), anim, animMs: ms, side: SIDE.Neutral });
+    const rest = low(make().frame(frame([ent(20, KIND.Barrel, { side: SIDE.Neutral })]), cam()).cards);
+    let o = fg.frame(frame([b(2, 0)], { now: 10 }), cam());
+    expect(o.falls).toEqual([{ id: 20, x: 2.5, z: 4.5 }]);
+    for (let i = 1; i < 31; i++) o = fg.frame(frame([b(2, i * 16)], { now: 10 + i / 60 }), cam());
+    expect(o.cards.look[4]).toBe(1);
+    expect(Math.abs(low(o.cards) - rest + 1.75)).toBeLessThan(0.25);
+    expect(Math.max(...ys(o.cards)) - low(o.cards)).toBeCloseTo(Math.max(...ys(make().frame(frame([ent(20, KIND.Barrel, { side: SIDE.Neutral })]), cam()).cards)) - rest, 6);
+    expect(o.shadows.n).toBe(0);
+    o = fg.frame(frame([], { now: 11 }), cam());
+    expect(total(o)).toBe(1);
+    expect(fg.fallers).toBe(1);
+    for (let i = 0; i < 90; i++) o = fg.frame(frame([], { now: 11.1 + i / 60 }), cam());
+    expect(total(o)).toBe(0);
+  });
+
+  it('draws no shadow under water or in the air, and one at the bed on the bank above the level', () => {
+    const bank = dipFigs().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 0.9 * TILE, y: 1.5 * TILE })]), cam());
+    expect(bank.shadows.n).toBe(1);
+    expect(bedAt(dm, 0.9, 1.5)).toBeGreaterThanOrEqual(WATER_LEVEL);
+    const wade = dipFigs().frame(frame([knight(1, 1)]), cam());
+    expect(wade.shadows.n).toBe(0);
+    const air = dipFigs().frame(frame([knight(2, 4, { anim: ANIM.Dash })]), cam());
+    expect(air.shadows.n).toBe(0);
+  });
+
+  it('lifts a chest, a skull and a lying body onto the bed', () => {
+    const fg = dipFigs();
+    const chest = fg.frame(frame([ent(30, KIND.Chest, { ...at2(1, 1), side: SIDE.Neutral })]), cam());
+    expect(low(chest.cards)).toBeCloseTo(low(make().frame(frame([ent(30, KIND.Chest, { side: SIDE.Neutral })]), cam()).cards) + bedAt(dm, 1.5, 1.5), 6);
+    expect(fg.anchors.get(30)!.y).toBeCloseTo(bedAt(dm, 1.5, 1.5), 6);
+  });
+});

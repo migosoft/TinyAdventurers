@@ -55,17 +55,17 @@ export interface LayoutIn {
   useHint: UseHint | null;
   /** The ids with nothing over them: the snapshot's dark ones and what the picture hides (no bar, name, tag, hint or mark). */
   dark: ReadonlySet<number>;
-  /** A foot point in tiles on the canvas (device px). */
-  at: (x: number, z: number) => { px: number; py: number };
+  /** A point in tiles on the canvas (device px): `y` the height above the floor in tiles (a foot on the bed of a dip is below 0). */
+  at: (x: number, z: number, y: number) => { px: number; py: number };
   /** Canvas px per art px. */
   zoom: number;
   /** The width in art px of `text` in style `kind`; optional (a rough estimate when missing). */
   measure?: (text: string, kind: WorldTextKind) => number;
 }
 
-/** A foot point as whole canvas px. */
-function foot(i: LayoutIn, x: number, z: number): { px: number; py: number } {
-  const p = i.at(x, z);
+/** A foot point as whole canvas px, at the foot's height `y`. */
+function foot(i: LayoutIn, x: number, z: number, y: number): { px: number; py: number } {
+  const p = i.at(x, z, y);
   return { px: Math.round(p.px), py: Math.round(p.py) };
 }
 
@@ -80,7 +80,7 @@ export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
     if (!look) continue;
     const a = i.anchors.get(e.id);
     if (!a) continue;
-    const f = foot(i, a.x, a.z);
+    const f = foot(i, a.x, a.z, a.y);
     const x = Math.round(f.px - (look.w * i.zoom) / 2);
     const y = Math.round(f.py - (a.height + BAR_GAP) * i.zoom);
     out.push({ t: 'bar', x, y, w: look.w, frac: e.hp, color: FILL[look.fill] });
@@ -97,7 +97,7 @@ export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
     const name = i.heroNames.get(e.id);
     const a = i.anchors.get(e.id);
     if (!name || !a || !a.tagShown) continue;
-    const f = foot(i, a.x, a.z);
+    const f = foot(i, a.x, a.z, a.y);
     const y = Math.round(f.py - a.tag * i.zoom);
     out.push({ t: 'text', x: f.px, y, text: name, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: a.alpha, scale: 1, align: 'center', base: 'bottom' });
     // The symbols start ICON_GAP right of the tag's edge, centred on the tag's middle.
@@ -119,7 +119,7 @@ export function layoutTags(i: LayoutIn, tagOf: (e: EntState) => string | null, o
     if (!a || i.dark.has(e.id)) continue;
     const text = tagOf(e);
     if (text === null) continue;
-    const f = foot(i, a.x, a.z);
+    const f = foot(i, a.x, a.z, a.y);
     out.push({ t: 'text', x: f.px, y: Math.round(f.py - (a.height + TAG_RISE) * i.zoom), text, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
   }
 }
@@ -129,7 +129,7 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
   const h = i.useHint;
   if (!h || i.dark.has(h.ent.id)) return;
   const a = i.anchors.get(h.ent.id);
-  const f = foot(i, a ? a.x : h.ent.x / TILE, a ? a.z : h.ent.y / TILE);
+  const f = foot(i, a ? a.x : h.ent.x / TILE, a ? a.z : h.ent.y / TILE, a ? a.y : 0);
   const x = f.px;
   const y = Math.round(f.py - CAP_RISE * i.zoom);
   out.push({ t: 'cap', x, y });
@@ -201,7 +201,7 @@ export class Floats {
 
   layout(at: LayoutIn['at'], zoom: number, out: OverlayItem[]): void {
     for (const f of this.list) {
-      const p = at(f.x, f.z);
+      const p = at(f.x, f.z, 0);
       out.push({
         t: 'text', x: Math.round(p.px + f.dx * zoom), y: Math.round(p.py + (f.rise - f.up) * zoom), text: f.text, kind: f.kind, color: f.color, stroke: f.stroke,
         alpha: Math.min(1, (f.life / f.max) * 2), scale: f.pop ? popScale(f.age) : 1, align: 'center', base: 'bottom',
@@ -211,9 +211,9 @@ export class Floats {
 }
 
 /** A sleeper's rising Z: born at the figure's spot (tiles), 3 art px right of the foot at the head. */
-interface Zed { x: number; z: number; head: number; age: number }
+interface Zed { x: number; z: number; y: number; head: number; age: number }
 /** What the marks need from a figure's anchor, by id. */
-interface MarkState { x: number; z: number; head: number; cx: number; alpha: number; fear: boolean; charm: boolean; zT: number; zs: Zed[] }
+interface MarkState { x: number; z: number; y: number; head: number; cx: number; alpha: number; fear: boolean; charm: boolean; zT: number; zs: Zed[] }
 
 /** Sleep Z, fear "!" and charm heart over figures, from the anchors' effect bits: the twin of the marks in `StatusFx`. */
 export class Marks {
@@ -231,16 +231,16 @@ export class Marks {
       const sleep = has(a.effects, EFFECT.Sleep);
       if (!s) {
         if (!(sleep || has(a.effects, EFFECT.Fear) || has(a.effects, EFFECT.Charmed))) continue;
-        this.states.set(id, (s = { x: a.x, z: a.z, head: a.head, cx: a.cx, alpha: a.alpha, fear: false, charm: false, zT: 0, zs: [] }));
+        this.states.set(id, (s = { x: a.x, z: a.z, y: a.y, head: a.head, cx: a.cx, alpha: a.alpha, fear: false, charm: false, zT: 0, zs: [] }));
       }
-      s.x = a.x; s.z = a.z; s.head = a.head; s.cx = a.cx; s.alpha = a.alpha;
+      s.x = a.x; s.z = a.z; s.y = a.y; s.head = a.head; s.cx = a.cx; s.alpha = a.alpha;
       s.fear = has(a.effects, EFFECT.Fear);
       s.charm = has(a.effects, EFFECT.Charmed);
       if (sleep) {
         s.zT -= dt;
         if (s.zT <= 0) {
           s.zT = Z_EVERY;
-          s.zs.push({ x: a.x, z: a.z, head: a.head, age: 0 });
+          s.zs.push({ x: a.x, z: a.z, y: a.y, head: a.head, age: 0 });
         }
       } else s.zT = 0;
       for (let i = s.zs.length - 1; i >= 0; i--) {
@@ -259,9 +259,9 @@ export class Marks {
     for (const s of this.states.values()) {
       for (const z of s.zs) {
         const k = z.age / Z_LIFE;
-        mark('Z', SOUND_TEXT.fill, at(z.x, z.z), 3 + Math.sin(z.age * 5) * 1.5, z.head + k * Z_RISE, (1 - k) * s.alpha);
+        mark('Z', SOUND_TEXT.fill, at(z.x, z.z, z.y), 3 + Math.sin(z.age * 5) * 1.5, z.head + k * Z_RISE, (1 - k) * s.alpha);
       }
-      const foot = at(s.x, s.z);
+      const foot = at(s.x, s.z, s.y);
       if (s.fear) mark('!', SOUND_TEXT.fill, foot, s.cx, s.head + 3 + Math.abs(Math.sin(this.clock * 9)) * 1.5, s.alpha);
       if (s.charm) mark('♥', CHARM_COLOR, foot, s.cx + (s.fear ? 7 : 0), s.head + 3 + Math.abs(Math.sin(this.clock * 9 + 1)) * 1.5, s.alpha);
     }

@@ -17,7 +17,7 @@ const TILE = 16;
 const at = (x: number, z: number) => ({ px: 7 + x * 100, py: 11 + z * 100 });
 
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 5 * TILE, y: 5 * TILE, hp: 0.5, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0, ...o });
-const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, effects: 0, ...o });
+const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, effects: 0, y: 0, ...o });
 
 function input(ents: EntState[], anchors: [number, FigureAnchor][], o: Partial<LayoutIn> = {}): LayoutIn {
   return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, dark: new Set(), at, zoom: ZOOM, ...o };
@@ -39,6 +39,24 @@ const hint = (i: LayoutIn): OverlayItem[] => {
 };
 type Of<T extends OverlayItem['t']> = Extract<OverlayItem, { t: T }>;
 const only = <T extends OverlayItem['t']>(items: OverlayItem[], t: T): Of<T>[] => items.filter((i): i is Of<T> => i.t === t);
+
+describe('anchor height (#324)', () => {
+  it('a bar of an anchor with y = -0.5 sits lower on the canvas than the same anchor at y = 0, by the projection of 0.5 tile', () => {
+    // a map that shows the height: 100 canvas px per tile up
+    const lifted = (x: number, z: number, y: number) => ({ px: 7 + x * 100, py: 11 + z * 100 - y * 100 });
+    const ents = [ent(7, KIND.SkeletonWarrior)];
+    const flat = only(bars(input(ents, [[7, anchor({ y: 0 })]], { at: lifted })), 'bar')[0];
+    const low = only(bars(input(ents, [[7, anchor({ y: -0.5 })]], { at: lifted })), 'bar')[0];
+    expect(low.y - flat.y).toBe(50);
+    expect(low.x).toBe(flat.x);
+  });
+  it('the use hint hangs from the anchor height too', () => {
+    const lifted = (x: number, z: number, y: number) => ({ px: 7 + x * 100, py: 11 + z * 100 - y * 100 });
+    const barrel = ent(9, KIND.Barrel);
+    const cap = (y: number) => only(hint(input([barrel], [[9, anchor({ y })]], { useHint: { ent: barrel, label: null }, at: lifted })), 'cap')[0];
+    expect(cap(-0.5).y - cap(0).y).toBe(50);
+  });
+});
 
 describe('layoutBars', () => {
   it('a hurt enemy gets a red 12 px bar 3 px above its height', () => {

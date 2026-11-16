@@ -528,7 +528,7 @@ export class RunView3d implements RunView {
     const items: OverlayItem[] = [];
     const i: LayoutIn = {
       ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: this.hidden, zoom: c.zoom,
-      at: (x, z) => toCanvas(cam, c.plan, c.zoom, x, 0, z), measure: (t, k) => o.measure(t, k),
+      at: (x, z, y) => toCanvas(cam, c.plan, c.zoom, x, y, z), measure: (t, k) => o.measure(t, k),
     };
     layoutBars(i, items);
     layoutHeroTags(i, items);
@@ -550,7 +550,7 @@ export class RunView3d implements RunView {
     const a = this.figures.anchors.get(id);
     const e = f.ents.get(id);
     // 0.5 tile: mid-body of a figure without an anchor yet (the first frame of an entity).
-    const y = e && isProjectileKind(e.kind) ? SHOT_LIFT : a ? a.height / 2 / TILE : 0.5;
+    const y = e && isProjectileKind(e.kind) ? SHOT_LIFT : a ? a.y + a.height / 2 / TILE : 0.5;
     if (id === f.you) return { id, x: f.own.x / TILE, z: f.own.y / TILE, y };
     if (a) return { id, x: a.x, z: a.z, y };
     return e ? { id, x: e.x / TILE, z: e.y / TILE, y } : null;
