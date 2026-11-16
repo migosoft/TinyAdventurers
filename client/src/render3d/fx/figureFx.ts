@@ -237,10 +237,12 @@ function drain(out: FxOut, frame: FxFrame): void {
 
 // ---- the mimic ----
 const WAKE: BurstSpec = { x: 0, y: 0, z: 0, n: 10, speed: [1.2, 2.8], up: [0.1, 1.3], life: [0.25, 0.45], g: 4, drag: 0, size: PX * 1.5, colours: [0xffe070], streak: false };
-const LAND: BurstSpec = { x: 0, y: 0, z: 0, n: 5, speed: [0.6, 1.25], up: [0, 0.5], life: [0.15, 0.3], g: 1, drag: 0, size: PX * 3, colours: [0x9a8a7a], streak: false };
+/** The motes of the mimic's landing and of the rim dust (before the detail setting). */
+const LAND_N = 5, RIM_N = 6;
+const LAND: BurstSpec = { x: 0, y: 0, z: 0, n: LAND_N, speed: [0.6, 1.25], up: [0, 0.5], life: [0.15, 0.3], g: 1, drag: 0, size: PX * 3, colours: [0x9a8a7a], streak: false };
 
 /** The dust where a figure goes over a chasm's edge: the 2D `sinkStartFx` burst (6 motes, stone brown, up to 25 px/s, from 4 px above the rim spot, 0.4 s). */
-const RIM: BurstSpec = { x: 0, y: 0, z: 0, n: 6, speed: [0.5, 25 * PX], up: [0, 0.9], life: [0.25, 0.4], g: 1, drag: 0, size: PX * 2, colours: [0x775c55], streak: false };
+const RIM: BurstSpec = { x: 0, y: 0, z: 0, n: RIM_N, speed: [0.5, 25 * PX], up: [0, 0.9], life: [0.25, 0.4], g: 1, drag: 0, size: PX * 2, colours: [0x775c55], streak: false };
 const RIM_Y = 4 * PX;
 
 /** A puff of dust motes of `spec` (mutated: position and count) at a record's spot, lit; none for a figure the sight hides. */
@@ -283,6 +285,6 @@ export function registerFigureFx(): void {
     WAKE.x = r.x; WAKE.y = 8 / TILE; WAKE.z = r.z; WAKE.n = Math.max(3, Math.round(10 * f.ctx.detail));
     burst(o.tris, f.ctx.ax, WAKE, a, r.seed);
   });
-  registerFx(FX_KIND.MimicLand, (o, f, r, a) => { dust(o, f, r, a, LAND, 0.05, 5); });
-  registerFx(FX_KIND.RimDust, (o, f, r, a) => { dust(o, f, r, a, RIM, RIM_Y, 6); });
+  registerFx(FX_KIND.MimicLand, (o, f, r, a) => { dust(o, f, r, a, LAND, 0.05, LAND_N); });
+  registerFx(FX_KIND.RimDust, (o, f, r, a) => { dust(o, f, r, a, RIM, RIM_Y, RIM_N); });
 }

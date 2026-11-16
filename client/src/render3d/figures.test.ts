@@ -1125,7 +1125,8 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const early = dipFigs();
     early.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
     const o = early.frame(frame([e], { now: 50 }), cam());
-    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 2.5, 4.5) > 0 ? bedAt(dm, 2.5, 4.5) : 0, 1);
+    expect(bedAt(dm, 2.5, 4.5)).toBeLessThan(-1);   // the chasm's middle: the foot is not on it, it starts at the height it had (a new thing: 0)
+    expect(low(o.cards) - dryLow).toBeCloseTo(0, 6);
     expect(o.falls).toHaveLength(1);
     const next = early.frame(frame([e], { now: 50.016, dt: 0.016 }), cam());
     expect(low(next.cards) - dryLow).toBeLessThan(0);
@@ -1295,5 +1296,12 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const chest = fg.frame(frame([ent(30, KIND.Chest, { ...at2(1, 1), side: SIDE.Neutral })]), cam());
     expect(low(chest.cards)).toBeCloseTo(low(make().frame(frame([ent(30, KIND.Chest, { side: SIDE.Neutral })]), cam()).cards) + bedAt(dm, 1.5, 1.5), 6);
     expect(fg.anchors.get(30)!.y).toBeCloseTo(bedAt(dm, 1.5, 1.5), 6);
+    // the skull a figure leaves lies on the bed too (rule 7)
+    fg.event({ t: 'Died', id: 11, x: sp(1, 1)[0], y: sp(1, 1)[1], kind: KIND.Knight });
+    const skull = fg.frame(frame([], { now: 11 }), cam());
+    expect(skull.decals.n).toBe(1);
+    const under = bedAt(dm, 1.5, 1.5 - 2 / TILE);   // the token lies 2 px up the screen from the death spot (yaw 0)
+    expect(under).toBeLessThan(-0.3);
+    for (const y of ys(skull.decals)) expect(y).toBeCloseTo(LIE_Y + under, 5);
   });
 });

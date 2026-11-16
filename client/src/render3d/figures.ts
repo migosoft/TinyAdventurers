@@ -733,42 +733,40 @@ export class Figures3d {
       kept?.insts.push({ base: i, ox: i.x - x, oz: i.z - z, dl: i.lift - this.lifted(y) });
       out.models.push(falling ? { ...i, tint: Figures3d.dim(i.tint, depthFade(y)) } : i);
     };
-    {
-      push(body);
-      insts.push(body);
-      const wp = pose.weapon;
-      if (wp && !pose.lie) {
-        // The kit logs a weapon it cannot make (once) and gives nothing until the model is built; the figure goes without it.
-        const wm = kit.get(wp.frame);
-        if (wm) {
-          const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
-          // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
-          // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
-          // `size`, so `boneScale` makes up the difference.
-          const bs = (wp.scale * (d.scale ?? 1) * m.size) / m.scale;
-          const w: FigureInst = {
-            owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-            tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
-          };
-          // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
-          body.radius = w.radius = radius + wm.radius * bs * m.scale;
-          if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
-          push(w);
-          insts.push(w);
-        }
+    push(body);
+    insts.push(body);
+    const wp = pose.weapon;
+    if (wp && !pose.lie) {
+      // The kit logs a weapon it cannot make (once) and gives nothing until the model is built; the figure goes without it.
+      const wm = kit.get(wp.frame);
+      if (wm) {
+        const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
+        // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
+        // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
+        // `size`, so `boneScale` makes up the difference.
+        const bs = (wp.scale * (d.scale ?? 1) * m.size) / m.scale;
+        const w: FigureInst = {
+          owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
+          tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
+        };
+        // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
+        body.radius = w.radius = radius + wm.radius * bs * m.scale;
+        if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
+        push(w);
+        insts.push(w);
       }
-      // The shadow caster: the box of the standing idle card at the foot (no card is pushed); a faller casts none.
-      if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
-        const cf = `${d.idle}0`, cb = this.bounds(cf), fy = d.footY ?? cb.h;
-        // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
-        const card: Card = { frame: cf, x, z, lift: this.lifted(y), flip: pose.left, originX: pose.originX, footY: fy / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
-        const c = casterOf(card, e.id, this.frames, cam);
-        if (c) out.casters.push(c);
-      }
-      fig.last = insts;
-      if (pose.afterimage && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
-      if (this.accelDue(fig, s, f.dt) && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
     }
+    // The shadow caster: the box of the standing idle card at the foot (no card is pushed); a faller casts none.
+    if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
+      const cf = `${d.idle}0`, cb = this.bounds(cf), fy = d.footY ?? cb.h;
+      // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
+      const card: Card = { frame: cf, x, z, lift: this.lifted(y), flip: pose.left, originX: pose.originX, footY: fy / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
+      const c = casterOf(card, e.id, this.frames, cam);
+      if (c) out.casters.push(c);
+    }
+    fig.last = insts;
+    if (pose.afterimage && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
+    if (this.accelDue(fig, s, f.dt) && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
     if (kept) {
       // The pose is shared by the instances and mutated by the memory: a copy outlives the entity.
       const frozen = copyPose(p3);
@@ -893,23 +891,21 @@ export class Figures3d {
         frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: this.lifted(y), flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
         scale: sc, sx: pose.body.sx, sy: pose.body.sy, angle: rad(pose.body.angle), offset: [pose.body.x, pose.body.y - 1], tint, mode, alpha: pose.alpha, reach,
       };
-      {
-        into(body);
-        if (body.alpha >= 1 && this.shadowed(e.id) && !falling) {
-          const k = casterOf(body, e.id, this.frames, cam);
-          if (k) out.casters.push(k);
-        }
-        // The stored card is the lit one: a vanish image inherits `dark` and the faded alpha (`framePoint` reads geometry only).
-        const l = this.lit(body, e.id);
-        fig.body = l.card;
-        if (pose.afterimage && !falling) {
-          const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
-          this.images.push({ card: { ...l.card, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA * k, secs: AFTER_SECS, left: AFTER_SECS });
-        }
-        if (this.accelDue(fig, s, f.dt) && !falling) {
-          const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
-          this.images.push({ card: { ...l.card, tint: rgbOf(ACCEL_TINT), mode: 0 }, alpha0: ACCEL_ALPHA * pose.alpha * k, secs: ACCEL_SECS, left: ACCEL_SECS });
-        }
+      into(body);
+      if (body.alpha >= 1 && this.shadowed(e.id) && !falling) {
+        const k = casterOf(body, e.id, this.frames, cam);
+        if (k) out.casters.push(k);
+      }
+      // The stored card is the lit one: a vanish image inherits `dark` and the faded alpha (`framePoint` reads geometry only).
+      const l = this.lit(body, e.id);
+      fig.body = l.card;
+      if (pose.afterimage && !falling) {
+        const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
+        this.images.push({ card: { ...l.card, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA * k, secs: AFTER_SECS, left: AFTER_SECS });
+      }
+      if (this.accelDue(fig, s, f.dt) && !falling) {
+        const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
+        this.images.push({ card: { ...l.card, tint: rgbOf(ACCEL_TINT), mode: 0 }, alpha0: ACCEL_ALPHA * pose.alpha * k, secs: ACCEL_SECS, left: ACCEL_SECS });
       }
     }
 

@@ -10,7 +10,7 @@ export const DRIP_FALL = 0.35;
 export const DRIP_RING = 1.0;
 /** Where a drop starts: above the wall tops (first guess), tiles. */
 export const DRIP_TOP = 3;
-/** The rings and splash lie this far above the water's surface (tiles; the surface is at WATER_LEVEL, below the floor). */
+/** The height of the rings and the splash (tiles, absolute): just above the water's surface, which is at WATER_LEVEL, below the floor. */
 export const WATER_Y = WATER_LEVEL + 0.01;
 /** The drop's width in tiles (1 art px); the splash pixels are the same. */
 export const DROP_SIZE = PX;

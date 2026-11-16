@@ -77,16 +77,6 @@ function eventsOf(q: Pusher, p: number): { at: number; ev: PictureEv }[] {
   ];
 }
 
-/** How many pushed things are in their fall or drowning at `t`. */
-export function liquidsFalling(t: number, pushes: Record<Push, number | null>): number {
-  let n = 0;
-  for (const q of PUSHERS) {
-    const p = pushes[q.push];
-    if (p !== null && t >= p + SLIDE_TIME - EPS && t < p + SLIDE_TIME + q.dur) n++;
-  }
-  return n;
-}
-
 /**
  * The page's actors at time `t` (s) and the events born in the window (t - dt, t] (each event once when the windows follow each other):
  * an elf wading up and down the shallow rim, a knight walking into the lava, standing 5 s and walking out, an imp beside the water

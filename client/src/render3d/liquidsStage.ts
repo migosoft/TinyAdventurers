@@ -31,7 +31,7 @@ const PAN_SPEED = 12;
 const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
 const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
 const NONE_IDS: ReadonlySet<number> = new Set();
-const ALL_VISIBLE ={ isVisible: (): boolean => true };
+const ALL_VISIBLE = { isVisible: (): boolean => true };
 /**
  * A pinned clock shows a fall in progress: the first frame plays the REPLAY seconds before it as frames of STEP seconds (the events as the
  * script sends them, the figures drawn and thrown away), then the page holds still (the figures get no time).

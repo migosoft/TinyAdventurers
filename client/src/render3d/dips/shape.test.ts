@@ -65,14 +65,37 @@ describe('dip shape', () => {
     }
   });
 
+  it('has a lip: ground above 0, at most LIP, just outside the outline of a pool (mask 0.28 to 0.4)', () => {
+    for (const c of ['C', '~', 'L']) {
+      const m = pool(c, 5);
+      let top = -Infinity;
+      for (let z = 4.5; z < 6.5; z += 0.05) for (const x of [edgeX - 0.15, edgeX - 0.1, edgeX - 0.07]) top = Math.max(top, bedAt(m, x, z));
+      expect(top, c).toBeGreaterThan(0.005);
+      expect(top, c).toBeLessThanOrEqual(LIP);
+    }
+  });
+
   it('rounds a convex corner inward', () => expect(bedAt(pool('C', 5), cornerX + 0.08, cornerZ + 0.08)).toBeGreaterThan(-0.5));
 
-  it('is a pure function of the point', () => {
-    const m = pool('C', 5);
-    const a = bedAt(m, edgeX, 4.25), b = bedAt(m, edgeX, 4.25);
-    expect(a).toBe(b);
-    // The same point reached from either neighbouring cell's local grid (offset + fraction).
-    expect(bedAt(m, 2 + 1, 4.25)).toBe(bedAt(m, 3 + 0, 2 + 2.25));
+  it('depends only on the cells of the mask window of the point (so two cells agree on their shared edge)', () => {
+    // Two chasm cells (2, 2) and (3, 2); along their shared edge x = 3 the window is the cells 2..3 x j..j+1.
+    const make = (others: number) => {
+      const m = new TileMap(7, 7, new Uint8Array(49).fill(others));
+      m.set(2, 2, TILE_ID.Chasm); m.set(3, 2, TILE_ID.Chasm);
+      m.set(2, 3, TILE_ID.Floor); m.set(3, 3, TILE_ID.Floor);
+      return m;
+    };
+    const a = make(TILE_ID.Floor), b = make(TILE_ID.Lava), c = make(TILE_ID.DeepWater);
+    let seen = 0;
+    for (let z = 2.5; z < 3.5; z += 0.05) {
+      // the window of (3, z): cells 2..3 in x, floor(z - 0.5) .. +1 in z: rows 2 and 3 for z in [2.5, 3.5): all set the same in the copies
+      expect(bedAt(b, 3, z)).toBe(bedAt(a, 3, z));
+      expect(bedAt(c, 3, z)).toBe(bedAt(a, 3, z));
+      if (bedAt(a, 3, z) < -1) seen++;
+    }
+    expect(seen).toBeGreaterThan(0);
+    // and a point outside the window does see the difference
+    expect(bedAt(b, 4.5, 4.5)).not.toBe(bedAt(a, 4.5, 4.5));
   });
 
   it('names the kind', () => {
