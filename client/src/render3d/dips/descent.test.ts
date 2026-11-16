@@ -104,6 +104,35 @@ describe('descent', () => {
           }
           if (++steps > 2000) throw new Error('never gone');
         }
+        expect(f.y, tag).toBeLessThanOrEqual(-FALL_GONE + 1e-9);   // it went down, not stuck on a ledge until FALL_MAX_AGE
+      }
+    }
+  });
+
+  it('keeps its body off a convex rock corner of an L-shaped chasm two cells wide', () => {
+    const w = 14, h = 14;
+    const tiles = new Uint8Array(w * h).fill(TILE_ID.Floor);
+    for (let j = 5; j <= 11; j++) for (let i = 2; i <= 3; i++) tiles[j * w + i] = TILE_ID.Chasm;   // the vertical arm
+    for (let j = 5; j <= 6; j++) for (let i = 2; i <= 10; i++) tiles[j * w + i] = TILE_ID.Chasm;   // the horizontal arm
+    const map = new TileMap(w, h, tiles);
+    const bedM = (x: number, z: number) => bedAt(map, x, z);
+    const R = FALL_RADIUS;
+    const starts: [number, number, number, number][] = [[2.05, 8.95, 2.1, -2.1]];   // the case that clipped the corner at (4, 7)
+    for (let x = 2.05; x < 4; x += 0.3) for (let z = 7.05; z < 12; z += 0.45) for (const [a, b] of [[1, -1], [1, 0], [0, -1], [-1, -1], [1, 1]]) starts.push([x, z, a * 2.1, b * 2.1]);
+    for (const dt of [1 / 60]) {
+      for (const [x, z, vx, vz] of starts) {
+        const f = startFall(x, z, 0, vx, vz);
+        let steps = 0;
+        while (stepFall(f, dt, bedM)) {
+          if (f.y < -1) {
+            for (const [dx, dz] of [[0, 0], [R, 0], [-R, 0], [0, R], [0, -R], [R, R], [R, -R], [-R, R], [-R, -R]]) {
+              const b = bedM(f.x + dx, f.z + dz);
+              if (b > f.y + 1e-6) expect(b, `${x},${z} dt ${dt} at ${f.x.toFixed(2)},${f.z.toFixed(2)} y ${f.y.toFixed(2)} d ${dx},${dz}`).toBeLessThanOrEqual(f.y + 1e-6);
+            }
+          }
+          if (++steps > 2000) throw new Error('never gone');
+        }
+        expect(f.y).toBeLessThanOrEqual(-FALL_GONE + 1e-9);
       }
     }
   });
@@ -143,15 +172,15 @@ describe('descent', () => {
   it('never ages out or jumps from any start in a 3x3 chasm', () => {
     const bed = block3();
     for (const dt of [1 / 60, 0.05]) {
-      for (let x = 3.05; x < 6; x += 0.1) {
-        for (let z = 3.05; z < 6; z += 0.1) {
+      for (let x = 3.05; x < 6; x += 0.15) {
+        for (let z = 3.05; z < 6; z += 0.15) {
           const r = run(bed, startFall(x, z, Math.max(0, bed(x, z)), 0, 0), dt);
           expect(r.gone, `${x.toFixed(2)},${z.toFixed(2)} dt ${dt}`).toBe(true);
           expect(r.time).toBeLessThan(FALL_MAX_AGE);
         }
       }
     }
-  }, 30000);   // a grid scan with a check per step: slow when the whole suite runs in parallel
+  }, 30000);   // a grid scan with a check per step; stepFall makes about twice as many bed() calls since the body radius
 
   it('drowns onto the bed', () => {
     expect(drownY(-0.3, -2.3, 0)).toBe(-0.3);

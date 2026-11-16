@@ -241,15 +241,15 @@ const WAKE: BurstSpec = { x: 0, y: 0, z: 0, n: 10, speed: [1.2, 2.8], up: [0.1, 
 const LAND_N = 5, RIM_N = 12;
 const LAND: BurstSpec = { x: 0, y: 0, z: 0, n: LAND_N, speed: [0.6, 1.25], up: [0, 0.5], life: [0.15, 0.3], g: 1, drag: 0, size: PX * 3, colours: [0x9a8a7a], streak: false };
 
-/** The dust where a figure goes over a chasm's edge, made larger and lighter than 2D's `sinkStartFx` (6 motes, 2 px) so it reads in dim light: 12 motes of 4 px (the burst has no shrink), two stone colours, up to 40 px/s, thrown up to 1.1 rad, from 4 px above the rim spot, up to 0.6 s. */
-const RIM: BurstSpec = { x: 0, y: 0, z: 0, n: RIM_N, speed: [0.8, 40 * PX], up: [0.2, 1.1], life: [0.35, 0.6], g: 1, drag: 0, size: PX * 4, colours: [0xb09a8c, 0x8a7468], streak: false };
+/** The dust where a figure goes over a chasm's edge, made larger and lighter than 2D's `sinkStartFx` (6 motes, 2 px) so it reads in dim light: 12 motes of 4 px (the burst has no shrink), two stone colours, up to 40 px/s, thrown 0.5 to 1.4 rad (up into the light above the rim), from 4 px above the rim spot, up to 0.6 s. Lit like all dust: a clearly lighter stone albedo is what makes it read. */
+const RIM: BurstSpec = { x: 0, y: 0, z: 0, n: RIM_N, speed: [0.8, 40 * PX], up: [0.5, 1.4], life: [0.35, 0.6], g: 1, drag: 0, size: PX * 4, colours: [0xd9d0c4, 0xb8a898], streak: false };
 const RIM_Y = 4 * PX;
 
 /** A puff of dust motes of `spec` (mutated: position and count) at a record's spot, lit; none for a figure the sight hides. */
-function dust(o: FxOut, f: FxFrame, r: FxRec, age: number, spec: BurstSpec, y: number, n: number, lit = true): void {
+function dust(o: FxOut, f: FxFrame, r: FxRec, age: number, spec: BurstSpec, y: number, n: number): void {
   if (f.hidden.has(r.follow)) return;
   spec.x = r.x; spec.y = y; spec.z = r.z; spec.n = Math.max(2, Math.round(n * f.ctx.detail));
-  burst(lit ? o.lit : o.tris, f.ctx.ax, spec, age, r.seed);
+  burst(o.lit,f.ctx.ax, spec, age, r.seed);
 }
 
 // ---- all of it ----
@@ -286,5 +286,5 @@ export function registerFigureFx(): void {
     burst(o.tris, f.ctx.ax, WAKE, a, r.seed);
   });
   registerFx(FX_KIND.MimicLand, (o, f, r, a) => { dust(o, f, r, a, LAND, 0.05, LAND_N); });
-  registerFx(FX_KIND.RimDust, (o, f, r, a) => { dust(o, f, r, a, RIM, RIM_Y, RIM_N, false); });
+  registerFx(FX_KIND.RimDust, (o, f, r, a) => { dust(o, f, r, a, RIM, RIM_Y, RIM_N); });
 }

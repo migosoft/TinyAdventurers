@@ -60,21 +60,29 @@ export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => n
   // The body has a radius: each axis moves on its own (so a slide along a wall goes on), and is dropped with its speed when the bed
   // FALL_RADIUS ahead of the new place, or at the place itself, is above the foot.
   const sx = Math.sign(f.vx), sz = Math.sign(f.vz);
+  // The diagonal point guards a convex rock corner the two axis probes slip past: a hit undoes the step and zeroes both speeds.
+  const R = FALL_RADIUS, ox = f.x, oz = f.z;
   const nx = f.x + f.vx * dt;
-  if (f.vx !== 0 && (bed(nx, f.z) > y || bed(nx + sx * FALL_RADIUS, f.z) > y)) f.vx = 0; else f.x = nx;
+  if (f.vx !== 0 && (bed(nx, f.z) > y || bed(nx + sx * R, f.z) > y)) f.vx = 0; else f.x = nx;
   const nz = f.z + f.vz * dt;
-  if (f.vz !== 0 && (bed(f.x, nz) > y || bed(f.x, nz + sz * FALL_RADIUS) > y)) f.vz = 0; else f.z = nz;
-  if (bed(f.x, f.z) > y) { f.vx = 0; f.vz = 0; }
-  // A body that overlaps a wall (a narrow chasm, a sink spot near a bank) eases toward its cell's centre line, on that axis only.
+  if (f.vz !== 0 && (bed(f.x, nz) > y || bed(f.x, nz + sz * R) > y)) f.vz = 0; else f.z = nz;
+  if (bed(f.x, f.z) > y || (f.vx !== 0 && f.vz !== 0 && bed(f.x + sx * R, f.z + sz * R) > y)) { f.x = ox; f.z = oz; f.vx = 0; f.vz = 0; }
+  // A body that overlaps a wall (a narrow chasm, a sink spot near a bank) eases away from the side that hit (toward the cell's centre
+  // line when both sides hit), on that axis only, at RIM_PULL, never into rock. The four diagonal probes ease it away from a corner.
   const pull = RIM_PULL * dt;
-  if (bed(f.x + FALL_RADIUS, f.z) > y || bed(f.x - FALL_RADIUS, f.z) > y) {
-    const px = f.x + Math.max(-pull, Math.min(pull, f.cx - f.x));
-    if (bed(px, f.z) <= y) f.x = px;
+  const away = (hitPlus: boolean, hitMinus: boolean, centre: number, at: number): number =>
+    hitPlus && !hitMinus ? -pull : hitMinus && !hitPlus ? pull : Math.max(-pull, Math.min(pull, centre - at));
+  const hx0 = bed(f.x + R, f.z) > y, hx1 = bed(f.x - R, f.z) > y, hz0 = bed(f.x, f.z + R) > y, hz1 = bed(f.x, f.z - R) > y;
+  let ex = hx0 || hx1 ? away(hx0, hx1, f.cx, f.x) : 0, ez = hz0 || hz1 ? away(hz0, hz1, f.cz, f.z) : 0;
+  for (const ix of [-1, 1]) {
+    for (const iz of [-1, 1]) {
+      if (bed(f.x + ix * R, f.z + iz * R) <= y) continue;
+      if (ex === 0) ex = -ix * pull;
+      if (ez === 0) ez = -iz * pull;
+    }
   }
-  if (bed(f.x, f.z + FALL_RADIUS) > y || bed(f.x, f.z - FALL_RADIUS) > y) {
-    const pz = f.z + Math.max(-pull, Math.min(pull, f.cz - f.z));
-    if (bed(f.x, pz) <= y) f.z = pz;
-  }
+  if (ex !== 0 && bed(f.x + ex, f.z) <= y) f.x += ex;
+  if (ez !== 0 && bed(f.x, f.z + ez) <= y) f.z += ez;
   const b = bed(f.x, f.z);
   if (y < b) { f.y = b; f.vy = 0; } else f.y = y;
   return f.y > -FALL_GONE;
