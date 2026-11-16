@@ -8,7 +8,10 @@ import { Forest } from './forest';
 import { paletteBytes } from './palette';
 import type { TreeForm, TreeSpec } from './spec';
 import { TREE_ORDER, treeMaterials } from './treeNodes';
-import { TREE_UPLOAD_MS, TreeLayer } from './treeLayer';
+import { TREE_UPLOAD_MS, TreeLayer, chunkGeometry } from './treeLayer';
+import { treeSpecOf } from './spec';
+import demo from '../../generated/woodland-demo.json';
+import type { PlantInfo } from '../../generated/PlantInfo';
 
 const spec = (x: number, z: number, seed = 1, extra: Partial<TreeSpec> = {}): TreeSpec => ({ form: 'round' as TreeForm, x, z, seed, scalePct: 100, mirrored: false, leaf: 1, dead: false, ...extra });
 const MAP = { w: 48, h: 32 }; // 3 x 2 chunks
@@ -348,4 +351,31 @@ describe('TreeLayer', () => {
     expect(l.shared.leafOverride.value).toBe(0.25);
     expect(l.shared.plain.value).toBe(1);
   });
+});
+
+/** FNV-1a over the bytes of a stream as the GPU gets it (float32, or uint32 for the index). */
+function fnv(a: ArrayLike<number>, uint = false): number {
+  const b = new Uint8Array((uint ? Uint32Array.from(a) : Float32Array.from(a)).buffer);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < b.length; i++) { h ^= b[i]; h = Math.imul(h, 0x01000193) >>> 0; }
+  return h;
+}
+
+describe('chunkGeometry', () => {
+  // Pinned before #335 changed how the streams are kept: the demo woodland's chunk geometries, every stream byte for byte.
+  it('uploads the demo woodland unchanged', () => {
+    const lvl = (demo as unknown as { w: number; h: number; woodland: { plants: PlantInfo[]; palette: number } }[])[0];
+    const f = new Forest(lvl.woodland.plants.map(treeSpecOf), { w: lvl.w, h: lvl.h }, lvl.woodland.palette);
+    while (f.built < f.total) f.step({ x: lvl.w / 2, z: lvl.h / 2 }, 1e9);
+    const chunks = f.frame({ wind: true, t: 0 }).chunks;
+    let h = 0x811c9dc5;
+    for (const k of [...chunks.keys()].sort((a, b) => a - b)) {
+      const g = chunkGeometry(chunks.get(k)!);
+      const sums = ['position', 'nrm', 'grad', 'part', 'misc', 'tuft', 'plant', 'look'].map((n) => fnv(g.getAttribute(n).array as ArrayLike<number>));
+      sums.push(fnv(g.getIndex()!.array as ArrayLike<number>, true));
+      h = fnv([h, k, ...sums], true);
+    }
+    expect(chunks.size).toBe(36);
+    expect(h.toString(16)).toBe('7eb8a564');
+  }, 60_000);
 });
