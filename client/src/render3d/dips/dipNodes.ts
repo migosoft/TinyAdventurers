@@ -4,7 +4,7 @@
 // sloped ground and on the vertical skirts along walls. The numbers are first guesses from the mockup, to be tuned by eye.
 import type { NodeMaterial, Texture } from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, select, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, If, abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, select, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { flatTexel } from '../materials';
@@ -158,7 +158,20 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // runs along x takes x, one along z takes z, a rounded corner blends the two by the normal (a single coordinate would mirror there).
   const nx2 = normal.x.mul(normal.x), nz2 = normal.z.mul(normal.z);
   const alongZ = smoothstep(0.3, 0.7, nx2.div(nx2.add(nz2).add(1e-4)));
-  const ridges = mix(slabs(wp.x.mul(sign(normal.z)), y), slabs(wp.z.mul(sign(normal.x)).negate(), y), alongZ);
+  // The slabs cost about 40 hashes an evaluation, so a real branch keeps them to the pixels that show them: below the floor inside a
+  // chasm's outline, and one evaluation where the wall runs straight (two only on a rounded corner). Plain arithmetic, so a branch is
+  // allowed here (no texture sample, no derivative).
+  const rimMask = attribute('rim', 'vec3');
+  const sA = wp.x.mul(sign(normal.z)), sB = wp.z.mul(sign(normal.x)).negate();
+  const ridges = Fn(() => {
+    const r = float(0).toVar();
+    If(rimMask.z.greaterThan(0.3).and(d.greaterThan(0.02)), () => {
+      If(alongZ.lessThan(0.01), () => { r.assign(slabs(sA, y)); })
+        .ElseIf(alongZ.greaterThan(0.99), () => { r.assign(slabs(sB, y)); })
+        .Else(() => { r.assign(mix(slabs(sA, y), slabs(sB, y), alongZ)); });
+    });
+    return r;
+  })();
   const chasmRock = CHASM_ROCK.mul(ridges);
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
@@ -168,7 +181,16 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // `near` (1 on the dip's cells, 0 one tile away) says how far a mark runs, `rim` (the outline's own mask) where the outline is.
   const rim = attribute('rim', 'vec3');
   const near = attribute('near', 'vec3');
-  const sh = shards(wp.xz.mul(SHARD_FREQ));
+  // The pieces (27 hashes) only on floor that lava or a chasm marks: a branch again. Elsewhere: no piece, far from any edge.
+  const piece: N = Fn(() => {
+    const v = vec2(0, 1).toVar();
+    If(max(near.y, near.z).greaterThan(0.02).and(bank.lessThan(0.99)), () => {
+      const s = shards(wp.xz.mul(SHARD_FREQ));
+      v.assign(vec2(s.id, s.edge));
+    });
+    return v;
+  })();
+  const sh = { id: piece.x, edge: piece.y };
   const cellXZ: N = fract(wp.xz);
   const joint = float(1).sub(smoothstep(0.02, 0.09, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
   const patchy = vnoise2(wp.xz.mul(2.6).add(7)).sub(0.5);

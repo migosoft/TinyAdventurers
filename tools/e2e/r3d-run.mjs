@@ -235,10 +235,13 @@ try {
   const mark = sentInputs.length;
   await page.mouse.move(800, 300);
   await page.mouse.down();
-  await page.waitForTimeout(300 * slow);
+  // Inputs go out with the frames, and a software frame of the 3D view takes about half a second (measured on main, 2026-11-16):
+  // hold the button until a primary went out, not for a fixed time (300 ms passed or failed by the luck of the frame's timing).
+  const primaries = () => sentInputs.slice(mark).filter((m) => m[5] != null);
+  for (let waited = 0; waited < 5000 * slow && primaries().length === 0; waited += 100) await page.waitForTimeout(100);
   await page.mouse.up();
   await page.waitForTimeout(200);
-  const shots = sentInputs.slice(mark).filter((m) => m[5] != null);
+  const shots = primaries();
   console.log(`primary inputs after the click ${shots.length}`);
   if (shots.length === 0) errors.push('a left click sent no primary Input');
   await page.screenshot({ path: `${out}/r3d-run-${level}-aimed.png` });
