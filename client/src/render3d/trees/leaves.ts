@@ -1,6 +1,6 @@
 // Falling leaves (#329): rare single leaves that start from a tree's real lobes, drift down with the wind, land, lie a moment and fade.
 // `pushLeaves` fills the CPU buffer a chunk keeps; `leafAt` is the CPU twin of the path the leaf shader (`leafMaterial`) draws.
-import { rng } from '../../game/vegetation/canvas';
+import { rng } from './recipe';
 import { WIND_DIR } from '../wind';
 import type { BuiltTree } from './build';
 

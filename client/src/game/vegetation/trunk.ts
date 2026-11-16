@@ -1,8 +1,6 @@
 // Trunk-side helpers shared by the leafy trees and the conifer (#279).
+import { type Seg, type Trunk, barkLineCount, limbSteps, rootPaths } from '../../render3d/trees/recipe';
 import { type Canvas, DEFAULT_LIGHT, type Light, barkShade, isBark, isLeaf, step } from './canvas';
-
-/** A stroke: discs of half-width `w` along a path. */
-export type Seg = { x: number; y: number; w: number }[];
 
 /** A bark stroke painter for `cv`: writes the picture's colour and the default-light reference's, rim dark on the shadow side. */
 export function painter(cv: Canvas, light: Light): (seg: Seg, edge: boolean, maxY?: number) => void {
@@ -15,36 +13,12 @@ export function painter(cv: Canvas, light: Light): (seg: Seg, edge: boolean, max
   };
 }
 
-export interface Trunk {
-  /** The axis at t (0 = foot, 1 = fork): position and half-width in px. */
-  at(t: number): { x: number; y: number; w: number };
-  seg: Seg;
-  topY: number;
-  footY: number;
-}
-
-/**
- * A bent, tapering trunk from the foot (design y 79) to the fork (design y `forkY`): a bend B·sin(πt) (up to ±5 units times
- * `bend`), a lean of up to ±3 units and a 0.6-unit wobble; half-width 6.0 − 3.2 t units times `tw`, plus a foot flare
- * 1.6·(1 − t/0.2)² in the lowest fifth. `Y` maps design y to px, `sx` stretches x, `tw` is scale times the shape's trunk factor.
- */
-export function trunkPath(r: () => number, cx: number, Y: (y: number) => number, s: number, sx: number, tw: number, forkY: number, bend: number): Trunk {
-  const B = (r() < 0.5 ? -1 : 1) * (1.5 + r() * 3.5) * bend, lean = (r() - 0.5) * 6, ph = r() * 6;
-  const at = (t: number) => ({
-    x: cx + (B * Math.sin(Math.PI * t) + lean * t + 0.6 * Math.sin(t * 9 + ph)) * s * sx,
-    y: Y(79 + (forkY - 79) * t),
-    w: Math.max(1.2, (6.0 - 3.2 * t + (t < 0.2 ? 1.6 * (1 - t / 0.2) ** 2 : 0)) * tw),
-  });
-  const seg: Seg = []; for (let i = 0; i <= 48; i++) seg.push(at(i / 48));
-  return { at, seg, topY: Y(forkY), footY: Y(79) };
-}
-
 /**
  * Wavy dashed lines along the trunk (4; 2 below 70 % scale) at fixed fractions of its half-width, one step lighter on the
  * sun side of the axis and one darker on the other. Positions come from the trunk and `r()` only; the light picks colours.
  */
 export function barkLines(cv: Canvas, r: () => number, tr: Trunk, light: Light, s: number, tTop = 0.97): void {
-  const n = s >= 0.7 ? 4 : 2, len = Math.max(8, Math.ceil((tr.footY - tr.topY) * tTop));
+  const { n, len } = barkLineCount(tr, s, tTop);
   for (let i = 0; i < n; i++) {
     const f = n === 2 ? (i ? 0.75 : -0.75) : -0.75 + (1.5 * i) / (n - 1), ph = r() * 6;
     let on = true;
@@ -69,7 +43,7 @@ export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: numb
   const paint = painter(cv, light);
   for (const [dx, ty] of targets) {
     const tx = X(dx), tyy = Y(ty), cxp = fork.x + (tx - fork.x) * 0.15, cyp = fork.y + (tyy - fork.y) * 0.75;
-    const n = Math.max(8, Math.ceil(Math.hypot(tx - fork.x, tyy - fork.y) * 2));
+    const n = limbSteps(fork, tx, tyy);
     const pts: NormalPt[] = [];
     for (let i = 0; i <= n; i++) {
       const t = i / n, u = 1 - t;
@@ -100,26 +74,10 @@ export function shadowLine(cv: Canvas, r: () => number, light: Light, pts: Norma
   }
 }
 
-const ROOT_DIRS: Record<2 | 3 | 4, [number, number, number, number][]> = {
-  4: [[-1, 0.2, 11, 2.8], [-0.4, 0.55, 7, 2.4], [0.45, 0.55, 7, 2.4], [1, 0.18, 12, 2.8]],
-  3: [[-1, 0.22, 11, 2.8], [0.2, 0.6, 6, 2.2], [1, 0.2, 11, 2.8]],
-  2: [[-1, 0.25, 9, 2.6], [1, 0.25, 9, 2.6]],
-};
-
-/** A few short humps around the foot: length + r()·4 units times `lenMul`, tapering by (1 − t)^1.1, the rim kept; the lower ones overlap. */
+/** The roots around the foot (`rootPaths`), painted with their rim kept; the lower ones overlap. */
 export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: number) => void, cx: number, footY: number, s: number, tw: number, count: 2 | 3 | 4, lenMul: number): Seg[] {
-  const list: Seg[] = [];
-  for (const [vx, vy, len0, hw] of ROOT_DIRS[count]) {
-    const len = (len0 + r() * 4) * s * lenMul, wig = r() * 6, w0 = Math.max(1.2, hw * tw), m = Math.hypot(vx, vy);
-    const n = Math.max(6, Math.round(len * 1.5)); let x = cx + (vx / m) * 4 * tw, y = footY + (vy / m) * 2 * s;
-    const seg: Seg = [];
-    for (let i = 0; i <= n; i++) {
-      const t = i / n; seg.push({ x: x + Math.sin(t * 8 + wig) * 0.7 * t * s, y, w: w0 * (1 - t) ** 1.1 + 0.5 });
-      const fy = vy * (1 - 0.6 * t), mm = Math.hypot(vx, fy); x += (vx / mm) * (len / n); y += (fy / mm) * (len / n);
-    }
-    list.push(seg);
-  }
-  list.sort((A, B) => A[A.length - 1].y - B[B.length - 1].y).forEach((sg) => paint(sg, true));
+  const list = rootPaths(r, cx, footY, s, tw, count, lenMul);
+  list.forEach((sg) => paint(sg, true));
   return list;
 }
 

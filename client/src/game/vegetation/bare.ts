@@ -1,6 +1,7 @@
 // The bare tree (plant kind 5): the leafy trunk and roots under recursive, leafless limbs (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, rng } from './canvas';
-import { type NormalPt, barkLines, painter, rootMoss, roots, shadowLine, trunkPath } from './trunk';
+import { rng, trunkPath } from '../../render3d/trees/recipe';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape } from './canvas';
+import { type NormalPt, barkLines, painter, rootMoss, roots, shadowLine } from './trunk';
 
 /** Twig pixels: mid brown on the sun side of the trunk, dark brown on the other (colour only). */
 const twigColour = (x: number, cx: number, L: Light) => ((x - cx) * L.x > 0 ? 'c' : 'b');

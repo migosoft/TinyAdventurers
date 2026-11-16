@@ -1,8 +1,9 @@
 // The lobed crown with its pockets and vines (leafy trees and bushes) (#279).
+import type { Lobe } from '../../render3d/trees/recipe';
 import { type Canvas, DEFAULT_LIGHT, type Light, isLeaf, step } from './canvas';
 
-/** A crown lobe in px: centre, radii and the two phases of its scalloped outline. Its draw index is its seam id. */
-export interface Lobe { x: number; y: number; rx: number; ry: number; ph: number; ph2: number }
+/** A crown lobe's draw index is its seam id. */
+export type { Lobe };
 export interface CrownOpts {
   /** The crown's bounding ellipse (px) for the crown-wide gradient. */
   cx: number; cy: number; crx: number; cry: number;

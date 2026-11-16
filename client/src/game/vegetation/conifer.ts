@@ -1,6 +1,8 @@
 // A conifer (fir/spruce): a straight trunk under stacked, jagged skirts (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, rng, step } from './canvas';
-import { type Trunk, barkLines, canopyShadow, painter, rootMoss, roots, type Seg } from './trunk';
+// The trunk, the roots and every tier's place and outline come from the recipe module (#334); this file paints them.
+import { coniferRoots, coniferSpire, coniferStart, coniferTier, rng, skirtColumns } from '../../render3d/trees/recipe';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, step } from './canvas';
+import { barkLines, canopyShadow, painter, rootMoss } from './trunk';
 
 const PAL = '56789';
 const quant = (l: number) => (l > 0.6 ? '9' : l > 0.2 ? '8' : l > -0.3 ? '7' : l > -0.75 ? '6' : '5');
@@ -12,16 +14,11 @@ const quant = (l: number) => (l > 0.6 ? '9' : l > 0.2 ? '8' : l > -0.3 ? '7' : l
  * are written for both lights; the sun-side lift and dabs only recolour.
  */
 function skirt(cv: Canvas, r: () => number, light: Light, s: number, cx: number, id: number, W: number, yTop: number, h: number, t: number): void {
-  const period = 3.2 + r() * 1.2, amp = (1.6 + r() * 0.8) * s, phase = r() * period;
-  const x0 = Math.round(cx - W), n = Math.round(cx + W) - x0 + 1;
-  const tops = new Float64Array(n), bots = new Float64Array(n);
-  const lx = 0.7 * light.x, dx = 0.7 * DEFAULT_LIGHT.x, yB = yTop + h, base = 0.05 - 0.3 * (1 - t);
+  const { x0, n, tops, bots, dabs } = skirtColumns(r, s, cx, W, yTop, h);
+  const lx = 0.7 * light.x, dx = 0.7 * DEFAULT_LIGHT.x, base = 0.05 - 0.3 * (1 - t);
   for (let i = 0; i < n; i++) {
-    const x = x0 + i, ax = Math.abs(x - cx) / W;
-    if (ax > 1) { tops[i] = Infinity; bots[i] = -Infinity; continue; }
-    const u = ((x + phase) / period) % 1, jag = amp * (1 - Math.abs(2 * u - 1));
-    const top = yTop + 0.9 * h * ax ** 1.1, bot = yB + 2.6 * s * ax * ax - jag;
-    tops[i] = top; bots[i] = bot;
+    if (tops[i] === Infinity) continue;
+    const x = x0 + i, top = tops[i], bot = bots[i];
     const xw = (x - cx) / W, span = Math.max(bot - top, 1);
     for (let y = Math.ceil(top); y <= Math.floor(bot); y++) {
       const b = 0.9 * (0.75 - (y - top) / span) + (r() - 0.5) * 0.12 + base, dB = bot - y;
@@ -44,7 +41,7 @@ function skirt(cv: Canvas, r: () => number, light: Light, s: number, cx: number,
     }
   }
   // dabs on the sun side, 2 px wide, one step lighter; every draw first
-  for (let k = 0, count = Math.round((W * h) / 40); k < count; k++) {
+  for (let k = 0; k < dabs; k++) {
     const u = 0.25 + 0.7 * r(), v = 0.6 * r();
     for (const ref of [false, true]) {
       const sg = Math.sign(ref ? DEFAULT_LIGHT.x : light.x), x = Math.round(cx + sg * u * W), i = x - x0;
@@ -78,33 +75,26 @@ function tierDiscs(out: PlantShape['clumps'], cx: number, y: number, W: number, 
 
 /** A conifer: a straight tapering trunk, skirts stacked from the bottom (each one drooping to a zigzag hem) narrowing to a spire, blue-green palette 5..9. */
 export function drawConifer(seed: number, s: number, light: Light): Drawn {
-  const r = rng(seed), cv = new Canvas(220, 220), cx = 110, base = 190, detail = s >= 0.7;
-  const bare = 1 + r() * 23; // bare trunk below the lowest skirt, design units (1 to 24: some hide it, some show a long trunk)
-  const Y = (y: number) => base + (y - 86) * s;
-  const footY = Y(80), paint = painter(cv, light);
-  // trunk: half-width 3.2 to 1.4 units with a foot flare, up to just under the lowest skirt
-  const len = bare + 4, wAt = (u: number) => Math.max(1.2, (3.2 - 1.8 * (u / len) + 2.2 * Math.max(0, 1 - u / 5) ** 2) * s);
-  const seg: Seg = [], steps = Math.ceil(len * s);
-  for (let i = 0; i <= steps; i++) { const u = (i / steps) * len; seg.push({ x: cx, y: Y(80 - u), w: wAt(u) }); }
-  const tr: Trunk = { at: (t) => ({ x: cx, y: Y(80 - t * len), w: wAt(t * len) }), seg, topY: Y(80 - len), footY };
+  const r = rng(seed), cv = new Canvas(220, 220);
+  const p = coniferStart(r, s), { cx, Y, bare, footY, wAt, seg, tr, bottom, n } = p;
+  const paint = painter(cv, light);
   paint(seg, false, footY);
-  const rootSegs = roots(r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
+  const rootSegs = coniferRoots(r, p);
+  rootSegs.forEach((sg) => paint(sg, true));
   const cones: { yTop: number; h: number; W: number }[] = [];
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream
   // skirts, bottom first so each higher one covers the top of the one below; id = index from the bottom
-  // the top skirt's top is at y 13; the gap is at most 10, so the full zigzag (2.4 px) never opens a row between two skirts
-  const bottom = 80 - bare, span = bottom - 26, n = Math.max(3, Math.ceil(span / 10) + 1), gap = span / (n - 1);
   const clumps: PlantShape['clumps'] = [];
   for (let i = 0; i < n; i++) {
-    const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
-    const yTop = Y(bottom - i * gap - 13);
-    skirt(cv, r, light, s, cx, i, W, yTop, 13 * s, t);
-    cones.push({ yTop, h: 13 * s, W });
+    const { t, W, yTop, h } = coniferTier(r, p, i);
+    skirt(cv, r, light, s, cx, i, W, yTop, h, t);
+    cones.push({ yTop, h, W });
     tierDiscs(clumps, cx, yTop + 0.6 * 13 * s, W, Math.min(0.85 * W, 0.4 * 13 * s)); // inside its own tier: the discs end at the hem
   }
-  skirt(cv, r, light, s, cx, n, 3.2 * s, Y(9), 8 * s, 1); // the spire: its top is 4 units above the top skirt's, so it overlaps it
-  cones.push({ yTop: Y(9), h: 8 * s, W: 3.2 * s });
+  const sp = coniferSpire(p); // its top is 4 units above the top skirt's, so it overlaps it
+  skirt(cv, r, light, s, cx, n, sp.W, sp.yTop, sp.h, 1);
+  cones.push({ yTop: sp.yTop, h: sp.h, W: sp.W });
   clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: Math.min(0.85 * 3.2 * s, 0.4 * 8 * s) }); // the spire: one disc
   cv.set(cx, Math.ceil(Y(9)) - 1, '7', '7', n); // its tip, on the row above the spire's top row
   canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk

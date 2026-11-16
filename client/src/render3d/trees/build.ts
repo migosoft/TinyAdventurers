@@ -1,5 +1,5 @@
 // Turns a tree spec into mesh streams: the leafy trees (round, wide, tall), the dead tree, the willow, conifers and bushes.
-import { rng } from '../../game/vegetation/canvas';
+import { rng } from './recipe';
 import { growLeafy, growPlant, growWillow, swayK, type FallLobe, type Skeleton } from './grow';
 import { RAMP, TreeMesh, coreBall, mirrorX, skirt, tube, tuftPatch, tufts, type GradFn } from './mesh';
 import type { TreeSpec } from './spec';

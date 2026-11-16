@@ -1,8 +1,8 @@
-// The skeletons of the trees. A leafy tree (round, wide, tall): the 2D generator's trunk with a root flare, limbs that fork twice in
+// The skeletons of the trees. A leafy tree (round, wide, tall): the recipe's trunk (recipe.ts) with a root flare, limbs that fork twice in
 // space, a leader, and a crown lobe at the branch ends. The willow: heavy limbs under curtains of hanging leaf tufts. A conifer or
-// a bush: the 2D recipe's trunk, twigs, lobes and skirts placed in depth. Pure geometry in plant-local tiles; no mesh here.
-import { rng } from '../../game/vegetation/canvas';
-import { drawPlant, drawTree } from '../../game/vegetation';
+// a bush: the recipe's trunk, twigs, lobes and skirts placed in depth. Pure geometry in plant-local tiles; no mesh here.
+// "The picture" below is the recipe's flat frame (px, y down): the one the 2D view's plant pictures were painted in.
+import { type Recipe, leafyRecipe, plantRecipe, rng } from './recipe';
 import { SWAY } from '../wind';
 import { RAMP, type Lobe3, type P3, type SkirtOpts, type TuftPatch } from './mesh';
 import type { TreeForm, TreeSpec } from './spec';
@@ -95,8 +95,7 @@ export function growLeafy(spec: TreeSpec): Skeleton {
   const form = spec.form;
   if (form !== 'round' && form !== 'wide' && form !== 'tall') throw new Error(`trees: ${form} is not a leafy tree`);
   const tb = TABLE[form];
-  const rc = drawPlant(form, spec.seed, spec.scalePct).recipe;
-  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const rc = plantRecipe(form, spec.seed, spec.scalePct);
   const r = rng((spec.seed * 104729 + 71) >>> 0), du = rc.s * U, minW = 0.6 * U;
   const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U;
 
@@ -189,8 +188,6 @@ export function growLeafy(spec: TreeSpec): Skeleton {
   };
 }
 
-type Recipe = NonNullable<ReturnType<typeof drawPlant>['recipe']>;
-
 /** The generator's roots laid on the ground (picture-down is toward the viewer), and one more to the back for the first and last. */
 function layRoots(rc: Recipe, X: (x: number) => number, minW: number): P3[][] {
   const out: P3[][] = [];
@@ -220,8 +217,7 @@ export const WILLOW_SHIFT = { warm: 0.09, bright: 0.08 };
  * All numbers are first guesses (the look was judged as it is).
  */
 export function growWillow(spec: TreeSpec): Skeleton {
-  const rc = drawTree({ seed: spec.seed, scale: spec.scalePct / 100, shape: 'wide', old: true }).recipe;
-  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const rc = leafyRecipe({ seed: spec.seed, scale: spec.scalePct / 100, shape: 'wide', old: true });
   const r = rng((spec.seed * 15485863 + 5) >>> 0), du = rc.s * U;
   const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
   const bz = (r() - 0.5) * 6 * du, nT = rc.trunk.length;
@@ -300,12 +296,11 @@ export function growWillow(spec: TreeSpec): Skeleton {
   };
 }
 
-/** A conifer or a bush from the 2D recipe: its trunk and twigs bent a little in depth, its lobes spread around the crown, its skirts as cones. */
+/** A conifer or a bush from the recipe: its trunk and twigs bent a little in depth, its lobes spread around the crown, its skirts as cones. */
 export function growPlant(spec: TreeSpec): Skeleton {
   const form = spec.form;
   if (form !== 'conifer' && form !== 'bush') throw new Error(`trees: ${form} is not a conifer or a bush`);
-  const bush = form === 'bush', rc = drawPlant(form, spec.seed, spec.scalePct).recipe;
-  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const bush = form === 'bush', rc = plantRecipe(form, spec.seed, spec.scalePct);
   const r = rng((spec.seed * 7919 + 13) >>> 0), du = rc.s * U, amp = ampOf(form, spec.dead);
   const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
   const picLobes = rc.lobes ?? [], picSkirts = rc.skirts ?? [], picLimbs = rc.limbs ?? [];

@@ -1,46 +1,21 @@
 // A bush: a lobed crown standing on one thin stem that forks early (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, barkShade, isLeaf, rng, step } from './canvas';
-import { type Lobe, crown, pockets } from './crown';
-
-/** How much wider a bush is drawn than the width its lobe layout is sized for (measured over many seeds and sizes). */
-export const BUSH_SPREAD = 1.1;
-
-/** Lobe layouts `[dx, dy, r]` in design units from the ground line, by lobe count. */
-const LAYOUTS: Record<3 | 4 | 5, [number, number, number][]> = {
-  3: [[0, -13, 10], [-9, -8, 8], [9, -8, 8]],
-  4: [[-4, -13, 10], [6, -12, 9], [-13, -7, 7], [12, -7, 7]],
-  5: [[0, -14, 10], [-9, -10, 9], [9, -10, 9], [-17, -6, 7], [17, -6, 7]],
-};
-
-/** The width of each layout in design units (outermost lobe edges), derived from `LAYOUTS`. */
-const EXTENT = Object.fromEntries(([3, 4, 5] as const).map((n) => [n, Math.max(...LAYOUTS[n].map(([dx, , rad]) => dx + rad)) - Math.min(...LAYOUTS[n].map(([dx, , rad]) => dx - rad))])) as Record<3 | 4 | 5, number>;
+// The lobes, the stem and the twigs come from the recipe module (#334); this file paints them.
+import { bushPlan, rng } from '../../render3d/trees/recipe';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, barkShade, isLeaf, step } from './canvas';
+import { crown, pockets } from './crown';
 
 /** A bush: 3-5 lobes on one thin stem that forks early; `width` is the drawn width in px (about, to a few px). */
 export function drawBush(o: { seed: number; width: number; light?: Light }): Drawn {
   const { seed } = o, light = o.light ?? DEFAULT_LIGHT;
-  const r = rng(seed); const cv = new Canvas(120, 100); const cx = 60, ground = 85;
-  const n = o.width < 28 ? 3 : o.width < 40 ? 4 : 5; // lobe count by the drawn size
-  const s = o.width / BUSH_SPREAD / EXTENT[n]; // design units to px: the layout's width in units becomes the drawn width
-  const lift = Math.round((3 + r()) * (o.width / 32)); // the crown stands this high above the ground
-  const lobes: Lobe[] = LAYOUTS[n].map(([dx, dy, rad]) => {
-    const x = cx + (dx + (r() - 0.5) * 3) * s, y = ground - lift + (dy + (r() - 0.5) * 2) * s, rr = rad + (r() - 0.5) * 2;
-    return { x, y, rx: rr * s, ry: rr * s * 0.86, ph: r() * 6, ph2: r() * 6 };
-  }).sort((a, b) => b.y - a.y);
-  // one thin stem in the middle (1 px below 40 px wide, else 2), painted before the crown, which covers the branch tops
-  const sx = cx + Math.round((r() - 0.5) * 2), wide = o.width < 40 ? 1 : 2, h = Math.round(1 + o.width / 40);
-  const stemCentre = sx + (wide - 1) / 2;
+  const r = rng(seed); const cv = new Canvas(120, 100);
+  const { cx, ground, s, lobes, sx, wide, h, stemCentre, yFork, twigs, recipe } = bushPlan(r, o.width);
+  // the stem is painted before the crown, which covers the branch tops
   for (let x = sx; x < sx + wide; x++) {
     const lit = wide === 1 ? 0 : (x - stemCentre) / (wide / 2);
     for (let y = ground - h; y <= ground - 1; y++) cv.set(x, y, barkShade(lit * light.x, false), barkShade(lit * DEFAULT_LIGHT.x, false));
   }
-  // it forks early into 2 branches (3 with 5 lobes), 1 px wide, going up and out at 35-60 degrees until they are under the crown;
-  // every angle is drawn whatever the light, the sun side of the stem is the lighter brown
-  const nb = n === 5 ? 3 : 2, yEnd = ground - lift - 1, yFork = ground - h - 1;
-  const twigs: { x: number; y: number; w: number }[][] = [];
-  for (let k = 0; k < nb; k++) {
-    const mag = ((35 + r() * 25) * Math.PI) / 180, a = nb === 3 && k === 1 ? (r() - 0.5) * 0.3 : (k === 0 ? -mag : mag);
-    const len = Math.max(1, (yFork - yEnd) / Math.cos(a));
-    twigs.push([{ x: stemCentre, y: yFork, w: 0.5 }, { x: stemCentre + Math.sin(a) * len, y: yFork - Math.cos(a) * len, w: 0.5 }]);
+  // the twigs are 1 px wide; the sun side of the stem is the lighter brown
+  for (const { a, len } of twigs) {
     for (let t = 0; t <= len; t += 0.5) {
       const x = stemCentre + Math.sin(a) * t, y = yFork - Math.cos(a) * t, side = x - stemCentre;
       cv.set(x, y, side * light.x > 0 ? 'c' : 'b', side * DEFAULT_LIGHT.x > 0 ? 'c' : 'b');
@@ -60,6 +35,5 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
   }
   // the shadow shape: the lobes only; the stem is too thin for a trunk caster (trunkTop = the foot)
   const shape: PlantShape = { cast: 'parts', trunkTop: ground, trunkX0: sx, trunkX1: sx + wide - 1, clumps: lobes.map((b) => ({ x: b.x, y: b.y, r: Math.max(b.rx, b.ry) })) };
-  const trunk = [{ x: stemCentre + 0.5, y: ground, w: wide / 2 }, { x: stemCentre + 0.5, y: ground - h - 1, w: wide / 2 }];
-  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 }, shape, { foot: { x: cx, y: ground }, trunk, roots: [], limbs: twigs, lobes, s });
+  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 }, shape, recipe);
 }

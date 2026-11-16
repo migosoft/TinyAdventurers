@@ -1,5 +1,6 @@
 // The drawing surface and the shared palette of the vegetation generator (#279).
 // Pure: no Phaser, no DOM, no Node.
+import { type Recipe, rng } from '../../render3d/trees/recipe';
 type Rgb = [number, number, number];
 export interface Rgba { w: number; h: number; data: Uint8ClampedArray }
 
@@ -24,20 +25,7 @@ export interface PlantShape {
   clumps: { x: number; y: number; r: number; reach?: number }[];
 }
 /** A drawn plant; `foot` (px, inside img) is the trunk foot: the sprite's origin and its depth. */
-/** A stroke point of the recipe: canvas px (before the crop), y down, and half-width. */
-export interface RecipePt { x: number; y: number; w: number }
-/**
- * What a leafy tree, a conifer or a bush was drawn from, for the 3D builder: every length in canvas px before the crop (y down),
- * `foot` in the same px. `s` is the px per design unit (the scale). The bare tree carries none.
- * Only the plants that have them carry `limbs` (a bush's twigs), `lobes` (a bush's crown ellipses) and `skirts` (a conifer's cones:
- * apex row `yTop`, hem `h` below it, half-width `W`).
- */
-export interface Recipe {
-  foot: { x: number; y: number }; trunk: RecipePt[]; roots: RecipePt[][]; s: number;
-  limbs?: RecipePt[][];
-  lobes?: { x: number; y: number; rx: number; ry: number }[];
-  skirts?: { yTop: number; h: number; W: number }[];
-}
+/** `recipe`: what a leafy tree, a conifer or a bush was drawn from (render3d/trees/recipe.ts, #334); the bare tree carries none. */
 export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape; recipe?: Recipe }
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],
@@ -45,7 +33,7 @@ export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40
   a: [58, 35, 40], b: [98, 53, 43], c: [143, 64, 41], d: [176, 112, 74],
   // dead wood: the bark ramp a..d turned greyer and darker (a bare tree's wood, written by its last pass)
   e: [40, 32, 34], f: [64, 50, 47], g: [90, 73, 64], h: [118, 99, 84] };
-export function rng(seed: number) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+export { rng };
 
 /** A unit vector pointing toward the sun, in screen space (y down). */
 export interface Light { x: number; y: number }
