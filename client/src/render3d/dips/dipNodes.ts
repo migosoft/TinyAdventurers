@@ -17,27 +17,44 @@ const WRAP = 0.35;
 /** The chasm rock's albedo (lit by the game light), and its own cool light per unit of relief shading, which makes the shape read with no torch near. */
 const CHASM_ROCK = vec3(0.09, 0.088, 0.086);
 const CHASM_SELF = vec3(0.17, 0.18, 0.205);
-/** The strata: layers per world unit across the tilted strata coordinate, the tilt (tan of the angle, rising to the right), the noise warping the layers (frequencies and amounts), the share of a layer's height that is the sloping top (the rest is the undercut), the grain. */
-const STRATA_FREQ = 1.7, STRATA_TILT = 0.7;
-const STRATA_WARP_FREQ = 0.9, STRATA_WARP = 0.9, STRATA_WARP2_FREQ = 3.6, STRATA_WARP2 = 0.45;
-const STRATA_LEDGE = 1.0, STRATA_CHIP_FREQ = 9, STRATA_CHIP = 0.45;
-/** The relief: the step of the finite differences, the slope's weight, the light's direction in the wall's frame (along the wall, up it, out of it), the ambient share, the grain's strength and frequency. */
-const STRATA_EPS = 0.1, STRATA_RELIEF = 0.8;
+/** The strata: layers per world unit and the tilt (tan of the angle, rising to the right) of the main set and of the second, shallower set that breaks it up where a noise mask says so; the low-frequency warp of the layer coordinate (frequency, amount in layers: it varies the layers' thickness about 3 to 1) and a mid-frequency one. */
+const STRATA_FREQ = 1.9, STRATA_TILT = 0.7, STRATA2_FREQ = 1.3, STRATA2_TILT = 0.2;
+const STRATA_WARP_FREQ = 0.45, STRATA_WARP = 3.2, STRATA_WARP2_FREQ = 1.3, STRATA_WARP2 = 0.7;
+/** One layer's profile: the share of it that is the shaded underside (a ramp that steepens to the overhang's lip), the ledge height (scaled by a low-frequency noise so ledges fade out and begin), the chips on the faces (frequency, height). */
+const STRATA_SHADE = 0.42, STRATA_LEDGE = 0.4, STRATA_LEDGE_VAR = 1.3, STRATA_CHIP_FREQ = 8, STRATA_CHIP = 0.3;
+/** The relief: the step of the finite differences, the slope's weight, the light's direction in the wall's frame (along the wall, up it, out of it), the ambient share, the face tone's range from a low-frequency noise, the grain's strength and frequency. */
+const STRATA_EPS = 0.05, STRATA_RELIEF = 0.8;
 const STRATA_LIGHT = vec3(-0.45, 0.55, 0.7);
-const STRATA_AMBIENT = 0.12, STRATA_GRAIN = 0.2, STRATA_GRAIN_FREQ = 24;
+const STRATA_AMBIENT = 0.08, STRATA_TONE = 0.7, STRATA_GRAIN = 0.3, STRATA_GRAIN_FREQ = 20;
 
-/**
- * The height of the rock face at (s, y), s along the wall: the strata coordinate is warped by noise, `1 - fract` of it makes each layer
- * recede slowly going up and jump out at its end (the undercut underside), plus chips. Sine-free noise only.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
-function strata(s: N, y: N): N {
+/** The slowly varying noise of the rock face, evaluated once per pixel and shared by the three height reads: the two warps, the set mask and the ledge amplitude. */
+interface StrataNoise { w1: N; w2: N; mask: N; amp: N }
+const strataNoise = (s: N, y: N): StrataNoise => {
   const p = vec2(s, y);
-  const warp = vnoise2(p.mul(STRATA_WARP_FREQ)).sub(0.5).mul(STRATA_WARP).add(vnoise2(p.mul(STRATA_WARP2_FREQ).add(7)).sub(0.5).mul(STRATA_WARP2));
-  const a = y.sub(s.mul(STRATA_TILT)).mul(STRATA_FREQ).add(warp.mul(STRATA_FREQ));
-  const top = float(1).sub(fract(a)).mul(STRATA_LEDGE);
-  return top.add(vnoise2(p.mul(STRATA_CHIP_FREQ)).mul(STRATA_CHIP));
+  return {
+    w1: vnoise2(p.mul(STRATA_WARP_FREQ)).sub(0.5).mul(STRATA_WARP),
+    w2: vnoise2(p.mul(STRATA_WARP2_FREQ).add(7)).sub(0.5).mul(STRATA_WARP2),
+    mask: vnoise2(p.mul(0.6).add(3)),
+    amp: vnoise2(p.mul(0.8).add(11)),
+  };
+};
+/** One layer's height at a layer coordinate `a`: a ramp up (the shaded underside, steepening to the lip) over STRATA_SHADE of the layer, then a longer lit slope back down. */
+const saw = (a: N): N => {
+  const f = fract(a);
+  return select(f.lessThan(STRATA_SHADE), f.div(STRATA_SHADE).pow(2), float(1).sub(f).div(1 - STRATA_SHADE));
+};
+/**
+ * The height of the rock face at (s, y), s along the wall: two sets of layers (tilted differently, warped at low frequency) mixed by a
+ * noise mask, each layer a `saw`, scaled by a ledge amplitude that fades ledges in and out, plus chips. Sine-free noise only.
+ */
+function strata(s: N, y: N, n: StrataNoise): N {
+  const a1 = y.sub(s.mul(STRATA_TILT)).mul(STRATA_FREQ).add(n.w1).add(n.w2);
+  const a2 = y.sub(s.mul(STRATA2_TILT)).mul(STRATA2_FREQ).add(n.w2.mul(2)).sub(n.w1.mul(0.5));
+  const h = mix(saw(a1), saw(a2), smoothstep(0.45, 0.6, n.mask));
+  const amp = float(STRATA_LEDGE).mul(float(0.25).add(smoothstep(0.2, 0.7, n.amp).mul(STRATA_LEDGE_VAR)));
+  return h.mul(amp).add(vnoise2(vec2(s, y).mul(STRATA_CHIP_FREQ)).mul(STRATA_CHIP));
 }
 
 export interface DipMaterial {
@@ -84,14 +101,16 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // The chasm's rock: layered ledges. The height field is read at the point and one step along the wall and one step down it; its
   // slope, lit from the upper left, gives the relief (a ledge's top bright, its undercut underside black).
   const s0 = wp.x.sub(wp.z);
-  const h0 = strata(s0, y);
-  const hs = strata(s0.add(STRATA_EPS), y);
-  const hy = strata(s0, y.add(STRATA_EPS));
+  const sn = strataNoise(s0, y);
+  const h0 = strata(s0, y, sn);
+  const hs = strata(s0.add(STRATA_EPS), y, sn);
+  const hy = strata(s0, y.add(STRATA_EPS), sn);
   const gs = hs.sub(h0).div(STRATA_EPS).mul(STRATA_RELIEF), gy = hy.sub(h0).div(STRATA_EPS).mul(STRATA_RELIEF);
   const nrm = vec3(gs.negate(), gy.negate(), 1);
   const lamb = max(float(0), dot(nrm, STRATA_LIGHT)).div(length(nrm));
   const grain = float(1 - STRATA_GRAIN).add(vnoise2(vec2(s0, y).mul(STRATA_GRAIN_FREQ)).mul(2 * STRATA_GRAIN));
-  const ridges = float(STRATA_AMBIENT).add(lamb.mul(1 - STRATA_AMBIENT)).mul(grain);
+  const tone = float(1 - STRATA_TONE / 2).add(sn.amp.mul(STRATA_TONE));
+  const ridges = float(STRATA_AMBIENT).add(lamb.mul(1 - STRATA_AMBIENT)).mul(grain).mul(tone);
   const chasmRock = CHASM_ROCK.mul(ridges);
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
