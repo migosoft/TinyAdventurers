@@ -1,7 +1,7 @@
 // Headless check of a real run in the 3D view (?r3d): one debug e2e_* account opens a debug room for the level, starts it,
 // waits for drawn frames, walks the hero, switches to the free camera and checks the chunk culling on the dungeon.
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
-// Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block).
+// Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
@@ -172,6 +172,11 @@ try {
   if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push('expected exactly one 3D canvas in #game');
   if ((await page.locator('#game canvas.r3d-overlay').count()) !== 1) errors.push('expected exactly one overlay canvas in #game');
   if ((await page.locator('#game canvas').count()) !== 2) errors.push('expected exactly two canvases in #game (3D and overlay)');
+  // DV=1 (50 %) or DV=2 (100 %): F4 that many times, so every picture of the run is taken with darkvision (#328).
+  for (let i = 0; i < Number(process.env.DV || 0); i++) {
+    await page.keyboard.press('F4');
+    await page.waitForTimeout(400);
+  }
   await page.screenshot({ path: `${out}/r3d-run-${level}.png` });
   const figures = (await r3d()).figures;
   console.log(`figures drawn ${figures}`);

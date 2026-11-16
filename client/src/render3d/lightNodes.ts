@@ -12,6 +12,9 @@ import { makeSunLight, type SunLight } from './sunNodes';
 /** A card casts a shadow on a segment only when its foot is within half its width plus this (tiles) of the segment's line. */
 const CARD_REACH = 0.5;
 
+/** A point this close (tiles) to its cell's height lies on the cell's top (the darkvision rule for tops). */
+const DV_TOP_SLACK = 0.05;
+
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
@@ -306,7 +309,10 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
           If(uDvReach.greaterThan(0), () => {
             const eyeD = length(P.xz.sub(uDvEye));
             const edge = float(1).sub(smoothstep(uDvReach.add(DV_MARGIN), uDvReach.add(DV_MARGIN + DV_FADE), eyeD));
-            If(edge.greaterThan(0), () => {
+            // The eye does not see the top of a block that rises above it (a wall top). The wall walk cannot tell: it skips the
+            // cell the point lies in, and from a top the way down to the eye starts inside that cell (#328).
+            const onTop = Nrm.y.greaterThan(0.5).and(P.y.greaterThan(DV_EYE)).and(abs(cellH(ivec2(int(floor(P.x)), int(floor(P.z)))).sub(P.y)).lessThan(DV_TOP_SLACK)).toVar('dvOnTop');
+            If(edge.greaterThan(0).and(onTop.not()), () => {
               dvOut.assign(edge.mul(wallVis(Po, vec3(uDvEye.x, DV_EYE, uDvEye.y))));
             });
           });

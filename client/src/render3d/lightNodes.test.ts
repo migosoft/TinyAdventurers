@@ -66,6 +66,14 @@ describe('the lighting shader', () => {
       expect(withFoot.length).toBeGreaterThan(without.length);
     });
 
+    it(`${B.name}: darkvision leaves out the top of a block that rises above the eye`, () => {
+      // The wall walk skips the cell a point lies in, so alone it would let the eye "see" the top of a wall from below
+      // (grey tops beyond sight, #328). The test of the top is a variable of its own, set before the walk.
+      const code = lightFragment(B);
+      expect(code).toContain('dvOnTop');
+      expect(code.indexOf('dvOnTop')).toBeLessThan(code.lastIndexOf('dvOnTop'));
+    });
+
     it(`${B.name}: with the sun it builds, keeps the loop indices apart, and samples the sun's shadow map first, before any branch`, () => {
       const code = lightFragment(B, true, true);
       const ls = loops(code);
