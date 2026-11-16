@@ -51,6 +51,8 @@ export interface StageCtx {
   canvasEl: HTMLCanvasElement;
   /** Null while the device is being restored. */
   view: View | null;
+  /** The view's backend ('WebGPU' or 'WebGL2 fallback'); the last one built while the device is being restored (#314). */
+  backend: string;
   timer: FrameTimer<R3dSystem>;
 }
 
@@ -375,7 +377,7 @@ export async function startHost(
     }
     let drawCalls = 0;
     try {
-      drawCalls = stage!.frame({ now, dt, frameMs, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, timer });
+      drawCalls = stage!.frame({ now, dt, frameMs, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, backend: backendName, timer });
     } finally {
       if (!restoring) timer.renderEnd(drawCalls); // also when the stage threw, so the timer stays consistent
     }

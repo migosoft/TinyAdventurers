@@ -36,6 +36,8 @@ export interface FrameStats {
   canvas: { w: number; h: number; cssZoom: number };
   /** Extra lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
+  /** The 3D view's renderer (#314): printed after the canvas line; absent in 2D. */
+  renderer?: RendererStats;
   rtt: number;
   jitter: number;
   interp: number;
@@ -51,9 +53,20 @@ export interface FrameStats {
   wolf: boolean | null;
 }
 
+/** The 3D view's backend and its scene pass, for the F3 panel (#314). */
+export interface RendererStats {
+  backend: string;
+  /** The scene pass's size in px. */
+  w: number;
+  h: number;
+  quality: string;
+  zoom: number;
+}
+
 /** The F3 panel's text: frame timings with the per-system breakdown, then the network figures. */
 export function statsText(f: FrameStats): string {
   const ms = (v: number) => `${v.toFixed(2)} ms`;
+  const r = f.renderer;
   return (
     `FPS        ${f.fps.toFixed(0)}\n` +
     `frame      ${ms(f.wholeMs)}\n` +
@@ -64,6 +77,7 @@ export function statsText(f: FrameStats): string {
     `objects    ${f.objects}\n` +
     `draw calls ${f.drawCalls}\n` +
     `canvas     ${f.canvas.w}x${f.canvas.h}${f.canvas.cssZoom === 1 ? '' : ` x${f.canvas.cssZoom} css`}\n` +
+    (r ? `render     ${r.w}x${r.h} (${r.quality})\nzoom       ${r.zoom}\nbackend    ${r.backend}\n` : '') +
     `ping       ${f.rtt.toFixed(0)} ms\n` +
     `jitter     ${f.jitter.toFixed(1)} ms\n` +
     `interp     ${f.interp.toFixed(0)} ms\n` +

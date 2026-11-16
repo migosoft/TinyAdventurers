@@ -323,4 +323,9 @@ describe('statsText', () => {
   it('shows the CSS upscale of a world-resolution canvas', () => {
     expect(statsText({ ...stats, canvas: { w: 640, h: 360, cssZoom: 4 } }).split('\n')[8]).toBe('canvas     640x360 x4 css');
   });
+
+  it('prints the 3D view\'s render size, zoom and backend after the canvas (#314)', () => {
+    const t = statsText({ ...stats, renderer: { backend: 'WebGPU', w: 640, h: 360, quality: 'balanced', zoom: 4 } }).split('\n');
+    expect(t.slice(8, 13)).toEqual(['canvas     2560x1440', 'render     640x360 (balanced)', 'zoom       4', 'backend    WebGPU', 'ping       20 ms']);
+  });
 });

@@ -68,7 +68,7 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
   const frame = (view: View | null, held: string[] = [], dt = 1 / 60, frameMs = dt * 1000): number => {
     now += dt;
     const plan = renderPlan(params.quality, 4, 1920, 1080);
-    const c: StageCtx = { now, dt, frameMs, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, canvasEl, zoom: 4, plan, view, timer };
+    const c: StageCtx = { now, dt, frameMs, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, canvasEl, zoom: 4, plan, view, backend: 'WebGPU', timer };
     return stage.frame(c);
   };
   const rebuild = (): HTMLCanvasElement => {
@@ -428,6 +428,15 @@ describe('the run stage', () => {
     expect(hud.calls.some((c) => c[0] === 'toggleDebug')).toBe(true);
   });
 
+  it('the HUD frame carries the backend, the render size, the quality and the zoom (#314)', () => {
+    const { stage, hud, frame } = setup();
+    stage.built!(fakeView());
+    frame(fakeView());
+    const last = hud.calls.filter((c) => c[0] === 'frame').at(-1)!;
+    const plan = renderPlan(stage.runView['c']!.params.quality, 4, 1920, 1080);
+    expect((last[1] as { renderer: unknown }).renderer).toEqual({ backend: 'WebGPU', w: plan.targetW, h: plan.targetH, quality: stage.runView['c']!.params.quality, zoom: 4 });
+  });
+
   it('window.__r3d gains hero, cam and chunks', () => {
     const { stage, frame } = setup();
     const state = { backend: '', frames: 0, renderSize: [0, 0] as [number, number], zoom: 0 };
@@ -481,7 +490,7 @@ describe('startRun3d', () => {
       expect(stage).not.toBeNull();
       const timer = new FrameTimer<(typeof R3D_SYSTEMS)[number]>(R3D_SYSTEMS);
       const plan = renderPlan('balanced', 4, 1920, 1080);
-      stage!.frame({ now: 1, dt: 1 / 60, frameMs: 1000 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: document.createElement('canvas'), zoom: 4, plan, view: null, timer });
+      stage!.frame({ now: 1, dt: 1 / 60, frameMs: 1000 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: document.createElement('canvas'), zoom: 4, plan, view: null, backend: 'WebGPU', timer });
       const n = hud.calls.filter((c) => c[0] === 'frame').length;
       vi.advanceTimersByTime(100);
       expect(hud.calls.filter((c) => c[0] === 'frame').length).toBe(n);
@@ -664,7 +673,7 @@ describe('startRun3d', () => {
         let st: ReturnType<typeof createRunStage> | undefined;
         const host = await startHost(el, '', 'run', (a, h) => (st = createRunStage(run, info, a, h, el)), deps);
         st!.key!({ code: 'KeyZ', repeat: false } as KeyboardEvent);
-        st!.frame({ now: 1, dt: 1, frameMs: 1000, params: host!.params, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: el.querySelector('canvas')!, zoom: 4, plan: renderPlan('balanced', 4, 1920, 1080), view: null, timer: new FrameTimer(R3D_SYSTEMS) });
+        st!.frame({ now: 1, dt: 1, frameMs: 1000, params: host!.params, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: el.querySelector('canvas')!, zoom: 4, plan: renderPlan('balanced', 4, 1920, 1080), view: null, backend: 'WebGPU', timer: new FrameTimer(R3D_SYSTEMS) });
         expect(host!.params.yaw).toBe(45);
         host!.setParams({ ...host!.params, pitch: 40 });
         vi.advanceTimersByTime(1000);

@@ -573,6 +573,7 @@ export class RunView3d implements RunView {
       objects,
       drawCalls: this.drawCalls,
       canvas: { w: c.canvas.w, h: c.canvas.h, cssZoom: 1 },
+      renderer: { backend: c.backend, w: c.plan.targetW, h: c.plan.targetH, quality: c.params.quality, zoom: c.zoom },
     };
   }
 

@@ -6,6 +6,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import type { LightField } from '../game/light';
 import type { UseHint } from '../game/useHint';
+import type { RendererStats } from '../ui/hud';
 import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 
@@ -96,6 +97,8 @@ export interface ViewStats {
   canvas: { w: number; h: number; cssZoom: number };
   /** Extra readout lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
+  /** The 3D view's backend, scene pass size, quality and zoom (#314); the 2D view has none. */
+  renderer?: RendererStats;
 }
 
 export const NO_STATS: ViewStats = {
