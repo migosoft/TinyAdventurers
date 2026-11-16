@@ -74,7 +74,7 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.MimicWake]: 0.6,
   [FX_KIND.MimicLand]: 0.4,
   [FX_KIND.ShadeVeil]: 1,
-  [FX_KIND.RimDust]: 0.4,
+  [FX_KIND.RimDust]: 0.6,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */

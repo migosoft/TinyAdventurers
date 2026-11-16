@@ -169,6 +169,12 @@ describe('figure effects', () => {
     const young = newOut();
     fx.frame(frameOf(1.1, []), young);
     expect(young.lit.n + young.tris.n).toBeGreaterThan(0);
+    expect(young.lit.n).toBe(0);   // unlit: a lit mote beside the black chasm is nearly invisible
+    expect(FX_LIFE[FX_KIND.RimDust]).toBe(0.6);
+    const mid = newOut();
+    fx.frame(frameOf(1.2, []), mid);   // all 12 motes alive (the shortest life is 0.35 s): a whole number of triangles per mote
+    expect(mid.tris.n).toBeGreaterThan(0);
+    expect(mid.tris.n % 12).toBe(0);
     const old = newOut();
     fx.frame(frameOf(1 + FX_LIFE[FX_KIND.RimDust] + 0.01, []), old);
     expect(old.lit.n + old.tris.n).toBe(0);

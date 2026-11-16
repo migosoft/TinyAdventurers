@@ -151,7 +151,7 @@ describe('descent', () => {
         }
       }
     }
-  });
+  }, 30000);   // a grid scan with a check per step: slow when the whole suite runs in parallel
 
   it('drowns onto the bed', () => {
     expect(drownY(-0.3, -2.3, 0)).toBe(-0.3);

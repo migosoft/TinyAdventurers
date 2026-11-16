@@ -14,6 +14,11 @@ import { LAVA_LEVEL } from './shape';
 /** The light's wrap on a dip surface (like a floor's). */
 const WRAP = 0.35;
 
+/** The chasm rock's albedo (lit by the game light), how deep the cracks cut (1 = black), and its own cool light per unit of ridge (`face * (1 - cracks)`), which makes the shape read with no torch near. */
+const CHASM_ROCK = vec3(0.075, 0.072, 0.07);
+const CHASM_CRACK = 0.95;
+const CHASM_SELF = vec3(0.12, 0.13, 0.16);
+
 export interface DipMaterial {
   material: NodeMaterial;
   /** 0 or 1: the floor texel above the lip reads the linear texture at a sharpened position. */
@@ -61,7 +66,8 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const r2 = abs(vnoise2(sp.mul(vec2(7, 2.5)).add(4)).sub(0.5));
   const crack = float(1).sub(smoothstep(0, 0.07, min(r1, r2.mul(1.4))));
   const face = float(0.35).add(smoothstep(0.35, 0.75, columns).mul(0.9)).add(vnoise2(sp.mul(vec2(14, 5))).mul(0.25));
-  const chasmRock = vec3(0.075, 0.072, 0.07).mul(face).mul(float(1).sub(crack.mul(0.85)));
+  const ridges = face.mul(float(1).sub(crack.mul(CHASM_CRACK)));
+  const chasmRock = CHASM_ROCK.mul(ridges);
 
   const glowNoise = fbm2(wp.xz.mul(3).add(vec2(0, time.mul(0.2))));
 
@@ -76,7 +82,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
     .mul(exp(abs(y.sub(LAVA_LEVEL)).mul(-7)))
     .mul(float(0.5).add(glowNoise.mul(0.8)))
     .mul(smoothstep(0, 0.08, d));
-  const cool = chasmRock.mul(vec3(0.10, 0.11, 0.14)).mul(bank);
+  const cool = CHASM_SELF.mul(ridges).mul(bank);
   const fade = float(0.03).add(exp(min(y, 0).mul(0.55)).mul(0.97));
   // `base` (every light and shadow loop) is built once; only these cheap terms are picked by float weights (a colour `select` would emit `base` per branch).
   const lavaW = select(isLava, float(1), float(0));
