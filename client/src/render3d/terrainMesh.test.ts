@@ -72,9 +72,26 @@ describe('buildTerrainChunk', () => {
       return [w, l];
     };
     expect(at(3, 2)).toEqual([1, 1]);
-    expect(at(3, 3)).toEqual([1, 1]);
+    expect(at(3, 3)).toEqual([0, 0]);
     expect(at(2, 2)).toEqual([1, 0]);
     expect(at(4, 2)).toEqual([0, 1]);
+  });
+
+  it('lays no plate of another kind over a lava or water cell', () => {
+    const c = buildTerrainChunk(with_(6, 4, [[2, 1, T.ShallowWater], [3, 1, T.Lava]]), 0, 0, frames, 0)!;
+    const at = (x: number, z: number) => {
+      let w = 0, l = 0;
+      for (let q = 0; q < quadCount(c); q++) {
+        if (c.arrays.position[q * 18] !== x || c.arrays.position[q * 18 + 2] !== z) continue;
+        if (c.arrays.position[q * 18 + 1] === Math.fround(LAVA_LEVEL)) l++; else w++;
+      }
+      return [w, l];
+    };
+    expect(at(2, 1)).toEqual([1, 0]);
+    expect(at(3, 1)).toEqual([0, 1]);
+    expect(at(1, 1)).toEqual([1, 0]);
+    expect(at(3, 0)).toEqual([1, 1]);
+    expect(at(4, 1)).toEqual([0, 1]);
   });
 
   it('uses no edge overlay', () => {

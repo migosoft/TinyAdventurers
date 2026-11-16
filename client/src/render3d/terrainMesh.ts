@@ -57,11 +57,12 @@ export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: 
 
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     if (cellHeight(map.get(x, z)) !== 0) continue;
-    if (near(x, z, DIP.water)) {
+    const own = dipOf(map.get(x, z));
+    if ((own === DIP.water || own === DIP.none) && near(x, z, DIP.water)) {
       plate('water', x, z, WATER_LEVEL);
       if (map.get(x, z) === TILE_ID.DeepWater) plate('deep', x, z, WATER_LEVEL + LAYER_STEP);
     }
-    if (near(x, z, DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
+    if ((own === DIP.lava || own === DIP.none) && near(x, z, DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
   }
   if (sink.kind.length === 0) return null;
   return {

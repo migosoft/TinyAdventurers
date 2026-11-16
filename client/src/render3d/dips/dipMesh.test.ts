@@ -151,6 +151,46 @@ describe('buildDipChunk', () => {
       const y = p[v * 3 + 1], b = bedAt(m, p[v * 3], p[v * 3 + 2]);
       expect(y === 0 || Math.abs(y - Math.min(b, 0)) < 2e-3).toBe(true);
     }
+    expect(skirt).toBeGreaterThan(0);
     expect(skirt % (2 * (R + 1))).toBe(0);
+  });
+
+  it('closes the slit at a concave corner against a wall', () => {
+    const m = open(8, 8, [[4, 4, TILE_ID.Wall], [3, 3, TILE_ID.ShallowWater], [3, 4, TILE_ID.ShallowWater], [4, 3, TILE_ID.ShallowWater]]);
+    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const { position: p, normal: n, index } = c.arrays;
+    const strip = (nx: number, nz: number, onX: boolean, at: number) => {
+      const out: number[] = [];
+      for (let v = 0; v < c.arrays.count; v++) {
+        if (n[v * 3] === nx && n[v * 3 + 1] === 0 && n[v * 3 + 2] === nz && Math.abs(p[v * 3 + (onX ? 0 : 2)] - at) < 1e-6) out.push(v);
+      }
+      return out;
+    };
+    for (const [nx, nz, onX] of [[-1, 0, true], [0, -1, false]] as [number, number, boolean][]) {
+      // the west cell's east side is x = 4; the north cell's south side is z = 4
+      const s = strip(nx, nz, onX, 4).filter((v) => (onX ? p[v * 3 + 2] >= 4 : p[v * 3] >= 4) && (onX ? p[v * 3 + 2] <= 5 : p[v * 3] <= 5));
+      expect(s.length, `${nx},${nz}`).toBe(2 * (R + 1));
+      let corner = 0;
+      for (const v of s) {
+        const y = p[v * 3 + 1], b = bedAt(m, p[v * 3], p[v * 3 + 2]);
+        expect(y === 0 || Math.abs(y - Math.min(b, 0)) < 2e-3).toBe(true);
+        if (y < -0.01) corner = Math.min(corner, y);
+      }
+      // the strip's first R + 1 vertices are its tops; a bottom reaches 0 where the bed does
+      expect(s.slice(0, R + 1).every((v) => p[v * 3 + 1] === 0)).toBe(true);
+      expect(corner).toBeLessThan(0);
+    }
+    // every triangle that uses a skirt vertex faces the way its vertex normals do
+    let tris = 0;
+    for (let t = 0; t < index.length; t += 3) {
+      const [a, b, d] = [index[t], index[t + 1], index[t + 2]];
+      if (n[a * 3 + 1] !== 0) continue;
+      const e1 = [0, 1, 2].map((k) => p[b * 3 + k] - p[a * 3 + k]), e2 = [0, 1, 2].map((k) => p[d * 3 + k] - p[a * 3 + k]);
+      const g = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const dot = g[0] * n[a * 3] + g[1] * n[a * 3 + 1] + g[2] * n[a * 3 + 2];
+      expect(dot).toBeGreaterThanOrEqual(0);
+      if (Math.hypot(...g) > 1e-9) { expect(dot).toBeGreaterThan(0); tris++; }
+    }
+    expect(tris).toBeGreaterThan(0);
   });
 });
