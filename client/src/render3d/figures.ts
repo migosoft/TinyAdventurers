@@ -224,7 +224,8 @@ export class Figures3d {
   private skulls: Skull[] = [];
   private coins: Coin[] = [];
   private readonly mimics = new Map<number, MimicMem>();
-  private now = 0;
+  /** The clock of the last frame (`f.now`), which stamps the events; null before the first frame, so an early event starts on that frame (#319). */
+  private now: number | null = null;
   private cam: Cam | null = null;
   /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much, and whether a torch has a glow quad. */
   private dark: ReadonlySet<number> = new Set();

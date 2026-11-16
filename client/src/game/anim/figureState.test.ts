@@ -65,6 +65,13 @@ describe('FigureStates.stateOf', () => {
     expect(a.s.fall).toBeCloseTo(0.5);
     expect(a.s.drown).toBe(0);
   });
+  it('a Sink event without a clock starts on the first frame that draws the figure (#319)', () => {
+    const fs = new FigureStates(map());
+    fs.event({ t: 'Sink', id: 7, x: at(2), y: 9, how: 0 }, null);
+    expect(fs.sinking(7)).toBe(true);
+    expect(fs.stateOf(ent({ id: 7 }), frame(), 500).s.fall).toBe(0);
+    expect(fs.stateOf(ent({ id: 7 }), frame(), 500 + CONST.FALL_TIME / 2).s.fall).toBeCloseTo(0.5);
+  });
   it('Sink how 2 clears the sink', () => {
     const fs = new FigureStates(map());
     fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 0);
@@ -115,6 +122,15 @@ describe('FigureStates.event', () => {
     expect(fs.takeReappear(7, 0.2)).toBe(false);
     fs.event({ t: 'Effect', id: 7, kind: EFFECT.Invisible, on: false, look: 0 }, 0.3);
     expect(fs.takeVanish(7, 0.4)).toBe(false);
+  });
+  it('a mark without a clock is stamped by the first prune, and expires from then (#319)', () => {
+    const fs = new FigureStates(map());
+    fs.event({ t: 'Effect', id: 7, kind: EFFECT.Invisible, on: false, look: 0 }, null);
+    fs.event({ t: 'Effect', id: 8, kind: EFFECT.Invisible, on: false, look: 0 }, null);
+    fs.prune(500);
+    expect(fs.takeReappear(7, 500.1)).toBe(true);
+    fs.prune(600);
+    expect(fs.takeReappear(8, 600)).toBe(false);
   });
   it('marks expire; prune drops them', () => {
     const fs = new FigureStates(map());

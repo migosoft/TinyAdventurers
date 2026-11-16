@@ -68,9 +68,10 @@ export function appearFactor(left: number, total: number): number {
 
 /** Ids waiting for a visual hand-off (events arrive ~the interpolation delay before the view changes). Entries expire. */
 export class Marks {
-  private at = new Map<number, number>();
+  private at = new Map<number, number | null>();
   constructor(private ttl: number) {}
-  add(id: number, now: number): void {
+  /** `now` is null when the view has no clock yet (an event before its first frame): the mark is fresh until the first `prune` stamps it. */
+  add(id: number, now: number | null): void {
     this.at.set(id, now);
   }
   delete(id: number): void {
@@ -80,11 +81,14 @@ export class Marks {
   take(id: number, now: number): boolean {
     const t = this.at.get(id);
     this.at.delete(id);
-    return t !== undefined && now - t <= this.ttl;
+    return t !== undefined && (t === null || now - t <= this.ttl);
   }
-  /** Drop expired marks. */
+  /** Drop expired marks; a mark added without a clock is stamped with this one. */
   prune(now: number): void {
-    for (const [id, t] of this.at) if (now - t > this.ttl) this.at.delete(id);
+    for (const [id, t] of this.at) {
+      if (t === null) this.at.set(id, now);
+      else if (now - t > this.ttl) this.at.delete(id);
+    }
   }
   clear(): void {
     this.at.clear();

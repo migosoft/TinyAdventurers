@@ -41,6 +41,16 @@ describe('Marks', () => {
     m.add(8, 10);
     expect(m.take(8, 12)).toBe(false);
   });
+  it('a mark added without a clock is fresh when taken, and is stamped by the first prune (#319)', () => {
+    const m = new Marks(1);
+    m.add(7, null);
+    expect(m.take(7, 500)).toBe(true);
+    m.add(8, null);
+    m.prune(500);
+    expect(m.size).toBe(1);
+    m.prune(500.5);
+    expect(m.take(8, 502)).toBe(false);
+  });
   it('prunes stale marks and forgets deleted ones', () => {
     const m = new Marks(1);
     m.add(1, 0);

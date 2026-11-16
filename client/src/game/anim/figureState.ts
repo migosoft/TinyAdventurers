@@ -14,7 +14,8 @@ interface Sink {
   x: number;
   y: number;
   drown: boolean;
-  t: number;
+  /** When it began; null until the first frame that draws the figure, for an event that came before the view had a clock. */
+  t: number | null;
 }
 
 export class FigureStates {
@@ -46,7 +47,8 @@ export class FigureStates {
     }
     const sk = this.sinks.get(e.id);
     if (sk) {
-      const k = Math.min(1, (nowS - sk.t) / (sk.drown ? CONST.DROWN_TIME : CONST.FALL_TIME));
+      sk.t ??= nowS;
+      const k = Math.min(1, (nowS - sk.t) /(sk.drown ? CONST.DROWN_TIME : CONST.FALL_TIME));
       Object.assign(s, { x: sk.x, y: sk.y, anim: ANIM.Idle, animT: 0, fall: sk.drown ? 0 : k, drown: sk.drown ? k : 0 });
       return { s, predicted, started, drowning: sk.drown };
     }
@@ -60,8 +62,11 @@ export class FigureStates {
     return this.sinks.has(id);
   }
 
-  /** Sink, Effect(Invisible) and Died bookkeeping. Died returns 'lost' when the figure fell or drowned (no skull). */
-  event(ev: PictureEv, nowS: number): 'lost' | null {
+  /**
+   * Sink, Effect(Invisible) and Died bookkeeping. Died returns 'lost' when the figure fell or drowned (no skull).
+   * `nowS` is null when the view has drawn no frame yet and so has no clock: the sink or mark then starts on the first frame (#319).
+   */
+  event(ev: PictureEv, nowS: number | null): 'lost' | null {
     switch (ev.t) {
       case 'Died':
         return this.sinks.delete(ev.id) ? 'lost' : null;

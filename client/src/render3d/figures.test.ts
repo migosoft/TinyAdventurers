@@ -226,6 +226,20 @@ describe('Figures3d', () => {
     expect(drowned.frame(frame([ent(12, KIND.Knight, { x: at(1), side: SIDE.Friendly })]), cam()).openers).toEqual([]);
   });
 
+  it('starts a fall that came before the first frame on that frame, not at clock 0 (#319)', () => {
+    const fallen = (f: Figures3d) => f.frame(frame([ent(11, KIND.Knight, { x: at(2), side: SIDE.Friendly })]), cam());
+    const early = make();
+    early.event({ t: 'Sink', id: 11, x: at(2), y: 8, how: 0 });
+    const late = make();
+    late.frame(frame([]), cam());
+    late.event({ t: 'Sink', id: 11, x: at(2), y: 8, how: 0 });
+    const a = fallen(early);
+    const b = fallen(late);
+    expect(total(b)).toBeGreaterThan(0);
+    expect(a.cards.position).toEqual(b.cards.position);
+    expect(a.cards.n).toBe(b.cards.n);
+  });
+
   it('cuts the body of a wading knight by the sink and lowers it by the same', () => {
     const dry = make().frame(frame([ent(10, KIND.Knight, { x: at(0) })]), cam());
     const wet = make().frame(frame([ent(10, KIND.Knight, { x: at(3) })]), cam());
