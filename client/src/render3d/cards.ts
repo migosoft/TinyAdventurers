@@ -160,8 +160,10 @@ export function casterOf(c: Card, id: number, frames: FrameRects, cam: Cam): Sha
 /**
  * A 1 x 1 tile card fixed to a wall face (not turned to the camera), for the emissive pass (no `look`): centre (x, y, z),
  * `nx`/`nz` the face's outward normal (+z, +x or -x here), the picture mirrored when `flip`.
+ * `byLight`: the card is lit by the room's light like the wall it hangs on (a torch that is out, #325) instead of self-lit;
+ * it is the foot's fourth value, which the emissive pass reads as this flag (a wall card is never hidden as scenery).
  */
-export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects, scenery = false): void {
+export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects, byLight = false): void {
   const fr = frames[frame];
   if (!fr) return;
   // The viewer in front of the face looks along -normal; their right is (-nz, nx) on the ground rotated: normal +z -> right +x, +x -> -z, -x -> +z.
@@ -169,7 +171,7 @@ export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: num
   const u0 = flip ? fr.x + fr.w : fr.x, u1 = flip ? fr.x : fr.x + fr.w;
   const v0 = fr.y, v1 = fr.y + fr.h;
   const at = (s: number, h: number, u: number, v: number): V => [x + rx * s * 0.5, y + h * 0.5, z + rz * s * 0.5, u, v];
-  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x + nx * WALL_SIGHT_PUSH, z + nz * WALL_SIGHT_PUSH, 0, scenery ? 1 : 0); });
+  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x + nx * WALL_SIGHT_PUSH, z + nz * WALL_SIGHT_PUSH, 0, byLight ? 1 : 0); });
   b.n++;
 }
 

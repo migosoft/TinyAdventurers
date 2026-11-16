@@ -317,6 +317,9 @@ describe('Figures3d', () => {
     const t3 = make().frame(frame([torch(0, false, 24, 32.5)]), cam());
     expect(nameOf(t3.emissive)).toBe('torch_out');
     expect(t3.glows.n).toBe(0);
+    // #325: an unlit torch is lit by the room's light (the wall card's flag), a burning one is self-lit
+    expect(t3.emissive.foot[3]).toBe(1);
+    expect(t0.emissive.foot[3]).toBe(0);
 
     // chests: closed lid, then the lid over the gold, then empty
     const chest = (anim: number, animMs: number) => ent(31, KIND.Chest, { anim, animMs, side: SIDE.Neutral });
@@ -579,9 +582,8 @@ describe('the sight attributes of the cards (#305)', () => {
     expect(footOf(orc.cards, 0).scenery).toBe(0);
   });
 
-  it('the board objects are scenery: torch flame, barrel, mimic, skull and coins', () => {
-    const torch = make().frame(frame([ent(30, KIND.Torch, { x: 3 * 16 + 8, y: 2 * 16 + 0.5, extra: 0, anim: 1, side: SIDE.Neutral })]), cam());
-    for (let i = 0; i < torch.emissive.n * 6; i++) expect(footOf(torch.emissive, i).scenery).toBe(1);
+  // A torch is not in this list: its pass never read the flag, and a wall card's fourth foot value says "lit by the room's light" (#325).
+  it('the board objects are scenery: barrel, mimic, skull and coins', () => {
     const barrel = make().frame(frame([ent(32, KIND.Barrel, { side: SIDE.Neutral })]), cam());
     expect(footOf(barrel.cards, 0).scenery).toBe(1);
     const mimic = make().frame(frame([ent(33, KIND.Mimic, { side: SIDE.Neutral, flags: FLAG.HIDING })]), cam()); // hiding: a chest (a revealed one is a creature)

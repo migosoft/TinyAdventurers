@@ -349,7 +349,8 @@ export class Figures3d {
     const ph = e.id * 1.7;
     // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
     const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
-    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames, true);
+    // Only a burning torch is self-lit: one that is out takes the room's light like the wall it hangs on (#325).
+    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames, !lit);
     const sightAt: [number, number] = [cx + nx * WALL_SIGHT_PUSH, cz + nz * WALL_SIGHT_PUSH];
     if (lit && this.torchGlow) {
       const k = torchFlicker(now, ph);

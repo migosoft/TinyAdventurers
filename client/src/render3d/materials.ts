@@ -294,15 +294,22 @@ export function shadowMaterial(sight: Sight): MeshBasicNodeMaterial {
   return m;
 }
 
-/** Torch flames: the atlas texel, self-lit. */
+/**
+ * Wall cards (torches): the atlas texel, self-lit while burning. A card flagged "by the light" (the third `sight` value, from
+ * `pushWall`'s `byLight`: a torch that is out, #325) is lit by the light model like a figure's card instead.
+ */
 export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward, sight: Sight): MeshBasicNodeMaterial {
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const m = new MeshBasicNodeMaterial();
+  const truePos = varying(positionGeometry, 'wallCardPos');
   m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
-  // Sight (#305): self-lit, so no `apply`: gone on unseen ground (a stipple, as the opaque cards), dimmed behind a trunk on dark maps.
-  const seen = attribute('sight', 'vec3');
+  // Sight (#305): gone on unseen ground (a stipple, as the opaque cards). Self-lit: no `apply`, dimmed behind a trunk on dark maps. By the light: the sight step of every lit surface.
+  const seen: N = attribute('sight', 'vec3');
   const shown = sight.shown(seen.x, 0);
-  m.colorNode = vec4(sight.dim(lighting.shoulder(texel.rgb.mul(1.15)), seen.y), select(bayerAt().lessThan(shown), texel.a, float(0)));
+  const selfLit = sight.dim(lighting.shoulder(texel.rgb.mul(1.15)), seen.y);
+  const byLight = sight.apply(lighting.finish(texel.rgb, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: float(-1), darkOnly: float(0) })), truePos, seen.xy);
+  const colour: N = select(seen.z.greaterThan(0.5), byLight, selfLit);
+  m.colorNode = vec4(colour, select(bayerAt().lessThan(shown), texel.a, float(0)));
   m.alphaTest = 0.5;
   m.side = DoubleSide;
   return m;

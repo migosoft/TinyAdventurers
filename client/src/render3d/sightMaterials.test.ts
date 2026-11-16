@@ -80,6 +80,16 @@ describe('the sight step in the materials', () => {
   }
 });
 
+// #325: a wall card that is not burning (a torch that is out) is lit by the light model, so the flame material carries the lights.
+describe('the flame material', () => {
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: reads the room's light`, () => {
+      const code = fragment(B, emissiveMaterial(new Texture(), 64, 64, lit(), viewTowardUniform(), makeSight()));
+      expect(code).toContain('lightAmbient');
+    });
+  }
+});
+
 describe('a world without a sun', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`${B.name}: the world and card materials carry no shadow compare`, () => {
