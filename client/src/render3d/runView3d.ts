@@ -32,7 +32,7 @@ import { MoverTracker, collectAirMovers } from '../game/airmovers';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
+import { assignSkips, carrierMap, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, fxLine, lightLines, skyLines, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
@@ -424,7 +424,7 @@ export class RunView3d implements RunView {
         ...(this.cove ? this.cove.lights(c.now) : []),
         ...this.fxPass.out.lights,
       ];
-      const sel = selectLights(cands, fp, focus, c.params.lcap);
+      const sel = selectLights(cands, lightView(fp, cam), focus, c.params.lcap);
       lights = sel.list;
       // The cove's bushes cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
       const mask = this.mask;

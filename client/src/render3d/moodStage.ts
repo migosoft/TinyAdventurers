@@ -25,7 +25,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { parseLights } from './lightsStage';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -181,7 +181,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       let inView = 0;
       if (game) {
         const cands = [...staticCands(field, pairs, map, t), ...movingCands(moving, [], () => null, t)];
-        const sel = selectLights(cands, fp, viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(cands, lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
       }

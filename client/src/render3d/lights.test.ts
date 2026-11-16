@@ -6,8 +6,9 @@ import { LightField } from '../game/light';
 import { sunLook } from '../game/sunmath';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
-import type { Cam } from './camera';
-import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { project, type Cam } from './camera';
+import { WALL_H } from './heights';
+import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -204,6 +205,38 @@ describe('footprint', () => {
     expect(fp.x1).toBeCloseTo(18, 6);
     expect(fp.z0).toBeCloseTo(10 - 4 / Math.sin(Math.PI / 3), 6);
     expect(fp.z1).toBeCloseTo(10 + 4 / Math.sin(Math.PI / 3), 6);
+  });
+});
+
+describe('lightView', () => {
+  const grow = WALL_H / Math.tan(Math.PI / 3);
+  it('grows the footprint toward the camera by the wall top on the bottom edge', () => {
+    const cam: Cam = { x: 10, z: 10, pitch: Math.PI / 3, yaw: 0 };
+    const fp = footprint(cam, 8, 4);
+    const lv = lightView(fp, cam);
+    expect(lv.x0).toBeCloseTo(fp.x0, 6);
+    expect(lv.x1).toBeCloseTo(fp.x1, 6);
+    expect(lv.z0).toBeCloseTo(fp.z0, 6);
+    expect(lv.z1).toBeCloseTo(fp.z1 + grow, 6);
+    // The wall top that shows on the bottom edge stands on the grown box's edge.
+    const top = project(cam, 10, WALL_H, lv.z1);
+    expect(top.sy).toBeCloseTo(-4, 6);
+  });
+  it('grows toward the camera at a turned view', () => {
+    const cam: Cam = { x: 10, z: 10, pitch: Math.PI / 3, yaw: Math.PI / 2 };
+    const fp = footprint(cam, 8, 4);
+    const lv = lightView(fp, cam);
+    expect(lv.x0).toBeCloseTo(fp.x0 - grow, 6);
+    expect(lv.x1).toBeCloseTo(fp.x1, 6);
+    expect(lv.z0).toBeCloseTo(fp.z0, 6);
+    expect(lv.z1).toBeCloseTo(fp.z1, 6);
+  });
+  it('keeps a torch below the bottom edge whose light reaches a wall top on screen', () => {
+    const cam: Cam = { x: 10, z: 10, pitch: Math.PI / 3, yaw: 0 };
+    const fp = footprint(cam, 8, 4);
+    const torch: Cand = { id: 's1', kind: 0, x: 10, y: 1, z: fp.z1 + 4, radius: 3, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 };
+    expect(selectLights([torch], fp, { x: 10, z: 10 }, 16).list).toEqual([]);
+    expect(selectLights([torch], lightView(fp, cam), { x: 10, z: 10 }, 16).list.map((c) => c.id)).toEqual(['s1']);
   });
 });
 

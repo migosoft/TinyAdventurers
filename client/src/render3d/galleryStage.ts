@@ -16,7 +16,7 @@ import { Figures3d } from './figures';
 import { CROWD_MAX, EFFECT_GROUPS, GROUP_CELLS, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
 import type { FigureKit } from './models/kit';
 import { MODEL_OF_KIND } from './models/table';
 import { seenOpeners } from './openers';
@@ -345,7 +345,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       let inView = 0;
       if (torch) {
         const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-        const sel = selectLights(staticCands(field, pairs, map, t), fp, { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(staticCands(field, pairs, map, t), lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
         casters = selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap));

@@ -19,7 +19,7 @@ import type { R3dParams } from './params';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MIST } from './mist';
@@ -165,7 +165,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       let cracks: Crack[] = [];
       if (game) {
         const cands = [...staticCands(field, pairs, map, t), ...movingCands(movingAt(t), [], () => null, t)];
-        const sel = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(cands, lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
         // Only the cracks the viewer sees (as runView3d); the mask is up to date above.

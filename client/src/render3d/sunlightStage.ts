@@ -21,7 +21,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -172,7 +172,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       if (game) {
         // The cracks the viewer sees (as runView3d), and the torch and the bounce fill of each crack as lights.
         cracks = selectCracks(field, fp, c.params.sight ? mask : null, CRACK_CAP, look).map((l) => crackOf(l, look, c.now));
-        const sel = selectLights(staticCands(field, pairs, map, c.now, look), fp, viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(staticCands(field, pairs, map, c.now, look), lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
       }

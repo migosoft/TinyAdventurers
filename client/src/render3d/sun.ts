@@ -2,7 +2,7 @@
 // Pure maths (no Phaser, no three): x east, y up, z south.
 import type { SunInfo } from '../generated/SunInfo';
 import type { Cam } from './camera';
-import type { Footprint } from './lights';
+import { raised, type Footprint } from './lights';
 import type { Quality } from './quality';
 import type { SunFrame } from './view';
 import { WIND } from './wind';
@@ -141,10 +141,7 @@ export function sunBasis(dir: Vec3): { R: Vec3; U: Vec3; F: Vec3 } {
  * the footprint and its copy shifted that way.
  */
 export function sunView(fp: Footprint, cam: Cam): Footprint {
-  const k = SUN_TOP / Math.tan(cam.pitch);
-  const dx = -Math.sin(cam.yaw) * k;
-  const dz = Math.cos(cam.yaw) * k;
-  return { x0: Math.min(fp.x0, fp.x0 + dx), x1: Math.max(fp.x1, fp.x1 + dx), z0: Math.min(fp.z0, fp.z0 + dz), z1: Math.max(fp.z1, fp.z1 + dz) };
+  return raised(fp, cam, SUN_TOP);
 }
 
 const boxCorners =(x0: number, x1: number, z0: number, z1: number): Vec3[] => {

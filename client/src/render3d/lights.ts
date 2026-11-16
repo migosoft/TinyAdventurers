@@ -10,6 +10,7 @@ import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import { groundAt, type Cam } from './camera';
 import { TORCH_MID } from './figures';
+import { WALL_H } from './heights';
 import type { Light } from './light';
 
 /** A light's colour is scaled by this on its way to the shader (first guess). */
@@ -174,6 +175,25 @@ export function footprint(cam: Cam, halfW: number, halfH: number): Footprint {
     z0: Math.min(...pts.map((p) => p.z)),
     z1: Math.max(...pts.map((p) => p.z)),
   };
+}
+
+/**
+ * The footprint plus the ground under what stands up to `top` tiles on it and shows above the screen's bottom edge: such a thing
+ * stands top / tan(pitch) nearer the camera than the edge, so the box grows that far toward the camera (and only there).
+ */
+export function raised(fp: Footprint, cam: Cam, top: number): Footprint {
+  const k = top / Math.tan(cam.pitch);
+  const dx = -Math.sin(cam.yaw) * k;
+  const dz = Math.cos(cam.yaw) * k;
+  return { x0: Math.min(fp.x0, fp.x0 + dx), x1: Math.max(fp.x1, fp.x1 + dx), z0: Math.min(fp.z0, fp.z0 + dz), z1: Math.max(fp.z1, fp.z1 + dz) };
+}
+
+/**
+ * The ground whose lights the screen can show (#326): the footprint raised to the wall tops, so a torch just below the bottom
+ * edge stays in the list while a wall top it lights is on screen.
+ */
+export function lightView(fp: Footprint, cam: Cam): Footprint {
+  return raised(fp, cam, WALL_H);
 }
 
 /** The lights that reach the footprint (reach = radius + `LIGHT_MARGIN`), most important first, at most `cap`; `inView` counts all that reach. */

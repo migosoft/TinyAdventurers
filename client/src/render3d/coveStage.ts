@@ -19,7 +19,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, dungeonAmbient, stoneClear } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -152,7 +152,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       c.timer.lap('plants');
 
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-      const sel = selectLights([...staticCands(field, pairs, map, seconds), ...cove.lights(seconds)], fp, { x: knight.x, z: knight.z }, Math.min(LIGHT_CAP, params.lcap));
+      const sel = selectLights([...staticCands(field, pairs, map, seconds), ...cove.lights(seconds)], lightView(fp, cam), { x: knight.x, z: knight.z }, Math.min(LIGHT_CAP, params.lcap));
       const lights = sel.list;
       // The cove's plants cast only where the knight sees them, as in a run.
       const shown = params.sight ? coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : coveCasters;
