@@ -47,12 +47,13 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const isChasm = dip.greaterThan(2.5);
 
   // All the noise is evaluated here, at the top level; the kinds only pick between the results.
-  const mud = vec3(0.10, 0.085, 0.055).mul(float(0.6).add(fbm2(pp.mul(5)).mul(0.8)));
+  const rough = fbm2(pp.mul(5));
+  const mud = vec3(0.10, 0.085, 0.055).mul(float(0.6).add(rough.mul(0.8)));
   const pebbles = smoothstep(0.66, 0.72, vnoise2(pp.mul(4.3).add(3.1)));
   const stones = vec3(0.20, 0.19, 0.16).mul(float(0.7).add(vnoise2(pp.mul(9)).mul(0.5)));
   const waterRock = mix(mix(mud, stones, pebbles), vec3(0.03, 0.07, 0.04), smoothstep(0.4, 2.0, d).mul(0.7));
 
-  const lavaRock = vec3(0.045, 0.038, 0.036).mul(float(0.6).add(fbm2(pp.mul(5)).mul(0.9))).mul(float(0.75).add(vnoise2(pp.mul(23)).mul(0.5)));
+  const lavaRock = vec3(0.045, 0.038, 0.036).mul(float(0.6).add(rough.mul(0.9))).mul(float(0.75).add(vnoise2(pp.mul(23)).mul(0.5)));
 
   const sp = vec2(wp.x.sub(wp.z).mul(1.6), y.mul(0.55));
   const columns = fbm2(sp.mul(vec2(1.3, 0.9)));
@@ -77,8 +78,10 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
     .mul(smoothstep(0, 0.08, d));
   const cool = chasmRock.mul(vec3(0.10, 0.11, 0.14)).mul(bank);
   const fade = float(0.03).add(exp(min(y, 0).mul(0.55)).mul(0.97));
-  const chasmColour = base.add(cool).mul(fade);
-  const colour = select(isChasm, chasmColour, select(isLava, base.add(band), base));
+  // `base` (every light and shadow loop) is built once; only these cheap terms are picked by float weights (a colour `select` would emit `base` per branch).
+  const lavaW = select(isLava, float(1), float(0));
+  const chasmW = select(isChasm, float(1), float(0));
+  const colour = mix(base.add(band.mul(lavaW)), base.add(cool).mul(fade), chasmW);
 
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(sight.apply(colour, wp, sight.unseenAt(wp.xz)), 1);

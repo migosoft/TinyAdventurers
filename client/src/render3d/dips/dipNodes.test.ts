@@ -1,5 +1,7 @@
 // The dip ground's shader code as three generates it (GLSL and WGSL), built without a GPU (#324).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { worldMaterial } from '../materials';
+import { makeCoverShared } from '../cover/coverRead';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { makeLighting, type Lighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
@@ -53,6 +55,27 @@ describe('dipMaterial', () => {
 
     it(`${B.name}: uses no sine hash`, () => {
       expect(fragment(B, build().m.material, { geometry: geometry() })).not.toContain('43758');
+    });
+
+    it(`${B.name}: the hash keeps its mixing step, and building logs no TSL error`, () => {
+      const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(fragment(B, build().m.material, { geometry: geometry() })).toContain('33.33');
+        expect(err).not.toHaveBeenCalled();
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        err.mockRestore();
+        warn.mockRestore();
+      }
+    });
+
+    it(`${B.name}: the lighting is built once (as many loops as the world material)`, () => {
+      const t = new Texture();
+      const l = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
+      const world = worldMaterial(t, t, 64, 64, l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1))).material;
+      const count = (code: string): number => loops(code).length;
+      expect(count(fragment(B, build().m.material, { geometry: geometry() }))).toBe(count(fragment(B, world, { geometry: geometry() })));
     });
 
     it(`${B.name}: keeps its loops apart`, () => {

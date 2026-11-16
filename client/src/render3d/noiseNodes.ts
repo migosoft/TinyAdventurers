@@ -10,9 +10,10 @@ export const hash3 = (c: N): N => fract(sin(dot(c, vec3(12.9898, 78.233, 37.719)
 
 /** Dave Hoskins' hash without sine: vec2 -> 0..1. */
 export const hash21 = (p: N): N => {
-  const p3 = fract(vec3(p.x, p.y, p.x).mul(0.1031)).toVar();
-  p3.addAssign(dot(p3, p3.yzx.add(33.33)));
-  return fract(p3.x.add(p3.y).mul(p3.z));
+  // No assignment: `assign` needs a shader stack, which does not exist while a material is being built.
+  const p3 = fract(vec3(p.x, p.y, p.x).mul(0.1031));
+  const q = p3.add(dot(p3, p3.yzx.add(33.33)));
+  return fract(q.x.add(q.y).mul(q.z));
 };
 
 /** Value noise of a vec2 on `hash21`, smoothstep-interpolated, 0..1. */
