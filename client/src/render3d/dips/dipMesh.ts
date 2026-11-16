@@ -1,6 +1,7 @@
 import type { TileMap } from '../../sim/map';
 import { cellHeight } from '../heights';
 import { CHUNK, flatSurface, type FrameRects } from '../worldMesh';
+import { TILE_ID } from '../../generated/defs';
 import { GROUND_TILES } from '../../game/woodland/ground';
 import { bedAt, dipOf, inDipMesh, kindAt } from './shape';
 
@@ -34,7 +35,7 @@ const SIDES: { dx: number; dz: number; n: [number, number]; ox: number; oz: numb
  * (wall or not) or its painted-ground kind (`flatSurface`) differs. A door opening or closing changes none of them.
  */
 export function dipClassChanged(a: number, b: number): boolean {
-  return dipOf(a) !== dipOf(b) || cellHeight(a) !== cellHeight(b) || GROUND_TILES.has(a) !== GROUND_TILES.has(b);
+  return dipOf(a) !== dipOf(b) || (a === TILE_ID.DeepWater) !== (b === TILE_ID.DeepWater) || cellHeight(a) !== cellHeight(b) || GROUND_TILES.has(a) !== GROUND_TILES.has(b);
 }
 
 /** The ground of the dip cells of chunk (cx, cz), or null when it has none. */

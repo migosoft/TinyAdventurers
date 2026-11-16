@@ -22,7 +22,11 @@ describe('dipClassChanged (F2)', () => {
   it('is false for a door toggle and any change that leaves the dip class, height and ground kind alone', () => {
     expect(dipClassChanged(TILE_ID.DoorOpen, TILE_ID.DoorClosed)).toBe(false);
     expect(dipClassChanged(TILE_ID.DoorClosed, TILE_ID.DoorOpen)).toBe(false);
-    expect(dipClassChanged(TILE_ID.ShallowWater, TILE_ID.DeepWater)).toBe(false);
+    expect(dipClassChanged(TILE_ID.ShallowWater, TILE_ID.ShallowWater)).toBe(false);
+  });
+  it('is true between shallow and deep water (the bed and the deep plate differ)', () => {
+    expect(dipClassChanged(TILE_ID.ShallowWater, TILE_ID.DeepWater)).toBe(true);
+    expect(dipClassChanged(TILE_ID.DeepWater, TILE_ID.ShallowWater)).toBe(true);
   });
   it('is true when the dip kind, the height or the painted ground kind changes', () => {
     expect(dipClassChanged(TILE_ID.Floor, TILE_ID.Chasm)).toBe(true);
