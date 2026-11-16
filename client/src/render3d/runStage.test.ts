@@ -65,10 +65,10 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
   };
   let canvasEl = mkCanvas();
   let now = 0;
-  const frame = (view: View | null, held: string[] = [], dt = 1 / 60): number => {
+  const frame = (view: View | null, held: string[] = [], dt = 1 / 60, frameMs = dt * 1000): number => {
     now += dt;
     const plan = renderPlan(params.quality, 4, 1920, 1080);
-    const c: StageCtx = { now, dt, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, canvasEl, zoom: 4, plan, view, timer };
+    const c: StageCtx = { now, dt, frameMs, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, canvasEl, zoom: 4, plan, view, timer };
     return stage.frame(c);
   };
   const rebuild = (): HTMLCanvasElement => {
@@ -225,6 +225,15 @@ describe('the run stage', () => {
     expect(frame(null)).toBe(0);
     frame(null);
     expect(inputs(net).length).toBeGreaterThan(0);
+  });
+
+  it("a long host frame advances the session by the frame's raw time, not the clamped dt (#312)", () => {
+    const { frame, net } = setup();
+    const view = fakeView();
+    frame(view); // the first frame
+    const before = inputs(net).length;
+    frame(view, [], 0.05, 80); // an 80 ms frame: the host's dt is clamped to 50 ms
+    expect(inputs(net).length - before).toBe(4); // 80 ms of 1/60 s steps, as the 2D view runs them
   });
 
   it('walks by the keys: D at yaw 0 sends east', () => {
@@ -472,7 +481,7 @@ describe('startRun3d', () => {
       expect(stage).not.toBeNull();
       const timer = new FrameTimer<(typeof R3D_SYSTEMS)[number]>(R3D_SYSTEMS);
       const plan = renderPlan('balanced', 4, 1920, 1080);
-      stage!.frame({ now: 1, dt: 1 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: document.createElement('canvas'), zoom: 4, plan, view: null, timer });
+      stage!.frame({ now: 1, dt: 1 / 60, frameMs: 1000 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: document.createElement('canvas'), zoom: 4, plan, view: null, timer });
       const n = hud.calls.filter((c) => c[0] === 'frame').length;
       vi.advanceTimersByTime(100);
       expect(hud.calls.filter((c) => c[0] === 'frame').length).toBe(n);
@@ -655,7 +664,7 @@ describe('startRun3d', () => {
         let st: ReturnType<typeof createRunStage> | undefined;
         const host = await startHost(el, '', 'run', (a, h) => (st = createRunStage(run, info, a, h, el)), deps);
         st!.key!({ code: 'KeyZ', repeat: false } as KeyboardEvent);
-        st!.frame({ now: 1, dt: 1, params: host!.params, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: el.querySelector('canvas')!, zoom: 4, plan: renderPlan('balanced', 4, 1920, 1080), view: null, timer: new FrameTimer(R3D_SYSTEMS) });
+        st!.frame({ now: 1, dt: 1, frameMs: 1000, params: host!.params, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: el.querySelector('canvas')!, zoom: 4, plan: renderPlan('balanced', 4, 1920, 1080), view: null, timer: new FrameTimer(R3D_SYSTEMS) });
         expect(host!.params.yaw).toBe(45);
         host!.setParams({ ...host!.params, pitch: 40 });
         vi.advanceTimersByTime(1000);

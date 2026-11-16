@@ -39,7 +39,11 @@ declare global {
 }
 
 export interface StageCtx {
+  /** `dt`: seconds since the last frame, clamped to 0.001..0.05 (`frameDt`) for the stages' own animation. */
   now: number; dt: number; params: R3dParams;
+  /** The raw milliseconds since the last animation frame, unclamped (0 on the first): the run session's fixed steps take
+   * the real time, as the 2D view's do, so a long frame does not lose game time (#312). */
+  frameMs: number;
   /** KeyboardEvent.code of the held movement keys. */
   held: ReadonlySet<string>;
   canvas: { w: number; h: number }; zoom: number; plan: RenderPlan;
@@ -343,6 +347,7 @@ export async function startHost(
 
   const frame = (nowMs: number): void => {
     const gap = nowMs - lastFrameMs; // the raw time between animation frames, not frameDt's clamped one
+    const frameMs = lastFrameMs >= 0 ? Math.max(0, gap) : 0;
     if (lastFrameMs >= 0 && gap > 0) fps = fps === 0 ? 1000 / gap : fps * 0.9 + (1000 / gap) * 0.1;
     lastFrameMs = nowMs;
     timer.stepStart();
@@ -370,7 +375,7 @@ export async function startHost(
     }
     let drawCalls = 0;
     try {
-      drawCalls = stage!.frame({ now, dt, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, timer });
+      drawCalls = stage!.frame({ now, dt, frameMs, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, timer });
     } finally {
       if (!restoring) timer.renderEnd(drawCalls); // also when the stage threw, so the timer stays consistent
     }

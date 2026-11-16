@@ -186,7 +186,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         if (c.view) upload(c.view);
       }
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
-      session.frame(c.dt * 1000);
+      session.frame(c.frameMs); // the raw time: the session clamps it itself, as in the 2D view (#312)
       const r = window.__r3d;
       if (r) {
         r.hero = runView.hero;
