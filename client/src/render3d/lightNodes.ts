@@ -1,6 +1,6 @@
 // The light of the 3D view in TSL: point lights with a grid-walk wall shadow (port of the demo's lightAt / wallVis).
 import { DataTexture, DataUtils, HalfFloatType, LinearFilter, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type Texture } from 'three/webgpu';
-import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, texture, textureLoad, uniform, uniformArray, dot, vec2, vec3, vec4 } from 'three/tsl';
+import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length, max, min, mix, normalize, pow, select, smoothstep, texture, textureLoad, uniform, uniformArray, dot, vec2, vec3, vec4 } from 'three/tsl';
 import { DV_DARK, EDGE } from '../game/light';
 import { AMBIENT, DV_EYE, DV_FADE, DV_MARGIN, LIGHT_CAP, packLights, type Light } from './light';
 import { makeCracks, type Cracks } from './air/crackNodes';
@@ -22,6 +22,9 @@ type N = any;
 /** A loop from 0 to `end` whose index is called `name` (three's `Loop` takes `name`; its typings do not list it). */
 const named = (name: string, end: number): N => ({ start: 0, end, name });
 
+/** The glint's two lobes (`glintAt`): a sharp one for the light's own image and a broad one around it. */
+export const GLINT = { sharp: 700, sharpGain: 5, broad: 90, broadGain: 0.1 } as const;
+
 export interface Lighting {
   /**
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
@@ -33,6 +36,10 @@ export interface Lighting {
    */
   /** `shadow` (fixed when the shader is built): 'full' (default) walls, cards, sun rays and darkvision; 'walls' only each light's wall test (the haze: no card or sun-ray walk, no darkvision); 'none' only the falloff. */
   lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N; selfLit?: boolean }): { rgb: N; dv: N };
+  /** The specular light at P for the normal Nrm and the unit vector V toward the eye (vec3 nodes): for every point light its colour times
+   *  the falloff of lightAt times the wall test (when the shadows are on), and for every crack its colour times its mask, each times
+   *  pow(n.h, sharp) * sharpGain + pow(n.h, broad) * broadGain with h = normalize(L + V). No card test, no ambient, no lava. Loops 'gl' and 'gc'. */
+  glintAt(P: N, Nrm: N, V: N): N;
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
   /** The cracks (#307): openings in the ceiling whose light is a term of `lightAt` (see `air/crackNodes.ts`). */
@@ -230,6 +237,52 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const sun = makeSunLight();
   const hasSun = opts.sun === true;
 
+  // A point light's falloff: 1 at the light, 1 - (1 - EDGE) at the radius `rad` (smoothstep of the horizontal distance `dh`).
+  const falloff = (dh: N, rad: N): N => {
+    const k = min(dh.div(rad), 1);
+    return float(1).sub(float(1 - EDGE).mul(k.mul(k).mul(float(3).sub(k.mul(2)))));
+  };
+
+  // The two lobes of a glint for the normal Nrm, the unit vector toward the light `Ldir` and toward the eye V.
+  const lobes = (Nrm: N, Ldir: N, V: N): N => {
+    const nh = max(dot(Nrm, normalize(Ldir.add(V))), 0);
+    return pow(nh, GLINT.sharp).mul(GLINT.sharpGain).add(pow(nh, GLINT.broad).mul(GLINT.broadGain));
+  };
+
+  const glintAt = (P: N, Nrm: N, V: N): N => Fn(() => {
+    const sum = vec3(0).toVar();
+    const Po = P.add(Nrm.mul(0.03));
+    Loop(named('gl', LIGHT_CAP), ({ gl: i }: N) => {
+      const lp: N = lPos.element(i);
+      const lc: N = lCol.element(i);
+      const L = lp.xyz.toVar();
+      const rad = lp.w;
+      If(rad.lessThanEqual(0), () => {
+        Break();
+      });
+      const d = L.sub(P);
+      const dh = length(d.xz);
+      If(dh.lessThan(rad.add(LIGHT_MARGIN)), () => {
+        const v = float(1).toVar();
+        If(lc.w.greaterThan(0.5).and(uShadows.greaterThan(0.5)), () => {
+          v.assign(wallVis(Po, L));
+        });
+        sum.addAssign(lc.xyz.mul(falloff(dh, rad).mul(v).mul(lobes(Nrm, d.div(max(length(d), 1e-3)), V))));
+      });
+    });
+    Loop(named('gc', CRACK_CAP), ({ gc: s }: N) => {
+      If(float(s).greaterThanEqual(cracks.count), () => {
+        Break();
+      });
+      const m = cracks.mask(P, s).toVar();
+      If(m.greaterThan(0.004), () => {
+        const cr = cracks.at(s);
+        sum.addAssign(cr.rgb.mul(m.mul(lobes(Nrm, cr.dir, V))));
+      });
+    });
+    return sum;
+  })();
+
   const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N; selfLit?: boolean } = {}): { rgb: N; dv: N } => {
     const mode = opts.shadow ?? 'full';
     const shadowed = mode === 'full';
@@ -273,8 +326,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
           const dist = length(d);
           const dh = length(d.xz);
           If(dh.lessThan(rad.add(LIGHT_MARGIN)), () => {
-            const k = min(dh.div(rad), 1);
-            const f = float(1).sub(float(1 - EDGE).mul(k.mul(k).mul(float(3).sub(k.mul(2)))));
+            const f = falloff(dh, rad);
             const ndl = mix(max(dot(Nrm, d.div(max(dist, 1e-3))), 0), float(1), w);
             const v = float(1).toVar();
             if (wallTest) {
@@ -341,6 +393,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
 
   return {
     lightAt,
+    glintAt,
     sun,
     cracks,
     shadowsOn: uShadows,

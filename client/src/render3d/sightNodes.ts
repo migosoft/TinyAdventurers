@@ -2,7 +2,7 @@
 // The unseen strength comes from the sight mask (sightmask.ts) as a small RG8 texture over world space; the mist maths
 // is mist.ts's, written as nodes.
 import { DataTexture, Texture, LinearFilter, NoColorSpace, RGFormat, UnsignedByteType, Vector2, Vector3, Vector4, ClampToEdgeWrapping } from 'three/webgpu';
-import { Fn, If, clamp, dot, float, max, mix, mx_noise_float, select, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
+import { Discard, Fn, If, clamp, dot, float, max, mix, mx_noise_float, select, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
 import { DEFAULT_HAZE, SHADE, type HazeLook } from '../game/sightField';
 import { MIST, mistColour, type MistLook } from './mist';
 import type { SightMask } from './sightmask';
@@ -32,6 +32,8 @@ export interface Sight {
   apply(colour: N, P: N, u: N): N;
   /** The mask's texels per tile as a node (`sightOrigin.w`): the world's wall faces push their read point out by 1.5 / res (materials.ts); wall cards (torches) by the fixed WALL_SIGHT_PUSH, 0.25 tile (cards.ts). */
   readonly res: N;
+  /** `apply` discards a fragment whose P.y lies below this (the mirror pass's clip at the water level); -1e6: no clip. */
+  readonly clipBelow: { value: number };
   /** `colour` dimmed by SHADE * soft on dark maps (a self-lit thing behind a trunk); unchanged on other maps. */
   dim(colour: N, soft: N): N;
   /** How much of a card is drawn (0..1) from its (hard, scenery) attribute values, as `cardShown`; 1 when off. */
@@ -83,6 +85,8 @@ export function makeSight(): Sight {
   const uMistLight = uniform(new Vector3(1, 1, 1));
   // wind * t / 3: the noise's offset in noise units
   const uDrift = uniform(new Vector2());
+  // A fragment below this height is discarded (the mirror pass's clip at the water level); -1e6: no clip.
+  const uClip = uniform(-1e6);
 
   let tex = pending();
   const maskNode = texture(tex).setName('sightMask');
@@ -107,6 +111,9 @@ export function makeSight(): Sight {
     // Read both channels here, before any If, so the mask sample is emitted at the top level of the shader.
     const hard = u.x.toVar();
     const soft = u.y.toVar();
+    If(P.y.lessThan(uClip), () => {
+      Discard();
+    });
     If(isDark, () => {
       out.assign(mix(out.mul(float(1).sub(soft.mul(SHADE))), uClear, hard));
     });
@@ -158,5 +165,5 @@ export function makeSight(): Sight {
 
   const dispose = (): void => tex.dispose();
 
-  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, get uploads() { return uploads; }, get texture() { return tex; } };
+  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, clipBelow: uClip, get uploads() { return uploads; }, get texture() { return tex; } };
 }

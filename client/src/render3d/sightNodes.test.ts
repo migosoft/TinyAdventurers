@@ -6,7 +6,7 @@ import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { makeSight, SIGHT_OFF } from './sightNodes';
 import { SightMask } from './sightmask';
-import { fragment, type Builder } from './shaderCode.testutil';
+import { fragment, readsInBranches, type Builder } from './shaderCode.testutil';
 
 describe('the sight nodes', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
@@ -82,4 +82,28 @@ describe('the sight nodes', () => {
     expect(s.uploads).toBe(2);
     s.dispose();
   });
+});
+
+describe('the sight clip', () => {
+  it('starts without a clip', () => {
+    const sight = makeSight();
+    expect(sight.clipBelow.value).toBe(-1e6);
+    sight.dispose();
+  });
+
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: discards below the clip, after the mask is read`, () => {
+      const sight = makeSight();
+      const m = new MeshBasicNodeMaterial();
+      m.colorNode = sight.apply(vec3(1), positionWorld, sight.unseenAt(positionWorld.xz));
+      const code = fragment(B, m);
+      expect(code).toContain('discard');
+      // The mask sample comes before the discard (top level, uniform control flow).
+      const sample = code.search(B === WGSLNodeBuilder ? /textureSample\(/ : /\btexture\(/);
+      expect(sample).toBeGreaterThanOrEqual(0);
+      expect(sample).toBeLessThan(code.indexOf('discard'));
+      expect(readsInBranches(code)).toEqual([]);
+      sight.dispose();
+    });
+  }
 });

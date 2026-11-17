@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DataTexture, FloatType, GLSLNodeBuilder, MeshBasicNodeMaterial, RGBAFormat, WGSLNodeBuilder } from 'three/webgpu';
 import { float, positionWorld, vec2, vec3, vec4 } from 'three/tsl';
-import { makeLighting } from './lightNodes';
+import { GLINT, makeLighting } from './lightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** The fragment shader of a material lit by `lightAt` (a card's options: its own slot, the dark flag). */
@@ -129,6 +129,52 @@ describe('finish', () => {
       expect(separate).toContain('0.123');
       // The lit colour still comes from the albedo.
       expect(separate).toContain('0.25');
+    });
+  }
+});
+
+describe('glintAt', () => {
+  const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
+  const glintCode = (B: Builder): string => {
+    const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(lighting.glintAt(positionWorld, vec3(0, 1, 0), vec3(0, 0.6, 0.8)), 1);
+    return fragment(B, m);
+  };
+  const lit = (B: Builder): string => lightFragment(B);
+  // Each uniformArray is one uniform buffer; the caster arrays are the ones the card test reads (`cA`, `cB`, `cR`), the lights' the ones `glintAt` reads.
+  const arrays = (code: string): number => new Set(code.match(/\bnodeUniform\w*|\bArray\w*\b/g) ?? []).size;
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: builds a glint`, () => {
+      const code = glintCode(B);
+      expect(code.length).toBeGreaterThan(0);
+      // The two lobes: the sharp and the broad exponent.
+      expect(code).toMatch(/\bpow\(/);
+      expect(code).toContain(String(GLINT.sharp));
+      expect(code).toContain(String(GLINT.broad));
+    });
+
+    it(`${B.name}: keeps the glint loops apart`, () => {
+      const ls = loops(glintCode(B));
+      const names = ls.map((l) => l.name);
+      expect(names).toContain('gl');
+      expect(names).toContain('gc');
+      for (const n of ['li', 'cs', 'ci']) expect(names).not.toContain(n);
+      for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+      // The wall walk (ws) sits inside the light loop, the crack mask's ray loop (cr) inside the crack loop.
+      expect(ls.find((l) => l.name === 'ws')?.outer).toContain('gl');
+      expect(ls.find((l) => l.name === 'cr')?.outer).toContain('gc');
+    });
+
+    it(`${B.name}: reads no caster for a glint`, () => {
+      const glint = glintCode(B);
+      // The card test is the only reader of the caster arrays: its loop is `ci`, and the atlas is read there with textureLoad / texelFetch.
+      expect(loops(lit(B)).map((l) => l.name)).toContain('ci');
+      expect(loops(glint).map((l) => l.name)).not.toContain('ci');
+      const loads = (c: string): number => (c.match(/\b(?:textureLoad|texelFetch)\(/g) ?? []).length;
+      expect(loads(lit(B))).toBeGreaterThan(loads(glint));
+      // Fewer uniform arrays: three declares the three caster arrays only where the card test uses them.
+      expect(arrays(glint)).toBeLessThan(arrays(lit(B)));
     });
   }
 });
