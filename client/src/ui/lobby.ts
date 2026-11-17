@@ -103,6 +103,9 @@ export class Lobby {
   ) {
     this.root.className = 'lobby hidden';
     host.append(this.root);
+    // The next action in the lobby ends the kept error line (capture: before the button's own handler, which may set a new one).
+    this.root.addEventListener('click', () => { this.errorText = ''; }, true);
+    this.root.addEventListener('change', () => { this.errorText = ''; }, true);
   }
 
   get visible(): boolean {
@@ -113,6 +116,7 @@ export class Lobby {
     this.render();
   }
   hide(): void {
+    this.errorText = '';
     this.root.classList.add('hidden');
   }
 
@@ -145,9 +149,13 @@ export class Lobby {
     // A refused build change is not followed by a Character message: draw the selects from the saved state again.
     // Any other error only writes the line, so half-typed input stays.
     if (isBuildRefusal(msg)) this.render();
+    this.errorText = msg;
     const e = this.root.querySelector('.error');
     if (e) e.textContent = msg;
   }
+
+  /** The last error line: a server update re-renders the lobby, so render() writes it back until the user's next action or hide(). */
+  private errorText = '';
 
   /**
    * The server keeps no echo of a debug pick, and a refused one (a weapon the class is not trained in,
@@ -182,6 +190,8 @@ export class Lobby {
   private render(): void {
     if (this.room) this.renderRoom();
     else this.renderHome();
+    const e = this.root.querySelector('.error');
+    if (e) e.textContent = this.errorText;
   }
 
   private renderHome(): void {

@@ -107,6 +107,23 @@ describe('Lobby', () => {
     expect(document.querySelector<HTMLInputElement>('#runname')!.value).toBe('abc');
     expect(document.querySelector('.error')!.textContent).toBe('That run is full.');
   });
+  it('keeps the error line when a server update re-renders the lobby', () => {
+    const l = make();
+    l.error('The 3D view could not load: x');
+    l.setRuns([]);
+    expect(document.querySelector('.error')!.textContent).toBe('The 3D view could not load: x');
+  });
+  it('clears the kept error line on the next click in the lobby, and when the lobby is hidden', () => {
+    const l = make();
+    l.error('x');
+    document.querySelector<HTMLElement>('#runname')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    l.setRuns([]);
+    expect(document.querySelector('.error')!.textContent).toBe('');
+    l.error('y');
+    l.hide();
+    l.show();
+    expect(document.querySelector('.error')!.textContent).toBe('');
+  });
   it('shows the own loadout selects while not ready, listing the non-locked cards with the reason', () => {
     const l = make();
     inRoom(l, false);
