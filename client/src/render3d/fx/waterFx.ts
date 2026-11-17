@@ -4,7 +4,7 @@
 import { WATER_Y } from '../air/drips';
 import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';
 import { burst, PX, type BurstSpec } from './shapes';
-import type { WaterSpot } from '../water/water';
+import type { WaterCues, WaterSpot } from '../water/water';
 import type { FxOut } from './types';
 
 /** Motes of an entering and of a plunge (before the detail setting). */
@@ -15,22 +15,24 @@ const PLUNGE: BurstSpec = { x: 0, y: 0, z: 0, n: PLUNGE_N, speed: [10 * PX, 45 *
 const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false, floor: WATER_Y };
 const BUBBLE: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [10 * PX, 10 * PX], up: [Math.PI / 2 - 0.01, Math.PI / 2 - 0.01], life: [0.25, 0.35], g: 0, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false, floor: WATER_Y };
 
-function emitAll(fx: Effects3d, f: FxFrame, list: readonly WaterSpot[], kind: typeof FX_KIND.WaterSplash | typeof FX_KIND.WaterDrop, a: number): void {
-  const now = f.ctx.now;
+function emitAll(fx: Effects3d, hidden: ReadonlySet<number>, now: number, list: readonly WaterSpot[], kind: typeof FX_KIND.WaterSplash | typeof FX_KIND.WaterDrop, a: number): void {
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
-    if (!f.hidden.has(s.id)) fx.emit(kind, now, s.x, s.z, s.id, a);
+    if (!hidden.has(s.id)) fx.emit(kind, now, s.x, s.z, s.id, a);
   }
+}
+
+/** The records of water cues born at `now`: the one place that says which kind and variant a cue makes. A cue of a hidden id makes none. */
+export function emitWaterCues(fx: Effects3d, w: WaterCues, now: number, hidden: ReadonlySet<number>): void {
+  emitAll(fx, hidden, now, w.enters, FX_KIND.WaterSplash, 0);
+  emitAll(fx, hidden, now, w.plunges, FX_KIND.WaterSplash, 1);
+  emitAll(fx, hidden, now, w.spray, FX_KIND.WaterDrop, 0);
+  emitAll(fx, hidden, now, w.bubbles, FX_KIND.WaterDrop, 1);
 }
 
 /** The records of a frame's water cues. */
 function drawWaterFx(_out: FxOut, frame: FxFrame, fx: Effects3d): void {
-  const w = frame.water;
-  if (!w) return;
-  emitAll(fx, frame, w.enters, FX_KIND.WaterSplash, 0);
-  emitAll(fx, frame, w.plunges, FX_KIND.WaterSplash, 1);
-  emitAll(fx, frame, w.spray, FX_KIND.WaterDrop, 0);
-  emitAll(fx, frame, w.bubbles, FX_KIND.WaterDrop, 1);
+  if (frame.water) emitWaterCues(fx, frame.water, frame.ctx.now, frame.hidden);
 }
 
 function drawSplash(o: FxOut, f: FxFrame, r: FxRec, age: number): void {

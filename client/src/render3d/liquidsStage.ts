@@ -4,7 +4,7 @@
 // water) and 3 (barrel), or by the panel's buttons. The script (liquidsScript.ts) sends the figures the run's events (`Sink`, `Died`).
 // `&push=chasm|water|barrel` asks that push at t = 1 s; `&t=<s>` pins the clock. `window.__r3d.liquids = { t, fallers, ripples }`
 // (`ripples`: the live ripples of the water, #345). The water's own `Water3d` is stepped with the page's clock `t` (the elf's wading, the
-// imp's drowning, their droplets through the effects); a pinned page steps it in its replay loop too, so the rings of the last seconds show.
+// imp's drowning, their droplets through the effects); a pinned page steps it in its replay loop too, so the rings, splashes and bubbles of the last seconds show.
 // The run's own light list (torches, lava), the sight off, the game light; WASD pans a free camera.
 import { KIND, LIGHT_KIND } from '../generated/defs';
 import { LightField } from '../game/light';
@@ -16,6 +16,7 @@ import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { Effects3d, FX_KIND } from './fx/effects3d';
 import { FxPass } from './fx/pass';
+import { emitWaterCues } from './fx/waterFx';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
@@ -143,7 +144,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             for (const ev of w.events) figures.event(ev);
             const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
-            water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, landed: null, hidden: NONE_IDS });
+            // The droplets of the replayed seconds too, stamped with the replay's own time (the cues of the main frame go through the pass).
+            emitWaterCues(fx, water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, landed: null, hidden: NONE_IDS }).cues, tau, NONE_IDS);
           }
           fdt = STEP;
         } else fdt = 0;

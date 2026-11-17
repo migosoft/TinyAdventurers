@@ -92,15 +92,40 @@ describe('the water of the ?r3d=liquids stage (#345)', () => {
     expect(fs[fs.length - 1].water?.reflect).toBe(true);
   });
 
-  it('stirs more ripples when the imp is pushed into the deep water (key 2)', () => {
+  /** The most ripples live within `reach` tiles of (x, z) in any frame of `n` steps, read frame by frame (the packed array is reused). */
+  const nearMax = (r: ReturnType<typeof make>, x: number, z: number, reach: number, n: number): number => {
+    let most = 0;
+    for (let k = 0; k < n; k++) {
+      const rip = r.step(1)[0].water!.ripples!;
+      let c = 0;
+      for (let i = 0; i < rip.length; i += 4) if (rip[i + 2] >= 0 && Math.hypot(rip[i] - x, rip[i + 1] - z) < reach) c++;
+      most = Math.max(most, c);
+    }
+    return most;
+  };
+
+  it('stirs ripples at the imp\'s spot when it is pushed into the deep water (key 2), and none there without the push', () => {
     (window as unknown as { __r3d: object }).__r3d = {};
-    const r = make('?r3d=liquids');
-    let before = 0;
-    for (const f of r.step(20)) before = Math.max(before, live(f));
-    r.stage.key!({ code: 'Digit2', repeat: false } as KeyboardEvent);
-    let after = 0;
-    for (const f of r.step(40)) after = Math.max(after, live(f));
-    expect(after).toBeGreaterThan(before);
+    // The imp goes under at (4.5, 5.5) at 1.35 s; the elf wades along x = 3.5 and x = 6.5, a tile or more away.
+    const pushed = make('?r3d=liquids');
+    pushed.step(20);
+    pushed.stage.key!({ code: 'Digit2', repeat: false } as KeyboardEvent);
+    const withPush = nearMax(pushed, 4.5, 5.5, 0.5, 40);
+    const quiet = make('?r3d=liquids');
+    quiet.step(20);
+    const withoutPush = nearMax(quiet, 4.5, 5.5, 0.5, 40);
+    expect(withoutPush).toBe(0);
+    expect(withPush).toBeGreaterThan(0);
+  });
+
+  it('a page pinned after the imp went under replays its droplets and bubbles; without the push there are none', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const lit = (q: string): number => {
+      const f = make(q).step(1)[0];
+      return f.fx!.lit.n;
+    };
+    expect(lit('?r3d=liquids&t=1.9')).toBe(0);
+    expect(lit('?r3d=liquids&push=water&t=1.9')).toBeGreaterThan(0);
   });
 
   it('passes the pinned clock as the water\'s now and shows the rings of the replayed seconds', () => {
