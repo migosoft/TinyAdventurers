@@ -12,7 +12,7 @@ import type { Sight } from '../sightNodes';
 import { flatTexel, weight } from '../materials';
 import { coverTexel, kindLook, type CoverShared } from '../cover/coverRead';
 import { fbm2, hash21, vnoise2 } from '../noiseNodes';
-import { LAVA_LEVEL } from './shape';
+import { LAVA_LEVEL, OUTLINE_EDGE } from './shape';
 
 /** The light's wrap on a dip surface (like a floor's). */
 const WRAP = 0.35;
@@ -110,8 +110,8 @@ const JOINT_FROM = 0.02, JOINT_TO = 0.09, JOINT_SHARE = 0.6;
 const EMBER_FLICKER_BASE = 0.55, EMBER_FLICKER = 0.6, EMBER_REACH_TO = 0.98;
 /** The upper end of the cracks' reach (the lower end is `1 - CRACK_REACH`), and the width of the fade at the mesh's border (in near-chasm: the cracks fade to nothing there). */
 const CRACK_REACH_TO = 0.95, CRACK_BORDER_FADE = 0.1;
-/** The broken-off floor: the outline's own mask value at the cell's edge (the same 0.5 as `shape.ts` uses in `bed` and `surfaceAt`), the range of the piece id over which the break depth varies, and the rock's tone where the floor has broken off (a share of the chasm rock's albedo). */
-const OUTLINE_EDGE = 0.5, CHIP_ID_FROM = 0.25, CHIP_ID_TO = 0.75, BROKEN_ROCK_TONE = 0.35;
+/** The broken-off floor (a piece breaks off where the chasm mask is above `OUTLINE_EDGE` less its chip, from `shape.ts`): the range of the piece id over which the break depth varies, and the rock's tone where the floor has broken off (a share of the chasm rock's albedo). */
+const CHIP_ID_FROM = 0.25, CHIP_ID_TO = 0.75, BROKEN_ROCK_TONE = 0.35;
 /** The dust at a chasm's rim starts at this near-chasm value (it runs to 1). */
 const DUST_FROM = 0.5;
 /**

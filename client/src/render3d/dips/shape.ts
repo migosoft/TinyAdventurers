@@ -9,6 +9,8 @@ export type DipKind = (typeof DIP)[keyof typeof DIP];
 // First guesses for the user to tune; every number of the shape lives here.
 export const WATER_LEVEL = -0.08, LAVA_LEVEL = -0.15;
 export const SHALLOW_BED = 0.55, DEEP_BED = 2.3, LAVA_BED = 1.7, CHASM_BED = 12;
+/** The mask's value on a straight cell edge: the dip's outline. The bank starts here, the liquid's surface lies inside it, and the dip material's broken-off floor pieces break off by it. */
+export const OUTLINE_EDGE = 0.5;
 /** The mask value at which each bed reaches its full depth (the slope of the bank). */
 export const STEEP = { water: 0.85, deep: 0.95, lava: 0.8, chasm: 0.56 } as const;
 export const ROUGH = 0.06, LIP = 0.05;
@@ -78,11 +80,11 @@ function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
-  let h = -(SHALLOW_BED * ss(0.5, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(0.5, STEEP.deep, mD))
-    - LAVA_BED * ss(0.5, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(0.5, STEEP.chasm, mC) : 0);
-  h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(0.5, 0.7, any) * (1 - ss(0.56, 0.9, mC));
-  // A continuous bump on the outside of the outline: 0 at the cell edge (any 0.5) and beyond 0.25.
-  h += LIP * ss(0.25, 0.4, any) * (1 - ss(0.42, 0.5, any)) * (0.4 + 0.6 * vnoise(x * 6, z * 6));
+  let h = -(SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD))
+    - LAVA_BED * ss(OUTLINE_EDGE, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(OUTLINE_EDGE, STEEP.chasm, mC) : 0);
+  h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(OUTLINE_EDGE, 0.7, any) * (1 - ss(0.56, 0.9, mC));
+  // A continuous bump on the outside of the outline: 0 at the cell edge (any = OUTLINE_EDGE) and beyond 0.25.
+  h += LIP * ss(0.25, 0.4, any) * (1 - ss(0.42, OUTLINE_EDGE, any)) * (0.4 + 0.6 * vnoise(x * 6, z * 6));
   return h;
 }
 
@@ -114,8 +116,8 @@ export function kindOf(water: number, lava: number, chasm: number): DipKind {
 /** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > 0.5), else -Infinity. */
 export function surfaceAt(map: TileMap, x: number, z: number): number {
   const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava);
-  if (w > 0.5 && w >= l) return WATER_LEVEL;
-  if (l > 0.5) return LAVA_LEVEL;
+  if (w > OUTLINE_EDGE && w >= l) return WATER_LEVEL;
+  if (l > OUTLINE_EDGE) return LAVA_LEVEL;
   return -Infinity;
 }
 
