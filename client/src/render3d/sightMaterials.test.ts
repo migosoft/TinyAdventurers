@@ -65,7 +65,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'tree colour', m: trees.colour, world: false },
     // A falling leaf: lit like the leaves and veiled like every world material.
     { name: 'tree leaf', m: trees.leaf, world: false },
-    // The air (#307): specks and embers (additive), smoke, rings and drops (blended) and the haze sheets.
+    // The air (#307): specks and embers (additive), smoke and drops (blended) and the haze sheets.
     { name: 'air add', m: air.add, world: false, attrs: AIR_ATTRS },
     { name: 'air blend', m: air.blend, world: false, attrs: AIR_ATTRS },
     { name: 'air haze', m: air.haze, world: false, attrs: HAZE_ATTRS },

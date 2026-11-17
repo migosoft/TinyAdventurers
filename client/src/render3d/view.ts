@@ -577,7 +577,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   glows.mesh.renderOrder = 4;
   fxDyn.mesh.renderOrder = 5;
   fxLitDyn.mesh.renderOrder = 5;
-  // The air (#307): specks and embers (additive), smoke, rings and drops (blended) as camera-facing quads, and the haze sheets.
+  // The air (#307): specks and embers (additive), smoke and drops (blended) as camera-facing quads, and the haze sheets.
   const air = airMaterials(lighting, sight, { sun: world.painted, toward });
   const airBuf = newAirBuffers();
   const airAttrs: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
