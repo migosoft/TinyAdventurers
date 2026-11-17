@@ -1,4 +1,4 @@
-// Publishes the 0x72 "16x16 DungeonTileset II" sheet (CC0) as a Phaser atlas:
+// Publishes the 0x72 "16x16 DungeonTileset II" sheet (CC0) as a JSON-hash atlas:
 // public/assets/atlas.png + atlas.json with the pack's own frame names
 // (e.g. `knight_m_run_anim_f2`, `weapon_axe`, `floor_3`), plus a few pack
 // frames recolored with pack colors (see RECOLORS, e.g. the summoner), plus

@@ -1,5 +1,5 @@
 // Ground hazards in 3D (#308, design §6): burning ground (FirePatch), consecrated ground (HolyGround) and entangling roots (Roots).
-// The 2D original is `PhaserRunView.drawHazard`: a glow of the hazard's radius (the `aim` field, px; the look's when 0) whose strength
+// A hazard is a glow of the hazard's radius (the `aim` field, px; the look's when 0) whose strength
 // follows the remaining life (`extra`, ms, full from 500) with a flicker, and rising sparks. Each picture is a pure function of the
 // clock and the entity's id. The light is the server's (no client light).
 import { isHazardKind } from '../../game/anim/defs';
@@ -12,12 +12,12 @@ import { BALL1, dot, fireBall, groundRing, PX, streak, type MV3, type V3 } from 
 import type { FxTris } from './tris';
 import type { FxOut } from './types';
 
-/** The strength of a hazard: `min(1, extra / 500)` times the flicker times the look's own, as 2D sets the glow's alpha. */
+/** The strength of a hazard: `min(1, extra / 500)` times the flicker times the look's own: the glow's alpha. */
 export function hazardStrength(extra: number, now: number, id: number, lookAlpha: number): number {
   return Math.min(1, extra / 500) * (0.7 + 0.3 * Math.sin(now / 0.07 + id)) * lookAlpha;
 }
 
-/** Half extents of the hazard on the floor (tiles): the radius (`aim` px, else the look's) times the look's squash. Only the fire patch is squashed in 3D (the others' 0.7 is 2D's foreshortening, which the camera does here). */
+/** Half extents of the hazard on the floor (tiles): the radius (`aim` px, else the look's) times the look's squash. Only the fire patch is squashed in 3D (the others' 0.7 would be a foreshortening, which the camera does here). */
 export function hazardRadii(kind: number, aim: number): { rx: number; rz: number } {
   const look = HAZARD_LOOKS[kind], r = (aim > 0 ? aim : look.r) / TILE;
   return kind === KIND.FirePatch ? { rx: r * look.sx, rz: r * look.sy } : { rx: r, rz: r };

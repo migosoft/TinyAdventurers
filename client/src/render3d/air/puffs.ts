@@ -1,5 +1,5 @@
-// Smoke and embers (#307): a port of the smoke and ember half of game/mood.ts into world tiles with height. Torch smoke in gusts,
-// lava smoke and sparks, fire trails and blast bursts; rising speeds, sway, wind share, life and fade are mood.ts's, in tiles.
+// Smoke and embers (#307): simulated in world tiles with height. Torch smoke in gusts,
+// lava smoke and sparks, fire trails and blast bursts; rising speeds, sway, wind share, life and fade are in tiles.
 import { LIGHT_KIND } from '../../generated/defs';
 import { LAVA_LEVEL } from '../dips/shape';
 import { BurstOnce, LAVA_EMBER_EVERY, LAVA_SMOKE_EVERY, MAX_EMBERS, MAX_SMOKE, spawnCount } from '../../game/moodmath';
@@ -14,7 +14,7 @@ export const SMOKE_STAND = 0.15;
 export const SMOKE_LIFT = 0.3;
 /** Lava smoke and sparks rise from the pool's surface, this high (tiles; first guess). */
 export const LAVA_Y = LAVA_LEVEL + 0.02;
-/** An ember is this wide at birth and at the end of its life (tiles): 1 art px going to 0.6 (the 2D scale 0.5 to 0.3 of a 2 px dot). */
+/** An ember is this wide at birth and at the end of its life (tiles): 1 art px going to 0.6. */
 export const EMBER_SIZE0 = PX;
 export const EMBER_SIZE1 = 0.6 * PX;
 /** A blast's burst starts this high (tiles; first guess). */
@@ -22,13 +22,13 @@ export const BLAST_Y = 0.5;
 /** A blast's embers leap up at BLAST_LEAP0 + up to BLAST_LEAP tiles/s (first guess). */
 const BLAST_LEAP0 = 10 * PX;
 const BLAST_LEAP = 25 * PX;
-/** Torch smoke starts up to this far above the flame's top (tiles; 2D: 1.5 px). */
+/** Torch smoke starts up to this far above the flame's top (tiles; 1.5 px). */
 const SMOKE_JITTER_Y = 1.5 * PX;
 /** A blast throws this many embers, once. */
 const BLAST_EMBERS = 18;
 /** Seconds between a fire shot's embers. */
 const TRAIL_EVERY = 0.04;
-/** The air carries an ember sideways this much slower (2D: 0.4); smoke slows by this much per second as it rises. */
+/** The air carries an ember sideways this much slower; smoke slows by this much per second as it rises. */
 const RISE_DRAG = 0.25;
 const SOOT = 0x2e2824;
 const SMOKE_GREY = 0xb09a86;
@@ -133,7 +133,7 @@ export class Puffs {
     const p = this.smoke.add();
     p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
     p.life = p.max = max;
-    // The 2D texture is 32 px: a scale `s` is a diameter of 2 s tiles.
+    // The blob texture is 32 px: a scale `s` is a diameter of 2 s tiles.
     p.s0 = 2 * s0; p.s1 = 2 * s1; p.a = a; p.sway = sway; p.rgb = rgb;
     p.tx = tx; p.tz = tz; p.nx = nx; p.nz = nz; p.vis = 1;
   }
@@ -168,7 +168,7 @@ export class Puffs {
       for (let k = 0; k < BLAST_EMBERS; k++) {
         const a = c.rng() * Math.PI * 2;
         const v = rnd(c, 20, 50) * PX;
-        // The 2D burst is a ring in the screen plane; here it is a ring on the floor that also leaps up (first guess).
+        // The burst is a ring on the floor that also leaps up (first guess).
         this.ember(m.x * PX, BLAST_Y, m.y * PX, Math.cos(a) * v, BLAST_LEAP0 + rnd(c, 0, BLAST_LEAP), Math.sin(a) * v, rnd(c, 0.6, 1.4));
       }
     }
@@ -180,7 +180,7 @@ export class Puffs {
     const stamp = ++this.stamp;
     for (const tr of torches) {
       if (!inView(c, tr.x, tr.z)) continue;
-      // Keyed by the flame's position (mood.ts): two torches on one floor tile (a corner) keep their own gusts.
+      // Keyed by the flame's position: two torches on one floor tile (a corner) keep their own gusts.
       const key = Math.round(tr.x / PX) * 65536 + Math.round(tr.z / PX);
       let g = this.gusts.get(key);
       if (!g) this.gusts.set(key, (g = { burst: false, left: c.rng() * 1.5, next: 0, soot: 0, stamp }));
@@ -245,7 +245,7 @@ export class Puffs {
       p.z += p.vz * dt;
       if (c.windOn) {
         // A wall-face torch's flame sits on the wall's edge, where the air is 0: sample inside its floor tile.
-        // Only the wall-ward axis is clamped (mood.ts); the sample follows the puff along the wall.
+        // Only the wall-ward axis is clamped; the sample follows the puff along the wall.
         const sx = p.tx >= 0 && p.nx !== 0 ? clamp(p.x, p.tx + 0.01, p.tx + 0.99) : p.x;
         const sz = p.tz >= 0 && p.nz !== 0 ? clamp(p.z, p.tz + 0.01, p.tz + 0.99) : p.z;
         const w = airAt(c, sx, sz);

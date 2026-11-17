@@ -1,9 +1,9 @@
-// The stage of the ?r3d=sunlight page (#307): the 2D `?sunlight` room (game/SunlightDemoScene.ts) in the 3D view, no server, no login.
-// Both use the same fixtures (game/sunlightDemoScript.ts): a tall room with a pillar and one Daylight crack at SUN, a knight in the
+// The stage of the ?r3d=sunlight page (#307): the sunlight demo room, no server, no login.
+// It uses the fixtures of game/sunlightDemoScript.ts: a tall room with a pillar and one Daylight crack at SUN, a knight in the
 // patch and one beside it, the room's torch out, and an open alcove with a lit torch. The air is the dungeon's dust and haze only.
 // The page keeps its own `SunLook` (the shared `sunLook` stays the run's). Keys: 2 second crack, R reroll (new ids, so new looks),
-// V vary on/off. URL: second=1, vary=0 and, with vary=0, shape, patch, slant, from, clouds, often, height, style, rays, glow; the 2D
-// `beam=0` is `shafts=0` here. WASD pans a free camera.
+// V vary on/off. URL: second=1, vary=0 and, with vary=0, shape, patch, slant, from, clouds, often, height, style, rays, glow;
+// `shafts=0` turns the shafts off. WASD pans a free camera.
 import { ANIM, CONST, KIND, LIGHT, LIGHT_KIND, SIDE } from '../generated/defs';
 import { LightField } from '../game/light';
 import { DEFAULT_HAZE } from '../game/sightField';
@@ -32,7 +32,7 @@ import type { Assets, FrameInput, WorldInput } from './view';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
-/** Ids of the Daylight lights: the first crack's, the second's, plus ROLL_STEP per reroll (as the 2D page). */
+/** Ids of the Daylight lights: the first crack's, the second's, plus ROLL_STEP per reroll. */
 const FIRST_ID = 1;
 const SECOND_ID = 3;
 const ROLL_STEP = 1000;
@@ -60,7 +60,7 @@ export function sunlightEnts(): EntState[] {
 }
 
 /**
- * The page's own sun look from the 2D keys: shape=straight|widening, patch, slant, from=left|right, clouds, often=1, height (4..7), style=fan|parallel,
+ * The page's own sun look from the URL keys: shape=straight|widening, patch, slant, from=left|right, clouds, often=1, height (4..7), style=fan|parallel,
  * rays (1..3), glow, vary=0. They apply with vary=0 (a varied sun takes only slant, direction and cloud gap). `gap` is one of OFTEN's arrays.
  */
 export function parseSunLook(search: string): SunLook {
@@ -184,7 +184,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
         : SIGHT_OFF;
       c.timer.lap('sight');
 
-      // The air as the 2D page has it: dust (in the sun's patch too) and haze; no smoke, embers or drips.
+      // The air: dust (in the sun's patch too) and haze; no smoke, embers or drips.
       const p2 = c.params;
       const parts = air.step({
         dt: c.dt, t: c.now, fp, mask: p2.sight ? mask : null, torches, shots: [], movers: [], lights, cracks,

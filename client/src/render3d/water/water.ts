@@ -1,6 +1,5 @@
 // Water in 3D (#345): what the figures do to the water of a dip. Wading, entering, dashing, drowning and the
-// drips that land become ripple sources (for the surface) and cues (for the droplet effects). The 2D originals
-// are `WadeFx`, `sinkStartFx` and `bubbleFx` in game/terrain.ts, in tiles here. Pure: no three.js, no effects.
+// drips that land become ripple sources (for the surface) and cues (for the droplet effects), in tiles. Pure: no three.js, no effects.
 import { CONST } from '../../generated/defs';
 import { WATER_LEVEL, isWater } from '../dips/shape';
 import type { TileMap } from '../../sim/map';
@@ -25,7 +24,7 @@ export interface WaterIn {
   hidden: ReadonlySet<number>;
 }
 
-/** `standing`: in the water last frame; a dash over water counts as in it (2D's WadeFx keeps its tile during a dash), so a dash that ends in water makes no entering. */
+/** `standing`: in the water last frame; a dash over water counts as in it (a figure keeps its tile during a dash), so a dash that ends in water makes no entering. */
 interface FigState { x: number; z: number; standing: boolean; ring: number; spray: number; seen: number }
 interface Drown { id: number; x: number; z: number; left: number; stir: number; bubble: number }
 

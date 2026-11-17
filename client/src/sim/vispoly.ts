@@ -3,7 +3,7 @@
 // into long segments; rays go to every segment end (and just beside it, so a
 // ray that grazes a corner continues behind it) plus at even angles, each
 // stopping at the nearest segment or at the radius, so the outer edge is a
-// circle. Drawn by game/visionmask.ts; the server's visibility stays per tile.
+// circle. The 3D view samples it as its sight mask; the server's visibility stays per tile.
 import { TILE, type Blocker, type TileMap } from './map';
 
 /** A wall edge in px: x0, y0, x1, y1. */

@@ -1,4 +1,4 @@
-// Cover kinds (#330): what a soft ground-cover layer (grass, moss, later snow) looks like. Pure data: no three.js, no Phaser.
+// Cover kinds (#330): what a soft ground-cover layer (grass, moss, later snow) looks like. Pure data: no three.js.
 import { P } from '../../game/vegetation/canvas';
 
 type Rgb = [number, number, number];

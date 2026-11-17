@@ -1,4 +1,4 @@
-// The stage of a real run in the 3D view (#302): the Phaser-free `RunSession` on the host core. The session owns the map, the
+// The stage of a real run in the 3D view (#302): the `RunSession` on the host core. The session owns the map, the
 // prediction and the HUD; `RunView3d` draws; this file joins them to the host's frame, keys and the ground painting.
 import type { ClassId } from '../generated/ClassId';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -189,7 +189,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         if (c.view) upload(c.view);
       }
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
-      session.frame(c.frameMs); // the raw time: the session clamps it itself, as in the 2D view (#312)
+      session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
       const r = window.__r3d;
       if (r) {
         r.hero = runView.hero;

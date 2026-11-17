@@ -1,5 +1,5 @@
 // Where the tall-grass bushels stand (#330): clusters on thick cover, as in the spike, plus the source's spots.
-// Pure and deterministic from the seed (no Math.random). No three.js, no Phaser.
+// Pure and deterministic from the seed (no Math.random). No three.js.
 import type { BushelLook } from './kinds';
 import type { Bushel, BushelSpot } from './source';
 

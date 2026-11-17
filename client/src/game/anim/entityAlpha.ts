@@ -1,4 +1,4 @@
-// How see-through a figure is drawn: pure, so it can be tested without Phaser.
+// How see-through a figure is drawn: pure, so it can be tested.
 import { EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../effectBits';
 

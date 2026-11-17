@@ -83,7 +83,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   let prev = opts.pinned ? t - STEP : t;
   let warmed = !opts.pinned;
 
-  // The field: the wall torches, then a light on every lava tile (ids from 1, as in 2D).
+  // The field: the wall torches, then a light on every lava tile (ids from 1).
   const field = new LightField(map);
   let lightId = 1;
   for (const tc of LIQUIDS_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.ty, on: true });

@@ -1,4 +1,4 @@
-// The opaque bounds of an atlas frame, read from the atlas image: the Phaser-free twin of `frameBounds` (game/status.ts).
+// The opaque bounds of an atlas frame, read from the atlas image: opaque rows and columns, not the frame's box.
 // The pose (game/anim/pose.ts) wants them for the lying layout and the frame's size.
 import type { FrameBounds } from '../game/anim/pose';
 import type { FrameRects } from './worldMesh';

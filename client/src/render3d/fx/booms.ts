@@ -1,5 +1,5 @@
-// The other booms, the chain spark, deaths, raised minions, immune marks and hit sparks in 3D (#308, design §6 "Events"). The 2D
-// originals are in `game/effects.ts` and `game/PhaserRunView.ts`; the trigger, place and life are theirs, the looks are the plan's table.
+// The other booms, the chain spark, deaths, raised minions, immune marks and hit sparks in 3D (#308, design §6 "Events"). The
+// trigger, place and life come from the event; the looks are the plan's table.
 // Every picture is a pure function of (age, seed, the record's numbers). The fireball and the frost nova are in `bursts.ts`.
 // Glow by themselves: rings, sparks, motes, bolts. Lit (they take the light of the room): stone chunks, dust, wood chips, blood and bone.
 import { LIGHT_KIND } from '../../generated/defs';

@@ -1,4 +1,4 @@
-// Effect looks in a snapshot: pure, so the sim-side world code can read them without Phaser.
+// Effect looks in a snapshot: pure, so the sim-side world code can read them.
 import { EFFECT_LOOK } from '../generated/defs';
 
 /**

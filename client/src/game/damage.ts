@@ -36,7 +36,7 @@ export function floatOf(e: Ev): FloatOf | null {
 /** The server puts a hit or heal on a creature's body: this many px (art px on screen) above its foot. */
 export const BODY_RISE = 10;
 
-/** 2D's test for a hit or heal on the own hero: the event's spot (body, `BODY_RISE` px over the foot) within 4 px of the predicted hero. */
+/** The test for a hit or heal on the own hero: the event's spot (body, `BODY_RISE` px over the foot) within 4 px of the predicted hero. */
 export function onOwnHero(ev: { x: number; y: number; p: boolean }, own: { x: number; y: number }): boolean {
   return ev.p && Math.hypot(ev.x - own.x, ev.y + BODY_RISE - own.y) < 4;
 }

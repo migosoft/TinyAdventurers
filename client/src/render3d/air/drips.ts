@@ -1,11 +1,11 @@
-// Water drips (#307): a port of game/mood-drips.ts into world tiles. A drop falls into a pool, leaving two splash pixels and, the frame it
+// Water drips (#307): in world tiles. A drop falls into a pool, leaving two splash pixels and, the frame it
 // lands, a report in `AirParts.landed` for the water's ripple.
 import { DRIP_EVERY, MAX_DRIPS, spawnCount } from '../../game/moodmath';
 import { WATER_LEVEL } from '../dips/shape';
 import { PX } from './airCtx';
 import type { AirParts } from './airParts';
 
-/** Seconds a drop falls, and the drip lasts after landing (as the 2D). */
+/** Seconds a drop falls, and the drip lasts after landing. */
 export const DRIP_FALL = 0.35;
 export const DRIP_RING = 1.0;
 /** Where a drop starts: above the wall tops (first guess), tiles. */
@@ -14,11 +14,11 @@ export const DRIP_TOP = 3;
 export const WATER_Y = WATER_LEVEL + 0.01;
 /** The drop's width in tiles (1 art px); the splash pixels are the same. */
 export const DROP_SIZE = PX;
-/** The drops' and splash pixels' colour (the 2D 0xd8ecff); the renderer tints them with it. */
+/** The drops' and splash pixels' colour (0xd8ecff); the renderer tints them with it. */
 export const DROP_RGB = 0xd8ecff;
 export const DROP_ALPHA = 0.85;
 export const SPLASH_ALPHA = 0.8;
-/** The splash lasts this share of the drip's time after landing, and hops this high (px; 2D). */
+/** The splash lasts this share of the drip's time after landing, and hops this high (px). */
 const SPLASH_SHARE = 0.3;
 const SPLASH_HOP = 3;
 

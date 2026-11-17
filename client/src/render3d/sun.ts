@@ -1,5 +1,5 @@
 // The sky of a woodland run: the sun and moon, ambient light and haze for an hour of the day, and the run's clock.
-// Pure maths (no Phaser, no three): x east, y up, z south.
+// Pure maths (no three): x east, y up, z south.
 import type { SunInfo } from '../generated/SunInfo';
 import type { Cam } from './camera';
 import { raised, type Footprint } from './lights';

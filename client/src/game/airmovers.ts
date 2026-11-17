@@ -1,4 +1,4 @@
-// Turns positions per id into AirMovers (see mood.ts), with velocities from the change since the last frame.
+// Turns positions per id into AirMovers (see airTypes.ts), with velocities from the change since the last frame.
 import { FLAG, KIND } from '../generated/defs';
 import type { RunFrame } from '../run/view';
 import type { AirMover } from './airTypes';

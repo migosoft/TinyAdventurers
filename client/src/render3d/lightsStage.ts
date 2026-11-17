@@ -1,5 +1,5 @@
-// The stage of the ?r3d=lights page (#304): the 2D `?lights` demo (game/LightsDemoScene.ts) in the 3D view, no server, no login.
-// Both play the same script (game/lightsDemoScript.ts): the board, seven torches (one a blue one that switches every 3 s, one
+// The stage of the ?r3d=lights page (#304): the lights demo, no server, no login.
+// It plays the script of game/lightsDemoScript.ts: the board, seven torches (one a blue one that switches every 3 s, one
 // beside the lava pool without a flame figure), a lava pool, a fireball, a frost bolt and an explosion flash. The lights go through
 // the run's own light-list functions (lights.ts): the static field, the moving lights, the choice for the shader's slots, the lava
 // texels. A knight walks a loop past the pillars so its shadow can be seen. V cycles the viewer's darkvision 0 / 50 / 100 %.
@@ -94,14 +94,14 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const LAVA_SEED = 344;
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;
-  // The viewer's sight, as the 2D `?lights` page: `&at=x,y` (tiles) or the script's VIEWER (the middle of room 1's tile); the page's map has no soft tiles.
+  // The viewer's sight: `&at=x,y` (tiles) or the script's VIEWER (the middle of room 1's tile); the page's map has no soft tiles.
   const at = new URLSearchParams(search).get('at')?.split(',').map(Number);
   const viewerAt = at?.length === 2 && at.every(Number.isFinite) ? { x: at[0], z: at[1] } : { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
   const hardView = new SightView(map.w, map.h);
   hardView.compute(map, viewerAt.x * TILE, viewerAt.z * TILE, CONST.FOV_RADIUS, 'hard');
   const mask = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
 
-  // The field: each torch's light on the tile its spot lies in (ids from 1, as in 2D), then a light on every lava tile.
+  // The field: each torch's light on the tile its spot lies in (ids from 1), then a light on every lava tile.
   const field = new LightField(map);
   let lightId = 1;
   let blueId = 0;

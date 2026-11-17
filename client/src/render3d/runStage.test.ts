@@ -234,7 +234,7 @@ describe('the run stage', () => {
     frame(view); // the first frame
     const before = inputs(net).length;
     frame(view, [], 0.05, 80); // an 80 ms frame: the host's dt is clamped to 50 ms
-    expect(inputs(net).length - before).toBe(4); // 80 ms of 1/60 s steps, as the 2D view runs them
+    expect(inputs(net).length - before).toBe(4); // 80 ms of 1/60 s steps
   });
 
   it('walks by the keys: D at yaw 0 sends east', () => {

@@ -1,5 +1,4 @@
-// Status marks round figures in 3D (#308, design §6): the marks of the `effects` bits of every drawn figure, card or model. The 2D original
-// is `game/status.ts` (sizes, colours, rhythms); the Accelerated afterimage is `Figures3d`'s own (dash copies path) and the body tints
+// Status marks round figures in 3D (#308, design §6): the marks of the `effects` bits of every drawn figure, card or model. The Accelerated afterimage is `Figures3d`'s own (dash copies path) and the body tints
 // (Frozen's cool one, Poisoned's green) are the figures'. Every picture is a pure function of the clock and the figure's id. Figures in
 // `hidden` get no marks and add no light. The Shade's veil (`game/shadeHaze.ts`) is stateful (its strands trail the figure): the state
 // is kept per Shade id in `VEILS`, and a dead Shade's veil drifts apart for a second (`FX_KIND.ShadeVeil`).
@@ -20,7 +19,7 @@ const c0: MV3 = [0, 0, 0];
 const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0];
 const spot: [number, number] = [0, 0];
 
-/** Mote colours (2D `status.ts`). */
+/** Mote colours. */
 const BUBBLE = 0x7fd650, GLINT = 0x7fe060, DRAIN = 0x9a8cb8;
 const FLAKE = [0xffffff, 0xd8f0ff], EMBERS = [0xff7a20, 0xffb040];
 const BLACK: V3 = [0, 0, 0], ICE: V3 = [0xa8 / 255, 0xd8 / 255, 0xff / 255];
@@ -156,7 +155,7 @@ const VEILS = new Map<number, VeilMem>();
 /** Forgets every veil (tests). */
 export function clearVeils(): void { VEILS.clear(); }
 
-/** Draws strands in the plane of the screen round the world spot (`wx`, `wz`), whose screen position is (`sx`, `sy`) px. Alpha follows 2D's dither steps: solid, then two see-through ones. */
+/** Draws strands in the plane of the screen round the world spot (`wx`, `wz`), whose screen position is (`sx`, `sy`) px. Alpha follows the dither steps: solid, then two see-through ones. */
 function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: number, wz: number, sx: number, sy: number, alpha: number): void {
   for (const l of lines) {
     const n = l.pts.length - 1, k = alpha * (l.front ? 0.8 : 1);

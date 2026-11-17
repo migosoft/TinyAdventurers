@@ -12,11 +12,11 @@ const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
 const TREE_PCTS = [50, 60, 69, 70, 80, 100, 120, 130], BUSH_PCTS = [75, 87, 88, 100, 124, 125, 150], OLD_PCTS = [80, 100, 120];
 const TREES = ['round', 'wide', 'tall', 'conifer'] as const;
 
-/** The recipes as they were before the recipe got its own module (#334), recorded from the 2D generator at af89609. */
+/** The recipes as they were before the recipe got its own module (#334), recorded from the painters' generator (game/vegetation/*) at af89609. */
 const PINNED = { round: 778112706, wide: 831311708, tall: 2477591384, conifer: 1831981634, bush: 636702037, old: 1918450829 };
 
 describe('plant recipes', () => {
-  it('are what the 2D generator gave before #334', () => {
+  it('are what the generator gave before #334', () => {
     const got: Record<string, number> = {};
     for (const kind of TREES) got[kind] = hash(SEEDS.map((seed) => TREE_PCTS.map((pct) => plantRecipe(kind, seed, pct))));
     got.bush = hash(SEEDS.map((seed) => BUSH_PCTS.map((pct) => plantRecipe('bush', seed, pct))));
@@ -24,8 +24,8 @@ describe('plant recipes', () => {
     expect(got).toEqual(PINNED);
   });
 
-  // Until #310 removes the 2D picture: the painter draws from the same stream, so its recipe must be the module's.
-  it('are the recipes the 2D picture is painted from', () => {
+  // Until #333 removes the painters: a painter draws from the same stream, so its recipe must be the module's.
+  it('are the recipes the pictures are painted from', () => {
     const got: Record<string, number> = {};
     for (const kind of TREES) got[kind] = hash(SEEDS.map((seed) => TREE_PCTS.map((pct) => drawPlant(kind, seed, pct).recipe)));
     got.bush = hash(SEEDS.map((seed) => BUSH_PCTS.map((pct) => drawPlant('bush', seed, pct).recipe)));

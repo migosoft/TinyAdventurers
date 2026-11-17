@@ -1,6 +1,6 @@
 // Cracks (#307): a Daylight light seen as an opening in a ceiling plane. The pure model: `crackOf` turns a static light and the
-// 2D sun look (lookFor, so a crack looks the same in both views) into numbers; `crackMask` is the CPU twin of the shader's mask
-// (the dungeon 3D demo's `sunMask`, extended by the 2D variety: rays, the faint main beam, widening); `selectCracks` picks the
+// sun look (lookFor) into numbers; `crackMask` is the CPU twin of the shader's mask
+// (the dungeon 3D demo's `sunMask`, extended by the variety of rays, the faint main beam and widening); `selectCracks` picks the
 // ones worth sending; `packCracks` lays them out as the uniform arrays of the shader. No three.js, no GPU.
 import { LIGHT_KIND } from '../../generated/defs';
 import type { LightField, StaticLight } from '../../game/light';
@@ -18,7 +18,7 @@ export const CRACK_Z_TILT = -0.2;
 /** The demo's soft rim: smoothstep(RIM_LO, RIM_HI, r) in the mask. */
 export const RIM_LO = 0.62;
 export const RIM_HI = 1.0;
-/** The faint main beam's share of the light (the 2D `MAIN_ALPHA`). */
+/** The faint main beam's share of the light. */
 export const MAIN_ALPHA = 0.45;
 /** The opening's rim middle (r about 0.81) sits at the patch's edge: rx = patch / 2 / this (first guess). */
 const RIM_MID = 0.81;
@@ -59,7 +59,7 @@ const smooth = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** The crack of static light `l` at time `t` (s), with `base` as the 2D sun look (slant, direction, cloud gap). */
+/** The crack of static light `l` at time `t` (s), with `base` as the sun look (slant, direction, cloud gap). */
 export function crackOf(l: StaticLight, base: SunLook, t: number): Crack {
   const look = lookFor(l.id, base);
   const cloud = cloudAt(l.id, t, look);
@@ -92,7 +92,7 @@ export function crackOf(l: StaticLight, base: SunLook, t: number): Crack {
 }
 
 /**
- * The light share of a crack (0..1; where rays overlap up to sqrt(rays), as the 2D rays add) at the world point (x, y, z) in tiles. Follows the sun ray from the point down to the floor, turns
+ * The light share of a crack (0..1; where rays overlap up to sqrt(rays), as the rays add) at the world point (x, y, z) in tiles. Follows the sun ray from the point down to the floor, turns
  * it by `rot` and divides by the ellipse (`rx`, `rz`) scaled by s(y) = mix(1, widen, y / ceil): that is `e`. The rim is the
  * demo's wobbly ellipse; the shade is the faint main beam or the rays' bands (floor edges mixed to the top's by height), glow-scaled
  * by the ray count, times the demo's streak. 0 above the ceiling and below the floor. Keep it branch-light: the shader copies it.

@@ -1,5 +1,5 @@
-// The woodland's critters in the 3D view (#306): bees looping around the flower patches and butterflies wandering over the grass, as
-// in 2D (game/woodland/critters.ts; the same seeds, order and maths from critterMath.ts). Each is a few solid pixel rects drawn as
+// The woodland's critters in the 3D view (#306): bees looping around the flower patches and butterflies wandering over the grass, with
+// the seeds, order and maths of critterMath.ts. Each is a few solid pixel rects drawn as
 // opaque cards, so the sun lights them and their tiny shadows fall through the cards' sun twin. Shown only where the viewer sees.
 import { BEE_COLOURS, BEES_PER_PATCH, beeParams, beePos, butterflyHomes, flowerPatches, flyParams, flyPos, type BeeParams, type Butterfly, type FlyParams, type Pt, type Rect } from '../game/woodland/critterMath';
 import { flowerSpots } from '../game/woodland/ground';

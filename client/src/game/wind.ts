@@ -1,4 +1,4 @@
-// A coarse grid of air velocities that figures, projectiles and blasts stir, for the cosmetic dungeon air (mood.ts). Pure maths.
+// A coarse grid of air velocities that figures, projectiles and blasts stir, for the cosmetic dungeon air (render3d/air). Pure maths.
 
 /** Side of a grid cell in px. */
 export const WIND_CELL = 8;

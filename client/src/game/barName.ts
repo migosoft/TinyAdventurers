@@ -32,7 +32,7 @@ export const BAR_LABEL_HERO = '#7fe08a';
 export const BAR_LABEL_OTHER = '#b8c4d8';
 
 /**
- * The one rule for who gets a bar and how it looks, shared by the 2D and the 3D view: none for shots, hazards, chests, barrels,
+ * The one rule for who gets a bar and how it looks, used by the 3D view: none for shots, hazards, chests, barrels,
  * bosses (they have the boss bar) and the dead; the ogre's is 28 wide, others 12; a hero or a Friendly creature is green unless it
  * is on the enemy side (a charmed hero is red), Neutral grey-blue, the rest red; Neutral and Friendly creatures carry a name.
  */

@@ -1,10 +1,10 @@
-// The stage of the ?r3d=mood page (#307): the 2D `?mood` room (game/MoodDemoScene.ts) in the 3D view, no server, no login.
-// Both play the same script (game/moodDemoScript.ts): warm wall torches, a lava pool, a water pool with drips, a few still figures,
+// The stage of the ?r3d=mood page (#307): the dungeon air's demo room, no server, no login.
+// It plays the script of game/moodDemoScript.ts: warm wall torches, a lava pool, a water pool with drips, a few still figures,
 // a knight who walks a loop round the pillar and dashes every 6 s, an arrow every 3 s and a fireball every 4 s that explodes at the
 // east wall. The knight, the arrow and the fireball stir the air. The air is the run's own (`Air3d`, fed as runView3d.ts feeds it);
 // its switches (dust, smoke, embers, haze, drips, stir, draft) and `respawn` are the params, the panel shows Stir and Draft.
 // The pool's water (#345) is the run's too (`Water3d`, ripples only: the drips that land ring it); `window.__r3d.ripples` is the live count.
-// The 2D `wind=1` overlay is not ported (its key is the woodland's sway here). WASD pans a free camera.
+// WASD pans a free camera.
 import { ANIM, CONST, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { LightField } from '../game/light';
@@ -47,7 +47,7 @@ const ARROW_ID = 101;
 const FIRE_ID = 102;
 /** Ids of the still figures start here. */
 const STILL_ID = 200;
-/** The body radius of the walking knight in px (2D: 6), and how far above its feet its centre is. */
+/** The body radius of the walking knight in px, and how far above its feet its centre is. */
 const KNIGHT_R = 6;
 const KNIGHT_LIFT = 4;
 
@@ -119,7 +119,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
   hardView.compute(map, MOOD_VIEWER.x, MOOD_VIEWER.y, CONST.FOV_RADIUS, 'hard');
   const mask = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
 
-  // The field: the warm torches on their tiles, then a light on every lava tile (ids from 1, as in 2D).
+  // The field: the warm torches on their tiles, then a light on every lava tile (ids from 1).
   const field = new LightField(map);
   let lightId = 1;
   for (const tc of MOOD_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: MOOD_WARM, x: tc.tx, y: tc.ty, on: true });
@@ -142,7 +142,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
   label.textContent = 'mood demo in 3D: torches, lava, a pool, a walking knight, an arrow and a fireball stir the air; WASD pans';
   document.body.appendChild(label);
 
-  /** The movers of this frame: the knight (a figure), the arrow and the fireball (shots with a wake), as the 2D scene feeds them. */
+  /** The movers of this frame: the knight (a figure), the arrow and the fireball (shots with a wake). */
   const moversOf = (dt: number, st: ReturnType<typeof moodScript>): AirMover[] => {
     movers.length = 0;
     tracker.begin(dt);

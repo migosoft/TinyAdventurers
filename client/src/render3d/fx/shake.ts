@@ -1,4 +1,4 @@
-// Camera shake (#308), Phaser's: for `ms` a random screen offset of up to `intensity x w` and `intensity x h` px each frame, seeded from the
+// Camera shake (#308): for `ms` a random screen offset of up to `intensity x w` and `intensity x h` px each frame, seeded from the
 // frame count (so a frozen clock shows the same picture). A new kick replaces a weaker running one only when it is stronger.
 import { hash3 } from './rand';
 

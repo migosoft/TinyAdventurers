@@ -1,7 +1,7 @@
 // Frame choice for figures with their own action frames (the dragon, the
 // demon): lift-off and landing, hovering while airborne, wind-up then strike
 // for attacks, walking, idling. Pack figures keep the idle/run/hit logic in
-// EntityView.
+// the view.
 import { ANIM, CONST, FLAG } from '../../generated/defs';
 import type { FigureAnim, FigureDef } from './defs';
 

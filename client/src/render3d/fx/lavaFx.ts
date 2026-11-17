@@ -1,5 +1,5 @@
 // The sparks and embers of the lava in 3D (#344): a figure entering, a bubble popping, the spray of a dash and the embers of a burning hero.
-// The 2D original is `WadeFx` (game/terrain.ts); speeds are art pixels per second as in waterFx.ts. The cues come from `Lava3d`
+// Speeds are art pixels per second as in waterFx.ts. The cues come from `Lava3d`
 // (`frame.lava`); a cue of an id the sight hides makes no record. Everything glows (`out.tris`), nothing is lit.
 import { LAVA_Y } from '../air/puffs';
 import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';

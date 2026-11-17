@@ -1,6 +1,6 @@
 // The overlay's layout (#311): what is drawn over the 3D canvas and where, as plain items in canvas device px. No DOM. The rules
-// are the 2D view's (`drawBarsAndBeams`, the hero name tag and its `TagEffects`, the key cap); each item hangs from a figure's
-// anchor (render3d/figures.ts) projected to the canvas, offset upward by 2D's art-px amounts times `zoom`.
+// are those of the HP bars and beams, the hero name tag and its effect symbols, and the key cap; each item hangs from a figure's
+// anchor (render3d/figures.ts) projected to the canvas, offset upward by its art-px amount times `zoom`.
 import { EFFECT, FLAG } from '../generated/defs';
 import { isPlayerKind } from '../game/anim/defs';
 import { barOf } from '../game/barName';
@@ -72,7 +72,7 @@ function foot(i: LayoutIn, x: number, z: number, y: number): { px: number; py: n
 const textWidth = (i: LayoutIn, text: string, kind: WorldTextKind): number =>
   i.measure ? i.measure(text, kind) : text.length * WORLD_TEXT[kind].size * EM_PER_CHAR;
 
-/** HP bars and the names over Neutral and Friendly creatures' bars: 2D's `drawBarsAndBeams` rules. */
+/** HP bars and the names over Neutral and Friendly creatures' bars. */
 export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
   for (const e of i.ents.values()) {
     if (i.dark.has(e.id)) continue;
@@ -143,7 +143,7 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
 
 /**
  * Where a hit or heal's float is born. The server places the event on the own hero from the hero's SERVER position `srv` (in the
- * snapshot that carried it); such an event (2D's proximity test against `srv`) is born at the predicted spot instead, shifted by
+ * snapshot that carried it); such an event (the proximity test against `srv`) is born at the predicted spot instead, shifted by
  * predicted minus server position (#281). Any other event keeps its spot.
  */
 export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: number; y: number }, srv: { x: number; y: number } | null): { x: number; y: number } {
@@ -172,7 +172,7 @@ export class Floats {
 
   /**
    * The float of a picture event, if it has one. A hit or heal arrives at the body, `BODY_RISE` px above the foot, which is a
-   * screen-up offset in 2D; here it is the foot, lifted by the same art px on the screen, so it holds at any yaw. `own`: the
+   * screen-up offset; here it is the foot, lifted by the same art px on the screen, so it holds at any yaw. `own`: the
    * predicted hero, `server`: the hero's server position (see `floatSpot`). `dark`: the event is in the dark, so it has no float.
    */
   addPicture(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null, dark = false): void {

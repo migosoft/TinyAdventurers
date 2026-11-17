@@ -1,5 +1,5 @@
 // The cracks in TSL (#307): the shader twin of `crackMask` (cracks.ts), reading the packed uniform arrays. The mask is the dungeon
-// 3D demo's `sunMask` with the 2D variety (rays, the faint main beam, widening); `lightAt` adds it as a light term, Task 5's
+// 3D demo's `sunMask` with the variety of rays, the faint main beam and widening; `lightAt` adds it as a light term, Task 5's
 // shaft march reads it again. Only If/Loop control flow and no texture read, so it may sit inside any branch.
 import { Vector4 } from 'three/webgpu';
 import { Break, Fn, If, Loop, atan, cos, float, int, length, max, mix, sin, smoothstep, uniform, uniformArray, vec2 } from 'three/tsl';

@@ -21,7 +21,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('RulesLog without Phaser', () => {
+describe('RulesLog', () => {
   it('L turns the log on and asks the server', () => {
     const { net, log } = make();
     expect(log.on).toBe(false);

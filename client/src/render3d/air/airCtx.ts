@@ -1,15 +1,15 @@
-// What the parts of the air simulation share (#307): the map, the rng, the wind and the sight, in world tiles. The wind keeps the
-// 2D px units (it is shared with mood.ts); `airAt` converts to tiles/s.
+// What the parts of the air simulation share (#307): the map, the rng, the wind and the sight, in world tiles. The wind keeps
+// px units (game/wind.ts); `airAt` converts to tiles/s.
 import type { TileMap } from '../../sim/map';
 import type { Wind } from '../../game/wind';
 import type { Footprint } from '../lights';
 import { hiddenAt, type SightMask } from '../sightmask';
 
-/** One art pixel in tiles; 2D px values (positions, px/s speeds) convert with this. */
+/** One art pixel in tiles; px values (positions, px/s speeds) convert with this. */
 export const PX = 1 / 16;
 /** Tiles beyond the view in which lava, water and torches still count. */
 export const MARGIN = 1;
-/** Air faster than this (tiles/s; 2D: 8 px/s) stirs a dust cloud apart; the ambient draft (at most DRAFT_MAX) never does. */
+/** Air faster than this (tiles/s; 8 px/s) stirs a dust cloud apart; the ambient draft (at most DRAFT_MAX) never does. */
 export const STIR_SPEED = 8 * PX;
 /** Shares of the sampled air that smoke and embers take on. */
 export const SMOKE_WIND = 0.6;

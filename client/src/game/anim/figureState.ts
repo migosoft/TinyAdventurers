@@ -1,4 +1,4 @@
-// Per-figure bookkeeping shared by the 2D and the 3D view, Phaser-free: which state a figure is drawn from (predicted
+// Per-figure bookkeeping pure: which state a figure is drawn from (predicted
 // for the own hero, interpolated otherwise), the fall into a chasm or the drowning of a hero lost to the terrain, and
 // the vanish and reappear marks of Invisible. The views keep the pictures (splashes, bubbles, ghost images).
 import { ANIM, CONST, EFFECT, SIDE, TILE_ID } from '../../generated/defs';
@@ -28,7 +28,7 @@ export class FigureStates {
 
   constructor(private readonly map: TileMap) {}
 
-  /** The ViewState a figure is drawn from this frame: predicted for the own hero (unless charmed), interpolated otherwise; sink, fall and drown applied. `started` is true on the frame a predicted sink begins (2D plays sinkStartFx). */
+  /** The ViewState a figure is drawn from this frame: predicted for the own hero (unless charmed), interpolated otherwise; sink, fall and drown applied. `started` is true on the frame a predicted sink begins (the view plays its start effect). */
   stateOf(e: EntState, f: { you: number; own: OwnHero }, nowS: number): { s: ViewState; predicted: boolean; started: boolean; drowning: boolean } {
     // The own figure is drawn from prediction, except while charmed: then it is the server's, interpolated hero.
     const predicted = e.id === f.you && f.own.alive && !f.own.charmed;
@@ -57,7 +57,7 @@ export class FigureStates {
     return { s, predicted, started, drowning: false };
   }
 
-  /** Whether a figure is falling or drowning (the 2D view plays its start effect when a Sink event begins one). */
+  /** Whether a figure is falling or drowning (the view plays its start effect when a Sink event begins one). */
   sinking(id: number): boolean {
     return this.sinks.has(id);
   }
@@ -86,7 +86,7 @@ export class FigureStates {
     }
   }
 
-  /** The own figure when it is missing from `ents` but alive (2D's fallback entity). */
+  /** The own figure when it is missing from `ents` but alive (a fallback entity). */
   ownEntity(f: { you: number; own: OwnHero }, myKind: number): EntState {
     return { id: f.you, kind: myKind, x: f.own.x, y: f.own.y, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: f.own.effects, side: SIDE.Friendly, entangled: f.own.entangled };
   }

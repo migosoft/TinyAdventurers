@@ -1,4 +1,4 @@
-// The nymph's cove cover source (#330): the grass carpet of the 2D cove (covemath.ts) as a cover source, so the 3D view grows
+// The nymph's cove cover source (#330): the grass carpet of the cove (covemath.ts) as a cover source, so the 3D view grows
 // its cover over the carpet's shape and keeps its colours. The tufts and ferns come in as bushel spots.
 import type { CoveInfo } from '../../generated/CoveInfo';
 import { TILE_ID } from '../../generated/defs';
@@ -42,7 +42,7 @@ export function coveSource(map: TileMap, c: CoveInfo, spots: BushelSpot[]): Cove
         if (wy < 0 || wy >= h) continue;
         for (let wx = x0; wx < x1; wx++) {
           const a = ((y + MARGIN) * art.w + (wx - origin.x + MARGIN)) * 4;
-          if (art.data[a + 3] !== 255) continue; // the 2D stone shadows are partly transparent: the 3D view casts its own
+          if (art.data[a + 3] !== 255) continue; // the carpet's stone shadows are partly transparent: the 3D view casts its own
           const o = (wy * w + wx) * 4;
           colour[o] = art.data[a]; colour[o + 1] = art.data[a + 1]; colour[o + 2] = art.data[a + 2];
         }

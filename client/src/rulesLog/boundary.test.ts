@@ -1,5 +1,5 @@
 // Pins the client hooks of the rules log (the table in the plan): outside
-// `src/rulesLog/` and `src/generated/`, only GameScene.ts, PhaserRunView.ts, render3d/runStage.ts and wire.ts may name the module.
+// `src/rulesLog/` and `src/generated/`, only render3d/runStage.ts and wire.ts may name the module.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';

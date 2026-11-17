@@ -1,5 +1,4 @@
-// The pure parts of the pixies (#202, #306): each one's path around the cove's tree, its wing flip and its colours. No Phaser,
-// so the 2D view (pixies.ts) and the 3D view share them. The path is pure and seeded.
+// The pure parts of the pixies (#202, #306): each one's path around the cove's tree, its wing flip and its colours. The path is pure and seeded.
 
 /** Half-axes of the ellipse a pixie wanders in (px). */
 export const PIXIE_RX = 56;

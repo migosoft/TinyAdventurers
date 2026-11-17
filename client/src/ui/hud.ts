@@ -20,7 +20,7 @@ import { CharmView, charmLeft } from './charmView';
 
 export interface FrameStats {
   fps: number;
-  /** The whole frame: Phaser's step from `PRE_STEP` to `POST_RENDER`, ms. */
+  /** The whole frame, from the start of its step to the end of its render, ms. */
   wholeMs: number;
   /** Its render part, ms. */
   renderMs: number;
@@ -36,7 +36,7 @@ export interface FrameStats {
   canvas: { w: number; h: number; cssZoom: number };
   /** Extra lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
-  /** The 3D view's renderer (#314): printed after the canvas line; absent in 2D. */
+  /** The 3D view's renderer (#314): printed after the canvas line. */
   renderer?: RendererStats;
   rtt: number;
   jitter: number;
@@ -113,7 +113,7 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F9', 'immortal on/off'],
 ];
 
-/** The debug paths drawn in the dungeon and their colours (`PhaserRunView.drawPathLine`). */
+/** The debug paths and the colours the badge lists them in. */
 const DEBUG_PATHS: [colour: string, label: string][] = [
   ['#ffe040', 'path to the boss'],
   ['#40a0ff', 'path to the ogre'],
@@ -216,7 +216,7 @@ export class Hud {
     host.append(this.root);
   }
 
-  /** The 3D view adds its camera-turn keys to the help line (null removes them); the 2D view never calls it. */
+  /** The 3D view adds its camera-turn keys to the help line (null removes them). */
   setTurnHelp(keys: [z: string, x: string, c: string] | null): void {
     this.helpEl.innerHTML = helpHtml(keys);
   }

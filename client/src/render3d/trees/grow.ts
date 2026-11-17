@@ -1,7 +1,7 @@
 // The skeletons of the trees. A leafy tree (round, wide, tall): the recipe's trunk (recipe.ts) with a root flare, limbs that fork twice in
 // space, a leader, and a crown lobe at the branch ends. The willow: heavy limbs under curtains of hanging leaf tufts. A conifer or
 // a bush: the recipe's trunk, twigs, lobes and skirts placed in depth. Pure geometry in plant-local tiles; no mesh here.
-// "The picture" below is the recipe's flat frame (px, y down): the one the 2D view's plant pictures were painted in.
+// "The picture" below is the recipe's flat frame (px, y down): the one the plant painters (game/vegetation/*) paint in.
 import { type Recipe, leafyRecipe, plantRecipe, rng } from './recipe';
 import { SWAY } from '../wind';
 import { RAMP, type Lobe3, type P3, type SkirtOpts, type TuftPatch } from './mesh';

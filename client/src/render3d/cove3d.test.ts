@@ -213,7 +213,7 @@ describe('Cove3d', () => {
     }
   });
 
-  it('leaves the 2D pixie path alone: the shared ellipse still holds a default Pixies3d', () => {
+  it('leaves the default pixie path alone: the ellipse still holds a default Pixies3d', () => {
     const p = new Pixies3d({ x: 160, y: 100 }, 114, 3, 1, 50);
     for (let t = 0; t < 60; t += 1.7) for (const l of p.lights(t)) {
       expect(Math.abs(l.x - 10)).toBeLessThanOrEqual(PIXIE_RX / 16 + 1e-6);

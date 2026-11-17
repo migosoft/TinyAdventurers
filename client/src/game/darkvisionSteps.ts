@@ -1,4 +1,4 @@
-// The debug darkvision steps, apart from lightview.ts so the run session can use them without reaching Phaser.
+// The debug darkvision steps, kept apart from the view code so the run session can use them.
 
 /** The debug darkvision steps (F4, and V in ?lights): the next one above `current`, after 1 back to 0. */
 export function nextDarkvision(current: number): number {

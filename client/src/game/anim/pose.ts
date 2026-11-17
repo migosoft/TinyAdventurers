@@ -1,5 +1,5 @@
-// The per-frame look of one figure, as data: pure and Phaser-free, so the 2D
-// view (EntityView) and the 3D view draw from the same decisions. It owns the
+// The per-frame look of one figure, as data: pure, so the 3D view and the
+// tests read the same decisions. It owns the
 // rules (facing, frame choice, tints, lying, sinking, weapon pose); the random
 // particles, sparks and swooshes stay in the views.
 import { ANIM, EFFECT, FLAG } from '../../generated/defs';
@@ -43,7 +43,7 @@ export interface ViewState {
 }
 
 export interface PoseInput extends ViewState {
-  /** The aim as it appears on screen (rad, y down). 2D: = aim. 3D: from the yaw. Facing and weapon angles use it; steps along the aim use `aim`. */
+  /** The aim as it appears on screen (rad, y down). From the yaw. Facing and weapon angles use it; steps along the aim use `aim`. */
   screenAim: number;
 }
 
@@ -105,7 +105,7 @@ export interface Pose {
   scale: number;
   /** In the card's plane, frame px, y down: shiver, cast bob, lift, attack tilt (deg), dash stretch. */
   body: { x: number; y: number; angle: number; sx: number; sy: number };
-  /** World px along the aim: the melee step and the lunge (2D adds it to body x / y). */
+  /** World px along the aim: the melee step and the lunge. */
   aimStep: { x: number; y: number };
   /** Px cut from the bottom and sunk. */
   sink: number;
@@ -284,7 +284,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
 
   const appearLeft = Math.max(0, m.appearLeft - dt);
   m.appearLeft = appearLeft;
-  // A pulsing figure (the Ghost) blinks during its ambush wind-up (PhaserRunView skips the fade-in then).
+  // A pulsing figure (the Ghost) blinks during its ambush wind-up (its fade-in is skipped then).
   const ghost = d.pulse ? { t: m.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
   const appear = appearFactor(appearLeft, VANISH_SECS);
   const rootAlpha = (silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost, d.incorporealAlpha)) * appear;

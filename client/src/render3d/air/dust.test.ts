@@ -61,7 +61,7 @@ describe('dust', () => {
     let parts = run(air, 4, (t) => make(t));
     const before = parts.specks.count;
     expect(air.counts.stirred).toBe(0);
-    // A hero runs east through the first speck, in px as the 2D movers.
+    // A hero runs east through the first speck, in px, as the movers are.
     const [sx, , sz] = at(parts, 0);
     let t = 4;
     let peak = 0;

@@ -9,10 +9,10 @@ import { pushQuad, KIND } from './worldMesh';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
-/** The 2D force field's colours (`game/forcefield.ts`): the fill 0x3a8cff and the rims and bands 0x9fd8ff. */
+/** The force field's colours: the fill 0x3a8cff and the rims and bands 0x9fd8ff. */
 export const FIELD_FILL: [number, number, number] = [0x3a / 255, 0x8c / 255, 1];
 export const FIELD_EDGE: [number, number, number] = [0x9f / 255, 0xd8 / 255, 1];
-/** Seconds the field takes to rise from the floor (2D `FADE_IN`). */
+/** Seconds the field takes to rise from the floor. */
 export const FIELD_FADE_IN = 0.5;
 /** The age of a field that was there when the run began: long past its fade-in. */
 export const FIELD_OLD = 10;
@@ -32,7 +32,7 @@ export interface Ops<T> {
   eps: T;
 }
 
-/** A layer (colour `c`, alpha `b`) lying over (`rgb`, alpha `a`), as 2D draws the bands and rims on the fill: returns [rgb, alpha]. */
+/** A layer (colour `c`, alpha `b`) lying over (`rgb`, alpha `a`), as the bands and rims lie on the fill: returns [rgb, alpha]. */
 export function overLayer<T>(o: Ops<T>, a: T, rgb: T, c: T, b: T): [T, T] {
   const a2 = o.add(b, o.mul(a, o.sub(o.one, b)));
   return [o.mix(rgb, c, o.div(b, o.max(a2, o.eps))), a2];
@@ -51,7 +51,7 @@ export function fieldUniforms(): FieldUniforms {
 }
 
 /**
- * The force field's material (the 2D look, `forcefield.ts`): a blue fill pulsing in strength that rises from the floor as it appears,
+ * The force field's material: a blue fill pulsing in strength that rises from the floor as it appears,
  * three light bands drifting up the face and bright rims at the floor and the top. Unlit and translucent, ending with the sight step
  * at its own point (#305). Per-vertex `edge` (1 on a rim band) and `y01` (0 at the floor, 1 at the top).
  */

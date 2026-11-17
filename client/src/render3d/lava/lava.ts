@@ -1,6 +1,6 @@
 // Lava in 3D (#344): what the pools and the figures do to each other. A pool in view and seen bubbles now and then; a figure
 // that stands in lava opens a ring in the surface, enters with a splash, sprays when it dashes over and burns when it is a hero.
-// The 2D originals are `WadeFx` in game/terrain.ts and the mockup's bubbles, in tiles here. Pure: no three.js, no effects.
+// Sizes and distances are in tiles. Pure: no three.js, no effects.
 import { isPlayerKind } from '../../game/anim/defs';
 import type { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';

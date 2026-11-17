@@ -1,5 +1,5 @@
-// Every figure and every shot of a real run as cards (#303): the Phaser-free twin of EntityView and the projectile part of
-// PhaserRunView. The look of a figure is `figurePose` (game/anim/pose.ts), shared with the 2D view; this file turns the pose
+// Every figure and every shot of a real run as cards (#303): the figures with their
+// weapons, tints and effects, and the shots. The look of a figure is `figurePose` (game/anim/pose.ts); this file turns the pose
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
@@ -38,13 +38,13 @@ const BITE_AHEAD = 18.5;
 const BITE_HELD = 0.25;
 const BITE_SECS = 0.3;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
-/** The 2D ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
+/** The ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
 const SHADOW_DEPTH = 0.45;
 const SHADOW_ALPHA = 0.45;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
 const AFTER_ALPHA = 0.5;
-/** An Accelerated figure leaves a golden copy every 0.08 s; it lives 0.2 s and starts at 0.35 (2D `status.ts`). */
+/** An Accelerated figure leaves a golden copy every 0.08 s; it lives 0.2 s and starts at 0.35. */
 const ACCEL_EVERY = 0.08;
 const ACCEL_SECS = 0.2;
 const ACCEL_ALPHA = 0.35;
@@ -58,7 +58,7 @@ const TORCH_OFF = 0.02;
 /** The flame card's centre height (tiles) and its glow's lift above that, size and colour (the demo's torch). */
 export const TORCH_MID = 1.0;
 const TORCH_GLOW = { lift: 0.25, size: 1.5, rgb: [0.5, 0.3, 0.14] as [number, number, number] };
-/** The 2D chest, barrel and mimic shadow: an ellipse 13 x 5 px, strength 0.4. */
+/** The chest, barrel and mimic shadow: an ellipse 13 x 5 px, strength 0.4. */
 const OBJ_SHADOW_RX = 6.5;
 const OBJ_SHADOW_RY = 2.5;
 const OBJ_SHADOW_ALPHA = 0.4;
@@ -102,11 +102,11 @@ export interface FigureAnchor {
   x: number; z: number;
   /** The drawn foot's height in tiles: the bed of a dip under it, a faller's height, 0 in the air (#324). */
   y: number;
-  /** 2D's view `height`: body frame height x scale (EntityView), CHEST_HEIGHT for chests, barrels, mimics. */
+  /** The figure's height: body frame height x scale, CHEST_HEIGHT for chests, barrels, mimics. */
   height: number;
-  /** 2D's name-tag offset: (footY ?? frame h) x scale + 3. */
+  /** The name-tag offset: (footY ?? frame h) x scale + 3. */
   tag: number;
-  /** 2D's StatusAnchor `head` and `cx`: the opaque body's top, and its opaque centre from the foot (flip applied). */
+  /** The status anchor's `head` and `cx`: the opaque body's top, and its opaque centre from the foot (flip applied). */
   head: number; cx: number;
   alpha: number;
   /** False while falling or drowning. */
@@ -175,7 +175,7 @@ interface Coin { x: number; z: number; /** The bed under its spot (tiles): where
 interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean } }
 
 /**
- * The overlay anchor of a standing figure, 2D's numbers (EntityView): from the opaque bounds `fb` of the frame it shows, its foot row and the
+ * The overlay anchor of a standing figure: from the opaque bounds `fb` of the frame it shows, its foot row and the
  * game's figure scale `ds`. The card path and the model path both use it, so a model's bar and name sit where its card's would.
  */
 function standingAnchor(fb: FrameBounds, footY: number, ds: number): { height: number; tag: number; head: number } {
@@ -193,7 +193,7 @@ function lookOf(t: Tint, grey: boolean): { tint: [number, number, number]; mode:
 /** Not a figure: its own look is the object's (torches, chests, barrels, mimics, hazards) or the shot's. */
 const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Chest || k === KIND.Barrel || k === KIND.Mimic || isHazardKind(k) || isProjectileKind(k));
 
-/** The frozen figure's cool tint (multiplies), as in the 2D view. */
+/** The frozen figure's cool tint (multiplies). */
 const FROZEN_TINT = 0xa8d8ff;
 
 /**
@@ -309,7 +309,7 @@ export class Figures3d {
     if (ev.t !== 'Died') return false;
     if (lost === 'lost') return true;
     if (ev.kind === KIND.Shade) {
-      // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart (2D `Effects.shadeDeath`).
+      // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart.
       const fig = this.figs.get(ev.id);
       if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, alpha: i.alpha * 0.75 }))), secs: SHADE_FADE, left: SHADE_FADE });
       else if (fig?.body) this.images.push({ card: { ...fig.body }, alpha0: 0.75, secs: SHADE_FADE, left: SHADE_FADE });
@@ -344,7 +344,7 @@ export class Figures3d {
     const seen = new Set<number>();
     this.anchors.clear();
     let drawn = 0;
-    // The skulls first: the floor decals draw in buffer order without depth writes, so a figure sleeping on a skull's spot covers it (2D: the skull is under every figure).
+    // The skulls first: the floor decals draw in buffer order without depth writes, so a figure sleeping on a skull's spot covers it.
     this.drawSkulls(cam, out);
     for (const e of f.ents.values()) {
       seen.add(e.id);
@@ -392,7 +392,7 @@ export class Figures3d {
     let skullPose: Pose3d | null = null;
     for (let si = 0; si < this.skulls.length; si++) {
       const sk = this.skulls[si];
-      // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
+      // The token sits 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
       // A model figure leaves the skull model instead of the decal (the same pose for all: turned to face the camera, i.e. along the screen's down on the ground).
@@ -451,7 +451,7 @@ export class Figures3d {
     return !this.dark.has(id);
   }
 
-  /** The 2D body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
+  /** The body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
   private bodyFoot(x: number, z: number, cam: Cam): [number, number] {
     return [x - Math.sin(cam.yaw) / TILE, z + Math.cos(cam.yaw) / TILE];
   }
@@ -514,7 +514,7 @@ export class Figures3d {
     const dist = f.own.alive ? Math.hypot(e.x - f.own.x, e.y - f.own.y) : Infinity;
     const s: MimicState = m.tracker.step({ x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim, flags: e.flags }, f.dt, dist);
     const p = mimicPose(s, f.now, m.mem);
-    // 2D's reveal cue: a red "!" 18 px above the chest (the burst is the particles' business, #308).
+    // The reveal cue: a red "!" 18 px above the chest (the burst is the particles' business, #308).
     if (p.wakeCue && !f.dark.has(e.id)) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
     const x = e.x / TILE;
     const z = e.y / TILE;
@@ -530,7 +530,7 @@ export class Figures3d {
     this.opener(e, false, x, z, bed + CHEST_HEIGHT / 2 / TILE, 'mimic', out);
   }
 
-  /** A chest, a barrel or a mimic: 2D's `CHEST_HEIGHT` for the bar and the use hint. */
+  /** A chest, a barrel or a mimic: `CHEST_HEIGHT` for the bar and the use hint. */
   private objectAnchor(e: EntState, x: number, z: number, y: number, descending = false): void {
     this.anchors.set(e.id, { x, z, y, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, descending, effects: e.effects });
   }
@@ -548,7 +548,7 @@ export class Figures3d {
       const t = now - c.born;
       if (t >= c.life) continue;
       keep.push(c);
-      // 2D starts a coin 6 px above the spot; right is along the camera's right on the ground, up is height.
+      // A coin starts 6 px above the spot; right is along the camera's right on the ground, up is height.
       const right = (c.vx * t) / TILE;
       const up = (6 + c.vy * t - 0.5 * COIN_GRAVITY * t * t) / TILE;
       // The card's middle sits on the foot point (footY 0.5): never lower than half its height, so a landed coin rests on the floor.
@@ -904,9 +904,9 @@ export class Figures3d {
         scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark, base: this.ground(x, z, 0.3),
       }, this.frames, cam);
     } else {
-      // The 2D body sits 1 px below the shadow (body.y 1). A card lowered into the floor would lose its foot row, so the
+      // The body sits 1 px below the shadow. A card lowered into the floor would lose its foot row, so the
       // foot moves 1 / 16 tile toward the camera on the ground instead (screen down is (-sin yaw, cos yaw)).
-      // `aimStep` is 2D's screen step: the melee step is (3, 1.5) along the aim (y halved for the foreshortening) but the
+      // `aimStep` is the screen step: the melee step is (3, 1.5) along the aim (y halved for the foreshortening) but the
       // wolf's lunge is not, so the factor is not uniform and it is applied here as it is.
       const body: Card = {
         frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: this.lifted(y), flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
@@ -932,7 +932,7 @@ export class Figures3d {
 
     const wp = pose.weapon;
     if (wp && !pose.lie) {
-      // The weapon is a child of the figure in 2D: its offset is in figure px (scaled by the figure), not moved by the body's step.
+      // The weapon is a child of the figure: its offset is in figure px (scaled by the figure), not moved by the body's step.
       const wsc = wp.scale * sc;
       const wt = pose.weaponTint !== null ? rgbOf(pose.weaponTint) : ([1, 1, 1] as [number, number, number]);
       if (iced) { const t = rgbOf(FROZEN_TINT); wt[0] *= t[0]; wt[1] *= t[1]; wt[2] *= t[2]; }
@@ -949,7 +949,7 @@ export class Figures3d {
       pushShadow(out.shadows, cam, gf.x, gf.z, rx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
-    // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.
+    // The overlay anchor: the entity's own spot (the predicted one for the own hero): the unscaled-by-pose `d.scale`.
     const ds = d.scale ?? 1;
     const mid = pose.left ? fb.w - 1 - (fb.l + fb.r) / 2 : (fb.l + fb.r) / 2;
     const sa = standingAnchor(fb, pose.footY, ds);

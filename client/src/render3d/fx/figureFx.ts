@@ -1,7 +1,6 @@
 // The effects tied to the figures of a frame in 3D (#308, design §6 "Figures"): the swoosh and the fangs (cards and models alike), the
 // channel's swirl, the release sparks, the lich's nova wind-up, the slam telegraph on the floor, the dragon's breath and bite, the stone
-// gaze, the lich's drain and the mimic's wake and landing. The 2D originals are `EntityView.ts` (`weaponFx`, `breathFx`, `slamFx`),
-// `PhaserRunView.ts` (`drawGaze`, the drain beams) and `mimic.ts`; the trigger, place and timing are theirs. Each picture is a pure
+// gaze, the lich's drain and the mimic's wake and landing. The trigger, place and timing come from the figure's state. Each picture is a pure
 // function of the figure's `animT` (and the clock for pulses); the one-shot sparks are records, started once per action.
 import { ANIM, EFFECT, KIND } from '../../generated/defs';
 import { has } from '../../game/effectBits';
@@ -207,7 +206,7 @@ function drain(out: FxOut, frame: FxFrame): void {
     const g = frame.figs[i], dd = (g.x - lx) ** 2 + (g.z - lz) ** 2;
     if (g.kind === KIND.Lich && dd < best) {
       best = dd;
-      // 3D hides the drain beams while the lich is hidden: the sight rule wins over 2D's drawing above the fog
+      // 3D hides the drain beams while the lich is hidden: the sight rule wins
       if (frame.hidden.has(g.id)) return;
       lx = g.x; lz = g.z;
     }
@@ -241,7 +240,7 @@ const WAKE: BurstSpec = { x: 0, y: 0, z: 0, n: 10, speed: [1.2, 2.8], up: [0.1, 
 const LAND_N = 5, RIM_N = 12;
 const LAND: BurstSpec = { x: 0, y: 0, z: 0, n: LAND_N, speed: [0.6, 1.25], up: [0, 0.5], life: [0.15, 0.3], g: 1, drag: 0, size: PX * 3, colours: [0x9a8a7a], streak: false };
 
-/** The dust where a figure goes over a chasm's edge, made larger and lighter than 2D's `sinkStartFx` (6 motes, 2 px) so it reads in dim light: 12 motes of 4 px (the burst has no shrink), two stone colours, up to 40 px/s, thrown 0.5 to 1.4 rad (up into the light above the rim), from 4 px above the rim spot, up to 0.6 s. Lit like all dust: a clearly lighter stone albedo is what makes it read. */
+/** The dust where a figure goes over a chasm's edge, made large and light so it reads in dim light: 12 motes of 4 px (the burst has no shrink), two stone colours, up to 40 px/s, thrown 0.5 to 1.4 rad (up into the light above the rim), from 4 px above the rim spot, up to 0.6 s. Lit like all dust: a clearly lighter stone albedo is what makes it read. */
 const RIM: BurstSpec = { x: 0, y: 0, z: 0, n: RIM_N, speed: [0.8, 40 * PX], up: [0.5, 1.4], life: [0.35, 0.6], g: 1, drag: 0, size: PX * 4, colours: [0xd9d0c4, 0xb8a898], streak: false };
 const RIM_Y = 4 * PX;
 

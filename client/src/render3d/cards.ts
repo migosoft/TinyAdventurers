@@ -199,7 +199,7 @@ function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number,
 }
 
 /**
- * A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows (2D: 0.45 at the centre).
+ * A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows.
  * `rx` runs along screen right on the ground, `rz` along screen down, so the ellipse keeps its look at any yaw.
  * Callers pass the snapped foot (`snapGround`), like the cards, so the shadow stays under the feet.
  */

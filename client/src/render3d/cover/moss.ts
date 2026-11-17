@@ -1,5 +1,5 @@
 // The moss source (#330): where moss grows in the dungeon's rooms, decided on the client from the run's tiles alone
-// (the same for every player of a party, different per run). Pure data: no three.js, no Phaser.
+// (the same for every player of a party, different per run). Pure data: no three.js.
 import { TILE_ID } from '../../generated/defs';
 import type { CoveInfo } from '../../generated/CoveInfo';
 import { noise, type Rgb } from '../../game/covemath';

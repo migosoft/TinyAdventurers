@@ -1,5 +1,5 @@
 // The admin page (/admin): login, dashboard, players, player details and the
-// audit log. Plain DOM, no Phaser. Views are chosen by the URL hash:
+// audit log. Plain DOM. Views are chosen by the URL hash:
 // #/ (dashboard), #/players, #/players/<id>, #/audit.
 import type { AdminStats } from '../generated/AdminStats';
 import type { PlayerDetail } from '../generated/PlayerDetail';

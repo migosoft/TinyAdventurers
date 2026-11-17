@@ -1,4 +1,4 @@
-// The 3D view of a run (#302): a `RunView` for the Phaser-free session. The camera follows the own hero (or the spectated
+// The 3D view of a run (#302): a `RunView` for the run session. The camera follows the own hero (or the spectated
 // teammate) or flies free, the figures and shots are cards (`Figures3d`), and the lights come from the page's parameters. The three.js
 // `View` comes and goes (a lost device), so it is attached and detached from outside.
 import type { FrameBounds } from '../game/anim/pose';
@@ -234,7 +234,7 @@ export class RunView3d implements RunView {
   }
 
   /**
-   * The followed figure's sight (the own hero's, or the spectated teammate's: `f.camera`), as 2D's `LightView` computes it:
+   * The followed figure's sight (the own hero's, or the spectated teammate's: `f.camera`), computed from the view's blockers:
    * `hard` blockers, recomputed only when the position, the vision or the map changes.
    */
   private sightFor(f: RunFrame): SightView {
@@ -611,10 +611,10 @@ export class RunView3d implements RunView {
   }
 
   event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null, dark = false): void {
-    // A figure lost to a chasm or the deep leaves nothing behind: no burst, no light, no shake (as 2D).
+    // A figure lost to a chasm or the deep leaves nothing behind: no burst, no light, no shake.
     if (this.figures.event(ev)) return;
     this.fx.event(ev, this.clockNow, dark);
-    // The camera shakes as the 2D view's does: a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
+    // The camera shakes on a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
     else if (ev.t === 'Boom' && (ev.k === 0 || ev.k === 4 || ev.k === 7)) this.shake.kick(120, 0.004);
     else if (ev.t === 'Boom' && (ev.k === 6 || ev.k === 10)) this.shake.kick(200, 0.007);

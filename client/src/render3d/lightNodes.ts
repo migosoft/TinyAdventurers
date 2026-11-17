@@ -374,7 +374,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
 
   const shoulder = (col: N): N => mix(col, float(1).sub(exp(col.mul(-1.6))), smoothstep(0.55, 1.1, col));
 
-  // The darkvision rule: where only darkvision shows a surface it is grey at the 2D minimum; real light brings its colour back.
+  // The darkvision rule: where only darkvision shows a surface it is grey at the minimum the darkvision gives; real light brings its colour back.
   const finish = (albedo: N, lit: { rgb: N; dv: N }, greyAlbedo: N = albedo): N => {
     const l = max(lit.rgb.r, max(lit.rgb.g, lit.rgb.b));
     const g = lit.dv.mul(clamp(float(1).sub(l.div(1 - DV_DARK)), 0, 1));

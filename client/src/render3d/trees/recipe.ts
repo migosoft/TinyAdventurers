@@ -1,8 +1,8 @@
 // The plant recipe (#334): what a leafy tree, a conifer or a bush is made of, from (kind, seed, scale) alone. No canvas, no painting:
-// the 3D trees (grow.ts) read it, and the 2D generator (game/vegetation/*, until #310 removes it) paints from the same functions.
+// the 3D trees (grow.ts) read it, and the painters (game/vegetation/*, kept until #333) paint from the same functions.
 // Self-contained: it imports nothing.
 //
-// A plant's numbers come from one random stream per seed. The 2D painter draws from that stream between the recipe's parts (bark
+// A plant's numbers come from one random stream per seed. The painters draw from that stream between the recipe's parts (bark
 // lines, shadow lines, a noise value for every leaf pixel), so the recipe steps over those draws (`Rng.skip`) with the counts the
 // painter uses; both take the counts from the helpers here (`limbSteps`, `barkLineCount`, `skirtColumns`). Every tree therefore keeps
 // the shape it had when the picture and the recipe were made together; recipe.test.ts pins that.
@@ -16,7 +16,7 @@ export function rng(seed: number): Rng {
   return next;
 }
 
-/** A stroke point of the recipe: canvas px (before the 2D picture's crop), y down, and half-width. */
+/** A stroke point of the recipe: canvas px (before the picture's crop), y down, and half-width. */
 export interface RecipePt { x: number; y: number; w: number }
 /** A stroke: discs of half-width `w` along a path. */
 export type Seg = RecipePt[];
@@ -94,7 +94,7 @@ export function rootPaths(r: () => number, cx: number, footY: number, s: number,
 export type LeafyShape = 'round' | 'wide' | 'tall';
 /** `old`: an older tree: trunk x1.4, bend x1.9, four longer roots (x1.25), and the trunk forks 3 units lower. */
 export interface LeafyOpts { seed: number; scale: number; shape: LeafyShape; old?: boolean }
-/** Per shape: the stretch, the trunk factor, the roots, the bend and the crown's lobe layout `[dx, y, r]` in design units (the 2D picture's crown). */
+/** Per shape: the stretch, the trunk factor, the roots, the bend and the crown's lobe layout `[dx, y, r]` in design units (the picture's crown). */
 export const SHAPES: Record<LeafyShape, { sx: number; sy: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number; lobes: [number, number, number][] }> = {
   round: { sx: 1, sy: 1, trunk: 1, roots: 3, rootLen: 1, bend: 1, lobes: [[0, 14, 19], [-21, 26, 15], [22, 25, 15], [-11, 37, 13], [12, 37, 13], [-30, 36, 10], [30, 35, 10]] },
   wide: { sx: 1.3, sy: 0.85, trunk: 1.1, roots: 4, rootLen: 1.15, bend: 1.2, lobes: [[-7, 15, 18], [13, 17, 17], [-24, 27, 15], [26, 27, 14], [-13, 38, 13], [11, 38, 13], [-33, 36, 10], [32, 36, 10]] },
@@ -211,7 +211,7 @@ const LAYOUTS: Record<3 | 4 | 5, [number, number, number][]> = {
 /** The width of each layout in design units (outermost lobe edges), derived from `LAYOUTS`. */
 const EXTENT = Object.fromEntries(([3, 4, 5] as const).map((n) => [n, Math.max(...LAYOUTS[n].map(([dx, , rad]) => dx + rad)) - Math.min(...LAYOUTS[n].map(([dx, , rad]) => dx - rad))])) as Record<3 | 4 | 5, number>;
 
-/** A crown lobe in px: centre, radii and the two phases of its scalloped outline (the 2D picture's). */
+/** A crown lobe in px: centre, radii and the two phases of its scalloped outline. */
 export interface Lobe { x: number; y: number; rx: number; ry: number; ph: number; ph2: number }
 
 /**

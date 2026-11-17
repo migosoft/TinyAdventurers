@@ -1,5 +1,5 @@
-// The map and the script of the ?mood demo (#148, #158), without Phaser: the 2D scene (MoodDemoScene) and the 3D
-// stage both play it. All positions are 2D px (feet), `t` is seconds since the start.
+// The map and the script of the mood demo (#148, #158), which the 3D stage (?r3d=mood) plays.
+// All positions are px on the board (feet), `t` is seconds since the start.
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { TERRAIN } from './terrain-layers';

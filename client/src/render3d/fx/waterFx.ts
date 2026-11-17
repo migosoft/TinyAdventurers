@@ -1,5 +1,5 @@
 // The droplets of the water in 3D (#345): the splash of a figure entering or plunging, the spray of a dash and the bubbles of a drowning.
-// The 2D originals are `WadeFx`, `sinkStartFx` and `bubbleFx` (game/terrain.ts); speeds are art pixels per second as in figureFx.ts.
+// Speeds are art pixels per second as in figureFx.ts.
 // The cues come from `Water3d` (`frame.water`); a cue of an id the sight hides makes no record. All droplets are lit, like dust and smoke.
 import { WATER_Y } from '../air/drips';
 import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';

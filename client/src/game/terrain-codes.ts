@@ -1,5 +1,5 @@
 // Terrain frame layout shared by the atlas build (scripts/terrain-tiles.ts)
-// and the board (terrain.ts).
+// and the 3D view's liquids.
 
 export const TERRAIN_FRAMES = { water: 4, deep: 4, lava: 6, chasm: 1 } as const;
 /** Base texture period in tiles: piece `q = x % p + p * (y % p)`. */

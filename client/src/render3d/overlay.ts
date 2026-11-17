@@ -1,6 +1,6 @@
 // The overlay layer of a 3D run (#311): one Canvas 2D element over the 3D canvas, at the screen's full device resolution, cleared
 // and redrawn every frame from the items `overlayLayout.ts` lays out. Never darkened and independent of the render quality. The
-// looks are the 2D view's: `WORLD_TEXT` sizes in `FONT_TEXT`, the gold key cap, the effect symbols of the name tags.
+// looks: `WORLD_TEXT` sizes in `FONT_TEXT`, the gold key cap, the effect symbols of the name tags.
 import { FONT_TEXT } from '../fonts';
 import { WORLD_TEXT, type WorldTextKind } from '../game/worldText';
 import { effectIconDataUri } from '../ui/effectIcons';
@@ -67,7 +67,7 @@ export class Overlay3d {
     ctx.fillStyle = BAR_FRAME;
     ctx.fillRect(it.x - frame, it.y - frame, w + 2 * frame, h + 2 * frame);
     ctx.fillStyle = it.color;
-    // 2D's fill: whole art px, at least 1.
+    // The fill: whole art px, at least 1.
     ctx.fillRect(it.x, it.y, Math.round(Math.max(1, Math.round(it.w * it.frac)) * zoom), h);
   }
 
@@ -76,7 +76,7 @@ export class Overlay3d {
     ctx.globalAlpha = it.alpha;
     ctx.font = `${t.style} ${t.size * zoom * it.scale}px ${FONT_TEXT}`;
     ctx.textAlign = it.align === 'center' ? 'center' : 'left';
-    ctx.textBaseline = it.base === 'bottom' ? 'bottom' : 'middle'; // 'bottom' is the em box's bottom, like Phaser's origin y 1
+    ctx.textBaseline = it.base === 'bottom' ? 'bottom' : 'middle'; // 'bottom' is the em box's bottom
     if (it.stroke) {
       ctx.strokeStyle = it.stroke;
       ctx.lineWidth = 2 * zoom;

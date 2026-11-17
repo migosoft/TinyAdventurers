@@ -1,7 +1,7 @@
 // The own hero's predicted shots (the "cosmetic" copies): spawned when a shot is
 // fired, advanced each frame, ended at a wall, an enemy or when the server's shot
-// is gone. The server's copy of an own shot stays hidden (`hidden`). Phaser-free;
-// a view only draws `live` and reacts to `ended`.
+// is gone. The server's copy of an own shot stays hidden (`hidden`).
+// A view only draws `live` and reacts to `ended`.
 import { ENEMY_KINDS, FLAG, HITBOX, KIND } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';

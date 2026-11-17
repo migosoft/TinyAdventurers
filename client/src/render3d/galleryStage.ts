@@ -1,7 +1,7 @@
 // The stage of the ?r3d=gallery page (#303): every figure kind cycling through its states, the status-effect looks, the board
 // objects and shots, and a corridor behind a full-height wall where things walk for the see-through check. It runs on the real
 // path of a run: a synthetic `RunFrame` goes through `Figures3d`, its openers through `seenOpeners` (all visible here), and the
-// result into `FrameInput.see`. No server, no login. The 2D twin is `GalleryScene` (game/GalleryScene.ts).
+// result into `FrameInput.see`. No server, no login.
 import { ANIM, CONST, EFFECT, FLAG, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
 import { LightField } from '../game/light';
 import type { PictureEv } from '../run/view';
@@ -30,7 +30,7 @@ const TILE = 16;
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
 
-/** The figure states the rows cycle through, as the 2D gallery lists them. */
+/** The figure states the rows cycle through. */
 export const STATES: [string, number][] = [
   ['idle', ANIM.Idle],
   ['move', ANIM.Move],

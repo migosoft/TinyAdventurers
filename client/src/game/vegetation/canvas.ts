@@ -1,5 +1,5 @@
 // The drawing surface and the shared palette of the vegetation generator (#279).
-// Pure: no Phaser, no DOM, no Node.
+// Pure: no DOM, no Node.
 import { type Recipe, rng } from '../../render3d/trees/recipe';
 type Rgb = [number, number, number];
 export interface Rgba { w: number; h: number; data: Uint8ClampedArray }

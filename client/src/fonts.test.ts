@@ -10,7 +10,7 @@ describe('fonts', () => {
     expect(FONT_TEXT).toBe("'Inter', system-ui, sans-serif");
     expect(FONT_HEAD).toBe("'IM Fell English SC', Georgia, serif");
   });
-  it('loadFonts asks for every face Phaser draws with', async () => {
+  it('loadFonts asks for every face the game draws with', async () => {
     const asked: string[] = [];
     await loadFonts({ load: (f: string) => (asked.push(f), Promise.resolve([])) } as unknown as FontFaceSet);
     expect(asked).toEqual(expect.arrayContaining(['400 16px Inter', '600 16px Inter', '800 16px Inter', 'italic 600 16px Inter', '16px "IM Fell English SC"']));

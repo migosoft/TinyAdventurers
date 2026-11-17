@@ -1,6 +1,6 @@
 // The nymph's cove in the 3D dungeon (#306, #329, #330): the willow and the bushes as grown 3D trees that sway in the wind, a shadow
 // caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer, and the pixies: glows with wing cards that also
-// light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts, pixieMath.ts), so both views agree.
+// light the ground. The grass carpet is cover/cove.ts. Layout and paths come from covemath.ts and pixieMath.ts.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { LIGHT_KIND } from '../generated/defs';
 import { COVE_TREE_FOOT, coveLayout, placeCovePlants } from '../game/covemath';
@@ -30,7 +30,7 @@ const rgbOf = (c: number): [number, number, number] => [((c >> 16) & 255) / 255,
 const GLOW = rgbOf(PIXIE_COLOURS.glow);
 const CORE = rgbOf(PIXIE_COLOURS.core);
 
-/** The pixies of one place: `count` of them on `pixieAt` paths around `centre` (px, as in 2D), their 3D point from the path. */
+/** The pixies of one place: `count` of them on `pixieAt` paths around `centre` (px), their 3D point from the path. */
 export class Pixies3d {
   constructor(
     private readonly centre: { x: number; y: number },
@@ -40,7 +40,7 @@ export class Pixies3d {
     private readonly seed: number,
     /** The height of the path's centre above the ground (px). */
     private readonly up: number = CANOPY_UP,
-    /** Another path than the 2D ellipse: pixie `i` at time `t` from the ellipse's unit position (u, v, each -1..1), as a point in tiles. */
+    /** Another path than the default ellipse: pixie `i` at time `t` from the ellipse's unit position (u, v, each -1..1), as a point in tiles. */
     private readonly orbit?: (i: number, t: number, u: number, v: number) => { x: number; y: number; z: number },
   ) {}
 
@@ -49,7 +49,7 @@ export class Pixies3d {
     const p = pixieAt(i, t, this.centre, this.seed);
     if (this.orbit) return { ...this.orbit(i, t, (p.x - this.centre.x) / PIXIE_RX, (p.y - this.centre.y) / PIXIE_RY), wingUp: p.wingUp };
     const dy = p.y - this.centre.y;
-    // The 2D ellipse is the canopy seen from above at a tilt: its vertical axis is mostly depth, a little height.
+    // The ellipse is the canopy seen from above at a tilt: its vertical axis is mostly depth, a little height.
     return { x: p.x / TILE, z: this.groundPx / TILE + (0.6 * dy) / TILE, y: this.up / TILE - (0.4 * dy) / TILE, wingUp: p.wingUp };
   }
 

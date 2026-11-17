@@ -1,5 +1,5 @@
 // What fills a cover layer (#330): per map px the cover kind's masks and colours, produced by `prep` units that a
-// time-sliced job runs before any height unit. Pure data: no three.js, no Phaser.
+// time-sliced job runs before any height unit. Pure data: no three.js.
 import type { GroundImage } from '../view';
 import type { CoverKind } from './kinds';
 

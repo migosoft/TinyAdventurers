@@ -1,6 +1,6 @@
-// The dust (dungeon) and pollen (woodland) of the air (#307): a port of the dust half of game/mood.ts into world tiles with
+// The dust (dungeon) and pollen (woodland) of the air (#307): simulated in world tiles with
 // height. Loose clouds of motes wander, ride the air, are stirred apart by movers, fade and respawn. A speck has no colour of its
-// own: the shader lights it (the scene minus ambient), so the light share of the 2D alpha is not computed here, only where a
+// own: the shader lights it (the scene minus ambient), so no light share of the alpha is computed here, only where a
 // cloud may spawn (`airLightAt`).
 import { DUST_ALPHA, MAX_CLOUDS, cloudCount, dustTint } from '../../game/moodmath';
 import type { Light } from '../light';
@@ -16,7 +16,7 @@ export const DUST_Y0 = 0.2;
 export const DUST_YSPAN = 1.6;
 /** Clouds drift no higher than this (tiles; first guess). */
 export const DUST_TOP = 2.4;
-/** A cloud's spread radius (2D: 6..16 px), tiles. */
+/** A cloud's spread radius (6..16 px), tiles. */
 const CLOUD_R0 = 6 * PX;
 const CLOUD_R1 = 16 * PX;
 /** Motes are spread this share of the radius up and down (first guess). */
@@ -24,7 +24,7 @@ const MOTE_Y = 0.4;
 /** Seconds a cloud lives. */
 const LIFE0 = 6;
 const LIFE1 = 12;
-/** Floating up, tiles/s^2 (2D: 0.3 px/s^2). */
+/** Floating up, tiles/s^2 (0.3 px/s^2). */
 const FLOAT = 0.3 * PX;
 /** With the wind off a cloud's height wanders by this much speed per second (tiles/s^2) within +-DUST_WANDER_Y (first guess). */
 const DUST_WANDER_Y = 2 * PX;

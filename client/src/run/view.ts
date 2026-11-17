@@ -1,5 +1,4 @@
-// The boundary between the Phaser-free run session and a view (the 2D game or
-// the 3D view). Types only, except NO_STATS. The session never imports a view;
+// The boundary between the run session and a view (the 3D view). Types only, except NO_STATS. The session never imports a view;
 // it asks the view one question (pointerWorld), everything else flows to it.
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -99,7 +98,7 @@ export interface ViewStats {
   canvas: { w: number; h: number; cssZoom: number };
   /** Extra readout lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
-  /** The 3D view's backend, scene pass size, quality and zoom (#314); the 2D view has none. */
+  /** The 3D view's backend, scene pass size, quality and zoom (#314). */
   renderer?: RendererStats;
 }
 

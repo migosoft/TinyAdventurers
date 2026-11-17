@@ -412,7 +412,7 @@ describe('Figures3d anchors (#311)', () => {
     expect(a!.z).toBeCloseTo(40 / TILE, 9);
     expect(a!.effects).toBe(1 << EFFECT.Burning);
     expect(a!.tagShown).toBe(true);
-    // the 2D numbers: height is the frame height times the scale, the tag sits 3 px above the foot
+    // height is the frame height times the scale, the tag sits 3 px above the foot
     const d = FIGURES[KIND.Wizard];
     expect(a!.height).toBe(FIG.h * (d.scale ?? 1));
     expect(a!.tag).toBe((d.footY ?? FIG.h) * (d.scale ?? 1) + 3);

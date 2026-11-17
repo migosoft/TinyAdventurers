@@ -1,5 +1,5 @@
 // The bubbles of a lava pool (#344): a dome swells on the surface for a while, then pops. Pure bookkeeping for the shader's
-// uniform slots; the 2D original is the mockup's bubble code. Sizes and distances are in tiles, times in seconds.
+// uniform slots; sizes and distances are in tiles, times in seconds.
 
 export const BUBBLE_CAP = 6;
 /** Seconds a bubble swells, then the seconds of its pop; its size range (tiles); the dome's height per size; the pop ring's reach. */

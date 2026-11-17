@@ -11,11 +11,11 @@ import { PX } from './airCtx';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
-/** The haze's colour (the 2D tint 0x8a7c6c) and how bright the light it takes from the scene is (first guess: the demo's wrap of 0.35). */
+/** The haze's colour and how bright the light it takes from the scene is (first guess: the demo's wrap of 0.35). */
 // Paler than the lit floor, so the veil shows (0x8a7c6c, near the floor's own colour, did not; first guess).
 const HAZE_RGB: [number, number, number] = [0xd0 / 255, 0xc4 / 255, 0xb4 / 255];
 const HAZE_WRAP = 0.35;
-/** The smoke blob, the haze texture's size (art px) and the haze's noise mapping (first guesses for the 2D blob texture). */
+/** The smoke blob, the haze texture's size (art px) and the haze's noise mapping (first guesses). */
 const HAZE_TEX_PX = 128;
 const HAZE_LO = 0.2, HAZE_HI = 0.8;
 /** Dust brightens with its light: full at 1 / DUST_GAIN of the scene's light above the ambient. */
@@ -81,7 +81,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
     add.side = DoubleSide;
   }
 
-  // Blended: smoke is the 2D smoke blob, lit; a drop and a splash pixel are solid.
+  // Blended: smoke is a soft blob, lit; a drop and a splash pixel are solid.
   const blend = new MeshBasicNodeMaterial();
   {
     blend.positionNode = position;
@@ -90,7 +90,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
       const shown: N = sight.shown(u.x, 0);
       const lit: N = litAt();
       const r = length(corner);
-      // 1 at the centre, 0.45 at half the radius, 0 at the edge (the 2D smoke texture's gradient).
+      // 1 at the centre, 0.45 at half the radius, 0 at the edge (the smoke blob's gradient).
       const smoke = max(mix(float(1).sub(r.mul(1.1)), float(1).sub(r).mul(0.9), step(0.5, r)), 0);
       const shape = mix(float(1), smoke, step(kind, 2.5));
       const alpha = shape.mul(a).mul(shown);

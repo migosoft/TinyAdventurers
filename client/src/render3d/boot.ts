@@ -31,7 +31,7 @@ export async function bootGallery(el: HTMLElement, search: string): Promise<void
   await startHost(el, s, 'demo', (assets) => createGalleryStage(assets, p, s));
 }
 
-/** `?r3d=lights` (#304): the 2D `?lights` demo's board and lights in 3D, no server needed. Zoom 2 unless the URL picks one. */
+/** `?r3d=lights` (#304): the lights demo's board and lights, no server needed. Zoom 2 unless the URL picks one. */
 export async function bootLights(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
@@ -52,14 +52,14 @@ export async function bootCove(el: HTMLElement, search: string): Promise<void> {
   await startHost(el, s, 'demo', (assets) => createCoveStage(assets, p, s));
 }
 
-/** `?r3d=mood` (#307): the 2D `?mood` room's air in 3D (torch smoke, lava embers, dust, haze, pool drips, a knight, an arrow and a fireball stirring the air), no server needed. Zoom 2 unless the URL picks one. */
+/** `?r3d=mood` (#307): the dungeon air's demo room (torch smoke, lava embers, dust, haze, pool drips, a knight, an arrow and a fireball stirring the air), no server needed. Zoom 2 unless the URL picks one. */
 export async function bootMood(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createMoodStage(assets, p, s, host));
 }
 
-/** `?r3d=sunlight` (#307): the 2D `?sunlight` room's cracks, shafts and patches in 3D, no server needed. Zoom 2 unless the URL picks one. */
+/** `?r3d=sunlight` (#307): the sunlight demo room's cracks, shafts and patches, no server needed. Zoom 2 unless the URL picks one. */
 export async function bootSunlight(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);

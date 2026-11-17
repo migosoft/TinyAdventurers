@@ -1,5 +1,5 @@
 // The boss hall's force field, the particles of it (#308): the glitter rising from the sealed cells and the burst of 40 when it appears.
-// The 2D original is `game/forcefield.ts`. The glitter is a seeded stream per cell, pure in the clock: mote `j` of a cell is born at
+// The glitter is a seeded stream per cell, pure in the clock: mote `j` of a cell is born at
 // `j / RATE` and rises 12 px over its life. The fill, bands and rims are the field mesh's material (`fieldMesh.ts`), driven by `fieldAge`.
 import { WALL_H } from '../heights';
 import { registerFrameFx, type Effects3d, type FxFrame } from './effects3d';
@@ -10,9 +10,9 @@ import type { FxOut } from './types';
 
 /** The burst when the field appears. */
 export const FIELD_BURST = 40;
-/** Glitter colours of 2D. */
+/** Glitter colours. */
 const GLITTER = [0xbfe8ff, 0xffffff, 0x7fc4ff];
-/** Motes born per cell and second (2D: one or two a frame for the whole field; per cell here), and the life of one (s). */
+/** Motes born per cell and second, and the life of one (s). */
 const RATE = 30;
 const LIFE0 = 0.4, LIFE1 = 0.9;
 /** Rise over a life: 12 px. */
@@ -30,7 +30,7 @@ export function fieldBurst(T: FxTris, ax: Axes, cells: readonly (readonly [numbe
     const life = LIFE0 + 0.5 * hash3(seed, i, 3);
     if (age > life) continue;
     const c = cells[Math.floor(hash3(seed, i, 0) * cells.length) % cells.length];
-    // 2D throws at +-20 px/s in both directions; here along the floor and up
+    // Thrown at +-20 px/s in both directions along the floor and up
     const vx = (hash3(seed, i, 4) - 0.5) * 40 * PX, vy = (hash3(seed, i, 5) - 0.5) * 40 * PX, vz = (hash3(seed, i, 6) - 0.5) * 40 * PX;
     const k = age / life, col = GLITTER[Math.floor(hash3(seed, i, 7) * GLITTER.length) % GLITTER.length];
     dot(T, ax, c[0] + hash3(seed, i, 1) + vx * age, hash3(seed, i, 2) * WALL_H + vy * age, c[1] + hash3(seed, i, 8) + vz * age, SIZE * (1 - k * 0.7), rgb(col, 0), rgb(col, 1), rgb(col, 2), 1 - k * k);

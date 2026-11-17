@@ -28,5 +28,5 @@ describe('effect icons', () => {
     expect(ids.map((id) => EFFECT_ICON[id].color)).toEqual(['#e07a5f', '#e0c060', '#90c890']);
     for (const id of ids) expect(effectIconSvg(id, 14)).toContain('<svg');
   });
-  it('makes a data URI Phaser can load', () => expect(effectIconDataUri(EFFECT.Sleep, 32)).toMatch(/^data:image\/svg\+xml;base64,/));
+  it('makes a data URI an image can load', () => expect(effectIconDataUri(EFFECT.Sleep, 32)).toMatch(/^data:image\/svg\+xml;base64,/));
 });

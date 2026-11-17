@@ -147,7 +147,7 @@ export interface MimicPose {
   shadowAlpha: number;
   /** Faces left (mirrored): the aim points left of the screen's vertical by more than a margin. */
   flip: boolean;
-  /** One-shot cues for the 2D effects: the reveal pop and the landing dust. */
+  /** One-shot cues for the effects: the reveal pop and the landing dust. */
   wakeCue: boolean;
   landCue: boolean;
 }

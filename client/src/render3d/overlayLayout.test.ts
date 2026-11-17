@@ -211,7 +211,7 @@ const floatItems = (f: Floats, a = at): OverlayItem[] => {
 };
 
 describe('Floats', () => {
-  it('a damage number rises and fades like 2D', () => {
+  it('a damage number rises and fades', () => {
     const f = new Floats(mid);
     f.add(5 * TILE, 5 * TILE, '12', '#ffffff');
     const start = only(floatItems(f), 'text')[0];
@@ -309,7 +309,7 @@ describe('floatSpot', () => {
 
 describe('Floats.addPicture', () => {
   // A hit at the foot (160, 120) arrives from the server 10 px up, at y = 110. Whatever the camera's yaw, the number starts 10 art px
-  // straight up the screen from the foot, as in 2D.
+  // straight up the screen from the foot.
   const zoom = 4;
   const plan = renderPlan('high', zoom, 1920, 1080);
   for (const yawDeg of [0, 90, 180, 270]) {

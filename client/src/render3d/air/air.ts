@@ -1,5 +1,4 @@
-// The air of the 3D view (#307): dust and pollen, smoke, embers and drips simulated on the CPU in world tiles with height, a port
-// of game/mood.ts and mood-drips.ts. It owns the 2D `Wind` (px units: x = tiles * 16, y = z * 16) and writes `AirParts`, reused
+// The air of the 3D view (#307): dust and pollen, smoke, embers and drips simulated on the CPU in world tiles with height. It owns the `Wind` (game/wind.ts; px units: x = tiles * 16, y = z * 16) and writes `AirParts`, reused
 // arrays the renderer draws as camera-facing quads. No three.js, no GPU: every rule is tested here.
 import type { AirMover, AirShot } from '../../game/airTypes';
 import { TERRAIN } from '../../game/terrain-layers';
@@ -27,7 +26,7 @@ export interface AirInput {
   mask: SightMask | null;
   /** Flame foot on the wall (x, z), its normal, and its floor tile. */
   torches: readonly { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[];
-  /** px, as 2D. */
+  /** px. */
   shots: readonly AirShot[];
   movers: readonly AirMover[];
   lights: readonly Light[];

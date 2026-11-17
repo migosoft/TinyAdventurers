@@ -147,7 +147,7 @@ describe('the ?r3d=sunlight stage', () => {
 });
 
 describe('parseSunLook', () => {
-  it('reads the 2D page keys into its own look, not the shared one', () => {
+  it('reads the URL keys into the page look, not the shared one', () => {
     const l = parseSunLook('?shape=straight&patch=3&slant=1&from=right&clouds=0.6&height=5&style=parallel&rays=2&glow=1.5&often=1&vary=0');
     expect(l).toMatchObject({ widen: false, patch: 3, slant: 1, dir: 1, clouds: 0.6, height: 5, style: 'parallel', rays: 2, glow: 1.5, vary: false });
     expect(l.gap).toEqual([2, 4]);

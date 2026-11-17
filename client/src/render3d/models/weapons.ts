@@ -1,4 +1,4 @@
-// The pack's weapons as 3D models (#338): each sprite of the 2D pack becomes a rounded piece (its outline smoothed, its colours
+// The pack's weapons as 3D models (#338): each sprite of the pack becomes a rounded piece (its outline smoothed, its colours
 // flat, thick in the middle and thin at the rim), a bow becomes two round rods along a smooth line. The page that approved the
 // looks is `weapons.html`; this is its `rounded`, `rodGeo` and `bowParts` on plain typed arrays (no canvas), so it runs in a
 // Web Worker and under node. A weapon model has one bone (0), the stage `weapon` and its origin at the grip, in sprite pixels.

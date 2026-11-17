@@ -4,7 +4,7 @@ import { DMG_COLORS, dmgColor, floatOf, onOwnHero } from './damage';
 
 describe('floatOf', () => {
   const dmg = { t: 'Dmg', x: 0, y: 0, v: 11.6, crit: false, p: false, ty: DMG_TYPE.Physical, imm: false } as const;
-  it('names every float as 2D shows it', () => {
+  it('names every float as the view shows it', () => {
     expect(floatOf({ ...dmg, imm: true })).toEqual({ text: 'immune', color: '#a0a0a0', opts: { kind: 'small' } });
     expect(floatOf({ ...dmg, crit: true })).toEqual({ text: '12', color: '#ffd24a', opts: { big: true } });
     expect(floatOf(dmg)).toEqual({ text: '12', color: '#ffffff', opts: {} });
@@ -14,7 +14,7 @@ describe('floatOf', () => {
     expect(floatOf({ t: 'Coins', x: 0, y: 0, v: 7 })).toEqual({ text: '+7 coins', color: '#ffd040', opts: { kind: 'small', up: 14 } });
     expect(floatOf({ t: 'Boom', x: 0, y: 0, r: 1, k: 0 })).toBeNull();
   });
-  it('finds a hit on the own hero by 2D proximity rule', () => {
+  it('finds a hit on the own hero by the proximity rule', () => {
     expect(onOwnHero({ x: 50, y: 40, p: true }, { x: 51, y: 51 })).toBe(true);
     expect(onOwnHero({ x: 50, y: 40, p: true }, { x: 56, y: 50 })).toBe(false);
     expect(onOwnHero({ x: 50, y: 40, p: false }, { x: 50, y: 50 })).toBe(false);

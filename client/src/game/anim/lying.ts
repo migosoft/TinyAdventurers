@@ -1,5 +1,4 @@
-// The lying layout of a prone figure (asleep): pure, Phaser-free, shared by the
-// 2D view (EntityView through status.ts) and the 3D view.
+// The lying layout of a prone figure (asleep): pure, so the 3D view and the tests share it.
 
 /**
  * A prone figure (asleep) lies down towards its facing: rotated ±90° about

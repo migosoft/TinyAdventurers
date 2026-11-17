@@ -1,6 +1,6 @@
 // The run session: everything of a run that is not a picture. It owns the map,
 // the light field, the predictor, the interpolator, the HUD and net traffic;
-// a view (the 2D game or the 3D view) draws what the session hands it. The
+// a view (the 3D view) draws what the session hands it. The
 // session never imports a view; it asks the view one question (pointerWorld).
 import { ABILITIES, ABILITY_RUNES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
 import { has } from '../game/effectBits';

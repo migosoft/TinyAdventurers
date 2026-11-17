@@ -1,7 +1,7 @@
 // The sight mask on the CPU (#305): a small world-space field around the viewer with the unseen strength per texel in
 // two channels, `hard` (beyond sight) and `soft` (behind a trunk or thicket). Later stages upload it as a texture and
-// sample it in shaders. It is filled the way the 2D masks are (visionmask.ts, shademask.ts), with the same pure
-// functions (game/sightField.ts), in float fields without a canvas.
+// sample it in shaders. It is filled with the pure
+// functions of game/sightField.ts, in float fields without a canvas.
 import { blurField, canvasRes, extendPoints, extendRim, fillPolygon, rampLayers, type RasterScratch } from '../game/sightField';
 import { TILE, type TileMap } from '../sim/map';
 import { touches, type View } from '../sim/view';
@@ -10,7 +10,7 @@ import { sightRadius } from '../sim/vispoly';
 /** Tiles of mask beyond the sight radius on each side. */
 export const SIGHT_MARGIN = 2;
 
-/** Steps of the soft ramp from clear to full (as the 2D wedge). */
+/** Steps of the soft ramp from clear to full of the wedge. */
 const RAMP_LAYERS = 4;
 
 /** How a mask is filled: crisp black on dark maps, feathered mist on daylight maps. World px (DEFAULT_HAZE's on daylight, 0 and 0 on dark maps). */
@@ -100,7 +100,7 @@ export class SightMask {
     // hard: the polygon in white, visible hard walls whole, then the feather
     grey.fill(0);
     fillPolygon(grey, n, n, hard.polygon.points, tx, ty, s, raster);
-    // per tile, a row fill per texel row (as 2D's walls step): the texels of tile t are those with floor(o + (k + 0.5) / res) = t
+    // per tile, a row fill per texel row (the walls' step): the texels of tile t are those with floor(o + (k + 0.5) / res) = t
     const first = (o: number, t: number): number => Math.max(0, Math.ceil((t - o) * res - 0.5));
     const t0x = Math.floor(this.ox + 0.5 / res), t1x = Math.floor(this.ox + (n - 0.5) / res);
     const t0z = Math.floor(this.oz + 0.5 / res), t1z = Math.floor(this.oz + (n - 0.5) / res);
@@ -131,7 +131,7 @@ export class SightMask {
       for (let k = 0; k < count; k++) soft[k] = (this.clip[k] / 255) * (soft[k] / layers.length);
     }
 
-    // a trunk or thicket tile the full view sees (2D's `touches`) is not behind a trunk: its own texels would read ~0.5 and mist a plant at its foot
+    // a trunk or thicket tile the full view sees (`touches`) is not behind a trunk: its own texels would read ~0.5 and mist a plant at its foot
     if (all) {
       for (let tz = t0z; tz <= t1z; tz++) {
         const j0 = first(this.oz, tz), j1 = Math.min(n, first(this.oz, tz + 1));

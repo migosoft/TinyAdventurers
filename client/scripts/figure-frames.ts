@@ -1,5 +1,5 @@
 // Figures from Superdark's packs, each as <Prefix>_Idle_1..4 and <Prefix>_Walk_1..4: 32x32
-// canvases facing right like the 0x72 figures (EntityView flips by aim; no mirroring needed),
+// canvases facing right like the 0x72 figures (the view flips them by aim; no mirroring needed),
 // trimmed to one shared box (the union of the opaque pixels) so the frames do not wobble.
 //   The dire wolf (Enchanted Forest, CC0, client/assets-src/enchanted-forest/frames/Wolf):
 //     dire_wolf_idle_anim_f0..3, dire_wolf_run_anim_f0..3

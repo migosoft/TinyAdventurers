@@ -88,7 +88,7 @@ export interface Cand extends Light { id: string; kind: number; /** The brightne
 /**
  * Every light of the field that is on, except lava (its glow is the ground's own). Torches sit at their flame. A Daylight light is
  * the **bounce fill**: the crack (air/cracks.ts) lights its own patch, this faint light at `BOUNCE_Y` is what that patch bounces
- * into the room. It dims with the crack's cloud, `base` is its unclouded brightness. `sun` is the 2D sun look the cracks use.
+ * into the room. It dims with the crack's cloud, `base` is its unclouded brightness. `sun` is the sun look the cracks use.
  */
 export function staticCands(field: LightField, torches: TorchPairs, map: TileMap, t: number, sun: SunLook = sunLook): Cand[] {
   const out: Cand[] = [];

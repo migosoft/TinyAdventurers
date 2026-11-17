@@ -1,6 +1,5 @@
-// The pure sight functions of the 2D view, without Phaser (#305): the polygon wedge geometry, the scanline
-// raster and blur of the grey field, the mask resolution, the soft shadow's test and the haze look. The 2D mask
-// files (visionmask.ts, shademask.ts, unseenfx.ts) re-export them; the 3D view (render3d) imports them from here.
+// The pure sight functions (#305): the polygon wedge geometry, the scanline raster and blur of the grey field,
+// the mask resolution and the haze look. The 3D view (render3d/sightmask.ts) fills its sight mask with them.
 
 /** How dark the soft shadow is (alpha of black). */
 export const SHADE = 0.3;
