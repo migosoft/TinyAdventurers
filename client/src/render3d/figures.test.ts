@@ -7,7 +7,7 @@ import { cardHeight, createKit, directRunner, type FigureKit } from './models/ki
 import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
-import { DESCS, FIT_KIND, modelKeyOf, type DescKey } from './models/table';
+import { DESCS, FIT_KIND, modelKeyOf, outlineFrame, TUBE_DESCS, type DescKey } from './models/table';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -701,6 +701,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
+    // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
+    for (const k of [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)]) frames[outlineFrame(k)] = { ...atlasFrames[outlineFrame(k)].frame };
     for (const k of BUILT) kit.get(k);
     while (kit.version < BUILT.length) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
@@ -774,8 +776,10 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       // the shadow oval and the light's caster box shrink with the figure; the card path is what it was
       const sw = (b: FigureOut): number => Math.hypot(b.shadows.position[3] - b.shadows.position[0], b.shadows.position[5] - b.shadows.position[2]);
       expect(sw(mo), `${kind} oval`).toBeCloseTo(sw(co) * size, 6);
-      expect(mo.casters[0].w, `${kind} caster w`).toBeCloseTo(co.casters[0].w * size, 6);
-      expect(mo.casters[0].y1 - mo.casters[0].y0, `${kind} caster h`).toBeCloseTo((co.casters[0].y1 - co.casters[0].y0) * size, 6);
+      // the lamp's caster is the model's own outline frame, one frame px per model px
+      const fr = frames[outlineFrame(modelKeyOf(kind)!)], m = kit.get(modelKeyOf(kind)!)!;
+      expect(mo.casters[0].w, `${kind} caster w`).toBeCloseTo((fr.w * m.scale) / 16, 6);
+      expect(mo.casters[0].y1 - mo.casters[0].y0, `${kind} caster h`).toBeCloseTo((fr.h * m.scale) / 16, 6);
     }
     // the wizard is the one description at 1: model and card agree exactly
     expect(kit.get('wizard')!.size).toBe(1);
@@ -791,7 +795,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const bed = bedAt(dm, 1.5, 1.5);
     expect(bed).toBeLessThan(-0.3);
     expect(model.casters.length).toBe(1);
-    expect(model.casters[0].y0, 'caster lower edge').toBeCloseTo(card.casters[0].y0, 6);
+    expect(model.casters[0].y0, 'caster lower edge').toBeCloseTo(card.casters[0].y0, 6);   // the foot is the card's foot: both stand on the bed
     expect(model.models[0].lift / Math.cos(Math.PI / 4), 'world height after the stretch').toBeCloseTo(bed, 6);
     expect(model.models[0].cut).toBe(false);
     expect(model.openers[0].mid, 'mid').toBeCloseTo(dryModel.openers[0].mid + bed, 6);
@@ -881,6 +885,40 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const stone = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow | (1 << EFFECT.Petrified) })]), cam(), look({ kit, ...all }));
     expect(stone.models[0].tint[0]).toBeCloseTo(0xa0 / 255, 6);
     expect(stone.models[0].stone).toBe(true);
+  });
+
+  describe('the lamp caster is the model\'s own outline (#357)', () => {
+    const one = (e: EntState) => make().frame(frame([e]), cam(), look({ kit, ...all }));
+    it('has the atlas rect of model_<key>, as wide as the frame times the model scale, for the wolf and the stag', () => {
+      for (const [kind, key] of [[KIND.DireWolf, 'wolf'], [KIND.Stag, 'stag']] as const) {
+        const e = ent(10, kind), c = one(e).casters[0], fr = atlasFrames[outlineFrame(key)].frame, m = kit.get(key)!;
+        const v = m.varies ? variationOf(10) : { size: 1 };
+        expect(c.id, key).toBe(10);
+        expect(c.w, key).toBeCloseTo((fr.w * m.scale * v.size) / 16, 6);
+        expect([c.u0, c.v0, c.u1, c.v1], key).toEqual([fr.x, fr.y, fr.x + fr.w, fr.y + fr.h]);
+      }
+    });
+    it('is mirrored when the pose faces left', () => {
+      const right = one(ent(10, KIND.Stag, { aim: 0 })).casters[0], left = one(ent(10, KIND.Stag, { aim: Math.PI })).casters[0];
+      expect(right.u0).toBeLessThan(right.u1);
+      expect(left.u0).toBeGreaterThan(left.u1);
+    });
+    it('is absent for a lying and a faint figure', () => {
+      expect(one(ent(10, KIND.Stag, { effects: 1 << EFFECT.Sleep })).casters).toEqual([]);
+      expect(one(ent(10, KIND.Stag, { flags: FLAG.INCORPOREAL })).casters).toEqual([]);
+      expect(one(ent(10, KIND.Stag)).casters.length).toBe(1);
+    });
+    it('is absent, without throwing, when the atlas lacks the frame', () => {
+      const keep = frames[outlineFrame('stag')];
+      delete frames[outlineFrame('stag')];
+      try {
+        const out = one(ent(10, KIND.Stag));
+        expect(out.models.length).toBeGreaterThan(0);
+        expect(out.casters).toEqual([]);
+      } finally {
+        frames[outlineFrame('stag')] = keep;
+      }
+    });
   });
 
   describe('the tube models: variation, anchors, oval, reach and fangs (#357)', () => {

@@ -56,3 +56,6 @@ export const FIT_KIND: Record<DescKey, number> = {
 export function modelKeyOf(kind: number): ModelKey | null {
   return MODEL_OF_KIND[kind] ?? null;
 }
+
+/** The atlas frame of a model's side outline, the lamp's shadow caster (client/scripts/model-frames.ts bakes it). */
+export const outlineFrame = (key: string): string => `model_${key}`;

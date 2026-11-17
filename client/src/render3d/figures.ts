@@ -29,7 +29,7 @@ import type { FigureKit } from './models/kit';
 import { BONES, BOW_WEAPONS } from './models/bones';
 import type { FigureModel } from './models/model';
 import { LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
-import { modelKeyOf } from './models/table';
+import { modelKeyOf, outlineFrame } from './models/table';
 import { variationOf } from './models/variation';
 import type { FrameRects } from './worldMesh';
 
@@ -791,11 +791,9 @@ export class Figures3d {
         insts.push(w);
       }
     }
-    // The shadow caster: the box of the standing idle card at the foot (no card is pushed); a faller casts none.
+    // The shadow caster: the model's own side outline (a baked atlas frame, one px per model px) at the foot; a faller casts none.
     if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
-      const cf = `${d.idle}0`, cb = this.bounds(cf), fy = d.footY ?? cb.h;
-      // Scaled by the model's `size` from the foot, so the box fits the smaller figure.
-      const card: Card = { frame: cf, x, z, lift: this.lifted(y), flip: pose.left, originX: pose.originX, footY: fy / cb.h, scale: sc * m.size, tint: [1, 1, 1], mode: 0, alpha: 1 };
+      const card: Card = { frame: outlineFrame(key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: m.scale * v.size * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
       const c = casterOf(card, e.id, this.frames, cam);
       if (c) out.casters.push(c);
     }
