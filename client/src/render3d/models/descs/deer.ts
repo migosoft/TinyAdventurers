@@ -39,7 +39,7 @@ export function deerDesc(v: DeerLook): TubeDesc {
     add({ shape: { ball: [0.42, 0.42, 0.42] }, at: head(0.95, 0.4, sd * 1.45), stage: 'spikes', bone: 'head', line: 0, colour: EYE });
     add({ shape: { drop: { r: er, len: el, sink: 0.6, wide: 0.5, dir: [-0.3, 0.6, 0.75 * sd] } }, at: head(-1.0, 1.1, sd * 1.15), stage: 'hair', bone: 'head', line: 0.35, colour: COAT, bend: { sway: 0.8 } });
     if (v.antlers) {
-      const rr = 0.75, at = head(-0.2, 1.45, sd * 0.75);
+      const rr = 1, at = head(-0.2, 1.45, sd * 0.75);
       const beam = [[0, 0, 0], [-0.8, 1.8, 1.0], [-1.2, 3.8, 2.0], [-0.4, 5.6, 2.4], [0.9, 6.5, 2.0]].map((p, i) => ({ p: [p[0], p[1], p[2] * sd] as [number, number, number], r: (0.52 - 0.06 * i) * rr }));
       add({ shape: { tube: beam, opts: { K: 10, N: 22 } }, at, stage: 'spikes', bone: 'hat', line: 0.3, colour: ANTLER });
       const tines = [[[-0.4, 0.9, 0.5], [1.8, 1.9, 0.9]], [[-1.2, 3.8, 2.0], [0.6, 5.0, 2.3]], [[-0.4, 5.6, 2.4], [-1.6, 7.0, 2.9]]];

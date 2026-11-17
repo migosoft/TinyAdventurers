@@ -133,6 +133,13 @@ describe('buildTubeFigure', () => {
     expect(m.ranges.filter((r) => r.line).length).toBeGreaterThan(0);
   });
 
+  it("the stag's antlers are at the page's thickness: beam base radius 0.52, tines 0.4", () => {
+    const radii = TUBE_DESCS.stag.pieces.filter((p) => p.bone === 'hat').map((p) => (p.shape as Extract<typeof p.shape, { tube: unknown }>).tube[0].r);
+    expect(radii).toHaveLength(8);
+    expect(radii.filter((r) => Math.abs(r - 0.52) < 1e-9)).toHaveLength(2);
+    expect(radii.filter((r) => Math.abs(r - 0.4) < 1e-9)).toHaveLength(6);
+  });
+
   it('hit radius', () => {
     expect(hitRadius(TUBE_DESCS.stag)).toBe(5);
     expect(hitRadius(TUBE_DESCS.deer)).toBe(5);
