@@ -15,7 +15,7 @@ import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
 import { BOSS_TEXT, className, needsText } from './text';
 import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
-import { SettingsView, type Toggle } from './settings';
+import { SettingsView, type Choice, type Toggle } from './settings';
 import { CharmView, charmLeft } from './charmView';
 
 export interface FrameStats {
@@ -176,6 +176,7 @@ export class Hud {
   private debugT = 0;
   menuOpen = false;
   private toggles: Toggle[] = [];
+  private choices: Choice[] = [];
   private view!: SettingsView;
   private inSettings = false;
 
@@ -226,10 +227,16 @@ export class Hud {
     this.buildView();
   }
 
+  /** The pick-one rows of the Settings view (the 3D view adds Quality). */
+  setChoices(c: Choice[]): void {
+    this.choices = c;
+    this.buildView();
+  }
+
   private buildView(): void {
     const net: Toggle = { label: 'Network stats', key: 'F3', get: () => !this.debug.classList.contains('hidden'), set: (on) => this.debug.classList.toggle('hidden', !on) };
     const old = this.view?.root;
-    this.view = new SettingsView([...this.toggles, net], () => this.showSettings(false));
+    this.view = new SettingsView([...this.toggles, net], () => this.showSettings(false), this.choices);
     this.view.root.hidden = !this.inSettings;
     if (old) old.replaceWith(this.view.root);
     else this.menu.append(this.view.root);

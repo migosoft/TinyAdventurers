@@ -1,7 +1,7 @@
 // The DOM panel of the ?r3d page: the single place that renders the params.
 
 import { DEFAULT_HOUR, PITCH_MAX, PITCH_MIN, wrapYaw, type R3dParams } from './params';
-import type { Quality } from './quality';
+import { QUALITIES } from './quality';
 import type { SeeMode } from './seeThrough';
 import { hourLabel } from './sun';
 
@@ -24,7 +24,6 @@ export interface Panel {
 export interface PageButton { name: string; pressed: (() => boolean) | null; press: () => void }
 
 const PITCHES = [30, 45, 48.6];
-const QUALITIES: [Quality, string][] = [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']];
 const ZOOMS = [1, 2, 3, 4, 6, 8];
 const SEE_MODES: [SeeMode, string][] = [['soft', 'Soft'], ['off', 'Off']];
 const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: number; max: number; step: number }[] = [

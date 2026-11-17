@@ -88,6 +88,16 @@ describe('Hud', () => {
     expect(menu.classList.contains('in-settings')).toBe(false);
     expect(settings.hidden).toBe(true);
   });
+  it('shows the choices in Settings and removes them again', () => {
+    hud.setToggles([{ label: 'Rules log', key: 'L', get: () => false, set: () => {} }]);
+    hud.setChoices([{ label: 'Quality', options: [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']], get: () => 'balanced', set: () => {} }]);
+    const menu = document.querySelector<HTMLElement>('.menu')!;
+    expect(menu.querySelectorAll('.settings .choice input[type=radio]').length).toBe(3);
+    expect(menu.querySelectorAll('.settings input[type=checkbox]').length).toBe(2);
+    hud.setChoices([]);
+    expect(menu.querySelectorAll('.settings .choice').length).toBe(0);
+    expect(menu.querySelectorAll('.settings input[type=checkbox]').length).toBe(2);
+  });
   it('returns to the main menu after the menu was closed from Settings', () => {
     hud.toggleMenu();
     [...document.querySelectorAll<HTMLButtonElement>('.menu button')].find((b) => b.textContent === 'Settings')!.click();

@@ -1220,6 +1220,24 @@ kbd {
   font-size: 15px;
   padding: 4px 2px;
 }
+.settings .choice {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  padding: 4px 2px;
+}
+.settings .choice > span {
+  margin-right: auto;
+}
+.settings .radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
 .settings .check kbd {
   margin-left: auto;
 }

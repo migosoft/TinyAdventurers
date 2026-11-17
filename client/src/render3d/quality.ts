@@ -2,6 +2,12 @@
 
 export type Quality = 'high' | 'balanced' | 'fast';
 
+export const QUALITIES: readonly (readonly [Quality, string])[] = [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']];
+
+export function isQuality(v: unknown): v is Quality {
+  return v === 'high' || v === 'balanced' || v === 'fast';
+}
+
 /** The largest whole zoom that shows about 15 x 9.5 tiles, clamped to 2..8. */
 export function pickZoom(w: number, h: number): number {
   const z = Math.floor(Math.min(w / (16 * 15), h / (16 * 9.5)));
