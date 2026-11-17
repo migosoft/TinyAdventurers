@@ -25,6 +25,8 @@ const KINDS = [
   ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
 const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny'];
+/** The woodland page's line-up: the seven figures it places, no animals. */
+const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
 /** The animals (#357): their rows in KINDS start here. */
 const ANIMALS = ['bunny', 'deer', 'stag', 'boar'];
 // A still picture: the clock nearly stopped (slow) at t = 0.6 (past the hurt flash).
@@ -69,7 +71,7 @@ shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: A
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });
 shots.push({ name: 'crowd-cards', q: '&crowd=40&crowdAs=cards&at=crowd:20&zoom=3&slow=1000&t=0.6', need: [], readout: true });
 shots.push({ name: 'crowd-models-many', q: '&crowd=184&at=crowd:90&zoom=2&slow=1000&t=0.6', need: ALL, readout: true });
-for (const hour of ['9.5', '18.5']) shots.push({ name: `woodland-${hour}`, page: 'woodland', q: `&models=1&hour=${hour}&hourRate=0&zoom=3`, need: ALL, wait: 4000 });
+for (const hour of ['9.5', '18.5']) shots.push({ name: `woodland-${hour}`, page: 'woodland', q: `&models=1&hour=${hour}&hourRate=0&zoom=3`, need: WOODLAND, wait: 4000 });
 
 const args =
   mode === 'webgpu' && process.env.HEADED
