@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ANIM, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
+import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { ATTACK_IN_SECS, GAIT, HIT_SECS, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { buildJob } from './build';
+import { ATTACK_IN_SECS, BUTT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 
@@ -37,6 +39,272 @@ const hand = (m: FigureModel, p: Pose3d, side: 'R' | 'L'): [number, number, numb
 };
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
 const isIdentity = (p: Pose3d, b: number): boolean => identity.every((e, k) => Math.abs(p.bones[b * 12 + k] - e) < 1e-6);
+
+/** The wolf's pose in ten situations, taken from the code before the tube models' abilities (#357): root x, y, z, roll, sx, sy, sz, then the bends (MAX_BENDS x 4), then the bones (MAX_BONES x 12). */
+const WOLF_TABLE: Record<string, number[]> = {
+  idle: [0,0,0,0,1,1,1,0,0,1,0.0467354,0,0,1,0.0467354,-0.9876729,0,0.1565319,0.3455599,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,0.9998002,-0.0199881,0,0.1609036,0.0203876,1.0197856,0,-0.0783207,0,0,1,0,0.9998002,-0.0199881,0,0.1609036,0.0203876,1.0197856,0,-0.0783207,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0,1,0,0,0,0,1.0199894,0,-0.0799577,0,0,1,0],
+  move0: [0,0,0,0,1,1,1,-0.8650605,0,-0.5016676,0.2037273,-0.8650605,0,-0.5016676,0.2037273,-0.8650605,0,-0.5016676,0.2511418,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.9677253,-0.0387297,0,0.3137108,0.0408891,1.0216821,0,-0.2879024,0,0,1,0,0.9677253,-0.0387297,0,0.3137108,0.0408891,1.0216821,0,-0.2879024,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.7763136,0.4412428,0,-0.7360138,-0.6303469,0.5434195,0,4.7259178,0,0,1,0,0.7763136,0.4412428,0,-0.7360138,-0.6303469,0.5434195,0,4.7259178,0,0,1,0,0.7763136,-0.4412428,0,0.7360138,0.6303469,0.5434195,0,4.7259178,0,0,1,0,0.7763136,-0.4412428,0,0.7360138,0.6303469,0.5434195,0,4.7259178,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0,0.9685,0,0,0,0,1.0225,0,-0.09,0,0,1,0],
+  move1: [0,1.4142136,0,0,1,1,1,-0.0097005,0,0.999953,0.3499704,-0.0097005,0,0.999953,0.3499704,-0.0097005,0,0.999953,0.4196675,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1.0164145,-0.0380745,0,-0.4288925,0.0471184,0.986917,0,0.621867,0,0,1,0,1.0164145,-0.0380745,0,-0.4288925,0.0471184,0.986917,0,0.621867,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1,0,0,0,0,1,0,0.7782388,0,0,1,0,1,0,0,0,0,1,0,0.7782388,0,0,1,0,1,0,0,0,0,1,0,-0.7782388,0,0,1,0,1,0,0,0,0,1,0,-0.7782388,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0,1.0033228,-0.1670074,0,0.6680298,0.1722272,0.9729148,0,0.108341,0,0,1,0],
+  move2: [0,2,0,0,1,1,1,0.3108452,0,0.9504606,0.4777403,0.3108452,0,0.9504606,0.4777403,0.3108452,0,0.9504606,0.5518845,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,1.0376693,0.0415289,0,-0.3280779,-0.0388896,0.9717221,0,0.3106713,0,0,1,0,1.0376693,0.0415289,0,-0.3280779,-0.0388896,0.9717221,0,0.3106713,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,0.7763136,-0.6303469,0,3.5503452,0.6303469,0.7763136,0,-2.0048501,0,0,1,0,0.7763136,-0.6303469,0,3.5503452,0.6303469,0.7763136,0,-2.0048501,0,0,1,0,0.7763136,0.6303469,0,-3.5503452,-0.6303469,0.7763136,0,-2.0048501,0,0,1,0,0.7763136,0.6303469,0,-3.5503452,-0.6303469,0.7763136,0,-2.0048501,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0,1.0385,0,0,0,0,0.9725,0,0.11,0,0,1,0],
+  windup: [0,0,1,0,1,1,1,0,0,1,0.0027528,0,0,1,0.0027528,0.9991496,0,0.0412319,0.0831122,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,0.9082578,-0.4184644,0,3.2899404,0.4187611,0.9097877,0,-0.7883748,0,0,1,0,0.9082578,-0.4184644,0,3.2899404,0.4187611,0.9097877,0,-0.7883748,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,1,0,0,0,0,1,0,0.5506762,0,0,1,0,1,0,0,0,0,1,0,0.5506762,0,0,1,0,1,0,0,0,0,1,0,-0.5506762,0,0,1,0,1,0,0,0,0,1,0,-0.5506762,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0,0.9928086,-0.1198988,0,0.4795951,0.1197122,0.9943559,0,0.0225766,0,0,1,0],
+  bite0: [1.7633558,0,0,0,1,1,1,0,0,0,1e-06,0,0,0,1e-06,0,0,0,1e-06,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,0.9999393,0.0110208,0,0.0835584,-0.0110208,0.9999393,0,-0.1686446,0,0,1,0,0.9999393,0.0110208,0,0.0835584,-0.0110208,0.9999393,0,-0.1686446,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,1,0,0,0,0,1,0,-0.2027202,0,0,1,0,1,0,0,0,0,1,0,-0.2027202,0,0,1,0,1,0,0,0,0,1,0,0.2027202,0,0,1,0,1,0,0,0,0,1,0,0.2027202,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0,0.9990284,0.0440696,0,-0.1762785,-0.0440696,0.9990284,0,0.0038861,0,0,1,0],
+  bite1: [4,0,0,0,1,1,1,0,0,0,1e-06,0,0,0,1e-06,0,0,0,1e-06,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,0.9110388,0.4123208,0,-2.4794054,-0.4123208,0.9110388,0,2.2541437,0,0,1,0,0.9110388,0.4123208,0,-2.4794054,-0.4123208,0.9110388,0,2.2541437,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,1,0,0,0,0,1,0,-0.4592337,0,0,1,0,1,0,0,0,0,1,0,-0.4592337,0,0,1,0,1,0,0,0,0,1,0,0.4592337,0,0,1,0,1,0,0,0,0,1,0,0.4592337,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0,0.9950042,0.0998334,0,-0.3993337,-0.0998334,0.9950042,0,0.0199833,0,0,1,0],
+  bite2: [0,0,0,0,1,1,1,0,0,0,1e-06,0,0,0,1e-06,0,0,0,1e-06,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9920017,0.1262249,0,-0.9698074,-0.1262249,0.9920017,0,0.6951112,0,0,1,0,0.9920017,0.1262249,0,-0.9698074,-0.1262249,0.9920017,0,0.6951112,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0],
+  hit: [-1.5930815,0,0,0,1,1,1,0,0,-1,0.4080182,0,0,-1,0.4080182,-0.0225479,0,-0.9997458,0.4009282,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,0.9612573,-0.2638209,0,1.5924994,0.2714418,0.8554785,0,0.1771177,0,0,1,0,0.9935651,0.0802833,0,1.5924994,-0.0369996,0.8967469,0,0.1771177,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,1,0,0,0,0,1,0,0.8200133,0,0,1,0,1,0,0,0,0,1,0,0.8200133,0,0,1,0,1,0,0,0,0,1,0,-0.8200133,0,0,1,0,1,0,0,0,0,1,0,-0.8200133,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0,0.9839827,-0.1593584,0,0.6374334,0.1782638,0.8796284,0,0.4814865,0,0,1,0],
+  sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
+};
+
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny';
+const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
+const TUBE_KIND: Record<TubeKey, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny };
+const tmemo = new Map<TubeKey, FigureModel>();
+const tube = (k: TubeKey): FigureModel => {
+  let m = tmemo.get(k);
+  if (!m) tmemo.set(k, (m = buildJob(k, null)));
+  return m;
+};
+const tdef = (k: TubeKey): FigureDef => FIGURES[TUBE_KIND[k]];
+const flat = (p: Pose3d): number[] => [p.root.x, p.root.y, p.root.z, p.root.roll, p.root.sx, p.root.sy, p.root.sz, ...p.bends, ...p.bones];
+/** The bone's world matrix as a three.js matrix. */
+const world = (p: Pose3d, b: number): Matrix4 => {
+  const e = p.bones, o = b * 12;
+  return new Matrix4().set(e[o], e[o + 1], e[o + 2], e[o + 3], e[o + 4], e[o + 5], e[o + 6], e[o + 7], e[o + 8], e[o + 9], e[o + 10], e[o + 11], 0, 0, 0, 1);
+};
+/** What a bone does by itself: its parent's world matrix undone. */
+const localOf = (m: FigureModel, p: Pose3d, b: number): Matrix4 => world(p, m.parents[b]).invert().multiply(world(p, b));
+/** The turn about z (rad) and the stretch along y of a bone's own matrix. */
+const turnOf = (m: FigureModel, p: Pose3d, b: number): number => { const e = localOf(m, p, b).elements; return Math.atan2(e[1], e[0]); };
+const stretchOf = (m: FigureModel, p: Pose3d, b: number): number => { const e = localOf(m, p, b).elements; return Math.hypot(e[4], e[5], e[6]); };
+const BUTT_ANIM = (animT: number): Partial<ViewState> => ({ anim: ANIM.Melee, animT });
+/** A moment in the strike of a butt: `u` is 0.35 + 0.65 * animT / secs. */
+const STRIKE_T = 0.07;
+
+describe('the wolf is unchanged', () => {
+  const m = buildFigure('wolf', DESCS.wolf), d = FIGURES[KIND.DireWolf];
+  const cases: Record<string, () => Pose3d> = {
+    idle: () => poseFigure(m, d, view(), 1 / 60, settled({ clock: 0.6 })),
+    move0: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: 0 })),
+    move1: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 4 })),
+    move2: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 2 })),
+    windup: () => poseFigure(m, d, view({ anim: ANIM.Windup }), 0, settled({ clock: 0.03 })),
+    bite0: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.03 }), 0, settled()),
+    bite1: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.075 }), 0, settled()),
+    bite2: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.2 }), 0, settled()),
+    hit: () => poseFigure(m, d, view({ flags: FLAG.HURT }), 0.05, settled({ clock: 1.3 })),
+    sleep: () => poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 1 / 60, settled({ clock: 0.4 })),
+  };
+  for (const k of Object.keys(cases)) {
+    it(`gives the numbers of before for ${k}`, () => {
+      const got = flat(cases[k]()), want = WOLF_TABLE[k];
+      expect(got.length).toBe(want.length);
+      for (let i = 0; i < want.length; i++) expect(Math.abs(got[i] - want[i]), `${k}[${i}]`).toBeLessThan(1e-6);
+    }, SLOW);
+  }
+});
+
+describe('legs of two bones', () => {
+  const m = tube('stag'), d = tdef('stag');
+  const at = (phi: number): Pose3d => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi }));
+
+  it('are straight at rest', () => {
+    const p = poseFigure(m, d, view(), 0, settled());
+    for (const l of m.legs!) { expect(turnOf(m, p, l.upper)).toBeCloseTo(0, 6); expect(turnOf(m, p, l.lower)).toBeCloseTo(0, 6); }
+  }, SLOW);
+
+  it('fold the lower leg back (never forwards, never beyond LEG_FOLD) while the upper leg swings, and not otherwise', () => {
+    expect(LEG_FOLD).toBe(0.95);
+    const A = 0.62 * GAIT.stride;
+    let folded = 0, straight = 0;
+    for (let i = 0; i < 40; i++) {
+      const phi = i / 40 * 2 * Math.PI, p = at(phi), ext = -Math.cos(2 * phi);
+      for (const l of m.legs!) {
+        const sgn = l.front ? 1 : -1, fold = turnOf(m, p, l.lower), want = -LEG_FOLD * Math.max(0, Math.sin(2 * phi) * sgn);
+        expect(fold, `phi ${phi}`).toBeLessThanOrEqual(1e-6);
+        expect(fold).toBeGreaterThanOrEqual(-LEG_FOLD - 1e-6);
+        expect(fold).toBeCloseTo(want, 5);
+        expect(turnOf(m, p, l.upper)).toBeCloseTo(A * 1.1 * ext * sgn, 5);
+        if (fold < -1e-3) folded++; else straight++;
+      }
+    }
+    expect(folded).toBeGreaterThan(0);
+    expect(straight).toBeGreaterThan(0);
+  }, SLOW);
+
+  it('take no squash on the upper leg, while the bunny and the wolf legs still do', () => {
+    const phi = 0;   // ext = -1: the legs are drawn in
+    const p = at(phi);
+    for (const l of m.legs!) expect(stretchOf(m, p, l.upper)).toBeCloseTo(1, 6);
+    const b = tube('bunny'), bp = poseFigure(b, tdef('bunny'), view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi }));
+    for (const l of b.legs!) { expect(l.lower).toBe(-1); expect(stretchOf(b, bp, l.upper)).toBeCloseTo(0.7, 5); }
+    const w = buildFigure('wolf', DESCS.wolf), wp = poseFigure(w, FIGURES[KIND.DireWolf], view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi }));
+    for (const n of ['leg0', 'leg1', 'leg2', 'leg3'] as const) expect(stretchOf(w, wp, bone(n))).toBeCloseTo(0.7, 5);
+  }, SLOW);
+
+  it('move the front pair and the hind pair mirrored, as the wolf legs', () => {
+    const p = at(0.3);
+    const [f, h] = [m.legs!.filter((l) => l.front), m.legs!.filter((l) => !l.front)];
+    expect(f.length).toBe(2); expect(h.length).toBe(2);
+    expect(turnOf(m, p, f[0].upper)).toBeCloseTo(turnOf(m, p, f[1].upper), 6);
+    expect(turnOf(m, p, h[0].upper)).toBeCloseTo(turnOf(m, p, h[1].upper), 6);
+    expect(turnOf(m, p, f[0].upper)).toBeCloseTo(-turnOf(m, p, h[0].upper), 6);
+    // At phi 0.3 the front legs swing forward and fold; the hind legs do not.
+    expect(turnOf(m, p, f[0].lower)).toBeCloseTo(-LEG_FOLD * Math.sin(0.6), 5);
+    expect(turnOf(m, p, f[1].lower)).toBeCloseTo(turnOf(m, p, f[0].lower), 6);
+    expect(turnOf(m, p, h[0].lower)).toBeCloseTo(0, 6);
+    expect(turnOf(m, p, h[1].lower)).toBeCloseTo(0, 6);
+  }, SLOW);
+});
+
+describe('the hop', () => {
+  it('lifts the bunny by the hop factor at the top of the bound, the stag by 2.0', () => {
+    for (const [k, hop] of [['bunny', 1.3], ['stag', 1]] as const) {
+      const m = tube(k), p = poseFigure(m, tdef(k), view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 2 }));
+      expect(p.root.y, k).toBeCloseTo(2.0 * hop * m.scale, 5);
+    }
+  }, SLOW);
+});
+
+describe('the neck', () => {
+  /** Where the bend carries the neck's end, in the body's frame. */
+  const bentEnd = (m: FigureModel, p: Pose3d): [number, number, number] => {
+    const nb = m.neckBend!, o = m.bends[nb].origin, e = pivot(m, 'head'), a = p.bends[nb * 4 + 3], c = Math.cos(a), s = Math.sin(a);
+    const vx = e[0] - o[0], vy = e[1] - o[1];
+    return [o[0] + vx * c - vy * s, o[1] + vx * s + vy * c, e[2]];
+  };
+  const states: [string, Partial<ViewState>, Partial<Pose3dMemory>][] = [
+    ['idle', {}, { clock: 1.2 }],
+    ['move', { anim: ANIM.Move }, { walk: 1, phi: Math.PI / 4 }],
+    ['the wind-up', { anim: ANIM.Windup }, {}],
+    ['the strike', BUTT_ANIM(STRIKE_T), {}],
+  ];
+
+  for (const k of ['stag', 'deer'] as const) {
+    it(`${k}: idle at t 0 the bend axis is z and its angle 0`, () => {
+      const m = tube(k), p = poseFigure(m, tdef(k), view(), 0, settled());
+      const nb = m.neckBend!;
+      expect([p.bends[nb * 4], p.bends[nb * 4 + 1], p.bends[nb * 4 + 2]]).toEqual([0, 0, 1]);
+      expect(p.bends[nb * 4 + 3]).toBe(0);
+    }, SLOW);
+
+    for (const [name, v, mm] of states) {
+      it(`${k}: the head bone keeps the neck's end in ${name}`, () => {
+        const m = tube(k), p = poseFigure(m, tdef(k), view(v), 0, settled(mm));
+        const want = apply(p, bone('body'), bentEnd(m, p)), got = apply(p, bone('head'), pivot(m, 'head'));
+        for (let i = 0; i < 3; i++) expect(got[i]).toBeCloseTo(want[i], 3);
+      }, SLOW);
+    }
+
+    it(`${k}: bends by -0.8 pitch - 0.2 w and the nod in a bound`, () => {
+      const m = tube(k);
+      for (const phi of [0, Math.PI / 4, 1]) {
+        const p = poseFigure(m, tdef(k), view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi }));
+        const pitch = 0.17 * Math.sin(2 * phi);
+        expect(p.bends[m.neckBend! * 4 + 3]).toBeCloseTo(-0.8 * pitch - 0.2 + 0.05 * GAIT.loose * Math.sin(2 * phi), 5);
+      }
+    }, SLOW);
+  }
+
+  it('the boar and the bunny have no neck bend', () => {
+    expect(tube('boar').neckBend).toBe(-1);
+    expect(tube('bunny').neckBend).toBe(-1);
+  }, SLOW);
+});
+
+describe('the butt', () => {
+  const angle = (p: Pose3d, b: number): number => Math.atan2(p.bones[b * 12 + 4], p.bones[b * 12]);
+
+  it('holds the reared pose in a wind-up and strikes with pose.attack', () => {
+    for (const k of ['boar', 'stag'] as const) {
+      const m = tube(k), d = tdef(k), mem = settled();
+      const w = poseFigure(m, d, view({ anim: ANIM.Windup }), 0, mem);
+      expect(w.attack, k).toBeNull();
+      expect(w.root.x, k).toBeLessThan(-1);
+      expect(angle(w, bone('body')), k).toBeGreaterThan(0.12 + 0.05);
+      const s = poseFigure(m, d, view(BUTT_ANIM(STRIKE_T)), 0, mem);
+      expect(s.attack?.style, k).toBe('butt');
+      expect(s.attack!.u).toBeCloseTo(BUTT.hold + (1 - BUTT.hold) * STRIKE_T / BUTT.secs, 6);
+      expect(poseFigure(m, d, view(BUTT_ANIM(BUTT.secs)), 0, mem).attack, k).toBeNull();
+    }
+  }, SLOW);
+
+  it('lowers the stag\'s neck at the lunge, and throws the boar\'s head up', () => {
+    const st = tube('stag'), sp = poseFigure(st, tdef('stag'), view(BUTT_ANIM(STRIKE_T)), 0, settled());
+    expect(sp.bends[st.neckBend! * 4 + 3]).toBeLessThan(-0.5);
+    const rear = poseFigure(st, tdef('stag'), view({ anim: ANIM.Windup }), 0, settled());
+    expect(rear.bends[st.neckBend! * 4 + 3]).toBeGreaterThan(0.1);
+    const bo = tube('boar'), bp = poseFigure(bo, tdef('boar'), view(BUTT_ANIM(STRIKE_T)), 0, settled());
+    expect(turnOf(bo, bp, bone('head'))).toBeGreaterThan(0.3);
+  }, SLOW);
+
+  it('is not done by the deer and the bunny, which bite as the wolf', () => {
+    for (const k of ['deer', 'bunny'] as const) {
+      const m = tube(k), p = poseFigure(m, tdef(k), view(BUTT_ANIM(STRIKE_T)), 0, settled());
+      expect(p.attack?.style, k).toBe('bite');
+      expect(p.root.x, k).toBeGreaterThanOrEqual(0);
+    }
+  }, SLOW);
+});
+
+describe('the crest', () => {
+  it('scales the hat bone about its pivot and leaves the head alone', () => {
+    const m = tube('stag'), mem = settled({ crest: 0.8 });
+    expect(newPose3dMemory().crest).toBe(1);
+    const p = poseFigure(m, tdef('stag'), view(), 0, mem), L = localOf(m, p, bone('hat')).elements;
+    for (const i of [0, 5, 10]) expect(L[i]).toBeCloseTo(0.8, 6);
+    const at = apply(p, bone('hat'), pivot(m, 'hat')), hp = apply(p, bone('head'), pivot(m, 'hat'));
+    for (let i = 0; i < 3; i++) expect(at[i]).toBeCloseTo(hp[i], 5);
+    const H = localOf(m, p, bone('head')).elements;
+    for (const i of [0, 5, 10]) expect(H[i]).toBeCloseTo(1, 6);
+  }, SLOW);
+
+  it('leaves the wizard\'s hat as it is by default', () => {
+    const m = model('wizard'), d = def('wizard');
+    const a = poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: 1 })), b = poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: 1, crest: 1 }));
+    expect(a.bones).toEqual(b.bones);
+    const e = localOf(m, a, bone('hat')).elements;
+    expect(Math.hypot(e[0], e[1], e[2])).toBeCloseTo(1, 5);
+    expect(Math.hypot(e[4], e[5], e[6])).toBeCloseTo(1, 5);
+  }, SLOW);
+});
+
+describe('the woodland animals in every animation', () => {
+  it('give finite bones, bends and root, also with a stopped clock', () => {
+    const anims = Object.values(ANIM) as number[];
+    for (const k of TUBES) for (const dt of [0, 1 / 60]) for (const anim of anims) {
+      const m = tube(k), mem = newPose3dMemory();
+      const p = poseFigure(m, tdef(k), view({ anim, animT: dt, x: 3, y: -2 }), dt, mem);
+      for (const v of [...flat(p), p.air, p.yaw]) expect(Number.isFinite(v), `${k} anim ${anim} dt ${dt}`).toBe(true);
+      const q = poseFigure(m, tdef(k), view({ anim, animT: dt + 0.07, x: 3 + dt, y: -2 }), dt, mem);
+      for (const v of flat(q)) expect(Number.isFinite(v), `${k} anim ${anim} second`).toBe(true);
+    }
+  }, SLOW);
+
+  it('hold a stone animal\'s pose mid-stride and mid-butt, hit or not, whatever the crest', () => {
+    const stone = 1 << EFFECT.Petrified;
+    for (const k of ['stag', 'boar'] as const) for (const first of [{ anim: ANIM.Move }, BUTT_ANIM(STRIKE_T)]) {
+      const m = tube(k), d = tdef(k), mem = settled({ walk: 1, phi: 0.7, crest: 0.8 });
+      const a = copyPose(poseFigure(m, d, view({ ...first, effects: stone }), 1 / 60, mem));
+      mem.crest = 1.3;
+      const b = poseFigure(m, d, view({ anim: ANIM.Idle, effects: stone, flags: FLAG.HURT }), 0.3, mem);
+      expect(b.bones, k).toEqual(a.bones);
+      expect(b.bends, k).toEqual(a.bends);
+      expect(b.root, k).toEqual(a.root);
+      mem.crest = 0.5;
+      expect(poseFigure(m, d, view({ anim: ANIM.Move, effects: stone, flags: FLAG.HURT }), 0.3, mem).bones, k).toEqual(a.bones);
+      if (k === 'stag') expect(localOf(m, a, bone('hat')).elements[0]).toBeCloseTo(0.8, 5);
+    }
+  }, SLOW);
+
+  it('lie on their side with the legs unfolded, and stretch in a dash', () => {
+    for (const k of TUBES) {
+      const m = tube(k), d = tdef(k);
+      const p = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 1 / 60, settled({ phi: 0.4 }));
+      expect(p.root.roll, k).toBeCloseTo(Math.PI / 2, 6);
+      for (const l of m.legs!) if (l.lower >= 0) expect(turnOf(m, p, l.lower), k).toBeCloseTo(0, 6);
+      expect(poseFigure(m, d, view({ anim: ANIM.Dash }), 1 / 60, settled()).root.sx, k).toBeCloseTo(1.25, 6);
+    }
+  }, SLOW);
+});
 
 describe('the standing pose', () => {
   it('stays on the ground with only the breathing moving', () => {

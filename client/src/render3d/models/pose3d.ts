@@ -34,12 +34,14 @@ export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: n
   /** The pose `poseFigure` returns (written anew each call), and its attack object. */
   out: Pose3d | null; atk: { style: AttackStyle; u: number };
   /** A Windup came before this attack (the figure already holds the wound-up pose): no blend-in. */
-  woundUp: boolean }
+  woundUp: boolean;
+  /** The scale of the hat bone (the antlers of a stag): 1 unless the caller sets it. */
+  crest: number }
 export function newPose3dMemory(): Pose3dMemory {
-  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false };
+  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1 };
 }
 
-export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite';
+export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite' | 'butt';
 export interface Pose3d {
   /** World heading, radians (0 = +x; the game's y is the world's z). */
   yaw: number;
@@ -161,20 +163,27 @@ const UP: V3 = [0, 1, 0], SIDE: V3 = [0, 0, 1];
 interface AttackScratch {
   k: number; right: V3; left: V3; useRight: boolean; useLeft: boolean; b: V3; n: V3; twist: number; lean: number;
   longR: number; longL: number; lunge: number; head: number;
+  /** The butt: how far the animal is reared back, and how far forward into the strike (0 to 1; 0 for every other style). */
+  back: number; fwd: number;
   /** Which hand the pose's weapon basis (`b`, `n`) is for: 0 right, 1 left. */
   hand: 0 | 1;
 }
-const AP: AttackScratch = { k: 0, right: [0, 0, 0], left: [0, 0, 0], useRight: false, useLeft: false, b: [0, 1, 0], n: [0, 0, 1], twist: 0, lean: 0, longR: 1, longL: 1, lunge: 0, head: 0, hand: 0 };
+const AP: AttackScratch = { k: 0, right: [0, 0, 0], left: [0, 0, 0], useRight: false, useLeft: false, b: [0, 1, 0], n: [0, 0, 1], twist: 0, lean: 0, longR: 1, longL: 1, lunge: 0, head: 0, back: 0, fwd: 0, hand: 0 };
 
 /**
  * The attack at `u` (0 = it starts, 1 = back in the carrying pose): where each arm points, how the weapon lies, and `k`, how much
  * of this pose is mixed into the walking pose. `arc` is the swing's arc (rad).
  */
 function attackPose(style: AttackStyle, u: number, arc: number): void {
-  AP.k = 0; AP.useRight = AP.useLeft = false; AP.twist = AP.lean = 0; AP.longR = AP.longL = 1; AP.lunge = AP.head = 0; AP.hand = 0;
+  AP.k = 0; AP.useRight = AP.useLeft = false; AP.twist = AP.lean = 0; AP.longR = AP.longL = 1; AP.lunge = AP.head = 0; AP.back = AP.fwd = 0; AP.hand = 0;
   if (u < 0) return;
   u = Math.min(1, u);
-  if (style === 'bite') {
+  if (style === 'butt') {
+    // Rear up, throw the head down (or up) into the strike, come back.
+    AP.k = 1;
+    AP.back = ease(u / BUTT.back) * (1 - ease((u - BUTT.back) / BUTT.strike));
+    AP.fwd = ease((u - BUTT.back) / BUTT.strike) * (1 - ease((u - 0.6) / 0.4));
+  } else if (style === 'bite') {
     // Rear the head, snap down, come back (the lunge is the game's own, see `lungeOf`).
     AP.k = u < 0.2 ? ease(u / 0.2) : 1 - ease((u - 0.7) / 0.3);
     AP.head = 0.4 * ease(u / 0.25) - 0.8 * ease((u - 0.25) / 0.15) + 0.4 * ease((u - 0.5) / 0.4);
@@ -213,8 +222,13 @@ function slamPose(d: FigureDef, t: number): void {
   norm(set3(AP.right, 0.3 + 0.9 * down, 1 - 1.5 * down, 0.1)); norm(set3(AP.left, 0.3 + 0.9 * down, 1 - 1.5 * down, -0.1));
   norm(set3(AP.b, 0.3 + 0.6 * down, 1 - 1.5 * down, 0)); AP.n[0] = SIDE[0]; AP.n[1] = SIDE[1]; AP.n[2] = SIDE[2];
   AP.twist = 0; AP.lean = -0.12 * (1 - 2 * down) * up;   // leaning back (the negative lean) while it is up, forward as it comes down
-  AP.longR = AP.longL = 1.4; AP.lunge = 0; AP.head = 0;
+  AP.longR = AP.longL = 1.4; AP.lunge = 0; AP.head = 0; AP.back = AP.fwd = 0;
 }
+
+/** The butt's curve (the page's): reared back by `u` 0.35, the strike takes `strike` of it; a wind-up holds `hold`, the strike and return last `secs` (s). */
+export const BUTT = { back: 0.35, strike: 0.12, hold: 0.35, secs: 0.36 } as const;
+/** How far a lower leg folds back at most (rad). */
+export const LEG_FOLD = 0.95;
 
 /**
  * Each style's clock: the page's normalised time `u` at `animT = 0`, how long the rest of the page's curve (1 - u0) lasts here
@@ -225,6 +239,7 @@ const TIMING: Record<AttackStyle, { u0: number; secs: number; hold: number }> = 
   shot: { u0: 0.55, secs: 0.25, hold: 0.55 },          // the shot starts at the release and the figure recovers in 0.25 s
   cast: { u0: 0.42, secs: 0.25, hold: 0.42 },          // the cast starts as the light leaves
   bite: { u0: 0.25, secs: 0.3, hold: 0.25 },           // the head is reared; the snap and the return last 0.3 s
+  butt: { u0: BUTT.hold, secs: BUTT.secs, hold: BUTT.hold },   // reared up (a wind-up holds it); the strike and the return last 0.36 s
 };
 /** The page's `u` at `animT` seconds into a style's attack. The swing: u 0.2 to 0.56 (the sweep) over `MELEE_T`, then 0.56 to 1 (the return) over `MELEE_T`. */
 function uOf(style: AttackStyle, animT: number): number {
@@ -233,11 +248,20 @@ function uOf(style: AttackStyle, animT: number): number {
   return T.u0 + (1 - T.u0) * animT / T.secs;
 }
 const LUNGE_SECS = 0.15;
+/** The legs of a model: its own list (the tube models), else the four leg bones, the front ones by the sign of the pivot's x, none with a lower bone. */
+const legLists = new WeakMap<FigureModel, { upper: number; lower: number; front: boolean }[]>();
+function legsOf(m: FigureModel): { upper: number; lower: number; front: boolean }[] {
+  if (m.legs) return m.legs;
+  let l = legLists.get(m);
+  if (!l) legLists.set(m, (l = [0, 1, 2, 3].map((j) => ({ upper: LEG0 + j, lower: -1, front: m.pivots[(LEG0 + j) * 3] > 0 }))));
+  return l;
+}
+
 const ATTACK_ANIMS = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Bite]);
 const FACE_AIM = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Channel, ANIM.Windup, ANIM.Slam, ANIM.Bite]);
 
 function styleOf(m: FigureModel, d: FigureDef, anim: number): AttackStyle {
-  if (m.armLength === 0) return 'bite';
+  if (m.armLength === 0) return m.butt ? 'butt' : 'bite';
   if (anim === ANIM.Melee && (d.swing || d.mount === 'bow')) return 'swing';
   if (d.mount === 'bow') return 'shot';
   if (d.mount === 'staff' || d.attack === 'caster') return 'cast';
@@ -378,7 +402,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   else if (!ATTACK_ANIMS.has(anim)) mem.woundUp = false;
   const weight = struck && !mem.woundUp ? Math.min(1, animT / ATTACK_IN_SECS) : 1;
   if (slam) slamPose(d, animT); else attackPose(style, u, arc);
-  AP.k *= weight; AP.head *= weight;
+  AP.k *= weight; AP.head *= weight; AP.back *= weight; AP.fwd *= weight;
   // The game's lunge: out and back over 0.15 s at the start of a melee animation.
   const lunge = !asleep && anim === ANIM.Melee && d.lunge ? Math.sin(Math.min(animT / LUNGE_SECS, 1) * Math.PI) * weight : 0;
   AP.lunge = lunge;
@@ -393,24 +417,38 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   let bob = 0;
   resetLocals();
   const body = locals[BODY], head = locals[HEAD];
+  const neck = m.neckBend !== undefined && m.neckBend >= 0 ? m.bends[m.neckBend] : null;
+  let nbend = 0;
   if (m.quad) {
     // Bounding: the front pair and the hind pair each move together; highest with the legs stretched, nose up at the take-off.
     const ext = -Math.cos(2 * phi);
-    bob = 2.0 * GAIT.bounce * air * w;
+    bob = 2.0 * GAIT.bounce * air * w * (m.hop ?? 1);
     let pitch = 0.17 * Math.sin(2 * phi) * w * lim;
-    for (let j = 0; j < 4; j++) {
-      const b = LEG0 + j, sgn = Math.sign(m.pivots[b * 3]), L = locals[b];
-      L.rz = A * 1.1 * ext * sgn * w; L.sy = 1 - 0.3 * Math.max(0, -ext) * w;
-    }
     body.sx = 1 + 0.07 * lim * (air - 0.45) * w;
     body.sy = 1 + 0.02 * breath * idle - 0.05 * lim * (air - 0.45) * w + rise;
     pitch -= 0.1 * AP.lunge;   // the bite: the front dips into the lunge
     pitch += 0.18 * HJ;        // a hit rocks it away from the blow
     pitch += leanBack;
+    pitch += 0.07 * AP.back - 0.09 * AP.fwd;   // the butt: reared up, then down into the blow
     body.rz = pitch;
-    for (let j = 0; j < 4; j++) locals[LEG0 + j].ty = Math.sin(pitch) * m.pivots[(LEG0 + j) * 3];   // the legs stay under the rocking body
-    head.rz = -0.75 * pitch + 0.04 * cos2 * w + 0.02 * breath * idle + AP.head + 0.25 * HJ;   // the head stays level
-    head.ty = 0.1 * breath * idle;
+    for (const l of legsOf(m)) {
+      const sgn = l.front ? 1 : -1, L = locals[l.upper];
+      L.rz = A * 1.1 * ext * sgn * w;
+      L.ty = Math.sin(pitch) * m.pivots[l.upper * 3];   // the legs stay under the rocking body
+      if (l.lower < 0) L.sy = 1 - 0.3 * Math.max(0, -ext) * w;
+      else locals[l.lower].rz = -LEG_FOLD * Math.max(0, Math.sin(2 * phi) * sgn) * w;   // the lower leg folds back as the leg swings forward
+    }
+    if (neck) {
+      // The neck bends as a whole; the head follows its end.
+      nbend = -0.8 * pitch + 0.05 * GAIT.loose * Math.sin(2 * phi) * w - 0.2 * w + 0.3 * AP.back - 1.05 * AP.fwd;
+      const tilt = -0.4 * AP.fwd, look = asleep ? 0 : 0.4 * Math.sin(t * 0.5) * idle * (1 - Math.max(AP.back, AP.fwd));
+      const hp = HEAD * 3, vx = m.pivots[hp] - neck.origin[0], vy = m.pivots[hp + 1] - neck.origin[1], c = Math.cos(nbend), sn = Math.sin(nbend);
+      head.rz = 0.6 * nbend + tilt + 0.25 * HJ; head.ry = look;
+      head.tx = vx * c - vy * sn - vx; head.ty = vx * sn + vy * c - vy;
+    } else {
+      head.rz = -0.75 * pitch + 0.04 * cos2 * w + 0.02 * breath * idle + AP.head + 0.25 * HJ - 0.3 * AP.back + 0.45 * AP.fwd;   // the head stays level (a butt tilts it)
+      head.ty = 0.1 * breath * idle;
+    }
     body.sy *= 1 - 0.1 * Math.abs(HJ);
   } else {
     // Skipping: one hop per step. Landing with the legs together, highest with them apart, a little stretch in the air.
@@ -448,6 +486,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
 
   // ---- loose parts ----
   const loose = GAIT.loose, turn = -mem.turn, hat = locals[HAT];
+  hat.sx = hat.sy = hat.sz = mem.crest;
   {
     const kk = m.hatSway * loose;   // the hat rocks about the top of the head
     hat.rx = kk * 0.14 * Math.sin(phi - 0.8) * w;
@@ -463,7 +502,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (!asleep && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
   // The steps (lunge, jolt, shiver) are the game's px, scaled by the game's figure scale and the fall shrink as the card scales its own.
   const gameScale = (d.scale ?? 1) * fallK;
-  R.x = (num(d.lunge) * lunge - 1.6 * HJ) * gameScale;
+  R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back) * gameScale;   // the butt rears back, the lunge goes forward
   R.y = bob * m.scale;
   if (windup) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
   if (asleep) {
@@ -476,7 +515,9 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
 
   // ---- bends and the robe ----
   for (let i = 0; i < m.bends.length && i < MAX_BENDS; i++) {
-    const B = m.bends[i], kk = B.k * loose * 1.5;
+    const B = m.bends[i];
+    if (B.neck) { pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = 0; pose.bends[i * 4 + 2] = 1; pose.bends[i * 4 + 3] = nbend; continue; }
+    const kk = B.k * loose * 1.5;
     const wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle, wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
     const wz = kk * (B.up * 0.12 * w + 0.2 * Math.sin(2 * phi - 1.1) * w + 0.03 * Math.sin(t * 1.7) * idle) - B.up * 0.5 * HJ;   // a hit: the loose end lags behind the knocked body
     // The turn at the tip: its axis and its angle, which levels off so that a strong setting cannot fold the piece over.
