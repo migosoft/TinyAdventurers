@@ -40,6 +40,14 @@ describe('buildTubeFigure', () => {
         expect(lastStage).toBeLessThan(STAGES.length);
       });
 
+      it('has finite positions, normals, pivots and bends', () => {
+        for (const arr of [m.position, m.normal, m.pivots]) expect(arr.every(Number.isFinite)).toBe(true);
+        for (const bd of m.bends) {
+          const nums = [bd.bone, ...bd.origin, ...bd.dir, bd.len, bd.k, bd.up, bd.wag];
+          expect(nums.every(Number.isFinite), JSON.stringify(bd)).toBe(true);
+        }
+      });
+
       it('scale, size and flags', () => {
         expect(m.scale).toBeCloseTo(SIZE[key] * PAGE_TO_GAME, 6);
         expect(m.size).toBe(1);
