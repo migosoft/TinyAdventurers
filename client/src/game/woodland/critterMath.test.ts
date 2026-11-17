@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
-import { reachesPhaser } from '../../testutil/importWalk';
 import { rng } from '../covemath';
-import { beeAt, beeDepth, butterflyAt, flowerPatches, WING_COLOURS } from './critters';
-import { butterflyHomes } from './critterMath';
+import { beeAt, butterflyAt, butterflyHomes, flowerPatches, WING_COLOURS } from './critterMath';
 
 const bounds = { x: 100, y: 100, w: 190, h: 190 };
 
@@ -15,18 +13,6 @@ describe('critters', () => {
       const b = beeAt(i, t, f, 3);
       expect(Math.hypot(b.x - f.x, b.y - f.y)).toBeLessThanOrEqual(10);
     }
-  });
-
-  it('a bee sorts by its own position, so it passes in front of what stands just south of its flower (#263)', () => {
-    const f = { x: 200, y: 150 };
-    let south = 0, north = 0;
-    for (let t = 0; t < 4; t += 0.05) {
-      const b = beeAt(0, t, f, 3);
-      if (b.y > f.y + 2) { expect(beeDepth(b)).toBeGreaterThan(beeDepth(f)); south++; }
-      if (b.y < f.y - 2) { expect(beeDepth(b)).toBeLessThan(beeDepth(f)); north++; }
-    }
-    expect(south).toBeGreaterThan(0);
-    expect(north).toBeGreaterThan(0);
   });
 
   it('a butterfly rises 1.5 px on a flap and sinks 0.6 px between flaps', () => {
@@ -124,12 +110,5 @@ describe('critters', () => {
     }
     expect(n).toBeGreaterThan(5);
     expect(butterflyHomes(map, seed)).toEqual(want);
-  });
-
-  it('the pure modules reach no phaser import', () => {
-    for (const f of ['game/pixieMath.ts', 'game/woodland/critterMath.ts', 'game/covemath.ts']) {
-      const chain = reachesPhaser(f);
-      expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
-    }
   });
 });

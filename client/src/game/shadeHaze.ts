@@ -1,6 +1,5 @@
 // The Shade's looks that are not a sprite (#170, #200): a veil of black strands that wraps it and streams behind, the flat silhouette
-// that warns of an ambush, and the veil drifting apart when it dies. The maths is pure (tested); `ShadeVeil` only draws it.
-import type Phaser from 'phaser';
+// that warns of an ambush, and the veil drifting apart when it dies. The maths is pure (tested); the 3D view draws it.
 import { CONST } from '../generated/defs';
 
 /** Server wind-up of the ambush (`AMBUSH_WARNING` in run/ambush.rs). */
@@ -250,50 +249,4 @@ export function restingVeil(feet: Pt, face: 1 | -1, rnd: Rng = Math.random): Vei
   const v = new VeilStrands(rnd);
   for (let i = 0; i < 60; i++) v.step(feet, face, 1 / 30);
   return [...v.lines];
-}
-
-/** Front strands are a little fainter where they wrap across the (black) body. */
-const FRONT_ALPHA = 0.8;
-
-/** Draws the veil's pixels at `alpha` into the graphics behind the figure and the one in front of it (may be the same). */
-export function drawVeil(lines: readonly VeilStrand[], back: Phaser.GameObjects.Graphics, front: Phaser.GameObjects.Graphics, alpha: number): void {
-  const px = veilPixels(lines);
-  for (const [g, m, k] of [[back, px.back, alpha], [front, px.front, alpha * FRONT_ALPHA]] as const)
-    for (const [key, a] of m) {
-      const [x, y] = key.split(',').map(Number);
-      g.fillStyle(VEIL_COLOR, a * k).fillRect(x, y, 1, 1);
-    }
-}
-
-/** Draws the `VeilStrands` as black pixels (`veilPixels`): cloth and back strands just under the figure, the wrapping ones just over it. */
-export class ShadeVeil {
-  private veil = new VeilStrands();
-  /** The veil and the feet it was last drawn round, kept after it is cleared (the Shade's death starts from it). */
-  private last: { lines: readonly VeilStrand[]; feet: Pt } | null = null;
-  private back: Phaser.GameObjects.Graphics;
-  private front: Phaser.GameObjects.Graphics;
-
-  constructor(scene: Phaser.Scene) {
-    this.back = scene.add.graphics();
-    this.front = scene.add.graphics();
-  }
-
-  /** Follows the Shade's `feet`, or clears the veil when null. `alpha` scales it (fading in, the ambush warning). */
-  update(feet: { x: number; y: number } | null, face: 1 | -1, depth: number, alpha: number, dt: number): void {
-    this.veil.step(feet, face, dt);
-    if (feet) this.last = { lines: this.veil.lines, feet: { ...feet } };
-    this.back.clear().setDepth(depth - 0.5);
-    this.front.clear().setDepth(depth + 0.5);
-    drawVeil(this.veil.lines, this.back, this.front, alpha);
-  }
-
-  /** The veil as it was last drawn, and round which feet; null if it never was. */
-  remains(): { lines: readonly VeilStrand[]; feet: Pt } | null {
-    return this.last;
-  }
-
-  destroy(): void {
-    this.back.destroy();
-    this.front.destroy();
-  }
 }

@@ -22,22 +22,3 @@ export function resolve(from: string, spec: string): string | null {
 export const isAsset = (spec: string): boolean => /\.(css|png|json|wgsl|glsl|svg)$/.test(spec.split('?')[0]);
 
 export const read = (f: string): string => readFileSync(join(SRC, f), 'utf8');
-
-/** The first chain of non-type imports from `file` (relative to src) to `phaser`, or null. */
-export function reachesPhaser(file: string, seen = new Set<string>()): string[] | null {
-  if (seen.has(file)) return null;
-  seen.add(file);
-  for (const s of specifiers(read(file))) {
-    if (s === 'phaser' || s.startsWith('phaser/')) return [file, 'phaser'];
-    if (!s.startsWith('.')) continue;
-    const next = resolve(file, s);
-    if (!next) {
-      // An unresolved import must not stop the walk silently: only a known asset (a Vite `?raw` or `?url` included) may be skipped.
-      if (isAsset(s)) continue;
-      return [file, `unresolved import '${s}'`];
-    }
-    const chain = reachesPhaser(next, seen);
-    if (chain) return [file, ...chain];
-  }
-  return null;
-}

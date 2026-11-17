@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { MoverTracker, collectAirMovers } from './airmovers';
 import type { AirMover } from './airTypes';
 import { FIGURES } from './anim/defs';
@@ -6,8 +6,6 @@ import { projectileAir } from './airshots';
 import { FLAG, KIND } from '../generated/defs';
 import type { EntState } from './world';
 import type { RunFrame } from '../run/view';
-
-vi.mock('phaser', () => ({ default: {} }));
 
 const DT = 1 / 60;
 

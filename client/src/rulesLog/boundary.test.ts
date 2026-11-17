@@ -26,9 +26,8 @@ describe('rules log boundary', () => {
       const n = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('rulesLog')).length;
       if (n > 0) found[relative(SRC, f)] = n;
     }
-    // One import line each: GameScene (makes the log, binds L), PhaserRunView (the 2D tags: `phaserTags` and the type),
-    // runStage (makes the log of a 3D run, binds L). The session, the 3D view and the overlay layout only see a callback.
-    expect(found).toEqual({ 'game/GameScene.ts': 1, 'game/PhaserRunView.ts': 2, 'render3d/runStage.ts': 1 });
+    // One import line: runStage (makes the log of a 3D run, binds L). The session, the 3D view and the overlay layout only see a callback.
+    expect(found).toEqual({ 'render3d/runStage.ts': 1 });
   });
 
   it('wire.ts passes the raw log element through once', () => {
