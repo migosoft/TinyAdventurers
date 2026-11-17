@@ -22,8 +22,11 @@ const STATES = ['idle', 'move', 'melee', 'shoot', 'cast', 'windup', 'dash'];
 const KINDS = [
   ['wizard', 'wizard'], ['paladin', 'knight'], ['barbarian', 'dwarf'], ['ranger', 'elf'],
   ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['raisedskel', 'skelet'], ['ogre', 'ogre'], ['wolf', 'wolf'],
+  ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
-const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
+const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny'];
+/** The animals (#357): their rows in KINDS start here. */
+const ANIMALS = ['bunny', 'deer', 'stag', 'boar'];
 // A still picture: the clock nearly stopped (slow) at t = 0.6 (past the hurt flash).
 const STILL = '&slow=1000&t=0.6';
 // A dash leaves copies that fade in 0.25 s of the stage's clock, so a stopped clock would keep the copies of the first frames (drawn as cards
@@ -40,6 +43,20 @@ shots.push({ name: 'kind-wizard-channel', q: `&focus=models&at=model:0&zoom=6&st
 shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:8&zoom=6&state=bite${STILL}`, need: ['wolf'] });
 shots.push({ name: 'swoosh-paladin-south', q: `&focus=models&at=model:1&zoom=6&state=melee&aim=90${STILL}`, need: ['knight'] });
 shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:8&zoom=6&state=melee&aim=90${STILL}`, need: ['wolf'] });
+// The animals (#357) have their state shots from the loop above; here the swing's reach from the south (aim 90).
+for (const [name, i] of ANIMALS.map((n) => [n, KINDS.findIndex((k) => k[0] === n)])) {
+  shots.push({ name: `kind-${name}-aim`, q: `&focus=models&at=model:${i}&zoom=6&state=melee&aim=90${STILL}`, need: [name] });
+}
+// The variety block: six animals of each kind in a row, each with its own look from its id (the antlers, tusks, size and coat vary).
+for (const [r, name] of ['stag', 'deer', 'boar', 'bunny'].entries()) shots.push({ name: `variety-${name}`, q: `&at=variety:${r}&zoom=4&state=idle${STILL}`, need: [name] });
+// The lamp's own outline of the stag as its shadow.
+shots.push({ name: 'torch-light-stag', q: `&at=model:${KINDS.findIndex((k) => k[0] === 'stag')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
+// The animals on the liquids page: wading, the fall into the chasm and the sink into the lava.
+for (const name of ANIMALS) {
+  shots.push({ name: `liquids-${name}-wade`, page: 'liquids', q: `&models=${name}&t=4&zoom=3`, need: [name] });
+  shots.push({ name: `liquids-${name}-chasm`, page: 'liquids', q: `&models=${name}&push=chasm&t=1.6&zoom=3`, need: [name] });
+  shots.push({ name: `liquids-${name}-lava`, page: 'liquids', q: `&models=${name}&t=4.5&zoom=3`, need: [name] });
+}
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
@@ -188,7 +205,7 @@ if (!only || only.test('lose')) {
     await snap(p, 'lose-after');
     console.log(`lose: ${after.drawn} figures drawn after the loss; models rebuilt: ${before === after.builtMs ? 'no (same build times)' : 'YES'}`);
     if (before !== after.builtMs) errs.push('lose: the models were built again after the loss');
-    if (!(after.drawn >= 9)) errs.push(`lose: only ${after.drawn} figures drawn after the loss`);
+    if (!(after.drawn >= 13)) errs.push(`lose: only ${after.drawn} figures drawn after the loss`);
     await p.close();
   } catch (e) {
     errs.push(`lose: ${e.message}`);

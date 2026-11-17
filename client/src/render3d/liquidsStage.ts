@@ -5,6 +5,7 @@
 // `&push=chasm|water|barrel` asks that push at t = 1 s; `&t=<s>` pins the clock. `window.__r3d.liquids = { t, fallers, ripples }`
 // (`ripples`: the live ripples of the water, #345). The water's own `Water3d` is stepped with the page's clock `t` (the elf's wading, the
 // imp's drowning, their droplets through the effects); a pinned page steps it in its replay loop too, so the rings, splashes and bubbles of the last seconds show.
+// `&models=stag|deer|boar|bunny|wolf` (#357) lets that kind play all four roles, drawn as its 3D model (the stage makes a kit and ends it).
 // The run's own light list (torches, lava), the sight off, the game light; WASD pans a free camera.
 import { KIND, LIGHT_KIND } from '../generated/defs';
 import { LightField } from '../game/light';
@@ -23,12 +24,14 @@ import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
+import type { FigureKit } from './models/kit';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
 import { Lava3d, type LavaIn } from './lava/lava';
 import { emitLavaCues } from './fx/lavaFx';
 import { rng } from './fx/rand';
 import { seeLook } from './seeThrough';
+import { createStageKit, modelsReadouter } from './stageKit';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
 import { Water3d } from './water/water';
@@ -50,7 +53,10 @@ const ALL_VISIBLE = { isVisible: (): boolean => true };
 const REPLAY = 6;
 const STEP = 1 / 60;
 
-export interface LiquidsOpts { push: Push | null; start: number; pinned: boolean; slow: number }
+/** The kinds `&models=` names. */
+const MODEL_NAMES: Record<string, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, wolf: KIND.DireWolf };
+
+export interface LiquidsOpts { push: Push | null; start: number; pinned: boolean; slow: number; /** The kind that plays every role, drawn as a model; null for the ordinary cast. */ models: number | null }
 
 export function parseLiquids(search: string): LiquidsOpts {
   const q = new URLSearchParams(search);
@@ -61,6 +67,7 @@ export function parseLiquids(search: string): LiquidsOpts {
     push: push === 'chasm' || push === 'water' || push === 'barrel' ? push : null,
     start: Number.isFinite(t) && t > 0 ? t : 0, pinned: q.has('t') && Number.isFinite(t),
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
+    models: MODEL_NAMES[q.get('models') ?? ''] ?? null,
   };
 }
 
@@ -72,6 +79,9 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const cam = { x: map.w / 2, z: map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
   if (opts.push) pushes[opts.push] = 1;
+  // The kit of a `&models` page, kept across a rebuilt view and ended with the stage.
+  const kit: FigureKit | null = opts.models !== null ? createStageKit(assets) : null;
+  const readout = kit ? modelsReadouter(kit) : null;
   const pass = new FxPass(NONE_IDS);
   const fx = new Effects3d(map);
   // Made with the stage, whose clock only runs forward: a new page makes a new one.
@@ -145,7 +155,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       }
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 };
+      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, ...(kit ? { models: { kit, is: () => true } } : {}) };
       // A pinned page plays the seconds before its clock once, then holds still.
       let fdt = dt;
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
@@ -155,7 +165,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           for (let k = Math.ceil(REPLAY / STEP); k >= 1; k--) {
             const tau = t - k * STEP;
             if (tau < 0) continue;
-            const w = liquidsScript(tau, STEP, pushes);
+            const w = liquidsScript(tau, STEP, pushes, opts.models ?? undefined);
             for (const ev of w.events) figures.event(ev);
             const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
@@ -168,7 +178,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         } else fdt = 0;
       }
       // The actors and the events born since the last frame, sent to the figures as a run sends them.
-      const sc = liquidsScript(t, Math.max(0, t - prev), pushes);
+      const sc = liquidsScript(t, Math.max(0, t - prev), pushes, opts.models ?? undefined);
       prev = t;
       for (const ev of sc.events) figures.event(ev);
       const ents = [...torchEnts, ...sc.ents];
@@ -197,11 +207,13 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
+        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 }, t);
         r.liquids = { t, fallers: figures.fallers, ripples: wo.live, bubbles: lo.live };
       }
       c.timer.renderStart();
       return c.view.draw(
         {
+          ...(kit ? { models: { insts: fo.models, kit } } : {}),
           cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
@@ -222,6 +234,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
     },
     dispose(): void {
       label.remove();
+      kit?.dispose();
       host?.setPageButtons([]);
     },
   };

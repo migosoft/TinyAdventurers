@@ -37,12 +37,16 @@ export const MODEL_PITCH = 3;
 /** The effect rows are 4 tiles apart: the ogre stands taller than 3 tiles on the screen. */
 export const MODEL_ROW_PITCH = 4;
 export const MODEL_EFFECT_ROWS = 9;
-export const MODEL_EFFECT_COLS = 7;
+export const MODEL_EFFECT_COLS = 9;
 export const CROWD_PER_ROW = 23;
 export const CROWD_ROWS = 8;
+/** The variety block (#357), below the crowd: one row per animal kind, `VARIETY_COLS` animals each, `VARIETY_PITCH` tiles apart. */
+export const VARIETY_ROWS = 4;
+export const VARIETY_COLS = 6;
+export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
-/** The pillars' columns (tiles) in the model block: between the kind cells 2/3 and 5/6. */
-export const PILLAR_X = [11, 20] as const;
+/** The pillars' columns (tiles) in the model block: between the kind cells 2/3, 5/6, 8/9 and 11/12 (the animals' cells have a torch beside them). */
+export const PILLAR_X = [11, 20, 29, 38] as const;
 
 export interface Layout {
   map: TileMap;
@@ -55,6 +59,8 @@ export interface Layout {
   modelEffect(row: number, col: number): { x: number; z: number };
   dying(i: number): { x: number; z: number };
   crowd(i: number): { x: number; z: number };
+  /** Foot of the animal in column `col` of variety row `row`, in tiles. */
+  variety(row: number, col: number): { x: number; z: number };
   /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
   pillarTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
@@ -72,7 +78,8 @@ export function layoutOf(nFigures: number): Layout {
   const effTop2 = mTop + 5;
   const dyingZ = effTop2 + MODEL_EFFECT_ROWS * MODEL_ROW_PITCH + 1.5;
   const crowdTop = dyingZ + 3;
-  const h = Math.ceil(crowdTop + CROWD_ROWS * 2) + 2;
+  const varTop = crowdTop + CROWD_ROWS * 2 + 1;
+  const h = Math.ceil(varTop + VARIETY_ROWS * VARIETY_PITCH) + 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
   const floor = (x0: number, x1: number, z0: number, z1: number, t: number = TILE_ID.Floor): void => {
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) tiles[z * GALLERY_W + x] = t;
@@ -95,6 +102,7 @@ export function layoutOf(nFigures: number): Layout {
     modelEffect: (row, col) => ({ x: 2 + col * MODEL_PITCH + 1.5, z: effTop2 + row * MODEL_ROW_PITCH + 3 }),
     dying: (i) => ({ x: 2 + i * MODEL_PITCH + 1.5, z: dyingZ }),
     crowd: (i) => ({ x: 2 + (i % CROWD_PER_ROW) * 2 + 1, z: crowdTop + Math.floor(i / CROWD_PER_ROW) * 2 + 1 }),
+    variety: (row, col) => ({ x: 2 + col * VARIETY_PITCH + 1.5, z: varTop + row * VARIETY_PITCH + 2 }),
     pillarTorches: PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + 1 })),
     focus: {
       models: { x: 2 + (9 * MODEL_PITCH) / 2, z: kindZ },

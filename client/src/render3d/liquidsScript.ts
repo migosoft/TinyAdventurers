@@ -36,7 +36,7 @@ const ent = (id: number, kind: number, x: number, y: number, side: number, o: Pa
 });
 
 /** The elf on its U, going there and back. */
-function elfAt(t: number): EntState {
+function elfAt(t: number, kind: number): EntState {
   const legs: number[] = [];
   for (let i = 1; i < ELF_PATH.length; i++) legs.push(Math.hypot(ELF_PATH[i][0] - ELF_PATH[i - 1][0], ELF_PATH[i][1] - ELF_PATH[i - 1][1]));
   const len = legs.reduce((a, b) => a + b, 0);
@@ -48,16 +48,16 @@ function elfAt(t: number): EntState {
   const [a, b] = [ELF_PATH[i], ELF_PATH[i + 1]];
   const k = legs[i] ? d / legs[i] : 0;
   const dx = (b[0] - a[0]) * (back ? -1 : 1);
-  return ent(ELF_ID, KIND.ElvenRanger, a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: dx < 0 ? Math.PI : 0 });
+  return ent(ELF_ID, kind, a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: dx < 0 ? Math.PI : 0 });
 }
 
 /** The knight: floor, into the lava, standing, out again. */
-function knightAt(t: number): EntState {
+function knightAt(t: number, kind: number): EntState {
   const s = ((t % KNIGHT_LOOP) + KNIGHT_LOOP) % KNIGHT_LOOP;
-  if (s < K_WAIT) return ent(KNIGHT_ID, KIND.Knight, K_X0, K_Y, SIDE.Friendly);
-  if (s < K_WAIT + K_LEG) return ent(KNIGHT_ID, KIND.Knight, K_X0 + (s - K_WAIT) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000 });
-  if (s < K_WAIT + K_LEG + K_STAND) return ent(KNIGHT_ID, KIND.Knight, K_X1, K_Y, SIDE.Friendly);
-  return ent(KNIGHT_ID, KIND.Knight, K_X1 - (s - K_WAIT - K_LEG - K_STAND) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: Math.PI });
+  if (s < K_WAIT) return ent(KNIGHT_ID, kind, K_X0, K_Y, SIDE.Friendly);
+  if (s < K_WAIT + K_LEG) return ent(KNIGHT_ID, kind, K_X0 + (s - K_WAIT) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000 });
+  if (s < K_WAIT + K_LEG + K_STAND) return ent(KNIGHT_ID, kind, K_X1, K_Y, SIDE.Friendly);
+  return ent(KNIGHT_ID, kind, K_X1 - (s - K_WAIT - K_LEG - K_STAND) * KNIGHT_SPEED, K_Y, SIDE.Friendly, { anim: ANIM.Move, animMs: t * 1000, aim: Math.PI });
 }
 
 /** Where a pushed thing stops: 0.1 tile inside its target cell (the Sink comes as it crosses the rim, as on the server; the fall's rim pull does the rest). */
@@ -68,12 +68,12 @@ function reach(q: Pusher): [number, number] {
 }
 
 /** Events of a push at `p`: the Sink when the slide ends, the Died after the fall's or the drowning's time. */
-function eventsOf(q: Pusher, p: number): { at: number; ev: PictureEv }[] {
+function eventsOf(q: Pusher, kind: number, p: number): { at: number; ev: PictureEv }[] {
   const at = p + SLIDE_TIME;
   const [x, y] = [reach(q)[0] * TILE, reach(q)[1] * TILE];
   return [
     { at, ev: { t: 'Sink', id: q.id, x, y, how: q.how } },
-    { at: at + q.dur, ev: { t: 'Died', id: q.id, kind: q.kind, x, y } },
+    { at: at + q.dur, ev: { t: 'Died', id: q.id, kind, x, y } },
   ];
 }
 
@@ -83,25 +83,27 @@ function eventsOf(q: Pusher, p: number): { at: number; ev: PictureEv }[] {
  * and one beside the chasm, a barrel beside the chasm. `pushes`: when each push was asked (s) or null. A pushed imp slides 0.35 s to
  * its target cell, gets `Sink` (how 0 or 1), stays FALL_TIME or DROWN_TIME, gets `Died` and leaves; it is back after 3.2 s (counted
  * from the Sink). A pushed barrel rolls in and shows anim 2 for FALL_TIME, then leaves, with no Sink and no Died (as the server does
- * it); it too is back after 3.2 s, so the button works again.
+ * it); it too is back after 3.2 s, so the button works again. `as` (a kind) lets that kind play the wader, the lava walker and the two
+ * pushed figures (the barrel stays a barrel); the ids and the events are the same.
  */
-export function liquidsScript(t: number, dt: number, pushes: Record<Push, number | null>): LiquidsFrame {
-  const ents: EntState[] = [elfAt(t), knightAt(t)];
+export function liquidsScript(t: number, dt: number, pushes: Record<Push, number | null>, as?: number): LiquidsFrame {
+  const ents: EntState[] = [elfAt(t, as ?? KIND.ElvenRanger), knightAt(t, as ?? KIND.Knight)];
   const events: PictureEv[] = [];
   for (const q of PUSHERS) {
     const p = pushes[q.push];
-    const rest = ent(q.id, q.kind, q.from[0], q.from[1], q.side);
+    const kind = q.kind === KIND.Barrel ? q.kind : as ?? q.kind;
+    const rest = ent(q.id, kind, q.from[0], q.from[1], q.side);
     if (p === null || t < p) { ents.push(rest); continue; }
     const sink = p + SLIDE_TIME;
     const [rx, ry] = reach(q);
     if (t < sink) {
       const k = (t - p) / SLIDE_TIME;
-      ents.push({ ...rest, x: (q.from[0] + (rx - q.from[0]) * k) * TILE, y: (q.from[1] + (ry - q.from[1]) * k) * TILE, ...(q.kind === KIND.Imp ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
+      ents.push({ ...rest, x: (q.from[0] + (rx - q.from[0]) * k) * TILE, y: (q.from[1] + (ry - q.from[1]) * k) * TILE, ...(kind !== KIND.Barrel ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
     } else if (t < sink + q.dur) {
       ents.push({ ...rest, x: rx * TILE, y: ry * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
     } else if (t >= sink + BACK_TIME) ents.push(rest);
     // The server sends no Sink and no Died for a barrel (objects.rs): it only shows anim 2 and is gone.
-    if (q.kind !== KIND.Barrel) for (const e of eventsOf(q, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);
+    if (q.kind !== KIND.Barrel) for (const e of eventsOf(q, kind, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);
   }
   return { ents, events };
 }

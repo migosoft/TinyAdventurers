@@ -181,16 +181,43 @@ describe('the gallery stage', () => {
     for (const e of rows) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
   });
 
-  it('has the effect block: 9 effect rows of the four heroes, a skeleton, the ogre and the wolf', () => {
+  it('has the effect block: 9 effect rows of the four heroes, a skeleton, the ogre, the wolf, the stag and the boar', () => {
     const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, 200));
-    expect(ents).toHaveLength(9 * 7);
-    const kinds = ents.slice(0, 7).map((e) => e.kind);
-    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf]);
+    expect(ents).toHaveLength(9 * 9);
+    const kinds = ents.slice(0, 9).map((e) => e.kind);
+    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar]);
     for (const eff of ['Sleep', 'Petrified', 'Frozen', 'Slowed', 'Poisoned', 'Chilled', 'Tainted', 'Invisible'] as const) {
-      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(7);
+      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(9);
     }
-    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(7);
+    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(9);
     for (const e of ents) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+  });
+
+  it('has the model rows of the four animals in every state of the cycle', () => {
+    const animals: number[] = [KIND.Bunny, KIND.Deer, KIND.Stag, KIND.Boar];
+    const rowOf = (t: number, s: string | null) => galleryEnts(t, s).filter((e) => inRange(e.id, ID.model, 13) && animals.includes(e.kind));
+    expect(rowOf(0.1, null)).toHaveLength(4);
+    for (const [name, anim] of STATES) expect(rowOf(0.1, name).map((e) => e.anim), name).toEqual([anim, anim, anim, anim]);
+  });
+
+  it('has the variety block: 4 rows (stag, deer, boar, bunny) of 6 animals standing idle, facing right, as models', () => {
+    const v = galleryEnts(1.7, null).filter((e) => inRange(e.id, ID.variety, 100));
+    expect(v).toHaveLength(24);
+    expect(v.map((e) => e.id)).toEqual(Array.from({ length: 4 }, (_, r) => Array.from({ length: 6 }, (_, c) => ID.variety + r * 10 + c)).flat());
+    const rowKinds = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny];
+    v.forEach((e, i) => {
+      expect(e.kind).toBe(rowKinds[Math.floor(i / 6)]);
+      expect([e.anim, e.aim, e.flags, e.effects]).toEqual([ANIM.Idle, 0, 0, 0]);
+    });
+    // drawn as models, also when the crowd is cards; inside the map; on a floor; clear of every other block's feet
+    for (const q of ['?x=1', '?crowdAs=cards']) expect(v.every(modelsOf(parseGallery(q)))).toBe(true);
+    const others = galleryEnts(1.7, null, CROWD_MAX).filter((e) => !inRange(e.id, ID.variety, 100));
+    for (const e of v) {
+      expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+      expect(e.y / 16).toBeLessThan(GALLERY.map.h - 1);
+      for (const o of others) expect(Math.hypot(o.x - e.x, o.y - e.y), `${e.id} / ${o.id}`).toBeGreaterThan(16);
+    }
+    expect(parseGallery('?at=variety:2').at).toEqual(GALLERY.variety(2, 2.5));
   });
 
   it('lets one figure of each kind die every 6 s and leave its skull', () => {
@@ -225,7 +252,7 @@ describe('the gallery stage', () => {
     const yes = ents.filter(is).map((e) => e.id);
     expect(yes.every((id) => id >= ID.model)).toBe(true);
     expect(yes.filter((id) => inRange(id, ID.model, 13))).toHaveLength(13);
-    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(63);
+    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(81);
     expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
     expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);
     const cards = modelsOf(parseGallery('?crowd=5&crowdAs=cards'));
@@ -234,8 +261,13 @@ describe('the gallery stage', () => {
   });
 
   it('has a lit torch on each pillar of the model block, on a wall', () => {
-    const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 2));
-    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual([[KIND.Torch, 1, 0], [KIND.Torch, 1, 0]]);
+    const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 10));
+    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 4 }, () => [KIND.Torch, 1, 0]));
+    // the animals' cells (columns 9 to 12 of the kind row) have a pillar's torch within 5 tiles
+    for (const i of [9, 10, 11, 12]) {
+      const p = GALLERY.model(i);
+      expect(Math.min(...t.map((e) => Math.hypot(e.x / 16 - p.x, e.y / 16 - p.z)))).toBeLessThan(5);
+    }
     for (const e of t) expect(GALLERY.map.get(Math.floor(e.x / 16), Math.floor(e.y / 16) - 1)).toBe(TILE_ID.Wall);
   });
 

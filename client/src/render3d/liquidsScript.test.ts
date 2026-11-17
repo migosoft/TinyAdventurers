@@ -87,6 +87,28 @@ describe('liquidsScript', () => {
     expect(liquidsScript(1.35 + CONST.FALL_TIME + 0.05, 0.016, pushes).ents.some((e) => e.id === BARREL)).toBe(false);
   });
 
+  it('lets `as` play every role: the wader, the lava walker and the two pushed figures, not the barrel', () => {
+    const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
+    for (const t of [0, 1.2, 2.5]) {
+      const plain = liquidsScript(t, 0.016, pushes);
+      const as = liquidsScript(t, 0.016, pushes, KIND.Stag);
+      expect(as.ents.map((e) => e.id)).toEqual(plain.ents.map((e) => e.id));
+      expect(as.ents.filter((e) => e.id !== BARREL).every((e) => e.kind === KIND.Stag)).toBe(true);
+      expect(as.ents.find((e) => e.id === BARREL)!.kind).toBe(KIND.Barrel);
+      expect(as.events.map((e) => ('id' in e ? e.id : -1))).toEqual(plain.events.map((e) => ('id' in e ? e.id : -1)));
+    }
+    const ev = liquidsScript(1.35 + CONST.FALL_TIME, 0.05, { ...none, chasm: 1 }, KIND.Boar).events.find((e) => e.t === 'Died') as { kind: number; id: number };
+    expect([ev.id, ev.kind]).toEqual([IMP_CHASM, KIND.Boar]);
+  });
+
+  it('without `as` plays the same script as before (imps, the elf and the knight)', () => {
+    const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
+    expect(liquidsScript(0, 0.016, none).ents.map((e) => e.kind)).toEqual([KIND.ElvenRanger, KIND.Knight, KIND.Imp, KIND.Imp, KIND.Barrel]);
+    for (const t of [0, 1.4, 2.4, 4.5]) {
+      expect(JSON.stringify(liquidsScript(t, 0.016, pushes, undefined))).toBe(JSON.stringify(liquidsScript(t, 0.016, pushes)));
+    }
+  });
+
   it('emits each event once', () => {
     const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
     const dt = 1 / 60;

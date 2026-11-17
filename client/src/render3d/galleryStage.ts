@@ -13,7 +13,7 @@ import { atlasBounds } from './atlasBounds';
 import { freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
-import { CROWD_MAX, EFFECT_GROUPS, GROUP_CELLS, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
+import { CROWD_MAX, EFFECT_GROUPS, VARIETY_COLS, GROUP_CELLS, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
@@ -65,6 +65,8 @@ export const ID = {
   model: 4000,
   modelEffect: 4100,
   dying: 4300,
+  /** The variety block (#357): `+ row * 10 + col`. Its ids decide what each animal looks like. */
+  variety: 4500,
   pillarTorch: 4900,
   crowd: 5000,
 } as const;
@@ -84,7 +86,7 @@ export interface GalleryOpts {
 
 /**
  * `&state=<name>` pins one state, `&slow=<n>` slows the clock, `&focus=` picks where the camera starts (`&at=x,z` in tiles, or
- * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>`, overrides it),
+ * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>` / `variety:<row>` (the middle of the row), overrides it),
  * `&t=<s>` starts the clock there (the hurt flash is on at 0), `&crowd=<n>` adds walking model figures (`&crowdAs=cards` as cards),
  * `&light=torch` lights it with the torches.
  */
@@ -97,11 +99,12 @@ export function parseGallery(search: string): GalleryOpts {
   const crowd = Math.floor(Number(q.get('crowd') ?? 0));
   const atRaw = q.get('at') ?? '';
   // `at=x,z` in tiles, or the foot of a figure of the model block: `model:<kind>`, `effect:<row>,<col>`, `dying:<i>`, `crowd:<i>`.
-  const named = /^(model|effect|dying|crowd):(\d+)(?:,(\d+))?$/.exec(atRaw);
+  const named = /^(model|effect|dying|crowd|variety):(\d+)(?:,(\d+))?$/.exec(atRaw);
   const at = named
     ? (() => {
       const [, what, a, b] = named;
       const n = Number(a);
+      if (what === 'variety') return GALLERY.variety(n, b === undefined ? (VARIETY_COLS - 1) / 2 : Number(b));
       return what === 'model' ? GALLERY.model(n) : what === 'effect' ? GALLERY.modelEffect(n, Number(b ?? 0)) : what === 'dying' ? GALLERY.dying(n) : GALLERY.crowd(n);
     })()
     : null;
@@ -119,7 +122,7 @@ export function parseGallery(search: string): GalleryOpts {
   };
 }
 
-/** Which entities the stage draws as 3D models: the model blocks (ids from `ID.model` up) and the crowd unless it is cards. */
+/** Which entities the stage draws as 3D models: the model blocks (ids from `ID.model` up, the variety block included) and the crowd unless it is cards. */
 export function modelsOf(o: GalleryOpts): (e: EntState) => boolean {
   return (e) => e.id >= ID.model && (e.id < ID.crowd || o.crowdAs === 'models');
 }
@@ -138,7 +141,9 @@ const EFFECT_KINDS = [KIND.Knight, KIND.SkeletonWarrior, KIND.Ogre, KIND.Lich];
 const PARTY_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger];
 /** The model block's effect rows: every row of `EFFECT_ROWS` that shows something (not the plain wading one), for the four heroes, a skeleton, the ogre and the wolf. */
 const MODEL_EFFECT_ROW_LIST = EFFECT_ROWS.filter((r) => r.effect !== undefined || r.flag !== undefined);
-const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf];
+const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar];
+/** The variety block's rows: one animal kind each, `VARIETY_COLS` animals per row. */
+const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny];
 /** The kinds with a model, in the order of the model rows. */
 const MODEL_KINDS = Object.keys(MODEL_OF_KIND).map(Number);
 /** A figure of the dying row lives this many seconds of every `DIE_PERIOD`, then dies (and leaves its skull). */
@@ -205,6 +210,12 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
     }));
   }));
   out.push(...dyingAt(t));
+  VARIETY_KINDS.forEach((kind, r) => {
+    for (let c = 0; c < VARIETY_COLS; c++) {
+      const p = GALLERY.variety(r, c);
+      out.push(ent(ID.variety + r * 10 + c, kind, p.x, p.z, { anim: ANIM.Idle, animMs: (t % 1) * 1000, aim: 0 }));
+    }
+  });
   GALLERY.pillarTorches.forEach((p, i) => out.push(ent(ID.pillarTorch + i, KIND.Torch, p.x, p.z, { side: SIDE.Neutral, anim: 1, extra: 0 })));
   for (let i = 0; i < crowd; i++) {
     const p = GALLERY.crowd(i);

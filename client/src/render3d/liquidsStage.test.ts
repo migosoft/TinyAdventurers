@@ -1,12 +1,23 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { KIND } from '../generated/defs';
 import { r3dPage, isR3dDemo } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { PageButton } from './panel';
 import type { Stage, StageCtx } from './host';
-import { createLiquidsStage } from './liquidsStage';
+import { createLiquidsStage, parseLiquids } from './liquidsStage';
+import type { FigureKit } from './models/kit';
 import type { FrameInput } from './view';
+
+const fake = vi.hoisted(() => ({ made: 0, disposed: 0 }));
+vi.mock('./stageKit', async (orig) => ({
+  ...(await orig<typeof import('./stageKit')>()),
+  createStageKit: () => {
+    fake.made++;
+    return { get: () => null, known: () => true, times: new Map<string, number>(), version: 0, dispose: () => { fake.disposed++; } } satisfies FigureKit;
+  },
+}));
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
 for (const n of ['elf_f', 'knight_m', 'imp', 'chort']) for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`${n}_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
@@ -168,5 +179,41 @@ describe('the water of the ?r3d=liquids stage (#345)', () => {
     for (const f of fs) expect(f.water?.now).toBeCloseTo(1.9);
     expect(live(fs[0])).toBeGreaterThan(0);
     expect(ripples()).toBeGreaterThan(0);
+  });
+});
+
+describe('the models of the ?r3d=liquids stage (#357)', () => {
+  it('reads &models as a kind, null for an unknown name', () => {
+    expect(parseLiquids('?models=stag').models).toBe(KIND.Stag);
+    expect(parseLiquids('?models=deer').models).toBe(KIND.Deer);
+    expect(parseLiquids('?models=boar').models).toBe(KIND.Boar);
+    expect(parseLiquids('?models=bunny').models).toBe(KIND.Bunny);
+    expect(parseLiquids('?models=wolf').models).toBe(KIND.DireWolf);
+    expect(parseLiquids('?models=dragon').models).toBeNull();
+    expect(parseLiquids('?r3d=liquids').models).toBeNull();
+  });
+
+  it('with &models makes a kit, hands it to the view with the figures drawn as models, publishes the readout and disposes the kit', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    fake.made = 0; fake.disposed = 0;
+    const r = make('?r3d=liquids&models=stag');
+    const f = r.step(2)[1];
+    expect(fake.made).toBe(1);
+    expect(f.models).toBeDefined();
+    expect(Array.isArray(f.models!.insts)).toBe(true);
+    expect(typeof f.models!.kit.get).toBe('function');
+    expect((window as unknown as { __r3d: { models?: unknown } }).__r3d.models).toBeDefined();
+    r.stage.dispose();
+    expect(fake.disposed).toBe(1);
+    made.splice(made.indexOf(r.stage), 1);
+  });
+
+  it('without &models makes no kit and hands the view no models', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    fake.made = 0;
+    const f = make('?r3d=liquids').step(2)[1];
+    expect(fake.made).toBe(0);
+    expect(f.models).toBeUndefined();
+    expect((window as unknown as { __r3d: { models?: unknown } }).__r3d.models).toBeUndefined();
   });
 });
