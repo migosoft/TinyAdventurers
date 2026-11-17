@@ -62,10 +62,11 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+function run(over: { water?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
+  for (const [wx, wy] of over.water ?? []) map.set(wx, wy, TILE_ID.ShallowWater);
   const light = new LightField(map);
   if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
@@ -481,5 +482,45 @@ describe('the run view and the effects (#308)', () => {
     expect(shifted).toBe(true);
     r.ctx.now += 0.2;
     expect(r.again()!.cam.x).toBeCloseTo(steady.x, 3);
+  });
+});
+
+describe('the water in the run view (#345)', () => {
+  const POOL: [number, number][] = [1, 2, 3, 4, 5].flatMap((x) => [[x, 1], [x, 2]] as [number, number][]);
+  /** Ripples with an age of 0 or more in the packed array of a frame. */
+  const live = (f: FrameInput | null): number => {
+    const r = f?.water?.ripples;
+    let n = 0;
+    if (r) for (let i = 0; i < r.length; i += 4) if (r[i + 2] >= 0) n++;
+    return n;
+  };
+
+  it('hands the view the water with the mirror on Balanced and off on Fast or with refl off', () => {
+    expect(run().f?.water?.reflect).toBe(true);
+    expect(run({ params: { quality: 'fast' } }).f?.water?.reflect).toBe(false);
+    expect(run({ params: { refl: false } }).f?.water?.reflect).toBe(false);
+    expect(run({ params: { quality: 'high' } }).f?.water?.reflect).toBe(true);
+  });
+
+  it("passes the run's clock as the water's now", () => {
+    const r = run({ water: POOL });
+    r.ctx.now = 3.25;
+    expect(r.again()?.water?.now).toBe(3.25);
+  });
+
+  it('a wading own hero stirs ripples within a second; a hero on dry floor stirs none', () => {
+    const wet = run({ water: POOL });
+    const dry = run();
+    let last: FrameInput | null = null, dryLast: FrameInput | null = null;
+    for (let k = 1; k <= 60; k++) {
+      wet.own.x = 56 + 20 * Math.sin(k * 0.2);
+      wet.ctx.now = k / 60;
+      last = wet.again();
+      dry.own.x = 56 + 20 * Math.sin(k * 0.2);
+      dry.ctx.now = k / 60;
+      dryLast = dry.again();
+    }
+    expect(live(last)).toBeGreaterThanOrEqual(1);
+    expect(live(dryLast)).toBe(0);
   });
 });

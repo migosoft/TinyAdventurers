@@ -3,6 +3,7 @@
 // a knight who walks a loop round the pillar and dashes every 6 s, an arrow every 3 s and a fireball every 4 s that explodes at the
 // east wall. The knight, the arrow and the fireball stir the air. The air is the run's own (`Air3d`, fed as runView3d.ts feeds it);
 // its switches (dust, smoke, embers, haze, drips, stir, draft) and `respawn` are the params, the panel shows Stir and Draft.
+// The pool's water (#345) is the run's too (`Water3d`, ripples only: the drips that land ring it); `window.__r3d.ripples` is the live count.
 // The 2D `wind=1` overlay is not ported (its key is the woodland's sway here). WASD pans a free camera.
 import { ANIM, CONST, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
@@ -33,6 +34,7 @@ import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, FrameInput, WorldInput } from './view';
+import { Water3d } from './water/water';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
@@ -95,6 +97,7 @@ export function moodLights(t: number): MovingLight[] {
 }
 
 const ALL_VISIBLE = { isVisible: (): boolean => true };
+const NONE_IDS: ReadonlySet<number> = new Set();
 const arrowAir = projectileAir(KIND.Arrow);
 const fireAir = projectileAir(KIND.Fireball);
 
@@ -122,6 +125,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
   lavaTexels(field, map, lava);
 
   const air = new Air3d(map);
+  const water = new Water3d(map);
   const tracker = new MoverTracker();
   const movers: AirMover[] = [];
   const torches: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
@@ -203,9 +207,12 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       });
       const frameAir: NonNullable<FrameInput['air']> = { parts, haze: { on: p2.haze, t } };
       c.timer.lap('air');
+      // The pool's ripples (#345): the drips this air step landed, and the knight if he wades. No effects here, so the cues go unused.
+      const wo = water.step({ dt, now: t, figs: fo.figs, sinks: fo.sinks, landed: parts.landed, hidden: NONE_IDS });
 
       const r = window.__r3d;
       if (r) {
+        r.ripples = wo.live;
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
@@ -218,6 +225,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
           lava: game ? lava : null, lavaVersion: 0,
           darkvision: null,
           casters, sight, cracks: [], shafts: c.params.shafts, air: frameAir,
+          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
         },
         c.timer,
       );

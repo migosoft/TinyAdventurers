@@ -53,6 +53,18 @@ describe('ripples', () => {
     expect(xs).toEqual(Array.from({ length: RIPPLE_CAP }, (_, i) => 24 + i));
   });
 
+  it('treats a source born in the future (the clock went back) as free, not as the newest', () => {
+    const r = new Ripples();
+    for (let i = 0; i < RIPPLE_CAP; i++) r.add(i, 0, 100 + i * 0.01, 1);
+    r.add(99, 0, 1, 1); // the clock restarted at 1 s: all sixteen sources lie in the future
+    r.add(98, 0, 1.1, 1);
+    const out = new Float32Array(RIPPLE_CAP * 4);
+    expect(r.pack(1.2, out)).toBe(2);
+    const xs = Array.from({ length: RIPPLE_CAP }, (_, i) => out[i * 4]);
+    expect(xs).toContain(99);
+    expect(xs).toContain(98);
+  });
+
   it('reuses an expired slot before replacing a live one', () => {
     const r = new Ripples();
     r.add(0, 0, 0, 1);

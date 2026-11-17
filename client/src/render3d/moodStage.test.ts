@@ -19,7 +19,15 @@ afterEach(() => {
   for (const s of made.splice(0)) s.dispose();
 });
 
-interface Run { stage: Stage; setAirDev: boolean[]; frames: FrameInput[] }
+interface Run { stage: Stage; setAirDev: boolean[]; frames: FrameInput[]; /** Per frame: the ripples with an age of 0 or more in the water the view was handed. */ live: number[]; reflect: boolean[] }
+
+/** The live ripples of the packed array the view was handed. */
+function liveOf(i: FrameInput): number {
+  const r = i.water?.ripples;
+  let n = 0;
+  if (r) for (let k = 0; k < r.length; k += 4) if (r[k + 2] >= 0) n++;
+  return n;
+}
 
 /** Plays `seconds` of the page for `search` in steps of `dt`, collecting what the view was handed. */
 function play(search: string, seconds: number, dt = 0.05): Run {
@@ -29,7 +37,8 @@ function play(search: string, seconds: number, dt = 0.05): Run {
   const stage = createMoodStage(assets, params, search, host);
   made.push(stage);
   const out: FrameInput[] = [];
-  const view = { draw: (i: FrameInput) => (out.push(structuredCloneAir(i)), 0) };
+  const live: number[] = [], reflect: boolean[] = [];
+  const view = { draw: (i: FrameInput) => (live.push(liveOf(i)), reflect.push(!!i.water?.reflect), out.push(structuredCloneAir(i)), 0) };
   const zoom = 2;
   for (let n = 0; n < Math.round(seconds / dt); n++) {
     stage.frame({
@@ -37,7 +46,7 @@ function play(search: string, seconds: number, dt = 0.05): Run {
       plan: { ...renderPlan('balanced', zoom, 1280, 720), halfW: 40, halfH: 40 }, canvasEl: null, view, timer: { lap() {}, renderStart() {} },
     } as unknown as StageCtx);
   }
-  return { stage, setAirDev, frames: out };
+  return { stage, setAirDev, frames: out, live, reflect };
 }
 
 /** The air parts are reused arrays: copy the counts of the frame. */
@@ -87,6 +96,21 @@ describe('the ?r3d=mood stage', () => {
     expect(Math.max(...some.frames.map((f) => f.air!.parts.specks.count))).toBeGreaterThan(0);
     const none = play('?r3d=mood&dust=0', 6);
     expect(Math.max(...none.frames.map((f) => f.air!.parts.specks.count))).toBe(0);
+  });
+
+  it('rings the pool where a drip lands, and says the live count in window.__r3d.ripples (#345)', () => {
+    (window as unknown as { __r3d: { ripples?: number } }).__r3d = {};
+    try {
+      const r = play('?r3d=mood', 15);
+      expect(Math.max(...r.live)).toBeGreaterThan(0);
+      expect(r.reflect.every((x) => x)).toBe(true);
+      const said = (window as unknown as { __r3d: { ripples?: number } }).__r3d.ripples;
+      expect(said).toBe(r.live[r.live.length - 1]);
+      const dry = play('?r3d=mood&drips=0', 15);
+      expect(Math.max(...dry.live)).toBeLessThan(Math.max(...r.live));
+    } finally {
+      delete (window as { __r3d?: unknown }).__r3d;
+    }
   });
 
   it('throws one burst of embers where the fireball blasts, once per crossing', () => {

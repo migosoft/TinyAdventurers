@@ -73,3 +73,42 @@ describe('the ?r3d=liquids stage', () => {
     expect(g()!.fallers).toBe(1); // the imp sank at 1.35 and falls until 2.05
   });
 });
+
+describe('the water of the ?r3d=liquids stage (#345)', () => {
+  const live = (f: FrameInput): number => {
+    const r = f.water?.ripples;
+    let n = 0;
+    if (r) for (let i = 0; i < r.length; i += 4) if (r[i + 2] >= 0) n++;
+    return n;
+  };
+  const ripples = (): number | undefined => (window as unknown as { __r3d?: { liquids?: { ripples?: number } } }).__r3d?.liquids?.ripples;
+
+  it('rings round the wading elf within a second', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const r = make('?r3d=liquids');
+    const fs = r.step(20);
+    expect(ripples()).toBeGreaterThan(0);
+    expect(live(fs[fs.length - 1])).toBe(ripples());
+    expect(fs[fs.length - 1].water?.reflect).toBe(true);
+  });
+
+  it('stirs more ripples when the imp is pushed into the deep water (key 2)', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const r = make('?r3d=liquids');
+    let before = 0;
+    for (const f of r.step(20)) before = Math.max(before, live(f));
+    r.stage.key!({ code: 'Digit2', repeat: false } as KeyboardEvent);
+    let after = 0;
+    for (const f of r.step(40)) after = Math.max(after, live(f));
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it('passes the pinned clock as the water\'s now and shows the rings of the replayed seconds', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const r = make('?r3d=liquids&push=water&t=1.9');
+    const fs = r.step(3);
+    for (const f of fs) expect(f.water?.now).toBeCloseTo(1.9);
+    expect(live(fs[0])).toBeGreaterThan(0);
+    expect(ripples()).toBeGreaterThan(0);
+  });
+});

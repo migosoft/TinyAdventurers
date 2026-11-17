@@ -2,7 +2,9 @@
 // (shallow rim, deep centre), a lava pool against the east wall and a chasm; an elf wading up and down the rim, a knight walking into
 // the lava and out, and an imp beside the water, an imp and a barrel beside the chasm that are pushed in on key 1 (chasm), 2 (deep
 // water) and 3 (barrel), or by the panel's buttons. The script (liquidsScript.ts) sends the figures the run's events (`Sink`, `Died`).
-// `&push=chasm|water|barrel` asks that push at t = 1 s; `&t=<s>` pins the clock. `window.__r3d.liquids = { t, fallers }`.
+// `&push=chasm|water|barrel` asks that push at t = 1 s; `&t=<s>` pins the clock. `window.__r3d.liquids = { t, fallers, ripples }`
+// (`ripples`: the live ripples of the water, #345). The water's own `Water3d` is stepped with the page's clock `t` (the elf's wading, the
+// imp's drowning, their droplets through the effects); a pinned page steps it in its replay loop too, so the rings of the last seconds show.
 // The run's own light list (torches, lava), the sight off, the game light; WASD pans a free camera.
 import { KIND, LIGHT_KIND } from '../generated/defs';
 import { LightField } from '../game/light';
@@ -25,6 +27,7 @@ import type { R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
+import { Water3d } from './water/water';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { TILE } from '../sim/map';
@@ -65,6 +68,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   if (opts.push) pushes[opts.push] = 1;
   const pass = new FxPass(NONE_IDS);
   const fx = new Effects3d(map);
+  // Made with the stage, whose clock only runs forward: a new page makes a new one.
+  const water = new Water3d(map);
   let t = opts.start;
   let prev = opts.pinned ? t - STEP : t;
   let warmed = !opts.pinned;
@@ -138,6 +143,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             for (const ev of w.events) figures.event(ev);
             const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
+            water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, landed: null, hidden: NONE_IDS });
           }
           fdt = STEP;
         } else fdt = 0;
@@ -153,7 +159,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
 
       const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, fp }, fo.glows);
+      const wo = water.step({ dt: fdt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE_IDS });
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, water: wo.cues, fp }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];
@@ -171,7 +178,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
-        r.liquids = { t, fallers: figures.fallers };
+        r.liquids = { t, fallers: figures.fallers, ripples: wo.live };
       }
       c.timer.renderStart();
       return c.view.draw(
@@ -181,7 +188,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
           // The water (#345): the page's own clock, so a pinned page holds the waves still.
-          water: { ripples: null, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
+          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
         },
         c.timer,
       );

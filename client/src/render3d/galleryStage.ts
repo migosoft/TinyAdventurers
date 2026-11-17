@@ -23,6 +23,7 @@ import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
+import { Water3d } from './water/water';
 
 const TILE = 16;
 /** The free camera's speed in tiles per second. */
@@ -278,6 +279,7 @@ export function galleryInit(): RunViewInit {
 
 /** Everything is in sight in the gallery. */
 const ALL_VISIBLE = { isVisible: (): boolean => true };
+const NO_IDS: ReadonlySet<number> = new Set();
 
 /** `deps.kit` is for tests; a stage makes its own and ends it. */
 export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw: number }, search: string, deps: { kit?: FigureKit } = {}): Stage {
@@ -285,6 +287,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   const map = GALLERY.map;
   const world: WorldInput = { map, painted: false, clear: 'stone' };
   const figures = new Figures3d(galleryInit(), assets.frames, atlasBounds(assets.image, assets.frames));
+  const water = new Water3d(map);
   // One kit for the stage, kept across a rebuilt view (the new layer draws from its cached models).
   const kit = deps.kit ?? createStageKit(assets);
   const readout = modelsReadouter(kit);
@@ -352,6 +355,8 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
         assignSkips(lights, carrierMap(lights), casters);
       }
       c.timer.lap('lights');
+      // The water under the wading group (#345): ripples only (the gallery has no effects pass), on the page's clock `t`.
+      const wo = water.step({ dt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NO_IDS });
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
@@ -364,6 +369,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
         {
           cam, plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit },
+          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
         },
         c.timer,
       );

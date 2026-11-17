@@ -28,6 +28,8 @@ import { isBossKind, isProjectileKind } from '../game/anim/defs';
 import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { Air3d } from './air/air';
+import type { AirParts } from './air/airParts';
+import { Water3d, type WaterCues } from './water/water';
 import { MoverTracker, collectAirMovers } from '../game/airmovers';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
@@ -113,6 +115,11 @@ export class RunView3d implements RunView {
   private clockNow = 0;
   // The dungeon air and the woodland's pollen (#307): simulated here, once per run (a lost device keeps it).
   private readonly air: Air3d;
+  // The water (#345): ripples and droplet cues, made here like the air so a lost device keeps them. The air steps after the water in a
+  // frame, so the drips the water rings for are the ones that landed in the air's last step (null: none, or not stepped).
+  private readonly water: Water3d;
+  private landed: AirParts['landed'] | null = null;
+  private readonly waterIn: { ripples: Float32Array | null; now: number; reflect: boolean } = { ripples: null, now: 0, reflect: false };
   private readonly moverTracker = new MoverTracker();
   private readonly airMovers: AirMover[] = [];
   private readonly myKind: number;
@@ -182,6 +189,7 @@ export class RunView3d implements RunView {
     this.fxPass = new FxPass(this.hidden);
     this.myKind = init.myKind;
     this.air = new Air3d(init.map);
+    this.water = new Water3d(init.map);
     this.field = init.light;
     this.lava = new Float32Array(init.map.w * init.map.h * 4);
   }
@@ -372,6 +380,7 @@ export class RunView3d implements RunView {
     if (!view) {
       // The device is being restored: the overlay still paints (from the last frame's anchors), so names do not blink.
       this.drawCalls = 0;
+      this.landed = null; // the air does not step now: its last drips were not rung for, and will not be later
       for (const id of f.dark) this.hidden.add(id); // the picture's own hidden ids stay from the last frame
       this.paintOverlay(f, c, cam);
       return this.stats(c, 0);
@@ -402,8 +411,13 @@ export class RunView3d implements RunView {
     this.hidden.clear();
     for (const id of f.dark) this.hidden.add(id);
     if (sight.mask) hiddenByPicture([cardsQ, ghostsQ], sight.mask, this.hiddenSeen, this.hidden, fo.models);
+    // The water (#345): after the figures and the hidden ids, before the effects (they draw its droplets); the drips of the air's last step ring it.
+    const wo = this.water.step({ dt, now: c.now, figs: fo.figs, sinks: fo.sinks, landed: this.landed, hidden: this.hidden });
+    this.landed = null;
+    const wi = this.waterIn;
+    wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = c.params.refl && c.params.quality !== 'fast';
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
-    this.fxFrame(f, c, cam, fo, fp);
+    this.fxFrame(f, c, cam, fo, fp, wo.cues);
     const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
@@ -466,7 +480,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi,
       },
       c.timer,
     );
@@ -483,9 +497,9 @@ export class RunView3d implements RunView {
   }
 
   /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */
-  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut, fp: ReturnType<typeof footprint>): void {
+  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut, fp: ReturnType<typeof footprint>, water: WaterCues): void {
     this.fxPass.run(this.fx, {
-      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues, falls: fo.falls, fp,
+      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues, falls: fo.falls, water, fp,
     }, fo.glows);
   }
 
@@ -515,6 +529,7 @@ export class RunView3d implements RunView {
       on: { dust: p.dust, smoke: p.smoke, embers: p.embers, drips: p.drips, stir: p.stir, draft: p.draft }, respawn: p.respawn,
       drift: pollen ? (p.wind ? [WIND_DIR[0] * POLLEN_DRIFT, WIND_DIR[1] * POLLEN_DRIFT] : [0, 0]) : null, kinds: pollen ? 'pollen' : 'dungeon',
     });
+    this.landed = p.drips && !pollen ? parts.landed : null; // the arrays are the air's own: read at the next frame's water step, before the air steps again
     return { parts, haze: { on: p.haze && !pollen, t: c.now } };
   }
 

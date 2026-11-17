@@ -17,6 +17,7 @@ import { registerBursts } from './bursts';
 import { registerField } from './field';
 import { registerFigureFx } from './figureFx';
 import { registerWaterFx } from './waterFx';
+import type { WaterCues } from '../water/water';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
@@ -40,6 +41,8 @@ export interface FxPassIn {
   cues?: readonly MimicCue[];
   /** The falls into a chasm that began this frame (`FigureOut.falls`). */
   falls?: readonly { id: number; x: number; z: number }[];
+  /** The water's cues of this frame (`Water3d.step`). */
+  water?: WaterCues;
   /** The ground the screen shows (tiles). */
   fp?: Footprint;
 }
@@ -93,6 +96,7 @@ export class FxPass {
     fin.hidden = p.hidden;
     fin.cues = p.cues;
     fin.falls = p.falls;
+    fin.water = p.water;
     fin.fp = p.fp;
     const out = this.out;
     fx.frame(fin, out);
