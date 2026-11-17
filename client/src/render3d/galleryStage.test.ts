@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import type { FrameBounds } from '../game/anim/pose';
-import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
+import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
 import { CROWD_MAX } from './galleryMap';
@@ -244,6 +244,5 @@ describe('the gallery stage', () => {
     expect(r3dPage('?r3d=demo')).toBe('demo');
     expect(r3dPage('?r3d')).toBeNull();
     expect(isR3dDemo('?r3d=gallery')).toBe(true);
-    expect(wants3d('?r3d=gallery', true)).toBe(false);
   });
 });

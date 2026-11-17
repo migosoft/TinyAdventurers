@@ -1,25 +1,3 @@
-import Phaser from 'phaser';
-import { GalleryScene } from './game/GalleryScene';
-import { MimicDemoScene } from './game/MimicDemoScene';
-import { DaemonDemoScene } from './game/DaemonDemoScene';
-import { ChasmDemoScene, LavaDemoScene, WaterDemoScene } from './game/TerrainDemoScene';
-import { KnockbackDemoScene } from './game/KnockbackDemoScene';
-import { OgreDemoScene } from './game/OgreDemoScene';
-import { LichDemoScene } from './game/LichDemoScene';
-import { DragonDemoScene } from './game/DragonDemoScene';
-import { DemonDemoScene } from './game/DemonDemoScene';
-import { SpectreDemoScene } from './game/SpectreDemoScene';
-import { CharmDemoScene } from './game/CharmDemoScene';
-import { LightsDemoScene } from './game/LightsDemoScene';
-import { MoodDemoScene } from './game/MoodDemoScene';
-import { SunlightDemoScene } from './game/SunlightDemoScene';
-import { CoveDemoScene } from './game/CoveDemoScene';
-import { WoodlandDemoScene } from './game/WoodlandDemoScene';
-import { AnimalsDemoScene } from './game/AnimalsDemoScene';
-import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
-import { UNSEEN_FX, UnseenFX } from './game/unseenfx';
-import { requestedResolution, viewLayout, type Resolution, type ViewLayout } from './game/viewLayout';
-import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
 import type { ServerMsg } from './generated/ServerMsg';
 import { api, ApiFail } from './api';
@@ -28,101 +6,15 @@ import { Net } from './net';
 import { loadAtlas, type Atlas } from './ui/atlas';
 import { showAuth } from './ui/auth';
 import { Create } from './ui/create';
-import { EFFECT_ICON, effectIconDataUri, iconTextureKey } from './ui/effectIcons';
 import { Hub } from './ui/hub/hub';
 import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
 import { loadFonts } from './fonts';
-import { isR3dDemo, r3dPage, wants3d } from './r3dFlag';
+import { isR3dDemo, r3dPage } from './r3dFlag';
 import './style.css';
 import './ui/screens.css';
-
-class BootScene extends Phaser.Scene {
-  constructor() {
-    super('boot');
-  }
-  preload(): void {
-    this.load.atlas('atlas', 'assets/atlas.png', 'assets/atlas.json');
-    for (const id of Object.keys(EFFECT_ICON).map(Number)) this.load.svg(iconTextureKey(id), effectIconDataUri(id, 32), { width: 32, height: 32 });
-  }
-  create(): void {
-    // The game runs with pixelArt (nearest filtering); the effect symbols are smooth line art.
-    for (const id of Object.keys(EFFECT_ICON).map(Number)) this.textures.get(iconTextureKey(id)).setFilter(Phaser.Textures.FilterMode.LINEAR);
-    // Tiny runtime textures for particles and magic glows (the pack has no effect sprites).
-    const g = this.make.graphics({}, false);
-    g.fillStyle(0xffffff, 1).fillRect(0, 0, 2, 2);
-    g.generateTexture('dot', 2, 2);
-    g.clear().fillStyle(0xffffff, 1).fillRect(1, 0, 1, 3).fillRect(0, 1, 3, 1); // clear() resets the fill to black
-    g.generateTexture('spark', 3, 3);
-    g.clear();
-    for (let r = 6; r >= 1; r--) g.fillStyle(0xffffff, 0.12 + (6 - r) * 0.16).fillCircle(7, 7, r);
-    g.generateTexture('glow', 14, 14);
-    g.destroy();
-    // The darkvision greyscale, a camera post pipeline set by name. (The game config's
-    // `pipeline` option would do the same, but its typings expect a config constructor.)
-    (this.renderer as Phaser.Renderer.WebGL.WebGLRenderer).pipelines.addPostPipeline(DARKVISION_FX, DarkvisionFX);
-    (this.renderer as Phaser.Renderer.WebGL.WebGLRenderer).pipelines.addPostPipeline(UNSEEN_FX, UnseenFX);
-    this.game.events.emit('assets-ready');
-  }
-}
-
-/** Screen resolution unless a debug account asked for `?res=world` (set on Welcome, #295). */
-let resolution: Resolution = 'screen';
-
-function viewSize(): ViewLayout {
-  return viewLayout(window.innerWidth, window.innerHeight, resolution);
-}
-
-/**
- * The canvas is at screen resolution (so Inter text is crisp) and the integer zoom lives on each scene's
- * main camera, which shows the same world area as a world-resolution canvas scaled up by CSS would
- * (`?res=world` on a debug account switches to exactly that, `viewLayout`).
- * Every scene except the game keeps the world's (0, 0) at the top left (origin 0, 0), like a plain canvas;
- * the game centres its camera. LightsDemoScene fits its own zoom.
- */
-function applyView(sc: Phaser.Scene): void {
-  const key = sc.sys.settings.key;
-  if (key === 'lights-demo' || key === 'mood-demo' || key === 'sunlight-demo' || key === 'cove-demo' || key === 'woodland-demo' || key === 'spectre-demo' || key === 'charm-demo') return;
-  const cam = sc.cameras?.main;
-  if (!cam) return;
-  if (key !== 'game') cam.setOrigin(0, 0);
-  cam.setZoom(viewSize().camZoom);
-}
-
-/** The game's config `scale` for the current layout. */
-function scaleConfig(): Phaser.Types.Core.ScaleConfig {
-  const v = viewSize();
-  return { mode: Phaser.Scale.NONE, width: v.canvasW, height: v.canvasH, zoom: v.cssZoom };
-}
-
-/** Applies the view to every scene when it is created (before its first frame); the returned function re-applies it to the running scenes (resize). */
-function watchViews(game: Phaser.Game): () => void {
-  game.events.once('assets-ready', () => {
-    for (const sc of game.scene.getScenes(false)) sc.events.on(Phaser.Scenes.Events.CREATE, () => applyView(sc));
-  });
-  return () => game.scene.getScenes(true).forEach(applyView);
-}
-
-/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights, ?mood, ?sunlight, ?cove, ?woodland, ?spectres, ?animals, ?charm). */
-const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo', mood: 'mood-demo', sunlight: 'sunlight-demo', cove: 'cove-demo', woodland: 'woodland-demo', spectres: 'spectre-demo', animals: 'animals-demo', charm: 'charm-demo' };
-
-async function gallery(): Promise<void> {
-  const q = new URLSearchParams(location.search);
-  const start = Object.entries(DEMOS).find(([k]) => q.has(k))?.[1] ?? 'gallery';
-  await loadFonts();
-  const game = new Phaser.Game({
-    type: Phaser.WEBGL,
-    parent: 'game',
-    pixelArt: true,
-    scale: scaleConfig(),
-    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, CoveDemoScene, WoodlandDemoScene, SpectreDemoScene, AnimalsDemoScene, CharmDemoScene],
-  });
-  watchViews(game);
-  game.events.once('assets-ready', () => game.scene.start(start));
-  document.getElementById('game')!.classList.add('active');
-}
 
 function fatal(ui: HTMLElement, msg: string): void {
   ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${msg}</div></div>`;
@@ -130,7 +22,6 @@ function fatal(ui: HTMLElement, msg: string): void {
 
 /** Login, then the roster; opening a character connects to the game and shows its hub. */
 async function main(): Promise<void> {
-  const q = new URLSearchParams(location.search);
   if (isR3dDemo(location.search)) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
@@ -139,7 +30,6 @@ async function main(): Promise<void> {
     const boot = ({ gallery: bootGallery, lights: bootLights, woodland: bootWoodland, cove: bootCove, mood: bootMood, sunlight: bootSunlight, fx: bootFx, liquids: bootLiquids } as Record<string, typeof bootDemo>)[page ?? ''] ?? bootDemo;
     return boot(host, location.search);
   }
-  if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
   let me;
   try {
@@ -150,7 +40,7 @@ async function main(): Promise<void> {
   const atlas = await loadAtlas();
   if (!me) me = await showAuth(ui);
 
-  // The session (WebSocket, lobby, hub, Phaser) starts with the first opened character.
+  // The session (WebSocket, lobby, hub, the 3D view) starts with the first opened character.
   let session: { net: Net; lobby: Lobby; hub: Hub } | null = null;
   let starting: Promise<boolean> | null = null;
   const toRoster = () => {
@@ -192,7 +82,7 @@ async function main(): Promise<void> {
   roster.show(me);
 }
 
-/** Connected: the hub, the lobby and the Phaser game. */
+/** Connected: the hub, the lobby and the 3D view of a run. */
 async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void): Promise<{ net: Net; lobby: Lobby; hub: Hub }> {
   const hub = new Hub(ui, atlas, (m) => net.send(m), onRoster, () => {
     hub.hide();
@@ -217,35 +107,6 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   };
 
   await loadFonts();
-  /** The Phaser game, created by `ensurePhaser()` (at once without `?r3d`, else on Welcome for non-debug accounts). */
-  let game: Phaser.Game | null = null;
-  let relayout = () => {};
-  let ready: Promise<void> = new Promise(() => {});
-  const ensurePhaser = () => {
-    if (game) return;
-    const g = new Phaser.Game({
-      type: Phaser.WEBGL,
-      parent: 'game',
-      pixelArt: true,
-      antialias: false,
-      backgroundColor: '#000000',
-      scale: scaleConfig(),
-      scene: [BootScene, GameScene],
-      fps: { smoothStep: false },
-    });
-    game = g;
-    const refreshViews = watchViews(g);
-    /** Re-lays out the canvas (size and CSS zoom) and every running scene's camera. */
-    relayout = () => {
-      const s = viewSize();
-      g.scale.setZoom(s.cssZoom);
-      g.scale.resize(s.canvasW, s.canvasH);
-      refreshViews();
-    };
-    window.addEventListener('resize', relayout);
-    ready = new Promise<void>((r) => g.events.once('assets-ready', r));
-  };
-  if (!new URLSearchParams(location.search).has('r3d')) ensurePhaser();
   const gameEl = document.getElementById('game')!;
   let debugAccount = false;
   let run3d: { stop(): void } | null = null; // the render3d `Run3d` (main.ts has no static render3d import)
@@ -253,10 +114,8 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   let run3dStarts = 0; // a second RunStarted while the import is pending drops the stale start
 
   const backToLobby = () => {
-    if (run3d) {
-      run3d.stop();
-      run3d = null;
-    } else game?.scene.stop('game');
+    run3d?.stop();
+    run3d = null;
     hud.hide();
     gameEl.classList.remove('active');
     lobby.leftRoom();
@@ -279,18 +138,13 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         lobby.debug = m.debug;
         hub.setDebug(m.debug);
         debugAccount = m.debug;
-        if (!wants3d(location.search, m.debug)) ensurePhaser();
-        else if (!boot3d) {
+        if (!boot3d) {
           // so the chunk is usually there at RunStarted (a failed preload is retried then)
           const p = import('./render3d/boot');
           boot3d = p;
           p.catch(() => {
             if (boot3d === p) boot3d = null;
           });
-        }
-        if (requestedResolution(location.search, m.debug) !== resolution) {
-          resolution = requestedResolution(location.search, m.debug);
-          relayout();
         }
         break;
       case 'Lobby':
@@ -311,39 +165,31 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
       case 'RunStarted': {
         const info = m as RunStartInfo;
         const me = info.players.find((p) => p.ent === info.you)!;
-        if (wants3d(location.search, debugAccount)) {
-          const mine = ++run3dStarts;
-          lobby.hide();
-          gameEl.classList.add('active');
-          run3d?.stop();
-          run3d = null;
-          // Messages that arrive while the chunk loads are buffered and replayed into the session.
-          const early: ServerMsg[] = [];
-          const off = net.on((x) => early.push(x));
-          let mod: typeof import('./render3d/boot');
-          try {
-            mod = await (boot3d ??= import('./render3d/boot'));
-          } catch (e) {
-            off();
-            boot3d = null;
-            if (mine !== run3dStarts) break;
-            console.error('The 3D view could not load:', e);
-            net.send({ t: 'LeaveRun' }); // else the server keeps the hero in the run
-            backToLobby();
-            lobby.error(`The 3D view could not load: ${String(e)}`);
-            break;
-          }
-          off();
-          if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
-          run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early, dev: true });
-          break;
-        }
-        await ready;
+        const mine = ++run3dStarts;
         lobby.hide();
         gameEl.classList.add('active');
-        const data: GameInit = { info, net, hud, myClass: me.class };
-        game!.scene.stop('game');
-        game!.scene.start('game', data);
+        run3d?.stop();
+        run3d = null;
+        // Messages that arrive while the chunk loads are buffered and replayed into the session.
+        const early: ServerMsg[] = [];
+        const off = net.on((x) => early.push(x));
+        let mod: typeof import('./render3d/boot');
+        try {
+          mod = await (boot3d ??= import('./render3d/boot'));
+        } catch (e) {
+          off();
+          boot3d = null;
+          if (mine !== run3dStarts) break;
+          console.error('The 3D view could not load:', e);
+          net.send({ t: 'LeaveRun' }); // else the server keeps the hero in the run
+          backToLobby();
+          lobby.error(`The 3D view could not load: ${String(e)}`);
+          break;
+        }
+        off();
+        if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
+        // `dev` (the host's run mode with the dev tools) only for a debug account that asked with `?r3d`.
+        run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early, dev: debugAccount && new URLSearchParams(location.search).has('r3d') });
         break;
       }
     }

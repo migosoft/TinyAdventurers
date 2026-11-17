@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { reachesPhaser, read, specifiers, SRC } from '../testutil/importWalk';
 
@@ -19,11 +19,19 @@ describe('run and render3d imports', () => {
     expect(render3d).toContain('render3d/boot.ts');
     expect(run).toContain('run/view.ts');
   });
-  it('no file in run/ or render3d/ reaches phaser through non-type imports', () => {
-    for (const f of [...run, ...render3d]) {
-      const chain = reachesPhaser(f);
-      expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
-    }
+  it('no .ts file under src, tests included, imports phaser', () => {
+    const all = (d: string): string[] => readdirSync(join(SRC, d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? all(d ? `${d}/${e.name}` : e.name) : e.name.endsWith('.ts') ? [d ? `${d}/${e.name}` : e.name] : []));
+    const users = all('')
+      .filter((f) => f !== 'render3d/imports.test.ts' && f !== 'testutil/importWalk.ts' && specifiers(read(f)).some((s) => s === 'phaser' || s.startsWith('phaser/')));
+    expect(users).toEqual([]);
+  });
+  it('package.json lists no phaser dependency', () => {
+    const pkg = JSON.parse(readFileSync(join(SRC, '..', 'package.json'), 'utf8'));
+    expect(Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })).not.toContain('phaser');
+  });
+  it('main.ts has exactly one dynamic import target, ./render3d/boot', () => {
+    const targets = new Set([...read('main.ts').matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]));
+    expect([...targets]).toEqual(['./render3d/boot']);
   });
   it('render3d/ uses only three/webgpu and three/tsl as bare specifiers', () => {
     for (const f of render3d) for (const s of bare(f)) expect(['three/webgpu', 'three/tsl'], `${f} imports ${s}`).toContain(s);

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONST, KIND } from '../generated/defs';
 import { TORCHES, W, H, buildMap } from '../game/lightsDemoScript';
-import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
+import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
@@ -37,7 +37,6 @@ describe('the ?r3d=lights stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=lights')).toBe('lights');
     expect(isR3dDemo('?r3d=lights')).toBe(true);
-    expect(wants3d('?r3d=lights', true)).toBe(false);
   });
 
   it("shows the script's map", () => {

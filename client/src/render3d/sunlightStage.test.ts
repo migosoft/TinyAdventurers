@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { KIND } from '../generated/defs';
 import { SECOND, SUN, SUNLIGHT_H, SUNLIGHT_W, sunlightMap } from '../game/sunlightDemoScript';
-import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
+import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
@@ -43,7 +43,6 @@ describe('the ?r3d=sunlight stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=sunlight')).toBe('sunlight');
     expect(isR3dDemo('?r3d=sunlight')).toBe(true);
-    expect(wants3d('?r3d=sunlight', true)).toBe(false);
   });
 
   it("shows the script's room and the crack at SUN", () => {

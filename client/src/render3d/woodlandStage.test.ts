@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES } from '../game/anim/defs';
 import type { FigureKit } from './models/kit';
-import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
+import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
@@ -50,7 +50,6 @@ describe('the ?r3d=woodland stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=woodland')).toBe('woodland');
     expect(isR3dDemo('?r3d=woodland')).toBe(true);
-    expect(wants3d('?r3d=woodland', true)).toBe(false);
   });
 
   it('shows a painted world and turns on the sky rows and the mist rows', () => {

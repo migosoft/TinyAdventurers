@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { TILE_ID } from '../generated/defs';
-import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
+import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
@@ -44,7 +44,6 @@ describe('the ?r3d=cove stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=cove')).toBe('cove');
     expect(isR3dDemo('?r3d=cove')).toBe(true);
-    expect(wants3d('?r3d=cove', true)).toBe(false);
   });
 
   it('keeps the torch pillars outside the willow\'s reach', () => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { r3dPage, isR3dDemo, wants3d } from '../r3dFlag';
+import { r3dPage, isR3dDemo } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { PageButton } from './panel';
@@ -43,7 +43,6 @@ describe('the ?r3d=liquids stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=liquids')).toBe('liquids');
     expect(isR3dDemo('?r3d=liquids')).toBe(true);
-    expect(wants3d('?r3d=liquids', true)).toBe(false);
   });
 
   it('builds frames without a view error', () => {

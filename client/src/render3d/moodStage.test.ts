@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { KIND } from '../generated/defs';
 import { FIRE_EVERY, MOOD_H, MOOD_W, moodMap } from '../game/moodDemoScript';
-import { r3dPage, isR3dDemo, wants3d } from '../r3dFlag';
+import { r3dPage, isR3dDemo } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
@@ -59,7 +59,6 @@ describe('the ?r3d=mood stage', () => {
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=mood')).toBe('mood');
     expect(isR3dDemo('?r3d=mood')).toBe(true);
-    expect(wants3d('?r3d=mood', true)).toBe(false);
   });
 
   it("shows the script's room, shows Stir and Draft, and has no cracks", () => {

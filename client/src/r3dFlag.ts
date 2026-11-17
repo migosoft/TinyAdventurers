@@ -8,9 +8,3 @@ export function r3dPage(search: string): 'demo' | 'gallery' | 'lights' | 'woodla
 export function isR3dDemo(search: string): boolean {
   return r3dPage(search) !== null;
 }
-
-/** `?r3d` on a debug account: a run is shown in 3D (the dev pages are separate). */
-export function wants3d(search: string, debug: boolean): boolean {
-  const q = new URLSearchParams(search);
-  return q.has('r3d') && !isR3dDemo(search) && debug;
-}
