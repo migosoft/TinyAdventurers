@@ -6,17 +6,19 @@ import { knight } from './descs/knight';
 import { ogre } from './descs/ogre';
 import { skelet } from './descs/skelet';
 import { wizard } from './descs/wizard';
+import { boar } from './descs/boar';
+import { bunny } from './descs/bunny';
 import { deer, stag } from './descs/deer';
 import { wolf } from './descs/wolf';
 import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
 
-export type TubeKey = 'stag' | 'deer';
+export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny';
 export type ModelKey = DescKey | TubeKey;
 
 /** The animals built from tubes and balls (#357). */
-export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer };
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
@@ -33,6 +35,8 @@ export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   [KIND.DireWolf]: 'wolf',
   [KIND.Stag]: 'stag',
   [KIND.Deer]: 'deer',
+  [KIND.Boar]: 'boar',
+  [KIND.Bunny]: 'bunny',
 };
 
 /**

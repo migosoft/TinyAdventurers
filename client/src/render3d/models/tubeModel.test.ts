@@ -6,7 +6,9 @@ import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube } from './tubes';
 import { DESCS, TUBE_DESCS } from './table';
 
-const keys = ['stag', 'deer'] as const;
+const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
+const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
+const deers = (key: string): boolean => key === 'stag' || key === 'deer';
 const bone = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
 const rgb = (hex: number): number[] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 
@@ -39,7 +41,7 @@ describe('buildTubeFigure', () => {
       });
 
       it('scale, size and flags', () => {
-        expect(m.scale).toBeCloseTo((key === 'stag' ? 0.95 : 0.88) * PAGE_TO_GAME, 6);
+        expect(m.scale).toBeCloseTo(SIZE[key] * PAGE_TO_GAME, 6);
         expect(m.size).toBe(1);
         expect(m.quad).toBe(true);
         expect(m.armLength).toBe(0);
@@ -58,15 +60,17 @@ describe('buildTubeFigure', () => {
       it('bones: parents, legs and hat', () => {
         for (let b = 0; b < BONES.length; b++) { if (b === 0) expect(m.parents[b]).toBe(-1); else expect(m.parents[b]).toBeLessThan(b); }
         const onHat = Array.from({ length: n }, (_, i) => m.skin[i * 4]).filter((b) => b === bone('hat')).length;
-        if (key === 'stag') { expect(onHat).toBeGreaterThan(0); expect(m.butt).toBe(true); } else { expect(onHat).toBe(0); expect(m.butt).toBeFalsy(); }
+        if (key === 'stag' || key === 'boar') { expect(onHat).toBeGreaterThan(0); expect(m.butt).toBe(true); } else { expect(onHat).toBe(0); expect(m.butt).toBeFalsy(); }
         expect(m.legs).toHaveLength(4);
-        expect(m.legs!.every((l) => l.lower >= 0)).toBe(true);
+        expect(m.legs!.every((l) => (key === 'bunny' ? l.lower === -1 : l.lower >= 0))).toBe(true);
         expect(m.legs!.filter((l) => l.front)).toHaveLength(2);
-        expect(m.legs!.filter((l) => l.front).map((l) => [l.upper, l.lower])).toEqual([[bone('armR'), bone('handR')], [bone('armL'), bone('handL')]]);
-        expect(m.legs!.filter((l) => !l.front).map((l) => [l.upper, l.lower])).toEqual([[bone('leg0'), bone('leg1')], [bone('leg2'), bone('leg3')]]);
+        const low = (b: string): number => (key === 'bunny' ? -1 : bone(b as (typeof BONES)[number]));
+        expect(m.legs!.filter((l) => l.front).map((l) => [l.upper, l.lower])).toEqual([[bone('armR'), low('handR')], [bone('armL'), low('handL')]]);
+        expect(m.legs!.filter((l) => !l.front).map((l) => [l.upper, l.lower])).toEqual([[bone('leg0'), low('leg1')], [bone('leg2'), low('leg3')]]);
       });
 
       it('bends: the neck, a tail and two ears', () => {
+        if (!deers(key)) return;
         expect(m.bends).toHaveLength(MAX_BENDS);
         expect(m.bends[m.neckBend!].neck).toBe(true);
         expect(m.bends.filter((b) => !b.neck)).toHaveLength(3);
@@ -81,6 +85,7 @@ describe('buildTubeFigure', () => {
       });
 
       it('colours: neck, paint and hull offset', () => {
+        if (!deers(key)) return;
         const neckColour = key === 'stag' ? rgb(0x6e4028) : rgb(0x9a5a34);
         let found = 0;
         for (let i = 0; i < n; i++) if (m.skin[i * 4 + 2] === m.neckBend && m.skin[i * 4 + 1] === 0) {
@@ -103,6 +108,40 @@ describe('buildTubeFigure', () => {
       });
     });
   }
+
+  it('the boar: three bends, tusks on the hat, a heavy body', () => {
+    const m = buildJob('boar', null), d = TUBE_DESCS.boar;
+    expect(m.bends).toHaveLength(3);
+    expect(m.bends.some((b) => b.neck)).toBe(false);
+    expect(m.neckBend).toBe(-1);
+    expect(m.butt).toBe(true);
+    expect(m.scale).toBeCloseTo(0.9 * PAGE_TO_GAME, 6);
+    const torso = d.pieces.find((p) => p.torso)!, sh = torso.shape as Extract<typeof torso.shape, { tube: unknown }>;
+    expect(Math.max(...sh.tube.map((q) => q.r))).toBeCloseTo(3.5 * 1.25, 9);
+    expect(hitRadius(d)).toBe(6);
+    expect(d.pieces.filter((p) => p.bone === 'hat')).toHaveLength(2);
+  });
+
+  it('the bunny: two ear bends, a fixed tail, a hop, thigh and foot on one bone', () => {
+    const m = buildJob('bunny', null), d = TUBE_DESCS.bunny;
+    expect(m.bends).toHaveLength(2);
+    expect(m.bends.every((b) => !b.neck)).toBe(true);
+    expect(d.pieces.filter((p) => p.bend)).toHaveLength(2);
+    expect(d.pieces.some((p) => p.bone === 'body' && 'ball' in p.shape && !p.bend)).toBe(true);
+    expect(m.hop).toBe(1.3);
+    expect(m.butt).toBeFalsy();
+    expect(m.scale).toBeCloseTo(0.75 * PAGE_TO_GAME, 6);
+    expect(hitRadius(d)).toBe(4);
+    for (const b of ['leg0', 'leg2'] as const) expect(d.pieces.filter((p) => p.bone === b)).toHaveLength(2);
+  });
+
+  it('standing heights: stag > deer > boar > bunny, the bunny under 10 game px', () => {
+    const h = (k: (typeof keys)[number]): number => { const m = buildJob(k, null); return m.stands! * m.scale; };
+    expect(h('stag')).toBeGreaterThan(h('deer'));
+    expect(h('deer')).toBeGreaterThan(h('boar'));
+    expect(h('boar')).toBeGreaterThan(h('bunny'));
+    expect(h('bunny')).toBeLessThan(10);
+  });
 
   it('the stag stands 22 to 25 game px, the deer lower', () => {
     const s = buildJob('stag', null), e = buildJob('deer', null);
