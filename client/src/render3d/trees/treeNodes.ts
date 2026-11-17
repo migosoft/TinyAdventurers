@@ -220,7 +220,7 @@ export function treeMaterials(o: {
     const unseen = sight.unseenAt(foot);
     const stipple = bayerAt().lessThan(sight.shown(unseen.x, 1));
     // Foliage opens where the see-through mask has a disc; wood never does.
-    const open = seeOpenNode(mask, truePos, vec2(truePos.x.add(truePos.z), truePos.y).mul(16), see).toVar('treeOpen');
+    const open = seeOpenNode(mask, truePos, see).toVar('treeOpen');
     return vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()).or(stipple.not()).or(s.isFoliage.and(open)), float(0), float(1)));
   })();
   depth.alphaTest = 0.5;

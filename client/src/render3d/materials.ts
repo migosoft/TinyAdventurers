@@ -45,7 +45,7 @@ export function bayerAt() {
 }
 export type ViewToward = ReturnType<typeof viewTowardUniform>;
 
-/** The see-through uniforms every opening surface (walls, plants) reads: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
+/** The see-through uniforms every opening surface (walls, plants) reads: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
 export function seeUniforms() {
   return { mode: uniform(1), keep: uniform(SEE_DEFAULTS.keep), target: uniform(new Vector3()), ray: uniform(new Vector3(0, 0, 1)) };
 }
@@ -54,10 +54,10 @@ export type SeeUniforms = Record<keyof ReturnType<typeof seeUniforms>, N>;
 
 /**
  * Whether a surface point `wp` opens (a bool node) where the see-through mask has a disc and the point is nearer the camera than the thing under it.
- * `uvPx` is the texel position of the surface (the lattice mode's checker). The mask is sampled linearly at the top level of the shader; its green
+ * The mask is sampled linearly at the top level of the shader; its green
  * is a sum weighted by coverage (alpha), so dividing by alpha gives the value back at a disc's soft edge.
  */
-export function seeOpenNode(maskTex: Texture, wp: N, uvPx: N, see: SeeUniforms): N {
+export function seeOpenNode(maskTex: Texture, wp: N, see: SeeUniforms): N {
   const mk = texture(maskTex, screenUV);
   const strength = mk.r;
   const thingNear = float(SEE_DEPTH_BIAS).sub(mk.g.div(max(mk.a, 1e-4)));
@@ -65,8 +65,7 @@ export function seeOpenNode(maskTex: Texture, wp: N, uvPx: N, see: SeeUniforms):
   const inFront = strength.greaterThan(0).and(wallNear.greaterThan(thingNear.add(SEE_DEPTH_MARGIN)));
   const keepAt = float(1).sub(strength.mul(float(1).sub(see.keep)));
   const softOpen = bayerAt().greaterThanEqual(keepAt);
-  const latticeOpen = strength.greaterThan(0.5).and(mod(floor(uvPx.x).add(floor(uvPx.y)), 2).lessThan(0.5));
-  return inFront.and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
+  return inFront.and(select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1)));
 }
 
 /** What `worldMaterial` hands back: the material and the handles the view drives. */
@@ -74,7 +73,7 @@ export interface WorldMaterial {
   material: MeshBasicNodeMaterial;
   /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
   smooth: { value: number };
-  /** See-through uniforms: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
+  /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
@@ -142,7 +141,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
   const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
-  const { texel, p0, smooth, setGround } = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
+  const { texel, smooth, setGround } = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
 
   const wp = positionWorld;
   const cx = floor(wp.x);
@@ -180,7 +179,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
   const see = seeUniforms();
   const onWall = isTop.or(isFace);
-  const open = onWall.and(seeOpenNode(maskTex, wp, p0, see));
+  const open = onWall.and(seeOpenNode(maskTex, wp, see));
 
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));

@@ -4,10 +4,10 @@
 import type { Cam } from './camera';
 import type { Opener } from './figures';
 
-export type SeeMode = 'soft' | 'lattice' | 'off';
+export type SeeMode = 'soft' | 'off';
 /** `radius` in tiles on screen; `keep` 0..1 of the wall that stays at the centre; `edge` 0..1 of the radius the fade runs over. */
 export interface SeeLook { mode: SeeMode; radius: number; keep: number; edge: number }
-export const SEE_DEFAULTS: SeeLook = { mode: 'soft', radius: 1.3, keep: 0.15, edge: 0.4 };
+export const SEE_DEFAULTS: SeeLook = { mode: 'soft', radius: 0.8, keep: 0.15, edge: 0.4 };
 
 /** The look the page's parameters ask for. */
 export function seeLook(p: { see: SeeMode; seeR: number; seeKeep: number; seeEdge: number }): SeeLook {

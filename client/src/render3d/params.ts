@@ -121,7 +121,7 @@ export function parseParams(search: string): R3dParams {
     lcap: lcap !== null && Number.isInteger(lcap) ? range(lcap, 0, 16, DEFAULTS.lcap) : DEFAULTS.lcap,
     ccap: ccap !== null && Number.isInteger(ccap) ? range(ccap, 0, 16, DEFAULTS.ccap) : DEFAULTS.ccap,
     dv: dv === null ? null : range(dv, 0, 100, 0),
-    see: see === 'lattice' || see === 'off' ? see : DEFAULTS.see,
+    see: see === 'off' ? 'off' : DEFAULTS.see,
     seeR: range(num(q.get('seeR')), 0.5, 3, DEFAULTS.seeR),
     seeKeep: range(num(q.get('seeKeep')), 0, 1, DEFAULTS.seeKeep),
     seeEdge: range(num(q.get('seeEdge')), 0.01, 1, DEFAULTS.seeEdge),

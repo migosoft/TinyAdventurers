@@ -97,23 +97,23 @@ describe('panel', () => {
     expect(demo.calls[0].dv).toBe(50);
   });
 
-  it('the See through row has Soft / Lattice / Off and three sliders, in both modes', () => {
+  it('the See through row has exactly Soft and Off and three sliders, in both modes', () => {
     for (const mode of ['demo', 'run'] as const) {
       const { host, calls, btn } = setup(DEFAULTS, mode);
       expect(host.textContent).toContain('See through');
       expect(btn('Soft').getAttribute('aria-pressed')).toBe('true');
-      btn('Lattice').click();
-      expect(calls[0].see).toBe('lattice');
-      expect(btn('Lattice').getAttribute('aria-pressed')).toBe('true');
-      expect(btn('Soft').getAttribute('aria-pressed')).toBe('false');
+      const seeRow = [...host.querySelectorAll('.r3d-row')].find((r) => r.textContent?.startsWith('See through'))!;
+      expect([...seeRow.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Soft', 'Off']);
       btn('Off').click();
-      expect(calls[1].see).toBe('off');
+      expect(calls[0].see).toBe('off');
+      expect(btn('Off').getAttribute('aria-pressed')).toBe('true');
+      expect(btn('Soft').getAttribute('aria-pressed')).toBe('false');
       const r = host.querySelector<HTMLInputElement>('#r3d-seeR')!;
       expect(r.min).toBe('0.5');
       expect(r.max).toBe('3');
       r.value = '2';
       r.dispatchEvent(new Event('input'));
-      expect(calls[2].seeR).toBe(2);
+      expect(calls[1].seeR).toBe(2);
       expect(host.textContent).toContain('Radius 2');
       for (const id of ['seeKeep', 'seeEdge']) expect(host.querySelector(`#r3d-${id}`)).not.toBeNull();
     }

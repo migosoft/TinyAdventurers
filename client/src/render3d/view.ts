@@ -980,7 +980,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       wm.see.target.value.set(f.cam.x, 0, f.cam.z);
       const toward2 = discTowards(f.cam);
       wm.see.ray.value.set(toward2.x, 0, toward2.z); // horizontal: height does not make a wall nearer
-      wm.see.mode.value = look.mode === 'off' ? 0 : look.mode === 'soft' ? 1 : 2;
+      wm.see.mode.value = look.mode === 'off' ? 0 : 1;
       wm.see.keep.value = look.keep;
       mm.edge.value = look.edge;
       if (look.mode !== 'off') {

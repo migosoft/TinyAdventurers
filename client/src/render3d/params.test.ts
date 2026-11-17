@@ -105,7 +105,7 @@ describe('toSearch', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
-      see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
+      see: 'off', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
       shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false,
@@ -114,15 +114,17 @@ describe('toSearch', () => {
   });
 
   it('reads the see-through switch and sliders, clamps them, and leaves defaults out of the URL', () => {
-    expect(parseParams('?r3d&see=lattice&seeR=2')).toMatchObject({ see: 'lattice', seeR: 2, seeKeep: DEFAULTS.seeKeep });
+    expect(parseParams('?r3d&see=off&seeR=2')).toMatchObject({ see: 'off', seeR: 2, seeKeep: DEFAULTS.seeKeep });
     expect(parseParams('?r3d&see=off').see).toBe('off');
+    expect(parseParams('?r3d&see=lattice').see).toBe('soft');
+    expect(DEFAULTS.seeR).toBe(0.8);
     expect(parseParams('?r3d&see=bogus').see).toBe('soft');
     expect(parseParams('?r3d&seeR=9').seeR).toBe(3);
     expect(parseParams('?r3d&seeR=0').seeR).toBe(0.5);
     expect(parseParams('?r3d&seeKeep=2').seeKeep).toBe(1);
     expect(parseParams('?r3d&seeEdge=-1').seeEdge).toBe(0.01); // an edge of 0 would be smoothstep(1, 1, t) in the mask shader
     expect(parseParams('?r3d&seeEdge=0').seeEdge).toBe(0.01);
-    expect(toSearch({ ...DEFAULTS, see: 'lattice', seeR: 2 }, '?r3d')).toBe('?r3d&see=lattice&seeR=2');
+    expect(toSearch({ ...DEFAULTS, see: 'off', seeR: 2 }, '?r3d')).toBe('?r3d&see=off&seeR=2');
     expect(toSearch(DEFAULTS, '?r3d&see=off&seeR=2&seeKeep=0.5&seeEdge=0.1')).toBe('?r3d');
   });
 

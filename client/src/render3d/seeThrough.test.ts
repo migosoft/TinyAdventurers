@@ -4,20 +4,27 @@ import type { Opener } from './figures';
 import { SEE_DEFAULTS, bayer4, discQuads, discStrength, nearOf, discTowards, wallKeep, wallOpens, SEE_DEPTH_BIAS } from './seeThrough';
 
 const look = SEE_DEFAULTS;
+const R = look.radius;
 const cam = { x: 10, z: 10, pitch: (48.6 * Math.PI) / 180, yaw: 0 };
 const op = (id: number, x: number, z: number, mid = 0.5): Opener => ({ id, x, z, mid, who: 'hero' });
+
+describe('SEE_DEFAULTS', () => {
+  it('has radius 0.8', () => {
+    expect(SEE_DEFAULTS.radius).toBe(0.8);
+  });
+});
 
 describe('discStrength', () => {
   it('is 1 in the centre and out to the edge of the full zone', () => {
     expect(discStrength(0, look)).toBe(1);
-    expect(discStrength(0.6 * 1.3, look)).toBe(1);
+    expect(discStrength(0.6 * R, look)).toBe(1);
   });
   it('fades between the full zone and the radius, monotone, and is 0 at the radius and beyond', () => {
-    expect(0 < discStrength(0.7 * 1.3, look) && discStrength(0.7 * 1.3, look) < 1).toBe(true);
-    expect(discStrength(1.3, look)).toBe(0);
+    expect(0 < discStrength(0.7 * R, look) && discStrength(0.7 * R, look) < 1).toBe(true);
+    expect(discStrength(R, look)).toBe(0);
     expect(discStrength(2, look)).toBe(0);
     let prev = 1;
-    for (let d = 0.78; d <= 1.3; d += 0.02) {
+    for (let d = 0.6 * R; d <= R; d += 0.02) {
       const s = discStrength(d, look);
       expect(s).toBeLessThanOrEqual(prev + 1e-12);
       prev = s;
@@ -58,10 +65,10 @@ describe('discQuads', () => {
       ys.push(p.sy - c.sy);
       expect(p.depth).toBeCloseTo(c.depth, 5); // camera-facing: one depth
     }
-    expect(Math.max(...xs)).toBeCloseTo(1.3, 5);
-    expect(Math.min(...xs)).toBeCloseTo(-1.3, 5);
-    expect(Math.max(...ys)).toBeCloseTo(1.3, 5);
-    expect(Math.min(...ys)).toBeCloseTo(-1.3, 5);
+    expect(Math.max(...xs)).toBeCloseTo(R, 5);
+    expect(Math.min(...xs)).toBeCloseTo(-R, 5);
+    expect(Math.max(...ys)).toBeCloseTo(R, 5);
+    expect(Math.min(...ys)).toBeCloseTo(-R, 5);
     expect(Math.max(...q.uv)).toBe(1);
     expect(Math.min(...q.uv)).toBe(-1);
   });
@@ -80,7 +87,7 @@ describe('discQuads', () => {
       for (let k = 0; k < 6; k++) s += project(cam, q.position[(i * 6 + k) * 3], q.position[(i * 6 + k) * 3 + 1], q.position[(i * 6 + k) * 3 + 2]).sx;
       return s / 6;
     };
-    for (let i = 0; i < 5; i++) expect(cx(i + 1) - cx(i)).toBeLessThan(2 * 1.3);
+    for (let i = 0; i < 5; i++) expect(cx(i + 1) - cx(i)).toBeLessThan(2 * R);
   });
 });
 
