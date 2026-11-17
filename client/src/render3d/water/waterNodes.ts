@@ -22,6 +22,13 @@ const named = (name: string, end: number): N => ({ start: 0, end, name });
 
 /** The waves: the heights (tiles) of two slow sines and one low-frequency noise, the step of the normal's finite differences (tiles) and the factor on the slope. */
 export const WAVES = { a1: 0.007, a2: 0.006, a3: 0.008, eps: 0.015, gain: 2 } as const;
+/**
+ * The waves' shapes. Each sine runs along one axis (`k`, radians per tile), slanted by the other (`skew`), at `speed` radians per
+ * second (the second one runs the other way). The noise has `freq` cells per tile and drifts `drift` cells per second.
+ */
+export const WAVE_SHAPE = {
+  sine1: { k: 2.1, skew: 0.5, speed: 0.9 }, sine2: { k: 2.6, skew: 0.9, speed: 0.7 }, noise: { freq: 1.8, drift: [0.12, 0.09] },
+} as const;
 /** What a tile of way through the water takes from red, green and blue, and the colour the water itself scatters back per unit of light at the surface. */
 export const ABSORB = [0.55, 0.22, 0.16] as const, SCATTER = [0.004, 0.02, 0.022] as const;
 /**
@@ -38,7 +45,7 @@ const FRESNEL_0 = 0.02, FRESNEL_POW = 5;
  * The ceiling's rock: the darkest albedo and the range the noise adds, its warm tint, the noise's frequency (per tile); the cracks'
  * frequency, half width (in noise value) and how dark they are; the light's wrap.
  */
-export const CEILING = { base: 0.07, range: 0.27, tint: [1, 0.93, 0.88], freq: 2.7, crackFreq: 4.7, crackWidth: 0.03, crackDark: 0.35, wrap: 0.35 } as const;
+export const CEILING = { base: 0.03, range: 0.12, tint: [1, 0.93, 0.88], freq: 2.7, crackFreq: 4.7, crackWidth: 0.03, crackDark: 0.35, wrap: 0.35 } as const;
 
 export interface WaterMaterial {
   material: NodeMaterial;
@@ -63,9 +70,10 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
 
   // The surface's height at `p` (x, z in tiles): the waves and the ripples (the twin of `rippleHeight`).
   const waves = Fn(([p]: N[]) => {
-    const w = float(WAVES.a1).mul(sin(p.x.mul(2.1).add(time.mul(0.9)).add(p.y.mul(0.5))))
-      .add(float(WAVES.a2).mul(sin(p.y.mul(2.6).sub(time.mul(0.7)).add(p.x.mul(0.9)))))
-      .add(float(WAVES.a3).mul(vnoise2(p.mul(1.8).add(vec2(time.mul(0.12), time.mul(0.09)))).sub(0.5)))
+    const { sine1: s1, sine2: s2, noise: nz } = WAVE_SHAPE;
+    const w = float(WAVES.a1).mul(sin(p.x.mul(s1.k).add(time.mul(s1.speed)).add(p.y.mul(s1.skew))))
+      .add(float(WAVES.a2).mul(sin(p.y.mul(s2.k).sub(time.mul(s2.speed)).add(p.x.mul(s2.skew)))))
+      .add(float(WAVES.a3).mul(vnoise2(p.mul(nz.freq).add(vec2(time.mul(nz.drift[0]), time.mul(nz.drift[1])))).sub(0.5)))
       .toVar();
     Loop(named('rp', RIPPLE_CAP), ({ rp: i }: N) => {
       const r: N = rip.element(i);
