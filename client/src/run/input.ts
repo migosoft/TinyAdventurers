@@ -1,5 +1,5 @@
 // One step of the own hero's input, as the run session consumes it, and the
-// eight-way direction helper both views and the session share.
+// eight-way direction helper the view and the session share.
 
 export interface StepInput {
   mx: -1 | 0 | 1;

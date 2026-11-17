@@ -1,5 +1,5 @@
-// The boundary between the run session and a view (the 3D view). Types only, except NO_STATS. The session never imports a view;
-// it asks the view one question (pointerWorld), everything else flows to it.
+// The boundary between the run session and the view (the 3D view). Types only, except NO_STATS.
+// The session never imports the view; it asks the view one question (pointerWorld), everything else flows to it.
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';

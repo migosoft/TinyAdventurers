@@ -6,9 +6,9 @@ export const SHADE = 0.3;
 
 /** What unseen ground looks like. `blurPx` is in world pixels (the canvas is at screen resolution and the integer zoom lives on the camera). */
 export interface HazeLook {
-  /** Unseen strength beyond sight (0..1; read by VisionMask.outside). */
+  /** Unseen strength beyond sight (0..1; read as `outside` by the sight mask). */
   outside: number;
-  /** Unseen strength behind a soft blocker such as a trunk (read by VisionMask.soft). */
+  /** Unseen strength behind a soft blocker such as a trunk (read as `soft` by the sight mask). */
   soft: number;
   /** The wash colour, 0xRRGGBB. */
   colour: number;
@@ -18,9 +18,9 @@ export interface HazeLook {
   desat: number;
   /** Blur tap distance at full strength, in world pixels. */
   blurPx: number;
-  /** The blur radius of the vision mask in world pixels: how softly the edge of sight fades (read by VisionMask.feather). */
+  /** The blur radius of the sight mask in world pixels: how softly the edge of sight fades. */
   feather: number;
-  /** World px behind a soft blocker over which the haze grows from nothing to `soft` (read by VisionMask.ramp); 0: crisp from the blocker's edge. */
+  /** World px behind a soft blocker over which the haze grows from nothing to `soft` (the sight mask's `ramp`); 0: crisp from the blocker's edge. */
   ramp: number;
 }
 

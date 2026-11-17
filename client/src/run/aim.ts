@@ -1,4 +1,4 @@
-// One aim origin for both views (#311): the aim is measured from the hero's foot to the aimed point at the foot plane.
+// One aim origin for the view and the session (#311): the aim is measured from the hero's foot to the aimed point at the foot plane.
 import type { OwnHero } from './view';
 
 /** Height (art px) a shot is drawn above its ground point; the pointer is read at this height. */

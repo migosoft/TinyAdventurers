@@ -87,7 +87,7 @@ try {
 
   a2 = await player('Bob', classes[1], false, noChunk ? bobErrors : errors);
   p2 = a2.page;
-    await p2.waitForSelector('[data-join]');
+  await p2.waitForSelector('[data-join]');
   await p2.screenshot({ path: `${out}/0-lobby.png` });
   await p2.click('[data-join]');
   await p2.waitForSelector('.players li');

@@ -1,5 +1,5 @@
-// Explosion frame layout, shared by the atlas build (scripts/explosion-frames.ts)
-// and the effects (effects.ts). AI-generated art for this game (ChatGPT sheets
+// Explosion frame layout, used by the atlas build
+// (scripts/explosion-frames.ts). AI-generated art for this game (ChatGPT sheets
 // in assets-src/explosion/), cut from six labelled stages into square frames,
 // each centred on its stage's cloud.
 

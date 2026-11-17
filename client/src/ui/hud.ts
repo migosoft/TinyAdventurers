@@ -32,7 +32,7 @@ export interface FrameStats {
   objects: number;
   /** WebGL draw calls of the last frame. */
   drawCalls: number;
-  /** The canvas's pixel size and its CSS upscale (above 1 only with `?res=world`, #295). */
+  /** The canvas's pixel size and its CSS upscale (1 in the 3D view). */
   canvas: { w: number; h: number; cssZoom: number };
   /** Extra lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];

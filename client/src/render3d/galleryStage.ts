@@ -165,7 +165,7 @@ function walk(base: number, amp: number, w: number, ph: number, t: number): { x:
   return { x: base + amp * Math.sin(w * t + ph), aim: Math.cos(w * t + ph) >= 0 ? 0 : Math.PI };
 }
 
-/** The barrel's cycle as `GalleryScene` runs it: rest, fuse, fall, rest, sink. */
+/** The barrel's cycle as the gallery runs it: rest, fuse, fall, rest, sink. */
 const BARREL_STEPS: [number, number][] = [[0, 1], [1, CONST.BARREL_FUSE], [2, CONST.FALL_TIME + 0.3], [0, 1], [3, CONST.DROWN_TIME + 0.3]];
 function barrelAt(t: number): { anim: number; animMs: number } {
   const total = BARREL_STEPS.reduce((s, [, d]) => s + d, 0);

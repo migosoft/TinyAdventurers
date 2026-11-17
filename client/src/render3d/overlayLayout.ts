@@ -26,7 +26,7 @@ const TAG_RISE = 7;
 const CAP_RISE = 26;
 export const CAP_SIZE = 11;
 const CAP_LABEL_GAP = 2;
-/** The effect symbols next to a hero's name: 5.5 art px, 2 px from the tag, 1 px apart (TagEffects). */
+/** The effect symbols next to a hero's name: 5.5 art px, 2 px from the tag, 1 px apart. */
 export const ICON_SIZE = 5.5;
 const ICON_GAP = 2;
 const ICON_STEP = 1;
@@ -151,7 +151,7 @@ export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: n
   return { x: ev.x + pred.x - srv.x, y: ev.y + pred.y - srv.y };
 }
 
-/** A floating number or word, kept at its ground spot (tiles) and rising in screen space; the twin of `Effects.text`. */
+/** A floating number or word, kept at its ground spot (tiles) and rising in screen space. */
 interface Float { x: number; z: number; dx: number; up: number; rise: number; vy: number; age: number; life: number; max: number; pop: boolean; text: string; color: string; stroke: string; kind: WorldTextKind }
 
 export class Floats {
@@ -215,7 +215,7 @@ interface Zed { x: number; z: number; y: number; head: number; age: number }
 /** What the marks need from a figure's anchor, by id. */
 interface MarkState { x: number; z: number; y: number; head: number; cx: number; alpha: number; fear: boolean; charm: boolean; zT: number; zs: Zed[] }
 
-/** Sleep Z, fear "!" and charm heart over figures, from the anchors' effect bits: the twin of the marks in `StatusFx`. */
+/** Sleep Z, fear "!" and charm heart over figures, from the anchors' effect bits. */
 export class Marks {
   private clock = 0;
   private readonly states = new Map<number, MarkState>();

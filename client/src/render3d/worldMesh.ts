@@ -73,7 +73,7 @@ export function chunksOfTile(map: { w: number; h: number }, x: number, z: number
   return out;
 }
 
-/** The floor frame of a cell: floor_1 for 93 %, the other seven share the rest (as autotile.ts). */
+/** The floor frame of a cell: floor_1 for 93 %, the other seven share the rest (the same tile hash the wall autotiling uses). */
 export function floorFrame(x: number, z: number): string {
   const h = tileHash(x, z);
   return h < 0.93 ? 'floor_1' : `floor_${2 + Math.floor(h * 1000) % 7}`;

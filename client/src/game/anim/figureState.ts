@@ -1,6 +1,6 @@
-// Per-figure bookkeeping pure: which state a figure is drawn from (predicted
+// Pure per-figure bookkeeping: which state a figure is drawn from (predicted
 // for the own hero, interpolated otherwise), the fall into a chasm or the drowning of a hero lost to the terrain, and
-// the vanish and reappear marks of Invisible. The views keep the pictures (splashes, bubbles, ghost images).
+// the vanish and reappear marks of Invisible. The view keeps the pictures (splashes, bubbles, ghost images).
 import { ANIM, CONST, EFFECT, SIDE, TILE_ID } from '../../generated/defs';
 import type { OwnHero, PictureEv } from '../../run/view';
 import type { TileMap } from '../../sim/map';

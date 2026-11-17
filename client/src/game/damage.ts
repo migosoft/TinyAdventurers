@@ -12,7 +12,7 @@ export const DMG_COLORS: Record<number, string> = {
   [DMG_TYPE.Poison]: '#80e040',
 };
 
-/** A floating number or word for a picture event, as both views show it (`up`: art px above the event's spot). */
+/** A floating number or word for a picture event, as the run shows it (`up`: art px above the event's spot). */
 export interface FloatOf { text: string; color: string; opts: { big?: boolean; kind?: WorldTextKind; up?: number } }
 
 /** The float of a `Dmg`, `Heal`, `Immune` or `Coins` event; null for the other events. */
