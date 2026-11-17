@@ -105,8 +105,9 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
   const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
   const smooth = uniform(0);
   const useSmooth = smooth.greaterThan(0.5);
-  // Both reads sit in the shader and a select picks one; sampling stays in uniform control flow.
-  const atlasTexel = select(useSmooth.and(kind.lessThan(0.5)), texture(linearAtlas, p.div(size)), texture(atlas, p0.div(size)));
+  // Every read sits in the shader and float weights (exactly 0 or 1) pick among them; a `select` between texels can become an `if`, and sampling stays in uniform control flow.
+  const weight = (on: N): N => select(on, float(1), float(0));
+  const atlasTexel = mix(texture(atlas, p0.div(size)), texture(linearAtlas, p.div(size)), weight(useSmooth.and(kind.lessThan(0.5))));
 
   const groundReady = uniform(0);
   const groundNear = texture(groundStart, p0.div(max(rect.zw, vec2(1))));
@@ -114,9 +115,10 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
   // Two texture nodes on one texture start are "mergeable" (same uniform hash, so one shared binding): then only one of them would follow `setGround`.
   groundNear.mergeable = false;
   groundLin.mergeable = false;
-  const groundTexel = select(useSmooth, groundLin, groundNear);
-  const ground = vec4(select(groundReady.greaterThan(0.5), groundTexel.rgb, vec3(...GRASS_FLAT)), select(groundReady.greaterThan(0.5), groundTexel.a, 1));
-  const texel = select(isGround, ground, atlasTexel);
+  const groundTexel = mix(groundNear, groundLin, weight(useSmooth));
+  const readyW = weight(groundReady.greaterThan(0.5));
+  const ground = vec4(mix(vec3(...GRASS_FLAT), groundTexel.rgb, readyW), mix(float(1), groundTexel.a, readyW));
+  const texel = mix(atlasTexel, ground, weight(isGround));
   return {
     texel,
     p0,
@@ -153,11 +155,15 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
     .or(fx.greaterThan(1 - PX).and(lower(1, 0)));
 
   const top = select(rim, vec3(...RIM), vec3(...STONE));
-  const base = select(isTop, top, texel.rgb);
+  // The texel comes first, by a weight (exactly 0 or 1): a `select` here could hold its first use in a branch.
+  const base = mix(texel.rgb, top, select(isTop, float(1), float(0)));
   // Ground cover (#330): floor and ground darken where cover stands (the sheets and bushels show on it); with the layer off they show the cover's colour flat.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
-  const albedo = select(covered, select(cover.on.greaterThan(0.5), base.mul(kindLook(grown.id).darken), grown.rgb), base);
+  // Mixed by weights (exactly 0 or 1), with `base` first: the atlas samples and their `fwidth` stay at the top level, outside any `if`.
+  const coverW = select(covered, float(1), float(0));
+  const darkenW = select(cover.on.greaterThan(0.5), float(1), float(0));
+  const albedo = mix(base, mix(grown.rgb, base.mul(kindLook(grown.id).darken), darkenW), coverW);
   // Wrap: floor and ground 0.35, wall face 0.5, wall top TOP_WRAP. A top takes the point lights without the wall test (`open`):
   // the lights hang below it, and the test would cut ragged wedges into it. So the walls around a lit room show as a stone band,
   // also from behind, where no brick face points at the camera (#342).

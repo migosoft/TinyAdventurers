@@ -5,7 +5,7 @@ import { makeCoverShared } from '../cover/coverRead';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { makeLighting, type Lighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
-import { fragment, type Builder } from '../shaderCode.testutil';
+import { fragment, readsInBranches, type Builder } from '../shaderCode.testutil';
 import { dipMaterial } from './dipNodes';
 
 /** The dip mesh's vertex layout (`DipArrays`). */
@@ -76,6 +76,18 @@ describe('dipMaterial', () => {
       const world = worldMaterial(t, t, 64, 64, l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1))).material;
       const count = (code: string): number => loops(code).length;
       expect(count(fragment(B, build().m.material, { geometry: geometry() }))).toBe(count(fragment(B, world, { geometry: geometry() })));
+    });
+
+    it(`${B.name}: the chasm slabs are emitted once`, () => {
+      // `slabs` writes its tilt constant (LEDGE_COS, 0.906) twice (the layer's own axis and the one across it), and the ridges call it four
+      // times (two runs along z, one along x, and the two of a corner blend): 8 in all for one copy of the block. A second use of `ridges`
+      // outside the rock's pick would emit a second copy: 16.
+      const code = fragment(B, build().m.material, { geometry: geometry() });
+      expect(code.split('0.906').length - 1).toBe(8);
+    });
+
+    it(`${B.name}: no atlas or ground sample and no derivative sits in a branch`, () => {
+      expect(readsInBranches(fragment(B, build().m.material, { geometry: geometry() }))).toEqual([]);
     });
 
     it(`${B.name}: keeps its loops apart`, () => {

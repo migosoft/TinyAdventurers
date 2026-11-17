@@ -144,8 +144,12 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // The kinds, by ranges of the vertex attribute (0 none, 1 water, 2 lava, 3 chasm).
   const isLava = dip.greaterThan(1.5).and(dip.lessThan(2.5));
   const isChasm = dip.greaterThan(2.5);
+  // The kinds as float weights (exactly 0 or 1): the colours below are mixed by them, not picked by `select`, because a `select` between
+  // colours can become an `if` that holds the first use of a node, and a later use outside it then emits the node a second time.
+  const lavaW = select(isLava, float(1), float(0));
+  const chasmW = select(isChasm, float(1), float(0));
 
-  // All the noise is evaluated here, at the top level; the kinds only pick between the results.
+  // All the noise is evaluated here, at the top level; the kinds mix the results by weight.
   const rough = fbm2(pp.mul(5));
   const mud = vec3(0.10, 0.085, 0.055).mul(float(0.6).add(rough.mul(0.8)));
   const pebbles = smoothstep(0.66, 0.72, vnoise2(pp.mul(4.3).add(3.1)));
@@ -160,7 +164,8 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const alongZ = smoothstep(0.3, 0.7, nx2.div(nx2.add(nz2).add(1e-4)));
   // The slabs cost about 40 hashes an evaluation, so a real branch keeps them to the pixels that show them: below the floor inside a
   // chasm's outline, and one evaluation where the wall runs straight (two only on a rounded corner). Plain arithmetic, so a branch is
-  // allowed here (no texture sample, no derivative).
+  // allowed here (no texture sample, no derivative). The rock and the chasm's self-light below both use `ridges`, and both use it at the
+  // top level (not inside a branch), so this block is emitted once.
   const rimMask = attribute('rim', 'vec3');
   const sA = wp.x.mul(sign(normal.z)), sB = wp.z.mul(sign(normal.x)).negate();
   const ridges = Fn(() => {
@@ -199,7 +204,10 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // drawn as the world material draws it: darkened under standing cover, or the cover's colour flat while the layer is off.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = grown.h.greaterThan(0.5);
-  const floorTexel = select(covered, select(cover.on.greaterThan(0.5), flat.texel.rgb.mul(kindLook(grown.id).darken), grown.rgb), flat.texel.rgb);
+  // Mixed by weights (exactly 0 or 1), with the texel first: the atlas samples and their `fwidth` stay at the top level, outside any `if`.
+  const coverW = select(covered, float(1), float(0));
+  const darkenW = select(cover.on.greaterThan(0.5), float(1), float(0));
+  const floorTexel = mix(flat.texel.rgb, mix(grown.rgb, flat.texel.rgb.mul(kindLook(grown.id).darken), darkenW), coverW);
 
   const scorch = smoothstep(1 - SCORCH_REACH, 1, near.y.add(patchy.mul(0.35)));
   const byLava = mix(floorTexel.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
@@ -215,7 +223,8 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const dusty = float(1).sub(smoothstep(0.5, 1, near.z).mul(RIM_DUST));
   const byChasm = mix(byLava.mul(float(1).sub(crack.mul(CRACK_DARK))).mul(dusty), CHASM_ROCK.mul(0.35), brokenOff);
 
-  const rock = select(dip.lessThan(1.5), waterRock, select(dip.lessThan(2.5), lavaRock, chasmRock));
+  // Water (and a dip of 0) takes `waterRock`; the weights pick the other two.
+  const rock = mix(mix(waterRock, lavaRock, lavaW), chasmRock, chasmW);
   const albedo = mix(byChasm, rock, bank);
 
   const lit = lighting.lightAt(wp, normal, WRAP, { selfLit: false });
@@ -228,9 +237,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
     .mul(smoothstep(0, 0.08, d));
   const cool = CHASM_SELF.mul(ridges).mul(bank);
   const fade = float(0.03).add(exp(min(y, 0).mul(0.55)).mul(0.97));
-  // `base` (every light and shadow loop) is built once; only these cheap terms are picked by float weights (a colour `select` would emit `base` per branch).
-  const lavaW = select(isLava, float(1), float(0));
-  const chasmW = select(isChasm, float(1), float(0));
+  // `base` (every light and shadow loop) is built once; only these cheap terms are picked by the float weights (a colour `select` would emit `base` per branch).
   const colour = mix(base.add(band.mul(lavaW)), base.add(cool).mul(fade), chasmW);
 
   const m = new MeshBasicNodeMaterial();

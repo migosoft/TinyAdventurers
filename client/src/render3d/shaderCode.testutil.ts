@@ -43,3 +43,29 @@ function built(B: Builder, m: NodeMaterial, opts: { compare?: boolean; geometry?
   b.build();
   return b;
 }
+
+/**
+ * The lines of generated shader code that sample a texture or take a screen-space derivative (`fwidth`, `dFdx`, `dFdy`, `dpdx`, `dpdy`)
+ * inside a data-dependent `if` or `else` block. A loop's body (the lighting's) and an `if` whose condition is a number compared with a
+ * number (the lighting's build-time switches, which the shader compiler folds away) do not count. A sample or derivative in a branch that
+ * pixels of one quad take differently is undefined (WGSL rejects it).
+ */
+export function readsInBranches(code: string): string[] {
+  const read = /\b(fwidth|dFdx|dFdy|dpdx|dpdy|textureSample\w*|texture)\s*\(/;
+  const fixed = /\bif\s*\(\s*\(?\s*-?[\d.]+\s*[<>]=?\s*-?[\d.]+\s*\)?\s*\)/;
+  const out: string[] = [];
+  const stack: ('if' | 'else' | 'loop' | 'other')[] = [];
+  for (const line of code.split('\n')) {
+    if (read.test(line) && !stack.includes('loop') && (stack.includes('if') || stack.includes('else'))) out.push(line.trim());
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === '{') {
+        const before = line.slice(0, i);
+        if (/\b(for|loop)\b/.test(before)) stack.push('loop');
+        else if (/\bif\b/.test(before)) stack.push(fixed.test(before) ? 'other' : 'if');
+        else if (/\belse\b/.test(before)) stack.push('else');
+        else stack.push('other');
+      } else if (line[i] === '}') stack.pop();
+    }
+  }
+  return out;
+}

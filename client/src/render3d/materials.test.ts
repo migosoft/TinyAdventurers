@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DataTexture, Texture } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { float, vec3 } from 'three/tsl';
 import { makeLighting, type Lighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { makeSunLight } from './sunNodes';
 import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { makeCoverShared } from './cover/coverRead';
+import { fragment, readsInBranches, type Builder } from './shaderCode.testutil';
 
 type Opts = { self?: unknown; darkOnly?: unknown; sun?: unknown } | undefined;
 /** A stub `Lighting` that records the options `lightAt` was called with. */
@@ -78,6 +79,23 @@ describe('worldMaterial', () => {
     expect(calls[0]?.darkOnly).toBeUndefined();
     expect(calls[0]?.sun).toBeDefined();
   });
+});
+
+describe('worldMaterial shader code', () => {
+  /** The world mesh's vertex layout. */
+  const geometry = (): BufferGeometry => {
+    const g = new BufferGeometry();
+    for (const [n, s] of [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1]] as [string, number][]) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
+    return g;
+  };
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: no atlas or ground sample and no derivative sits in a branch`, () => {
+      const t = new Texture();
+      const l = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
+      const m = worldMaterial(t, t, 64, 64, l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1))).material;
+      expect(readsInBranches(fragment(B, m, { geometry: geometry() }))).toEqual([]);
+    });
+  }
 });
 
 describe('makeLighting lava', () => {
