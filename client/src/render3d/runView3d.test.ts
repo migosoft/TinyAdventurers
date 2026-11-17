@@ -19,6 +19,7 @@ import type { Overlay3d } from './overlay';
 import type { OverlayItem } from './overlayLayout';
 import { SIDE } from '../generated/defs';
 import type { FrameInput } from './view';
+import { rng } from './fx/rand';
 import type { PlantInfo } from '../generated/PlantInfo';
 import type { CoverResult } from './cover/coverJob';
 import { encodeCover } from './cover/kinds';
@@ -62,7 +63,7 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
@@ -71,7 +72,7 @@ function run(over: { water?: [number, number][]; lava?: [number, number][]; cove
   const light = new LightField(map);
   if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
-  const init: RunViewInit = { info, map, light, myKind: KIND.Wizard };
+  const init: RunViewInit = { info, map, light, myKind: KIND.Wizard, lavaRng: over.lavaRng };
   const overlay = over.paint ? ({ size() {}, measure: () => 10, paint: (items: OverlayItem[]) => over.paint!.splice(0, over.paint!.length, ...items) } as unknown as Overlay3d) : null;
   const v = new RunView3d(init, frames, bounds, overlay);
   let got: FrameInput | null = null;
@@ -557,7 +558,7 @@ describe('the lava in the run view (#344)', () => {
   });
 
   it('bubbles a pool in view within 3 s, and a map without lava never', () => {
-    expect(most(run({ rows: ROWS, lava: POOL, ownX: 24 }), 180)).toBeGreaterThan(0);
+    expect(most(run({ rows: ROWS, lava: POOL, ownX: 24, lavaRng: rng(5) }), 180)).toBeGreaterThan(0);
     expect(most(run({ rows: ROWS, ownX: 24 }), 180)).toBe(0);
   });
 
@@ -580,7 +581,7 @@ describe('the lava in the run view (#344)', () => {
   });
 
   it('a new view after a device loss keeps the bubbles', () => {
-    const r = run({ rows: ROWS, lava: POOL, ownX: 24 });
+    const r = run({ rows: ROWS, lava: POOL, ownX: 24, lavaRng: rng(6) });
     let f: FrameInput | null = null;
     for (let k = 0; k < 240 && live(f) === 0; k++) { r.ctx.now += 1 / 60; f = r.again(); }
     expect(live(f)).toBeGreaterThan(0);

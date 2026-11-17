@@ -121,12 +121,16 @@ export class Lava3d {
     return maskAt(this.map, x, z, isLava) >= LAVA.mask;
   }
 
-  private startBubble(p: Pool, now: number): void {
+  private startBubble(p: Pool, now: number, i: LavaIn): void {
     const n = p.tiles.length / 2;
+    const f = i.fp;
     for (let t = 0; t < LAVA.tries; t++) {
       const k = Math.floor(this.rng() * n) * 2;
       const x = p.tiles[k] + this.rng(), z = p.tiles[k + 1] + this.rng();
       const size = BUBBLE.size[0] + this.rng() * (BUBBLE.size[1] - BUBBLE.size[0]);
+      // only where the hero can see it: in view (margin 1 tile) and not hidden by the mask
+      if (x < f.x0 - VIEW_MARGIN || x > f.x1 + VIEW_MARGIN || z < f.z0 - VIEW_MARGIN || z > f.z1 + VIEW_MARGIN) continue;
+      if (i.mask && hiddenAt(i.mask, x, z)) continue;
       // the spot and the four points a dome's size away must all be lava: a dome never reaches a bank, and a lone tile has no room for one
       if (!this.deep(x, z) || !this.deep(x + size, z) || !this.deep(x - size, z) || !this.deep(x, z + size) || !this.deep(x, z - size)) continue;
       this.bubbles.add(x, z, now, size);
@@ -182,12 +186,14 @@ export class Lava3d {
     }
 
     // a pool in view and seen counts its timer down; a long frame starts one bubble, not a burst
+    // expired bubbles report their pop first: `add` drops them without a word
+    this.bubbles.pack(now, this.packed, this.onPop);
     for (const p of this.pools) {
       if (!this.watched(p, i)) continue;
       p.timer -= dt;
       if (p.timer > 0) continue;
       p.timer = this.wait();
-      this.startBubble(p, now);
+      this.startBubble(p, now, i);
     }
     this.result.live = this.bubbles.pack(now, this.packed, this.onPop);
     this.input = null;

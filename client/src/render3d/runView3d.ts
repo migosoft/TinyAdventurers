@@ -198,7 +198,7 @@ export class RunView3d implements RunView {
     this.myKind = init.myKind;
     this.air = new Air3d(init.map);
     this.water = new Water3d(init.map);
-    this.lavaSim = new Lava3d(init.map);
+    this.lavaSim = new Lava3d(init.map, init.lavaRng);
     this.field = init.light;
     this.lava = new Float32Array(init.map.w * init.map.h * 4);
   }

@@ -15,6 +15,8 @@ export interface RunViewInit {
   map: TileMap;
   light: LightField;
   myKind: number;
+  /** The 3D view's random source for the lava's bubbles (default `Math.random`); tests pass a seeded one. */
+  lavaRng?: () => number;
 }
 
 /** A predicted own shot, as the view may read it. */

@@ -6,7 +6,7 @@ import { TileMap } from '../../sim/map';
 import { View } from '../../sim/view';
 import type { DrawnFig } from '../fx/types';
 import { LAVA_LEVEL, isLava, maskAt } from '../dips/shape';
-import { SightMask, type SightLook } from '../sightmask';
+import { SightMask, hiddenAt, type SightLook } from '../sightmask';
 import { BUBBLE, BUBBLE_CAP } from './bubbles';
 import { LAVA, Lava3d, STIR_CAP, type LavaIn } from './lava';
 
@@ -54,11 +54,11 @@ function run(l: Lava3d, seconds: number, o: Partial<LavaIn> = {}, from = 0, dt =
   }
   return { spots, maxLive, last };
 }
-const mask = (map: TileMap): SightMask => {
+const mask = (map: TileMap, tx = 0.5, tz = 0.5): SightMask => {
   const look: SightLook = { daylight: false, feather: 0, ramp: 0 };
   const m = new SightMask(map, look);
   const v = new View(map.w, map.h);
-  v.compute(map, 0.5 * TILE, 0.5 * TILE, 3, 'hard');
+  v.compute(map, tx * TILE, tz * TILE, 3, 'hard');
   m.update(v, null, 0);
   return m;
 };
@@ -107,6 +107,20 @@ describe('Lava3d bubbles', () => {
     const hid = run(l, 10, { mask: mask(map) }, 10);
     expect(hid.spots.size).toBe(0);
     expect(run(l, 10, {}, 20).spots.size).toBeGreaterThan(0);
+  });
+
+  it('starts bubbles only on spots that are in view and seen', () => {
+    const map = room(24, 8, block(2, 1, 20, 6));
+    const m = mask(map, 6.5, 3.5);
+    const fp = { x0: 0, z0: 0, x1: 14, z1: 8 };
+    const l = new Lava3d(map, seeded(21));
+    const { spots } = run(l, 30, { mask: m, fp });
+    expect(spots.size).toBeGreaterThan(3);
+    for (const s of spots) {
+      const [x, z] = s.split(',').map(Number);
+      expect(x).toBeLessThanOrEqual(fp.x1 + 1);
+      expect(hiddenAt(m, x, z)).toBe(false);
+    }
   });
 
   it('gives two pools their own timers and shares the cap', () => {
@@ -168,6 +182,16 @@ describe('Lava3d bubbles', () => {
     const mine = pops.filter((p) => Math.abs(p.x - x) < 1e-4 && Math.abs(p.z - z) < 1e-4);
     expect(mine.length).toBe(1);
     expect(mine[0].id).toBe(-1);
+  });
+
+  it('still cues the pop of a bubble whose frame jumped past swell and pop while another started', () => {
+    const l = new Lava3d(poolRoom(), seeded(12));
+    let t = 0, r = l.step(inp(t, 1 / 60));
+    while (r.live === 0) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    const x = r.bubbles[0], z = r.bubbles[1];
+    t += BUBBLE.swell + BUBBLE.pop + 0.5;
+    r = l.step(inp(t, 5));
+    expect(r.cues.pops.some((p) => Math.abs(p.x - x) < 1e-4 && Math.abs(p.z - z) < 1e-4)).toBe(true);
   });
 
   it('makes no pop cue where the mask hides the bubble', () => {
