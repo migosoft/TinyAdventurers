@@ -54,7 +54,10 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 | Left mouse | Primary attack toward the cursor (hold to repeat) |
 | Right mouse | Secondary ability |
 | Q / E | Switch which teammate you watch after dying |
-| Esc | Menu (leave the dungeon) |
+| Z / C | Turn the camera 45° left / right |
+| X | Turn the camera back to north |
+| Middle mouse button, drag | Turn the camera freely (it snaps to the nearest 45° on release) |
+| Esc | Menu: Settings (Quality: High, Balanced or Fast; the choice is kept in this browser) and leave the dungeon |
 | F3 | Network and performance stats |
 | F4 | Debug accounts only: cycle your own hero's darkvision 0 / 50% / 100% |
 | F8 | Debug accounts only: put the next effect (blind, sleep, petrified, …) on your own hero |
@@ -65,7 +68,7 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 | Part | Tech | Commands |
 |---|---|---|
 | `server/` | Rust (tokio, axum). Authoritative 60 Hz simulation and lobby. | `cargo test`, `cargo run` |
-| `client/` | TypeScript, Phaser 3, Vite | `npm install`, `npm run dev` (port 5173, proxies `/ws` to :8080), `npm test` |
+| `client/` | TypeScript, three.js, Vite | `npm install`, `npm run dev` (port 5173, proxies `/ws` to :8080), `npm test` |
 | `tools/e2e/` | playwright-core + installed Edge/Chrome | `npm install`, `node smoke.mjs http://localhost:8080/` |
 
 To run the server tests without a local Rust toolchain:
@@ -82,26 +85,15 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ### Dev helpers
 
-- `?gallery`: every figure cycling through all its animations (no server needed)
-  - Add `&state=melee&slow=10` to loop one animation in slow motion.
-- `?mimic`: the chasing mimic, a treasure chest opening and the mimic reveal, side by side (no server needed)
-- `?daemons`: the demon dungeon's imps, chorts and summoner fighting a knight, plus a pack of them (no server needed)
-- `?water`, `?chasm`, `?lava`: the terrain with scripted figures: wading, drowning, falling, burning, the dash jumping a gap, and being knocked in (no server needed; add `&slow=3` for slow motion)
-- `?knockback`: every push in the game (orc warrior, chort, the demon's cleave and swoop, the dragon's claw and tail) next to chasms and deep water (no server needed; `&slow=3` works too)
-- `?dragon`: the red dragon looping through every action, flight and landing smash included (no server needed; Space pauses, S slow motion, 1-8 jump to an action)
-- `?charm`: what a charmed player sees (pink haze, "CHARMED", the caster, a shrinking bar) while a charmed Barbarian attacks a Paladin; big buttons for Charmed, Paused (Dispel) and Ends (no server needed)
-- `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
-- `?lich`: the lich's dark purple magic: gloom bolt volley, the summon of 5 skeletons + 5 archers, and the nova pushing heroes 64 px (no server needed; `&slow=3` works too)
-- `?demon`: the red demon looping through every action: walking, cleave, the swoop charge, the ring of fire and an enraged cleave (no server needed; Space pauses, S slow motion, 1-7 jump to an action)
-- `?spectres`: the Ghost and the Shade: the pulsing see-through Ghost, the Shade's veil of black strands and how it trails, both vanishing, the ambush warnings (flicker, silhouette) and their deaths (no server needed; `&slow=3` works too)
-- `?lights`: the light system on a small board: torches in several colours, lava with a torch beside it, a fireball and a frost bolt lighting a corridor, an explosion flash in a dark doorway, a torch that switches (no server needed; `&slow=3` works too). V cycles the viewer's darkvision 0 / 50% / 100% (greyscale where it sees only by darkvision); `&dv=0.5` starts with it. Two pillars show the straight vision edges; click moves the viewer (`&at=x,y` in tiles), E toggles the old tile edges (`&edges=old`).
+- `?r3d=<page>`: the 3D view's dev pages, with no server and no login. Pages: `demo` (the dev scene), `gallery` (every figure cycling through its states, the objects and a corridor behind a wall; add `&state=melee&slow=10` to loop one state in slow motion, `&focus=models` for the figure models), `lights` (torches in several colours, lava, a fireball and a frost bolt, an explosion flash; V cycles the viewer's darkvision 0 / 50% / 100%), `woodland` (the forest road under the sun and sky of the time of day), `cove` (the nymph's cove), `mood` (the dungeon's air), `sunlight` (a ceiling crack's light shaft and patch), `fx` (the effects; `&fx=spells|booms|shots|figures|bosses|hazards|status|objects`) and `liquids` (water, lava and a chasm with wading and pushed figures; keys 1, 2 and 3 push an imp or a barrel in). The panel at the bottom changes the camera, the quality and the switches of each page. See [docs/TECHNICAL.md](docs/TECHNICAL.md) §10.
 - Debug accounts (no URL parameter): the admin marks a game account in `/admin` (player page, "Debug"). A marked account always plays in debug mode and only with other marked accounts; normal players never see its rooms.
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop. F9 makes you mortal (and immortal again).
-  - The yellow badge at the bottom lists the debug keys (F4, F8, F9).
+  - The yellow badge at the bottom lists the debug keys (F4, F7, F8, F9 and the Shift forms).
   - In the character screen the Attribute **+1**, skill-tree nodes and the respec are free (no XP or coins), and items can be granted. They are saved on the character, so use a test account.
-  - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.
+  - The server sends the shortest walkable path to the boss, the ogre mini-boss and the cove every 0.5 s, and the badge lists their colours, but the 3D view does not draw them yet.
+  - A `?r3d` in the address of a debug account's run shows the dev panel (camera, quality, light and sight switches, the free camera on F) over the run; without it the run looks like a player's.
   - Debug runs bank XP and coins like normal runs. Unmarking the account in `/admin` wipes the progress of all its characters.
-  - The host picks the end boss in the waiting room (there is no URL preselect). `tools/e2e/smoke.mjs` takes `?debug` as its own switch and marks its throwaway accounts through the admin API (`ADMIN_USER`/`ADMIN_PASSWORD` in the environment) or psql.
+  - The host picks the end boss in the waiting room (there is no URL preselect). `tools/e2e/smoke.mjs` plays a two-player run with ordinary throwaway accounts; `tools/e2e/r3d-run.mjs` marks a throwaway account as a debug account through the admin API (`ADMIN_USER`/`ADMIN_PASSWORD` in the environment) or psql and plays a run with it.
 - `?lag=150&jitter=40&loss=2`: simulates a bad network connection
 
 ## Art

@@ -1,4 +1,4 @@
-# 1) Build the browser client (Vite + Phaser).
+# 1) Build the browser client (Vite + three.js).
 FROM node:22-alpine AS client
 WORKDIR /app/client
 COPY client/package.json client/package-lock.json ./
