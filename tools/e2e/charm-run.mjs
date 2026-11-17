@@ -5,6 +5,7 @@
 // charm-run-on.png (haze) and charm-run-off.png (after the end). Deletes its throwaway account.
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
+import { VIEWPORT, watchPage, backendQuery } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -16,10 +17,9 @@ const psql = (sql) => execFileSync('docker', ['compose', 'exec', '-T', 'db', 'ps
 const browser = await chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const errors = [];
 try {
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));
-  await page.goto(base + query);
+  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  watchPage(page, '', errors);
+  await page.goto(base + query + (backendQuery() ? (query.includes('?') ? '&' : '?') + backendQuery() : ''));
   await page.waitForSelector('#auth-name');
   await page.click('#auth-switch');
   await page.fill('#auth-name', account);

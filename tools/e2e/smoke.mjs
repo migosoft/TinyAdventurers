@@ -1,15 +1,15 @@
-// Two-player smoke test: register two throwaway accounts, create a character each,
-// create/join a run, start, move, attack, screenshots; then a second login closes
-// the first window, and both accounts are deleted again.
+// Two-player smoke test in the 3D view: register two ordinary (non-debug) throwaway accounts, create a character each,
+// create/join a run, start, check the 3D view (frames, canvases, figures, walking, no address-bar rewrite, no free camera,
+// the quality setting), screenshots; then a second login closes the first window, and both accounts are deleted again.
 // Usage: node smoke.mjs [baseUrl] [query] [outDir] [Class1,Class2] [dungeon|woodland]
-//   e.g. node smoke.mjs http://localhost:8080/ "?debug" shots Paladin,Wizard
+//   e.g. node smoke.mjs http://localhost:8080/ "" shots ElvenRanger,Paladin
 // Set BROWSER to a Chrome/Edge executable if Edge is not at the default Windows path.
-// Set LOG=1 to turn the rules log on in both windows (key L) and assert that a `.rules-log .rl-row` appears.
-// A `debug` query makes both throwaway accounts debug accounts (the game reads the account's flag, not the URL):
-// through the admin API when ADMIN_USER and ADMIN_PASSWORD are set, else with psql on the local compose stack.
-// An empty start room logs nothing, so use LOG=1 with a `debug` query (F8 puts a debug effect on Alice).
+// The page gets `backend=webgl` appended (BACKEND=webgpu: nothing). READBACK=1 saves r3d-readback.png (Alice's frame read back).
+// NOCHUNK=1: Bob's page cannot load the 3D chunk; his run must end and the lobby must say "The 3D view could not load".
+// The debug keys (F4, F8, F9, the rules log) are checked by r3d-run.mjs, which uses a debug account.
 import { chromium } from 'playwright-core';
-import { PASSWORD, tag, markDebug, login, deleteAccount } from './account.mjs';
+import { PASSWORD, tag, login, deleteAccount } from './account.mjs';
+import { VIEWPORT, watchPage, backendQuery, r3dState, saveReadback } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -19,24 +19,24 @@ const level = (process.argv[6] ?? 'dungeon').toLowerCase();
 const launch = () => chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const browser = await launch();
 const errors = [];
+const noChunk = process.env.NOCHUNK === '1';
+const bobErrors = []; // with NOCHUNK=1 Bob's console reports the failed chunk: expected, not counted
+const pageUrl = base + query + (backendQuery() ? (query.includes('?') ? '&' : '?') + backendQuery() : '');
 
-async function open(name, b = browser) {
-  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
+async function open(name, b = browser, errs = errors) {
+  const ctx = await b.newContext({ viewport: VIEWPORT });
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
-  // The first /api/me before logging in is an expected 401.
-  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`${name} console: ${m.text()}`));
-  await page.goto(base + query);
+  watchPage(page, name, errs);
+  await page.goto(pageUrl);
   await page.waitForSelector('#auth-name');
   return page;
 }
 /** Registers a fresh account, creates a character of `cls` (its hub opens) and enters the runs list with it. */
-async function player(name, cls, shots) {
+async function player(name, cls, shots, errs = errors) {
   const account = `e2e_${tag()}`;
-  const page = await open(name);
+  const page = await open(name, browser, errs);
   if (shots) await page.screenshot({ path: `${out}/0-login.png` });
   await login(page, account, true);
-  if (query.includes('debug')) await markDebug(base, account); // no WebSocket yet, so the connection reads the new flag
   if (shots) await page.screenshot({ path: `${out}/0-roster.png` });
   await page.click('#new-char');
   await page.fill('#char-name', `${name}${tag()}`);
@@ -75,8 +75,9 @@ if (level === 'woodland') {
 await p1.screenshot({ path: `${out}/1-room.png` });
 await p1.locator('.level-panel').screenshot({ path: `${out}/1-level-panel.png` });
 
-const a2 = await player('Bob', classes[1]);
+const a2 = await player('Bob', classes[1], false, noChunk ? bobErrors : errors);
 const p2 = a2.page;
+if (noChunk) await p2.route(/(render3d\/boot|assets\/boot-)/, (r) => r.abort());
 await p2.waitForSelector('[data-join]');
 await p2.screenshot({ path: `${out}/0-lobby.png` });
 await p2.click('[data-join]');
@@ -90,24 +91,61 @@ await p1.waitForFunction(() => document.querySelectorAll('.players .ok').length 
 if (level === 'woodland') await p2.waitForSelector('.level-card.level-woodland.selected'); // the guest sees the host's choice
 await p1.click('#start');
 await p1.waitForSelector('#game.active', { timeout: 10000 });
-await p2.waitForSelector('#game.active', { timeout: 10000 });
+const searchAtStart = await p1.evaluate(() => location.search);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const pages = [['Alice', p1]];
+if (noChunk) {
+  // Bob cannot load the 3D chunk: his run ends and the lobby says why.
+  await p2.waitForFunction(() => /The 3D view could not load/.test(document.body.textContent ?? ''), null, { timeout: 15000 }).then(
+    () => console.log('NOCHUNK: Bob sees "The 3D view could not load"'),
+    () => errors.push('NOCHUNK: Bob never saw "The 3D view could not load"'),
+  );
+  if (await p2.locator('#game.active').count()) errors.push('NOCHUNK: #game is still active on Bob\'s page');
+  await p2.screenshot({ path: `${out}/4-nochunk.png` });
+} else {
+  await p2.waitForSelector('#game.active', { timeout: 10000 });
+  pages.push(['Bob', p2]);
+}
+const searchB = new Map();
+for (const [name, page] of pages) searchB.set(name, name === 'Alice' ? searchAtStart : await page.evaluate(() => location.search));
+
+// The 3D view is up on every window that runs it.
+for (const [name, page] of pages) {
+  await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 }).catch(() => errors.push(`${name}: window.__r3d.frames never passed 10`));
+  if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push(`${name}: expected exactly one #game canvas.r3d`);
+  if ((await page.locator('#game canvas.r3d-overlay').count()) !== 1) errors.push(`${name}: expected exactly one #game canvas.r3d-overlay`);
+  if ((await page.locator('.r3d-panel').count()) !== 0) errors.push(`${name}: an ordinary account must not get the .r3d-panel`);
+  await page.waitForFunction(() => window.__r3d?.figures >= 1, null, { timeout: 15000 }).catch(() => {});
+  const st = await r3dState(page);
+  if (!(st.figures >= 1)) errors.push(`${name}: no figure drawn (figures = ${st.figures})`);
+  console.log(`${name}: backend ${st.backend}, ${st.frames} frames, ${st.figures} figures`);
+}
 await p1.waitForTimeout(1500);
 await p1.screenshot({ path: `${out}/2-start.png` });
+if (!(await saveReadback(p1, `${out}/r3d-readback.png`))) errors.push('Alice: readback returned nothing');
 
-const logOn = process.env.LOG === '1';
-if (logOn) {
-  await p1.keyboard.press('l');
-  await p2.keyboard.press('l');
+// Hold D: the hero walks more than a tile.
+for (const [name, page] of pages) {
+  const h0 = (await r3dState(page)).hero;
+  await page.mouse.move(900, 300);
+  await page.keyboard.down('d');
+  // Software frames are slow (two games share the machine): hold at least 900 ms, then until the hero has walked a tile (6 s at most).
+  await page.waitForTimeout(900);
+  let moved = 0;
+  for (let waited = 0; waited < 6000; waited += 250) {
+    const h1 = (await r3dState(page)).hero;
+    moved = h0 && h1 ? dist(h0, h1) : 0;
+    if (moved > 1) break;
+    await page.waitForTimeout(250);
+  }
+  await page.keyboard.up('d');
+  console.log(`${name}: hero moved ${moved.toFixed(2)} tiles holding D`);
+  if (!(moved > 1)) errors.push(`${name}: the hero moved only ${moved.toFixed(2)} tiles holding D`);
 }
-
-// Move and attack.
-await p1.mouse.move(900, 300);
+// Attack.
 await p1.keyboard.down('w');
-await p1.waitForTimeout(900);
-await p1.keyboard.up('w');
-await p1.keyboard.down('d');
 await p1.waitForTimeout(500);
-await p1.keyboard.up('d');
+await p1.keyboard.up('w');
 await p1.screenshot({ path: `${out}/3-weapons.png` }); // the heroes after moving, holding their weapons
 for (let i = 0; i < 3; i++) {
   await p1.mouse.click(900, 300);
@@ -116,64 +154,65 @@ for (let i = 0; i < 3; i++) {
 await p1.mouse.click(900, 250, { button: 'right' });
 await p1.waitForTimeout(150);
 await p1.screenshot({ path: `${out}/3-attack.png` });
+
+// F is not a free camera for an ordinary account: the camera stays on the hero.
+await p1.keyboard.press('f');
+await p1.keyboard.down('d');
+await p1.waitForTimeout(600);
+await p1.keyboard.up('d');
+await p1.waitForTimeout(1000);
+{
+  const { cam, hero } = await r3dState(p1);
+  const gap = cam && hero ? dist(cam, hero) : Infinity;
+  console.log(`after F and D: camera ${gap.toFixed(2)} tiles from the hero`);
+  if (!(gap < 2)) errors.push(`F moved the camera ${gap} tiles away from the hero`);
+}
+await p1.keyboard.press('f');
+
+// Settings: three checkboxes, the Quality radios; Fast shrinks the render size and is stored, Balanced restores both.
 await p1.keyboard.press('Escape');
 await p1.click('text=Settings');
 await p1.waitForTimeout(150);
 await p1.screenshot({ path: `${out}/3c-settings.png` });
-if ((await p1.locator('.menu input[type=checkbox]').count()) !== 3) throw new Error('Settings view must hold three checkboxes');
+if ((await p1.locator('.menu input[type=checkbox]').count()) !== 3) errors.push('Settings view must hold three checkboxes');
+const radios = p1.locator('.menu input[type=radio][name="choice-quality"]');
+if ((await radios.count()) !== 3) errors.push('Settings view must hold three Quality radios');
+if (!(await p1.locator('.menu input[type=radio][name="choice-quality"][value=balanced]').isChecked())) errors.push('Quality must start on Balanced');
+const area = async () => { const r = (await r3dState(p1)).renderSize; return r ? r[0] * r[1] : 0; };
+const stored = () => p1.evaluate(() => { try { return localStorage.getItem('ta.quality'); } catch { return null; } });
+const a0 = await area(); // the render size follows on a frame; a software frame takes up to a second, so allow 10 s
+await p1.click('.menu input[type=radio][name="choice-quality"][value=fast]');
+await p1.waitForFunction((n) => { const r = window.__r3d?.renderSize; return r && r[0] * r[1] < n; }, a0, { timeout: 10000 }).catch(() => errors.push(`Fast did not shrink the render size within 10 s (was ${a0})`));
+if ((await stored()) !== 'fast') errors.push(`localStorage ta.quality is ${await stored()}, expected fast`);
+console.log(`quality Fast: render area ${a0} -> ${await area()}`);
+await p1.click('.menu input[type=radio][name="choice-quality"][value=balanced]');
+await p1.waitForFunction((n) => { const r = window.__r3d?.renderSize; return r && r[0] * r[1] === n; }, a0, { timeout: 10000 }).catch(() => errors.push(`Balanced did not restore the render size within 10 s (want ${a0})`));
+if ((await stored()) !== 'balanced') errors.push(`localStorage ta.quality is ${await stored()}, expected balanced`);
 await p1.click('.menu .settings button');
 await p1.keyboard.press('Escape');
-await p2.keyboard.down('a');
-await p2.waitForTimeout(600);
-await p2.keyboard.up('a');
-await p2.mouse.click(300, 300);
-await p2.waitForTimeout(80);
-await p2.screenshot({ path: `${out}/4-p2.png` });
-if (logOn && query.includes('debug')) {
-  // The start room is usually empty of enemies; a debug effect on her own hero (F8) is a certain log event.
-  await p1.keyboard.press('F8');
-  await p1.waitForTimeout(500);
-}
-if (logOn && !query.includes('debug')) console.log('WARNING: LOG=1 without a debug query: the empty start room logs nothing, so the row assertion is skipped');
-if (logOn && query.includes('debug')) {
-  // Both windows must show at least one row: this also proves the opt-in reaches the run.
-  for (const [name, page] of [['Alice', p1], ['Bob', p2]]) {
-    await page.waitForSelector('.rules-log .rl-row', { timeout: 10000 }).then(
-      async () => console.log(`rules log: ${name} sees ${await page.locator('.rules-log .rl-row').count()} rows`),
-      () => errors.push(`rules log: no .rules-log .rl-row appeared for ${name}`),
-    );
-  }
-  await p1.screenshot({ path: `${out}/3b-log.png` });
+
+if (!noChunk) {
+  await p2.keyboard.down('a');
+  await p2.waitForTimeout(600);
+  await p2.keyboard.up('a');
+  await p2.mouse.click(300, 300);
+  await p2.waitForTimeout(80);
+  await p2.screenshot({ path: `${out}/4-p2.png` });
 }
 await p1.keyboard.press('F3');
 await p1.waitForTimeout(600);
 await p1.screenshot({ path: `${out}/5-debug.png` });
 const dbg = await p1.textContent('.debug');
 console.log(dbg);
-// With ?debug only: F4 (debug darkvision) twice, 0 -> 50% -> 100%; the greyscale shows
-// where she sees only by darkvision. A failure is logged, never thrown past the cleanup below.
-if (query.includes('debug')) {
-  try {
-    for (const want of ['50%', '100%']) {
-      await p1.keyboard.press('F4');
-      await p1.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 });
-    }
-    await p1.screenshot({ path: `${out}/5-darkvision.png` });
-    console.log('F4 darkvision: 50% -> 100%');
-  } catch (e) {
-    console.log(`F4 darkvision FAILED: ${e.message.split('\n')[0]}`);
-  }
-  // F9: mortal (the badge says so), then immortal again.
-  try {
-    for (const want of ['MORTAL', 'immortal']) {
-      await p1.keyboard.press('F9');
-      await p1.waitForFunction((w) => document.querySelector('.debug-badge .db-title')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 });
-    }
-    console.log('F9 immortality: MORTAL -> immortal');
-  } catch (e) {
-    console.log(`F9 immortality FAILED: ${e.message.split('\n')[0]}`);
-  }
-} else console.log('F4 darkvision step skipped (no debug in the query)');
+await p1.keyboard.press('F3');
+
+// The address bar was not rewritten, and no effect triangle was refused.
+for (const [name, page] of pages) {
+  const now = await page.evaluate(() => location.search);
+  if (now !== searchB.get(name)) errors.push(`${name}: location.search changed from "${searchB.get(name)}" to "${now}"`);
+  const fx = (await r3dState(page)).fx;
+  if (fx && fx.dropped !== 0) errors.push(`${name}: effect triangles dropped at the caps: ${fx.dropped}`);
+}
 
 // A second login to Alice's account closes her first window.
 // Its own browser: in the shared one, its WebGL start queues behind the two running
@@ -190,20 +229,23 @@ console.log('second login closed the first window');
 
 // Bob leaves the run and deletes his account by typing the password (it contains
 // w, a, s, d, e: game keys must not be swallowed outside the game).
-await p2.keyboard.press('Escape');
-await p2.click('text=Leave dungeon');
-await p2.click('#to-hub');
-await p2.click('#to-roster');
-await p2.click('#delete-account');
-await p2.click('#delete-password');
-await p2.keyboard.type(PASSWORD);
-const typed = await p2.inputValue('#delete-password');
-if (typed !== PASSWORD) errors.push(`typing in the password box after a run gave "${typed}"`);
-await p2.click('#delete-confirm');
-await p2.waitForSelector('#auth-name', { timeout: 5000 }).then(
-  () => console.log('typed the password after a run and deleted the account'),
-  () => errors.push('account deletion by typing the password failed'),
-);
+let typed = null; // NOCHUNK: Bob's steps are skipped; his account is deleted in the cleanup
+if (!noChunk) {
+  await p2.keyboard.press('Escape');
+  await p2.click('text=Leave dungeon');
+  await p2.click('#to-hub');
+  await p2.click('#to-roster');
+  await p2.click('#delete-account');
+  await p2.click('#delete-password');
+  await p2.keyboard.type(PASSWORD);
+  typed = await p2.inputValue('#delete-password');
+  if (typed !== PASSWORD) errors.push(`typing in the password box after a run gave "${typed}"`);
+  await p2.click('#delete-confirm');
+  await p2.waitForSelector('#auth-name', { timeout: 5000 }).then(
+    () => console.log('typed the password after a run and deleted the account'),
+    () => errors.push('account deletion by typing the password failed'),
+  );
+}
 
 // Admin area (only with ADMIN_USER / ADMIN_PASSWORD set, as on the server): live
 // data, then delete Alice's character, change her password and delete her.

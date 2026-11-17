@@ -1,11 +1,13 @@
 // Headless check of a real run in the 3D view (?r3d): one debug e2e_* account opens a debug room for the level, starts it,
 // waits for drawn frames, walks the hero, switches to the free camera and checks the chunk culling on the dungeon.
+// It is a debug account, so the debug keys run here too: F4 (darkvision), F9 (immortality) and, with LOG=1, the rules log (L, F8).
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
 // Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
 import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
+import { VIEWPORT, watchPage, saveReadback } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots';
@@ -20,7 +22,7 @@ const browser = await chromium.launch({
 const errors = [];
 const account = `e2e_${tag()}`;
 // R3D_W / R3D_H: the window (1280x768). BACKEND=webgpu: the page picks WebGPU (default: WebGL2). FPS_S=10: the frame-rate measurement (below).
-const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 };
+const viewport = { width: Number(process.env.R3D_W) || VIEWPORT.width, height: Number(process.env.R3D_H) || VIEWPORT.height };
 const page = await (await browser.newContext({ viewport })).newPage();
 // Frame-rate bookkeeping, from the first script of the page: every requestAnimationFrame interval, and the draw calls and triangles
 // the context submits (all passes: depth, colour, sun). WebGL2 and WebGPU are both hooked.
@@ -45,12 +47,9 @@ await page.addInitScript(() => {
     }
   }
 });
-page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-// The first /api/me before logging in is an expected 401.
-page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));
 // A lost device is only a console warning (host.ts); unless the script loses it on purpose below, it is a failure.
 let losing = false;
-page.on('console', (m) => m.type() === 'warning' && /device lost/i.test(m.text()) && !losing && errors.push(`device lost: ${m.text()}`));
+watchPage(page, '', errors, () => losing);
 // A minimal MessagePack reader for the frames the page sends: an Input goes out as a bare array [seq, mx, my, aim, aim_dist, primary, ...].
 function unpack(buf) {
   let p = 0;
@@ -178,6 +177,7 @@ try {
     await page.waitForTimeout(400);
   }
   await page.screenshot({ path: `${out}/r3d-run-${level}.png` });
+  if (!(await saveReadback(page, `${out}/r3d-readback.png`))) errors.push('readback returned nothing');
   const figures = (await r3d()).figures;
   console.log(`figures drawn ${figures}`);
   if (!(figures >= 1)) errors.push(`no figure drawn (window.__r3d.figures = ${figures})`);
@@ -194,6 +194,31 @@ try {
     console.log(`hero moved ${moved.toFixed(2)} tiles`);
     if (!(moved > 1)) errors.push(`the hero moved only ${moved.toFixed(2)} tiles holding D`);
   }
+
+  // The debug keys. F3 shows the .debug block; F4 steps darkvision 0 -> 50 % -> 100 %; F9 flips immortality.
+  await page.keyboard.press('F3');
+  await page.waitForSelector('.debug', { timeout: 5000 });
+  for (const want of ['50%', '100%']) {
+    await page.keyboard.press('F4');
+    await page.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 })
+      .catch(() => errors.push(`F4: the debug block never showed darkvision ${want}`));
+  }
+  console.log('F4 darkvision: 50% -> 100%');
+  for (const want of ['MORTAL', 'immortal']) {
+    await page.keyboard.press('F9');
+    await page.waitForFunction((w) => document.querySelector('.debug-badge .db-title')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 })
+      .catch(() => errors.push(`F9: the badge never said DEBUG · ${want}`));
+  }
+  console.log('F9 immortality: MORTAL -> immortal');
+  if (process.env.LOG === '1') {
+    await page.keyboard.press('l');
+    await page.keyboard.press('F8'); // a debug effect on the own hero is a certain log event
+    await page.waitForSelector('.rules-log .rl-row', { timeout: 10000 }).then(
+      async () => console.log(`rules log: ${await page.locator('.rules-log .rl-row').count()} rows`),
+      () => errors.push('rules log: no .rules-log .rl-row appeared'),
+    );
+  }
+  await page.keyboard.press('F3');
 
   // F: the free camera. D now moves the camera, not the hero.
   const before = await r3d();
