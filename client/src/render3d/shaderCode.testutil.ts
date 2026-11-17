@@ -46,9 +46,10 @@ function built(B: Builder, m: NodeMaterial, opts: { compare?: boolean; geometry?
 
 /**
  * The lines of generated shader code that sample a texture or take a screen-space derivative (`fwidth`, `dFdx`, `dFdy`, `dpdx`, `dpdy`)
- * inside a data-dependent `if` or `else` block. A loop's body (the lighting's) and an `if` whose condition is a number compared with a
- * number (the lighting's build-time switches, which the shader compiler folds away) do not count. A sample or derivative in a branch that
- * pixels of one quad take differently is undefined (WGSL rejects it).
+ * inside a data-dependent `if` or `else` block. Out of scope: loop bodies (a read inside any loop is not reported, and the lighting's
+ * loops read shadow maps there) and an `if` whose condition is a number compared with a number (the lighting's build-time switches, which
+ * the shader compiler folds away; `if`s on two literals are skipped). A sample or derivative in a branch that pixels of one quad take
+ * differently is undefined (WGSL rejects it).
  */
 export function readsInBranches(code: string): string[] {
   const read = /\b(fwidth|dFdx|dFdy|dpdx|dpdy|textureSample\w*|texture)\s*\(/;

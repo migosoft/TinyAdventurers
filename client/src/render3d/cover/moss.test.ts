@@ -155,6 +155,29 @@ describe('mossSource', () => {
     expect(withNone).toBe(true);
   });
 
+  // A sealed corridor of 9 floor tiles (walls above, below and at both ends) with one water tile of the given kind in the middle.
+  const corridor = (water: number): TileMap => {
+    const cw = 11, t = new Uint8Array(cw * 3).fill(TILE_ID.Wall);
+    for (let x = 1; x <= 9; x++) t[cw + x] = TILE_ID.Floor;
+    t[cw + 5] = water;
+    return new TileMap(cw, 3, t);
+  };
+  const tileSum = (s: CoverSource, cw: number, tx: number, ty: number): number => {
+    let sum = 0;
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) sum += s.allow[(ty * TILE + y) * cw * TILE + tx * TILE + x] + s.grow[(ty * TILE + y) * cw * TILE + tx * TILE + x];
+    return sum;
+  };
+
+  it.each([['ShallowWater', TILE_ID.ShallowWater], ['DeepWater', TILE_ID.DeepWater]])('moss grows on the corridor tiles beside %s, and nowhere else in the corridor', (_name, water) => {
+    const s = make(corridor(water), null, true);
+    // Walls on both sides make a corridor tile exempt, but water beside it makes it waterside, and waterside is always mossy.
+    expect(tileSum(s, 11, 4, 1)).toBeGreaterThan(0);
+    expect(tileSum(s, 11, 6, 1)).toBeGreaterThan(0);
+    // Two tiles from the water the tile is an ordinary corridor tile: exempt, even with `everywhere`.
+    expect(tileSum(s, 11, 3, 1)).toBe(0);
+    expect(tileSum(s, 11, 7, 1)).toBe(0);
+  });
+
   it('leaves the cove bare', () => {
     const o = roomOrigin(2, 2);
     const cove: CoveInfo = { x: o.x, y: o.y, w: R, h: R, tree_x: o.x + 3, tree_y: o.y + 3, seed: 1 };

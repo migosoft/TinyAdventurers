@@ -14,6 +14,9 @@ import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
+/** 1 where `on` holds, else 0. Picks by `mix` with these weights keep both sides at the top level of the shader (a `select` between colours or texels can become an `if`). */
+export const weight = (on: N) => select(on, float(1), float(0));
+
 const RIM = [0.4, 0.34, 0.33] as const;
 /** How much of a light a wall top takes although the light hangs below it (0 none, 1 all). */
 const TOP_WRAP = 0.5;
@@ -105,8 +108,7 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
   const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
   const smooth = uniform(0);
   const useSmooth = smooth.greaterThan(0.5);
-  // Every read sits in the shader and float weights (exactly 0 or 1) pick among them; a `select` between texels can become an `if`, and sampling stays in uniform control flow.
-  const weight = (on: N): N => select(on, float(1), float(0));
+  // Every read sits at the top level and float weights (exactly 0 or 1) pick among them: a `select` between texels can become an `if`, and sampling must stay in uniform control flow.
   const atlasTexel = mix(texture(atlas, p0.div(size)), texture(linearAtlas, p.div(size)), weight(useSmooth.and(kind.lessThan(0.5))));
 
   const groundReady = uniform(0);
@@ -156,13 +158,13 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
 
   const top = select(rim, vec3(...RIM), vec3(...STONE));
   // The texel comes first, by a weight (exactly 0 or 1): a `select` here could hold its first use in a branch.
-  const base = mix(texel.rgb, top, select(isTop, float(1), float(0)));
+  const base = mix(texel.rgb, top, weight(isTop));
   // Ground cover (#330): floor and ground darken where cover stands (the sheets and bushels show on it); with the layer off they show the cover's colour flat.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
   // Mixed by weights (exactly 0 or 1), with `base` first: the atlas samples and their `fwidth` stay at the top level, outside any `if`.
-  const coverW = select(covered, float(1), float(0));
-  const darkenW = select(cover.on.greaterThan(0.5), float(1), float(0));
+  const coverW = weight(covered);
+  const darkenW = weight(cover.on.greaterThan(0.5));
   const albedo = mix(base, mix(grown.rgb, base.mul(kindLook(grown.id).darken), darkenW), coverW);
   // Wrap: floor and ground 0.35, wall face 0.5, wall top TOP_WRAP. A top takes the point lights without the wall test (`open`):
   // the lights hang below it, and the test would cut ragged wedges into it. So the walls around a lit room show as a stone band,
@@ -204,7 +206,7 @@ export function maskMaterial(): { material: NodeMaterial; edge: { value: number 
   const strength = float(1).sub(smoothstep(float(1).sub(edge), 1, t));
   const m = new NodeMaterial();
   // Where the strength is 0 (the square's corners, outside the circle) the fragment writes nothing (green and alpha 0), so a far thing's empty corner cannot win the depth MAX against a nearer thing's disc.
-  const on = select(strength.greaterThan(0), float(1), float(0));
+  const on = weight(strength.greaterThan(0));
   m.fragmentNode = vec4(strength, float(SEE_DEPTH_BIAS).sub(attribute('near', 'float')).mul(on), 0, on);
   m.depthTest = false;
   m.depthWrite = false;

@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { CHUNK, floorFrame, type FrameRects } from '../worldMesh';
 import { DIP_RES, buildDipChunk, dipClassChanged, type DipChunk } from './dipMesh';
-import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, isChasm, kindAt, maskAt, nearAt } from './shape';
+import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
 
 const frames: FrameRects = {};
 for (let i = 1; i <= 8; i++) frames[`floor_${i}`] = { x: 100 + i * 16, y: 200 + i * 32, w: 16, h: 16 };
@@ -155,7 +155,7 @@ describe('buildDipChunk', () => {
       expect(marks[v * 3]).toBeCloseTo(maskAt(m, x, z, isChasm), 6);
       expect(marks[v * 3 + 1]).toBeCloseTo(n[0], 6);
       expect(marks[v * 3 + 2]).toBeCloseTo(n[1], 6);
-      expect(dip[v]).toBe(kindAt(m, x, z));
+      expect(dip[v]).toBe(kindOf(maskAt(m, x, z, isWater), maskAt(m, x, z, isLava), maskAt(m, x, z, isChasm)));
       seen[dip[v]]++;
     }
     for (const k of seen) expect(k).toBeGreaterThan(0);

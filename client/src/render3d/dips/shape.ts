@@ -104,16 +104,11 @@ export function nearAt(map: TileMap, x: number, z: number, out: { [i: number]: n
   out[at + 1] = 1 - Math.sqrt(chasm);
 }
 
-/** The kind whose mask is largest, none below 0.15 (the bank material's choice). A tie goes to the chasm, then lava, then water. */
+/** The kind of dip at a point, from its three masks (`maskAt` of water, lava and chasm): the kind whose mask is largest, none below 0.15 (the bank material's choice). A tie goes to the chasm, then lava, then water. */
 export function kindOf(water: number, lava: number, chasm: number): DipKind {
   const best = Math.max(water, lava, chasm);
   if (best < 0.15) return DIP.none;
   return chasm === best ? DIP.chasm : lava === best ? DIP.lava : DIP.water;
-}
-
-/** The kind of dip at (x, z): `kindOf` the three masks there. */
-export function kindAt(map: TileMap, x: number, z: number): DipKind {
-  return kindOf(maskAt(map, x, z, isWater), maskAt(map, x, z, isLava), maskAt(map, x, z, isChasm));
 }
 
 /** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > 0.5), else -Infinity. */

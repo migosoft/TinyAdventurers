@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
   BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, kindOf, maskAt, nearAt, isChasm, isLava, sampleBed, surfaceAt, walkBedAt, type DipKind,
+  bedAt, bedField, depthFade, dipOf, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, sampleBed, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -138,8 +138,9 @@ describe('dip shape', () => {
   });
   it('names the kind', () => {
     const m = pool('C', 5);
-    expect(kindAt(m, mid, mid)).toBe(DIP.chasm);
-    expect(kindAt(m, edgeX - 1.5, mid)).toBe(DIP.none);
+    const at = (x: number, z: number) => kindOf(maskAt(m, x, z, isWater), maskAt(m, x, z, isLava), maskAt(m, x, z, isChasm));
+    expect(at(mid, mid)).toBe(DIP.chasm);
+    expect(at(edgeX - 1.5, mid)).toBe(DIP.none);
     const want: Record<keyof typeof TILE_ID, DipKind> = {
       Barrier: DIP.none, Chasm: DIP.chasm, DeepWater: DIP.water, DoorClosed: DIP.none, DoorOpen: DIP.none,
       Floor: DIP.none, Lava: DIP.lava, Road: DIP.none, ShallowWater: DIP.water, Thicket: DIP.none,

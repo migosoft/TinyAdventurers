@@ -83,7 +83,7 @@ describe('dipMaterial', () => {
       // times (two runs along z, one along x, and the two of a corner blend): 8 in all for one copy of the block. A second use of `ridges`
       // outside the rock's pick would emit a second copy: 16.
       const code = fragment(B, build().m.material, { geometry: geometry() });
-      expect(code.split('0.906').length - 1).toBe(8);
+      expect((code.match(/\b0\.906\b/g) ?? []).length).toBe(8);
     });
 
     it(`${B.name}: no atlas or ground sample and no derivative sits in a branch`, () => {

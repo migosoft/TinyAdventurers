@@ -1,13 +1,15 @@
 // The ground of the dips in TSL (#324): the floor's own texel above the lip, the bank rock below it (mud for water, basalt for lava,
 // jagged slabs of chasm rock), lit like the world, with the lava's band of glow and the chasm's depth fade. The mesh (dipMesh.ts) carries the
-// world material's `kind` and `rect` plus a per-vertex `dip` kind; the rock reads the world position only, so it looks the same on the
-// sloped ground and on the vertical skirts along walls. The numbers are first guesses from the mockup, to be tuned by eye.
+// world material's `kind` and `rect`, a per-vertex `dip` kind and `marks` (x: the chasm outline's mask, y: near lava, z: near a chasm; the
+// last two are 1 on the dip's cells and 0 one tile away). Above the lip the floor reads the ground cover's texel (the moss beside water),
+// as the world material does. The rock reads the world position only, so it looks the same on the sloped ground and on the vertical skirts
+// along walls. The numbers are first guesses from the mockup, to be tuned by eye.
 import type { NodeMaterial, Texture } from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { Fn, If, abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, select, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, If, abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
-import { flatTexel } from '../materials';
+import { flatTexel, weight } from '../materials';
 import { coverTexel, kindLook, type CoverShared } from '../cover/coverRead';
 import { fbm2, hash21, vnoise2 } from '../noiseNodes';
 import { LAVA_LEVEL } from './shape';
@@ -92,6 +94,26 @@ const SHARD_FREQ = 1.35, CRACK_REACH = 0.9, CRACK_RAGGED = 0.5, CRACK_WIDTH = 0.
 /** The floor by lava: how far the scorching runs (tiles) and how dark it makes the floor, the soot's colour and cover, how far the glow in the tile joints and cracks runs, its colour and the cracks' width (in pieces). */
 const SCORCH_REACH = 0.9, SCORCH_DARK = 0.3, SOOT_COVER = 0.45, EMBER_REACH = 0.5, EMBER_WIDTH = 0.07;
 const SOOT = vec3(0.045, 0.03, 0.026), EMBER = vec3(0.85, 0.24, 0.04);
+/** Where the rock starts: the depth below the floor (world units) where `bank` begins to turn the floor's texel into rock and where it is full. The slab gate starts at the same depth (one quantity: above it no rock shows, so no slabs are computed). */
+const ROCK_START = 0.02, ROCK_FULL = 0.12;
+/** The slab gate: the chasm outline's mask above which the slabs are computed at all (marks.x), so only pixels inside a chasm's outline pay for them. */
+const SLAB_MASK_MIN = 0.3;
+/** The wall's direction from the normal (`alongZ`: 0 on a wall along x, 1 on one along z): the smoothstep that sharpens it, and the values under and over which one run of slabs is enough (0.01, 0.99) and only a rounded corner takes two. */
+const ALONG_Z_FROM = 0.3, ALONG_Z_TO = 0.7, ALONG_X_ONLY = 0.01, ALONG_Z_ONLY = 0.99;
+/** The piece gate: the pieces of the floor are computed where lava or a chasm marks it (marks.y or marks.z above the first) and `bank` is under the second (the floor still shows). */
+const PIECE_MARK_MIN = 0.02, PIECE_BANK_MAX = 0.99;
+/** The patchy noise that breaks up the reach of the scorch and the ember: its frequency and offset, and its weight in the scorch and in the ember. */
+const PATCHY_FREQ = 2.6, PATCHY_OFFSET = 7, SCORCH_PATCHY = 0.35, EMBER_PATCHY = 0.3;
+/** The glow in the tile joints: the width of the joint line (from the cell's edge, tiles) and its share of the ember line against the cracks'. */
+const JOINT_FROM = 0.02, JOINT_TO = 0.09, JOINT_SHARE = 0.6;
+/** The ember's flicker (a base and the noise's range) and the upper end of its reach (the lower end is `1 - EMBER_REACH`). */
+const EMBER_FLICKER_BASE = 0.55, EMBER_FLICKER = 0.6, EMBER_REACH_TO = 0.98;
+/** The upper end of the cracks' reach (the lower end is `1 - CRACK_REACH`), and the width of the fade at the mesh's border (in near-chasm: the cracks fade to nothing there). */
+const CRACK_REACH_TO = 0.95, CRACK_BORDER_FADE = 0.1;
+/** The broken-off floor: the outline's own mask value at the cell's edge (the same 0.5 as `shape.ts` uses in `bed` and `surfaceAt`), the range of the piece id over which the break depth varies, and the rock's tone where the floor has broken off (a share of the chasm rock's albedo). */
+const OUTLINE_EDGE = 0.5, CHIP_ID_FROM = 0.25, CHIP_ID_TO = 0.75, BROKEN_ROCK_TONE = 0.35;
+/** The dust at a chasm's rim starts at this near-chasm value (it runs to 1). */
+const DUST_FROM = 0.5;
 /**
  * The piece of a jittered grid `q` lies in (a Voronoi cell: a shard with straight edges): its random id 0..1 and how far `q` is inside
  * its border (0 on the border). Nine cells, unrolled at build time (no shader loop); sine-free hashes only.
@@ -139,15 +161,15 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const d = y.negate();
   // The rock is drawn in a plane that slides with depth, so the pattern does not smear on steep banks.
   const pp = wp.xz.add(vec2(y.mul(0.8), y.mul(-0.5)));
-  const bank = smoothstep(0.02, 0.12, d);
+  const bank = smoothstep(ROCK_START, ROCK_FULL, d);
 
   // The kinds, by ranges of the vertex attribute (0 none, 1 water, 2 lava, 3 chasm).
   const isLava = dip.greaterThan(1.5).and(dip.lessThan(2.5));
   const isChasm = dip.greaterThan(2.5);
   // The kinds as float weights (exactly 0 or 1): the colours below are mixed by them, not picked by `select`, because a `select` between
   // colours can become an `if` that holds the first use of a node, and a later use outside it then emits the node a second time.
-  const lavaW = select(isLava, float(1), float(0));
-  const chasmW = select(isChasm, float(1), float(0));
+  const lavaW = weight(isLava);
+  const chasmW = weight(isChasm);
 
   // All the noise is evaluated here, at the top level; the kinds mix the results by weight.
   const rough = fbm2(pp.mul(5));
@@ -161,7 +183,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // The chasm's rock: jagged slabs, in the wall's own frame (along it, to the right seen from inside the chasm, and up it). A wall that
   // runs along x takes x, one along z takes z, a rounded corner blends the two by the normal (a single coordinate would mirror there).
   const nx2 = normal.x.mul(normal.x), nz2 = normal.z.mul(normal.z);
-  const alongZ = smoothstep(0.3, 0.7, nx2.div(nx2.add(nz2).add(1e-4)));
+  const alongZ = smoothstep(ALONG_Z_FROM, ALONG_Z_TO, nx2.div(nx2.add(nz2).add(1e-4)));
   // The slabs cost about 40 hashes an evaluation, so a real branch keeps them to the pixels that show them: below the floor inside a
   // chasm's outline, and one evaluation where the wall runs straight (two only on a rounded corner). Plain arithmetic, so a branch is
   // allowed here (no texture sample, no derivative). The rock and the chasm's self-light below both use `ridges`, and both use it at the
@@ -170,9 +192,9 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const sA = wp.x.mul(sign(normal.z)), sB = wp.z.mul(sign(normal.x)).negate();
   const ridges = Fn(() => {
     const r = float(0).toVar();
-    If(marks.x.greaterThan(0.3).and(d.greaterThan(0.02)), () => {
-      If(alongZ.lessThan(0.01), () => { r.assign(slabs(sA, y)); })
-        .ElseIf(alongZ.greaterThan(0.99), () => { r.assign(slabs(sB, y)); })
+    If(marks.x.greaterThan(SLAB_MASK_MIN).and(d.greaterThan(ROCK_START)), () => {
+      If(alongZ.lessThan(ALONG_X_ONLY), () => { r.assign(slabs(sA, y)); })
+        .ElseIf(alongZ.greaterThan(ALONG_Z_ONLY), () => { r.assign(slabs(sB, y)); })
         .Else(() => { r.assign(mix(slabs(sA, y), slabs(sB, y), alongZ)); });
     });
     return r;
@@ -188,7 +210,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // The pieces (27 hashes) only on floor that lava or a chasm marks: a branch again. Elsewhere: no piece, far from any edge.
   const piece: N = Fn(() => {
     const v = vec2(0, 1).toVar();
-    If(max(marks.y, marks.z).greaterThan(0.02).and(bank.lessThan(0.99)), () => {
+    If(max(marks.y, marks.z).greaterThan(PIECE_MARK_MIN).and(bank.lessThan(PIECE_BANK_MAX)), () => {
       const s = shards(wp.xz.mul(SHARD_FREQ));
       v.assign(vec2(s.id, s.edge));
     });
@@ -196,31 +218,31 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   })();
   const sh = { id: piece.x, edge: piece.y };
   const cellXZ: N = fract(wp.xz);
-  const joint = float(1).sub(smoothstep(0.02, 0.09, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
-  const patchy = vnoise2(wp.xz.mul(2.6).add(7)).sub(0.5);
+  const joint = float(1).sub(smoothstep(JOINT_FROM, JOINT_TO, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
+  const patchy = vnoise2(wp.xz.mul(PATCHY_FREQ).add(PATCHY_OFFSET)).sub(0.5);
 
   // By water the rim is the game's own moss (the ground cover, #330: `cover/moss.ts` grows it along every pool). The floor under it is
   // drawn as the world material draws it: darkened under standing cover, or the cover's colour flat while the layer is off.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = grown.h.greaterThan(0.5);
   // Mixed by weights (exactly 0 or 1), with the texel first: the atlas samples and their `fwidth` stay at the top level, outside any `if`.
-  const coverW = select(covered, float(1), float(0));
-  const darkenW = select(cover.on.greaterThan(0.5), float(1), float(0));
+  const coverW = weight(covered);
+  const darkenW = weight(cover.on.greaterThan(0.5));
   const floorTexel = mix(flat.texel.rgb, mix(grown.rgb, flat.texel.rgb.mul(kindLook(grown.id).darken), darkenW), coverW);
 
-  const scorch = smoothstep(1 - SCORCH_REACH, 1, marks.y.add(patchy.mul(0.35)));
+  const scorch = smoothstep(1 - SCORCH_REACH, 1, marks.y.add(patchy.mul(SCORCH_PATCHY)));
   const byLava = mix(floorTexel.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
-  const emberLine = max(joint.mul(0.6), float(1).sub(smoothstep(0, EMBER_WIDTH, sh.edge)));
-  const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, 0.98, marks.y.add(patchy.mul(0.3)))).mul(float(0.55).add(glowNoise.mul(0.6))).mul(float(1).sub(bank));
+  const emberLine = max(joint.mul(JOINT_SHARE), float(1).sub(smoothstep(0, EMBER_WIDTH, sh.edge)));
+  const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, EMBER_REACH_TO, marks.y.add(patchy.mul(EMBER_PATCHY)))).mul(float(EMBER_FLICKER_BASE).add(glowNoise.mul(EMBER_FLICKER))).mul(float(1).sub(bank));
 
   // Cracks run out from the chasm along the edges of the floor's pieces, each piece as far as its own id lets them, widening toward
   // the rim; the pieces at the rim have broken off (the dark rock under the floor shows), which makes the break line jagged.
-  const reach = smoothstep(1 - CRACK_REACH, 0.95, marks.z.add(sh.id.sub(0.5).mul(CRACK_RAGGED)));
+  const reach = smoothstep(1 - CRACK_REACH, CRACK_REACH_TO, marks.z.add(sh.id.sub(0.5).mul(CRACK_RAGGED))).mul(smoothstep(0, CRACK_BORDER_FADE, marks.z));
   const crackWidth = max(reach.mul(CRACK_WIDTH), 1e-3);
   const crack = float(1).sub(smoothstep(crackWidth.mul(0.5), crackWidth, sh.edge)).mul(step(1e-3, reach));
-  const brokenOff = step(float(0.5).sub(smoothstep(0.25, 0.75, sh.id).mul(CHIP)), marks.x);
-  const dusty = float(1).sub(smoothstep(0.5, 1, marks.z).mul(RIM_DUST));
-  const byChasm = mix(byLava.mul(float(1).sub(crack.mul(CRACK_DARK))).mul(dusty), CHASM_ROCK.mul(0.35), brokenOff);
+  const brokenOff = step(float(OUTLINE_EDGE).sub(smoothstep(CHIP_ID_FROM, CHIP_ID_TO, sh.id).mul(CHIP)), marks.x);
+  const dusty = float(1).sub(smoothstep(DUST_FROM, 1, marks.z).mul(RIM_DUST));
+  const byChasm = mix(byLava.mul(float(1).sub(crack.mul(CRACK_DARK))).mul(dusty), CHASM_ROCK.mul(BROKEN_ROCK_TONE), brokenOff);
 
   // Water (and a dip of 0) takes `waterRock`; the weights pick the other two.
   const rock = mix(mix(waterRock, lavaRock, lavaW), chasmRock, chasmW);

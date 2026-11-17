@@ -355,7 +355,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     );
     return finishMesh(g, box, material, terrain);
   };
-  /** The dip ground of a chunk: eight attributes and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
+  /** The dip ground of a chunk: seven attributes (position, normal, uv, rect, kind, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
   const makeDipMesh = (d: DipChunk): ChunkMesh => {
     const a = d.arrays;
     const g = new BufferGeometry();
