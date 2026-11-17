@@ -10,6 +10,7 @@ import { fragment, type Builder } from './shaderCode.testutil';
 import { dipMaterial } from './dips/dipNodes';
 import { airMaterials } from './air/airNodes';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
+import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
 import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
 const lit = () => {
@@ -22,6 +23,7 @@ const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2]
 const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
+const LAVA_ATTRS: [string, number][] = [['position', 3], ['shore', 2]];
 const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
   if (!attrs) return undefined;
   const g = new BufferGeometry();
@@ -47,6 +49,11 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     // The water's surface and the ceiling of its mirror pass (#345).
     { name: 'water', m: waterMaterial(l, sight, t, { w: 4, h: 3 }, toward).material, world: true },
     { name: 'ceiling', m: ceilingMaterial(l, sight), world: true },
+    // The lava's surface (#344) ends with the sight step.
+    { name: 'lava', m: lavaMaterial(sight).material, world: true, attrs: LAVA_ATTRS },
+    // The heat shimmer (#344) is the one material without the sight step: it shows the scene copy, which went through the step, and its
+    // strength is gated by the seen share at the view ray's ground point (the mask's read and the mode are in its code).
+    { name: 'shimmer', m: shimmerMaterial(sight, l.lavaTexture, { w: 4, h: 3 }, toward).material, world: true },
     { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
     { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },

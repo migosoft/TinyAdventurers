@@ -16,6 +16,13 @@ export const hash21 = (p: N): N => {
   return fract(q.x.add(q.y).mul(q.z));
 };
 
+/** Dave Hoskins' hash without sine: vec2 -> vec2, each 0..1 (the points of a Voronoi's cells). */
+export const hash22 = (p: N): N => {
+  const p3 = fract(vec3(p.x, p.y, p.x).mul(vec3(0.1031, 0.103, 0.0973)));
+  const q = p3.add(dot(p3, p3.yzx.add(33.33)));
+  return fract(q.xx.add(q.yz).mul(q.zy));
+};
+
 /** Value noise of a vec2 on `hash21`, smoothstep-interpolated, 0..1. */
 export const vnoise2 = (p: N): N => {
   const i = p.floor();
