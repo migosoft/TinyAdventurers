@@ -17,6 +17,7 @@ import { registerBursts } from './bursts';
 import { registerField } from './field';
 import { registerFigureFx } from './figureFx';
 import { registerWaterFx } from './waterFx';
+import { registerLavaFx } from './lavaFx';
 import type { WaterCues } from '../water/water';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
@@ -62,6 +63,7 @@ export class FxPass {
     registerBooms();
     registerFigureFx();
     registerWaterFx();
+    registerLavaFx();
     registerHazards();
     registerField();
     registerStatus();

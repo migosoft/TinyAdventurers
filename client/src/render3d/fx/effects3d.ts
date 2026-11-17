@@ -10,6 +10,7 @@ import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
 import type { Footprint } from '../lights';
 import type { WaterCues } from '../water/water';
+import type { LavaCues } from '../lava/lava';
 import { BURST_MAX, castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
@@ -51,6 +52,10 @@ export const FX_KIND = {
   WaterSplash: 24,
   /** One droplet of a dash's spray (a=0) or one bubble of a drowning (a=1) (follows the figure's id). */
   WaterDrop: 25,
+  /** The sparks where a figure enters lava (a=0, follows the figure's id) or where a bubble pops (a=1, id -1). */
+  LavaBurst: 26,
+  /** One spark of a dash across lava (follows the figure's id). */
+  LavaSpray: 27,
 } as const;
 export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
@@ -82,6 +87,8 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.RimDust]: 0.6,
   [FX_KIND.WaterSplash]: 0.45,
   [FX_KIND.WaterDrop]: 0.35,
+  [FX_KIND.LavaBurst]: 1.2,
+  [FX_KIND.LavaSpray]: 0.3,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */
@@ -118,6 +125,8 @@ export interface FxFrame {
   falls?: readonly { id: number; x: number; z: number }[];
   /** The water's cues of this frame (`Water3d.step`): the droplets of entering, plunging, spraying and bubbling. */
   water?: WaterCues;
+  /** The lava's cues of this frame (`Lava3d.step`): the sparks of entering, popping and spraying, and the burning heroes' embers. */
+  lava?: LavaCues;
   /** The ground the screen shows (tiles): the hazards draw only inside it. Undefined: no limit. */
   fp?: Footprint;
 }
