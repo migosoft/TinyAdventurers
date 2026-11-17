@@ -198,12 +198,15 @@ try {
   // The debug keys. F3 shows the .debug block; F4 steps darkvision 0 -> 50 % -> 100 %; F9 flips immortality.
   await page.keyboard.press('F3');
   await page.waitForSelector('.debug', { timeout: 5000 });
-  for (const want of ['50%', '100%']) {
-    await page.keyboard.press('F4');
-    await page.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 })
-      .catch(() => errors.push(`F4: the debug block never showed darkvision ${want}`));
+  // With DV=1|2 the pictures are taken with darkvision already stepped by the loop above: leave it as asked and skip this check.
+  if (!Number(process.env.DV || 0)) {
+    for (const want of ['50%', '100%']) {
+      await page.keyboard.press('F4');
+      await page.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 })
+        .catch(() => errors.push(`F4: the debug block never showed darkvision ${want}`));
+    }
+    console.log('F4 darkvision: 50% -> 100%');
   }
-  console.log('F4 darkvision: 50% -> 100%');
   for (const want of ['MORTAL', 'immortal']) {
     await page.keyboard.press('F9');
     await page.waitForFunction((w) => document.querySelector('.debug-badge .db-title')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 })
