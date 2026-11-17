@@ -5,7 +5,7 @@
 // charm-run-on.png (haze) and charm-run-off.png (after the end). Deletes its throwaway account.
 import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
-import { VIEWPORT, watchPage, backendQuery } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, backendQuery, r3dState } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -40,15 +40,21 @@ try {
   await page.waitForSelector('.players li');
   await page.click('#start');
   await page.waitForSelector('#game.active', { timeout: 15000 });
-  await page.waitForTimeout(2000);
+  // The 3D run starts late in software: F8 is dropped until the session knows it is a debug run (the badge) and is drawing frames.
+  await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
+  await page.waitForSelector('.debug-badge', { timeout: 30000 });
+  console.log(`run up: ${(await r3dState(page)).frames} frames, debug badge shown`);
   await page.keyboard.press('F3');
 
-  // F8 cycles the effects; Charmed is the 19th press (Sleep, Petrified, ... are the ones before it).
+  // F8 puts the next effect on the hero; Charmed is one of them (the nearest living enemy is the caster). Press until the charmed view shows,
+  // one press per ~400 ms (the simulated lag delays the answer), at most 40 presses (more than a cycle of the effect list).
   const shown = () => page.evaluate(() => { const v = document.querySelector('.charm-view'); return !!v && !v.hidden; });
-  for (let i = 0; i < 19 && !(await shown()); i++) {
+  let presses = 0;
+  for (; presses < 40 && !(await shown()); presses++) {
     await page.keyboard.press('F8');
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(400);
   }
+  console.log(`F8 pressed ${presses} times`);
   const t0 = Date.now();
   let maxCorr = 0;
   let last = null;
