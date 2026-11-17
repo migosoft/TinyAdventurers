@@ -97,10 +97,9 @@ describe('dipMaterial', () => {
     });
   }
 
-  it('reads the light without the pool glow (selfLit false) and carries the sight step', () => {
+  it('reads the light once and carries the sight step', () => {
     const { m, calls } = build();
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ selfLit: false });
     expect(fragment(WGSLNodeBuilder, m.material, { geometry: geometry() })).toContain('sightMode');
   });
 

@@ -146,7 +146,7 @@ export interface DipMaterial {
 }
 
 /**
- * The dip ground: `mix(floor texel, rock, bank)` by the depth below the floor, lit with `lightAt` (without the lava cell's own glow: the
+ * The dip ground: `mix(floor texel, rock, bank)` by the depth below the floor, lit with `lightAt` (the lava's own glow is not a term of it: the
  * material draws a band of it at the lava's level), then the sight step. Opaque. `time` drives the band.
  */
 export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, sight: Sight, cover: CoverShared): DipMaterial {
@@ -248,7 +248,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const rock = mix(mix(waterRock, lavaRock, lavaW), chasmRock, chasmW);
   const albedo = mix(byChasm, rock, bank);
 
-  const lit = lighting.lightAt(wp, normal, WRAP, { selfLit: false });
+  const lit = lighting.lightAt(wp, normal, WRAP);
   const base = lighting.finish(albedo, lit).add(ember);
 
   // The lava's glowing band at its own level, and the chasm's cool self-light, then its fade with depth (the twin of `depthFade`).

@@ -106,7 +106,7 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
   // What lies behind the surface, absorbed along its way, plus the little the water scatters back of the light at the surface.
   const copyNode = texture(new Texture(), screenUV.add(Nw.xz.mul(REFRACT).mul(clamp(depth, 0, 1))));
   const T = exp(vec3(...ABSORB).mul(thick).negate());
-  const lit = lighting.lightAt(P, Nw, WRAP, { shadow: 'walls', selfLit: false }).rgb;
+  const lit = lighting.lightAt(P, Nw, WRAP, { shadow: 'walls' }).rgb;
   const through = copyNode.rgb.mul(T).add(vec3(...SCATTER).mul(lit).mul(float(1).sub(T)));
 
   // The mirror picture at the surface point (v runs down in a picture: three turns it for the backend), nudged by the waves.
@@ -157,7 +157,7 @@ export function ceilingMaterial(lighting: Lighting, sight: Sight): NodeMaterial 
   const vein = abs(vnoise2(q.mul(CEILING.crackFreq).add(vec2(9, 0))).sub(0.5));
   const crack = mix(float(CEILING.crackDark), float(1), smoothstep(CEILING.crackWidth * 0.5, CEILING.crackWidth, vein));
   const albedo = vec3(...CEILING.tint).mul(tone).mul(crack);
-  const lit = lighting.lightAt(P, vec3(0, -1, 0), CEILING.wrap, { shadow: 'walls', selfLit: false });
+  const lit = lighting.lightAt(P, vec3(0, -1, 0), CEILING.wrap, { shadow: 'walls' });
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), P, sight.unseenAt(q)), 1);
   return m;

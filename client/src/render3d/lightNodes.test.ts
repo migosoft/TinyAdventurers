@@ -92,22 +92,25 @@ describe('the lighting shader', () => {
   }
 });
 
-describe('the pool glow of a lava cell (selfLit)', () => {
+describe('the lava light', () => {
   const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
-  const code = (B: Builder, selfLit?: boolean): string => {
+  const code = (B: Builder): string => {
     const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
     const m = new MeshBasicNodeMaterial();
-    m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), selfLit === undefined ? {} : { selfLit }).rgb, 1);
+    // An upward face: the surface the lava cell's own glow used to be added on.
+    m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5)).rgb, 1);
     return fragment(B, m);
   };
-  // The self-light is a texel load of the lava texture (WGSL textureLoad, GLSL texelFetch) inside the `Nrm.y > 0.5` block.
-  const loads = (c: string): number => (c.match(/\b(?:textureLoad|texelFetch)\(/g) ?? []).length;
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
-    it(`${B.name}: selfLit false leaves out the self-light block, the default and true keep it`, () => {
-      const dflt = code(B);
-      expect(loads(code(B, true))).toBe(loads(dflt));
-      expect(loads(code(B, false))).toBe(loads(dflt) - 1);
-      expect(code(B, false).length).toBeLessThan(dflt.length);
+    it(`${B.name}: the light's code holds no textureLoad of the lava texture`, () => {
+      // The lava's own glow is its surface's (#344). The lava texture is the one filtered read of this shader (WGSL textureSample,
+      // GLSL texture); the heights and the atlas are texel loads (WGSL textureLoad, GLSL texelFetch) of other textures.
+      const c = code(B);
+      const sampled = [...c.matchAll(/\b(?:textureSample|texture)\( (\w+)/g)].map((m) => m[1]);
+      expect(new Set(sampled).size).toBe(1);
+      const loaded = [...c.matchAll(/\b(?:textureLoad|texelFetch)\( (\w+)/g)].map((m) => m[1]);
+      expect(loaded.length).toBeGreaterThan(0);
+      expect(loaded).not.toContain(sampled[0]);
     });
   }
 });

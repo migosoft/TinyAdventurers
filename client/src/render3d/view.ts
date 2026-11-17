@@ -68,7 +68,6 @@ import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
-import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
 import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
 import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
@@ -76,6 +75,8 @@ import { refreshWaterField, waterField } from './water/waterField';
 import { buildWaterChunk } from './water/waterMesh';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './water/passes';
+import { buildLavaChunk, buildShimmerChunk, type LavaChunk } from './lava/lavaMesh';
+import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
@@ -87,6 +88,8 @@ export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 /** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */
 const NO_CLIP = -1e6;
+/** How far above `LAVA_LEVEL` a lava chunk's bounds reach (tiles): the room for the bubbles' domes. */
+const LAVA_DOME_ROOM = 0.1;
 /** Whether the shadow lookup flips v (see the call in `draw`). */
 const SUN_FLIP_V = true;
 
@@ -142,6 +145,8 @@ export interface FrameInput {
   air?: { parts: AirParts; haze: { on: boolean; t: number } } | null;
   /** The water (#345): the packed ripples (null: none), its clock in seconds, and whether the mirror pass runs. Absent: no ripples, clock `t`, no mirror. */
   water?: { ripples: Float32Array | null; now: number; reflect: boolean };
+  /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
+  lavaPool?: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean };
 }
 
 export { GroundTooLargeError };
@@ -226,7 +231,7 @@ export interface View {
   setGround(img: GroundImage): void;
   /** Builds the ground cover's meshes and uploads its image (#330); throws GroundTooLargeError above the device's texture limit. */
   setCover(r: CoverResult): void;
-  /** Chunk meshes (world and terrain): all of them, and those three drew in the last frame. */
+  /** Chunk meshes (world, dips, water, lava and its shimmer): all of them, and those three drew in the last frame. */
   readonly chunks: { total: number; drawn: number };
   /** Scene objects, for the F3 panel. */
   readonly meshes: number;
@@ -364,6 +369,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const mirrorTarget = new RenderTarget(1, 1, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
   mirrorTarget.texture.colorSpace = NoColorSpace;
   water.setScene(sceneCopy.texture);
+  // The lava (#344): its glowing surface, and the hot air over it, which shows the same copy a little off.
+  const lava = lavaMaterial(sight);
+  const shimmer = shimmerMaterial(sight, lighting.lavaTexture, map, toward);
+  shimmer.setScene(sceneCopy.texture);
   const mirrorCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   mirrorCam.up.set(0, -1, 0);
   mirrorCam.layers.set(0);
@@ -372,32 +381,35 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
 
   const scene = new Scene();
   const { nx, nz } = chunkGrid(map);
-  /** One mesh per chunk: static geometry, culled by its bounds. `terrain`: the uv and rect buffers are rewritten (terrain animation). */
-  interface ChunkMesh { mesh: Mesh; terrain: TerrainChunk | null; seen: boolean }
+  /** One mesh per chunk: static geometry, culled by its bounds. */
+  interface ChunkMesh { mesh: Mesh }
   const counters = { drawn: 0 };
   /** True while the shaft pass's depth pre-pass renders the scene. */
   let inPrepass = false;
   const worldChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
-  const terrainChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const dipChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const waterChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const lavaChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const shimmerChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  type GroundBox = { x0: number; z0: number; x1: number; z1: number };
   /** The ground each water chunk's quads cover (tiles), for `poolInView`; null: rebuilt from the chunks at the next frame. */
-  let waterBoxes: { x0: number; z0: number; x1: number; z1: number }[] | null = null;
-  let clock = 0;
-  const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number, terrain: TerrainChunk | null, bottom = 0): ChunkMesh => {
+  let waterBoxes: GroundBox[] | null = null;
+  /** The same for the lava chunks' cells. */
+  let lavaBoxes: GroundBox[] | null = null;
+  /** Whether the frame draws the shimmer: only a frame that makes the scene copy may (the sheets show the copy). */
+  let shimmerOn = false;
+  const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number): ChunkMesh => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(a.position, 3));
-    const uvA = new BufferAttribute(a.uv, 2), rectA = new BufferAttribute(a.rect, 4);
-    if (terrain) { uvA.setUsage(DynamicDrawUsage); rectA.setUsage(DynamicDrawUsage); }
-    g.setAttribute('uv', uvA);
+    g.setAttribute('uv', new BufferAttribute(a.uv, 2));
     g.setAttribute('normal', new BufferAttribute(a.normal, 3));
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
-    g.setAttribute('rect', rectA);
+    g.setAttribute('rect', new BufferAttribute(a.rect, 4));
     const box = new Box3(
-      new Vector3(cx * CHUNK, bottom, cz * CHUNK),
+      new Vector3(cx * CHUNK, 0, cz * CHUNK),
       new Vector3(Math.min(map.w, cx * CHUNK + CHUNK), top, Math.min(map.h, cz * CHUNK + CHUNK)),
     );
-    return finishMesh(g, box, material, terrain);
+    return finishMesh(g, box, material);
   };
   /** The dip ground of a chunk: seven attributes (position, normal, uv, rect, kind, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
   const makeDipMesh = (d: DipChunk): ChunkMesh => {
@@ -412,31 +424,55 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('marks', new BufferAttribute(a.marks, 3));
     g.setIndex(new BufferAttribute(a.index, 1));
     const box = new Box3(new Vector3(...d.min), new Vector3(...d.max));
-    return finishMesh(g, box, dm.material, null);
+    return finishMesh(g, box, dm.material);
   };
   /** The water's surface in a chunk: its quads at `WATER_LEVEL`, on the water's own layer (drawn after the scene copy). */
   const makeWaterMesh = (position: Float32Array): ChunkMesh => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(position, 3));
     g.computeBoundingBox();
-    const cm = finishMesh(g, g.boundingBox!, water.material, null);
+    const cm = finishMesh(g, g.boundingBox!, water.material);
     cm.mesh.layers.set(WATER_LAYER);
     return cm;
   };
-  const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial, terrain: TerrainChunk | null): ChunkMesh => {
+  /**
+   * The lava's surface in a chunk (#344): an opaque sheet at `LAVA_LEVEL` in the opaque scene (layer 0). Its bounds reach a little
+   * above the level for the bubbles' domes. The mesh stays at the origin: the material's vertex stage reads its positions as the world's.
+   */
+  const makeLavaMesh = (c: LavaChunk): ChunkMesh => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(c.position, 3));
+    g.setAttribute('shore', new BufferAttribute(c.shore, 2));
+    g.setIndex(new BufferAttribute(c.index, 1));
+    const box = new Box3(new Vector3(c.box.x0, LAVA_LEVEL, c.box.z0), new Vector3(c.box.x1, LAVA_LEVEL + LAVA_DOME_ROOM, c.box.z1));
+    return finishMesh(g, box, lava.material);
+  };
+  /**
+   * The hot air over a chunk's lava: sheets on the water's layer (drawn after the scene copy, which they show), hidden on every frame
+   * without the copy. `renderOrder` 0: the shadows, the decals and everything after them draw over it.
+   */
+  const makeShimmerMesh = (position: Float32Array): ChunkMesh => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(position, 3));
+    g.computeBoundingBox();
+    const cm = finishMesh(g, g.boundingBox!, shimmer.material);
+    cm.mesh.layers.set(WATER_LAYER);
+    cm.mesh.renderOrder = 0;
+    cm.mesh.visible = shimmerOn;
+    return cm;
+  };
+  const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial): ChunkMesh => {
     g.boundingBox = box;
     g.boundingSphere = box.getBoundingSphere(new Sphere());
     const mesh = new Mesh(g, mat);
     mesh.frustumCulled = true;
-    const cm: ChunkMesh = { mesh, terrain, seen: false };
     mesh.onBeforeRender = () => {
       // The shaft pass's depth pre-pass draws the chunks again; the readout counts the picture's draw.
       if (inPrepass) return;
       counters.drawn++;
-      cm.seen = true;
     };
     scene.add(mesh);
-    return cm;
+    return { mesh };
   };
   const dropChunk = (list: (ChunkMesh | null)[], i: number): void => {
     const c = list[i];
@@ -445,38 +481,43 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     c.mesh.geometry.dispose();
     list[i] = null;
   };
-  /** The tile of every cell as the chunks were built from it: `tileChanged` rebuilds the dip and plate chunks only when the class changed. */
+  /** The tile of every cell as the chunks were built from it: `tileChanged` rebuilds the dip, water and lava chunks only when the class changed. */
   const builtTiles = Uint8Array.from(map.tiles);
   /** `dips` false: only the world chunk (a change that leaves every cell's dip class alone). */
   const buildAt = (cx: number, cz: number, dips = true): void => {
     const i = cz * nx + cx;
     dropChunk(worldChunks, i);
     const c = buildChunk(map, world.painted, cx, cz, assets.frames);
-    if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H, null);
+    if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H);
     if (!dips) return;
-    dropChunk(terrainChunks, i);
     dropChunk(dipChunks, i);
-    const t = buildTerrainChunk(map, cx, cz, assets.frames, clock);
-    if (t) terrainChunks[i] = makeChunkMesh(t.arrays, cx, cz, 0, t, LAVA_LEVEL);
     const d = buildDipChunk(map, world.painted, cx, cz, assets.frames);
     if (d) dipChunks[i] = makeDipMesh(d);
     dropChunk(waterChunks, i);
     const w = buildWaterChunk(map, cx, cz);
     if (w) waterChunks[i] = makeWaterMesh(w.position);
     waterBoxes = null;
+    dropChunk(lavaChunks, i);
+    dropChunk(shimmerChunks, i);
+    const l = buildLavaChunk(map, cx, cz);
+    if (l) lavaChunks[i] = makeLavaMesh(l);
+    const s = buildShimmerChunk(map, cx, cz);
+    if (s) shimmerChunks[i] = makeShimmerMesh(s.position);
+    lavaBoxes = null;
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-  const chunkTotal = (): number => worldChunks.filter(Boolean).length + terrainChunks.filter(Boolean).length + dipChunks.filter(Boolean).length + waterChunks.filter(Boolean).length;
-  const boxesOfWater = (): { x0: number; z0: number; x1: number; z1: number }[] => {
-    if (!waterBoxes) {
-      waterBoxes = [];
-      for (const c of waterChunks) {
-        const b = c?.mesh.geometry.boundingBox;
-        if (b) waterBoxes.push({ x0: b.min.x, z0: b.min.z, x1: b.max.x, z1: b.max.z });
-      }
+  const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks];
+  const chunkTotal = (): number => allChunks.reduce((n, list) => n + list.filter(Boolean).length, 0);
+  const boxesOf = (list: (ChunkMesh | null)[]): GroundBox[] => {
+    const out: GroundBox[] = [];
+    for (const c of list) {
+      const b = c?.mesh.geometry.boundingBox;
+      if (b) out.push({ x0: b.min.x, z0: b.min.z, x1: b.max.x, z1: b.max.z });
     }
-    return waterBoxes;
+    return out;
   };
+  const boxesOfWater = (): GroundBox[] => (waterBoxes ??= boxesOf(waterChunks));
+  const boxesOfLava = (): GroundBox[] => (lavaBoxes ??= boxesOf(lavaChunks));
   // The ceiling only the mirror pass draws (#345): one quad over the map at the walls' height, facing down. A painted map has no water.
   const ceilingMat = world.painted ? null : ceilingMaterial(lighting, sight);
   let ceiling: Mesh | null = null;
@@ -862,19 +903,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       dm.time.value = f.t;
       water.time.value = f.water?.now ?? f.t;
       water.setRipples(f.water?.ripples ?? null);
-      clock = f.t;
+      lava.time.value = shimmer.time.value = f.lavaPool?.now ?? f.t;
+      lava.setBubbles(f.lavaPool?.bubbles ?? null);
+      lava.setStirs(f.lavaPool?.stirs ?? null);
       fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
-      // A terrain chunk animates only if the last frame drew it; the others catch up when they come into view.
-      for (const c of terrainChunks) {
-        if (!c) continue;
-        const seen = c.seen;
-        c.seen = false;
-        if (!seen || !c.terrain) continue;
-        if (stepTerrainUv(c.terrain, assets.frames, f.t)) {
-          (c.mesh.geometry.getAttribute('uv') as BufferAttribute).needsUpdate = true;
-          (c.mesh.geometry.getAttribute('rect') as BufferAttribute).needsUpdate = true;
-        }
-      }
       chunks.drawn = counters.drawn;
       counters.drawn = 0;
       const cc = world.clear === 'stone' ? stoneClear(f.ambient) : world.clear;
@@ -1000,10 +1032,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         timer?.lap('shafts');
       }
       // The water (#345): with a pool in view the picture is split around a copy of the opaque scene, and (reflections on) the scene
-      // above the water is drawn first from a camera mirrored in the water plane. Without a pool nothing extra runs.
+      // above the water is drawn first from a camera mirrored in the water plane. Without a pool nothing extra runs. Lava in view
+      // (#344) asks for the copy only for its heat shimmer, whose sheets are drawn on no other frame.
       const p = f.plan;
-      const wp = picturePasses({ water: poolInView(boxesOfWater(), footprint(f.cam, p.halfW, p.halfH)), lava: false, reflect: f.water?.reflect ?? false, heat: false }, p.targetW, p.targetH);
+      const fp = footprint(f.cam, p.halfW, p.halfH);
+      const wp = picturePasses({ water: poolInView(boxesOfWater(), fp), lava: poolInView(boxesOfLava(), fp), reflect: f.water?.reflect ?? false, heat: f.lavaPool?.heat ?? false }, p.targetW, p.targetH);
       lastCopy = wp.copy;
+      if (wp.shimmer !== shimmerOn) {
+        shimmerOn = wp.shimmer;
+        for (const c of shimmerChunks) if (c) c.mesh.visible = shimmerOn;
+      }
       if (wp.mirror) {
         if (mirrorTarget.width !== wp.mirror.w || mirrorTarget.height !== wp.mirror.h) mirrorTarget.setSize(wp.mirror.w, wp.mirror.h);
         const pose = mirrorPose([camera.position.x, camera.position.y, camera.position.z], [g.x, 0, g.z], WATER_LEVEL);
@@ -1079,9 +1117,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         heights.dispose();
         groundStart.dispose();
         for (const t of groundTex) t.dispose();
-        for (const c of [...worldChunks, ...terrainChunks, ...dipChunks, ...waterChunks]) c?.mesh.geometry.dispose();
+        for (const list of allChunks) for (const c of list) c?.mesh.geometry.dispose();
         fieldTex.dispose();
         water.material.dispose();
+        lava.material.dispose();
+        shimmer.material.dispose();
         sceneCopy.dispose();
         mirrorTarget.dispose();
         ceiling?.geometry.dispose();
