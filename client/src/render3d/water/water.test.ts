@@ -6,7 +6,7 @@ import { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
 import { WATER_LEVEL } from '../dips/shape';
 import { RIPPLE_CAP } from './ripples';
-import { Water3d, WADE, type WaterIn, type WaterSpot } from './water';
+import { Water3d, WADE, type WaterIn } from './water';
 
 // a 10 x 4 room: floor in the west half, a shallow pool from x = 5
 const room = (): TileMap => {
@@ -114,6 +114,7 @@ describe('Water3d', () => {
     expect(sprays).toBe(0);
     // made visible while standing in water: no enters cue
     r = w.step(inp(3, 1 / 60, [fig(1, 7, 2)], { hidden: NONE }));
+    expect(r.cues.enters.length).toBe(0);
     r = w.step(inp(3.02, 1 / 60, [fig(1, 7, 2)], { hidden: NONE }));
     expect(r.cues.enters.length).toBe(0);
     // a hidden drowning is silent for its whole time
@@ -161,11 +162,14 @@ describe('Water3d', () => {
     const b = w.step(inp(1 / 60, 1 / 60, [fig(1, 5.5, 2)]));
     expect(b.ripples).toBe(a.ripples);
     expect(b.cues).toBe(a.cues);
+    expect(b.cues.enters.length).toBe(1);
+    const enters = b.cues.enters, spray = b.cues.spray;
     w.step(inp(2 / 60, 1 / 60, []));
     // listed again in the water: counts as first sight, no enter
     const c = w.step(inp(3 / 60, 1 / 60, [fig(1, 6.5, 2)]));
     expect(c.cues.enters.length).toBe(0);
-    const spot: WaterSpot | undefined = b.cues.enters[0];
-    expect(spot === undefined || typeof spot.x === 'number').toBe(true);
+    expect(c.ripples).toBe(a.ripples);
+    expect(c.cues.enters).toBe(enters);
+    expect(c.cues.spray).toBe(spray);
   });
 });

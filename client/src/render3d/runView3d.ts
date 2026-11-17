@@ -29,7 +29,7 @@ import { CONST, KIND, LEAF_PALETTE } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { Air3d } from './air/air';
 import type { AirParts } from './air/airParts';
-import { Water3d, type WaterCues } from './water/water';
+import { Water3d, type WaterCues, type WaterIn } from './water/water';
 import { MoverTracker, collectAirMovers } from '../game/airmovers';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
@@ -51,6 +51,7 @@ import { FxPass } from './fx/pass';
 import { Shake, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
+import { reflects } from './params';
 
 const TILE = 16;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
@@ -119,7 +120,9 @@ export class RunView3d implements RunView {
   // frame, so the drips the water rings for are the ones that landed in the air's last step (null: none, or not stepped).
   private readonly water: Water3d;
   private landed: AirParts['landed'] | null = null;
-  private readonly waterIn: { ripples: Float32Array | null; now: number; reflect: boolean } = { ripples: null, now: 0, reflect: false };
+  /** The input of `water.step`, reused every frame. */
+  private readonly waterStepIn: WaterIn = { dt: 0, now: 0, figs: [], sinks: [], landed: null, hidden: new Set() };
+  private readonly waterIn:{ ripples: Float32Array | null; now: number; reflect: boolean } = { ripples: null, now: 0, reflect: false };
   private readonly moverTracker = new MoverTracker();
   private readonly airMovers: AirMover[] = [];
   private readonly myKind: number;
@@ -412,10 +415,12 @@ export class RunView3d implements RunView {
     for (const id of f.dark) this.hidden.add(id);
     if (sight.mask) hiddenByPicture([cardsQ, ghostsQ], sight.mask, this.hiddenSeen, this.hidden, fo.models);
     // The water (#345): after the figures and the hidden ids, before the effects (they draw its droplets); the drips of the air's last step ring it.
-    const wo = this.water.step({ dt, now: c.now, figs: fo.figs, sinks: fo.sinks, landed: this.landed, hidden: this.hidden });
+    const ws = this.waterStepIn;
+    ws.dt = dt; ws.now = c.now; ws.figs = fo.figs; ws.sinks = fo.sinks; ws.landed = this.landed; ws.hidden = this.hidden;
+    const wo = this.water.step(ws);
     this.landed = null;
     const wi = this.waterIn;
-    wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = c.params.refl && c.params.quality !== 'fast';
+    wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = reflects(c.params);
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
     this.fxFrame(f, c, cam, fo, fp, wo.cues);
     const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };

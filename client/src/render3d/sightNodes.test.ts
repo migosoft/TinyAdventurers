@@ -97,7 +97,8 @@ describe('the sight clip', () => {
       const m = new MeshBasicNodeMaterial();
       m.colorNode = sight.apply(vec3(1), positionWorld, sight.unseenAt(positionWorld.xz));
       const code = fragment(B, m);
-      expect(code).toContain('discard');
+      // The discard sits in an `if` that compares a height (`.y`) with a uniform: the clip.
+      expect(code).toMatch(/if\s*\(\s*\(\s*[\w.]+\.y\s*<\s*(?:object\.)?nodeUniform\d+\s*\)\s*\)\s*\{\s*discard/);
       // The mask sample comes before the discard (top level, uniform control flow).
       const sample = code.search(B === WGSLNodeBuilder ? /textureSample\(/ : /\btexture\(/);
       expect(sample).toBeGreaterThanOrEqual(0);

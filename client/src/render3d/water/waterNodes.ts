@@ -58,6 +58,8 @@ export interface WaterMaterial {
   setMirror(m: { picture: Texture; matrix: Matrix4 } | null): void;
   /** 1 while a mirror is set, else 0: the factor on the mirror's share. */
   readonly mirrorOn: { value: number };
+  /** The ripple uniform's RIPPLE_CAP slots (x, z, age, strength) as `setRipples` left them; read-only, for tests. */
+  readonly ripples: readonly Vector4[];
 }
 
 /** `field`: the RG half-float texture of the bed height and the water mask (waterField.ts), linear; `map` its size in tiles; `toward`: the unit vector toward the eye. */
@@ -124,6 +126,7 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
     material: m,
     time,
     mirrorOn: uMirrorOn,
+    ripples: rip.array as Vector4[],
     setRipples(packed) {
       for (let i = 0; i < RIPPLE_CAP; i++) {
         const v = rip.array[i] as Vector4;

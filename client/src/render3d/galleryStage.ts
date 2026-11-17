@@ -24,6 +24,7 @@ import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
 import { Water3d } from './water/water';
+import { reflects } from './params';
 
 const TILE = 16;
 /** The free camera's speed in tiles per second. */
@@ -369,7 +370,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
         {
           cam, plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit },
-          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
+          water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
         },
         c.timer,
       );

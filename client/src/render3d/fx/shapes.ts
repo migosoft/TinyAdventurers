@@ -202,7 +202,7 @@ function mote(spec: BurstSpec, v: V3, t: number, out: MV3): MV3 {
   if (spec.drag <= 0) return thrown(bo, v, spec.g, t, out, floor);
   const s = (1 - Math.exp(-spec.drag * t)) / spec.drag;
   out[0] = spec.x + v[0] * s; out[2] = spec.z + v[2] * s;
-  out[1] = Math.max(floor,spec.y + v[1] * s - 0.5 * spec.g * t * t);
+  out[1] = Math.max(floor, spec.y + v[1] * s - 0.5 * spec.g * t * t);
   return out;
 }
 /** `b.n` motes at `age` seconds after the start, each a pure function of (`seed`, its index). Nothing is drawn after the longest life. */

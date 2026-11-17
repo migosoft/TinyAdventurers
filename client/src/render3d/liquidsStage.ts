@@ -24,7 +24,7 @@ import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, 
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import { seenOpeners } from './openers';
-import type { R3dParams } from './params';
+import { reflects, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
@@ -190,7 +190,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
           // The water (#345): the page's own clock, so a pinned page holds the waves still.
-          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
+          water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
         },
         c.timer,
       );

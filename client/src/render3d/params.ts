@@ -72,6 +72,11 @@ export const PITCH_MIN = 30;
 /** The steepest camera pitch (degrees) the URL accepts. */
 export const PITCH_MAX = 80;
 
+/** Whether the water's mirror pass runs: the Reflections switch, and never on quality Fast (#345). */
+export function reflects(p: Pick<R3dParams, 'refl' | 'quality'>): boolean {
+  return p.refl && p.quality !== 'fast';
+}
+
 /** Wraps degrees into -180..180 the way the URL does. */
 export function wrapYaw(yaw: number): number {
   // In-range values come back exactly as they are (37.3 stays 37.3); +180 maps to -180.

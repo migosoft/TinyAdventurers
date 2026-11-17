@@ -73,7 +73,10 @@ describe('buildWaterChunk', () => {
     const map = with_(32, 5, [[15, 2, T.ShallowWater]]);
     const left = buildWaterChunk(map, 0, 0)!;
     const right = buildWaterChunk(map, 1, 0)!;
-    expect(quadsOf(left).some((k) => k.startsWith('16,'))).toBe(false);
+    const l = quadsOf(left);
+    expect(new Set(l.map((k) => k.split(',')[0]))).toEqual(new Set(['14', '15']));
+    expect(l.length).toBe(6);
+    expect(quadsOf(right).filter((k) => l.includes(k))).toEqual([]);
     expect(new Set(quadsOf(right))).toEqual(new Set(['16,1', '16,2', '16,3']));
     expect(left.cx).toBe(0);
     expect(right.cx).toBe(1);

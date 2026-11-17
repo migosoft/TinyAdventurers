@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, parseParams, toSearch, wrapYaw, type R3dParams } from './params';
+import { DEFAULTS, parseParams, reflects, toSearch, wrapYaw, type R3dParams } from './params';
+
+describe('reflects', () => {
+  it('needs the switch and a quality above Fast', () => {
+    expect(reflects({ refl: true, quality: 'balanced' })).toBe(true);
+    expect(reflects({ refl: true, quality: 'high' })).toBe(true);
+    expect(reflects({ refl: true, quality: 'fast' })).toBe(false);
+    expect(reflects({ refl: false, quality: 'balanced' })).toBe(false);
+    expect(reflects({ refl: false, quality: 'high' })).toBe(false);
+  });
+});
 
 describe('wrapYaw', () => {
   it('wraps into -180..180', () => {

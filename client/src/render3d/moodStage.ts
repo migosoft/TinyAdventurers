@@ -29,7 +29,7 @@ import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
-import type { R3dParams } from './params';
+import { reflects, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
@@ -225,7 +225,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
           lava: game ? lava : null, lavaVersion: 0,
           darkvision: null,
           casters, sight, cracks: [], shafts: c.params.shafts, air: frameAir,
-          water: { ripples: wo.ripples, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
+          water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
         },
         c.timer,
       );

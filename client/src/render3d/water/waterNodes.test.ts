@@ -5,6 +5,7 @@ import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
 import { fragment, readsInBranches, type Builder } from '../shaderCode.testutil';
+import { OUTLINE_EDGE } from '../dips/shape';
 import { ceilingMaterial, waterMaterial, type WaterMaterial } from './waterNodes';
 
 const lighting = () => makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
@@ -68,7 +69,16 @@ describe('the water and ceiling materials', () => {
     });
 
     it(`${B.name}: the water discards outside the pool's outline`, () => {
-      expect(fragment(B, water().material)).toContain('discard');
+      // Every material holds the sight clip's discard; only the water adds the alpha test's (`DiffuseColor.w <= alphaTest`).
+      const alphaTest = /if\s*\(\s*\(\s*DiffuseColor\.w\s*<=\s*[\w.]+\s*\)\s*\)\s*\{\s*discard/;
+      const discards = (code: string): number => (code.match(/\bdiscard\b/g) ?? []).length;
+      const w = fragment(B, water().material);
+      const c = fragment(B, ceilingMaterial(lighting(), makeSight()));
+      expect(w).toMatch(alphaTest);
+      // ... and the alpha it tests is the outline mask: `step(OUTLINE_EDGE, <the field's second channel>)`.
+      expect(w).toMatch(new RegExp(`DiffuseColor\\s*=\\s*vec4(?:<f32>)?\\(.*step\\(\\s*${OUTLINE_EDGE}\\s*,\\s*\\w+\\.y\\s*\\)\\s*\\)`));
+      expect(c).not.toMatch(alphaTest);
+      expect(discards(w)).toBe(discards(c) + 1);
     });
   }
 
@@ -80,9 +90,9 @@ describe('the water and ceiling materials', () => {
     // The world material's light carries three caster arrays more than the water's.
     const count = (m: NodeMaterial): number => (fragment(WGSLNodeBuilder, m).match(/var<uniform>/g) ?? []).length;
     const l = lighting();
-    const sight = makeSight();
-    const full = ceilingMaterial({ ...l, lightAt: (p, n, w, o) => l.lightAt(p, n, w, { ...o, shadow: 'full' }) }, sight);
-    expect(count(full) - count(ceilingMaterial(l, sight))).toBe(3);
+    const build = (lit: typeof l): NodeMaterial => waterMaterial(lit, makeSight(), new Texture(), { w: 4, h: 3 }, viewTowardUniform()).material;
+    const full = build({ ...l, lightAt: (p, n, w, o) => l.lightAt(p, n, w, { ...o, shadow: 'full' }) });
+    expect(count(full) - count(build(l))).toBe(3);
   });
 
   it('has no mirror term without a mirror', () => {
@@ -98,7 +108,11 @@ describe('the water and ceiling materials', () => {
     const w = water();
     const packed = new Float32Array(64).fill(-1);
     packed.set([3, 4, 0.5, 1.6], 4);
-    expect(() => w.setRipples(packed)).not.toThrow();
-    expect(() => w.setRipples(null)).not.toThrow();
+    w.setRipples(packed);
+    expect(w.ripples.length).toBe(16);
+    expect(w.ripples[1].toArray()).toEqual([3, 4, 0.5, 1.6].map(Math.fround));
+    w.ripples.forEach((v, i) => { if (i !== 1) expect(v.z, `slot ${i}`).toBe(-1); });
+    w.setRipples(null);
+    w.ripples.forEach((v, i) => expect(v.z, `slot ${i}`).toBe(-1));
   });
 });

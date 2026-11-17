@@ -84,8 +84,11 @@ describe('waterField', () => {
   });
 
   it('follows a tile change', () => {
+    const F = TILE_ID.Floor;
     const steps: [number, number][] = [
-      [TILE_ID.Floor, TILE_ID.ShallowWater], [TILE_ID.ShallowWater, TILE_ID.DeepWater], [TILE_ID.DeepWater, TILE_ID.Floor],
+      [F, TILE_ID.ShallowWater], [TILE_ID.ShallowWater, TILE_ID.DeepWater], [TILE_ID.DeepWater, F],
+      [TILE_ID.Wall, F], [F, TILE_ID.Wall],
+      [F, TILE_ID.Chasm], [TILE_ID.Chasm, F], [F, TILE_ID.Lava], [TILE_ID.Lava, F],
     ];
     const make = () => room('.......', '.......', '...~...', '.......', '.......', '.......', '.......');
     const spots = (m: TileMap): [number, number][] => [[0, 0], [m.w - 1, m.h - 1], [0, m.h - 1], [m.w - 1, 0], [4, 4], [3, 3], [5, 2]];

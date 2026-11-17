@@ -754,12 +754,15 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;
       (heights.image.data as Uint8Array)[z * map.w + x] = Math.round(cellHeight(map.tiles[z * map.w + x]) * 100);
       heights.needsUpdate = true;
-      // The water's field around the cell (the rows `refreshWaterField` can change).
-      refreshWaterField(wField, map, x, z);
-      uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       const cell = z * map.w + x, was = builtTiles[cell];
       builtTiles[cell] = map.tiles[cell];
       const dips = dipClassChanged(was, map.tiles[cell]);
+      // The water's field around the cell (the rows `refreshWaterField` can change), only when the dip class changed (its kind, height
+      // or deep/shallow): a door opening must not cost an upload.
+      if (dips) {
+        refreshWaterField(wField, map, x, z);
+        uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
+      }
       for (const [cx, cz] of chunksOfTile(map, x, z)) buildAt(cx, cz, dips);
       rebuildField();
       chunks.total = chunkTotal();
@@ -1030,6 +1033,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         // After the render: the renderer sets the camera's clip space (WebGL's or WebGPU's) on its first use.
         mirrorMatrix.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
         water.setMirror({ picture: mirrorTarget.texture, matrix: mirrorMatrix });
+        timer?.lap('mirror');
       } else water.setMirror(null);
       if (p.direct && !wp.copy) {
         renderer.setRenderTarget(null);
