@@ -67,7 +67,7 @@ export function parseLiquids(search: string): LiquidsOpts {
     push: push === 'chasm' || push === 'water' || push === 'barrel' ? push : null,
     start: Number.isFinite(t) && t > 0 ? t : 0, pinned: q.has('t') && Number.isFinite(t),
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
-    models: MODEL_NAMES[q.get('models') ?? ''] ?? null,
+    models: Object.hasOwn(MODEL_NAMES, q.get('models') ?? '') ? MODEL_NAMES[q.get('models')!] : null,
   };
 }
 

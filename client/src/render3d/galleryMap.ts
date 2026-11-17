@@ -67,7 +67,8 @@ export interface Layout {
   focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models', { x: number; z: number }>;
 }
 
-export function layoutOf(nFigures: number): Layout {
+/** `nModels` is the number of model kinds in the kind row (the camera of `focus.models` centres on that row). */
+export function layoutOf(nFigures: number, nModels: number): Layout {
   const rows = Math.ceil(nFigures / PER_ROW);
   const figTop = 12;
   const effTop = figTop + rows * FIG_PITCH + 1;
@@ -105,7 +106,7 @@ export function layoutOf(nFigures: number): Layout {
     variety: (row, col) => ({ x: 2 + col * VARIETY_PITCH + 1.5, z: varTop + row * VARIETY_PITCH + 2 }),
     pillarTorches: PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + 1 })),
     focus: {
-      models: { x: 2 + (9 * MODEL_PITCH) / 2, z: kindZ },
+      models: { x: 2 + (nModels * MODEL_PITCH) / 2, z: kindZ },
       figures: { x: 2 + (PER_ROW * FIG_PITCH) / 2, z: figTop + (rows * FIG_PITCH) / 2 },
       corridor: { x: 18, z: 3.5 },
       effects: { x: 24, z: effTop + 2 },

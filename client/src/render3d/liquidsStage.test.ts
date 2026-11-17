@@ -190,6 +190,7 @@ describe('the models of the ?r3d=liquids stage (#357)', () => {
     expect(parseLiquids('?models=bunny').models).toBe(KIND.Bunny);
     expect(parseLiquids('?models=wolf').models).toBe(KIND.DireWolf);
     expect(parseLiquids('?models=dragon').models).toBeNull();
+    for (const name of ['constructor', 'toString', '__proto__']) expect(parseLiquids(`?models=${name}`).models, name).toBeNull();
     expect(parseLiquids('?r3d=liquids').models).toBeNull();
   });
 

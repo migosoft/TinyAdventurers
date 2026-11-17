@@ -732,7 +732,8 @@ export class Figures3d {
     const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
     const v = m.varies ? variationOf(e.id) : NO_VARIATION;
     // A model that knows its own standing height (`stands`) hangs the anchors from it; the card says nothing about how big such a model is.
-    const h = m.stands !== undefined ? m.stands * m.scale * v.size * (d.scale ?? 1) : 0;
+    const ms = m.scale * v.size;   // the drawn model's scale: every derived size follows the variation
+    const h = m.stands !== undefined ? m.stands * ms * (d.scale ?? 1) : 0;
     const sa = m.stands !== undefined ? { height: h, tag: h + 3, head: h } : standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     const foot = this.figFoot(e, s, f, { skims, start }, (pose.lie ? 3 : sa.height) / TILE);
     fig.body = null;
@@ -749,18 +750,18 @@ export class Figures3d {
     const sc = pose.scale;
     const dark = this.dark.has(e.id);
     const k = dark && this.darkFade ? this.fadeAlpha : 1;
-    const radius = silhouetteRadius(m);
+    const radius = silhouetteRadius(m) * v.size * Math.max(1, v.crest);   // the crest raises the antlers above the body's top
     // The sight reach is the card's: half the opaque width of the body frame the card would show, in tiles.
     const fb = this.bounds(pose.frame);
     // A model with a footprint takes its half length instead.
-    const hl = m.footprint ? (m.footprint[0] * m.scale * v.size * sc) / TILE : 0, hw = m.footprint ? (m.footprint[1] * m.scale * v.size * sc) / TILE : 0;
+    const hl = m.footprint ? (m.footprint[0] * ms * sc) / TILE : 0, hw = m.footprint ? (m.footprint[1] * ms * sc) / TILE : 0;
     const reach = pose.lie ? 0 : m.footprint ? hl : ((fb.r - fb.l + 1) * sc) / 2 / TILE;   // a lying card (a decal) carries none
     const tint = modelTint(pose, d, s);
     tint[0] *= v.tone; tint[1] *= v.tone; tint[2] *= v.tone;
     const insts: FigureInst[] = [];
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: m.scale * v.size, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
       cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
     };
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
@@ -776,16 +777,16 @@ export class Figures3d {
       const wm = kit.get(wp.frame);
       if (wm) {
         const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
-        // The instance is scaled by `m.scale` (the hand's place follows the fitted body); the weapon's own size is what the card path
+        // The instance is scaled by the drawn model's scale (the hand's place follows the fitted body); the weapon's own size is what the card path
         // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
         // `size`, so `boneScale` makes up the difference.
-        const bs = (wp.scale * (d.scale ?? 1) * m.size) / m.scale;
+        const bs = (wp.scale * (d.scale ?? 1) * m.size) / ms;
         const w: FigureInst = {
-          owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: m.scale, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
+          owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: ms, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
           tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
         };
         // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
-        body.radius = w.radius = radius + wm.radius * bs * m.scale;
+        body.radius = w.radius = radius + wm.radius * bs * ms;
         if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
         push(w);
         insts.push(w);
@@ -793,7 +794,7 @@ export class Figures3d {
     }
     // The shadow caster: the model's own side outline (a baked atlas frame, one px per model px) at the foot; a faller casts none.
     if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
-      const card: Card = { frame: outlineFrame(key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: m.scale * v.size * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
+      const card: Card = { frame: outlineFrame(key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: ms * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
       const c = casterOf(card, e.id, this.frames, cam);
       if (c) out.casters.push(c);
     }
@@ -822,10 +823,11 @@ export class Figures3d {
       pushShadow(out.shadows, cam, gf.x, gf.z, rx, rz, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
-    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
+    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * ms) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
-    const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
-    const bite = m.armLength > 0 || m.butt ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
+    const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
+    // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
+    const bite = m.armLength > 0 || m.butt || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
     const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale

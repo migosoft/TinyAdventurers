@@ -37,7 +37,7 @@ const shots = [];
 for (const [i, [name, desc]] of KINDS.entries()) {
   for (const s of STATES) shots.push({ name: `kind-${name}-${s}`, q: `&focus=models&at=model:${i}&zoom=6&state=${s}${still(s)}`, need: [desc], wait: s === 'dash' ? 6000 : 0 });
 }
-for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=3&state=${s}${still(s)}`, need: ALL, wait: s === 'dash' ? 6000 : 0 });
+for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=2&state=${s}${still(s)}`, need: ALL, wait: s === 'dash' ? 6000 : 0 });
 // The small effects (Task 11): the channel swirl, the wolf's bite state and the swing's swoosh from the south (aim 90).
 shots.push({ name: 'kind-wizard-channel', q: `&focus=models&at=model:0&zoom=6&state=channel${STILL}`, need: ['wizard'] });
 shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:8&zoom=6&state=bite${STILL}`, need: ['wolf'] });
@@ -62,8 +62,8 @@ for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`,
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):
 // this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
-shots.push({ name: 'state-cycle', q: '&focus=models&zoom=3&t=12.5&slow=1', need: ALL, until: 16 });
-shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=3&state=idle${STILL}`, need: ALL });
+shots.push({ name: 'state-cycle', q: '&focus=models&zoom=2&t=12.5&slow=1', need: ALL, until: 16 });
+shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=2&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'torch-light-close', q: `&at=model:3&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: ALL, skull: true });
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });

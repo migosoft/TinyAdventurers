@@ -47,7 +47,7 @@ export const STATES: [string, number][] = [
   ['land', ANIM.Land],
 ];
 
-export const GALLERY = layoutOf(Object.keys(FIGURES).length);
+export const GALLERY = layoutOf(Object.keys(FIGURES).length, Object.keys(MODEL_OF_KIND).length);
 
 /** Entity ids by part of the stage. */
 export const ID = {
@@ -139,7 +139,7 @@ const EFFECT_ROWS: { effect?: number; flag?: number; run?: boolean }[] = [
 ];
 const EFFECT_KINDS = [KIND.Knight, KIND.SkeletonWarrior, KIND.Ogre, KIND.Lich];
 const PARTY_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger];
-/** The model block's effect rows: every row of `EFFECT_ROWS` that shows something (not the plain wading one), for the four heroes, a skeleton, the ogre and the wolf. */
+/** The model block's effect rows: every row of `EFFECT_ROWS` that shows something (not the plain wading one), for the four heroes, a skeleton, the ogre, the wolf, the stag and the boar. */
 const MODEL_EFFECT_ROW_LIST = EFFECT_ROWS.filter((r) => r.effect !== undefined || r.flag !== undefined);
 const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar];
 /** The variety block's rows: one animal kind each, `VARIETY_COLS` animals per row. */

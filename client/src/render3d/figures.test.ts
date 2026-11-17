@@ -698,7 +698,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -998,6 +998,23 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       }
       const wolf = one(ent(10, KIND.DireWolf, { anim: ANIM.Windup }));
       expect(wolf.figs[0].bite).toBeGreaterThanOrEqual(0);
+    });
+
+    it('gives a deer and a bunny, which have no attack to show, no fangs either', () => {
+      for (const kind of [KIND.Deer, KIND.Bunny]) for (const anim of [ANIM.Windup, ANIM.Melee]) {
+        expect(one(ent(13, kind, { anim, animMs: 100 })).figs[0].bite, `${kind} ${anim}`).toBe(-1);
+      }
+    });
+
+    it('batches a stag by its size and crest, and puts a boar\'s swoosh at its varied shoulder', () => {
+      const m = sm(), v = variationOf(5);
+      let top = 0;
+      for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
+      const base = Math.max(m.radius, (top * m.scale) / 16 / 2);
+      expect(one(stag(5)).models[0].radius).toBeCloseTo(base * v.size * Math.max(1, v.crest), 9);
+      const b = kit.get('boar')!, bv = variationOf(12), out = one(ent(12, KIND.Boar));
+      const stretch = 1 / Math.cos(Math.PI / 4);
+      expect(out.figs[0].swingY - out.models[0].lift).toBeCloseTo(((b.shoulderY * b.scale * bv.size) / 16) * stretch, 6);
     });
   });
 

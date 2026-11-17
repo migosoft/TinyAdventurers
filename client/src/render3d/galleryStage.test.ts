@@ -220,6 +220,12 @@ describe('the gallery stage', () => {
     expect(parseGallery('?at=variety:2').at).toEqual(GALLERY.variety(2, 2.5));
   });
 
+  it('opens the models block on the middle of the kind row, however many kinds it has', () => {
+    const n = Object.keys(MODEL_OF_KIND).length;
+    expect(GALLERY.focus.models.x).toBeCloseTo((GALLERY.model(0).x + GALLERY.model(n - 1).x) / 2, 9);
+    expect(GALLERY.focus.models.z).toBe(GALLERY.model(0).z);
+  });
+
   it('lets one figure of each kind die every 6 s and leave its skull', () => {
     const alive = (t: number) => galleryEnts(t, null).filter((e) => inRange(e.id, ID.dying, 100));
     expect(alive(1)).toHaveLength(13);

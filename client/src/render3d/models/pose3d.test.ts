@@ -279,9 +279,8 @@ describe('the woodland animals in every animation', () => {
     }
   }, SLOW);
 
-  it('hold a stone animal\'s pose mid-stride and mid-butt, hit or not, whatever the crest', () => {
-    const stone = 1 << EFFECT.Petrified;
-    for (const k of ['stag', 'boar'] as const) for (const first of [{ anim: ANIM.Move }, BUTT_ANIM(STRIKE_T)]) {
+  it('hold a stone or frozen animal\'s pose mid-stride and mid-butt, hit or not, whatever the crest', () => {
+    for (const stone of [1 << EFFECT.Petrified, 1 << EFFECT.Frozen]) for (const k of ['stag', 'boar'] as const) for (const first of [{ anim: ANIM.Move }, BUTT_ANIM(STRIKE_T)]) {
       const m = tube(k), d = tdef(k), mem = settled({ walk: 1, phi: 0.7, crest: 0.8 });
       const a = copyPose(poseFigure(m, d, view({ ...first, effects: stone }), 1 / 60, mem));
       mem.crest = 1.3;
