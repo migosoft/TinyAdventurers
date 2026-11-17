@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
-  BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, bedField, depthFade, dipOf, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, sampleBed, surfaceAt, walkBedAt, type DipKind,
+  CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
+  bedAt, depthFade, dipOf, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -187,24 +187,6 @@ describe('dip shape', () => {
     expect(depthFade(3)).toBe(1);
   });
 
-  it('samples its field like bedAt', () => {
-    const m = pool('W', 3);
-    const f = bedField(m);
-    expect(f.w).toBe(m.w * BED_RES + 1);
-    expect(f.h).toBe(m.h * BED_RES + 1);
-    expect(f.data.length).toBe(f.w * f.h);
-    for (const [i, j] of [[0, 0], [13, 9], [20, 20], [25, 26], [f.w - 1, f.h - 1]]) {
-      expect(sampleBed(f, i / BED_RES, j / BED_RES)).toBeCloseTo(bedAt(m, i / BED_RES, j / BED_RES), 5);
-    }
-    const x = 3.4, z = 5.3;
-    const x0 = Math.floor(x * BED_RES), z0 = Math.floor(z * BED_RES);
-    const c = [f.data[z0 * f.w + x0], f.data[z0 * f.w + x0 + 1], f.data[(z0 + 1) * f.w + x0], f.data[(z0 + 1) * f.w + x0 + 1]];
-    const s = sampleBed(f, x, z);
-    expect(s).toBeGreaterThanOrEqual(Math.min(...c) - 1e-6);
-    expect(s).toBeLessThanOrEqual(Math.max(...c) + 1e-6);
-    expect(sampleBed(f, -5, -5)).toBe(f.data[0]);
-    expect(sampleBed(f, 999, 999)).toBe(f.data[f.data.length - 1]);
-  });
 });
 
 describe('walkBedAt', () => {

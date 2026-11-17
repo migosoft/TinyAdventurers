@@ -139,23 +139,5 @@ export function depthFade(y: number): number {
   return 0.03 + 0.97 * Math.exp(0.55 * Math.min(y, 0));
 }
 
+/** Texels per tile of the water field's grid (`water/waterField.ts`). */
 export const BED_RES = 4;
-
-/** bedAt on a grid of BED_RES texels per tile, (map.w * BED_RES + 1) by (map.h * BED_RES + 1), row by row. */
-export function bedField(map: TileMap): { w: number; h: number; data: Float32Array } {
-  const w = map.w * BED_RES + 1, h = map.h * BED_RES + 1;
-  const data = new Float32Array(w * h);
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) data[j * w + i] = bedAt(map, i / BED_RES, j / BED_RES);
-  return { w, h, data };
-}
-
-/** Bilinear, clamp-to-edge read of a bed field at (x, z) tiles: the CPU twin of the read #345's shader does by hand. */
-export function sampleBed(f: { w: number; h: number; data: Float32Array }, x: number, z: number): number {
-  const u = Math.min(f.w - 1, Math.max(0, x * BED_RES)), v = Math.min(f.h - 1, Math.max(0, z * BED_RES));
-  const i = Math.min(f.w - 2, Math.floor(u)), j = Math.min(f.h - 2, Math.floor(v));
-  const fx = u - i, fz = v - j;
-  const at = (a: number, b: number) => f.data[b * f.w + a];
-  const top = at(i, j) * (1 - fx) + at(i + 1, j) * fx;
-  const bot = at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx;
-  return top * (1 - fz) + bot * fz;
-}
