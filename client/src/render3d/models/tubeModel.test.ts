@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { KIND } from '../../generated/defs';
+import { FIGURES } from '../../game/anim/defs';
 import { BONES, MAX_BENDS, STAGES } from './bones';
 import { buildJob, transferList } from './build';
 import { buildFigure } from './model';
@@ -190,6 +192,12 @@ describe('buildTubeFigure', () => {
   it('hit radius', () => {
     expect(hitRadius(TUBE_DESCS.stag)).toBe(5);
     expect(hitRadius(TUBE_DESCS.deer)).toBe(5);
+  });
+
+  it("each animal's baseR is its model's hit radius", () => {
+    const kinds = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny } as const;
+    for (const key of keys) expect(FIGURES[kinds[key]].baseR, key).toBe(hitRadius(TUBE_DESCS[key]));
+    expect(keys.map((k) => FIGURES[kinds[k]].baseR)).toEqual([5, 5, 6, 4]);
   });
 
   it('a bad description throws an error that names it', () => {

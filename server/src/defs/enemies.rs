@@ -370,7 +370,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: if t == Stag { EntityKind::Stag } else { EntityKind::Deer },
                 hp: 40.0,
                 speed: 90.0,
-                radius: 6.0,
+                radius: 5.0,
                 vision: 8.0,
                 attr_mods,
                 weight: 12.0,
@@ -686,7 +686,7 @@ mod tests {
         for t in [Deer, Stag] {
             let d = def(t);
             assert_eq!(attr_sources(t).total(), Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
-            assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 6.0, 8.0, Some(Reaction::Flee)), "{t:?}");
+            assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 5.0, 8.0, Some(Reaction::Flee)), "{t:?}");
         }
         assert_eq!((def(Deer).kind, def(Stag).kind), (EntityKind::Deer, EntityKind::Stag));
         let boar = def(Boar);
