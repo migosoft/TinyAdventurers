@@ -16,6 +16,7 @@ import { registerBooms } from './booms';
 import { registerBursts } from './bursts';
 import { registerField } from './field';
 import { registerFigureFx } from './figureFx';
+import { registerWaterFx } from './waterFx';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
@@ -57,6 +58,7 @@ export class FxPass {
     registerBursts();
     registerBooms();
     registerFigureFx();
+    registerWaterFx();
     registerHazards();
     registerField();
     registerStatus();

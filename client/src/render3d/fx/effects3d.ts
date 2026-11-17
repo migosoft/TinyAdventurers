@@ -9,6 +9,7 @@ import type { OwnCast, PictureEv, ShotView } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { TILE } from '../../sim/map';
 import type { Footprint } from '../lights';
+import type { WaterCues } from '../water/water';
 import { BURST_MAX, castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
@@ -46,6 +47,10 @@ export const FX_KIND = {
   ShadeVeil: 22,
   /** The dust where a figure or a barrel goes over a chasm's edge (follows the faller's id; the sight hides it with the figure). */
   RimDust: 23,
+  /** The droplets where a figure enters the water (a=0) or drowns (a=1) (follows the figure's id; the sight hides them with it). */
+  WaterSplash: 24,
+  /** One droplet of a dash's spray (a=0) or one bubble of a drowning (a=1) (follows the figure's id). */
+  WaterDrop: 25,
 } as const;
 export type FxKind = (typeof FX_KIND)[keyof typeof FX_KIND];
 
@@ -75,6 +80,8 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.MimicLand]: 0.4,
   [FX_KIND.ShadeVeil]: 1,
   [FX_KIND.RimDust]: 0.6,
+  [FX_KIND.WaterSplash]: 0.45,
+  [FX_KIND.WaterDrop]: 0.35,
 };
 
 /** One effect in progress. `a` to `d` are the kind's numbers (see `Effects3d.event`). */
@@ -109,6 +116,8 @@ export interface FxFrame {
   cues?: readonly MimicCue[];
   /** The falls into a chasm that began this frame, at the rim (tiles; `FigureOut.falls`). */
   falls?: readonly { id: number; x: number; z: number }[];
+  /** The water's cues of this frame (`Water3d.step`): the droplets of entering, plunging, spraying and bubbling. */
+  water?: WaterCues;
   /** The ground the screen shows (tiles): the hazards draw only inside it. Undefined: no limit. */
   fp?: Footprint;
 }

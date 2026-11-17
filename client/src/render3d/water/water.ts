@@ -1,0 +1,133 @@
+// Water in 3D (#345): what the figures do to the water of a dip. Wading, entering, dashing, drowning and the
+// drips that land become ripple sources (for the surface) and cues (for the droplet effects). The 2D originals
+// are `WadeFx`, `sinkStartFx` and `bubbleFx` in game/terrain.ts, in tiles here. Pure: no three.js, no effects.
+import { CONST } from '../../generated/defs';
+import { WATER_LEVEL, isWater } from '../dips/shape';
+import type { TileMap } from '../../sim/map';
+import type { DrawnFig } from '../fx/types';
+import { RIPPLE_CAP, Ripples } from './ripples';
+
+/** Seconds between the rings of a wader, its speed (tiles/s) above which it rings, the strengths of the ripples and the rates (per second) of the cues. */
+export const WADE = { every: 0.3, speed: 0.3, ring: 1, enter: 1.6, drip: 0.55, plunge: 1.6, plunges: 3, stir: 0.6, stirRate: 8, bubbleRate: 12, sprayRate: 30 } as const;
+/** How far (tiles) the ripples of a drowning scatter around the spot: the plunge, the stirring. */
+const PLUNGE_SCATTER = 0.15, STIR_SCATTER = 0.2;
+
+export interface WaterSpot { id: number; x: number; z: number }
+export interface WaterCues { enters: WaterSpot[]; plunges: WaterSpot[]; spray: WaterSpot[]; bubbles: WaterSpot[] }
+export interface WaterIn {
+  dt: number;
+  now: number;
+  figs: readonly DrawnFig[];
+  /** The drownings that began this frame (`FigureOut.sinks`). */
+  sinks: readonly WaterSpot[];
+  /** The drips that reached the water this frame: (x, z) pairs. */
+  landed: { count: number; pos: Float32Array } | null;
+  hidden: ReadonlySet<number>;
+}
+
+interface FigState { x: number; z: number; standing: boolean; ring: number; spray: number; seen: number }
+interface Drown { id: number; x: number; z: number; left: number; stir: number; bubble: number }
+
+/** A list of cues that reuses its spot objects from frame to frame. */
+class Spots {
+  readonly list: WaterSpot[] = [];
+  private readonly pool: WaterSpot[] = [];
+  clear(): void { this.list.length = 0; }
+  push(id: number, x: number, z: number): void {
+    const n = this.list.length;
+    const s = this.pool[n] ?? (this.pool[n] = { id: 0, x: 0, z: 0 });
+    s.id = id; s.x = x; s.z = z;
+    this.list.push(s);
+  }
+}
+
+export class Water3d {
+  private readonly ripples = new Ripples();
+  private readonly packed = new Float32Array(RIPPLE_CAP * 4);
+  private readonly states = new Map<number, FigState>();
+  private drowns: Drown[] = [];
+  private frameNo = 0;
+  private readonly enters = new Spots();
+  private readonly plunges = new Spots();
+  private readonly spray = new Spots();
+  private readonly bubbles = new Spots();
+  private readonly cues: WaterCues = { enters: this.enters.list, plunges: this.plunges.list, spray: this.spray.list, bubbles: this.bubbles.list };
+  private readonly result = { ripples: this.packed, live: 0, cues: this.cues };
+
+  constructor(private readonly map: TileMap, private readonly rng: () => number = Math.random) {}
+
+  /** A ripple of `strength` at (x, z), scattered by up to `scatter` tiles. */
+  private ring(x: number, z: number, now: number, strength: number, scatter: number): void {
+    if (scatter > 0) {
+      const a = this.rng() * Math.PI * 2, r = this.rng() * scatter;
+      x += Math.cos(a) * r; z += Math.sin(a) * r;
+    }
+    this.ripples.add(x, z, now, strength);
+  }
+
+  /** One frame: the packed ripples (the same array every call), how many are live, and the cues for the effects (reused lists). */
+  step(i: WaterIn): { ripples: Float32Array; live: number; cues: WaterCues } {
+    const { dt, now, hidden } = i;
+    this.enters.clear(); this.plunges.clear(); this.spray.clear(); this.bubbles.clear();
+    const frame = ++this.frameNo;
+    for (let k = 0; k < i.figs.length; k++) {
+      const f = i.figs[k];
+      const over = isWater(this.map.get(Math.floor(f.x), Math.floor(f.z)));
+      const standing = over && !f.dashing && f.foot < WATER_LEVEL;
+      const quiet = hidden.has(f.id);
+      let s = this.states.get(f.id);
+      if (!s) {
+        s = { x: f.x, z: f.z, standing, ring: 0, spray: 0, seen: frame };
+        this.states.set(f.id, s);
+      } else {
+        const speed = dt > 0 ? Math.hypot(f.x - s.x, f.z - s.z) / dt : 0;
+        s.ring = Math.min(WADE.every, s.ring + dt);
+        if (standing && !s.standing) {
+          s.ring = 0;
+          if (!quiet) { this.ripples.add(f.x, f.z, now, WADE.enter); this.enters.push(f.id, f.x, f.z); }
+        } else if (standing && speed > WADE.speed && s.ring >= WADE.every) {
+          s.ring = 0;
+          if (!quiet) this.ripples.add(f.x, f.z, now, WADE.ring);
+        }
+        s.x = f.x; s.z = f.z; s.standing = standing; s.seen = frame;
+      }
+      if (over && f.dashing) {
+        s.spray += WADE.sprayRate * dt;
+        const n = Math.floor(s.spray);
+        s.spray -= n;
+        if (!quiet) for (let c = 0; c < n; c++) this.spray.push(f.id, f.x, f.z);
+      } else s.spray = 0;
+    }
+    if (this.states.size > 0) for (const [id, s] of this.states) if (s.seen !== frame) this.states.delete(id);
+
+    // the drownings that began before this frame stir the water and bubble until their time is up
+    let w = 0;
+    for (let k = 0; k < this.drowns.length; k++) {
+      const d = this.drowns[k];
+      const t = Math.min(dt, d.left);
+      d.left -= t;
+      d.stir += WADE.stirRate * t; d.bubble += WADE.bubbleRate * t;
+      const ns = Math.floor(d.stir), nb = Math.floor(d.bubble);
+      d.stir -= ns; d.bubble -= nb;
+      if (!hidden.has(d.id)) {
+        for (let c = 0; c < ns; c++) this.ring(d.x, d.z, now, WADE.stir, STIR_SCATTER);
+        for (let c = 0; c < nb; c++) this.bubbles.push(d.id, d.x, d.z);
+      }
+      if (d.left > 0) this.drowns[w++] = d;
+    }
+    this.drowns.length = w;
+    for (let k = 0; k < i.sinks.length; k++) {
+      const d = i.sinks[k];
+      this.drowns.push({ id: d.id, x: d.x, z: d.z, left: CONST.DROWN_TIME, stir: 0, bubble: 0 });
+      if (hidden.has(d.id)) continue;
+      for (let c = 0; c < WADE.plunges; c++) this.ring(d.x, d.z, now, WADE.plunge, PLUNGE_SCATTER);
+      this.plunges.push(d.id, d.x, d.z);
+    }
+
+    const l = i.landed;
+    if (l) for (let k = 0; k < l.count; k++) this.ripples.add(l.pos[k * 2], l.pos[k * 2 + 1], now, WADE.drip);
+
+    this.result.live = this.ripples.pack(now, this.packed);
+    return this.result;
+  }
+}
