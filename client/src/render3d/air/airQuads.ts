@@ -1,13 +1,13 @@
 // The air's quads (#307): `AirParts` into the vertex arrays of the two air meshes (additive and blended) and the haze sheets. Pure, no GPU.
 // Six vertices per quad. `position` is the quad's centre; the shader spreads the corners (`corner`, -1..1) by `size` (tiles) along the camera's
-// right and up (flat in x and z for a ring), so the quads stay round on screen.
+// right and up, so the quads stay round on screen.
 import type { Footprint } from '../lights';
 import { PX } from './airCtx';
 import { DROP_ASPECT, type AirParts } from './airParts';
 import { DROP_RGB } from './drips';
 
 /** The quad kinds, as the shaders read them. */
-export const KIND = { speck: 0, ember: 1, puff: 2, ring: 3, pixel: 4 } as const;
+export const KIND = { speck: 0, ember: 1, puff: 2, pixel: 3 } as const;
 
 /** One mesh's vertex arrays (`position` 3, `corner` 2, `size` 2, `rgba` 4, `kind` 1, `sightXZ` 2 floats per vertex). */
 export interface AirBuf {
@@ -57,20 +57,17 @@ function put(b: AirBuf, v: number, kind: number, x: number, y: number, z: number
   }
 }
 
-/** The ring's quad reaches this far (tiles) beyond its radius, so its one-pixel line is not cut at the quad's edge; the shader takes it off again. */
-export const RING_PAD = PX;
-
 const DROP_R = ((DROP_RGB >> 16) & 255) / 255, DROP_G = ((DROP_RGB >> 8) & 255) / 255, DROP_B = (DROP_RGB & 255) / 255;
 
 /**
- * Fills `out` from `parts` and returns the vertex counts of the additive mesh (specks, embers) and the blended mesh (smoke, rings, drops
+ * Fills `out` from `parts` and returns the vertex counts of the additive mesh (specks, embers) and the blended mesh (smoke, drops
  * and splash pixels). Things without a sight point of their own (all but the puffs) read the mask at their own x and z. A speck is one
  * art pixel; its colour and light are the shader's (the rgba is white with the speck's alpha).
  */
 export function airQuads(parts: AirParts, out: AirBuffers): { add: number; blend: number } {
-  const { specks, embers, puffs, rings, drops } = parts;
+  const { specks, embers, puffs, drops } = parts;
   ensure(out.add, (specks.count + embers.count) * 6);
-  ensure(out.blend, (puffs.count + rings.count + drops.count) * 6);
+  ensure(out.blend, (puffs.count + drops.count) * 6);
   let a = 0, b = 0;
   for (let i = 0; i < specks.count; i++, a += 6) {
     const x = specks.pos[i * 3], y = specks.pos[i * 3 + 1], z = specks.pos[i * 3 + 2];
@@ -83,10 +80,6 @@ export function airQuads(parts: AirParts, out: AirBuffers): { add: number; blend
   for (let i = 0; i < puffs.count; i++, b += 6) {
     const s = puffs.size[i];
     put(out.blend, b, KIND.puff, puffs.pos[i * 3], puffs.pos[i * 3 + 1], puffs.pos[i * 3 + 2], s, s, puffs.rgba[i * 4], puffs.rgba[i * 4 + 1], puffs.rgba[i * 4 + 2], puffs.rgba[i * 4 + 3], puffs.sight[i * 2], puffs.sight[i * 2 + 1]);
-  }
-  for (let i = 0; i < rings.count; i++, b += 6) {
-    const x = rings.pos[i * 3], z = rings.pos[i * 3 + 2], d = (rings.radius[i] + RING_PAD) * 2;
-    put(out.blend, b, KIND.ring, x, rings.pos[i * 3 + 1], z, d, d, DROP_R, DROP_G, DROP_B, rings.alpha[i], x, z);
   }
   for (let i = 0; i < drops.count; i++, b += 6) {
     const x = drops.pos[i * 3], z = drops.pos[i * 3 + 2], w = drops.size[i];

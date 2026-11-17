@@ -13,7 +13,7 @@ const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), g
 const cam = { x: 5, z: 5, pitch: 0.9, yaw: 0.3 };
 const bit = (...k: number[]): number => k.reduce((a, b) => a | (1 << b), 0);
 const fig = (id: number, kind: number, effects: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
-  id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects, alpha: 1, model: false, side: 0, def: FIGURES[kind],
+  id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects, alpha: 1, dashing: false, model: false, side: 0, def: FIGURES[kind],
   yaw: 0, swingY: 0.6, arc: 0, bite: -1, ...o,
 });
 const frameOf = (now: number, figs: DrawnFig[], hidden: number[] = []): FxFrame => ({

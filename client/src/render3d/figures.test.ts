@@ -284,6 +284,19 @@ describe('Figures3d', () => {
     expect(out.ghosts.look[4]).toBeCloseTo(0.5, 6);
   });
 
+  it('marks a dashing figure', () => {
+    const dash = make().frame(frame([ent(10, KIND.Knight, { anim: ANIM.Dash })]), cam());
+    expect(dash.figs[0].dashing).toBe(true);
+    const walk = make().frame(frame([ent(10, KIND.Knight, { anim: ANIM.Move })]), cam());
+    expect(walk.figs[0].dashing).toBe(false);
+    const ghost = make().frame(frame([ent(10, KIND.Knight, { flags: FLAG.INCORPOREAL })]), cam());
+    expect(ghost.figs[0].dashing).toBe(false);
+    const hero = make().frame(frame([], { own: own({ alive: true, dashing: true }) }), cam());
+    expect(hero.figs[0].dashing).toBe(true);
+    const still = make().frame(frame([], { own: own({ alive: true }) }), cam());
+    expect(still.figs[0].dashing).toBe(false);
+  });
+
   it('reports a figure that may open walls, by who it is', () => {
     const out = make().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly }), ent(11, KIND.OrcWarrior)]), cam());
     expect(out.openers.map((o) => [o.id, o.who])).toEqual([[10, 'friend'], [11, 'enemy']]);
@@ -1205,6 +1218,34 @@ describe('Figures3d on the bed of a dip (#324)', () => {
       for (const b of bufs) expect(b.dark.every((d) => d === 1), mode).toBe(true);
       if (mode === 'fade') expect(Math.max(...o.ghosts.look.filter((_, i) => i % 5 === 4))).toBe(0);
     }
+  });
+
+  it('reports a drowning once, a dark figure none, a barrel one', () => {
+    const fg = dipFigs();
+    const e = knight(3, 1);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
+    const first = fg.frame(frame([e], { now: 10 }), cam());
+    expect(first.sinks).toEqual([{ id: 10, x: 3.5, z: 1.5 }]);
+    expect(first.falls).toEqual([]);
+    const next = fg.frame(frame([e], { now: 10.1 }), cam());
+    expect(next.sinks).toEqual([]);
+    const dk = dipFigs();
+    dk.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
+    expect(dk.frame(frame([e], { dark: new Set([10]) }), cam()).sinks).toEqual([]);
+    const bg = dipFigs();
+    const barrel = (anim: number): EntState => ent(20, KIND.Barrel, { ...at2(3, 1), anim, side: SIDE.Neutral });
+    const o = bg.frame(frame([barrel(3)], { now: 10 }), cam());
+    expect(o.sinks).toEqual([{ id: 20, x: 3.5, z: 1.5 }]);
+    expect(bg.frame(frame([barrel(3)], { now: 10.1 }), cam()).sinks).toEqual([]);
+  });
+
+  it('reports no drowning for a fall', () => {
+    const fg = dipFigs();
+    const e = knight(2, 4);
+    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
+    const o = fg.frame(frame([e], { now: 10 }), cam());
+    expect(o.sinks).toEqual([]);
+    expect(o.falls).toHaveLength(1);
   });
 
   it('drowns onto the bed and leaves nothing', () => {

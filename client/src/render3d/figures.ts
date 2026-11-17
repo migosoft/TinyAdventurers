@@ -132,6 +132,8 @@ export interface FigureOut {
   cues: MimicCue[];
   /** The falls into a chasm that began this frame (a figure or a barrel the hero can see), at the rim they began on, in tiles. */
   falls: Array<{ id: number; x: number; z: number }>;
+  /** The drownings that began this frame (a figure, or a barrel's anim 3) the hero can see, where it went under, in tiles. Ids in `dark` are left out, as in `falls`. */
+  sinks: Array<{ id: number; x: number; z: number }>;
 }
 
 /** A thing's drawn motion: where it was drawn last frame, its eased speed (tiles/s), its foot's last height and its lava sink. */
@@ -270,6 +272,8 @@ export class Figures3d {
   private readonly parts = new Map<number, FallParts>();
   /** The falls that began this frame (the output's). */
   private falls: FigureOut['falls'] = [];
+  /** The drownings that began this frame (the output's). */
+  private sinks: FigureOut['sinks'] = [];
   /** The things falling this frame: entities and the fallers that outlived theirs. */
   fallers = 0;
 
@@ -333,8 +337,9 @@ export class Figures3d {
     const cover = look.ground ?? (() => 0);
     this.ground = (x, z, r) => cover(x, z, r) + this.bedAt(x, z);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [], falls: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [], falls: [], sinks: [] };
     this.falls = out.falls;
+    this.sinks = out.sinks;
     this.figUsed = 0;
     const seen = new Set<number>();
     this.anchors.clear();
@@ -478,7 +483,7 @@ export class Figures3d {
     const ex = e.x / TILE;
     const ez = e.y / TILE;
     const foot = this.foot(e.id, ex, ez, f.dt, f.now, { skims: false, start: e.anim === 2 ? 'fall' : e.anim === 3 ? 'drown' : null });
-    if (foot.started && foot.d?.kind === 'fall' && !this.dark.has(e.id)) this.falls.push({ id: e.id, x: foot.x, z: foot.z });
+    this.reportDescent(e.id, foot);
     const falling = foot.d?.kind === 'fall';
     // The fuse's shake moves the body along screen right.
     const x = foot.x + (Math.cos(cam.yaw) * p.dx) / TILE;
@@ -593,14 +598,15 @@ export class Figures3d {
   }
 
   /** The figure's state and its memory (made on the first frame), with the reappear rule: the lookup both ways of drawing share. */
-  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig; foot: Foot } {
+  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig; foot: Foot; dashing: boolean } {
     const st = this.states.stateOf(e, f, f.now);
     // The 3D view stands the figure on the bed and lets it fall by itself: the pose gets no sink, fall or drown (#324).
     const s: ViewState = { ...st.s, sink: 0, fall: 0, drown: 0 };
     const flags = st.s.flags ?? 0;
-    const skims = skimsTerrain(flags, st.predicted ? f.own.dashing : e.anim === ANIM.Dash) || (flags & FLAG.AIRBORNE) !== 0;
+    const dashing = st.predicted ? f.own.dashing : e.anim === ANIM.Dash;
+    const skims = skimsTerrain(flags, dashing) || (flags & FLAG.AIRBORNE) !== 0;
     const foot = this.foot(e.id, st.s.x / TILE, st.s.y / TILE, f.dt, f.now, { skims, start: this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null });
-    if (foot.started && foot.d?.kind === 'fall' && !this.dark.has(e.id)) this.falls.push({ id: e.id, x: foot.x, z: foot.z });
+    this.reportDescent(e.id, foot);
     let fig = this.figs.get(e.id);
     if (!fig) {
       const pi = isPlayerKind(e.kind) ? this.players.find((p) => p.ent === e.id) : undefined;
@@ -613,7 +619,14 @@ export class Figures3d {
     }
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
     if (this.states.takeReappear(e.id, f.now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) fig.mem.appearLeft = VANISH_SECS;
-    return { s, fig, foot };
+    return { s, fig, foot, dashing };
+  }
+
+  /** The frame a descent begins, once: a fall goes to `falls`, a drowning to `sinks`; a dark entity's is left out. */
+  private reportDescent(id: number, foot: Foot): void {
+    if (!foot.started || this.dark.has(id)) return;
+    if (foot.d?.kind === 'fall') this.falls.push({ id, x: foot.x, z: foot.z });
+    else if (foot.d?.kind === 'drown') this.sinks.push({ id, x: foot.x, z: foot.z });
   }
 
   /** A faller's ground is the real bed, chasm wall included. */
@@ -702,7 +715,7 @@ export class Figures3d {
    * False when it is not drawn (dead).
    */
   private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
-    const { s, fig, foot } = this.figOf(e, f, FIGURES[e.kind]);
+    const { s, fig, foot, dashing } = this.figOf(e, f, FIGURES[e.kind]);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     fig.body = null;
@@ -791,7 +804,7 @@ export class Figures3d {
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
     const bite = m.armLength > 0 ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite);
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = Math.max(0, (footY - ib.t) * m.size) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
     this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
@@ -803,16 +816,16 @@ export class Figures3d {
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
    */
-  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number): DrawnFig {
+  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number, dashing: boolean): DrawnFig {
     // The camera passes stretch the figure by 1 / cos(pitch) (nodes.ts): so is the top. `y` is the foot's world height; `handY` is a world height.
     const top = height / TILE / Math.cos(cam.pitch);
-    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1 });
+    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1 });
     this.figUsed++;
     f.id = e.id; f.kind = e.kind; f.x = x; f.z = z; f.top = top; f.foot = y;
     // The weapon hand (the model's shoulder, the card's hand height): a hand's reach in front of the body, along its facing.
     const h = f.hand as MV3, reach = model ? 0.3 : 10 / TILE;
     h[0] = x + Math.cos(yaw) * reach; h[1] = handY; h[2] = z + Math.sin(yaw) * reach;
-    f.aim = s.aim; f.anim = s.anim; f.animT = s.animT; f.effects = s.effects ?? 0; f.alpha = alpha; f.model = model; f.side = e.side; f.def = d;
+    f.aim = s.aim; f.anim = s.anim; f.animT = s.animT; f.effects = s.effects ?? 0; f.alpha = alpha; f.dashing = dashing; f.model = model; f.side = e.side; f.def = d;
     f.yaw = yaw; f.swingY = handY; f.arc = s.swingArc ?? d.swing?.arc ?? 0; f.bite = bite;
     f.mouth = undefined; f.nostril = undefined;
     out.figs.push(f);
@@ -846,7 +859,7 @@ export class Figures3d {
   private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
     const base = FIGURES[e.kind];
     if (!base) return false;
-    const { s, fig, foot } = this.figOf(e, f, base);
+    const { s, fig, foot, dashing } = this.figOf(e, f, base);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     fig.body = null;
@@ -942,7 +955,7 @@ export class Figures3d {
     // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.
     const stretch = 1 / Math.cos(cam.pitch), wolf = e.kind === KIND.DireWolf;
     const bite = !wolf ? -1 : s.anim === ANIM.Windup ? BITE_HELD : s.anim === ANIM.Melee ? BITE_HELD + (1 - BITE_HELD) * (s.animT / BITE_SECS) : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha, false, s.aim, y + (d.handY * ds * stretch) / TILE, bite);
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha, false, s.aim, y + (d.handY * ds * stretch) / TILE, bite, dashing);
     if (bite >= 0) this.muzzle(lf, cam, s.aim, y + lf.top * 0.55, 0.4);
     if (d.mouth && !pose.lie) {
       const mp = this.framePoint(e.id, d.mouth), np = this.framePoint(e.id, d.nostrils);

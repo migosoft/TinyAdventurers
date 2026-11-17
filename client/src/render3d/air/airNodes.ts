@@ -1,12 +1,11 @@
-// The air's materials in TSL (#307): specks and embers (additive), smoke, rings and drops (blended), and the haze sheets. The quads are
-// camera-facing (rings flat on the water), built from `airQuads.ts`'s attributes; every material ends with the sight step.
+// The air's materials in TSL (#307): specks and embers (additive), smoke and drops (blended), and the haze sheets. The quads are
+// camera-facing, built from `airQuads.ts`'s attributes; every material ends with the sight step.
 import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector3 } from 'three/webgpu';
-import { Fn, attribute, float, length, max, min, mix, mx_noise_float, positionWorld, select, smoothstep, step, uniform, vec3, vec4 } from 'three/tsl';
+import { Fn, attribute, float, length, max, min, mix, mx_noise_float, positionWorld, smoothstep, step, uniform, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import { CARD_BIAS, type ViewToward } from '../materials';
 import type { Sight } from '../sightNodes';
 import { PX } from './airCtx';
-import { RING_PAD } from './airQuads';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,9 +48,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
   const sightXZ: N = attribute('sightXZ', 'vec2');
   const half = size.mul(0.5);
   const facing = centre.add(right.mul(corner.x.mul(half.x))).add(up.mul(corner.y.mul(half.y)));
-  const flat = centre.add(vec3(corner.x.mul(half.x), 0, corner.y.mul(half.y)));
-  const isRing = kind.greaterThan(2.5).and(kind.lessThan(3.5));
-  const position = select(isRing, flat, facing).add(opts.toward.mul(CARD_BIAS));
+  const position = facing.add(opts.toward.mul(CARD_BIAS));
 
   const a: N = rgba.a;
   const sunAt = opts.sun ? { Ps: centre, ndl: float(1) } : undefined;
@@ -84,7 +81,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
     add.side = DoubleSide;
   }
 
-  // Blended: smoke is the 2D smoke blob, lit; a ring is a one-art-pixel line at its radius; a drop and a splash pixel are solid.
+  // Blended: smoke is the 2D smoke blob, lit; a drop and a splash pixel are solid.
   const blend = new MeshBasicNodeMaterial();
   {
     blend.positionNode = position;
@@ -95,9 +92,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
       const r = length(corner);
       // 1 at the centre, 0.45 at half the radius, 0 at the edge (the 2D smoke texture's gradient).
       const smoke = max(mix(float(1).sub(r.mul(1.1)), float(1).sub(r).mul(0.9), step(0.5, r)), 0);
-      const reach = half.x;
-      const line = step(reach.mul(r).sub(reach.sub(RING_PAD)).abs(), 0.5 * PX);
-      const shape = mix(mix(float(1), line, step(2.5, kind).mul(step(kind, 3.5))), smoke, step(kind, 2.5));
+      const shape = mix(float(1), smoke, step(kind, 2.5));
       const alpha = shape.mul(a).mul(shown);
       const colour = sight.apply(lighting.finish(rgba.rgb, lit), centre, u);
       return vec4(colour, alpha);

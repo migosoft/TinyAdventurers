@@ -1,16 +1,16 @@
-// Water drips (#307): a port of game/mood-drips.ts into world tiles. A drop falls into a pool, leaving two ripple rings (real circles
-// on the water, no 3/4 flattening) and two splash pixels.
+// Water drips (#307): a port of game/mood-drips.ts into world tiles. A drop falls into a pool, leaving two splash pixels and, the frame it
+// lands, a report in `AirParts.landed` for the water's ripple.
 import { DRIP_EVERY, MAX_DRIPS, spawnCount } from '../../game/moodmath';
 import { WATER_LEVEL } from '../dips/shape';
 import { PX } from './airCtx';
 import type { AirParts } from './airParts';
 
-/** Seconds a drop falls, and the rings last (as the 2D). */
+/** Seconds a drop falls, and the drip lasts after landing (as the 2D). */
 export const DRIP_FALL = 0.35;
 export const DRIP_RING = 1.0;
 /** Where a drop starts: above the wall tops (first guess), tiles. */
 export const DRIP_TOP = 3;
-/** The height of the rings and the splash (tiles, absolute): just above the water's surface, which is at WATER_LEVEL, below the floor. */
+/** The height the drop falls to and the splash starts from (tiles, absolute): just above the water's surface, which is at WATER_LEVEL, below the floor. */
 export const WATER_Y = WATER_LEVEL + 0.01;
 /** The drop's width in tiles (1 art px); the splash pixels are the same. */
 export const DROP_SIZE = PX;
@@ -18,8 +18,7 @@ export const DROP_SIZE = PX;
 export const DROP_RGB = 0xd8ecff;
 export const DROP_ALPHA = 0.85;
 export const SPLASH_ALPHA = 0.8;
-export const RING_ALPHA = 0.7;
-/** The splash lasts this share of the rings' time, and hops this high (px; 2D). */
+/** The splash lasts this share of the drip's time after landing, and hops this high (px; 2D). */
 const SPLASH_SHARE = 0.3;
 const SPLASH_HOP = 3;
 
@@ -46,7 +45,7 @@ export class Drips {
 
   /**
    * Drops fall into the `water` tiles in view (about one per tile per `DRIP_EVERY` s), up to `MAX_DRIPS` at once; `on` false:
-   * none new, none shown. Writes the drops and rings of `parts`.
+   * none new, none shown. Writes the drops and the landings of `parts`.
    */
   step(dt: number, water: readonly (readonly [number, number])[], on: boolean, parts: AirParts): void {
     let c: number;
@@ -61,9 +60,9 @@ export class Drips {
       this.spawned++;
     }
     const drops = parts.drops;
-    const rings = parts.rings;
+    const landed = parts.landed;
     drops.count = 0;
-    rings.count = 0;
+    landed.count = 0;
     const drop = (x: number, y: number, z: number, a: number, splash: number) => {
       const i = drops.count++;
       drops.pos[i * 3] = x;
@@ -73,17 +72,9 @@ export class Drips {
       drops.alpha[i] = a;
       drops.splash[i] = splash;
     };
-    const ring = (x: number, z: number, kk: number, w: number) => {
-      if (kk <= 0 || kk >= 1) return;
-      const i = rings.count++;
-      rings.pos[i * 3] = x;
-      rings.pos[i * 3 + 1] = WATER_Y;
-      rings.pos[i * 3 + 2] = z;
-      rings.radius[i] = ((2 + w * kk) / 2) * PX;
-      rings.alpha[i] = RING_ALPHA * (1 - kk);
-    };
     for (let i = this.n - 1; i >= 0; i--) {
       const d = this.drips[i];
+      const before = d.t;
       d.t += dt;
       if (d.t < DRIP_FALL) {
         if (on) {
@@ -100,8 +91,12 @@ export class Drips {
         continue;
       }
       if (!on) continue;
-      ring(d.x, d.z, k, 12);
-      ring(d.x, d.z, (k - 0.2) / 0.8, 7);
+      // The frame the drop reaches the water: once, for the water's ripple.
+      if (before < DRIP_FALL) {
+        const j = landed.count++;
+        landed.pos[j * 2] = d.x;
+        landed.pos[j * 2 + 1] = d.z;
+      }
       // Splash: two droplets hop up and fall back in the first moments.
       if (k < SPLASH_SHARE) {
         const h = Math.sin((k / SPLASH_SHARE) * Math.PI) * SPLASH_HOP * PX;

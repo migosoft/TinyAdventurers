@@ -30,7 +30,7 @@ describe('Air3d', () => {
     let drips = 0;
     for (let i = 0; i < 600; i++) {
       const p = air.step(make(i * 0.05));
-      drips = Math.max(drips, p.drops.count + p.rings.count);
+      drips = Math.max(drips, p.drops.count);
       if (i === 599) {
         expect(p.specks.count).toBeGreaterThan(0);
         expect(p.puffs.count).toBeGreaterThan(0);
@@ -48,7 +48,7 @@ describe('Air3d', () => {
       const i = make(t, { kinds: 'pollen', drift: [0.1, 0] });
       return i;
     });
-    any = parts.puffs.count + parts.embers.count + parts.drops.count + parts.rings.count;
+    any = parts.puffs.count + parts.embers.count + parts.drops.count;
     expect(any).toBe(0);
     expect(air.counts.smoke + air.counts.embers + air.counts.drips).toBe(0);
     expect(parts.specks.count).toBeGreaterThan(0);
@@ -58,7 +58,7 @@ describe('Air3d', () => {
     ['dust', (p) => p.specks.count],
     ['smoke', (p) => p.puffs.count],
     ['embers', (p) => p.embers.count],
-    ['drips', (p) => p.drops.count + p.rings.count],
+    ['drips', (p) => p.drops.count],
   ];
   for (const [key, count] of cases) {
     it(`gives zero of its part with ${key} off`, () => {

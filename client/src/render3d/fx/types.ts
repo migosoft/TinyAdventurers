@@ -38,6 +38,8 @@ export interface DrawnFig {
   animT: number;
   effects: number;
   alpha: number;
+  /** True while the figure dashes (the own hero: from prediction). */
+  dashing: boolean;
   model: boolean;
   side: number;
   def: FigureDef;
