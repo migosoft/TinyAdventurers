@@ -7,7 +7,7 @@ import { barOf } from '../game/barName';
 import { BODY_RISE, floatOf, onOwnHero } from '../game/damage';
 import type { PictureEv } from '../run/view';
 import { has } from '../game/effectBits';
-import { SOUND_TEXT } from '../game/effects';
+import { SOUND_TEXT } from '../game/fxLooks';
 import type { UseHint } from '../game/useHint';
 import { CHARM_COLOR, FLOAT, popScale, WORLD_TEXT, Z_EVERY, Z_LIFE, Z_RISE, type WorldTextKind } from '../game/worldText';
 import type { EntState } from '../game/world';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, FLAG } from '../generated/defs';
-import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, flameTip, mimicPose, torchFrame, torchOffset } from './objectPose';
+import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, mimicPose, torchFrame } from './objectPose';
 
 const fresh = () => ({ lastHop: -1, wakeFx: false });
 
@@ -33,14 +33,6 @@ describe('barrelPose', () => {
 });
 
 describe('torch', () => {
-  it('flameTip keeps its three cases', () => {
-    expect(flameTip(56, 48.5, 0)).toEqual([56.5, 29]);
-    expect(flameTip(16.5, 152, 1)).toEqual([18.5, 137]);
-    expect(flameTip(191.5, 152, 2)).toEqual([190.5, 137]);
-  });
-  it('offsets by side', () => {
-    expect(torchOffset(2)).toEqual([-1, 2, true]);
-  });
   it('torchFrame cycles at 8 fps, or is out', () => {
     const f = ['a', 'b', 'c'];
     expect(torchFrame(true, 0, f)).toBe('a');

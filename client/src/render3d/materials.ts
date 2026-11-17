@@ -82,8 +82,6 @@ export interface WorldMaterial {
 export interface FlatTexel {
   /** The floor or ground texel (rgba) of the surface point. */
   texel: N;
-  /** The surface's uv in atlas px. */
-  p0: N;
   /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
   smooth: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
@@ -122,7 +120,6 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
   const texel = mix(atlasTexel, ground, weight(isGround));
   return {
     texel,
-    p0,
     smooth,
     setGround(nearest, linear) {
       groundNear.value = nearest;

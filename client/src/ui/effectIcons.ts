@@ -70,5 +70,3 @@ export function effectIconSvg(id: number, px: number): string {
 export function effectIconDataUri(id: number, px: number): string {
   return 'data:image/svg+xml;base64,' + btoa(effectIconSvg(id, px));
 }
-
-export const iconTextureKey = (id: number) => `fx-icon-${id}`;

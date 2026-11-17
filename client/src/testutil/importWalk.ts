@@ -1,6 +1,6 @@
-// Test helper: reads the import graph of the client sources (used by the tests that keep Phaser out of a module).
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+// Test helper: reads the import graph of the client sources (used by the tests that guard what a module may import).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export const SRC = join(__dirname, '..');
 
@@ -11,14 +11,5 @@ export function specifiers(src: string): string[] {
   for (const m of src.matchAll(re)) if (!m[1] && !m[2]) out.push(m[3]);
   return out;
 }
-
-export function resolve(from: string, spec: string): string | null {
-  const base = join(dirname(from), spec);
-  for (const c of [`${base}.ts`, join(base, 'index.ts')]) if (existsSync(join(SRC, c))) return c;
-  return null;
-}
-
-/** A relative import of a non-code file; no code in it can reach phaser. */
-export const isAsset = (spec: string): boolean => /\.(css|png|json|wgsl|glsl|svg)$/.test(spec.split('?')[0]);
 
 export const read = (f: string): string => readFileSync(join(SRC, f), 'utf8');

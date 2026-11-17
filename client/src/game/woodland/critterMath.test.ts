@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
 import { rng } from '../covemath';
-import { beeAt, butterflyAt, butterflyHomes, flowerPatches, WING_COLOURS } from './critterMath';
+import { beeParams, beePos, butterflyHomes, flowerPatches, flyParams, flyPos, WING_COLOURS, type Pt, type Rect } from './critterMath';
+
+/** Bee `i` at time `t` (s) around `flower`. */
+const beeAt = (i: number, t: number, flower: Pt, seed: number): Pt => beePos(beeParams(i, seed), t, flower, { x: 0, y: 0 });
+/** Butterfly `i` at time `t` (s) wandering inside `bounds` (px). */
+const butterflyAt = (i: number, t: number, seed: number, bounds: Rect) => flyPos(flyParams(i, seed, bounds), t, bounds, { x: 0, y: 0, open: false, landed: false, ground: 0 });
 
 const bounds = { x: 100, y: 100, w: 190, h: 190 };
 

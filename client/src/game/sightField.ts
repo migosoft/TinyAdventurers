@@ -1,16 +1,9 @@
 // The pure sight functions of the 2D view, without Phaser (#305): the polygon wedge geometry, the scanline
 // raster and blur of the grey field, the mask resolution, the soft shadow's test and the haze look. The 2D mask
 // files (visionmask.ts, shademask.ts, unseenfx.ts) re-export them; the 3D view (render3d) imports them from here.
-import { inside } from '../sim/vispoly';
-import type { View } from '../sim/view';
 
 /** How dark the soft shadow is (alpha of black). */
 export const SHADE = 0.3;
-
-/** Is the point (world px) in the soft shadow: inside the hard polygon and outside the full one? */
-export function shadeCovers(hard: View, all: View, x: number, y: number): boolean {
-  return inside(hard.polygon, hard.px, hard.py, x, y) && !inside(all.polygon, all.px, all.py, x, y);
-}
 
 /** What unseen ground looks like. `blurPx` is in world pixels (the canvas is at screen resolution and the integer zoom lives on the camera). */
 export interface HazeLook {

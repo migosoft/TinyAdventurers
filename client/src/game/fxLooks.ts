@@ -1,5 +1,8 @@
-// Colours, looks and small pure functions the 2D effects and the 3D effects (#308) both use. Phaser-free: `render3d/` may import it.
+// Colours, looks and small pure functions of the 3D effects (#308).
 import { EFFECT_LOOK, KIND } from '../generated/defs';
+
+/** Sound text (the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
+export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
 
 /** The lich's gloom colours. */
 export const GLOOM = { dark: 0x2a0a3a, mid: 0x5a1a8a, light: 0xa060f0, spark: 0xe0c0ff };
@@ -42,23 +45,12 @@ function hash01(seed: number, i: number): number {
   return (h >>> 0) / 0x100000000;
 }
 
-/** Point `i` of `flameSpots(bodyW, bodyH, n, seed)` written into `out` (allocation-free: the 3D view draws from it each frame). */
+/** Flame spot `i` on a body `bodyW` x `bodyH` px (feet at y 0, upwards negative, x centred), mostly on its lower two thirds, written into `out` (allocation-free: the 3D view draws from it each frame). Deterministic for a `seed`. */
 export function flameSpotAt(bodyW: number, bodyH: number, i: number, seed: number, out: [number, number]): void {
   const u = hash01(seed, i * 2);
   const v = hash01(seed, i * 2 + 1);
   out[0] = (u - 0.5) * bodyW * 0.8;
   out[1] = -bodyH * (0.1 + 0.75 * v * v);
-}
-
-/** `n` points on a body `bodyW` x `bodyH` px (feet at y 0, upwards negative, x centred), mostly on its lower two thirds: where the flames of a burning figure sit. Deterministic for a `seed`. */
-export function flameSpots(bodyW: number, bodyH: number, n: number, seed: number): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  for (let i = 0; i < n; i++) {
-    const p: [number, number] = [0, 0];
-    flameSpotAt(bodyW, bodyH, i, seed, p);
-    out.push(p);
-  }
-  return out;
 }
 
 /** The golden afterimage of an Accelerated figure. */

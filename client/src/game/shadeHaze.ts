@@ -15,8 +15,6 @@ export function silhouetteAlpha(t: number): number {
   return SILHOUETTE_ALPHA_FROM + (SILHOUETTE_ALPHA_TO - SILHOUETTE_ALPHA_FROM) * k;
 }
 
-/** The veil's colour: pure darkness. */
-export const VEIL_COLOR = 0x000000;
 /** Strand px per segment: short while the Shade stands (a cloud), long while it moves (streaming). */
 const SEG_IDLE = 1.6;
 const SEG_MOVE = 3;
@@ -130,98 +128,7 @@ export class VeilStrands {
   }
 }
 
-/** A strand pixel's alpha `f` of the way from root to tip: solid, then two see-through steps; 0 where the dither leaves a gap. */
-export function veilAlpha(f: number, x: number, y: number): number {
-  if (f < 0.45) return 1;
-  if (f < 0.75) return 0.6;
-  return (x + y) % 2 === 0 ? 0.3 : 0;
-}
-
-/** The cloth between two back strands: dark at the body, thinning out to a dithered edge. */
-export function sheetAlpha(f: number, x: number, y: number): number {
-  if (f < 0.4) return 0.55;
-  if (f < 0.7) return 0.35;
-  return (x + y) % 2 === 0 ? 0.2 : 0;
-}
-
 type Pt = { x: number; y: number };
-
-/** Every whole pixel of a strand, root to tip, with how far along it lies (0 to 1). About 3 px wide at the root, 1 at the tip. */
-export function strandPixels(pts: readonly Pt[]): { x: number; y: number; f: number }[] {
-  const out: { x: number; y: number; f: number }[] = [];
-  const seen = new Set<string>();
-  const add = (x: number, y: number, f: number) => {
-    const key = `${x},${y}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push({ x, y, f });
-  };
-  const n = pts.length - 1;
-  for (let i = 0; i < n; i++) {
-    const [a, b] = [pts[i], pts[i + 1]];
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))));
-    for (let k = 0; k < steps; k++) {
-      const u = k / steps;
-      const f = (i + u) / n;
-      const x = Math.round(a.x + (b.x - a.x) * u);
-      const y = Math.round(a.y + (b.y - a.y) * u);
-      add(x, y, f);
-      if (f < 0.6) add(x, y + 1, f);
-      if (f < 0.3) add(x, y - 1, f);
-    }
-  }
-  const tip = pts[n];
-  add(Math.round(tip.x), Math.round(tip.y), 1);
-  return out;
-}
-
-/** Is (x, y) inside the polygon (even-odd)? */
-function inside(poly: readonly Pt[], x: number, y: number): boolean {
-  let c = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [a, b] = [poly[i], poly[j]];
-    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) c = !c;
-  }
-  return c;
-}
-
-/**
- * The veil as whole pixels and their alpha, one map per layer (`x,y` keys; a pixel covered twice keeps the darker):
- * behind the figure a solid core between the back strands' roots, the cloth between neighbouring back strands (a closed ring)
- * and the strands over it; in front the wrapping strands.
- */
-export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, number>; front: Map<string, number> } {
-  const back = new Map<string, number>();
-  const front = new Map<string, number>();
-  const put = (m: Map<string, number>, x: number, y: number, a: number) => {
-    if (a <= 0) return;
-    const key = `${x},${y}`;
-    if ((m.get(key) ?? 0) < a) m.set(key, a);
-  };
-  const backs = lines.filter((l) => !l.front);
-  // The core between the roots: solid, so there is no hole where the body is (it shows when the body goes at death).
-  const core = backs.map((l) => l.pts[0]);
-  if (core.length > 2) {
-    const xs = core.map((p) => p.x);
-    const ys = core.map((p) => p.y);
-    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
-      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) if (inside(core, x + 0.5, y + 0.5)) put(back, x, y, 1);
-  }
-  for (let s = 0; s < backs.length; s++) {
-    const [A, B] = [backs[s].pts, backs[(s + 1) % backs.length].pts];
-    const n = Math.min(A.length, B.length) - 1;
-    for (let i = 0; i < n; i++) {
-      const quad = [A[i], A[i + 1], B[i + 1], B[i]];
-      const xs = quad.map((p) => p.x);
-      const ys = quad.map((p) => p.y);
-      for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
-        for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++)
-          if (inside(quad, x + 0.5, y + 0.5)) put(back, x, y, sheetAlpha((i + 0.5) / n, x, y));
-    }
-  }
-  for (const l of lines) for (const p of strandPixels(l.pts)) put(l.front ? front : back, p.x, p.y, veilAlpha(p.f, p.x, p.y));
-  return { back, front };
-}
 
 /** Seconds the veil takes to drift apart after the Shade dies, and how much it spreads (1 = twice its size). */
 export const VEIL_DEATH_LIFE = 1;

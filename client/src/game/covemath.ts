@@ -4,7 +4,7 @@ import type { CoveInfo } from '../generated/CoveInfo';
 import { TILE } from '../sim/map';
 
 /** The room's floor area in px (origin = its top-left floor pixel) and the trunk foot in the same space. */
-export interface CoveSpec { w: number; h: number; tree: { x: number; y: number }; seed: number }
+interface CoveSpec { w: number; h: number; tree: { x: number; y: number }; seed: number }
 
 export { COVE_TREE_FOOT } from './vegetation';
 

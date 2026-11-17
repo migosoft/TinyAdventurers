@@ -1,5 +1,4 @@
-// Sizes and styles of every text drawn in the world (Phaser), in world px.
-// At the 1280 x 720 smoke size the camera zoom is 2, so 6.5 world px is about 13 screen px.
+// Sizes and styles of every text drawn in the world, in world px.
 export const WORLD_TEXT = {
   tag: { size: 6.5, style: "600" },
   number: { size: 7, style: "800" },
@@ -13,10 +12,7 @@ export const WORLD_TEXT = {
 
 export type WorldTextKind = keyof typeof WORLD_TEXT;
 
-/** Text texture resolution: at least the camera zoom (2 at 1280 x 720, 4 at 2560 x 1440, 6 at 3840 x 2160; larger zooms upscale a little), so text is never upscaled. */
-export const TEXT_RESOLUTION = 4;
-
-/** The sleeper's Z: one every `Z_EVERY` s, each living `Z_LIFE` s and rising `Z_RISE` px (shared by the 2D and 3D views). */
+/** The sleeper's Z: one every `Z_EVERY` s, each living `Z_LIFE` s and rising `Z_RISE` px. */
 export const Z_EVERY = 0.6;
 export const Z_LIFE = 1.2;
 export const Z_RISE = 10;
@@ -40,20 +36,4 @@ export function popScale(age: number): number {
   if (age >= POP_TIME) return 1;
   const k = Math.max(0, age) / POP_TIME;
   return POP_FROM - (POP_FROM - 1) * (1 - (1 - k) * (1 - k));
-}
-
-/**
- * The game runs pixelArt (NEAREST), which turns Inter into a jagged mess. A Text re-uploads its canvas
- * on every change and that resets the filter, so LINEAR is set again after each update. (1 = FilterMode.LINEAR.)
- */
-export function smoothText<T extends { updateText?: () => unknown; texture?: { setFilter?: (f: number) => unknown } }>(t: T): T {
-  const update = t.updateText?.bind(t);
-  if (!update || !t.texture?.setFilter) return t; // a test double
-  t.updateText = () => {
-    const r = update();
-    t.texture?.setFilter?.(1);
-    return r;
-  };
-  t.texture.setFilter(1);
-  return t;
 }

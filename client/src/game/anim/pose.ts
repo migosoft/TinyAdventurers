@@ -11,7 +11,7 @@ import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlph
 import { SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 
 /** Pack weapons are large next to the tiny figures; draw them smaller. */
-export const WEAPON_SCALE = 0.6;
+const WEAPON_SCALE = 0.6;
 /** The melee swing of a pack figure lasts this long (s). */
 export const MELEE_T = 0.18;
 const HALF_PI = Math.PI / 2;
@@ -140,7 +140,7 @@ export function shade(k: number, to: number, mix: number): number {
 }
 
 /** Horizontal origin of the body: the hips for figures not centred in their frames (`hipX`, mirrored when facing left). */
-export function originXOf(d: FigureDef, w: number, left: boolean): number {
+function originXOf(d: FigureDef, w: number, left: boolean): number {
   if (d.hipX === undefined) return 0.5;
   return (left ? w - d.hipX - 0.5 : d.hipX + 0.5) / w;
 }

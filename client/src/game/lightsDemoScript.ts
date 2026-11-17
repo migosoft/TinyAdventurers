@@ -1,5 +1,5 @@
 // What the lights demo shows, apart from how it is drawn: the board, the torches, the fireball, the frost bolt and the explosion
-// flash. The 2D page ?lights (LightsDemoScene) and the 3D page ?r3d=lights (render3d/lightsStage.ts) both play this script.
+// flash. The 3D page ?r3d=lights (render3d/lightsStage.ts) plays this script.
 import { LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { TILE, TileMap } from '../sim/map';
@@ -8,17 +8,17 @@ import { TERRAIN } from './terrain-layers';
 export const W = 30;
 export const H = 20;
 export const LOOP = 4;
-export const SWITCH = 3;
+const SWITCH = 3;
 /** How long the explosion at the fireball's turnaround flashes (the server's `BLAST_FLASH`). */
 export const FLASH = 0.4;
 /** The viewer stands in the middle of room 1 (tile). */
 export const VIEWER: [number, number] = [7, 9];
 export const CORRIDOR_Y = 9;
 export const BLUE = 0x3060ff;
-export const FIRE_COLOUR = 0xff7020;
+const FIRE_COLOUR = 0xff7020;
 export const FROST_COLOUR = 0x78c8ff;
 /** The explosion's x: the dark room's doorway. */
-export const BOOM_X = 15.5 * TILE;
+const BOOM_X = 15.5 * TILE;
 
 export function buildMap(): TileMap {
   const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
@@ -57,7 +57,7 @@ export function blueOn(t: number): boolean {
 }
 
 /** The fireball (out along the corridor to the far end of room 2 and back), the frost bolt (a circle in room 1) and the explosion's clock, at `t`. */
-export function boltsAt(t: number): { fx: number; fy: number; cx: number; cy: number; sinceBoom: number } {
+function boltsAt(t: number): { fx: number; fy: number; cx: number; cy: number; sinceBoom: number } {
   const p = (t % LOOP) / LOOP;
   const tri = p < 0.5 ? p * 2 : 2 - p * 2;
   const a = p * Math.PI * 2;

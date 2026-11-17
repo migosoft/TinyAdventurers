@@ -5,7 +5,7 @@
 // (dragonRig.ts, demonFrames.ts).
 // The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
 import { ANIM, CONST, KIND } from "../../generated/defs";
-import { GLOOM } from "../effects";
+import { GLOOM } from "../fxLooks";
 import type { ItemId } from "../../generated/ItemId";
 import { ITEMS } from "../../generated/progression";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";

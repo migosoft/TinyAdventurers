@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
-import { butterflyAt, BEES_PER_PATCH, butterflyHomes, flowerPatches } from '../game/woodland/critterMath';
+import { BEES_PER_PATCH, butterflyHomes, flowerPatches, flyParams, flyPos } from '../game/woodland/critterMath';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { flowerSpots } from '../game/woodland/ground';
 import { TILE, TileMap } from '../sim/map';
@@ -128,7 +128,7 @@ describe('critter heights', () => {
     const bounds = { x: 0, y: 0, w: 192, h: 192 };
     let landed = 0, flying = 0;
     for (let t = 0; t < 60; t += 0.1) {
-      const b = butterflyAt(0, t, 5, bounds);
+      const b = flyPos(flyParams(0, 5, bounds), t, bounds, { x: 0, y: 0, open: false, landed: false, ground: 0 });
       if (b.landed) { landed++; expect(butterflyLift(b)).toBeLessThanOrEqual(0.02); }
       else { flying++; expect(butterflyLift(b)).toBeCloseTo((b.ground - b.y) / 16 + 0.25, 9); }
     }

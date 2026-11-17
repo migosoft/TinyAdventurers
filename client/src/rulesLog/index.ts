@@ -16,9 +16,9 @@ const storage = (): Storage | null => {
 };
 
 /**
- * The rules log, client side, without Phaser: opt-in, keys, buffer and panel. Both views host it through a few one-line hooks
- * (see `boundary.test.ts`): the snapshot feed comes from the run session, the key from the host, the tags are drawn by the view
- * (`phaserTags.ts` in 2D, the overlay layout in 3D).
+ * The rules log, client side: opt-in, keys, buffer and panel. The 3D host hosts it through a few one-line hooks
+ * (see `boundary.test.ts`): the snapshot feed comes from the run session, the key from the host, the tags are drawn by the
+ * overlay layout.
  */
 export class RulesLog {
   private prefs: LogPrefs;

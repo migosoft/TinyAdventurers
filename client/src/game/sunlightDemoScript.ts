@@ -1,5 +1,4 @@
-// The map and the fixtures of the ?sunlight demo (#156), without Phaser: the 2D scene (SunlightDemoScene) and the
-// 3D stage both use them.
+// The map and the fixtures of the sunlight demo (#156), which the 3D stage (?r3d=sunlight) plays.
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 
@@ -14,12 +13,7 @@ export const SECOND = { x: 3, y: 12 };
 export const SUNLIGHT_VIEWER = { x: 7.5 * TILE, y: 8.5 * TILE };
 
 // The values the demo's buttons cycle through.
-export const PATCHES = [1.5, 2, 3];
-export const SLANTS = [0, 1, 1.5, 2];
-export const CLOUDS: [string, number][] = [['off', 0], ['soft', 0.3], ['medium', 0.45], ['strong', 0.6]];
 export const HEIGHTS = [4, 5, 6, 7];
-export const STYLES = ['fan', 'parallel'] as const;
-export const GLOWS = [1, 1.5, 2];
 export const OFTEN: [number, number][] = [[8, 25], [2, 4]];
 
 export function sunlightMap(): TileMap {

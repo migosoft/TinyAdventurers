@@ -1,5 +1,5 @@
-// The pure parts of the woodland critters (#203, #306): where the bees and butterflies are at a time. No Phaser, so the 2D
-// view (critters.ts) and the 3D view share them. Every position is a pure function of time and seed.
+// The pure parts of the woodland critters (#203, #306): where the bees and butterflies are at a time. Every position is a
+// pure function of time and seed.
 import { TILE_ID } from '../../generated/defs';
 import { TILE, type TileMap } from '../../sim/map';
 import { rng } from '../covemath';
@@ -41,17 +41,12 @@ export function beeParams(i: number, seed: number): BeeParams {
   const r = rng(seedOf(seed, i, 1));
   return { radius: 4 + r() * 5, w: TAU / (1 + r()), p: r() * TAU, p2: r() * TAU };
 }
-/** Writes bee position at `t` into `out` (no allocation). */
+/** Writes the bee's position at `t` into `out` (no allocation): a small wobbling loop of radius 4-9 px (period 1-2 s) around `flower`, at most 10 px away. */
 export function beePos(q: BeeParams, t: number, flower: Pt, out: Pt): Pt {
   const wob = 0.1 * q.radius * Math.sin(q.w * 2.3 * t + q.p2);
   out.x = flower.x + (q.radius + wob) * Math.cos(q.w * t + q.p);
   out.y = flower.y + (q.radius * 0.8 + wob) * Math.sin(q.w * t + q.p);
   return out;
-}
-
-/** Bee `i` at time `t` (s): a small wobbling loop of radius 4-9 px (period 1-2 s) around `flower`; at most 10 px away. */
-export function beeAt(i: number, t: number, flower: Pt, seed: number): Pt {
-  return beePos(beeParams(i, seed), t, flower, { x: 0, y: 0 });
 }
 
 /** `y` includes the flap lift; `ground` is the height without it (what it is sorted by). */
@@ -102,12 +97,6 @@ export function flyPos(q: FlyParams, t: number, bounds: Rect, out: Butterfly): B
   out.landed = landed;
   return out;
 }
-
-/** Butterfly `i` at time `t` (s) wandering inside `bounds` (px). */
-export function butterflyAt(i: number, t: number, seed: number, bounds: Rect): Butterfly {
-  return flyPos(flyParams(i, seed, bounds), t, bounds, { x: 0, y: 0, open: false, landed: false, ground: 0 });
-}
-
 
 /** The butterflies' homes: one per TILES_PER_BUTTERFLY walkable tiles (floor and road), each a wander box around a seeded tile, with its wing colour. */
 export function butterflyHomes(map: TileMap, seed: number): { bounds: Rect; colour: number }[] {

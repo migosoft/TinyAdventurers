@@ -17,11 +17,11 @@ import type { Pick } from '../generated/Pick';
 import { BOSS_TEXT, LEVEL_TEXT, className } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
-/** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
-const BOSS_FIG: Record<BossId, [string, string, number]> = {
-  Demon: ['demon', '', 2],
-  Lich: ['lich', '', 3],
-  Dragon: ['dragon', '', 2],
+/** Figure (atlas frame prefix) and preview scale. */
+const BOSS_FIG: Record<BossId, [figure: string, scale: number]> = {
+  Demon: ['demon', 2],
+  Lich: ['lich', 3],
+  Dragon: ['dragon', 2],
 };
 
 const LEVEL_BLURB: Record<LevelId, string> = {
@@ -303,9 +303,8 @@ export class Lobby {
       card.className = `boss-card${room.boss === b ? ' selected' : ''}`;
       card.disabled = !isHost;
       if (b) {
-        const [fig, filter, scale] = BOSS_FIG[b];
+        const [fig, scale] = BOSS_FIG[b];
         const c = spritePreview(this.atlas, fig, scale);
-        c.style.filter = filter;
         card.append(c);
       } else {
         const q = document.createElement('div');

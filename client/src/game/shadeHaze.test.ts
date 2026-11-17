@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AMBUSH_WARNING, dissolveVeil, restingVeil, sheetAlpha, silhouetteAlpha, strandPixels, veilAlpha, veilPixels, VEIL_DEATH_LIFE, VeilStrands } from './shadeHaze';
+import { AMBUSH_WARNING, dissolveVeil, restingVeil, silhouetteAlpha, VEIL_DEATH_LIFE, VeilStrands } from './shadeHaze';
 
 /** A steady pseudo-random source, so the tests do not flake. */
 function lcg(seed = 7): () => number {
@@ -61,32 +61,6 @@ describe('shade veil', () => {
     expect(v.lines).toEqual([]);
     v.step({ x: 200, y: 50 }, 1, 1 / 30);
     for (const l of v.lines) expect(Math.hypot(l.pts[0].x - 200, l.pts[0].y - 50)).toBeLessThan(14);
-  });
-  it('is solid black at the root and fades to a dithered edge at the tip', () => {
-    expect(veilAlpha(0, 0, 0)).toBe(1);
-    expect(veilAlpha(0.6, 0, 0)).toBe(0.6);
-    expect([veilAlpha(0.9, 0, 0), veilAlpha(0.9, 1, 0)].sort()).toEqual([0, 0.3]);
-  });
-  it('strandPixels covers the strand in whole pixels, wider near the root, root to tip', () => {
-    const px = strandPixels([{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 6, y: 0 }]);
-    for (const p of px) expect([Number.isInteger(p.x), Number.isInteger(p.y)]).toEqual([true, true]);
-    expect(px.filter((p) => p.y === 0).map((p) => p.x)).toEqual([0, 1, 2, 3, 4, 5, 6]);
-    expect(px.some((p) => p.x === 0 && p.y === 1)).toBe(true);
-    expect(px.some((p) => p.x === 6 && p.y === 1)).toBe(false);
-    expect(px.at(-1)?.f).toBe(1);
-  });
-  it('veilPixels fills a solid core and the cloth between back strands, fainter than the strands, and keeps the wrapping strands apart', () => {
-    const v = new VeilStrands(lcg());
-    settle(v, { x: 100, y: 100 }, 1);
-    const { back, front } = veilPixels(v.lines);
-    const sheet = [...back.values()].filter((a) => a < 0.6 && a > 0);
-    expect(sheet.length).toBeGreaterThan(20);
-    expect(Math.max(...sheet)).toBeLessThanOrEqual(sheetAlpha(0, 0, 0));
-    expect([...back.values()]).toContain(1);
-    // No hole in the middle: every pixel round the body's centre is solid.
-    for (let y = 92; y <= 95; y++) for (let x = 99; x <= 101; x++) expect(back.get(`${x},${y}`)).toBe(1);
-    expect(front.size).toBeGreaterThan(0);
-    for (const a of [...back.values(), ...front.values()]) expect(a).toBeLessThanOrEqual(1);
   });
 });
 

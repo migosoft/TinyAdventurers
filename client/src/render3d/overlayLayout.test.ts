@@ -3,7 +3,7 @@ import { EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
 import type { EntState } from '../game/world';
 import type { UseHint } from '../game/useHint';
 import type { FigureAnchor } from './figures';
-import { SOUND_TEXT } from '../game/effects';
+import { SOUND_TEXT } from '../game/fxLooks';
 import { popScale, WORLD_TEXT } from '../game/worldText';
 import { BODY_RISE } from '../game/damage';
 import type { PictureEv } from '../run/view';

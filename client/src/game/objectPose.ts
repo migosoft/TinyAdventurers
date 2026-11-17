@@ -1,6 +1,4 @@
-// Poses of the board's objects (chests, barrels, mimics, torches) as pure
-// functions, free of Phaser: the 2D views (chest.ts, barrel.ts, mimic.ts,
-// torch.ts) draw from them, and so can the 3D view.
+// Poses of the board's objects (chests, barrels, mimics, torches) as pure functions; the 3D view draws from them.
 import { ANIM, CONST, FLAG } from '../generated/defs';
 
 // ---- chest ----
@@ -54,17 +52,6 @@ export function barrelPose(anim: number, animMs: number): BarrelPose {
 
 // ---- torch ----
 
-/** Where the sprite's foot goes relative to the torch's position, and whether it is mirrored, by side. */
-export function torchOffset(side: number): [dx: number, dy: number, flip: boolean] {
-  return side === 0 ? [0, -3, false] : side === 1 ? [1, 2, false] : [-1, 2, true];
-}
-
-/** The tip of the flame (px) for a torch at (x, y) on `side`: the frames' flame reaches about 17 px above the foot, half a pixel towards the flame side. */
-export function flameTip(x: number, y: number, side: number): [number, number] {
-  const [dx, dy, flip] = torchOffset(side);
-  return [Math.round(x + dx) + (flip ? -0.5 : 0.5), Math.round(y + dy) - 17];
-}
-
 const TORCH_FPS = 8;
 
 /** The torch's atlas frame: a flame frame by time `t` (s) while lit, else `torch_out`. */
@@ -78,7 +65,7 @@ export function torchFrame(lit: boolean, t: number, frames: readonly string[]): 
 export const HOP_H = 7;
 
 /** Hop cycle split (fractions of one cycle, from the server). The mimic moves only while airborne. */
-export const HOP_CYCLE = CONST.MIMIC_HOP_CYCLE;
+const HOP_CYCLE = CONST.MIMIC_HOP_CYCLE;
 export const HOP = { crouch: CONST.MIMIC_HOP_AIR_START, air: CONST.MIMIC_HOP_AIR_END, land: CONST.MIMIC_HOP_AIR_END + 0.15 };
 export const BITE_T = 0.35;
 export const WAKE_T = CONST.MIMIC_WAKE_T;
@@ -103,7 +90,7 @@ export interface MimicState {
 }
 
 /** What the server sends for a mimic (an EntSnap, unpacked). */
-export interface MimicSnap {
+interface MimicSnap {
   x: number;
   y: number;
   anim: number;
