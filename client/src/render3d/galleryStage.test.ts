@@ -162,12 +162,12 @@ describe('the gallery stage', () => {
     expect([q.crowd, q.crowdAs, q.light, q.at]).toEqual([2, 'models', 'work', null]);
   });
 
-  it('has the model block: 9 kinds from ID.model, each cycling through the states like the card rows', () => {
-    const rows = galleryEnts(0.1, null).filter((e) => inRange(e.id, ID.model, 9));
-    expect(rows.map((e) => e.id)).toEqual(Array.from({ length: 9 }, (_, i) => 4000 + i));
+  it('has the model block: 11 kinds from ID.model, each cycling through the states like the card rows', () => {
+    const rows = galleryEnts(0.1, null).filter((e) => inRange(e.id, ID.model, 11));
+    expect(rows.map((e) => e.id)).toEqual(Array.from({ length: 11 }, (_, i) => 4000 + i));
     expect(ID.model).toBe(4000);
     expect(rows.map((e) => modelKeyOf(e.kind)).every((k) => k !== null)).toBe(true);
-    expect(new Set(rows.map((e) => modelKeyOf(e.kind))).size).toBe(7);
+    expect(new Set(rows.map((e) => modelKeyOf(e.kind))).size).toBe(9);
     expect(rows.map((e) => e.kind).sort((a, b) => a - b)).toEqual(Object.keys(MODEL_OF_KIND).map(Number).sort((a, b) => a - b));
     const anim = (t: number, s: string | null) => galleryEnts(t, s).find((e) => e.id === ID.model)!.anim;
     expect(anim(0.1, null)).toBe(ANIM.Idle);
@@ -195,12 +195,12 @@ describe('the gallery stage', () => {
 
   it('lets one figure of each kind die every 6 s and leave its skull', () => {
     const alive = (t: number) => galleryEnts(t, null).filter((e) => inRange(e.id, ID.dying, 100));
-    expect(alive(1)).toHaveLength(9);
+    expect(alive(1)).toHaveLength(11);
     expect(alive(4)).toHaveLength(0);
-    expect(alive(7)).toHaveLength(9);
-    expect(diedBetween(2.9, 3.1)).toHaveLength(9);
+    expect(alive(7)).toHaveLength(11);
+    expect(diedBetween(2.9, 3.1)).toHaveLength(11);
     expect(diedBetween(3.1, 5)).toHaveLength(0);
-    expect(diedBetween(8.9, 9.1)).toHaveLength(9);
+    expect(diedBetween(8.9, 9.1)).toHaveLength(11);
     const ev = diedBetween(2.9, 3.1)[0];
     expect(ev.t).toBe('Died');
     const e = alive(1)[0];
@@ -224,7 +224,7 @@ describe('the gallery stage', () => {
     const ents = galleryEnts(0, null, 5);
     const yes = ents.filter(is).map((e) => e.id);
     expect(yes.every((id) => id >= ID.model)).toBe(true);
-    expect(yes.filter((id) => inRange(id, ID.model, 9))).toHaveLength(9);
+    expect(yes.filter((id) => inRange(id, ID.model, 11))).toHaveLength(11);
     expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(63);
     expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
     expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);

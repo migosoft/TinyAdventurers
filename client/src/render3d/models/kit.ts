@@ -3,13 +3,13 @@
 
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { boundsOfPixels } from '../atlasBounds';
-import { buildJob, isFigureKey, isWeaponKey } from './build';
+import { buildJob, isFigureKey, isTubeKey, isWeaponKey } from './build';
 import type { FigureModel } from './model';
 import { FIT_KIND } from './table';
 import { WEAPONS, type SpritePixels } from './weapons';
 
 export interface FigureKit {
-  /** The model if it is built; otherwise null, and the build is started (once). Keys: a DescKey, 'skull', or a weapon sprite name. */
+  /** The model if it is built; otherwise null, and the build is started (once). Keys: a ModelKey, 'skull', or a weapon sprite name. */
   get(key: string): FigureModel | null;
   /** False for a key nothing can build (an unknown weapon): `get` stays null and one warning is logged. */
   known(key: string): boolean;
@@ -108,7 +108,7 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
     console.warn(`3D model ${key}: ${why}`);
   };
   const pixelsOf = (key: string): SpritePixels | null => (isWeaponKey(key) && !WEAPONS[key].art ? sprite(key) : null);
-  const known = (key: string): boolean => isFigureKey(key) || key === 'skull' || isWeaponKey(key);
+  const known = (key: string): boolean => isFigureKey(key) || isTubeKey(key) || key === 'skull' || isWeaponKey(key);
 
   const start = (key: string): void => {
     started.add(key);

@@ -6,14 +6,22 @@ import { knight } from './descs/knight';
 import { ogre } from './descs/ogre';
 import { skelet } from './descs/skelet';
 import { wizard } from './descs/wizard';
+import { deer, stag } from './descs/deer';
 import { wolf } from './descs/wolf';
+import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
+
+export type TubeKey = 'stag' | 'deer';
+export type ModelKey = DescKey | TubeKey;
+
+/** The animals built from tubes and balls (#357). */
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
 /** The game kinds that have a 3D model, and the description each one wears. */
-export const MODEL_OF_KIND: Partial<Record<number, DescKey>> = {
+export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   [KIND.Wizard]: 'wizard',
   [KIND.Paladin]: 'knight',
   [KIND.Barbarian]: 'dwarf',
@@ -23,6 +31,8 @@ export const MODEL_OF_KIND: Partial<Record<number, DescKey>> = {
   [KIND.RaisedSkeleton]: 'skelet',
   [KIND.Ogre]: 'ogre',
   [KIND.DireWolf]: 'wolf',
+  [KIND.Stag]: 'stag',
+  [KIND.Deer]: 'deer',
 };
 
 /**
@@ -39,6 +49,6 @@ export const FIT_KIND: Record<DescKey, number> = {
   wolf: KIND.DireWolf,
 };
 
-export function modelKeyOf(kind: number): DescKey | null {
+export function modelKeyOf(kind: number): ModelKey | null {
   return MODEL_OF_KIND[kind] ?? null;
 }

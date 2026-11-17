@@ -14,6 +14,14 @@ const noPixels = (): null => null;
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('createKit', () => {
+  it('builds a tube model through the runner without a card height', async () => {
+    const kit = createKit(noPixels, directRunner);
+    expect(kit.known('stag')).toBe(true);
+    expect(kit.get('stag')).toBeNull();
+    await settle();
+    expect(kit.get('stag')?.key).toBe('stag');
+  });
+
   it('builds in the background: null first, the model after the build, version up by one per arrival', async () => {
     const kit = createKit(noPixels, fake());
     expect(kit.version).toBe(0);

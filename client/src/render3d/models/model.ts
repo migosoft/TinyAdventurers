@@ -21,7 +21,11 @@ export interface ModelRange { stage: number; line: boolean; start: number; count
  * A loose piece (beard, plume, quiff, mane, tail) that bends: each point turns about `origin` (the fixed end, rest pose) by more
  * the further along `dir` it lies (`skin.w`, 0 to 1 over `len`); `k` is the page's sway, `up` which way it trails, `wag` how much it wags.
  */
-export interface BendDef { bone: number; origin: [number, number, number]; dir: [number, number, number]; len: number; k: number; up: 1 | -1; wag: number }
+export interface BendDef {
+  bone: number; origin: [number, number, number]; dir: [number, number, number]; len: number; k: number; up: 1 | -1; wag: number;
+  /** A tube model's neck: it bends as a whole about `origin`, more the nearer the head (`skin.w`). */
+  neck?: true;
+}
 
 export interface FigureModel {
   key: string;
@@ -45,6 +49,21 @@ export interface FigureModel {
   /** The description's `size`: how big the model is against its card (1 = as tall). The model path scales the card's weapon, anchors, shadow and light caster by it. */
   size: number;
   shoulderY: number; handY: number; armLength: number; armRadius: number; quad: boolean; scale: number; hipY: number; neck: [number, number];
+  // The fields below are set by tube models (tubeModel.ts) only.
+  /** The legs as bone indices (`lower` -1: none), front legs first. */
+  legs?: { upper: number; lower: number; front: boolean }[];
+  /** How high the model hops, in model px per unit of the hop. */
+  hop?: number;
+  /** The index in `bends` of the neck. */
+  neckBend?: number;
+  /** Some piece is on the hat bone (antlers): the animal butts. */
+  butt?: boolean;
+  /** Size, coat tone and the like vary from one animal to the next. */
+  varies?: boolean;
+  /** Standing height in model px (the highest point of the pieces, the hulls not counted). */
+  stands?: number;
+  /** Half length and half width of the ground oval, model px. */
+  footprint?: [number, number];
 }
 
 /** The triangles of `index` as two unbroken lists: the pieces' and the hulls' (copied into preallocated arrays: no spread, so no call-stack limit). */
