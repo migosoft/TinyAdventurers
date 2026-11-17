@@ -204,6 +204,16 @@ describe('panel', () => {
     }
   });
 
+  it('the demo and run panels have the Heat shimmer switch (#344)', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { calls, btn } = setup(DEFAULTS, mode);
+      expect(btn('Heat shimmer').getAttribute('aria-pressed')).toBe('true');
+      btn('Heat shimmer').click();
+      expect(calls[0].heat).toBe(false);
+      expect(btn('Heat shimmer').getAttribute('aria-pressed')).toBe('false');
+    }
+  });
+
   it('the tree rows (#329) show with the sky: a leaf slider with an Own button, and a Plain trees switch', () => {
     const { host, calls, panel, btn } = setup();
     const leaf = host.querySelector<HTMLInputElement>('#r3d-leaf')!;

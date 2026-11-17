@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, parseParams, reflects, toSearch, wrapYaw, type R3dParams } from './params';
+import { DEFAULTS, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
 
 describe('reflects', () => {
   it('needs the switch and a quality above Fast', () => {
@@ -108,7 +108,7 @@ describe('toSearch', () => {
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
-      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false,
+      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -193,6 +193,22 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&respawn=-2').respawn).toBe(0);
     expect(toSearch(DEFAULTS, '?r3d&dust=0&stir=0&respawn=3')).toBe('?r3d');
     expect(toSearch({ ...DEFAULTS, haze: false, respawn: 2 }, '?r3d')).toBe('?r3d&haze=0&respawn=2');
+  });
+
+  it('parses heat=0 and writes it back (#344)', () => {
+    expect(DEFAULTS.heat).toBe(true);
+    expect(parseParams('?r3d').heat).toBe(true);
+    expect(parseParams('?r3d&heat=0').heat).toBe(false);
+    expect(parseParams('?r3d&heat=bogus').heat).toBe(true);
+    expect(toSearch({ ...DEFAULTS, heat: false }, '?r3d')).toBe('?r3d&heat=0');
+    expect(toSearch(DEFAULTS, '?r3d&heat=0')).toBe('?r3d');
+  });
+
+  it('shimmers() is false on Fast and when the switch is off', () => {
+    expect(shimmers({ heat: true, quality: 'balanced' })).toBe(true);
+    expect(shimmers({ heat: true, quality: 'high' })).toBe(true);
+    expect(shimmers({ heat: true, quality: 'fast' })).toBe(false);
+    expect(shimmers({ heat: false, quality: 'balanced' })).toBe(false);
   });
 
   it('reads the reflections switch (on by default, refl=0 turns it off) and writes it back (#345)', () => {

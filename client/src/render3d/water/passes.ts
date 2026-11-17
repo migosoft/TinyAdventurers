@@ -11,17 +11,26 @@ export const WATER_LAYER = 2, CEILING_LAYER = 3;
 const VIEW_MARGIN = 1;
 
 /** Whether any box (x0, z0, x1, z1 in tiles) lies within 1 tile of the ground the screen shows. */
-export function waterInView(boxes: readonly { x0: number; z0: number; x1: number; z1: number }[], fp: Footprint): boolean {
+export function poolInView(boxes: readonly { x0: number; z0: number; x1: number; z1: number }[], fp: Footprint): boolean {
   for (const b of boxes) {
     if (b.x1 >= fp.x0 - VIEW_MARGIN && b.x0 <= fp.x1 + VIEW_MARGIN && b.z1 >= fp.z0 - VIEW_MARGIN && b.z0 <= fp.z1 + VIEW_MARGIN) return true;
   }
   return false;
 }
 
-/** The extra passes of a frame whose picture is w x h px: none without a pool in view; the mirror picture is half the size, at least 1 px. */
-export function waterPasses(inView: boolean, reflect: boolean, w: number, h: number): { copy: boolean; mirror: { w: number; h: number } | null } {
-  if (!inView) return { copy: false, mirror: null };
-  return { copy: true, mirror: reflect ? { w: Math.max(1, Math.ceil(w / 2)), h: Math.max(1, Math.ceil(h / 2)) } : null };
+/**
+ * The extra passes of a frame whose picture is w x h px: none without a pool in view. Water copies the scene and (with reflections) mirrors
+ * it at half size, at least 1 px. Lava copies it only for the heat shimmer, and never mirrors.
+ */
+export function picturePasses(
+  i: { water: boolean; lava: boolean; reflect: boolean; heat: boolean }, w: number, h: number,
+): { copy: boolean; mirror: { w: number; h: number } | null; shimmer: boolean } {
+  const shimmer = i.lava && i.heat;
+  return {
+    copy: i.water || shimmer,
+    mirror: i.water && i.reflect ? { w: Math.max(1, Math.ceil(w / 2)), h: Math.max(1, Math.ceil(h / 2)) } : null,
+    shimmer,
+  };
 }
 
 /** A camera position and target mirrored in the plane y = level; the mirror camera's up is (0, -1, 0). */

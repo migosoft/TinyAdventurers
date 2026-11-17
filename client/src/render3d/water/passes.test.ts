@@ -1,37 +1,46 @@
 import { describe, expect, it } from 'vitest';
-import { CEILING_LAYER, WATER_LAYER, mirrorPose, waterInView, waterPasses } from './passes';
+import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './passes';
 
-describe('the water passes', () => {
+const WATER = { water: true, lava: false, reflect: true, heat: true };
+
+describe('the picture passes', () => {
   it('needs nothing without a pool in view', () => {
-    expect(waterPasses(false, true, 800, 600)).toEqual({ copy: false, mirror: null });
+    expect(picturePasses({ water: false, lava: false, reflect: true, heat: true }, 800, 600)).toEqual({ copy: false, mirror: null, shimmer: false });
   });
 
-  it('copies with a pool, and mirrors at half size', () => {
-    expect(waterPasses(true, true, 801, 601)).toEqual({ copy: true, mirror: { w: 401, h: 301 } });
-  });
-
-  it('skips the mirror when asked', () => {
-    expect(waterPasses(true, false, 800, 600)).toEqual({ copy: true, mirror: null });
+  it('copies for water as before, and mirrors at half size', () => {
+    expect(picturePasses(WATER, 801, 601)).toEqual({ copy: true, mirror: { w: 401, h: 301 }, shimmer: false });
+    expect(picturePasses({ ...WATER, reflect: false }, 800, 600)).toEqual({ copy: true, mirror: null, shimmer: false });
   });
 
   it('never makes a 0 px target', () => {
-    expect(waterPasses(true, true, 1, 1).mirror).toEqual({ w: 1, h: 1 });
-    expect(waterPasses(true, true, 0, 0).mirror).toEqual({ w: 1, h: 1 });
+    expect(picturePasses(WATER, 1, 1).mirror).toEqual({ w: 1, h: 1 });
+    expect(picturePasses(WATER, 0, 0).mirror).toEqual({ w: 1, h: 1 });
+  });
+
+  it('copies for lava only while the shimmer is on', () => {
+    expect(picturePasses({ water: false, lava: true, reflect: true, heat: true }, 800, 600)).toEqual({ copy: true, mirror: null, shimmer: true });
+    expect(picturePasses({ water: false, lava: true, reflect: true, heat: false }, 800, 600)).toEqual({ copy: false, mirror: null, shimmer: false });
+  });
+
+  it('never mirrors for lava', () => {
+    expect(picturePasses({ water: true, lava: true, reflect: true, heat: false }, 800, 600).mirror).toEqual({ w: 400, h: 300 });
+    expect(picturePasses({ water: false, lava: true, reflect: true, heat: true }, 800, 600).mirror).toBeNull();
   });
 
   it('sees a pool at the screen edge', () => {
     const fp = { x0: 10, z0: 10, x1: 30, z1: 20 };
-    expect(waterInView([], fp)).toBe(false);
+    expect(poolInView([], fp)).toBe(false);
     // Half a tile outside each side: in view.
-    expect(waterInView([{ x0: 5, z0: 12, x1: 9.5, z1: 14 }], fp)).toBe(true);
-    expect(waterInView([{ x0: 30.5, z0: 12, x1: 33, z1: 14 }], fp)).toBe(true);
-    expect(waterInView([{ x0: 12, z0: 5, x1: 14, z1: 9.5 }], fp)).toBe(true);
-    expect(waterInView([{ x0: 12, z0: 20.5, x1: 14, z1: 25 }], fp)).toBe(true);
+    expect(poolInView([{ x0: 5, z0: 12, x1: 9.5, z1: 14 }], fp)).toBe(true);
+    expect(poolInView([{ x0: 30.5, z0: 12, x1: 33, z1: 14 }], fp)).toBe(true);
+    expect(poolInView([{ x0: 12, z0: 5, x1: 14, z1: 9.5 }], fp)).toBe(true);
+    expect(poolInView([{ x0: 12, z0: 20.5, x1: 14, z1: 25 }], fp)).toBe(true);
     // Three tiles outside: not.
-    expect(waterInView([{ x0: 2, z0: 12, x1: 7, z1: 14 }], fp)).toBe(false);
-    expect(waterInView([{ x0: 12, z0: 23, x1: 14, z1: 25 }], fp)).toBe(false);
+    expect(poolInView([{ x0: 2, z0: 12, x1: 7, z1: 14 }], fp)).toBe(false);
+    expect(poolInView([{ x0: 12, z0: 23, x1: 14, z1: 25 }], fp)).toBe(false);
     // One far pool and one in view.
-    expect(waterInView([{ x0: 60, z0: 60, x1: 62, z1: 62 }, { x0: 15, z0: 15, x1: 16, z1: 16 }], fp)).toBe(true);
+    expect(poolInView([{ x0: 60, z0: 60, x1: 62, z1: 62 }, { x0: 15, z0: 15, x1: 16, z1: 16 }], fp)).toBe(true);
   });
 
   it('mirrors the camera in the water plane', () => {

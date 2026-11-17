@@ -75,7 +75,7 @@ import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
 import { refreshWaterField, waterField } from './water/waterField';
 import { buildWaterChunk } from './water/waterMesh';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
-import { CEILING_LAYER, WATER_LAYER, mirrorPose, waterInView, waterPasses } from './water/passes';
+import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './water/passes';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
@@ -381,7 +381,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const terrainChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const dipChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const waterChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
-  /** The ground each water chunk's quads cover (tiles), for `waterInView`; null: rebuilt from the chunks at the next frame. */
+  /** The ground each water chunk's quads cover (tiles), for `poolInView`; null: rebuilt from the chunks at the next frame. */
   let waterBoxes: { x0: number; z0: number; x1: number; z1: number }[] | null = null;
   let clock = 0;
   const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number, terrain: TerrainChunk | null, bottom = 0): ChunkMesh => {
@@ -1002,7 +1002,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // The water (#345): with a pool in view the picture is split around a copy of the opaque scene, and (reflections on) the scene
       // above the water is drawn first from a camera mirrored in the water plane. Without a pool nothing extra runs.
       const p = f.plan;
-      const wp = waterPasses(waterInView(boxesOfWater(), footprint(f.cam, p.halfW, p.halfH)), f.water?.reflect ?? false, p.targetW, p.targetH);
+      const wp = picturePasses({ water: poolInView(boxesOfWater(), footprint(f.cam, p.halfW, p.halfH)), lava: false, reflect: f.water?.reflect ?? false, heat: false }, p.targetW, p.targetH);
       lastCopy = wp.copy;
       if (wp.mirror) {
         if (mirrorTarget.width !== wp.mirror.w || mirrorTarget.height !== wp.mirror.h) mirrorTarget.setSize(wp.mirror.w, wp.mirror.h);

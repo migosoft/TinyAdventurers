@@ -33,7 +33,7 @@ const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: num
   { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
-const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover' | 'shafts' | 'dust' | 'smoke' | 'embers' | 'haze' | 'drips' | 'stir' | 'draft' | 'refl'>, name: string): Switch =>
+const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover' | 'shafts' | 'dust' | 'smoke' | 'embers' | 'haze' | 'drips' | 'stir' | 'draft' | 'refl' | 'heat'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
 const GAME_LIGHT: Switch = {
   name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
@@ -63,8 +63,8 @@ const SKY_SWITCHES: Switch[] = [
 const AIR_SWITCHES: Switch[] = [flag('shafts', 'Shafts'), flag('dust', 'Dust'), flag('smoke', 'Smoke'), flag('embers', 'Embers'), flag('haze', 'Haze'), flag('drips', 'Drips')];
 const AIR_DEV_SWITCHES: Switch[] = [flag('stir', 'Stir'), flag('draft', 'Draft')];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
-  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), flag('refl', 'Reflections'), DARK_FADE, flag('sight', 'Sight')],
-  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), flag('refl', 'Reflections'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), flag('refl', 'Reflections'), flag('heat', 'Heat shimmer'), DARK_FADE, flag('sight', 'Sight')],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), flag('refl', 'Reflections'), flag('heat', 'Heat shimmer'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
 };
 
 /** A degree value with at most one decimal and no trailing .0. */
