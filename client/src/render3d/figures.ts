@@ -19,7 +19,7 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
-import { drownY, sinkCell, standY, stepLavaSink } from './dips/descent';
+import { drownY, lavaSinkOf, sinkCell, standY, stepLavaSink } from './dips/descent';
 import { bedAt, depthFade, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
@@ -482,7 +482,7 @@ export class Figures3d {
     const p = barrelPose(e.anim === 2 || e.anim === 3 ? 0 : e.anim, e.animMs);
     const ex = e.x / TILE;
     const ez = e.y / TILE;
-    const foot = this.foot(e.id, ex, ez, f.dt, f.now, { skims: false, start: e.anim === 2 ? 'fall' : e.anim === 3 ? 'drown' : null });
+    const foot = this.foot(e.id, ex, ez, f.dt, f.now, { skims: false, start: e.anim === 2 ? 'fall' : e.anim === 3 ? 'drown' : null, height: CHEST_HEIGHT / TILE });
     this.reportDescent(e.id, foot);
     const falling = foot.d?.kind === 'fall';
     // The fuse's shake moves the body along screen right.
@@ -598,15 +598,14 @@ export class Figures3d {
   }
 
   /** The figure's state and its memory (made on the first frame), with the reappear rule: the lookup both ways of drawing share. */
-  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig; foot: Foot; dashing: boolean } {
+  private figOf(e: EntState, f: RunFrame, base: FigureDef): { s: ViewState; fig: Fig; dashing: boolean; skims: boolean; start: 'fall' | 'drown' | null } {
     const st = this.states.stateOf(e, f, f.now);
     // The 3D view stands the figure on the bed and lets it fall by itself: the pose gets no sink, fall or drown (#324).
     const s: ViewState = { ...st.s, sink: 0, fall: 0, drown: 0 };
     const flags = st.s.flags ?? 0;
     const dashing = st.predicted ? f.own.dashing : e.anim === ANIM.Dash;
     const skims = skimsTerrain(flags, dashing) || (flags & FLAG.AIRBORNE) !== 0;
-    const foot = this.foot(e.id, st.s.x / TILE, st.s.y / TILE, f.dt, f.now, { skims, start: this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null });
-    this.reportDescent(e.id, foot);
+    const start = this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null;
     let fig = this.figs.get(e.id);
     if (!fig) {
       const pi = isPlayerKind(e.kind) ? this.players.find((p) => p.ent === e.id) : undefined;
@@ -619,7 +618,14 @@ export class Figures3d {
     }
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
     if (this.states.takeReappear(e.id, f.now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) fig.mem.appearLeft = VANISH_SECS;
-    return { s, fig, foot, dashing };
+    return { s, fig, dashing, skims, start };
+  }
+
+  /** Where a figure's foot is this frame, once its pose (and so its height in tiles, the lava sink's share) is known; reports a descent it begins. */
+  private figFoot(e: EntState, s: ViewState, f: RunFrame, o: { skims: boolean; start: 'fall' | 'drown' | null }, height: number): Foot {
+    const foot = this.foot(e.id, s.x / TILE, s.y / TILE, f.dt, f.now, { skims: o.skims, start: o.start, height });
+    this.reportDescent(e.id, foot);
+    return foot;
   }
 
   /** The frame a descent begins, once: a fall goes to `falls`, a drowning to `sinks`; a dark entity's is left out. */
@@ -651,7 +657,7 @@ export class Figures3d {
    * is at 0 when it skims the terrain or flies. `o.start` begins a descent on the first frame it is asked for, from the foot's last
    * height and its drawn speed (which are not updated once it is in one). A fall is not stepped on its first frame.
    */
-  private foot(id: number, x: number, z: number, dt: number, now: number, o: { skims: boolean; start: 'fall' | 'drown' | null }): Foot {
+  private foot(id: number, x: number, z: number, dt: number, now: number, o: { skims: boolean; start: 'fall' | 'drown' | null; height: number }): Foot {
     let mo = this.motions.get(id);
     if (!mo) this.motions.set(id, (mo = { px: x, pz: z, vx: 0, vz: 0, y: 0, lava: 0 }));
     let d = this.descents.get(id);
@@ -673,7 +679,7 @@ export class Figures3d {
     mo.px = x;
     mo.pz = z;
     const inLava = !o.skims && this.map.get(Math.floor(x), Math.floor(z)) === TILE_ID.Lava;
-    mo.lava = stepLavaSink(mo.lava, inLava, dt);
+    mo.lava = stepLavaSink(mo.lava, inLava ? lavaSinkOf(o.height) : 0, dt);
     mo.y = o.skims ? 0 : standY(this.bedAt(x, z), inLava || mo.lava > 0.001 ? mo.lava : null);
     return { x, z, y: mo.y, d: undefined, started, gone: false };
   }
@@ -715,9 +721,14 @@ export class Figures3d {
    * False when it is not drawn (dead).
    */
   private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
-    const { s, fig, foot, dashing } = this.figOf(e, f, FIGURES[e.kind]);
+    const { s, fig, dashing, skims, start } = this.figOf(e, f, FIGURES[e.kind]);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
+    // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
+    const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
+    const sa = standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
+    const foot = this.figFoot(e, s, f, { skims, start }, (pose.lie ? 3 : sa.height) / TILE);
     fig.body = null;
     fig.last = null;
     fig.model = true;
@@ -796,10 +807,6 @@ export class Figures3d {
       pushShadow(out.shadows, cam, gf.x, gf.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
-    // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
-    // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
-    const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
-    const sa = standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
@@ -859,13 +866,14 @@ export class Figures3d {
   private drawFigure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
     const base = FIGURES[e.kind];
     if (!base) return false;
-    const { s, fig, foot, dashing } = this.figOf(e, f, base);
+    const { s, fig, dashing, skims, start } = this.figOf(e, f, base);
     const d = fig.def;
     const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    const fb = this.bounds(pose.frame);
+    const foot = this.figFoot(e, s, f, { skims, start }, (pose.lie ? 3 : standingAnchor(fb, pose.footY, d.scale ?? 1).height) / TILE);
     fig.body = null;
     if (!pose.visible || foot.gone) return false;
 
-    const fb = this.bounds(pose.frame);
     const { x, z, y } = foot;
     const falling = foot.d?.kind === 'fall';
     // A faller's pieces, kept for when its entity is gone; its cards wear the depth's dark.

@@ -8,7 +8,13 @@ export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0
 export const DROWN_SINK = 0.4;
 /** The faller's body radius in tiles (a card or model is about 0.6 wide): a falling figure keeps this far from a wall. */
 export const FALL_RADIUS = 0.3;
-export const LAVA_SINK = 1.05, LAVA_IN = 0.55, LAVA_OUT = 2.5;
+export const LAVA_IN = 0.55, LAVA_OUT = 2.5;
+/** The share of its height a body sinks below the lava's level. */
+export const LAVA_SHARE = 0.6;
+/** How deep below the lava's level a body of `height` tiles floats. */
+export function lavaSinkOf(height: number): number {
+  return LAVA_SHARE * height;
+}
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
 /** A fall starting at (x, z) tiles and height y with the figure's drawn speed (tiles/s, capped at SLIDE_MAX); cx, cz: the centre of the cell it sank in. */
@@ -95,11 +101,10 @@ export function drownY(y0: number, bed: number, age: number): number {
   return y0 + (bed - y0) * u * u;
 }
 
-/** The slow sink in lava: toward LAVA_SINK at LAVA_IN per second on a lava tile, toward 0 at LAVA_OUT otherwise (1 - exp(-rate * dt) easing). */
-export function stepLavaSink(sink: number, inLava: boolean, dt: number): number {
-  const target = inLava ? LAVA_SINK : 0;
-  const rate = inLava ? LAVA_IN : LAVA_OUT;
-  return sink + (target - sink) * (1 - Math.exp(-rate * dt));
+/** The slow sink in lava: toward `goal` (`lavaSinkOf` the height on a lava tile, 0 off it) at LAVA_IN per second on lava, at LAVA_OUT otherwise (1 - exp(-rate * dt) easing). */
+export function stepLavaSink(sink: number, goal: number, dt: number): number {
+  const rate = goal > 0 ? LAVA_IN : LAVA_OUT;
+  return sink + (goal - sink) * (1 - Math.exp(-rate * dt));
 }
 
 /** Where a grounded foot stands: on the bed, or floating in lava at LAVA_LEVEL - sink when that is higher. `sink` null: not in lava. */

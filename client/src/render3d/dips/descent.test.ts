@@ -3,7 +3,7 @@ import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { bedAt, LAVA_LEVEL } from './shape';
 import {
-  DROWN_SINK, FALL_G, FALL_RADIUS, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
+  DROWN_SINK, FALL_G, FALL_RADIUS, FALL_GONE, FALL_MAX_AGE, LAVA_SHARE, lavaSinkOf, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
 const DROWN_TIME = CONST.DROWN_TIME;
@@ -200,13 +200,23 @@ describe('descent', () => {
 
   it('sinks slowly in lava and rises fast', () => {
     let s = 0;
-    for (let i = 0; i < 60; i++) s = stepLavaSink(s, true, 1 / 60);
+    const goal = lavaSinkOf(1.75);
+    for (let i = 0; i < 60; i++) s = stepLavaSink(s, goal, 1 / 60);
     expect(s).toBeGreaterThan(0.3);
     expect(s).toBeLessThan(0.6);
-    for (let i = 0; i < 300; i++) s = stepLavaSink(s, true, 1 / 60);
-    expect(Math.abs(s - LAVA_SINK)).toBeLessThan(0.05);
-    for (let i = 0; i < 60; i++) s = stepLavaSink(s, false, 1 / 60);
+    for (let i = 0; i < 300; i++) s = stepLavaSink(s, goal, 1 / 60);
+    expect(Math.abs(s - goal)).toBeLessThan(0.05);
+    for (let i = 0; i < 60; i++) s = stepLavaSink(s, 0, 1 / 60);
     expect(s).toBeLessThan(0.1);
+  });
+
+  it('sinks to a share of the height', () => {
+    expect(LAVA_SHARE).toBe(0.6);
+    for (const [h, tol] of [[1.75, 0.05], [3.5, 0.1]] as const) {
+      let s = 0;
+      for (let i = 0; i < 600; i++) s = stepLavaSink(s, lavaSinkOf(h), 1 / 60);
+      expect(Math.abs(s - LAVA_SHARE * h)).toBeLessThan(tol);
+    }
   });
 
   it('stands on the bed or floats', () => {

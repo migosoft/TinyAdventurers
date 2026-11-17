@@ -20,6 +20,7 @@ import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, walkBedAt, WATER_LEVEL } from './dips/shape';
+import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
@@ -1082,6 +1083,27 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const fly = dipFigs();
     fly.frame(frame([knight(2, 4, { flags: FLAG.AIRBORNE })]), cam());
     expect(fly.anchors.get(10)!.y).toBe(0);
+  });
+
+  it('a big figure and a hero in lava both stand with the same share above the surface (#344)', () => {
+    for (const kind of [KIND.Knight, KIND.Ogre]) {
+      const fg = dipFigs();
+      const mk = () => ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) });
+      run(fg, () => [mk()], 600);
+      const a = fg.anchors.get(10)!;
+      const height = a.height / TILE;
+      expect((LAVA_LEVEL - a.y) / height).toBeGreaterThan(LAVA_SHARE - 0.03);
+      expect((LAVA_LEVEL - a.y) / height).toBeLessThan(LAVA_SHARE + 0.03);
+    }
+  });
+
+  it('the sink does not depend on the pitch (#344)', () => {
+    const settle = (pitch: number): number => {
+      const fg = dipFigs();
+      for (let i = 0; i < 600; i++) fg.frame(frame([knight(6, 1)], { dt: 1 / 60, now: 10 + i / 60 }), { ...cam(), pitch });
+      return fg.anchors.get(10)!.y;
+    };
+    expect(settle(Math.PI / 6)).toBeCloseTo(settle(Math.PI * 80 / 180), 6);
   });
 
   it('sinks slowly into lava and comes back up', () => {
