@@ -74,6 +74,40 @@ describe('the ?r3d=liquids stage', () => {
   });
 });
 
+describe('the lava of the ?r3d=liquids stage (#344)', () => {
+  const bubbles = (): number | undefined => (window as unknown as { __r3d?: { liquids?: { bubbles?: number } } }).__r3d?.liquids?.bubbles;
+  /** The strengths of the rings the view was handed. */
+  const rings = (f: FrameInput): number[] => Array.from({ length: 8 }, (_, s) => f.lavaPool!.stirs![s * 4 + 2]);
+
+  it('opens a ring of strength 1 round the knight standing in the lava, and bubbles the pool', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const r = make('?r3d=liquids');
+    let ringed = false, most = 0;
+    for (let k = 0; k < 160; k++) {
+      const f = r.step(1)[0]; // 8 s of 0.05 s steps: the knight stands in the lava from about 2 s to 7 s
+      if (rings(f).includes(1)) ringed = true;
+      most = Math.max(most, bubbles()!);
+    }
+    expect(ringed).toBe(true);
+    expect(most).toBeGreaterThan(0);
+  });
+
+  it('passes the pinned clock as the lava\'s now, with the shimmer on Balanced', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const f = make('?r3d=liquids&t=6.5').step(2);
+    for (const x of f) { expect(x.lavaPool?.now).toBeCloseTo(6.5); expect(x.lavaPool?.heat).toBe(true); }
+  });
+
+  it('a pinned page shows the same bubbles on every boot and the knight already ringed', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    const a = make('?r3d=liquids&t=6.5').step(1)[0];
+    const first = Array.from(a.lavaPool!.bubbles!);
+    expect(rings(a)).toContain(1);
+    const b = make('?r3d=liquids&t=6.5').step(1)[0];
+    expect(Array.from(b.lavaPool!.bubbles!)).toEqual(first);
+  });
+});
+
 describe('the water of the ?r3d=liquids stage (#345)', () => {
   const live = (f: FrameInput): number => {
     const r = f.water?.ripples;

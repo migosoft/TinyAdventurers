@@ -35,7 +35,7 @@ declare global {
       /** ... and the 3D figures of a dev stage (#338): instances, batches and draws of the last frame, and the build time (ms) of each model built so far. */
       models?: { figures: number; batches: number; draws: number; builtMs: Record<string, number>; /** The gallery's clock (s), for the check shots. */ t?: number };
       /** ... and the liquids page's clock, the number of things falling (#324) and the live ripples of its water (#345). */
-      liquids?: { t: number; fallers: number; ripples: number };
+      liquids?: { t: number; fallers: number; ripples: number; /** The live bubbles of its lava (#344). */ bubbles: number };
       /** ... and the live ripples of the mood page's pool (#345). */
       ripples?: number;
     };

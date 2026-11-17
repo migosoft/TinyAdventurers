@@ -62,11 +62,12 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { water?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   for (const [wx, wy] of over.water ?? []) map.set(wx, wy, TILE_ID.ShallowWater);
+  for (const [lx, ly] of over.lava ?? []) map.set(lx, ly, TILE_ID.Lava);
   const light = new LightField(map);
   if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
@@ -522,5 +523,73 @@ describe('the water in the run view (#345)', () => {
     }
     expect(live(last)).toBeGreaterThanOrEqual(1);
     expect(live(dryLast)).toBe(0);
+  });
+});
+
+describe('the lava in the run view (#344)', () => {
+  const ROWS = ['##############', '#............#', '#............#', '#............#', '#............#', '#............#', '#............#', '##############'];
+  const POOL: [number, number][] = [];
+  for (let z = 2; z <= 5; z++) for (let x = 4; x <= 11; x++) POOL.push([x, z]);
+  /** Bubbles with an age of 0 or more in the packed array of a frame. */
+  const live = (f: FrameInput | null): number => {
+    const b = f?.lavaPool?.bubbles;
+    let n = 0;
+    if (b) for (let i = 0; i < b.length; i += 4) if (b[i + 2] >= 0) n++;
+    return n;
+  };
+  /** Steps `n` frames of 1/60 s (the run frame's dt) and returns the most bubbles live in any of them. */
+  const most = (r: ReturnType<typeof run>, n: number): number => {
+    let m = 0;
+    for (let k = 1; k <= n; k++) { r.ctx.now += 1 / 60; m = Math.max(m, live(r.again())); }
+    return m;
+  };
+
+  it('hands the view the lava with the shimmer on Balanced and off on Fast or with heat off', () => {
+    expect(run().f?.lavaPool?.heat).toBe(true);
+    expect(run({ params: { quality: 'fast' } }).f?.lavaPool?.heat).toBe(false);
+    expect(run({ params: { heat: false } }).f?.lavaPool?.heat).toBe(false);
+  });
+
+  it("passes the run's clock as the lava's now", () => {
+    const r = run({ rows: ROWS, lava: POOL });
+    r.ctx.now = 3.25;
+    expect(r.again()?.lavaPool?.now).toBe(3.25);
+  });
+
+  it('bubbles a pool in view within 3 s, and a map without lava never', () => {
+    expect(most(run({ rows: ROWS, lava: POOL, ownX: 24 }), 180)).toBeGreaterThan(0);
+    expect(most(run({ rows: ROWS, ownX: 24 }), 180)).toBe(0);
+  });
+
+  it('a changed lava tile reaches the lava: a pool turned to floor stops bubbling', () => {
+    const r = run({ rows: ROWS, lava: POOL, ownX: 24 });
+    const spy = vi.spyOn((r.v as unknown as { lavaSim: { mapChanged(): void } }).lavaSim, 'mapChanged');
+    for (const [x, z] of POOL) r.map.set(x, z, TILE_ID.Floor);
+    r.v.tileChanged(4, 2, TILE_ID.Floor);
+    expect(spy).toHaveBeenCalledTimes(1);
+    r.ctx.now += 1;
+    r.again(); // any bubble of before is pruned by this step
+    expect(most(r, 180)).toBe(0);
+  });
+
+  it('hands the effects the lava cues of the frame', () => {
+    const r = run({ rows: ROWS, lava: POOL, ownX: 24 });
+    const spy = vi.spyOn((r.v as unknown as { fxPass: { run(...a: unknown[]): void } }).fxPass, 'run');
+    r.again();
+    expect((spy.mock.calls[0][1] as { lava?: unknown }).lava).toBeDefined();
+  });
+
+  it('a new view after a device loss keeps the bubbles', () => {
+    const r = run({ rows: ROWS, lava: POOL, ownX: 24 });
+    let f: FrameInput | null = null;
+    for (let k = 0; k < 240 && live(f) === 0; k++) { r.ctx.now += 1 / 60; f = r.again(); }
+    expect(live(f)).toBeGreaterThan(0);
+    const arr = f!.lavaPool!.bubbles;
+    let got: FrameInput | null = null;
+    r.ctx.view = { draw: (i: FrameInput) => ((got = i), 0), meshes: 0, tileChanged: () => {} } as never;
+    r.v.begin(r.ctx);
+    r.again();
+    expect((got as FrameInput | null)?.lavaPool?.bubbles).toBe(arr);
+    expect(live(got)).toBeGreaterThan(0);
   });
 });

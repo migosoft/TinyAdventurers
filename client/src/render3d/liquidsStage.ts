@@ -24,7 +24,10 @@ import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, 
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import { seenOpeners } from './openers';
-import { reflects, type R3dParams } from './params';
+import { reflects, shimmers, type R3dParams } from './params';
+import { Lava3d, type LavaIn } from './lava/lava';
+import { emitLavaCues } from './fx/lavaFx';
+import { rng } from './fx/rand';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
@@ -34,6 +37,8 @@ import { tilesSeed } from './cover/moss';
 import { TILE } from '../sim/map';
 
 const PAN_SPEED = 12;
+/** The seed of the page's lava bubbles. */
+const LAVA_SEED = 344;
 const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
 const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
 const NONE_IDS: ReadonlySet<number> = new Set();
@@ -71,6 +76,9 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const fx = new Effects3d(map);
   // Made with the stage, whose clock only runs forward: a new page makes a new one.
   const water = new Water3d(map);
+  // The lava (#344) with a seeded source, so a pinned page shows the same bubbles on every boot.
+  const lava3d = new Lava3d(map, rng(LAVA_SEED));
+  const lavaIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: NONE_IDS, fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: cam };
   let t = opts.start;
   let prev = opts.pinned ? t - STEP : t;
   let warmed = !opts.pinned;
@@ -92,6 +100,12 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
   document.body.appendChild(label);
+
+  /** The lava's input of a step (one reused object). */
+  const lavaStep = (dt: number, now: number, figs: LavaIn['figs'], fp: LavaIn['fp']): LavaIn => {
+    lavaIn.dt = dt; lavaIn.now = now; lavaIn.figs = figs; lavaIn.fp = fp;
+    return lavaIn;
+  };
 
   /** Asks a push at the page's clock; ignored while that push is still playing. */
   const ask = (k: Push): boolean => {
@@ -134,6 +148,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 };
       // A pinned page plays the seconds before its clock once, then holds still.
       let fdt = dt;
+      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       if (opts.pinned) {
         if (!warmed) {
           warmed = true;
@@ -146,6 +161,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
             // The droplets of the replayed seconds too, stamped with the replay's own time (the cues of the main frame go through the pass).
             emitWaterCues(fx, water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, landed: null, hidden: NONE_IDS }).cues, tau, NONE_IDS);
+            // ... and the lava's sparks, pops and rings of the replayed seconds.
+            emitLavaCues(fx, lava3d.step(lavaStep(STEP, tau, wo.figs, fp)).cues, tau, NONE_IDS);
           }
           fdt = STEP;
         } else fdt = 0;
@@ -160,9 +177,9 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       if (!c.view) return 0;
 
       const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);
-      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const wo = water.step({ dt: fdt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE_IDS });
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, water: wo.cues, fp }, fo.glows);
+      const lo = lava3d.step(lavaStep(fdt, t, fo.figs, fp));
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, water: wo.cues, lava: lo.cues, fp }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];
@@ -180,7 +197,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
-        r.liquids = { t, fallers: figures.fallers, ripples: wo.live };
+        r.liquids = { t, fallers: figures.fallers, ripples: wo.live, bubbles: lo.live };
       }
       c.timer.renderStart();
       return c.view.draw(
@@ -191,6 +208,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
           // The water (#345): the page's own clock, so a pinned page holds the waves still.
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
+          lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
         },
         c.timer,
       );

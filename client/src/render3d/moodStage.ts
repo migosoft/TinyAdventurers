@@ -29,7 +29,9 @@ import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
-import { reflects, type R3dParams } from './params';
+import { reflects, shimmers, type R3dParams } from './params';
+import { Lava3d, type LavaIn } from './lava/lava';
+import { rng } from './fx/rand';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
@@ -38,6 +40,8 @@ import { Water3d } from './water/water';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
+/** The seed of the page's lava bubbles. */
+const LAVA_SEED = 344;
 const KNIGHT_ID = 100;
 const ARROW_ID = 101;
 const FIRE_ID = 102;
@@ -126,6 +130,9 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
 
   const air = new Air3d(map);
   const water = new Water3d(map);
+  // The pool's lava (#344): bubbles and rings only, no effects here, so its cues go unused.
+  const lava3d = new Lava3d(map, rng(LAVA_SEED));
+  const lavaIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: NONE_IDS, fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: cam };
   const tracker = new MoverTracker();
   const movers: AirMover[] = [];
   const torches: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
@@ -210,6 +217,9 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       // The pool's ripples (#345): the drips this air step landed, and the knight if he wades. No effects here, so the cues go unused.
       const wo = water.step({ dt, now: t, figs: fo.figs, sinks: fo.sinks, landed: parts.landed, hidden: NONE_IDS });
 
+      lavaIn.dt = dt; lavaIn.now = t; lavaIn.figs = fo.figs; lavaIn.fp = fp; lavaIn.mask = p2.sight ? mask : null;
+      const lo = lava3d.step(lavaIn);
+
       const r = window.__r3d;
       if (r) {
         r.ripples = wo.live;
@@ -226,6 +236,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
           darkvision: null,
           casters, sight, cracks: [], shafts: c.params.shafts, air: frameAir,
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
+          lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
         },
         c.timer,
       );

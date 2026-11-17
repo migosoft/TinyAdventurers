@@ -113,6 +113,15 @@ describe('the ?r3d=mood stage', () => {
     }
   });
 
+  it('hands the view the lava pool (#344): its clock and the shimmer on Balanced', () => {
+    const r = play('?r3d=mood', 4);
+    const f = r.frames[r.frames.length - 1];
+    expect(f.lavaPool?.bubbles).toBeInstanceOf(Float32Array);
+    expect(f.lavaPool?.stirs).toBeInstanceOf(Float32Array);
+    expect(f.lavaPool?.now).toBeCloseTo(3.95, 1);
+    expect(f.lavaPool?.heat).toBe(true);
+  });
+
   it('throws one burst of embers where the fireball blasts, once per crossing', () => {
     const r = play('?r3d=mood', 2 * FIRE_EVERY);
     const n = r.frames.map((f) => f.air!.parts.embers.count);

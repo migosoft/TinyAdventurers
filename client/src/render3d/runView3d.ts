@@ -51,7 +51,8 @@ import { FxPass } from './fx/pass';
 import { Shake, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
-import { reflects } from './params';
+import { reflects, shimmers } from './params';
+import { Lava3d, type LavaCues, type LavaIn } from './lava/lava';
 
 const TILE = 16;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
@@ -123,6 +124,10 @@ export class RunView3d implements RunView {
   /** The input of `water.step`, reused every frame. */
   private readonly waterStepIn: WaterIn = { dt: 0, now: 0, figs: [], sinks: [], landed: null, hidden: new Set() };
   private readonly waterIn:{ ripples: Float32Array | null; now: number; reflect: boolean } = { ripples: null, now: 0, reflect: false };
+  // The lava (#344): bubbles, rings and spark cues, made here like the water so a lost device keeps them.
+  private readonly lavaSim: Lava3d;
+  private readonly lavaStepIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: new Set(), fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: { x: 0, z: 0 } };
+  private readonly lavaIn: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean } = { bubbles: null, stirs: null, now: 0, heat: false };
   private readonly moverTracker = new MoverTracker();
   private readonly airMovers: AirMover[] = [];
   private readonly myKind: number;
@@ -193,6 +198,7 @@ export class RunView3d implements RunView {
     this.myKind = init.myKind;
     this.air = new Air3d(init.map);
     this.water = new Water3d(init.map);
+    this.lavaSim = new Lava3d(init.map);
     this.field = init.light;
     this.lava = new Float32Array(init.map.w * init.map.h * 4);
   }
@@ -421,8 +427,15 @@ export class RunView3d implements RunView {
     this.landed = null;
     const wi = this.waterIn;
     wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = reflects(c.params);
+    // The lava (#344): the same place in the frame; its cues go to the effects, its arrays to the view.
+    const ls = this.lavaStepIn;
+    ls.dt = dt; ls.now = c.now; ls.figs = fo.figs; ls.hidden = this.hidden; ls.fp = fp; ls.mask = c.params.sight ? this.mask : null;
+    ls.focus.x = cam.x; ls.focus.z = cam.z;
+    const lo = this.lavaSim.step(ls);
+    const li = this.lavaIn;
+    li.bubbles = lo.bubbles; li.stirs = lo.stirs; li.now = c.now; li.heat = shimmers(c.params);
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
-    this.fxFrame(f, c, cam, fo, fp, wo.cues);
+    this.fxFrame(f, c, cam, fo, fp, wo.cues, lo.cues);
     const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
@@ -485,7 +498,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi,
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li,
       },
       c.timer,
     );
@@ -502,9 +515,9 @@ export class RunView3d implements RunView {
   }
 
   /** The effects of this frame: the glows join the figures' (`fo.glows`), the triangles are sorted into the pass's two buffers, the lights wait in `fxPass.out.lights`. */
-  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut, fp: ReturnType<typeof footprint>, water: WaterCues): void {
+  private fxFrame(f: RunFrame, c: StageCtx, cam: Cam, fo: FigureOut, fp: ReturnType<typeof footprint>, water: WaterCues, lava: LavaCues): void {
     this.fxPass.run(this.fx, {
-      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues, falls: fo.falls, water, fp,
+      cam, now: c.now, quality: c.params.quality, figs: fo.figs, ents: f.ents, shots: f.shots, hiddenShots: f.hiddenShots, snap: f.snap, hidden: this.hidden, you: f.you, ownCast: f.ownCast, cues: fo.cues, falls: fo.falls, water, lava, fp,
     }, fo.glows);
   }
 
@@ -614,6 +627,7 @@ export class RunView3d implements RunView {
 
   tileChanged(x: number, y: number, _v: number): void {
     this.air.mapChanged();
+    this.lavaSim.mapChanged();
     this.sightKey = ''; // a door or a wall changed: the sight is recomputed
     this.mapVersion++;
     this.softDirty = true;

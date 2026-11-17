@@ -15,7 +15,9 @@ import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
-import type { R3dParams } from './params';
+import { shimmers, type R3dParams } from './params';
+import { Lava3d, type LavaIn } from './lava/lava';
+import { rng } from './fx/rand';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
@@ -89,6 +91,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const map = buildMap();
   const world: WorldInput = { map, painted: false, clear: 'stone' };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
+  const LAVA_SEED = 344;
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;
   // The viewer's sight, as the 2D `?lights` page: `&at=x,y` (tiles) or the script's VIEWER (the middle of room 1's tile); the page's map has no soft tiles.
@@ -113,6 +116,9 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const pairs = new TorchPairs();
   let lava = new Float32Array(map.w * map.h * 4);
   let lavaVersion = -1;
+  // The pool's lava (#344): bubbles and rings only, no effects here, so its cues go unused.
+  const lava3d = new Lava3d(map, rng(LAVA_SEED));
+  const lavaIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: new Set(), fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: cam };
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -184,6 +190,8 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
         ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }
         : SIGHT_OFF;
       c.timer.lap('sight');
+      lavaIn.dt = dt; lavaIn.now = t; lavaIn.figs = fo.figs; lavaIn.fp = footprint(cam, c.plan.halfW, c.plan.halfH); lavaIn.mask = c.params.sight ? mask : null;
+      const lo = lava3d.step(lavaIn);
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
@@ -195,7 +203,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: game ? lava : null, lavaVersion: lavaVersion,
+          lava: game ? lava : null, lavaVersion: lavaVersion, lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
           casters, sight, cracks, shafts: c.params.shafts,
         },

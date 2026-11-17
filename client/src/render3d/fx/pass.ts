@@ -19,6 +19,7 @@ import { registerFigureFx } from './figureFx';
 import { registerWaterFx } from './waterFx';
 import { registerLavaFx } from './lavaFx';
 import type { WaterCues } from '../water/water';
+import type { LavaCues } from '../lava/lava';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
@@ -44,6 +45,8 @@ export interface FxPassIn {
   falls?: readonly { id: number; x: number; z: number }[];
   /** The water's cues of this frame (`Water3d.step`). */
   water?: WaterCues;
+  /** The lava's cues of this frame (`Lava3d.step`). */
+  lava?: LavaCues;
   /** The ground the screen shows (tiles). */
   fp?: Footprint;
 }
@@ -99,6 +102,7 @@ export class FxPass {
     fin.cues = p.cues;
     fin.falls = p.falls;
     fin.water = p.water;
+    fin.lava = p.lava;
     fin.fp = p.fp;
     const out = this.out;
     fx.frame(fin, out);

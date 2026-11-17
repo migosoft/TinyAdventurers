@@ -94,6 +94,13 @@ describe('the ?r3d=lights stage', () => {
     expect(seen).toEqual([50, 100, 0]);
   });
 
+  it('hands the view the lava pool (#344): both arrays, its clock and the shimmer on Balanced', () => {
+    const { f } = drawn('?r3d=lights');
+    expect(f?.lavaPool?.bubbles).toBeInstanceOf(Float32Array);
+    expect(f?.lavaPool?.stirs).toBeInstanceOf(Float32Array);
+    expect(f?.lavaPool?.heat).toBe(true);
+  });
+
   it('passes the lava texels and no darkvision by default', () => {
     const { f } = drawn('?r3d=lights');
     expect(f!.lava).not.toBeNull();
