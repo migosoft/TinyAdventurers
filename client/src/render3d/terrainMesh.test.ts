@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
-import { LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
+import { LAVA_LEVEL } from './dips/shape';
 import { TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainSet } from '../game/terrain-codes';
-import { LAYER_STEP, buildTerrainChunk, stepTerrainUv, terrainFrame } from './terrainMesh';
+import { buildTerrainChunk, stepTerrainUv, terrainFrame } from './terrainMesh';
 import type { FrameRects } from './worldMesh';
 
 const frames: FrameRects = {};
@@ -34,23 +34,13 @@ const rectArr = (name: string) => [frames[name].x, frames[name].y, frames[name].
 const uvOf = (c: { arrays: { uv: Float32Array } }, q: number) => [...c.arrays.uv.slice(q * 12, q * 12 + 12)];
 
 describe('buildTerrainChunk', () => {
-  const quadYs = (c: { arrays: { position: Float32Array } }) => ys(c).map((y) => Math.round(y * 1e4) / 1e4);
   const names = (c: { arrays: { rect: Float32Array; count: number } }) => {
     const out: string[] = [];
     for (let q = 0; q < quadCount(c); q++) for (const [k, r] of Object.entries(frames)) if (rectOf(c, q).join() === [r.x, r.y, r.w, r.h].join()) out.push(k);
     return out;
   };
 
-  it('lays the plates at the surface level', () => {
-    const shallow = buildTerrainChunk(with_(5, 5, [[2, 2, T.ShallowWater]]), 0, 0, frames, 0)!;
-    expect(quadCount(shallow)).toBe(9);
-    expect(ys(shallow).every((y) => y === Math.fround(WATER_LEVEL))).toBe(true);
-
-    const deep = buildTerrainChunk(with_(5, 5, [[2, 2, T.DeepWater]]), 0, 0, frames, 0)!;
-    expect(quadCount(deep)).toBe(10);
-    expect(quadYs(deep).filter((y) => y === Math.round((WATER_LEVEL + LAYER_STEP) * 1e4) / 1e4).length).toBe(1);
-    expect(names(deep)).toContain('terrain_deep_f0_q' + ((2 % 4) + 4 * (2 % 4)));
-
+  it('lays the lava plates at the surface level', () => {
     const lava = buildTerrainChunk(with_(5, 5, [[2, 2, T.Lava]]), 0, 0, frames, 0)!;
     expect(quadCount(lava)).toBe(9);
     expect(ys(lava).every((y) => y === Math.fround(LAVA_LEVEL))).toBe(true);
@@ -59,51 +49,55 @@ describe('buildTerrainChunk', () => {
     expect(buildTerrainChunk(with_(5, 5, [[2, 2, T.Chasm]]), 0, 0, frames, 0)).toBeNull();
   });
 
-  it('gives a floor cell beside two dip kinds no plate (the banks show), and a chasm cell none', () => {
-    const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.ShallowWater], [4, 2, T.Lava], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
-    // (3, 2) borders water, lava and the chasm: nothing; the chasm (3, 3) never gets one
-    const at = (x: number, z: number) => {
-      let w = 0, l = 0;
-      for (let q = 0; q < quadCount(c); q++) {
-        if (c.arrays.position[q * 18] !== x || c.arrays.position[q * 18 + 2] !== z) continue;
-        const y = c.arrays.position[q * 18 + 1];
-        if (y === Math.fround(LAVA_LEVEL)) l++; else w++;
-      }
-      return [w, l];
-    };
-    expect(at(3, 2)).toEqual([0, 0]);
-    expect(at(3, 3)).toEqual([0, 0]);
-    expect(at(2, 2)).toEqual([1, 0]);
-    expect(at(4, 2)).toEqual([0, 1]);
+  it('lays no plate on water', () => {
+    expect(buildTerrainChunk(with_(5, 5, [[2, 2, T.ShallowWater]]), 0, 0, frames, 0)).toBeNull();
+    expect(buildTerrainChunk(with_(5, 5, [[2, 2, T.DeepWater], [3, 2, T.ShallowWater]]), 0, 0, frames, 0)).toBeNull();
+    // with lava in the room the plates are the lava's only
+    const c = buildTerrainChunk(with_(9, 5, [[2, 2, T.ShallowWater], [7, 2, T.Lava]]), 0, 0, frames, 0)!;
+    expect(quadCount(c)).toBe(9);
+    expect(ys(c).every((y) => y === Math.fround(LAVA_LEVEL))).toBe(true);
+    expect(c.anim.every((a) => a.set === 'lava')).toBe(true);
   });
 
-  it('gives a floor cell beside water and a chasm no water plate, which would cover the chasm\'s corner (F4)', () => {
-    const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.ShallowWater], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
+  it('gives a floor cell beside two dip kinds no plate (the banks show), and a chasm cell none', () => {
+    const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.ShallowWater], [4, 2, T.Lava], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
+    // (3, 2) borders water, lava and the chasm: nothing; the chasm (3, 3) never gets one; water never does
+    const at = (x: number, z: number) => {
+      let n = 0;
+      for (let q = 0; q < quadCount(c); q++) if (c.arrays.position[q * 18] === x && c.arrays.position[q * 18 + 2] === z) n++;
+      return n;
+    };
+    expect(at(3, 2)).toBe(0);
+    expect(at(3, 3)).toBe(0);
+    expect(at(2, 2)).toBe(0);
+    expect(at(4, 2)).toBe(1);
+    expect(at(5, 1)).toBe(1);
+  });
+
+  it('gives a floor cell beside lava and a chasm no lava plate, which would cover the chasm\'s corner (F4)', () => {
+    const c = buildTerrainChunk(with_(7, 5, [[2, 2, T.Lava], [3, 3, T.Chasm]]), 0, 0, frames, 0)!;
     const plateAt = (x: number, z: number) => {
       for (let q = 0; q < quadCount(c); q++) if (c.arrays.position[q * 18] === x && c.arrays.position[q * 18 + 2] === z) return true;
       return false;
     };
-    expect(plateAt(3, 2)).toBe(false);   // beside the water (2, 2) and the chasm (3, 3)
+    expect(plateAt(3, 2)).toBe(false);   // beside the lava (2, 2) and the chasm (3, 3)
     expect(plateAt(2, 3)).toBe(false);
-    expect(plateAt(1, 1)).toBe(true);    // beside the water only
-    expect(plateAt(2, 2)).toBe(true);    // the water cell itself
+    expect(plateAt(1, 1)).toBe(true);    // beside the lava only
+    expect(plateAt(2, 2)).toBe(true);    // the lava cell itself
   });
 
-  it('lays no plate of another kind over a lava or water cell', () => {
+  it('lays a lava plate over a lava cell beside water, and none on the water or its banks', () => {
     const c = buildTerrainChunk(with_(6, 4, [[2, 1, T.ShallowWater], [3, 1, T.Lava]]), 0, 0, frames, 0)!;
     const at = (x: number, z: number) => {
-      let w = 0, l = 0;
-      for (let q = 0; q < quadCount(c); q++) {
-        if (c.arrays.position[q * 18] !== x || c.arrays.position[q * 18 + 2] !== z) continue;
-        if (c.arrays.position[q * 18 + 1] === Math.fround(LAVA_LEVEL)) l++; else w++;
-      }
-      return [w, l];
+      let n = 0;
+      for (let q = 0; q < quadCount(c); q++) if (c.arrays.position[q * 18] === x && c.arrays.position[q * 18 + 2] === z) n++;
+      return n;
     };
-    expect(at(2, 1)).toEqual([1, 0]);
-    expect(at(3, 1)).toEqual([0, 1]);
-    expect(at(1, 1)).toEqual([1, 0]);
-    expect(at(3, 0)).toEqual([0, 0]);   // a floor cell beside water and lava: the banks show
-    expect(at(4, 1)).toEqual([0, 1]);
+    expect(at(2, 1)).toBe(0);
+    expect(at(3, 1)).toBe(1);
+    expect(at(1, 1)).toBe(0);
+    expect(at(3, 0)).toBe(0);   // a floor cell beside water and lava: the banks show
+    expect(at(4, 1)).toBe(1);
   });
 
   it('uses no edge overlay', () => {
@@ -127,19 +121,20 @@ describe('terrainFrame', () => {
 
 describe('stepTerrainUv', () => {
   it('writes only when a frame steps', () => {
-    const map = with_(4, 4, [[0, 0, T.ShallowWater], [3, 3, T.Lava]]);
+    const map = with_(4, 4, [[3, 3, T.Lava]]);
     const c = buildTerrainChunk(map, 0, 0, frames, 0)!;
-    expect(quadCount(c)).toBe(8);
-    const lavaUv = uvOf(c, 4);
+    expect(quadCount(c)).toBe(4);
+    const uv0 = uvOf(c, 0);
     expect(stepTerrainUv(c, frames, 0)).toBe(false);
-    // water is on frame 1 at 1.25 s, lava is back on its frame 0
-    expect(stepTerrainUv(c, frames, 1.25)).toBe(true);
-    expect(rectOf(c, 0)).toEqual(rectArr('terrain_water_f1_q0'));
-    const r = frames['terrain_water_f1_q0'];
+    // lava is on frame 5 at 1.0 s; the first quad is the cell (2, 2)
+    const p = TERRAIN_PERIOD.lava, q = (2 % p) + p * (2 % p);
+    expect(stepTerrainUv(c, frames, 1.0)).toBe(true);
+    expect(rectOf(c, 0)).toEqual(rectArr(`terrain_lava_f5_q${q}`));
+    const r = frames[`terrain_lava_f5_q${q}`];
     const uv = uvOf(c, 0);
+    expect(uv).not.toEqual(uv0);
     expect(Math.min(...uv.filter((_, i) => i % 2 === 0))).toBe(r.x);
     expect(Math.max(...uv.filter((_, i) => i % 2 === 1))).toBe(r.y + 16);
-    expect(uvOf(c, 4)).toEqual(lavaUv);
-    expect(stepTerrainUv(c, frames, 1.26)).toBe(false);
+    expect(stepTerrainUv(c, frames, 1.01)).toBe(false);
   });
 });

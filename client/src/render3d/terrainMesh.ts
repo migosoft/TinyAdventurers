@@ -1,13 +1,9 @@
-import { TILE_ID } from '../generated/defs';
 import type { TileMap } from '../sim/map';
 import { TERRAIN_FPS } from '../game/terrain-layers';
 import { TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainSet } from '../game/terrain-codes';
-import { DIP, LAVA_LEVEL, WATER_LEVEL, dipOf, type DipKind } from './dips/shape';
+import { DIP, LAVA_LEVEL, dipOf, type DipKind } from './dips/shape';
 import { cellHeight } from './heights';
 import { CHUNK, KIND, pushQuad, type FrameRects, type Rect, type WorldArrays } from './worldMesh';
-
-/** Tiles between the stacked layers of one cell. */
-export const LAYER_STEP = 0.002;
 
 export interface TerrainChunk {
   cx: number;
@@ -33,8 +29,9 @@ const rectOf = (frames: FrameRects, name: string): Rect => {
 };
 
 /**
- * The liquid plates of chunk (cx, cz): for every cell in the mesh of a water or lava dip (the cell or one of its eight neighbours
- * is water or lava) the animated base quad(s) at the surface level. No edge overlays, nothing for chasms; null when there is none.
+ * The lava plates of chunk (cx, cz): for every cell in the mesh of a lava dip (the cell or one of its eight neighbours is lava)
+ * the animated base quad at the surface level. Water has its own surface (water/waterMesh.ts). No edge overlays, nothing for
+ * chasms; null when there is none.
  */
 export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: FrameRects, clock: number): TerrainChunk | null {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
@@ -64,10 +61,6 @@ export function buildTerrainChunk(map: TileMap, cx: number, cz: number, frames: 
     const kinds = around(x, z);
     // A floor cell gets a liquid's plate only when no other kind of dip is around it: a full plate would cover the other dip's bulge.
     if (own === DIP.none && kinds.size > 1) continue;
-    if ((own === DIP.water || own === DIP.none) && kinds.has(DIP.water)) {
-      plate('water', x, z, WATER_LEVEL);
-      if (map.get(x, z) === TILE_ID.DeepWater) plate('deep', x, z, WATER_LEVEL + LAYER_STEP);
-    }
     if ((own === DIP.lava || own === DIP.none) && kinds.has(DIP.lava)) plate('lava', x, z, LAVA_LEVEL);
   }
   if (sink.kind.length === 0) return null;
