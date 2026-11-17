@@ -135,7 +135,7 @@ describe('the gallery stage', () => {
   });
 
   it('reads the URL: state, slow and focus', () => {
-    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', light: 'work', at: null, aim: null };
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null };
     expect(parseGallery('?r3d=gallery')).toEqual(d);
     expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
@@ -143,7 +143,7 @@ describe('the gallery stage', () => {
 
   it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
     expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
-      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', light: 'torch', at: { x: 12.5, z: 60 }, aim: null,
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null,
     });
     expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
     expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));
@@ -249,6 +249,20 @@ describe('the gallery stage', () => {
     expect(Math.abs(c[5].x / 16 - home.x)).toBeLessThan(1);
     expect(GALLERY.crowd(1).x - GALLERY.crowd(0).x).toBe(2);
     for (let i = 0; i < CROWD_MAX; i += 17) expect(GALLERY.map.tileAt(GALLERY.crowd(i).x * 16, GALLERY.crowd(i).z * 16)).toBe(TILE_ID.Floor);
+  });
+
+  it('reads `crowdKinds` as kind ids in the order named, null when none is known', () => {
+    expect(parseGallery('?crowdKinds=stag,bunny').crowdKinds).toEqual([KIND.Stag, KIND.Bunny]);
+    expect(parseGallery('?crowdKinds=nonsense').crowdKinds).toBeNull();
+    expect(parseGallery('?crowdKinds=nonsense,deer').crowdKinds).toEqual([KIND.Deer]);
+    expect(parseGallery('?crowd=3').crowdKinds).toBeNull();
+  });
+
+  it('cycles the crowd through `crowdKinds` when given', () => {
+    const c = galleryEnts(0, null, 8, null, [KIND.Stag, KIND.Bunny]).filter((e) => e.id >= ID.crowd);
+    expect(c).toHaveLength(8);
+    expect(c.map((e) => e.kind)).toEqual([0, 1, 2, 3, 4, 5, 6, 7].map((i) => (i % 2 ? KIND.Bunny : KIND.Stag)));
+    expect(c.map((e) => e.id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7].map((i) => ID.crowd + i));
   });
 
   it('draws as models exactly the ids of the model blocks and the crowd, and not a crowd that is cards', () => {

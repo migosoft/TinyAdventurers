@@ -76,6 +76,8 @@ export interface GalleryOpts {
   state: string | null; slow: number; focus: Focus; start: number;
   /** Walking model figures added in a 2 tile grid, and whether they are drawn as models or as cards. */
   crowd: number; crowdAs: 'models' | 'cards';
+  /** `&crowdKinds=<model key>,...`: the crowd cycles through the kinds wearing these models (null: every kind with a model). */
+  crowdKinds: number[] | null;
   /** `torch`: the gallery is lit by its torches through the game's lights and casters, not by the work light. */
   light: 'work' | 'torch';
   /** The camera's start in tiles (overrides the focus). */
@@ -97,6 +99,8 @@ export function parseGallery(search: string): GalleryOpts {
   const focus = q.get('focus');
   const start = Number(q.get('t') ?? 0);
   const crowd = Math.floor(Number(q.get('crowd') ?? 0));
+  // The kinds of the named models, in the order named; unknown keys are dropped.
+  const crowdKinds = (q.get('crowdKinds') ?? '').split(',').flatMap((key) => MODEL_KINDS.filter((k) => MODEL_OF_KIND[k] === key));
   const atRaw = q.get('at') ?? '';
   // `at=x,z` in tiles, or the foot of a figure of the model block: `model:<kind>`, `effect:<row>,<col>`, `dying:<i>`, `crowd:<i>`.
   const named = /^(model|effect|dying|crowd|variety):(\d+)(?:,(\d+))?$/.exec(atRaw);
@@ -116,6 +120,7 @@ export function parseGallery(search: string): GalleryOpts {
     focus: focus === 'corridor' || focus === 'effects' || focus === 'objects' || focus === 'models' ? focus : 'figures',
     crowd: Number.isFinite(crowd) && crowd > 0 ? Math.min(crowd, CROWD_MAX) : 0,
     crowdAs: q.get('crowdAs') === 'cards' ? 'cards' : 'models',
+    crowdKinds: crowdKinds.length > 0 ? crowdKinds : null,
     light: q.get('light') === 'torch' ? 'torch' : 'work',
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
     aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
@@ -181,7 +186,8 @@ function barrelAt(t: number): { anim: number; animMs: number } {
 }
 
 /** Every entity of the stage at gallery time `t` (s); `state` pins a state (else the 1.2 s cycle); `crowd` walking model figures are added. */
-export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: number | null = null): EntState[] {
+export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: number | null = null, crowdKinds: readonly number[] | null = null): EntState[] {
+  const crowdCycle = crowdKinds ?? MODEL_KINDS;
   const out: EntState[] = [];
   // Figure rows: the state cycle, the hurt flash every 3 s, the aim swinging and turning every 4 s.
   const only = STATES.findIndex(([n]) => n === state);
@@ -220,7 +226,7 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
   for (let i = 0; i < crowd; i++) {
     const p = GALLERY.crowd(i);
     const w = walk(p.x, 0.4, 1 + (i % 5) * 0.2, i * 0.9, t);
-    out.push(ent(ID.crowd + i, MODEL_KINDS[i % MODEL_KINDS.length], w.x, p.z, { anim: ANIM.Move, animMs: t * 1000 + i * 70, aim: w.aim }));
+    out.push(ent(ID.crowd + i, crowdCycle[i % crowdCycle.length], w.x, p.z, { anim: ANIM.Move, animMs: t * 1000 + i * 70, aim: w.aim }));
   }
 
   // Effect groups: idle (the slowed and chilled run back and forth); asleep and stone figures keep a facing, alternating every 4 s.
@@ -348,7 +354,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (!c.view) return 0;
       // The figures that died since the last frame leave their skulls; the event comes before the frame that no longer has them.
       for (const ev of diedBetween(t0, t)) figures.event(ev);
-      const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim);
+      const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds);
       const torch = opts.light === 'torch';
       if (torch) for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;

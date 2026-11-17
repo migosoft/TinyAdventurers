@@ -6,7 +6,7 @@
 // Env: BROWSER (the executable), HEADED=1 (a visible window; with mode webgpu on the real GPU),
 //      GPU=1 (a visible window on the real GPU with the notebook's start line, gpu.mjs; headless SwiftShader loses the WebGPU device),
 //      READBACK=1 (also saves <name>-readback.png: the frame re-drawn off-screen and read back, for WebGPU), R3D_W / R3D_H (1280x768),
-//      ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on).
+//      ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on), QUALITY=<high|balanced|fast> (appends &quality= to every URL).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright-core';
 import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
@@ -86,7 +86,7 @@ const b = await chromium.launch({
   ...(gpuOn ? gpuLaunch() : {}),
 });
 // GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
-const backend = gpuOn && mode === 'webgl' ? '&backend=webgl' : '';
+const backend = (gpuOn && mode === 'webgl' ? '&backend=webgl' : '') + (process.env.QUALITY ? `&quality=${process.env.QUALITY}` : '');
 const errs = [];
 const failures = [];
 const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 };
