@@ -335,7 +335,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
           }
           off();
           if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
-          run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early });
+          run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early, dev: true });
           break;
         }
         await ready;

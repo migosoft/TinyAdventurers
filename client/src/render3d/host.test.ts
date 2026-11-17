@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearErrors, showError, startHost, type Host, type Stage } from './host';
 import type { View, WorldInput } from './view';
 import { parseMap, MAP_ROWS } from './demoMap';
+import { DEFAULTS } from './params';
+import { QUALITY_KEY } from './qualityPref';
 
 function fakeView(): View {
   return {
@@ -231,5 +233,74 @@ describe('startHost', () => {
       spy.mockRestore();
       vi.useRealTimers();
     }
+  });
+});
+
+describe('startHost modes and the stored quality', () => {
+  const memStore = (initial?: string) => {
+    const data = new Map<string, string>(initial ? [[QUALITY_KEY, initial]] : []);
+    return { data, getItem: vi.fn((k: string) => data.get(k) ?? null), setItem: vi.fn((k: string, v: string) => void data.set(k, v)) };
+  };
+  const start = async (mode: 'demo' | 'run' | 'play', search: string, store: Parameters<typeof startHost>[4] extends infer D ? (D extends { store?: infer S } ? S : never) : never) => {
+    const { deps, stage } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, search, mode, () => stage, { ...deps, store });
+    return { host: host!, el };
+  };
+  const fake = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+  it('play: defaults plus the backend and the stored quality; no panel, no address bar, the change is stored', async () => {
+    fake();
+    const spy = vi.spyOn(history, 'replaceState');
+    try {
+      const store = memStore('fast');
+      const { host, el } = await start('play', '?r3d&pitch=30&free=1&quality=high&see=off&backend=webgl', store);
+      expect(host.params).toEqual({ ...DEFAULTS, backend: 'webgl', quality: 'fast' });
+      expect(el.querySelector('.r3d-panel')).toBeNull();
+      expect(host.dev).toBe(false);
+      host.setParams({ ...host.params, quality: 'high' });
+      vi.advanceTimersByTime(1000);
+      expect(spy).not.toHaveBeenCalled();
+      expect(store.data.get(QUALITY_KEY)).toBe('high');
+      host.stop();
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('play: a store that throws starts at balanced and a change does not throw', async () => {
+    const store = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+    const { host } = await start('play', '', store);
+    expect(host.params.quality).toBe('balanced');
+    expect(() => host.setParams({ ...host.params, quality: 'fast' })).not.toThrow();
+    host.stop();
+  });
+
+  it('run: the stored quality, the URL wins for the start only, a change is stored', async () => {
+    const a = memStore('fast');
+    const ra = await start('run', '?r3d', a);
+    expect(ra.host.params.quality).toBe('fast');
+    expect(ra.host.dev).toBe(true);
+    ra.host.setParams({ ...ra.host.params, quality: 'balanced' });
+    expect(a.data.get(QUALITY_KEY)).toBe('balanced');
+    ra.host.stop();
+    const b = memStore('fast');
+    const rb = await start('run', '?r3d&quality=high', b);
+    expect(rb.host.params.quality).toBe('high');
+    expect(b.data.get(QUALITY_KEY)).toBe('fast');
+    rb.host.stop();
+  });
+
+  it('demo: the store is neither read nor written', async () => {
+    const store = memStore('fast');
+    const { host } = await start('demo', '', store);
+    expect(host.params.quality).toBe('balanced');
+    expect(host.dev).toBe(true);
+    host.setParams({ ...host.params, quality: 'high' });
+    expect(store.getItem).not.toHaveBeenCalled();
+    expect(store.setItem).not.toHaveBeenCalled();
+    host.stop();
   });
 });

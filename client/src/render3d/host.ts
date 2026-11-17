@@ -3,10 +3,11 @@
 
 import { loadAtlas } from '../ui/atlas';
 import { FrameTimer } from '../game/frameTimer';
-import { createPanel, type PageButton } from './panel';
+import { createPanel, type PageButton, type Panel } from './panel';
 import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
 import { R3D_SYSTEMS, fxLine, lightLines, statsText3d, type R3dSystem } from './stats';
-import { pickZoom, renderPlan, type RenderPlan } from './quality';
+import { isQuality, pickZoom, renderPlan, type RenderPlan } from './quality';
+import { browserStore, loadQuality, saveQuality, type QualityStore } from './qualityPref';
 import { frameDt } from './scene';
 import { createRecovery, type Recovery } from './recover';
 import { trailingWriter } from './urlWriter';
@@ -76,6 +77,8 @@ export interface Stage {
 
 export interface Host {
   readonly params: R3dParams;
+  /** True in the dev pages and a debug account's `?r3d` run; false in 'play', where the free camera and the panel are off. */
+  readonly dev: boolean;
   setParams(p: R3dParams): void;
   /** A run's camera turned: the yaw in `params` and the panel, not in the address bar. */
   setRunYaw(deg: number): void;
@@ -99,7 +102,18 @@ export const MOVE_KEYS: Record<string, [number, number]> = {
 export interface HostDeps {
   createView: typeof createView;
   loadAtlas: () => Promise<{ img: HTMLImageElement; frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> }>;
+  /** Where the quality is kept; the browser's localStorage when left out, none when null. */
+  store?: QualityStore | null;
 }
+
+/** 'demo': the dev pages; 'run': a debug account's `?r3d` run; 'play': every other run, with no dev tools. */
+export type HostMode = 'demo' | 'run' | 'play';
+
+/** The panel of a 'play' host: nothing is shown, so the rest of the host keeps one path. */
+const NO_PANEL: Panel & { destroy(): void } = {
+  setReadout: () => {}, setParams: () => {}, setDaylight: () => {}, setSky: () => {}, setAirDev: () => {},
+  setPageButtons: () => {}, syncPageButtons: () => {}, destroy: () => {},
+};
 
 export function showError(host: HTMLElement, text: string, fixed: boolean): HTMLElement {
   const d = document.createElement('div');
@@ -126,11 +140,19 @@ export const isTextTarget = (t: EventTarget | null): boolean =>
  * point. A `makeStage` or first `built` that throws leaves nothing behind and the error is rethrown.
  */
 export async function startHost(
-  el: HTMLElement, search: string, mode: 'demo' | 'run', makeStage: (assets: Assets, host: Host) => Stage,
+  el: HTMLElement, search: string, mode: HostMode, makeStage: (assets: Assets, host: Host) => Stage,
   deps: HostDeps = { createView, loadAtlas },
 ): Promise<Host | null> {
   clearErrors(el);
-  const initial = parseParams(search);
+  const store = deps.store === undefined ? browserStore() : deps.store;
+  const parsed = parseParams(search);
+  // The stored quality is the start value of a run; a debug run's URL may override it for that run. The start value is
+  // not written back, only a later change is.
+  const initial: R3dParams = mode === 'play'
+    ? { ...DEFAULTS, backend: parsed.backend, quality: loadQuality(store) }
+    : mode === 'run'
+      ? { ...parsed, quality: new URLSearchParams(search).has('quality') && isQuality(new URLSearchParams(search).get('quality')) ? parsed.quality : loadQuality(store) }
+      : parsed;
   let params = initial;
   let canvas = document.createElement('canvas');
   canvas.className = 'r3d';
@@ -206,21 +228,25 @@ export async function startHost(
   // what follows `params.stats` (the readout's visibility, the timer) in step.
   const writeUrl = trailingWriter((s) => history.replaceState(null, '', s));
   const apply = (next: R3dParams): void => {
+    const qualityChanged = next.quality !== params.quality;
     params = next;
     panel.setParams(next);
-    // A run always starts facing north, so its yaw never goes into the address.
-    writeUrl(toSearch(mode === 'run' ? { ...next, yaw: DEFAULTS.yaw } : next, location.search));
+    if (mode !== 'demo' && qualityChanged) saveQuality(store, next.quality);
+    // A run always starts facing north, so its yaw never goes into the address; a 'play' run never writes it.
+    if (mode !== 'play') writeUrl(toSearch(mode === 'run' ? { ...next, yaw: DEFAULTS.yaw } : next, location.search));
     follow();
   };
   // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
-  const panel = createPanel(el, params, apply, {
-    mode,
-    onLose: () => {
-      if (!view) return true;
-      view.forceLoss();
-      return view.canForceLoss;
-    },
-  });
+  const panel: Panel & { destroy(): void } = mode === 'play'
+    ? NO_PANEL
+    : createPanel(el, params, apply, {
+      mode,
+      onLose: () => {
+        if (!view) return true;
+        view.forceLoss();
+        return view.canForceLoss;
+      },
+    });
 
   // The F3 readout; the timer runs only while it is open.
   const timer = new FrameTimer<R3dSystem>(R3D_SYSTEMS);
@@ -264,6 +290,7 @@ export async function startHost(
     get params() {
       return params;
     },
+    dev: mode !== 'play',
     setParams: (p) => apply(p),
     setRunYaw: (deg) => {
       params = { ...params, yaw: deg };

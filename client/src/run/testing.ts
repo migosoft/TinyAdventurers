@@ -92,7 +92,7 @@ export function fakeNet(): NetLike & { sent: ClientMsg[]; emit(m: ServerMsg): vo
   };
 }
 
-export function fakeHud(): HudLike & Pick<Hud, 'setToggles'> & { calls: [name: string, ...args: unknown[]][]; statsOn: boolean; menuOpen: boolean } {
+export function fakeHud(): HudLike & Pick<Hud, 'setToggles' | 'setChoices'> & { calls: [name: string, ...args: unknown[]][]; statsOn: boolean; menuOpen: boolean } {
   const calls: [string, ...unknown[]][] = [];
   const rec =
     (name: string) =>
@@ -114,6 +114,7 @@ export function fakeHud(): HudLike & Pick<Hud, 'setToggles'> & { calls: [name: s
     tooClose: rec('tooClose'),
     setTurnHelp: rec('setTurnHelp'),
     setToggles: rec('setToggles'),
+    setChoices: rec('setChoices'),
     frame: rec('frame'),
     setAsleep: rec('setAsleep'),
     toggleDebug() {

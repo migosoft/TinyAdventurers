@@ -87,12 +87,12 @@ export interface Run3d {
 /**
  * Starts a run in the 3D view. The session exists at once, so messages are handled from `RunStarted` on; until the host's
  * loop runs it is driven by a 16 ms timer without a view. `stop()` ends the host, the session and the timer, whichever state
- * the start is in. `deps.startHost` is for tests.
+ * the start is in. `deps.dev` (a debug account's `?r3d` run) picks the host's 'run' mode, else 'play'. `deps.startHost` is for tests.
  */
 export function startRun3d(
   el: HTMLElement,
   search: string,
-  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; early?: ServerMsg[]; startHost?: typeof startHost },
+  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; early?: ServerMsg[]; startHost?: typeof startHost; dev: boolean },
 ): Run3d {
   const run = newRun(deps);
   // Messages that came while this chunk loaded, replayed before any later one can arrive.
@@ -104,7 +104,7 @@ export function startRun3d(
     if (timer !== null) clearInterval(timer);
     timer = null;
   };
-  void (deps.startHost ?? startHost)(el, search, 'run', (assets, h) => {
+  void (deps.startHost ?? startHost)(el, search, deps.dev ? 'run' : 'play', (assets, h) => {
     host = h; // stop() reaches the host from here on, at any point of its start
     if (stopped) h.stop(); // stopped while the atlas loaded: the host disposes the stage it gets and ends
     return createRunStage(run, deps.info, assets, h, el, clearTimer);

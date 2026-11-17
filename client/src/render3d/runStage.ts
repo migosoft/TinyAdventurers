@@ -10,6 +10,7 @@ import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
+import { QUALITIES, type Quality } from './quality';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
 import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
@@ -65,7 +66,7 @@ class TimerClock implements FrameClock {
 }
 
 /** The HUD as the 3D run needs it: the session's, plus the Settings switches the host sets (the rules log's). */
-export type RunHud = HudLike & Pick<Hud, 'setToggles'>;
+export type RunHud = HudLike & Pick<Hud, 'setToggles' | 'setChoices'>;
 
 export interface Run {
   readonly session: RunSession;
@@ -143,6 +144,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   if (host.params.yaw !== 0) host.setRunYaw(0);
   host.setDaylight(info.daylight);
   if (info.woodland) host.setSky(true);
+  // The Settings view's Quality row: the host's quality, which it also stores.
+  run.hud.setChoices([{ label: 'Quality', options: QUALITIES, get: () => host.params.quality, set: (v) => host.setParams({ ...host.params, quality: v as Quality }) }]);
   const mouse = new RunMouse(el, turn);
   run.input.primary = () => mouse.takePrimary();
   run.input.secondary = () => mouse.takeSecondary();
@@ -233,6 +236,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
           run.log.key(e);
           return true;
         case 'KeyF':
+          if (!host.dev) return false;
           if (!e.repeat) host.setParams({ ...host.params, free: !host.params.free });
           return true;
         // Debug runs only (debug accounts); the session ignores them otherwise and while dead. Always taken from the
@@ -265,6 +269,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
     },
     dispose(): void {
       live = false;
+      run.hud.setChoices([]);
       run.hud.setTurnHelp(null);
       window.removeEventListener('keydown', onMod);
       window.removeEventListener('keyup', onMod);

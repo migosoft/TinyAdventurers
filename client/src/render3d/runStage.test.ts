@@ -51,6 +51,7 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
     setDaylight: vi.fn(),
     setSky: vi.fn(), setAirDev: vi.fn(), setPageButtons: vi.fn(), syncPageButtons: vi.fn(),
     stop: vi.fn(),
+    dev: true,
   };
   const el = document.createElement('div');
   const onLoop = vi.fn();
@@ -451,14 +452,54 @@ describe('the run stage', () => {
   });
 });
 
+describe('the run stage and the quality', () => {
+  it('registers one Quality choice that follows the host and sets it; dispose clears it', () => {
+    const { stage, hud, host, setParams } = setup();
+    const sets = hud.calls.filter((c) => c[0] === 'setChoices');
+    expect(sets).toHaveLength(1);
+    const choices = sets[0][1] as { label: string; get(): string; set(v: string): void }[];
+    expect(choices).toHaveLength(1);
+    expect(choices[0].label).toBe('Quality');
+    expect(choices[0].get()).toBe('balanced');
+    setParams({ quality: 'high' });
+    expect(choices[0].get()).toBe('high');
+    choices[0].set('fast');
+    expect(host.setParams).toHaveBeenCalledWith(expect.objectContaining({ quality: 'fast' }));
+    stage.dispose();
+    expect(hud.calls.filter((c) => c[0] === 'setChoices').pop()).toEqual(['setChoices', []]);
+  });
+
+  it('the free camera key works only when the host has dev tools', () => {
+    const on = setup();
+    expect(on.stage.key!({ code: 'KeyF', repeat: false } as KeyboardEvent)).toBe(true);
+    expect(on.host.params.free).toBe(true);
+    const off = setup();
+    (off.host as { dev: boolean }).dev = false;
+    expect(off.stage.key!({ code: 'KeyF', repeat: false } as KeyboardEvent)).toBe(false);
+    expect(off.host.params.free).toBe(false);
+  });
+});
+
 describe('startRun3d', () => {
+  it('dev picks the host mode: run for a debug account, play otherwise', () => {
+    const modes: string[] = [];
+    for (const dev of [false, true]) {
+      const run = startRun3d(document.createElement('div'), '', {
+        info: startInfo(ROWS), net: fakeNet() as unknown as Net, hud: fakeHud() as unknown as Hud, myClass: 'Wizard', dev,
+        startHost: (async (_el: HTMLElement, _s: string, mode: string) => { modes.push(mode); return null; }) as unknown as typeof startHost,
+      });
+      run.stop();
+    }
+    expect(modes).toEqual(['play', 'run']);
+  });
+
   it('stop ends the pre-view interval', () => {
     vi.useFakeTimers();
     try {
       const net = fakeNet();
       const hud = fakeHud();
       const run = startRun3d(document.createElement('div'), '', {
-        info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+        info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard', dev: true,
         startHost: () => new Promise(() => {}),
       });
       vi.advanceTimersByTime(100);
@@ -478,9 +519,9 @@ describe('startRun3d', () => {
       const net = fakeNet();
       const hud = fakeHud();
       let stage: ReturnType<typeof createRunStage> | null = null;
-      const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), setSky: vi.fn(), setAirDev: vi.fn(), setPageButtons: vi.fn(), syncPageButtons: vi.fn(), stop: vi.fn() };
+      const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), setSky: vi.fn(), setAirDev: vi.fn(), setPageButtons: vi.fn(), syncPageButtons: vi.fn(), stop: vi.fn(), dev: true };
       const run = startRun3d(document.createElement('div'), '', {
-        info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+        info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard', dev: true,
         startHost: async (_el, _s, _m, make) => {
           stage = make(assets, host) as ReturnType<typeof createRunStage>;
           return host;
@@ -505,7 +546,7 @@ describe('startRun3d', () => {
     const net = fakeNet();
     const hud = fakeHud();
     const run = startRun3d(document.createElement('div'), '', {
-      info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+      info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard', dev: true,
       startHost: () => new Promise(() => {}), // the atlas never loads
     });
     const toggles = hud.calls.filter((c) => c[0] === 'setToggles');
@@ -520,7 +561,7 @@ describe('startRun3d', () => {
     const hud = fakeHud();
     const info = startInfo(['#####', '#...#', '#####']);
     const run = startRun3d(document.createElement('div'), '', {
-      info, net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+      info, net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard', dev: true,
       early: [snap({ ev: [tile(1, 1, TILE_ID.DoorClosed)] })], startHost: () => new Promise(() => {}),
     });
     const said = hud.calls.filter((c) => c[0] === 'message' && String(c[1]).includes('force field'));
@@ -531,9 +572,9 @@ describe('startRun3d', () => {
   it('stop before the host exists stops the host the moment it is made', async () => {
     const net = fakeNet();
     const hud = fakeHud();
-    const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), setSky: vi.fn(), setAirDev: vi.fn(), setPageButtons: vi.fn(), syncPageButtons: vi.fn(), stop: vi.fn() };
+    const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), setSky: vi.fn(), setAirDev: vi.fn(), setPageButtons: vi.fn(), syncPageButtons: vi.fn(), stop: vi.fn(), dev: true };
     const run = startRun3d(document.createElement('div'), '', {
-      info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+      info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard', dev: true,
       startHost: async (_el, _s, _m, make) => {
         await Promise.resolve();
         make(assets, host);
