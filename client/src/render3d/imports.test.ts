@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { reachesPhaser, read, specifiers, SRC } from '../testutil/importWalk';
+import { read, specifiers, SRC } from '../testutil/importWalk';
 
 const listTs = (d: string) => readdirSync(join(SRC, d)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
 /** Every non-test .ts file under `d` (relative to src), subdirectories included. */
@@ -22,7 +22,7 @@ describe('run and render3d imports', () => {
   it('no .ts file under src, tests included, imports phaser', () => {
     const all = (d: string): string[] => readdirSync(join(SRC, d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? all(d ? `${d}/${e.name}` : e.name) : e.name.endsWith('.ts') ? [d ? `${d}/${e.name}` : e.name] : []));
     const users = all('')
-      .filter((f) => f !== 'render3d/imports.test.ts' && f !== 'testutil/importWalk.ts' && specifiers(read(f)).some((s) => s === 'phaser' || s.startsWith('phaser/')));
+      .filter((f) => specifiers(read(f)).some((s) => s === 'phaser' || s.startsWith('phaser/')));
     expect(users).toEqual([]);
   });
   it('package.json lists no phaser dependency', () => {
@@ -38,12 +38,6 @@ describe('run and render3d imports', () => {
   });
   it('run/ has no bare specifier at all', () => {
     for (const f of run) expect(bare(f), f).toEqual([]);
-  });
-  it('the files the session and the 3D view import do not reach phaser', () => {
-    for (const f of ['game/useHint.ts', 'game/terrain-layers.ts', 'game/world.ts', 'game/light.ts', 'game/anim/lying.ts', 'game/anim/pose.ts', 'game/anim/figureState.ts', 'game/objectPose.ts', 'game/woodland/ground.ts', 'game/airTypes.ts', 'game/airmovers.ts', 'game/moodDemoScript.ts', 'game/sunlightDemoScript.ts', 'ui/hud.ts', 'net.ts']) {
-      const chain = reachesPhaser(f);
-      expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
-    }
   });
   it('main.ts has no static import of render3d', () => {
     const stat = [...read('main.ts').matchAll(/^\s*(?:import|export)\s[^;]*?from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
