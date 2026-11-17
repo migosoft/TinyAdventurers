@@ -142,6 +142,19 @@ describe('Water3d', () => {
     expect(r.cues.enters.length).toBe(1);
   });
 
+  const dashPath: Array<[string, Array<[number, boolean]>, number]> = [
+    ['wading, a dash inside the pool, a stop in the pool', [[6, false], [6.1, false], [6.5, true], [7, true], [7.2, false]], 0],
+    ['floor, a dash across the rim, the dash ends in the pool', [[4, false], [4.5, true], [5.5, true], [6, false]], 0],
+    ['floor, a dash that ends on the floor, then a walk into the water', [[3, false], [3.5, true], [4, false], [4.5, false], [5.5, false]], 1],
+    ['a dash over water that ends on the floor, then a walk back into the water', [[6, false], [5.5, true], [4.5, true], [4, false], [4.5, false], [5.5, false]], 1],
+  ];
+  it.each(dashPath)('dash and splash: %s', (_name, path, want) => {
+    const w = new Water3d(room(), rng);
+    let enters = 0;
+    path.forEach(([x, dashing], i) => { enters += w.step(inp(i / 60, 1 / 60, [fig(1, x, 2, { dashing })])).cues.enters.length; });
+    expect(enters).toBe(want);
+  });
+
   it('reuses its arrays and forgets ids no longer listed', () => {
     const w = new Water3d(room(), rng);
     const a = w.step(inp(0, 1 / 60, [fig(1, 4.5, 2)]));

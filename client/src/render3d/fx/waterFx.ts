@@ -9,11 +9,11 @@ import type { FxOut } from './types';
 
 /** Motes of an entering and of a plunge (before the detail setting). */
 const ENTER_N = 6, PLUNGE_N = 14;
-const ENTER: BurstSpec = { x: 0, y: 0, z: 0, n: ENTER_N, speed: [8 * PX, 30 * PX], up: [0.5, 1.3], life: [0.2, 0.35], g: 3, drag: 0, size: PX * 2, colours: [0x72d6ce], streak: false };
-const PLUNGE: BurstSpec = { x: 0, y: 0, z: 0, n: PLUNGE_N, speed: [10 * PX, 45 * PX], up: [0.6, 1.4], life: [0.25, 0.45], g: 3, drag: 0, size: PX * 2, colours: [0xcae6f5], streak: false };
+const ENTER: BurstSpec = { x: 0, y: 0, z: 0, n: ENTER_N, speed: [8 * PX, 30 * PX], up: [0.5, 1.3], life: [0.2, 0.35], g: 3, drag: 0, size: PX * 2, colours: [0x72d6ce], streak: false, floor: WATER_Y };
+const PLUNGE: BurstSpec = { x: 0, y: 0, z: 0, n: PLUNGE_N, speed: [10 * PX, 45 * PX], up: [0.6, 1.4], life: [0.25, 0.45], g: 3, drag: 0, size: PX * 2, colours: [0xcae6f5], streak: false, floor: WATER_Y };
 /** A spray droplet: sideways up to 15 px/s, up 20 px/s. A bubble rises at 10 px/s. */
-const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false };
-const BUBBLE: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [10 * PX, 10 * PX], up: [Math.PI / 2 - 0.01, Math.PI / 2 - 0.01], life: [0.25, 0.35], g: 0, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false };
+const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false, floor: WATER_Y };
+const BUBBLE: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [10 * PX, 10 * PX], up: [Math.PI / 2 - 0.01, Math.PI / 2 - 0.01], life: [0.25, 0.35], g: 0, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false, floor: WATER_Y };
 
 function emitAll(fx: Effects3d, f: FxFrame, list: readonly WaterSpot[], kind: typeof FX_KIND.WaterSplash | typeof FX_KIND.WaterDrop, a: number): void {
   const now = f.ctx.now;

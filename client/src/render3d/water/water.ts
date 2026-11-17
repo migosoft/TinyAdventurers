@@ -25,6 +25,7 @@ export interface WaterIn {
   hidden: ReadonlySet<number>;
 }
 
+/** `standing`: in the water last frame; a dash over water counts as in it (2D's WadeFx keeps its tile during a dash), so a dash that ends in water makes no entering. */
 interface FigState { x: number; z: number; standing: boolean; ring: number; spray: number; seen: number }
 interface Drown { id: number; x: number; z: number; left: number; stir: number; bubble: number }
 
@@ -89,7 +90,7 @@ export class Water3d {
           s.ring = 0;
           if (!quiet) this.ripples.add(f.x, f.z, now, WADE.ring);
         }
-        s.x = f.x; s.z = f.z; s.standing = standing; s.seen = frame;
+        s.x = f.x; s.z = f.z; s.standing = standing || (over && f.dashing); s.seen = frame;
       }
       if (over && f.dashing) {
         s.spray += WADE.sprayRate * dt;

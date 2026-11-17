@@ -54,6 +54,23 @@ describe('shapes', () => {
       }
     });
   }
+  it('thrown with the default floor is the same as with the explicit 0.03, and bounces on a given floor', () => {
+    const a: [number, number, number] = [0, 0, 0], b: [number, number, number] = [0, 0, 0];
+    for (const t of [0, 0.1, 0.3, 0.6, 1.2]) {
+      thrown([1, 0.2, 2], [0.5, 1.5, -0.3], 3, t, a);
+      thrown([1, 0.2, 2], [0.5, 1.5, -0.3], 3, t, b, 0.03);
+      expect(a).toEqual(b);
+    }
+    // a pinned value of the unchanged path: 0.2 + 1.5 * 0.1 - 1.5 * 0.01
+    thrown([1, 0.2, 2], [0.5, 1.5, -0.3], 3, 0.1, a);
+    expect(a[1]).toBeCloseTo(0.335, 9);
+    // a floor below zero: born on it, never below it, finite
+    for (const t of [0, 0.05, 0.2, 0.5, 1]) {
+      thrown([0, -0.07, 0], [0.1, 0.4, 0], 3, t, a, -0.07);
+      expect(Number.isFinite(a[1])).toBe(true);
+      expect(a[1]).toBeGreaterThanOrEqual(-0.07);
+    }
+  });
   it('thrown stays finite for a downward throw without gravity', () => {
     const o: [number, number, number] = [0, 0, 0];
     for (const t of [0, 0.1, 0.5, 2]) {

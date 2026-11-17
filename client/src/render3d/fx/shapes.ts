@@ -164,13 +164,17 @@ function face(T: FxTris, ax: number, ay: number, az: number, bx_: number, by_: n
   T.tri(ax, ay, az, bx_, by_, bz_, cx, cy, cz, lerp(0.2, 0.93, k), lerp(0.45, 0.98, k), lerp(0.85, 1, k), alpha);
 }
 
-/** A point thrown from `p0` with velocity `v` under gravity `g`, bouncing once on the floor (y 0.03); written into `out`. */
-export function thrown(p0: V3, v: V3, g: number, t: number, out: MV3): MV3 {
+/** The height (tiles) a mote rests at above the ground (y 0): just over the floor so it does not sink into it. A drawer whose floor is
+ *  elsewhere (the water's surface, below 0) passes its own `floor`; a mote must start at or above its floor. */
+export const MOTE_FLOOR = 0.03;
+
+/** A point thrown from `p0` with velocity `v` under gravity `g`, bouncing once on the floor (y `floor`, default 0.03); written into `out`. */
+export function thrown(p0: V3, v: V3, g: number, t: number, out: MV3, floor = MOTE_FLOOR): MV3 {
   let y = p0[1] + v[1] * t - 0.5 * g * t * t;
-  if (y < 0.03 && g <= 0) y = 0.03;   // no gravity: no bounce, it only rests on the floor
-  else if (y < 0.03) {
-    const tl = (v[1] + Math.sqrt(v[1] * v[1] + 2 * g * (p0[1] - 0.03))) / g, t2 = t - tl, vy = (g * tl - v[1]) * 0.35;
-    y = Math.max(0.03, 0.03 + vy * t2 - 0.5 * g * t2 * t2);
+  if (y < floor && g <= 0) y = floor;   // no gravity: no bounce, it only rests on the floor
+  else if (y < floor) {
+    const tl = (v[1] + Math.sqrt(Math.max(0, v[1] * v[1] + 2 * g * (p0[1] - floor)))) / g, t2 = t - tl, vy = (g * tl - v[1]) * 0.35;
+    y = Math.max(floor, floor + vy * t2 - 0.5 * g * t2 * t2);
   }
   out[0] = p0[0] + v[0] * t; out[1] = y; out[2] = p0[2] + v[2] * t;
   return out;
@@ -187,15 +191,18 @@ export interface BurstSpec {
   /** 0xrrggbb colours; a mote takes one by its seed. */
   colours: readonly number[];
   streak: boolean;
+  /** The height the motes bounce on and never sink below; default `MOTE_FLOOR`. `y` must not be below it. */
+  floor?: number;
 }
 const bv: MV3 = [0, 0, 0], bp: MV3 = [0, 0, 0], bq: MV3 = [0, 0, 0], bo: MV3 = [0, 0, 0], bc: MV3 = [0, 0, 0];
 /** Position of a mote `t` seconds old: thrown under gravity, with drag slowing the launch velocity (no bounce then, only the floor). */
 function mote(spec: BurstSpec, v: V3, t: number, out: MV3): MV3 {
   bo[0] = spec.x; bo[1] = spec.y; bo[2] = spec.z;
-  if (spec.drag <= 0) return thrown(bo, v, spec.g, t, out);
+  const floor = spec.floor ?? MOTE_FLOOR;
+  if (spec.drag <= 0) return thrown(bo, v, spec.g, t, out, floor);
   const s = (1 - Math.exp(-spec.drag * t)) / spec.drag;
   out[0] = spec.x + v[0] * s; out[2] = spec.z + v[2] * s;
-  out[1] = Math.max(0.03, spec.y + v[1] * s - 0.5 * spec.g * t * t);
+  out[1] = Math.max(floor,spec.y + v[1] * s - 0.5 * spec.g * t * t);
   return out;
 }
 /** `b.n` motes at `age` seconds after the start, each a pure function of (`seed`, its index). Nothing is drawn after the longest life. */

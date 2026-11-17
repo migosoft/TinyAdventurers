@@ -6,6 +6,9 @@ import { Effects3d, FX_KIND, FX_LIFE, clearFxRegistry, type FxFrame } from './ef
 import { FxTris } from './tris';
 import type { FxOut } from './types';
 import { registerWaterFx } from './waterFx';
+import { newFxBuf } from '../models/fx';
+import { WATER_Y } from '../air/drips';
+import { PX } from './shapes';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
 const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
@@ -54,6 +57,39 @@ describe('water effects', () => {
     const fx = new Effects3d(map);
     fx.frame(frameOf(1, cues({ enters: [{ id: 3, x: 2, z: 2 }], plunges: [{ id: 3, x: 2, z: 2 }], spray: [{ id: 3, x: 2, z: 2 }], bubbles: [{ id: 3, x: 2, z: 2 }] }), [3]), newOut());
     expect(fx.records).toBe(0);
+  });
+
+  it('every droplet is finite, born on the water and never below it', () => {
+    const spot = { id: 3, x: 2, z: 2 };
+    const shapes: Array<[string, Partial<WaterCues>, number]> = [
+      ['enter', { enters: [spot] }, FX_LIFE[FX_KIND.WaterSplash]], ['plunge', { plunges: [spot] }, FX_LIFE[FX_KIND.WaterSplash]],
+      ['spray', { spray: [spot] }, FX_LIFE[FX_KIND.WaterDrop]], ['bubble', { bubbles: [spot] }, FX_LIFE[FX_KIND.WaterDrop]],
+    ];
+    const SIZE = PX * 2 * 1.5;   // a generous bound on a mote's quad corners around its centre
+    for (const [name, cu, life] of shapes) {
+      for (let seed = 0; seed < 6; seed++) {
+        const fx = new Effects3d(map);
+        for (let k = 0; k < seed; k++) fx.frame(frameOf(0.5 + k * 0.01), newOut());
+        const t0 = 1 + seed;
+        fx.frame(frameOf(t0, cues(cu)), newOut());
+        for (const age of [0, 0.1, life - 0.02]) {
+          const out = newOut();
+          fx.frame(frameOf(t0 + age), out);
+          const o = newFxBuf();
+          out.lit.flush(o, cam, false);
+          const p = o.position;
+          if (age < life - 0.1) expect(p.length, name).toBeGreaterThan(0);
+          for (let i = 0; i < p.length; i++) expect(Number.isFinite(p[i]), `${name} ${seed} ${age}`).toBe(true);
+          for (let i = 1; i < p.length; i += 3) expect(p[i], name).toBeGreaterThanOrEqual(WATER_Y - SIZE);
+          if (age === 0) {
+            // a mote's quad is symmetric about its centre: the mean height of all corners is the motes' mean height
+            let sum = 0, n = 0;
+            for (let i = 1; i < p.length; i += 3) { sum += p[i]; n++; }
+            expect(Math.abs(sum / n - WATER_Y), name).toBeLessThan(0.02);
+          }
+        }
+      }
+    }
   });
 
   it('a spray and a bubble make one drop record each, lit', () => {
