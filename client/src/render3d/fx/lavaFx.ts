@@ -17,8 +17,8 @@ const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up
 
 /** Embers of a burning hero: how many loop at once, how long each lives, how far from the hero it starts and how it rises (px). */
 export const EMBER_SLOTS = 6;
-const EMBER_LIFE = 0.4, EMBER_SPREAD = 4 * PX, EMBER_LIFT = 10 * PX, EMBER_RISE: readonly [number, number] = [18 * PX, 28 * PX];
-const EMBER_SIZE = PX * 1.5;
+export const EMBER_LIFE = 0.6, EMBER_SPREAD = 6 * PX, EMBER_LIFT = 10 * PX, EMBER_RISE: readonly [number, number] = [20 * PX, 32 * PX];
+const EMBER_SIZE = PX * 2;
 const EMBER_COLOURS: readonly [number, number, number][] = [[1, 0.8, 0.408], [0.933, 0.557, 0.18]];
 
 function emitAll(fx: Effects3d, hidden: ReadonlySet<number>, now: number, list: readonly LavaSpot[], kind: typeof FX_KIND.LavaBurst | typeof FX_KIND.LavaSpray, a: number): void {
@@ -36,14 +36,15 @@ export function emitLavaCues(fx: Effects3d, l: LavaCues, now: number, hidden: Re
 }
 
 /** Where ember `slot` of figure `id` is at `now`: (dx, dy, dz) from the figure's contact point and its fade 0..1 (1 at birth, 0 at its end).
- *  A pure function, looping every 0.4 s with a phase, a place and a rise per slot and id. */
+ *  A pure function, looping every EMBER_LIFE seconds with a phase, a place and a rise per slot and id. */
 export function emberAt(id: number, slot: number, now: number, out: [number, number, number]): number {
   const t = now / EMBER_LIFE + hash3(id, slot, 11), k = t - Math.floor(t), age = k * EMBER_LIFE;
   const ang = hash3(id, slot, 12) * Math.PI * 2, rad = Math.sqrt(hash3(id, slot, 13)) * EMBER_SPREAD;
   const rise = lerp(EMBER_RISE[0], EMBER_RISE[1], hash3(id, slot, 14));
   out[0] = Math.cos(ang) * rad; out[2] = Math.sin(ang) * rad;
   out[1] = hash3(id, slot, 15) * EMBER_LIFT + rise * age;
-  return 1 - k;
+  // Bright for most of its life, then out quickly: a straight fade leaves a dull speck on the dark crust for half the time.
+  return 1 - k * k * k;
 }
 
 /** The records of a frame's lava cues, and the embers of the burning heroes (not records: a pure function of the clock). */

@@ -5,7 +5,7 @@ import type { LavaCues } from '../lava/lava';
 import { Effects3d, FX_KIND, FX_LIFE, clearFxRegistry, type FxFrame } from './effects3d';
 import { FxTris } from './tris';
 import type { FxOut } from './types';
-import { EMBER_SLOTS, emberAt, emitLavaCues, registerLavaFx } from './lavaFx';
+import { EMBER_LIFE, EMBER_LIFT, EMBER_RISE, EMBER_SLOTS, EMBER_SPREAD, emberAt, emitLavaCues, registerLavaFx } from './lavaFx';
 import { newFxBuf } from '../models/fx';
 import { LAVA_Y } from '../air/puffs';
 import { PX } from './shapes';
@@ -98,11 +98,11 @@ describe('lava effects', () => {
           const f = emberAt(id, s, now, out);
           expect(f).toBeGreaterThanOrEqual(0);
           expect(f).toBeLessThanOrEqual(1);
-          expect(Math.abs(out[0])).toBeLessThanOrEqual(4 * PX + 1e-9);
-          expect(Math.abs(out[2])).toBeLessThanOrEqual(4 * PX + 1e-9);
+          expect(Math.abs(out[0])).toBeLessThanOrEqual(EMBER_SPREAD + 1e-9);
+          expect(Math.abs(out[2])).toBeLessThanOrEqual(EMBER_SPREAD + 1e-9);
           expect(out[1]).toBeGreaterThanOrEqual(-1e-9);
-          expect(out[1]).toBeLessThanOrEqual((10 + 28 * 0.4) * PX + 1e-9);
-          const f2 = emberAt(id, s, now + 0.4, again);
+          expect(out[1]).toBeLessThanOrEqual(EMBER_LIFT + EMBER_RISE[1] * EMBER_LIFE + 1e-9);
+          const f2 = emberAt(id, s, now + EMBER_LIFE, again);
           expect(f2).toBeCloseTo(f, 6);
           for (let c = 0; c < 3; c++) expect(again[c]).toBeCloseTo(out[c], 6);
         }
@@ -110,7 +110,7 @@ describe('lava effects', () => {
     }
     // each slot has a moment of birth (fade 1) and the fade falls to 0 just before it loops
     let max = 0, min = 1;
-    for (let k = 0; k < 400; k++) { const f = emberAt(1, 0, k * 0.001, out); max = Math.max(max, f); min = Math.min(min, f); }
+    for (let k = 0; k < 1000 * EMBER_LIFE; k++) { const f = emberAt(1, 0, k * 0.001, out); max = Math.max(max, f); min = Math.min(min, f); }
     expect(max).toBeGreaterThan(0.99);
     expect(min).toBeLessThan(0.01);
   });

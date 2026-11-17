@@ -110,10 +110,10 @@ describe('the lava and shimmer materials', () => {
       expect(samples(code)).toEqual([1]);
     });
 
-    it(`${B.name}: the shimmer samples the lava light four times and the copy once, and discards nothing`, () => {
+    it(`${B.name}: the shimmer samples the lava light three times and the copy once, and discards nothing`, () => {
       const code = fragment(B, shimmer().material);
-      // The lava light at four heights of the view ray, the scene copy and the sight mask.
-      expect(samples(code)).toEqual([4, 1, 1]);
+      // The lava light at three heights of the view ray, the scene copy and the sight mask.
+      expect(samples(code)).toEqual([3, 1, 1]);
       // Its colour is the scene copy, which went through the sight step; the mask only scales its strength.
       expect(code).toContain('sightOrigin');
       // With the sight off everything is seen, so the mode is read too.

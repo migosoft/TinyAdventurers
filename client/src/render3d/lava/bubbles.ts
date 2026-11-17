@@ -3,7 +3,7 @@
 
 export const BUBBLE_CAP = 6;
 /** Seconds a bubble swells, then the seconds of its pop; its size range (tiles); the dome's height per size; the pop ring's reach. */
-export const BUBBLE = { swell: 1.25, pop: 0.65, size: [0.16, 0.32], rise: 0.22, grow: 1.2, ring: 1.6 } as const;
+export const BUBBLE = { swell: 1.25, pop: 0.65, size: [0.2, 0.36], rise: 0.22, grow: 1.2, ring: 1.6 } as const;
 
 function smooth(a: number, b: number, t: number): number {
   const u = Math.min(1, Math.max(0, (t - a) / (b - a)));

@@ -3,7 +3,7 @@
 // slow open pools and along the shore. A figure wading in it leaves a molten ring, and a bubble swells as a dome (the vertex stage
 // lifts the sheet), pops as a bright ring and closes. No light of the room falls on it: the glow on the surroundings is the lava
 // light of lightNodes.ts. The shimmer re-draws the scene behind the air over the lava with a small rising wobble. The numbers are the
-// approved mockup's; its colours were tuned under a tone map, so they are starting values here.
+// approved mockup's unless a comment says otherwise; its colours were tuned under a tone map, which the lava applies to itself (`GLOW`).
 import { MeshBasicNodeMaterial, Texture, Vector4, type NodeMaterial } from 'three/webgpu';
 import { Fn, If, Loop, attribute, dot, exp, float, floor, fract, length, max, mix, positionLocal, positionWorld, screenUV, sin, smoothstep, sqrt, step, texture, uniform, uniformArray, vec2, vec3, vec4 } from 'three/tsl';
 import type { Sight } from '../sightNodes';
@@ -30,7 +30,7 @@ export const CRUST = { freq: 1.7, warp: 1.1, warpFreq: 0.7, flow: [0.035, 0.015]
  * The molten rock: the open pools' noise (per tile) and the range of it over which the crust opens; the heat noise's frequency (per
  * tile); the ring round a wading figure: full within `ring[1]` tiles, gone at `ring[0]`.
  */
-export const MOLTEN = { openFreq: 0.55, open: [0.62, 0.8], heatFreq: 2.2, ring: [0.75, 0.3] } as const;
+export const MOLTEN = { openFreq: 0.55, open: [0.6, 0.74], heatFreq: 2.2, ring: [0.75, 0.3] } as const;
 /**
  * The shimmer: the height of the hot air over the lava (tiles); the largest offset of the scene copy's read (screens); the noise's
  * cells per tile along the camera's right and forward axis; the cells per second the two reads rise.
@@ -40,7 +40,7 @@ export const HEAT = { height: 1.6, offset: 0.006, freq: [2.5, 2.2], rise: [1.6, 
 /** The noises' drifts (per second, in their own cells): the two reads of the warp, the open pools and the heat; `warpSeed` sets the warp's second read apart. */
 export const FLOW = { warp: [0.04, -0.035], warpSeed: 7.3, open: [-0.025, 0.018], heat: [0.22, -0.15] } as const;
 /**
- * The colours (raw, no tone map; above 1 clips). Molten: from `deep` to `hot` by the heat, then toward `white` by `whiteShare` over
+ * The colours, as light: `glowShown` presses them into what the screen shows, so a value above 1 is brighter, not clipped. Molten: from `deep` to `hot` by the heat, then toward `white` by `whiteShare` over
  * the heat range `whiteAt`. Crust: `crust` times a grain (`grain[0]` plus `grain[1]` of a noise at `grainFreq` per cell) and a tone
  * per plate (`plate[0]` plus `plate[1]` of the plate's hash); `rim` is added at a plate's edge, scaled by `rimHeat[0]` plus
  * `rimHeat[1]` of the heat.
@@ -62,8 +62,29 @@ export const BUBBLE_LOOK = {
   edge: 0.75, gain: 1.2, glint: [1.6, 1.2, 0.6], glintAt: 0.25, glintSize: 0.45,
   ring: [2.2, 1, 0.3], ringSharp: 12, patchGain: 1.5, patch: 0.5,
 } as const;
-/** The shimmer's noise: the offset that sets its second read apart; the strength at which a pixel is fully the wobbled copy; the least height of the view vector the ray is divided by. */
-export const SHIMMER = { seed: 5.1, fade: 0.05, viewMin: 0.1 } as const;
+/** The shimmer's noise: the offset that sets its second read apart; the strength at which a pixel is fully the wobbled copy; the least height of the view vector the ray is divided by; the heights of the ray at which the lava light is read. */
+export const SHIMMER = { seed: 5.1, fade: 0.05, viewMin: 0.1, reads: 3 } as const;
+
+/**
+ * The glow's curve: the lava's colours are mixed as light (values above 1 are brighter, not whiter) and then pressed into 0..1 the way
+ * the approved mockup showed them: `exposure`, the ACES filmic curve of three.js (`ACESFilmicToneMapping`: its two matrices as rows and
+ * the fit between them) and the sRGB encoding. The view itself maps no tones; this is the lava's own response, which gives the cracks
+ * their soft red skirt and turns the hottest rock toward yellow-white instead of clipping it.
+ */
+export const GLOW = {
+  exposure: 1.15,
+  toAces: [[0.59719, 0.35458, 0.04823], [0.076, 0.90834, 0.01566], [0.0284, 0.13383, 0.83777]],
+  fromAces: [[1.60475, -0.53108, -0.07367], [-0.10208, 1.10813, -0.00605], [-0.00327, -0.07276, 1.07602]],
+} as const;
+
+/** `colour` (light, any size) as the screen shows it, by `GLOW`. */
+function glowShown(colour: N): N {
+  const rows = (m: readonly (readonly number[])[], v: N): N => vec3(dot(v, vec3(...m[0])), dot(v, vec3(...m[1])), dot(v, vec3(...m[2])));
+  const v: N = rows(GLOW.toAces, colour.mul(GLOW.exposure / 0.6));
+  const fit = v.mul(v.add(0.0245786)).sub(0.000090537).div(v.mul(v.mul(0.983729).add(0.432951)).add(0.238081));
+  const lin: N = rows(GLOW.fromAces, fit).clamp(0, 1);
+  return mix(lin.mul(12.92), lin.pow(1 / 2.4).mul(1.055).sub(0.055), step(0.0031308, lin));
+}
 
 export interface LavaMaterial {
   material: NodeMaterial;
@@ -179,7 +200,7 @@ export function lavaMaterial(sight: Sight): LavaMaterial {
         });
       });
     });
-    return col;
+    return glowShown(col);
   });
 
   const m = new MeshBasicNodeMaterial();
@@ -227,12 +248,12 @@ export function shimmerMaterial(sight: Sight, lavaLight: Texture, map: { w: numb
     // The view ray's ground point at height `h` over the lava (the view is orthographic: every pixel's ray runs along `toward`).
     const per = T.xz.div(max(T.y, SHIMMER.viewMin)).toVar();
     const G: N = P.xz.add(per.mul(float(LAVA_LEVEL).sub(P.y))).toVar();
-    // The air is hot over lava and cools with the height: the mean over four heights of the ray (weights 1, 2/3, 1/3 and 0, so the
-    // strength reaches 0.5 over a wide pool), each read at the top level.
+    // The air is hot over lava and cools with the height: three heights of the ray below `HEAT.height` (where the weight would be
+    // 0) with the weights 1, 2/3 and 1/3 over their sum, so the strength reaches 1 over a wide pool; each read at the top level.
     const strength = float(0).toVar();
-    for (let k = 0; k < 4; k++) {
-      const h = (HEAT.height * k) / 3;
-      strength.addAssign(light.sample(G.add(per.mul(h)).div(vec2(map.w, map.h))).a.mul((1 - k / 3) / 4));
+    for (let k = 0; k < SHIMMER.reads; k++) {
+      const h = (HEAT.height * k) / SHIMMER.reads;
+      strength.addAssign(light.sample(G.add(per.mul(h)).div(vec2(map.w, map.h))).a.mul((1 - k / SHIMMER.reads) / ((SHIMMER.reads + 1) / 2)));
     }
     // Only what the hero sees shimmers (all of it when the sight is off).
     const hard = sight.unseenAt(G).x.toVar();
