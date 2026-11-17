@@ -9,6 +9,7 @@ import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 import { dipMaterial } from './dips/dipNodes';
 import { airMaterials } from './air/airNodes';
+import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
 const lit = () => {
@@ -43,6 +44,9 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     // The ground cover (#330): sheets and bushels end with the sight step.
     // The dips' ground (#324): floor above, bank rock below.
     { name: 'dip', m: dipMaterial(t, t, 64, 64, l, t, sight, cover).material, world: true, attrs: DIP_ATTRS },
+    // The water's surface and the ceiling of its mirror pass (#345).
+    { name: 'water', m: waterMaterial(l, sight, t, { w: 4, h: 3 }, toward).material, world: true },
+    { name: 'ceiling', m: ceilingMaterial(l, sight), world: true },
     { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
     { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },
