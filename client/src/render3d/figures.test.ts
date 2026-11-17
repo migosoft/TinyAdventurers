@@ -6,6 +6,7 @@ import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
 import { LIE_SINK, sideReach } from './models/pose3d';
+import { variationOf } from './models/variation';
 import { DESCS, FIT_KIND, modelKeyOf, type DescKey } from './models/table';
 import type { SpritePixels } from './models/weapons';
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
@@ -697,7 +698,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     for (const k of BUILT) kit.get(k);
@@ -880,6 +881,86 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const stone = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow | (1 << EFFECT.Petrified) })]), cam(), look({ kit, ...all }));
     expect(stone.models[0].tint[0]).toBeCloseTo(0xa0 / 255, 6);
     expect(stone.models[0].stone).toBe(true);
+  });
+
+  describe('the tube models: variation, anchors, oval, reach and fangs (#357)', () => {
+    const stag = (id: number, o: Partial<EntState> = {}) => ent(id, KIND.Stag, o);
+    const one = (e: EntState, fg = make()) => fg.frame(frame([e]), cam(), look({ kit, ...all }));
+    const sm = () => kit.get('stag')!;
+    const crestOf = (fg: Figures3d, id: number): number => (fg as unknown as { figs: Map<number, { mem3: { crest: number } }> }).figs.get(id)!.mem3.crest;
+    const near = (a: readonly number[], b: readonly number[]) => a.forEach((x, i) => expect(x).toBeCloseTo(b[i], 6));
+
+    it('scales and tones each animal by its id, the same on every client, and sets the antler scale', () => {
+      const m = sm(), v = variationOf(5), fg = make();
+      const a = one(stag(5), fg).models[0];
+      expect(a.scale).toBeCloseTo(m.scale * v.size, 9);
+      near(a.tint, [v.tone, v.tone, v.tone]);
+      expect(crestOf(fg, 5)).toBe(v.crest);
+      const again = one(stag(5)).models[0];
+      expect([again.scale, ...again.tint]).toEqual([a.scale, ...a.tint]);
+      const other = one(stag(6)).models[0];
+      expect([other.scale, ...other.tint]).not.toEqual([a.scale, ...a.tint]);
+    });
+
+    it('multiplies a status tint by the tone, and a stone animal is still grey', () => {
+      const v = variationOf(11), poisoned = 1 << EFFECT.Poisoned;
+      const wolf = one(ent(11, KIND.DireWolf, { effects: poisoned })).models[0].tint;
+      expect(wolf).not.toEqual([1, 1, 1]);
+      near(one(stag(11, { effects: poisoned })).models[0].tint, wolf.map((c) => c * v.tone));
+      const stone = one(stag(11, { effects: 1 << EFFECT.Petrified })).models[0];
+      expect(stone.stone).toBe(true);
+    });
+
+    it('leaves a wolf (no `varies`) at the model\'s scale and white', () => {
+      const w = kit.get('wolf')!, o = one(ent(10, KIND.DireWolf)).models[0];
+      expect(o.scale).toBe(w.scale);
+      expect(o.tint).toEqual([1, 1, 1]);
+    });
+
+    it('hangs the anchors from the model\'s standing height, and leaves a wolf\'s alone', () => {
+      const m = sm(), v = variationOf(5), fg = make(), h = m.stands! * m.scale * v.size;
+      one(stag(5), fg);
+      const a = fg.anchors.get(5)!;
+      expect([a.height, a.head, a.tag]).toEqual([h, h, h + 3].map((x) => expect.closeTo(x, 6)));
+      const wf = make();
+      one(ent(10, KIND.DireWolf), wf);
+      const card = wf.anchors.get(10)!, d = FIGURES[KIND.DireWolf], w = kit.get('wolf')!;
+      const ib = bounds(`${d.idle}0`), footY = d.footY ?? ib.h;
+      expect(card.height).toBeCloseTo(Math.max(0, footY - ib.t) * (d.scale ?? 1) * w.size, 6);
+    });
+
+    /** The half extents of the first ground oval, along screen right and screen depth (the camera's yaw is 0). */
+    const oval = (out: FigureOut): [number, number] => {
+      const p = out.shadows.position, xs = [0, 1, 2, 3, 4, 5].map((i) => p[i * 3]), zs = [0, 1, 2, 3, 4, 5].map((i) => p[i * 3 + 2]);
+      return [(Math.max(...xs) - Math.min(...xs)) / 2, (Math.max(...zs) - Math.min(...zs)) / 2];
+    };
+
+    it('draws the ground oval from the footprint, turned by the facing, and a wolf\'s from baseR', () => {
+      const m = sm(), v = variationOf(5), [hl, hw] = m.footprint!, k = (m.scale * v.size) / 16;
+      const east = oval(one(stag(5)));
+      expect(east[0]).toBeCloseTo(hl * k, 5);
+      expect(east[1]).toBeCloseTo(hw * k * 0.45, 5);
+      const south = oval(one(stag(5, { aim: Math.PI / 2 })));
+      expect(south[0]).toBeCloseTo(hw * k, 5);
+      expect(south[1]).toBeCloseTo(hl * k * 0.45, 5);
+      const d = FIGURES[KIND.DireWolf], w = oval(one(ent(10, KIND.DireWolf)));
+      expect(w[0]).toBeCloseTo((d.baseR * kit.get('wolf')!.size) / 16, 5);
+    });
+
+    it('gives the sight reach from the footprint\'s half length', () => {
+      const m = sm(), v = variationOf(5), body = one(stag(5)).models[0];
+      expect(body.reach).toBeCloseTo((m.footprint![0] * m.scale * v.size) / 16, 6);
+    });
+
+    it('gives a boar no fangs, in the wind-up and the strike, and still its swoosh', () => {
+      for (const anim of [ANIM.Windup, ANIM.Melee]) {
+        const out = one(ent(12, KIND.Boar, { anim, animMs: 100 }));
+        expect(out.figs[0].bite, String(anim)).toBe(-1);
+        expect(out.figs[0].arc, String(anim)).toBe(FIGURES[KIND.Boar].swing!.arc);
+      }
+      const wolf = one(ent(10, KIND.DireWolf, { anim: ANIM.Windup }));
+      expect(wolf.figs[0].bite).toBeGreaterThanOrEqual(0);
+    });
   });
 
   it('does not drop the tint when the hurt flash blinks: a hurt slowed wolf keeps the slowed blue on every frame', () => {

@@ -30,6 +30,7 @@ import { BONES, BOW_WEAPONS } from './models/bones';
 import type { FigureModel } from './models/model';
 import { LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
 import { modelKeyOf } from './models/table';
+import { variationOf } from './models/variation';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -40,6 +41,8 @@ const BITE_SECS = 0.3;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
 /** The ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
 const SHADOW_DEPTH = 0.45;
+/** No variation: a model without `varies`. */
+const NO_VARIATION = { size: 1, tone: 1, crest: 1 };
 const SHADOW_ALPHA = 0.45;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
@@ -727,13 +730,18 @@ export class Figures3d {
     // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
     // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
-    const sa = standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
+    const v = m.varies ? variationOf(e.id) : NO_VARIATION;
+    // A model that knows its own standing height (`stands`) hangs the anchors from it; the card says nothing about how big such a model is.
+    const h = m.stands !== undefined ? m.stands * m.scale * v.size * (d.scale ?? 1) : 0;
+    const sa = m.stands !== undefined ? { height: h, tag: h + 3, head: h } : standingAnchor(ib, footY, (d.scale ?? 1) * m.size);   // the smaller model's: the bar sits just above it
     const foot = this.figFoot(e, s, f, { skims, start }, (pose.lie ? 3 : sa.height) / TILE);
     fig.body = null;
     fig.last = null;
     fig.model = true;
     if (!pose.visible || foot.gone) return false;
-    const p3 = poseFigure(m, d, s, f.dt, (fig.mem3 ??= newPose3dMemory()));
+    const mem3 = (fig.mem3 ??= newPose3dMemory());
+    mem3.crest = v.crest;
+    const p3 = poseFigure(m, d, s, f.dt, mem3);
 
     const { x, z, y } = foot;
     const falling = foot.d?.kind === 'fall';
@@ -744,12 +752,15 @@ export class Figures3d {
     const radius = silhouetteRadius(m);
     // The sight reach is the card's: half the opaque width of the body frame the card would show, in tiles.
     const fb = this.bounds(pose.frame);
-    const reach = pose.lie ? 0 : ((fb.r - fb.l + 1) * sc) / 2 / TILE;   // a lying card (a decal) carries none
+    // A model with a footprint takes its half length instead.
+    const hl = m.footprint ? (m.footprint[0] * m.scale * v.size * sc) / TILE : 0, hw = m.footprint ? (m.footprint[1] * m.scale * v.size * sc) / TILE : 0;
+    const reach = pose.lie ? 0 : m.footprint ? hl : ((fb.r - fb.l + 1) * sc) / 2 / TILE;   // a lying card (a decal) carries none
     const tint = modelTint(pose, d, s);
+    tint[0] *= v.tone; tint[1] *= v.tone; tint[2] *= v.tone;
     const insts: FigureInst[] = [];
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: m.scale, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: m.scale * v.size, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
       cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
     };
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
@@ -803,17 +814,23 @@ export class Figures3d {
       const r = (d.baseR * sc * m.size) / TILE;
       // A hop shrinks the oval by how high the figure is; a lying figure's oval is stretched (the pose's own numbers).
       const hop = 1 - 0.35 * p3.air;
-      const rx = r * (pose.lie ? pose.shadow.sx : hop);
-      pushShadow(out.shadows, cam, gf.x, gf.z, rx, r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop), SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
+      let rx = r * (pose.lie ? pose.shadow.sx : hop), rz = r * SHADOW_DEPTH * (pose.lie ? pose.shadow.sy : hop);
+      if (m.footprint) {
+        // The footprint turned by the facing: half length and half width of the animal's ground, seen from the camera.
+        const a = p3.yaw - cam.yaw, ca = Math.cos(a), sa2 = Math.sin(a), lx = hl * (pose.lie ? pose.shadow.sx : hop), wz = hw * (pose.lie ? 1 : hop);
+        rx = Math.hypot(lx * ca, wz * sa2);
+        rz = Math.hypot(lx * sa2, wz * ca) * SHADOW_DEPTH;
+      }
+      pushShadow(out.shadows, cam, gf.x, gf.z, rx, rz, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
     this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * m.scale) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * m.scale) / TILE;
-    const bite = m.armLength > 0 ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
+    const bite = m.armLength > 0 || m.butt ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
     const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
-    const standing = Math.max(0, (footY - ib.t) * m.size) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
+    const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
     this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
