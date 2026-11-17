@@ -26,6 +26,15 @@ export function dipOf(tile: number): DipKind {
   }
 }
 
+/** A height-0 cell that is a tile of dip kind `dip`, or has one among its eight neighbours (the rounded outline reaches into those): the cells a liquid's surface covers. */
+export function liquidCell(map: TileMap, x: number, z: number, dip: DipKind): boolean {
+  if (cellHeight(map.get(x, z)) !== 0) return false;
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    if (dipOf(map.get(x + dx, z + dz)) === dip) return true;
+  }
+  return false;
+}
+
 function ss(a: number, b: number, t: number): number {
   const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
   return u * u * (3 - 2 * u);

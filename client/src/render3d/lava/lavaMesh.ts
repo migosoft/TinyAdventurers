@@ -1,6 +1,5 @@
 import type { TileMap } from '../../sim/map';
-import { DIP, LAVA_LEVEL, bedAt, dipOf, isLava, maskAt } from '../dips/shape';
-import { cellHeight } from '../heights';
+import { DIP, LAVA_LEVEL, bedAt, isLava, liquidCell, maskAt } from '../dips/shape';
 import { CHUNK } from '../worldMesh';
 
 /** Quads per tile side of the lava's surface (the bubbles' domes need it; the dip mesh's DIP_RES). */
@@ -10,11 +9,7 @@ export const SHIMMER_SHEETS = [0.02, 0.8, 1.6] as const;
 
 /** A height-0 cell that is lava, or has a lava tile among its eight neighbours (the rounded outline reaches into those). */
 export function lavaCell(map: TileMap, x: number, z: number): boolean {
-  if (cellHeight(map.get(x, z)) !== 0) return false;
-  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-    if (dipOf(map.get(x + dx, z + dz)) === DIP.lava) return true;
-  }
-  return false;
+  return liquidCell(map, x, z, DIP.lava);
 }
 
 export interface LavaChunk {

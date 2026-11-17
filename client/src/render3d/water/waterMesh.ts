@@ -1,15 +1,10 @@
 import type { TileMap } from '../../sim/map';
-import { DIP, WATER_LEVEL, dipOf } from '../dips/shape';
-import { cellHeight } from '../heights';
+import { DIP, WATER_LEVEL, liquidCell } from '../dips/shape';
 import { CHUNK } from '../worldMesh';
 
 /** A height-0 cell that is water, or has a water tile among its eight neighbours (the rounded outline reaches into those). */
 export function waterCell(map: TileMap, x: number, z: number): boolean {
-  if (cellHeight(map.get(x, z)) !== 0) return false;
-  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-    if (dipOf(map.get(x + dx, z + dz)) === DIP.water) return true;
-  }
-  return false;
+  return liquidCell(map, x, z, DIP.water);
 }
 
 export interface WaterChunk { cx: number; cz: number; position: Float32Array; count: number }

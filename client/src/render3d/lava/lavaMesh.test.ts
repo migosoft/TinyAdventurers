@@ -102,6 +102,12 @@ describe('lava mesh', () => {
       const ux = p[b] - p[a], uz = p[b + 2] - p[a + 2], vx = p[d] - p[a], vz = p[d + 2] - p[a + 2];
       expect(uz * vx - ux * vz).toBeGreaterThan(0);
     }
+    const s = buildShimmerChunk(with_(6, 6, pool(2, 2, 2)), 0, 0)!, q = s.position;
+    for (let t = 0; t < s.count / 3; t++) {
+      const o = t * 9;
+      const ux = q[o + 3] - q[o], uz = q[o + 5] - q[o + 2], vx = q[o + 6] - q[o], vz = q[o + 8] - q[o + 2];
+      expect(uz * vx - ux * vz).toBeGreaterThan(0);
+    }
   });
 
   it('follows a tile change', () => {
