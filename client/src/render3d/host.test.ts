@@ -89,6 +89,28 @@ describe('startHost', () => {
     host!.stop();
   });
 
+  it('keys reach the stage from a radio or a checkbox but not from a text or range input', async () => {
+    const { deps, stage } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, '', 'demo', () => stage, deps);
+    const make = (type: string) => {
+      const i = document.createElement('input');
+      i.type = type;
+      el.appendChild(i);
+      return i;
+    };
+    for (const type of ['text', 'range']) {
+      key(make(type), 'Escape');
+      expect(stage.key).not.toHaveBeenCalled();
+    }
+    for (const [n, type] of ['radio', 'checkbox'].entries()) {
+      key(make(type), 'Escape');
+      expect(stage.key).toHaveBeenCalledTimes(n + 1);
+    }
+    host!.stop();
+  });
+
   it('stop through the Host while the first view is pending leaves nothing behind', async () => {
     const { deps, stage, views } = setup();
     const el = document.createElement('div');

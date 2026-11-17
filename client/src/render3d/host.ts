@@ -129,8 +129,10 @@ export function clearErrors(host: HTMLElement): void {
   for (const d of Array.from(host.children)) if (d.classList.contains('r3d-error')) d.remove();
 }
 
+/** Text-like targets keep their own keys. A clicked radio, checkbox or button keeps focus but takes no typing. */
 export const isTextTarget = (t: EventTarget | null): boolean =>
-  t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
+  (t instanceof HTMLInputElement && !['checkbox', 'radio', 'button'].includes(t.type)) ||
+  t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
 /**
  * Null when it showed an error or was stopped during the start. Error boxes are the element's: a host removes those of
@@ -151,7 +153,7 @@ export async function startHost(
   const initial: R3dParams = mode === 'play'
     ? { ...DEFAULTS, backend: parsed.backend, quality: loadQuality(store) }
     : mode === 'run'
-      ? { ...parsed, quality: new URLSearchParams(search).has('quality') && isQuality(new URLSearchParams(search).get('quality')) ? parsed.quality : loadQuality(store) }
+      ? { ...parsed, quality: isQuality(new URLSearchParams(search).get('quality')) ? parsed.quality : loadQuality(store) }
       : parsed;
   let params = initial;
   let canvas = document.createElement('canvas');
