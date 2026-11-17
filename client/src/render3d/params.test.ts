@@ -98,7 +98,7 @@ describe('toSearch', () => {
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
-      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5,
+      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -183,5 +183,15 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&respawn=-2').respawn).toBe(0);
     expect(toSearch(DEFAULTS, '?r3d&dust=0&stir=0&respawn=3')).toBe('?r3d');
     expect(toSearch({ ...DEFAULTS, haze: false, respawn: 2 }, '?r3d')).toBe('?r3d&haze=0&respawn=2');
+  });
+
+  it('reads the reflections switch (on by default, refl=0 turns it off) and writes it back (#345)', () => {
+    expect(DEFAULTS.refl).toBe(true);
+    expect(parseParams('?r3d').refl).toBe(true);
+    expect(parseParams('?r3d&refl=0').refl).toBe(false);
+    expect(parseParams('?r3d&refl=1').refl).toBe(true);
+    expect(parseParams('?r3d&refl=bogus').refl).toBe(true);
+    expect(toSearch({ ...DEFAULTS, refl: false }, '?r3d')).toBe('?r3d&refl=0');
+    expect(toSearch(DEFAULTS, '?r3d&refl=0')).toBe('?r3d');
   });
 });

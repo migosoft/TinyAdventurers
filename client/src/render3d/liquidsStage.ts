@@ -180,6 +180,8 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
+          // The water (#345): the page's own clock, so a pinned page holds the waves still.
+          water: { ripples: null, now: t, reflect: c.params.refl && c.params.quality !== 'fast' },
         },
         c.timer,
       );

@@ -192,6 +192,18 @@ describe('panel', () => {
     }
   });
 
+  it('has a Reflections switch on the demo pages and in runs (#345)', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { calls, btn } = setup(DEFAULTS, mode);
+      expect(btn('Reflections').getAttribute('aria-pressed')).toBe('true');
+      btn('Reflections').click();
+      expect(calls[0].refl).toBe(false);
+      expect(btn('Reflections').getAttribute('aria-pressed')).toBe('false');
+      btn('Reflections').click();
+      expect(calls[1].refl).toBe(true);
+    }
+  });
+
   it('the tree rows (#329) show with the sky: a leaf slider with an Own button, and a Plain trees switch', () => {
     const { host, calls, panel, btn } = setup();
     const leaf = host.querySelector<HTMLInputElement>('#r3d-leaf')!;

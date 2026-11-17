@@ -4,10 +4,12 @@ import {
   BufferGeometry,
   Color,
   DataTexture,
+  DataUtils,
   DynamicDrawUsage,
   HalfFloatType,
   LinearFilter,
   LinearSRGBColorSpace,
+  Matrix4,
   Mesh,
   NearestFilter,
   NoColorSpace,
@@ -16,6 +18,7 @@ import {
   OrthographicCamera,
   QuadMesh,
   RedFormat,
+  RGFormat,
   RGBAFormat,
   RenderTarget,
   Scene,
@@ -68,7 +71,11 @@ import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type World
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
 import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
-import { LAVA_LEVEL } from './dips/shape';
+import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
+import { refreshWaterField, waterField } from './water/waterField';
+import { buildWaterChunk } from './water/waterMesh';
+import { ceilingMaterial, waterMaterial } from './water/waterNodes';
+import { CEILING_LAYER, WATER_LAYER, mirrorPose, waterInView, waterPasses } from './water/passes';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
@@ -78,6 +85,8 @@ export interface Assets { image: HTMLImageElement; frames: FrameRects }
 export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [number, number, number] }
 /** The painted ground, RGBA, w x h px. */
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
+/** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */
+const NO_CLIP = -1e6;
 /** Whether the shadow lookup flips v (see the call in `draw`). */
 const SUN_FLIP_V = true;
 
@@ -131,6 +140,8 @@ export interface FrameInput {
   shafts?: boolean;
   /** The air (#307): the simulation's parts for this frame and the haze (`on`, `t` seconds for its drift); absent or null = none. */
   air?: { parts: AirParts; haze: { on: boolean; t: number } } | null;
+  /** The water (#345): the packed ripples (null: none), its clock in seconds, and whether the mirror pass runs. Absent: no ripples, clock `t`, no mirror. */
+  water?: { ripples: Float32Array | null; now: number; reflect: boolean };
 }
 
 export { GroundTooLargeError };
@@ -328,6 +339,36 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
   const material = wm.material;
   const dm = dipMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, sight, cover);
+  // The water (#345). The field: the bed's height and the water's outline mask, half floats, filtered linearly (the lava light
+  // texture is read the same way), kept up to date by `tileChanged`.
+  const wField = waterField(map);
+  const fieldTex = new DataTexture(new Uint16Array(wField.data.length), wField.w, wField.h, RGFormat, HalfFloatType);
+  fieldTex.colorSpace = NoColorSpace;
+  fieldTex.magFilter = LinearFilter;
+  fieldTex.minFilter = LinearFilter;
+  fieldTex.generateMipmaps = false;
+  fieldTex.flipY = false;
+  /** Converts the field's rows j0..j1 (inclusive) to half floats and marks the texture for upload. */
+  const uploadField = (j0: number, j1: number): void => {
+    const out = fieldTex.image.data as Uint16Array;
+    for (let i = j0 * wField.w * 2, end = (j1 + 1) * wField.w * 2; i < end; i++) out[i] = DataUtils.toHalfFloat(wField.data[i]);
+    fieldTex.needsUpdate = true;
+  };
+  uploadField(0, wField.h - 1);
+  // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame. The water reads it as its view vector.
+  const toward = viewTowardUniform();
+  const water = waterMaterial(lighting, sight, fieldTex, map, toward);
+  // The copy of the opaque scene the water sees through, and the mirror picture: resized in place (the water's nodes keep the texture objects).
+  const sceneCopy = new RenderTarget(1, 1, { depthBuffer: false, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
+  sceneCopy.texture.colorSpace = NoColorSpace;
+  const mirrorTarget = new RenderTarget(1, 1, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
+  mirrorTarget.texture.colorSpace = NoColorSpace;
+  water.setScene(sceneCopy.texture);
+  const mirrorCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  mirrorCam.up.set(0, -1, 0);
+  mirrorCam.layers.set(0);
+  mirrorCam.layers.enable(CEILING_LAYER);
+  const mirrorMatrix = new Matrix4();
 
   const scene = new Scene();
   const { nx, nz } = chunkGrid(map);
@@ -339,6 +380,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const worldChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const terrainChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const dipChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const waterChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  /** The ground each water chunk's quads cover (tiles), for `waterInView`; null: rebuilt from the chunks at the next frame. */
+  let waterBoxes: { x0: number; z0: number; x1: number; z1: number }[] | null = null;
   let clock = 0;
   const makeChunkMesh = (a: WorldArrays, cx: number, cz: number, top: number, terrain: TerrainChunk | null, bottom = 0): ChunkMesh => {
     const g = new BufferGeometry();
@@ -369,6 +413,15 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setIndex(new BufferAttribute(a.index, 1));
     const box = new Box3(new Vector3(...d.min), new Vector3(...d.max));
     return finishMesh(g, box, dm.material, null);
+  };
+  /** The water's surface in a chunk: its quads at `WATER_LEVEL`, on the water's own layer (drawn after the scene copy). */
+  const makeWaterMesh = (position: Float32Array): ChunkMesh => {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(position, 3));
+    g.computeBoundingBox();
+    const cm = finishMesh(g, g.boundingBox!, water.material, null);
+    cm.mesh.layers.set(WATER_LAYER);
+    return cm;
   };
   const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial, terrain: TerrainChunk | null): ChunkMesh => {
     g.boundingBox = box;
@@ -407,9 +460,34 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (t) terrainChunks[i] = makeChunkMesh(t.arrays, cx, cz, 0, t, LAVA_LEVEL);
     const d = buildDipChunk(map, world.painted, cx, cz, assets.frames);
     if (d) dipChunks[i] = makeDipMesh(d);
+    dropChunk(waterChunks, i);
+    const w = buildWaterChunk(map, cx, cz);
+    if (w) waterChunks[i] = makeWaterMesh(w.position);
+    waterBoxes = null;
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-  const chunkTotal = (): number => worldChunks.filter(Boolean).length + terrainChunks.filter(Boolean).length + dipChunks.filter(Boolean).length;
+  const chunkTotal = (): number => worldChunks.filter(Boolean).length + terrainChunks.filter(Boolean).length + dipChunks.filter(Boolean).length + waterChunks.filter(Boolean).length;
+  const boxesOfWater = (): { x0: number; z0: number; x1: number; z1: number }[] => {
+    if (!waterBoxes) {
+      waterBoxes = [];
+      for (const c of waterChunks) {
+        const b = c?.mesh.geometry.boundingBox;
+        if (b) waterBoxes.push({ x0: b.min.x, z0: b.min.z, x1: b.max.x, z1: b.max.z });
+      }
+    }
+    return waterBoxes;
+  };
+  // The ceiling only the mirror pass draws (#345): one quad over the map at the walls' height, facing down. A painted map has no water.
+  const ceilingMat = world.painted ? null : ceilingMaterial(lighting, sight);
+  let ceiling: Mesh | null = null;
+  if (ceilingMat) {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array([0, WALL_H, 0, map.w, WALL_H, 0, map.w, WALL_H, map.h, 0, WALL_H, 0, map.w, WALL_H, map.h, 0, WALL_H, map.h]), 3));
+    ceiling = new Mesh(g, ceilingMat);
+    ceiling.frustumCulled = false;
+    ceiling.layers.set(CEILING_LAYER);
+    scene.add(ceiling);
+  }
   const chunks = { total: chunkTotal(), drawn: 0 };
 
   // The force field: one unlit, translucent mesh over every closed door cell.
@@ -436,8 +514,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   rebuildField();
 
-  // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame.
-  const toward = viewTowardUniform();
   // Cards share one vertex layout in four materials: opaque upright, translucent upright (sorted back to front by the caller), translucent flat (floor decals), and emissive (torch flames).
   const card = cardMaterial(atlas, aw, ah, lighting, toward, sight);
   const ghost = cardMaterial(atlas, aw, ah, lighting, toward, sight, { translucent: true });
@@ -570,6 +646,38 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
+  camera.layers.enable(WATER_LAYER);
+  /** The picture's layers: the opaque scene (0), the translucent things and the water. */
+  const pictureLayers = (): void => {
+    camera.layers.set(0);
+    camera.layers.enable(AIR_SKIP_LAYER);
+    camera.layers.enable(WATER_LAYER);
+  };
+  /** Whether the last frame's picture was drawn with the scene copy (a pool in view), for `readback`. */
+  let lastCopy = false;
+  /**
+   * The picture with a pool in view, into `target`: the opaque scene (layer 0), a copy of its colour, then the water and everything
+   * translucent over it with the depth kept. The water reads the copy: what lies behind its surface.
+   */
+  const splitPicture = (rt: RenderTarget): void => {
+    const auto = renderer.autoClear;
+    try {
+      camera.layers.set(0);
+      renderer.setRenderTarget(rt);
+      renderer.render(scene, camera);
+      if (sceneCopy.width !== rt.width || sceneCopy.height !== rt.height) sceneCopy.setSize(rt.width, rt.height);
+      renderer.setRenderTarget(sceneCopy);
+      quad.render(renderer); // `quad` shows `target`, which `rt` is
+      camera.layers.set(AIR_SKIP_LAYER);
+      camera.layers.enable(WATER_LAYER);
+      renderer.autoClear = false;
+      renderer.setRenderTarget(rt);
+      renderer.render(scene, camera);
+    } finally {
+      renderer.autoClear = auto;
+      pictureLayers();
+    }
+  };
 
   // The light shafts (#307), made when the first frame with cracks and shafts on comes: a depth pre-pass of the opaque scene (layer 0
   // only, at the art size), the march into a small half-float target, and the additive composite over the picture. A lost device
@@ -646,6 +754,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;
       (heights.image.data as Uint8Array)[z * map.w + x] = Math.round(cellHeight(map.tiles[z * map.w + x]) * 100);
       heights.needsUpdate = true;
+      // The water's field around the cell (the rows `refreshWaterField` can change).
+      refreshWaterField(wField, map, x, z);
+      uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       const cell = z * map.w + x, was = builtTiles[cell];
       builtTiles[cell] = map.tiles[cell];
       const dips = dipClassChanged(was, map.tiles[cell]);
@@ -700,11 +811,19 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const [w, h] = lastSize;
       const rt = new RenderTarget(w, h, { depthBuffer: true, type: UnsignedByteType, format: RGBAFormat, generateMipmaps: false });
       try {
-        renderer.setRenderTarget(rt);
-        renderer.render(scene, camera);
         // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does. The composite keeps the last
         // frame's `uvScale`, so this is right only when the readback target matches the picture's plan (its crop of the art-size frustum).
-        if (lastShafts && shafts) compositeShafts(shafts);
+        if (lastCopy && target && target.width === w && target.height === h) {
+          // A pool was in view: the same split picture as `draw` (the water's uniforms and the mirror picture are the last frame's), then copied over.
+          splitPicture(target);
+          if (lastShafts && shafts) compositeShafts(shafts);
+          renderer.setRenderTarget(rt);
+          quad.render(renderer);
+        } else {
+          renderer.setRenderTarget(rt);
+          renderer.render(scene, camera);
+          if (lastShafts && shafts) compositeShafts(shafts);
+        }
         renderer.setRenderTarget(null);
         const data = (await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h)) as Uint8Array;
         // WebGL2 reads the bottom row first, WebGPU the top row first (seen with the same scene on both): make it top first.
@@ -738,6 +857,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       wm.smooth.value = f.smooth ? 1 : 0;
       dm.smooth.value = wm.smooth.value;
       dm.time.value = f.t;
+      water.time.value = f.water?.now ?? f.t;
+      water.setRipples(f.water?.ripples ?? null);
       clock = f.t;
       fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
       // A terrain chunk animates only if the last frame drew it; the others catch up when they come into view.
@@ -875,7 +996,42 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sh.marchQuad.render(renderer);
         timer?.lap('shafts');
       }
-      if (f.plan.direct) {
+      // The water (#345): with a pool in view the picture is split around a copy of the opaque scene, and (reflections on) the scene
+      // above the water is drawn first from a camera mirrored in the water plane. Without a pool nothing extra runs.
+      const p = f.plan;
+      const wp = waterPasses(waterInView(boxesOfWater(), footprint(f.cam, p.halfW, p.halfH)), f.water?.reflect ?? false, p.targetW, p.targetH);
+      lastCopy = wp.copy;
+      if (wp.mirror) {
+        if (mirrorTarget.width !== wp.mirror.w || mirrorTarget.height !== wp.mirror.h) mirrorTarget.setSize(wp.mirror.w, wp.mirror.h);
+        const pose = mirrorPose([camera.position.x, camera.position.y, camera.position.z], [g.x, 0, g.z], WATER_LEVEL);
+        mirrorCam.left = camera.left;
+        mirrorCam.right = camera.right;
+        mirrorCam.top = camera.top;
+        mirrorCam.bottom = camera.bottom;
+        mirrorCam.far = camera.far;
+        mirrorCam.position.set(...pose.pos);
+        mirrorCam.lookAt(...pose.target);
+        mirrorCam.updateMatrixWorld(true);
+        mirrorCam.updateProjectionMatrix();
+        // For this pass only: everything below the water is clipped by the sight step, the walls stay closed (their openings read the
+        // picture's screen), and the chunk counters rest as in the shafts' pre-pass.
+        const seeMode = wm.see.mode.value;
+        sight.clipBelow.value = WATER_LEVEL;
+        wm.see.mode.value = 0;
+        inPrepass = true;
+        try {
+          renderer.setRenderTarget(mirrorTarget);
+          renderer.render(scene, mirrorCam);
+        } finally {
+          inPrepass = false;
+          wm.see.mode.value = seeMode;
+          sight.clipBelow.value = NO_CLIP;
+        }
+        // After the render: the renderer sets the camera's clip space (WebGL's or WebGPU's) on its first use.
+        mirrorMatrix.multiplyMatrices(mirrorCam.projectionMatrix, mirrorCam.matrixWorldInverse);
+        water.setMirror({ picture: mirrorTarget.texture, matrix: mirrorMatrix });
+      } else water.setMirror(null);
+      if (p.direct && !wp.copy) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
         // High draws straight to the canvas: there is no copy, so 'present' is not booked (it stays 0).
@@ -886,20 +1042,27 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         }
         return renderer.info.render.drawCalls;
       }
-      const p = f.plan;
-      renderer.setRenderTarget(targetFor(p.targetW, p.targetH, p.linear));
-      renderer.render(scene, camera);
+      // Into the picture's target; with a pool in view also on High, where the target has the canvas's size.
+      const rt = targetFor(p.targetW, p.targetH, p.linear);
+      if (wp.copy) splitPicture(rt);
+      else {
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, camera);
+      }
       timer?.lap('scene');
       if (sh) {
         compositeShafts(sh);
         timer?.lap('shafts');
       }
       renderer.setRenderTarget(null);
-      renderer.getViewport(fullViewport);
-      // The viewport origin is the top-left corner of the canvas on both backends.
-      renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
-      quad.render(renderer);
-      renderer.setViewport(fullViewport);
+      if (p.direct) quad.render(renderer); // the whole canvas
+      else {
+        renderer.getViewport(fullViewport);
+        // The viewport origin is the top-left corner of the canvas on both backends.
+        renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
+        quad.render(renderer);
+        renderer.setViewport(fullViewport);
+      }
       timer?.lap('present');
       return renderer.info.render.drawCalls;
     },
@@ -912,7 +1075,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         heights.dispose();
         groundStart.dispose();
         for (const t of groundTex) t.dispose();
-        for (const c of [...worldChunks, ...terrainChunks, ...dipChunks]) c?.mesh.geometry.dispose();
+        for (const c of [...worldChunks, ...terrainChunks, ...dipChunks, ...waterChunks]) c?.mesh.geometry.dispose();
+        fieldTex.dispose();
+        water.material.dispose();
+        sceneCopy.dispose();
+        mirrorTarget.dispose();
+        ceiling?.geometry.dispose();
+        ceilingMat?.dispose();
         fieldMesh?.geometry.dispose();
         fieldMaterial.dispose();
         material.dispose();
