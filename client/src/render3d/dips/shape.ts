@@ -31,7 +31,7 @@ function ss(a: number, b: number, t: number): number {
   return u * u * (3 - 2 * u);
 }
 
-/** Smooth membership of the cells around (x, z) in tiles: 0.5 on a straight cell edge. Outside the map is no member. */
+/** Smooth membership of the cells around (x, z) in tiles: `OUTLINE_EDGE` (0.5) on a straight cell edge. Outside the map is no member. */
 export function maskAt(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
   const u = x - 0.5, v = z - 0.5;
   const i = Math.floor(u), j = Math.floor(v);
@@ -113,7 +113,7 @@ export function kindOf(water: number, lava: number, chasm: number): DipKind {
   return chasm === best ? DIP.chasm : lava === best ? DIP.lava : DIP.water;
 }
 
-/** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > 0.5), else -Infinity. */
+/** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > `OUTLINE_EDGE`), else -Infinity. */
 export function surfaceAt(map: TileMap, x: number, z: number): number {
   const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava);
   if (w > OUTLINE_EDGE && w >= l) return WATER_LEVEL;

@@ -96,7 +96,7 @@ const SCORCH_REACH = 0.9, SCORCH_DARK = 0.3, SOOT_COVER = 0.45, EMBER_REACH = 0.
 const SOOT = vec3(0.045, 0.03, 0.026), EMBER = vec3(0.85, 0.24, 0.04);
 /** Where the rock starts: the depth below the floor (world units) where `bank` begins to turn the floor's texel into rock and where it is full. The slab gate starts at the same depth (one quantity: above it no rock shows, so no slabs are computed). */
 const ROCK_START = 0.02, ROCK_FULL = 0.12;
-/** The slab gate: the chasm outline's mask above which the slabs are computed at all (marks.x), so only pixels inside a chasm's outline pay for them. */
+/** The slab gate: the chasm outline's mask above which the slabs are computed at all (marks.x), so only pixels inside a chasm's outline pay for them. It lies below `OUTLINE_EDGE`, so the gate is open wherever the bank has started (the bed only drops once the chasm mask passes the outline). */
 const SLAB_MASK_MIN = 0.3;
 /** The wall's direction from the normal (`alongZ`: 0 on a wall along x, 1 on one along z): the smoothstep that sharpens it, and the values under and over which one run of slabs is enough (0.01, 0.99) and only a rounded corner takes two. */
 const ALONG_Z_FROM = 0.3, ALONG_Z_TO = 0.7, ALONG_X_ONLY = 0.01, ALONG_Z_ONLY = 0.99;
