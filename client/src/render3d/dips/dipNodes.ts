@@ -166,11 +166,11 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   // chasm's outline, and one evaluation where the wall runs straight (two only on a rounded corner). Plain arithmetic, so a branch is
   // allowed here (no texture sample, no derivative). The rock and the chasm's self-light below both use `ridges`, and both use it at the
   // top level (not inside a branch), so this block is emitted once.
-  const rimMask = attribute('rim', 'vec3');
+  const marks = attribute('marks', 'vec3');
   const sA = wp.x.mul(sign(normal.z)), sB = wp.z.mul(sign(normal.x)).negate();
   const ridges = Fn(() => {
     const r = float(0).toVar();
-    If(rimMask.z.greaterThan(0.3).and(d.greaterThan(0.02)), () => {
+    If(marks.x.greaterThan(0.3).and(d.greaterThan(0.02)), () => {
       If(alongZ.lessThan(0.01), () => { r.assign(slabs(sA, y)); })
         .ElseIf(alongZ.greaterThan(0.99), () => { r.assign(slabs(sB, y)); })
         .Else(() => { r.assign(mix(slabs(sA, y), slabs(sB, y), alongZ)); });
@@ -183,13 +183,12 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
 
   // The floor along a rim is marked by what lies beside it: moss by water, soot and glowing cracks by lava, cracks and broken-off
   // pieces by a chasm.
-  // `near` (1 on the dip's cells, 0 one tile away) says how far a mark runs, `rim` (the outline's own mask) where the outline is.
-  const rim = attribute('rim', 'vec3');
-  const near = attribute('near', 'vec3');
+  // `marks.y` and `marks.z` (near lava, near a chasm: 1 on the dip's cells, 0 one tile away) say how far a mark runs, `marks.x` (the
+  // chasm outline's own mask) where the outline is.
   // The pieces (27 hashes) only on floor that lava or a chasm marks: a branch again. Elsewhere: no piece, far from any edge.
   const piece: N = Fn(() => {
     const v = vec2(0, 1).toVar();
-    If(max(near.y, near.z).greaterThan(0.02).and(bank.lessThan(0.99)), () => {
+    If(max(marks.y, marks.z).greaterThan(0.02).and(bank.lessThan(0.99)), () => {
       const s = shards(wp.xz.mul(SHARD_FREQ));
       v.assign(vec2(s.id, s.edge));
     });
@@ -209,18 +208,18 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const darkenW = select(cover.on.greaterThan(0.5), float(1), float(0));
   const floorTexel = mix(flat.texel.rgb, mix(grown.rgb, flat.texel.rgb.mul(kindLook(grown.id).darken), darkenW), coverW);
 
-  const scorch = smoothstep(1 - SCORCH_REACH, 1, near.y.add(patchy.mul(0.35)));
+  const scorch = smoothstep(1 - SCORCH_REACH, 1, marks.y.add(patchy.mul(0.35)));
   const byLava = mix(floorTexel.mul(mix(float(1), float(SCORCH_DARK), scorch)), SOOT, scorch.mul(SOOT_COVER));
   const emberLine = max(joint.mul(0.6), float(1).sub(smoothstep(0, EMBER_WIDTH, sh.edge)));
-  const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, 0.98, near.y.add(patchy.mul(0.3)))).mul(float(0.55).add(glowNoise.mul(0.6))).mul(float(1).sub(bank));
+  const ember = EMBER.mul(emberLine).mul(smoothstep(1 - EMBER_REACH, 0.98, marks.y.add(patchy.mul(0.3)))).mul(float(0.55).add(glowNoise.mul(0.6))).mul(float(1).sub(bank));
 
   // Cracks run out from the chasm along the edges of the floor's pieces, each piece as far as its own id lets them, widening toward
   // the rim; the pieces at the rim have broken off (the dark rock under the floor shows), which makes the break line jagged.
-  const reach = smoothstep(1 - CRACK_REACH, 0.95, near.z.add(sh.id.sub(0.5).mul(CRACK_RAGGED)));
+  const reach = smoothstep(1 - CRACK_REACH, 0.95, marks.z.add(sh.id.sub(0.5).mul(CRACK_RAGGED)));
   const crackWidth = max(reach.mul(CRACK_WIDTH), 1e-3);
   const crack = float(1).sub(smoothstep(crackWidth.mul(0.5), crackWidth, sh.edge)).mul(step(1e-3, reach));
-  const brokenOff = step(float(0.5).sub(smoothstep(0.25, 0.75, sh.id).mul(CHIP)), rim.z);
-  const dusty = float(1).sub(smoothstep(0.5, 1, near.z).mul(RIM_DUST));
+  const brokenOff = step(float(0.5).sub(smoothstep(0.25, 0.75, sh.id).mul(CHIP)), marks.x);
+  const dusty = float(1).sub(smoothstep(0.5, 1, marks.z).mul(RIM_DUST));
   const byChasm = mix(byLava.mul(float(1).sub(crack.mul(CRACK_DARK))).mul(dusty), CHASM_ROCK.mul(0.35), brokenOff);
 
   // Water (and a dip of 0) takes `waterRock`; the weights pick the other two.

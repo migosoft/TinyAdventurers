@@ -3,7 +3,7 @@ import { cellHeight } from '../heights';
 import { CHUNK, flatSurface, type FrameRects } from '../worldMesh';
 import { TILE_ID } from '../../generated/defs';
 import { GROUND_TILES } from '../../game/woodland/ground';
-import { bedAt, dipOf, inDipMesh, kindAt, nearAt, rimAt } from './shape';
+import { bedAt, dipOf, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
 
 /** Quads per cell edge of the dip ground. */
 export const DIP_RES = 12;
@@ -16,10 +16,11 @@ export interface DipArrays {
   kind: Float32Array;
   /** The DipKind at each vertex: which bank material it takes. */
   dip: Float32Array;
-  /** `rimAt` at each vertex: how near it lies to water, lava and a chasm (three masks), for the rim's marks on the floor. */
-  rim: Float32Array;
-  /** `nearAt` at each vertex: 1 minus the distance in tiles to the nearest water, lava and chasm cell (three values), for the marks that run further into the floor. */
-  near: Float32Array;
+  /**
+   * Three values at each vertex, for the marks on the floor along a rim: x is the chasm's mask (0.5 on a straight outline, 1 inside), y how
+   * near lava lies and z how near a chasm lies (`nearAt`: 1 on the cells, 0 one tile away).
+   */
+  marks: Float32Array;
   index: Uint32Array;
   count: number;
 }
@@ -45,7 +46,7 @@ export function dipClassChanged(a: number, b: number): boolean {
 /** The ground of the dip cells of chunk (cx, cz), or null when it has none. */
 export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): DipChunk | null {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
-  const position: number[] = [], normal: number[] = [], uv: number[] = [], rect: number[] = [], kind: number[] = [], dip: number[] = [], rim: number[] = [], near: number[] = [];
+  const position: number[] = [], normal: number[] = [], uv: number[] = [], rect: number[] = [], kind: number[] = [], dip: number[] = [], marks: number[] = [];
   const index: number[] = [];
   const min: [number, number, number] = [Infinity, Infinity, Infinity], max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   const R = DIP_RES, N = R + 1, G = R + 3;
@@ -61,9 +62,10 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
       uv.push(s.u0 + (px - x) * 16, s.v0 + (pz - z) * 16);
       rect.push(r.x, r.y, r.w, r.h);
       kind.push(s.kind);
-      dip.push(kindAt(map, px, pz));
-      rim.push(...rimAt(map, px, pz));
-      near.push(...nearAt(map, px, pz));
+      const chasm = maskAt(map, px, pz, isChasm);
+      dip.push(kindOf(maskAt(map, px, pz, isWater), maskAt(map, px, pz, isLava), chasm));
+      marks.push(chasm, 0, 0);
+      nearAt(map, px, pz, marks, marks.length - 2);
       min[0] = Math.min(min[0], px); min[1] = Math.min(min[1], py); min[2] = Math.min(min[2], pz);
       max[0] = Math.max(max[0], px); max[1] = Math.max(max[1], py); max[2] = Math.max(max[2], pz);
     };
@@ -109,7 +111,7 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
     cx, cz,
     arrays: {
       position: new Float32Array(position), normal: new Float32Array(normal), uv: new Float32Array(uv),
-      rect: new Float32Array(rect), kind: new Float32Array(kind), dip: new Float32Array(dip), rim: new Float32Array(rim), near: new Float32Array(near),
+      rect: new Float32Array(rect), kind: new Float32Array(kind), dip: new Float32Array(dip), marks: new Float32Array(marks),
       index: new Uint32Array(index), count: kind.length,
     },
     min, max,

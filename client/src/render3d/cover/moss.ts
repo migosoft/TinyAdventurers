@@ -6,7 +6,7 @@ import { noise, type Rgb } from '../../game/covemath';
 import { P } from '../../game/vegetation/canvas';
 import { TILE, type TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
-import { rimAt } from '../dips/shape';
+import { isWater, maskAt } from '../dips/shape';
 import { COVER } from './kinds';
 import type { CoverSource } from './source';
 
@@ -31,7 +31,6 @@ function hash(seed: number, a: number, b: number, c: number): number {
 }
 
 const BAD_NEIGHBOUR = new Set<number>([TILE_ID.DoorOpen, TILE_ID.DoorClosed, TILE_ID.Lava, TILE_ID.Chasm]);
-const isWater = (t: number): boolean => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
 
 /**
  * `everywhere`: every eligible tile is mossy (the dev scene). `ignoreLava`: a map with lava still grows moss (a dev page that shows
@@ -100,7 +99,7 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
         const tone = MOSS_TONES[Math.min(MOSS_TONES.length - 1, Math.floor(n * n * MOSS_TONES.length))]; // darker tones commoner
         colour[o * 4] = tone[0]; colour[o * 4 + 1] = tone[1]; colour[o * 4 + 2] = tone[2]; colour[o * 4 + 3] = 255;
         // Beside water the ground falls into the pool inside the rounded outline (dips/shape.ts): no moss on the bank, and none creeps there.
-        const dry = !waterside[i] || rimAt(map, (x + 0.5) / TILE, (y + 0.5) / TILE)[0] < MOSS.waterEdge;
+        const dry = !waterside[i] || maskAt(map, (x + 0.5) / TILE, (y + 0.5) / TILE, isWater) < MOSS.waterEdge;
         if (!dry) continue;
         allow[o] = 1;
         if (!mossy[i]) continue;

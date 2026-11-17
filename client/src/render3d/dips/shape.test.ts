@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
   BED_RES, CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, nearAt, rimAt, sampleBed, surfaceAt, walkBedAt, type DipKind,
+  bedAt, bedField, depthFade, dipOf, inDipMesh, kindAt, kindOf, maskAt, nearAt, isChasm, isLava, sampleBed, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -99,19 +99,42 @@ describe('dip shape', () => {
   });
 
   it('measures how near a dip is, per kind', () => {
-    const m = pool('C', 5);
-    expect(nearAt(m, mid, mid)).toEqual([0, 0, 1]);                    // in the chasm: no water, no lava
-    expect(nearAt(m, edgeX, mid)[2]).toBe(1);                          // on the cell's edge
-    expect(nearAt(m, edgeX - 0.25, mid)[2]).toBeCloseTo(0.75, 9);      // 1 minus the distance in tiles
-    expect(nearAt(m, edgeX - 1, mid)[2]).toBeCloseTo(0, 9);            // one tile out: where the dip mesh ends
-    expect(nearAt(m, edgeX - 1.5, mid)[2]).toBe(0);
-    expect(nearAt(m, cornerX - 0.3, cornerZ - 0.4)[2]).toBeCloseTo(0.5, 9);   // to the corner, straight
+    // Each point: 1 minus the distance (plain hypot) to the cell's rectangle, at most 1, at least 0.
+    const near = (cell: { x: number; z: number }, px: number, pz: number) =>
+      Math.max(0, 1 - Math.hypot(Math.max(cell.x - px, 0, px - cell.x - 1), Math.max(cell.z - pz, 0, pz - cell.z - 1)));
+    const at = (m: TileMap, px: number, pz: number) => { const o = [9, 9, 9, 9]; nearAt(m, px, pz, o, 1); return o; };
+    const cell = { x: 5, z: 5 };
+    const pts: [number, number][] = [[5.5, 5.5], [5, 5.5], [5.5, 5], [6, 5.5], [4.75, 5.5], [4.5, 5.5], [4, 5.5], [3.5, 5.5], [6.25, 5.5], [7, 5.5],
+      [4.7, 4.6], [4.3, 4.3], [4, 4], [3.5, 3.5], [6.4, 6.3], [5.5, 6.5], [5.5, 7.6]];
+    for (const [c, ch, slot] of [['L', 'lava', 0], ['C', 'chasm', 1]] as const) {
+      const m = room(...Array.from({ length: 9 }, (_, j) => Array.from({ length: 9 }, (_, i) => (i === 4 && j === 4 ? c : '.')).join('')));
+      for (const [px, pz] of pts) {
+        const o = at(m, px, pz);
+        expect(o[1 + slot], `${ch} at ${px}, ${pz}`).toBeCloseTo(near(cell, px, pz), 9);
+        expect(o[1 + 1 - slot], `other kind at ${px}, ${pz}`).toBe(0);
+        expect([o[0], o[3]], 'outside the written slots').toEqual([9, 9]);
+      }
+    }
     const two = room('~.L');
-    expect(nearAt(two, 2.5, 1.5)).toEqual([0.5, 0.5, 0]);              // the floor cell between water and lava
-    // The outline's own masks: 0.5 on a straight edge, 0 half a tile out, 1 well inside.
-    expect(rimAt(m, edgeX, mid)[2]).toBeCloseTo(0.5, 9);
-    expect(rimAt(m, edgeX - 0.5, mid)[2]).toBe(0);
-    expect(rimAt(m, mid, mid)).toEqual([0, 0, 1]);
+    const o = at(two, 2.5, 1.5);
+    expect([o[1], o[2]]).toEqual([0.5, 0]);                            // lava is one cell and half a tile away; the chasm is none
+  });
+  it('picks the kind from three masks', () => {
+    expect(kindOf(0.1, 0.14, 0.149)).toBe(DIP.none);                   // none below 0.15
+    expect(kindOf(0.15, 0, 0)).toBe(DIP.water);
+    expect(kindOf(0.2, 0.4, 0.3)).toBe(DIP.lava);
+    expect(kindOf(0.5, 0.4, 0.3)).toBe(DIP.water);
+    expect(kindOf(0.2, 0.3, 0.4)).toBe(DIP.chasm);
+    expect(kindOf(0.5, 0.5, 0.5)).toBe(DIP.chasm);                     // ties: chasm over lava over water
+    expect(kindOf(0.5, 0.5, 0.2)).toBe(DIP.lava);
+    expect(kindOf(0.5, 0.2, 0.5)).toBe(DIP.chasm);
+  });
+  it('marks the outline by its masks', () => {
+    const m = pool('C', 5);
+    expect(maskAt(m, edgeX, mid, isChasm)).toBeCloseTo(0.5, 9);
+    expect(maskAt(m, edgeX - 0.5, mid, isChasm)).toBe(0);
+    expect(maskAt(m, mid, mid, isChasm)).toBe(1);
+    expect(maskAt(m, mid, mid, isLava)).toBe(0);
   });
   it('names the kind', () => {
     const m = pool('C', 5);

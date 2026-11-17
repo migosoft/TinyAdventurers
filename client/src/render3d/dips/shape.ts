@@ -55,10 +55,10 @@ function vnoise(x: number, z: number): number {
   return a * (1 - fz) + b * fz;
 }
 
-const isWater = (t: number) => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
+export const isWater = (t: number) => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
 const isDeep = (t: number) => t === TILE_ID.DeepWater;
-const isLava = (t: number) => t === TILE_ID.Lava;
-const isChasm = (t: number) => t === TILE_ID.Chasm;
+export const isLava = (t: number) => t === TILE_ID.Lava;
+export const isChasm = (t: number) => t === TILE_ID.Chasm;
 
 /** Height of the ground at (x, z): 0 on plain floor, up to LIP on a rim, negative in a dip. */
 export function bedAt(map: TileMap, x: number, z: number): number {
@@ -86,35 +86,34 @@ function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   return h;
 }
 
-/** The kind whose mask is largest at (x, z), none below 0.15 (the bank material's choice). */
 /**
- * How near (x, z) lies to each kind of dip: the three masks (water, lava, chasm). 0.5 on a straight outline, falling to 0 half a tile
- * out on the floor and rising to 1 inside. The dip material marks the floor along a rim with them (cracks, scorching, damp).
+ * How far the marks of lava and of a chasm reach at (x, z): 1 minus the distance in tiles to the nearest cell of that kind, so 1 in and
+ * on such a cell, falling to 0 one tile away. One tile is how far the dip mesh reaches (the cells beside terrain), so the marks end
+ * where the world mesh's plain floor begins. Writes the lava's value to `out[at]` and the chasm's to `out[at + 1]`.
  */
-export function rimAt(map: TileMap, x: number, z: number): [number, number, number] {
-  return [maskAt(map, x, z, isWater), maskAt(map, x, z, isLava), maskAt(map, x, z, isChasm)];
-}
-/**
- * How far the marks of each kind of dip reach at (x, z): for water, lava and chasm, 1 minus the distance in tiles to the nearest cell of
- * that kind (its square), so 1 in and on such a cell, falling to 0 one tile away. One tile is how far the dip mesh reaches (the cells
- * beside terrain), so the marks end where the world mesh's plain floor begins.
- */
-export function nearAt(map: TileMap, x: number, z: number): [number, number, number] {
+export function nearAt(map: TileMap, x: number, z: number, out: { [i: number]: number }, at: number): void {
   const cx = Math.floor(x), cz = Math.floor(z);
-  const d: [number, number, number] = [1, 1, 1];
+  let lava = 1, chasm = 1;
   for (let j = cz - 1; j <= cz + 1; j++) for (let i = cx - 1; i <= cx + 1; i++) {
     const kind = dipOf(map.get(i, j));
-    if (kind === DIP.none) continue;
-    const dist = Math.hypot(Math.max(i - x, 0, x - i - 1), Math.max(j - z, 0, z - j - 1));
-    d[kind - 1] = Math.min(d[kind - 1], dist);
+    if (kind !== DIP.lava && kind !== DIP.chasm) continue;
+    const dx = Math.max(i - x, 0, x - i - 1), dz = Math.max(j - z, 0, z - j - 1), d2 = dx * dx + dz * dz;
+    if (kind === DIP.lava) lava = Math.min(lava, d2); else chasm = Math.min(chasm, d2);
   }
-  return [1 - d[0], 1 - d[1], 1 - d[2]];
+  out[at] = 1 - Math.sqrt(lava);
+  out[at + 1] = 1 - Math.sqrt(chasm);
 }
-export function kindAt(map: TileMap, x: number, z: number): DipKind {
-  const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava), c = maskAt(map, x, z, isChasm);
-  const best = Math.max(w, l, c);
+
+/** The kind whose mask is largest, none below 0.15 (the bank material's choice). A tie goes to the chasm, then lava, then water. */
+export function kindOf(water: number, lava: number, chasm: number): DipKind {
+  const best = Math.max(water, lava, chasm);
   if (best < 0.15) return DIP.none;
-  return c === best ? DIP.chasm : l === best ? DIP.lava : DIP.water;
+  return chasm === best ? DIP.chasm : lava === best ? DIP.lava : DIP.water;
+}
+
+/** The kind of dip at (x, z): `kindOf` the three masks there. */
+export function kindAt(map: TileMap, x: number, z: number): DipKind {
+  return kindOf(maskAt(map, x, z, isWater), maskAt(map, x, z, isLava), maskAt(map, x, z, isChasm));
 }
 
 /** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > 0.5), else -Infinity. */

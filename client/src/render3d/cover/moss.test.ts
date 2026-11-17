@@ -6,7 +6,7 @@ import { TILE, TileMap } from '../../sim/map';
 import { COVER } from './kinds';
 import { mossSource, MOSS, MOSS_TONES, tilesSeed } from './moss';
 import type { CoverSource } from './source';
-import { rimAt } from '../dips/shape';
+import { isWater, maskAt } from '../dips/shape';
 
 // 5 x 5 rooms of 7 x 7 floor, walls between (1 tile), 1-tile doors in the walls between neighbours in a row,
 // a 2 x 2 pool in room (1,1), and a 1-wide corridor leaving the grid at the bottom right.
@@ -69,7 +69,7 @@ describe('mossSource', () => {
     for (let ty2 = pool.y + 1; ty2 <= pool.y + 4; ty2++) for (let tx2 = pool.x + 1; tx2 <= pool.x + 4; tx2++) {
       for (let ly = 0; ly < TILE; ly++) for (let lx = 0; lx < TILE; lx++) {
         const x = tx2 * TILE + lx, y = ty2 * TILE + ly;
-        if (rimAt(m, (x + 0.5) / TILE, (y + 0.5) / TILE)[0] >= MOSS.waterEdge) onBank += s.grow[y * W * TILE + x] + s.allow[y * W * TILE + x];
+        if (maskAt(m, (x + 0.5) / TILE, (y + 0.5) / TILE, isWater) >= MOSS.waterEdge) onBank += s.grow[y * W * TILE + x] + s.allow[y * W * TILE + x];
       }
     }
     expect(onBank).toBe(0);
