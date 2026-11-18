@@ -31,7 +31,7 @@ function make(hasSun: boolean) {
 /** A geometry as the layer makes it for the whole of a model's triangles (`which`: the pieces and hulls, the pieces or the hulls). */
 function geometryOf(m: FigureModel, which: 'all' | 'piece' | 'line' = 'all'): BufferGeometry {
   const b = modelBuffers(m);
-  return figureGeometry(b, which === 'all' ? b.index : which === 'piece' ? b.pieceIndex : b.lineIndex, new InstancedBufferAttribute(new Float32Array(4), 1), null);
+  return figureGeometry(b, which === 'all' ? b.index : which === 'piece' ? b.pieceIndex : b.lineIndex, new InstancedBufferAttribute(new Float32Array(4), 1));
 }
 
 describe('constants', () => {
@@ -132,6 +132,14 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(id).not.toMatch(/lightAmbient/);
       expect(id).not.toMatch(/figPaint|figStone|figSky/);
       expect(id).not.toMatch(/figIdOn/);
+    });
+
+    it('the hull\'s cut rule: the line fetches the id texel at its own fragment coordinate; the piece does not', () => {
+      const { mats } = make(true);
+      // The fetch of a texture at the fragment's own pixel: `texelFetch` of an `ivec2` of `gl_FragCoord`, or `textureLoad` at `fragCoord.xy`.
+      const own = wgsl ? /textureLoad\(\s*\w+,\s*vec2<i32>\(\s*fragCoord\.xy\s*\)/ : /ivec2\(\s*vec2\(\s*gl_FragCoord\.xy\.x[^;]*;[\s\S]*?texelFetch\(/;
+      expect(fragment(B, mats.line, { compare: true, geometry: geometryOf(elf, 'line') })).toMatch(own);
+      expect(fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf, 'piece') })).not.toMatch(own);
     });
 
     it('the id and the piece share one vertex stage: the rows texture read and the stretch by cos(pitch)', () => {

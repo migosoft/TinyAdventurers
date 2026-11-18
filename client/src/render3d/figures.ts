@@ -216,23 +216,6 @@ function modelTint(pose: Pose, d: FigureDef, s: ViewState): [number, number, num
   return t;
 }
 
-const silhouettes = new WeakMap<FigureModel, number>();
-/**
- * The radius batching needs (tiles): the screen circle is centred `radius` above the foot, so it encloses the whole figure when it is
- * at least half the figure's height, add-ons (hat, horns) included, and at least the model's reach from its axis. The top of the
- * geometry is found once per model (`baseHeight` leaves the add-ons out).
- */
-function silhouetteRadius(m: FigureModel): number {
-  let r = silhouettes.get(m);
-  if (r === undefined) {
-    let top = 0;
-    for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
-    r = Math.max(m.radius, (top * m.scale) / TILE / 2);
-    silhouettes.set(m, r);
-  }
-  return r;
-}
-
 export class Figures3d {
   /** Figures drawn last frame. */
   count = 0;
@@ -403,9 +386,9 @@ export class Figures3d {
       if (sk.model && sm) {
         skullPose ??= restPose(sm, cam.yaw + Math.PI / 2);
         out.models.push({
-          // Its own negative owner (no entity has one: no caster slot, no sight), so overlapping skulls batch apart.
+          // Its own negative owner (no entity has one: no caster slot, no sight), so every skull has its own id in the id pass.
           owner: -1 - si, model: 'skull', x, z, lift: this.groundLift(x, z, 0.3), scale: this.models?.kit.get('skelet')?.scale ?? 1, pose: skullPose, bone: -1, boneScale: 1,
-          tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: silhouetteRadius(sm),
+          tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 },
         });
         continue;
       }
@@ -750,7 +733,6 @@ export class Figures3d {
     const sc = pose.scale;
     const dark = this.dark.has(e.id);
     const k = dark && this.darkFade ? this.fadeAlpha : 1;
-    const radius = silhouetteRadius(m) * v.size * Math.max(1, v.crest);   // the crest raises the antlers above the body's top
     // The sight reach is the card's: half the opaque width of the body frame the card would show, in tiles.
     const fb = this.bounds(pose.frame);
     // A model with a footprint takes its half length instead.
@@ -762,7 +744,7 @@ export class Figures3d {
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
       owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
-      cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
+      cut: false, sight: { hard: 0, soft: 0 }, reach,
     };
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
     const push = (i: FigureInst): void => {
@@ -783,10 +765,8 @@ export class Figures3d {
         const bs = (wp.scale * (d.scale ?? 1) * m.size) / ms;
         const w: FigureInst = {
           owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: ms, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-          tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, radius, reach,
+          tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, reach,
         };
-        // A raised weapon can reach past the body's circle: the figure's circle grows by the weapon's own size.
-        body.radius = w.radius = radius + wm.radius * bs * ms;
         if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
         push(w);
         insts.push(w);

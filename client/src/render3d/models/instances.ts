@@ -1,12 +1,11 @@
 // The instances of figures (#338): the record of one drawn model per frame, the row of floats it becomes (one row of the data
-// texture the vertex shader reads) and the batches that keep figures which overlap on screen apart. Pure maths.
+// texture the vertex shader reads). Pure maths.
 
-import { project, type Cam } from '../camera';
 import { MAX_BENDS, MAX_BONES } from './bones';
 import type { Pose3d } from './pose3d';
 
 export interface FigureInst {
-  owner: number;            // the entity id: batching, the caster slot, sight
+  owner: number;            // the entity id: the id pass, the caster slot, sight
   model: string;            // kit key
   x: number; z: number;     // foot, tiles
   lift: number;             // tiles above the ground (negative: sunk)
@@ -24,13 +23,12 @@ export interface FigureInst {
   tint: [number, number, number]; stone: boolean; alpha: number; dark: boolean;
   cut: boolean;             // nothing below the ground is drawn (sinking, drowning)
   sight: { hard: number; soft: number };
-  radius: number;           // tiles, for batching
-  /** Tiles: for the sight mask's wide-figure rule, what the figure's card would use (half the opaque width of its body frame x the pose scale), so it is seen and hidden where the card would be. Not the batching radius. 0 when absent. */
+  /** Tiles: for the sight mask's wide-figure rule, what the figure's card would use (half the opaque width of its body frame x the pose scale), so it is seen and hidden where the card would be. 0 when absent. */
   reach?: number;
 }
 
 /** Texels per row, 4 floats each. */
-export const ROW_TEXELS = 64, MAX_BATCHES = 8;
+export const ROW_TEXELS = 64;
 /** The owners of a frame are numbered 0 .. OWNER_MAX - 1 (modulo) in the rows. */
 export const OWNER_MAX = 65536;
 const PX = 1 / 16;  // tiles per sprite px
@@ -91,44 +89,6 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
   out[o] = inst.alpha; out[o + 1] = inst.sight.hard; out[o + 2] = inst.sight.soft; out[o + 3] = slot;
   o = base + ROW.flags * 4;
   out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = 0;
-}
-
-/**
- * A batch index per instance: instances of one owner share a batch; two owners whose screen circles overlap never do, up to
- * MAX_BATCHES - 1; the rest share the last (nothing is dropped). The circle of an instance is its foot-point, projected, with
- * `radius` (screen distances from `project` are in tiles, so radii in tiles compare directly). Two owners overlap when any
- * circle of one overlaps any of the other's (a weapon, a dash copy).
- */
-export function batchFigures(insts: readonly FigureInst[], cam: Cam): Int32Array {
-  const n = insts.length, out = new Int32Array(n);
-  const sx = new Float64Array(n), sy = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    // The circle rides with the hop: `lift` leaves out the root's rise (`pose.root.y`, sprite px, which the row adds itself).
-    const p = project(cam, insts[i].x, insts[i].lift + insts[i].pose.root.y * PX + insts[i].radius, insts[i].z);
-    sx[i] = p.sx; sy[i] = p.sy;
-  }
-  const owners = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    const list = owners.get(insts[i].owner);
-    if (list) list.push(i); else owners.set(insts[i].owner, [i]);
-  }
-  const placed: { members: number[]; batch: number }[] = [];
-  const touches = (a: number[], b: number[]): boolean => {
-    for (const i of a) for (const j of b) {
-      const r = insts[i].radius + insts[j].radius;
-      if ((sx[i] - sx[j]) ** 2 + (sy[i] - sy[j]) ** 2 < r * r) return true;
-    }
-    return false;
-  };
-  for (const members of owners.values()) {
-    let batch = MAX_BATCHES - 1;
-    for (let b = 0; b < MAX_BATCHES - 1; b++) {
-      if (!placed.some((p) => p.batch === b && touches(p.members, members))) { batch = b; break; }
-    }
-    placed.push({ members, batch });
-    for (const i of members) out[i] = batch;
-  }
-  return out;
 }
 
 /** A float array that keeps its content and at least doubles when `rows` (a count of floats) exceeds it. */

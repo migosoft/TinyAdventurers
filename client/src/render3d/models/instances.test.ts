@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Cam } from '../camera';
 import { BONES, MAX_BENDS, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { MAX_BATCHES, OWNER_MAX, ROW, ROW_TEXELS, batchFigures, growRows, packInstance, type FigureInst } from './instances';
+import { OWNER_MAX, ROW, ROW_TEXELS, growRows, packInstance, type FigureInst } from './instances';
 import { restPose, type Pose3d } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS } from './table';
@@ -12,7 +11,7 @@ const near = (a: ArrayLike<number>, b: ArrayLike<number>): void => {
 };
 const inst = (o: Partial<FigureInst> = {}): FigureInst => ({
   owner: 1, model: 'skelet', x: 0, z: 0, lift: 0, scale: 1, pose: restPose(skelet, 0), bone: -1, boneScale: 1,
-  tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: 0.5, ...o,
+  tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, ...o,
 });
 const row = (i: FigureInst, slot = 0, ownerNo = 0): Float32Array => { const out = new Float32Array(ROW_TEXELS * 4 * 2); packInstance(out, 1, i, slot, ownerNo); return out.subarray(ROW_TEXELS * 4, ROW_TEXELS * 8); };
 /** The 3x4 matrix at a texel column, applied to a point. */
@@ -91,39 +90,6 @@ describe('packInstance', () => {
     const b = BONES.indexOf('weaponR');
     pose.bones.set([1, 0, 0, 5, 0, 1, 0, 7, 0, 0, 1, 9], b * 12);
     near(mat(row(inst({ pose, bone: b, boneScale: 2 })), ROW.bones, [1, 1, 1]), [7, 9, 11]);
-  });
-});
-
-describe('batchFigures', () => {
-  const cam: Cam = { x: 0, z: 0, pitch: 1, yaw: 0 };
-  it('far apart: batch 0 each', () => {
-    expect([...batchFigures([inst({ owner: 1 }), inst({ owner: 2, x: 20 })], cam)]).toEqual([0, 0]);
-  });
-  it('overlapping: 0 and 1', () => {
-    expect([...batchFigures([inst({ owner: 1 }), inst({ owner: 2, x: 0.5 })], cam)]).toEqual([0, 1]);
-  });
-  it('a figure and its weapon share a batch, whatever lies between', () => {
-    const b = batchFigures([inst({ owner: 1 }), inst({ owner: 2, x: 0.5 }), inst({ owner: 1, bone: 12, radius: 0.3 })], cam);
-    expect([...b]).toEqual([0, 1, 0]);
-  });
-  it('a dash copy far from its owner still keeps the owner\'s batch and blocks the batch it overlaps', () => {
-    const b = batchFigures([inst({ owner: 1 }), inst({ owner: 1, x: 10 }), inst({ owner: 2, x: 10.2 })], cam);
-    expect([...b]).toEqual([0, 0, 1]);
-  });
-  it('a hopping figure\'s circle rides with its hop: it overlaps a figure behind it that the grounded circle would miss', () => {
-    // A figure 0.9 tiles behind (z) the first: far enough for circles at the foot-height, close once the first has hopped.
-    const grounded = batchFigures([inst({ owner: 1, radius: 0.4 }), inst({ owner: 2, z: -1.3, radius: 0.4 })], cam);
-    expect([...grounded]).toEqual([0, 0]);
-    const hop = restPose(skelet, 0);
-    hop.root.y = 16 * 1.2;   // 1.2 tiles up
-    const hopping = batchFigures([inst({ owner: 1, radius: 0.4, pose: hop }), inst({ owner: 2, z: -1.3, radius: 0.4 })], cam);
-    expect([...hopping]).toEqual([0, 1]);
-  });
-  it('12 overlapping figures: batches 0 to 7, the last five in 7, none dropped', () => {
-    const list = Array.from({ length: 12 }, (_, i) => inst({ owner: i + 1, x: i * 0.01 }));
-    const b = batchFigures(list, cam);
-    expect([...b]).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 7, 7]);
-    expect(MAX_BATCHES).toBe(8);
   });
 });
 

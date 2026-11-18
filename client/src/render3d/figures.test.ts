@@ -724,11 +724,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.casters[0].id).toBe(10);
     expect(out.shadows.n).toBe(1);
     expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.head / 2 / 16, 6);
-    // the model's own scale, not the pose's fall shrink; the radius encloses the silhouette
-    const m = kit.get('elf')!;
-    expect(out.models[0].scale).toBe(m.scale);
-    expect(out.models[0].radius).toBeGreaterThanOrEqual(m.baseHeight / 16 / 2);
-    expect(out.models[0].radius).toBeGreaterThanOrEqual(m.radius);
+    // the model's own scale, not the pose's fall shrink
+    expect(out.models[0].scale).toBe(kit.get('elf')!.scale);
   });
 
   it('draws the card when the model is not built, or the kind has no description: the same output as without models', () => {
@@ -1006,12 +1003,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       }
     });
 
-    it('batches a stag by its size and crest, and puts a boar\'s swoosh at its varied shoulder', () => {
-      const m = sm(), v = variationOf(5);
-      let top = 0;
-      for (let i = 1; i < m.position.length; i += 3) top = Math.max(top, m.position[i]);
-      const base = Math.max(m.radius, (top * m.scale) / 16 / 2);
-      expect(one(stag(5)).models[0].radius).toBeCloseTo(base * v.size * Math.max(1, v.crest), 9);
+    it('puts a boar\'s swoosh at its varied shoulder', () => {
       const b = kit.get('boar')!, bv = variationOf(12), out = one(ent(12, KIND.Boar));
       const stretch = 1 / Math.cos(Math.PI / 4);
       expect(out.figs[0].swingY - out.models[0].lift).toBeCloseTo(((b.shoulderY * b.scale * bv.size) / 16) * stretch, 6);
@@ -1048,13 +1040,6 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       for (let i = 0; i < 4; i++) floats += fg.frame(frame([ranger({ effects: 1 << EFFECT.Sleep })], { dt: 0.5 }), cam(), look({ kit, ...all })).floats.length;
       expect(floats).toBe(0);
     });
-  });
-
-  it('batches by the weapon too: the circle is the same for the figure and its bow and bigger than the body alone', () => {
-    const [body, bow] = make().frame(frame([ranger()]), cam(), look({ kit, ...all })).models;
-    expect(bow.radius).toBe(body.radius);
-    const elf = kit.get('elf')!, wm = kit.get('weapon_bow')!;
-    expect(body.radius).toBeCloseTo(Math.max(elf.radius, elf.baseHeight / 16 / 2) + wm.radius * bow.boneScale * elf.scale, 6);
   });
 
   it('gives a model figure the sight reach its card gets for the same entity', () => {

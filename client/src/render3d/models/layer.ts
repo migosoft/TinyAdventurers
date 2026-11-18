@@ -81,8 +81,8 @@ export function modelBuffers(m: FigureModel): ModelBuffers {
   };
 }
 
-/** A geometry of the shared streams with its own instanced `row` (the row of each instance) and, optionally, a draw range of `index`. */
-export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: InstancedBufferAttribute, range: { start: number; count: number } | null): InstancedBufferGeometry {
+/** A geometry of the shared streams with the given `index` and its own instanced `row` (the row of each instance). */
+export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: InstancedBufferAttribute): InstancedBufferGeometry {
   const g = new InstancedBufferGeometry();
   g.setAttribute('position', b.position);
   g.setAttribute('normal', b.normal);
@@ -92,7 +92,6 @@ export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: Ins
   g.setAttribute('origin', b.origin);
   g.setAttribute('row', row);
   g.setIndex(index);
-  if (range) g.setDrawRange(range.start, range.count);
   g.instanceCount = 0;
   return g;
 }
@@ -122,7 +121,7 @@ export class FigureLayer {
   private readonly models = new Map<string, ModelRes>();
   private readonly entries = new Map<string, Entry>();
   /** Per-frame scratch, cleared at the top of `frame` so a frame allocates no containers. */
-  private readonly groups = new Map<string, { model: FigureModel; list: number[] }>();
+  private readonly groups = new Map<string, { key: string; model: FigureModel; list: number[] }>();
   private readonly live = new Set<Entry>();
   /** The frame's owner numbers: an entity id to its index in order of first appearance. */
   private readonly ownerNos = new Map<number, number>();
@@ -168,14 +167,14 @@ export class FigureLayer {
       ready++;
       if (!ownerNos.has(insts[i].owner)) ownerNos.set(insts[i].owner, ownerNos.size % OWNER_MAX);
       let g = groups.get(insts[i].model);
-      if (!g) groups.set(insts[i].model, g = { model: m, list: [] });
+      if (!g) groups.set(insts[i].model, g = { key: insts[i].model, model: m, list: [] });
       g.list.push(i);
     }
     this.fit(ready);
     let row = 0;
     let draws = 0;
-    for (const [key, g] of groups) {
-      const e = this.entry(key, g.model, g.list.length);
+    for (const g of groups.values()) {
+      const e = this.entry(g.key, g.model, g.list.length);
       const first = row;
       for (const i of g.list) { packInstance(this.rows, row, insts[i], slotOf(insts[i].owner), ownerNos.get(insts[i].owner)!); row++; }
       const ids = e.row.array as Float32Array;
@@ -252,10 +251,10 @@ export class FigureLayer {
       e!.meshes.push({ mesh, scene: into });
       if (counted) e!.draws++;
     };
-    add(figureGeometry(b, b.pieceIndex, row, null), res.mats.id, this.idScene, 0, true);
-    add(figureGeometry(b, b.pieceIndex, row, null), res.mats.piece, this.scene, FIGURE_ORDER, true);
-    if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row, null), res.mats.line, this.scene, HULL_ORDER, true);
-    if (this.sunScene && res.mats.sun) add(figureGeometry(b, b.pieceIndex, row, null), res.mats.sun, this.sunScene, 0, false);
+    add(figureGeometry(b, b.pieceIndex, row), res.mats.id, this.idScene, 0, true);
+    add(figureGeometry(b, b.pieceIndex, row), res.mats.piece, this.scene, FIGURE_ORDER, true);
+    if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row), res.mats.line, this.scene, HULL_ORDER, true);
+    if (this.sunScene && res.mats.sun) add(figureGeometry(b, b.pieceIndex, row), res.mats.sun, this.sunScene, 0, false);
     this.entries.set(key, e);
     return e;
   }

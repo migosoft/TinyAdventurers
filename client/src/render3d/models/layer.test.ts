@@ -49,7 +49,7 @@ const inst = (model: string, o: Partial<FigureInst> = {}): FigureInst => {
   const m = kit.get(model)!;
   return {
     owner: 1, model, x: 0, z: 0, lift: 0, scale: m.scale, pose: restPose(m, 0), bone: -1, boneScale: 1,
-    tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: m.radius, ...o,
+    tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, ...o,
   };
 };
 const frame = (insts: FigureInst[]): FigureFrame => ({ insts, kit });

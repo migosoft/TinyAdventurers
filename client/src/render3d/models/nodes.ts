@@ -22,7 +22,7 @@ type N = any;
 export const FIGURE_SHADE = 0.55;
 /** The render order of the figures' pieces: after every other opaque thing. */
 export const FIGURE_ORDER = 10;
-/** The render order of the hulls: after the pieces of every model, so the id pass and the pieces' depth are complete when a hull reads them. */
+/** The render order of the hulls: after the pieces of every model, so the pieces' depth is complete when a hull is depth-tested. (The id pass is a separate render, finished before the picture whatever the order.) */
 export const HULL_ORDER = FIGURE_ORDER + 0.5;
 /** The outline colour (sRGB, as every colour here). */
 export const OUTLINE = 0x222222;
