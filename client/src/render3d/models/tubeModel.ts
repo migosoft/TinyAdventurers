@@ -150,6 +150,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length + 0.8 * d.arms!.radius : 0,
     armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],
     ...(two ? { gait: 'walk' as const } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
+    ...(armed && d.arms!.stretch !== undefined ? { armStretch: d.arms!.stretch } : {}),
     legs: d.legs.map((l) => ({ upper: BONES.indexOf(l.upper), lower: l.lower ? BONES.indexOf(l.lower) : -1, front: two ? false : l.front, ...(two ? { knee: l.knee ?? 1 } : {}) })),
     hop: d.hop, neckBend: bends.findIndex((b) => b.neck), butt: d.pieces.some((p) => p.bone === 'hat'), varies: true,
     stands, footprint: [d.footprint[0], d.footprint[1]],

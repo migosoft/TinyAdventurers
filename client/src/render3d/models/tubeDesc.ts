@@ -38,7 +38,7 @@ export interface TubeDesc {
   /** 'two': an upright figure that walks on two legs (or none). Absent: four legs, as before. */
   stance?: 'two';
   /** 'two' only: both arms hang straight down from the pivots of armR and armL; a hand ball ends each. */
-  arms?: { length: number; radius: number };
+  arms?: { length: number; radius: number; /** The share of a blow's arm lengthening these arms take (default 1); arms of a natural length need little. */ stretch?: number };
   /** The height (page px) below which `robe` pieces swing. */
   robeTop?: number;
   /** A factor on the size of the held weapon (default 1). */

@@ -492,7 +492,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       const sd = side === 0 ? 1 : -1;
       eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * armAir * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
       if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) slerp(qa, fromDown(side === 0 ? AP.right : AP.left, qt), k);
-      const long = 1 + ((side === 0 ? AP.longR : AP.longL) - 1) * k, more = (long - 1) * (m.armLength - m.armRadius);
+      const long = 1 + ((side === 0 ? AP.longR : AP.longL) - 1) * k * (m.armStretch ?? 1), more = (long - 1) * (m.armLength - m.armRadius);
       const arm = locals[ARM[side]], hand = locals[HAND[side]];
       useQ(ARM[side], qa); arm.sy = long;                   // the arm grows ...
       hand.sy = 1 / long; hand.ty = -more / long;           // ... and the hand moves out with its end, at its own size

@@ -57,9 +57,11 @@ const WOLF_TABLE: Record<string, number[]> = {
   sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
 };
 
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny';
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'orc' | 'orcArcher';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
-const TUBE_KIND: Record<TubeKey, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny };
+/** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
+const BIPEDS: TubeKey[] = ['orc', 'orcArcher'];
+const TUBE_KIND: Record<TubeKey, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
   let m = tmemo.get(k);
@@ -176,6 +178,15 @@ describe('the walk', () => {
     const p = at(Math.PI / 2);
     expect(Math.sign(turnOf(m, p, bone('armR')))).toBe(-Math.sign(turnOf(m, p, m.legs![0].upper)));
     expect(Math.sign(turnOf(m, p, bone('armL')))).toBe(-Math.sign(turnOf(m, p, m.legs![1].upper)));
+  });
+  it('lengthens the arm in a blow by the share the model states (armStretch); the whole of it by default', () => {
+    const swing = (mm: FigureModel): number => stretchOf(mm, poseFigure(mm, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, settled()), bone('armR'));
+    const whole = swing(m), part = swing({ ...m, armStretch: 0.25 }), none = swing({ ...m, armStretch: 0 });
+    expect(whole).toBeGreaterThan(1.3);
+    expect(part - 1).toBeCloseTo(0.25 * (whole - 1), 6);
+    expect(none).toBeCloseTo(1, 6);
+    const hand = (mm: FigureModel): number => stretchOf(mm, poseFigure(mm, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, settled()), bone('handR'));
+    expect(hand({ ...m, armStretch: 0.25 })).toBeCloseTo(1 / part, 6);   // the hand keeps its own size
   });
   it('is straight at rest', () => {
     const p = poseFigure(m, d, view(), 0, settled());
@@ -395,13 +406,34 @@ describe('the crest', () => {
 describe('the woodland animals in every animation', () => {
   it('give finite bones, bends and root, also with a stopped clock', () => {
     const anims = Object.values(ANIM) as number[];
-    for (const k of TUBES) for (const dt of [0, 1 / 60]) for (const anim of anims) {
+    for (const k of [...TUBES, ...BIPEDS]) for (const dt of [0, 1 / 60]) for (const anim of anims) {
       const m = tube(k), mem = newPose3dMemory();
       const p = poseFigure(m, tdef(k), view({ anim, animT: dt, x: 3, y: -2 }), dt, mem);
-      for (const v of [...flat(p), p.air, p.yaw]) expect(Number.isFinite(v), `${k} anim ${anim} dt ${dt}`).toBe(true);
+      for (const v of [...flat(p), ...p.robe, p.air, p.yaw]) expect(Number.isFinite(v), `${k} anim ${anim} dt ${dt}`).toBe(true);
       const q = poseFigure(m, tdef(k), view({ anim, animT: dt + 0.07, x: 3 + dt, y: -2 }), dt, mem);
-      for (const v of flat(q)) expect(Number.isFinite(v), `${k} anim ${anim} second`).toBe(true);
+      for (const v of [...flat(q), ...q.robe]) expect(Number.isFinite(v), `${k} anim ${anim} second`).toBe(true);
     }
+  }, SLOW);
+
+  it('hold a stone or frozen two-legged creature\'s pose mid-stride and mid-attack, hit or not', () => {
+    for (const stone of [1 << EFFECT.Petrified, 1 << EFFECT.Frozen]) for (const k of BIPEDS) for (const first of [{ anim: ANIM.Move }, { anim: ANIM.Melee, animT: STRIKE_T }, { anim: ANIM.Shoot, animT: STRIKE_T }]) {
+      const m = tube(k), d = tdef(k), mem = settled({ walk: 1, phi: 0.7 });
+      const a = copyPose(poseFigure(m, d, view({ ...first, effects: stone }), 1 / 60, mem));
+      const rest = restPose(m, 0).bones, moved = a.bones.some((v, i) => Math.abs(v - rest[i]) > 1e-3);
+      expect(moved, `${k}: the held pose is a pose, not the rest`).toBe(true);
+      const b = poseFigure(m, d, view({ anim: ANIM.Idle, effects: stone, flags: FLAG.HURT }), 0.3, mem);
+      expect(b.bones, k).toEqual(a.bones);
+      expect(b.bends, k).toEqual(a.bends);
+      expect(b.root, k).toEqual(a.root);
+      expect(poseFigure(m, d, view({ anim: ANIM.Move, effects: stone, flags: FLAG.HURT }), 0.3, mem).bones, k).toEqual(a.bones);
+    }
+  }, SLOW);
+
+  it('pose the two-legged creatures\' attacks by what they hold: the cleaver swings, the bow shoots and swings in a melee', () => {
+    const style = (k: TubeKey, anim: number): string | undefined => poseFigure(tube(k), tdef(k), view({ anim, animT: STRIKE_T }), 1 / 60, settled()).attack?.style;
+    expect(style('orc', ANIM.Melee)).toBe('swing');
+    expect(style('orcArcher', ANIM.Shoot)).toBe('shot');
+    expect(style('orcArcher', ANIM.Melee)).toBe('swing');
   }, SLOW);
 
   it('hold a stone or frozen animal\'s pose mid-stride and mid-butt, hit or not, whatever the crest', () => {

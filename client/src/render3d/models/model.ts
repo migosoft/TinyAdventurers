@@ -58,6 +58,8 @@ export interface FigureModel {
   gait?: 'walk';
   /** A factor on the size of the held weapon (default 1). */
   weaponScale?: number;
+  /** The share of a blow's arm lengthening this model takes (default 1: the whole of it, as the short-armed figures). */
+  armStretch?: number;
   /** How high the model hops, in model px per unit of the hop. */
   hop?: number;
   /** The index in `bends` of the neck. */

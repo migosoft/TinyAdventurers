@@ -33,6 +33,8 @@ const bounds = (f: string): FrameBounds => {
 const cam = (yaw = 0): Cam => ({ x: 10, z: 10, pitch: Math.PI / 4, yaw });
 const make = () => new Figures3d(galleryInit(), frames, bounds);
 const inRange = (id: number, a: number, n: number) => id >= a && id < a + n;
+/** How many game kinds have a 3D model: the model block, the dying row and the lit block have one figure of each. */
+const KINDS = Object.keys(MODEL_OF_KIND).length;
 
 describe('the gallery stage', () => {
   const kinds = Object.keys(FIGURES).map(Number);
@@ -162,12 +164,13 @@ describe('the gallery stage', () => {
     expect([q.crowd, q.crowdAs, q.light, q.at]).toEqual([2, 'models', 'work', null]);
   });
 
-  it('has the model block: 13 kinds from ID.model, each cycling through the states like the card rows', () => {
-    const rows = galleryEnts(0.1, null).filter((e) => inRange(e.id, ID.model, 13));
-    expect(rows.map((e) => e.id)).toEqual(Array.from({ length: 13 }, (_, i) => 4000 + i));
+  it('has the model block: every model kind from ID.model, each cycling through the states like the card rows', () => {
+    const rows = galleryEnts(0.1, null).filter((e) => inRange(e.id, ID.model, KINDS));
+    expect(KINDS).toBeGreaterThanOrEqual(15);
+    expect(rows.map((e) => e.id)).toEqual(Array.from({ length: KINDS }, (_, i) => 4000 + i));
     expect(ID.model).toBe(4000);
     expect(rows.map((e) => modelKeyOf(e.kind)).every((k) => k !== null)).toBe(true);
-    expect(new Set(rows.map((e) => modelKeyOf(e.kind))).size).toBe(11);
+    expect(new Set(rows.map((e) => modelKeyOf(e.kind))).size).toBe(new Set(Object.values(MODEL_OF_KIND)).size);
     expect(rows.map((e) => e.kind).sort((a, b) => a - b)).toEqual(Object.keys(MODEL_OF_KIND).map(Number).sort((a, b) => a - b));
     const anim = (t: number, s: string | null) => galleryEnts(t, s).find((e) => e.id === ID.model)!.anim;
     expect(anim(0.1, null)).toBe(ANIM.Idle);
@@ -195,7 +198,7 @@ describe('the gallery stage', () => {
 
   it('has the model rows of the four animals in every state of the cycle', () => {
     const animals: number[] = [KIND.Bunny, KIND.Deer, KIND.Stag, KIND.Boar];
-    const rowOf = (t: number, s: string | null) => galleryEnts(t, s).filter((e) => inRange(e.id, ID.model, 13) && animals.includes(e.kind));
+    const rowOf = (t: number, s: string | null) => galleryEnts(t, s).filter((e) => inRange(e.id, ID.model, KINDS) && animals.includes(e.kind));
     expect(rowOf(0.1, null)).toHaveLength(4);
     for (const [name, anim] of STATES) expect(rowOf(0.1, name).map((e) => e.anim), name).toEqual([anim, anim, anim, anim]);
   });
@@ -279,12 +282,12 @@ describe('the gallery stage', () => {
 
   it('lets one figure of each kind die every 6 s and leave its skull', () => {
     const alive = (t: number) => galleryEnts(t, null).filter((e) => inRange(e.id, ID.dying, 100));
-    expect(alive(1)).toHaveLength(13);
+    expect(alive(1)).toHaveLength(KINDS);
     expect(alive(4)).toHaveLength(0);
-    expect(alive(7)).toHaveLength(13);
-    expect(diedBetween(2.9, 3.1)).toHaveLength(13);
+    expect(alive(7)).toHaveLength(KINDS);
+    expect(diedBetween(2.9, 3.1)).toHaveLength(KINDS);
     expect(diedBetween(3.1, 5)).toHaveLength(0);
-    expect(diedBetween(8.9, 9.1)).toHaveLength(13);
+    expect(diedBetween(8.9, 9.1)).toHaveLength(KINDS);
     const ev = diedBetween(2.9, 3.1)[0];
     expect(ev.t).toBe('Died');
     const e = alive(1)[0];
@@ -322,7 +325,7 @@ describe('the gallery stage', () => {
     const ents = galleryEnts(0, null, 5);
     const yes = ents.filter(is).map((e) => e.id);
     expect(yes.every((id) => id >= ID.model)).toBe(true);
-    expect(yes.filter((id) => inRange(id, ID.model, 13))).toHaveLength(13);
+    expect(yes.filter((id) => inRange(id, ID.model, KINDS))).toHaveLength(KINDS);
     expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(81);
     expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
     expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);

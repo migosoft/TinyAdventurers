@@ -3,16 +3,54 @@ import { KIND } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
 import { BONES, MAX_BENDS, STAGES } from './bones';
 import { buildJob, transferList } from './build';
-import { buildFigure } from './model';
+import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube } from './tubes';
-import { DESCS, TUBE_DESCS } from './table';
+import { DESCS, TUBE_DESCS, type TubeKey } from './table';
+import { orcDesc } from './descs/orc';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
 const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
 const deers = (key: string): boolean => key === 'stag' || key === 'deer';
 const bone = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
 const rgb = (hex: number): number[] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+
+/** The streams are as long as the vertex count says, the index stays inside it, and the ranges tile the index by stage, hulls first. */
+function expectStreams(m: FigureModel): void {
+  const n = m.position.length / 3;
+  expect(m.normal.length).toBe(n * 3);
+  expect(m.uv.length).toBe(n * 2);
+  expect(m.skin.length).toBe(n * 4);
+  expect(m.look.length).toBe(n * 4);
+  for (const i of m.index) expect(i).toBeLessThan(n);
+  expect(m.pieceIndex.length + m.lineIndex.length).toBe(m.index.length);
+  let at = 0, lastStage = -1, hullSeen = false;
+  for (const r of m.ranges) {
+    expect(r.start).toBe(at); at += r.count;
+    expect(r.stage).toBeGreaterThanOrEqual(lastStage);
+    if (r.stage !== lastStage) hullSeen = false;
+    if (r.line) { expect(hullSeen, 'hull after a piece').toBe(false); } else hullSeen = true;
+    lastStage = r.stage;
+  }
+  expect(at).toBe(m.index.length);
+  expect(lastStage).toBeLessThan(STAGES.length);
+}
+
+function expectFinite(m: FigureModel): void {
+  for (const arr of [m.position, m.normal, m.pivots]) expect(arr.every(Number.isFinite)).toBe(true);
+  for (const bd of m.bends) {
+    const nums = [bd.bone, ...bd.origin, ...bd.dir, bd.len, bd.k, bd.up, bd.wag, ...(bd.flutter ? [bd.flutter.rate, bd.flutter.angle] : [])];
+    expect(nums.every(Number.isFinite), JSON.stringify(bd)).toBe(true);
+  }
+}
+
+/** Every colour a model shows: the flat colours of its pieces (not the hulls) and the pixels of its paint. */
+function coloursOf(m: FigureModel): Set<number> {
+  const seen = new Set<number>(), n = m.position.length / 3, c = (v: number): number => Math.round(v * 255);
+  for (let i = 0; i < n; i++) if (m.skin[i * 4 + 1] === 0 && m.look[i * 4] !== -1) seen.add((c(m.look[i * 4]) << 16) | (c(m.look[i * 4 + 1]) << 8) | c(m.look[i * 4 + 2]));
+  if (m.look.some((v, i) => i % 4 === 0 && v === -1)) for (let i = 0; i < m.paint.data.length; i += 4) seen.add((m.paint.data[i] << 16) | (m.paint.data[i + 1] << 8) | m.paint.data[i + 2]);
+  return seen;
+}
 
 describe('buildTubeFigure', () => {
   it('PAGE_TO_GAME is the wolf model fitted scale', () => {
@@ -23,32 +61,9 @@ describe('buildTubeFigure', () => {
     const m = buildJob(key, null), d = TUBE_DESCS[key], n = m.position.length / 3;
 
     describe(key, () => {
-      it('has consistent streams, ranges and index lists', () => {
-        expect(m.normal.length).toBe(n * 3);
-        expect(m.uv.length).toBe(n * 2);
-        expect(m.skin.length).toBe(n * 4);
-        expect(m.look.length).toBe(n * 4);
-        for (const i of m.index) expect(i).toBeLessThan(n);
-        expect(m.pieceIndex.length + m.lineIndex.length).toBe(m.index.length);
-        let at = 0, lastStage = -1, hullSeen = false;
-        for (const r of m.ranges) {
-          expect(r.start).toBe(at); at += r.count;
-          expect(r.stage).toBeGreaterThanOrEqual(lastStage);
-          if (r.stage !== lastStage) hullSeen = false;
-          if (r.line) { expect(hullSeen, 'hull after a piece').toBe(false); } else hullSeen = true;
-          lastStage = r.stage;
-        }
-        expect(at).toBe(m.index.length);
-        expect(lastStage).toBeLessThan(STAGES.length);
-      });
+      it('has consistent streams, ranges and index lists', () => expectStreams(m));
 
-      it('has finite positions, normals, pivots and bends', () => {
-        for (const arr of [m.position, m.normal, m.pivots]) expect(arr.every(Number.isFinite)).toBe(true);
-        for (const bd of m.bends) {
-          const nums = [bd.bone, ...bd.origin, ...bd.dir, bd.len, bd.k, bd.up, bd.wag];
-          expect(nums.every(Number.isFinite), JSON.stringify(bd)).toBe(true);
-        }
-      });
+      it('has finite positions, normals, pivots and bends', () => expectFinite(m));
 
       it('scale, size and flags', () => {
         expect(m.scale).toBeCloseTo(SIZE[key] * PAGE_TO_GAME, 6);
@@ -227,6 +242,8 @@ describe('two-legged tube figures', () => {
     expect(k.legs!.map((l) => l.knee)).toEqual([-1, 1]);
     expect(k.weaponScale).toBe(1.5);
     expect(m.weaponScale).toBeUndefined();
+    expect(buildTubeFigure('s', { ...biped, arms: { ...biped.arms!, stretch: 0.3 } }).armStretch).toBe(0.3);
+    expect(m.armStretch).toBeUndefined();
   });
   it('hangs hands and weapons on the arms', () => {
     const A = biped.arms!;
@@ -270,5 +287,92 @@ describe('two-legged tube figures', () => {
       expect(a.quad).toBe(true); expect(a.gait).toBeUndefined(); expect(a.armLength).toBe(0); expect(a.robeTop).toBeNull();
       expect(a.legs!.every((l) => l.knee === undefined)).toBe(true);
     }
+  });
+});
+
+/** What each two-legged creature (#356) must be: a new creature adds a row here, the loop below checks it. */
+interface BipedFacts {
+  key: TubeKey;
+  /** Game px to the top of the head (the `head` stage). */
+  height: number;
+  bends: number;
+  /** The `knee` of each leg, the right one first; [] for a robe without legs. */
+  knees: (1 | -1)[];
+  robe: boolean;
+  /** Colours that must show, in the pieces or in the paint. */
+  colours: number[];
+  /** The bone its weapon hangs on; null: it holds nothing. */
+  weapon: 'weaponR' | 'weaponL' | null;
+}
+const BIPEDS: BipedFacts[] = [
+  { key: 'orc', height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'orcArcher', height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
+];
+
+describe('the two-legged creatures', () => {
+  for (const f of BIPEDS) {
+    describe(f.key, () => {
+      const m = buildJob(f.key, null), d = TUBE_DESCS[f.key], n = m.position.length / 3;
+      const piv = (b: (typeof BONES)[number]): number[] => [...m.pivots.subarray(bone(b) * 3, bone(b) * 3 + 3)];
+
+      it('has consistent streams, ranges and index lists', () => expectStreams(m));
+      it('has finite positions, normals, pivots and bends', () => expectFinite(m));
+
+      it('stands upright on the ground at its height and walks', () => {
+        expect(d.stance).toBe('two');
+        expect(m.quad).toBe(false); expect(m.gait).toBe('walk'); expect(m.varies).toBe(true);
+        expect(Math.abs(m.baseHeight - f.height)).toBeLessThan(0.5);
+        let low = Infinity;
+        for (let i = 0; i < n; i++) if (m.skin[i * 4 + 1] === 0) low = Math.min(low, m.position[i * 3 + 1]);
+        expect(Math.abs(low)).toBeLessThan(0.3 / m.scale);
+        expect(m.stands! * m.scale).toBeGreaterThanOrEqual(m.baseHeight - 1e-6);
+      });
+
+      it('bends, arms, legs and robe', () => {
+        expect(m.bends).toHaveLength(f.bends);
+        expect(m.bends.length).toBeLessThanOrEqual(MAX_BENDS);
+        expect(m.armLength).toBeGreaterThan(0);
+        expect(m.legs!.map((l) => l.knee)).toEqual(f.knees);
+        expect(m.legs!.every((l) => l.lower >= 0 && !l.front)).toBe(true);
+        if (f.knees.length) expect(m.legs!.map((l) => [l.upper, l.lower])).toEqual([[bone('leg0'), bone('leg1')], [bone('leg2'), bone('leg3')]]);
+        if (f.robe) expect(m.robeTop).not.toBeNull(); else expect(m.robeTop).toBeNull();
+        for (let b = 1; b < BONES.length; b++) expect(m.parents[b]).toBeLessThan(b);
+      });
+
+      it('shows its colours', () => {
+        const seen = coloursOf(m);
+        for (const c of f.colours) expect(seen.has(c), c.toString(16)).toBe(true);
+        expect(d.pieces.filter((p) => p.torso)).toHaveLength(1);
+      });
+
+      it('holds its weapon below the shoulder, at the side of its hand', () => {
+        if (!f.weapon) return;
+        const side = f.weapon === 'weaponR' ? 'armR' : 'armL';
+        expect(piv(f.weapon)[1]).toBeLessThan(piv(side)[1]);
+        expect(piv(f.weapon)[2]).toBe(piv(side)[2]);
+        expect(Math.sign(piv(f.weapon)[2])).toBe(f.weapon === 'weaponR' ? 1 : -1);
+        expect(m.parents[bone(f.weapon)]).toBe(bone(f.weapon === 'weaponR' ? 'handR' : 'handL'));
+      });
+
+      it('survives the worker hand-over', () => {
+        expect(structuredClone(m)).toEqual(m);
+      });
+    });
+  }
+
+  it('the orcs: one build; the archer has arms 0.75 as thick, a bone mask instead of tusks, and a strap', () => {
+    const w = buildJob('orc', null), a = buildJob('orcArcher', null);
+    expect(a.armRadius / w.armRadius).toBeCloseTo(0.75, 6);
+    expect(a.armLength).toBe(w.armLength);
+    expect(a.baseHeight).toBeCloseTo(w.baseHeight, 6);
+    expect(a.scale).toBe(w.scale);
+    const white = (d: TubeDesc): number => d.pieces.filter((p) => p.colour === 0xfdf7ed).length;
+    const drops = (d: TubeDesc): number => d.pieces.filter((p) => 'drop' in p.shape && p.colour === 0xfdf7ed).length;
+    expect(drops(TUBE_DESCS.orc)).toBe(2);         // the two tusks
+    expect(white(TUBE_DESCS.orc)).toBe(2);
+    expect(drops(TUBE_DESCS.orcArcher)).toBe(0);   // none through the mask
+    expect(white(TUBE_DESCS.orcArcher)).toBeGreaterThan(0);
+    expect(orcDesc({ name: 'Plain', arms: 1, mask: false, strap: false }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length);
+    expect(orcDesc({ name: 'Strapped', arms: 1, mask: false, strap: true }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length + 1);
   });
 });
