@@ -23,7 +23,7 @@ import { project, snapGround, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
-import { Figures3d, screenAim, type FigureOut } from './figures';
+import { Figures3d, screenAim, untinted, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
 
 const FIG = { w: 16, h: 28 };
@@ -281,7 +281,7 @@ describe('Figures3d', () => {
 
   it('draws a dash afterimage at half alpha behind a dashing figure', () => {
     const out = make().frame(frame([ent(10, KIND.Knight, { anim: ANIM.Dash })]), cam());
-    expect(out.cards.n).toBe(1);
+    expect(out.cards.n).toBe(2);   // the body and its sword
     expect(out.ghosts.n).toBe(1);
     expect(out.ghosts.look[4]).toBeCloseTo(0.5, 6);
   });
@@ -677,6 +677,16 @@ describe('Figures3d ground ovals (#306)', () => {
   });
 });
 
+describe('untinted', () => {
+  it('a definition without its tint, the same copy each time', () => {
+    const d = FIGURES[KIND.Disciple], u = untinted(d);
+    expect(u.tint).toBeUndefined();
+    expect({ ...u, tint: d.tint }).toEqual(d);
+    expect(untinted(d)).toBe(u);
+    expect(untinted(FIGURES[KIND.Wizard])).toBe(FIGURES[KIND.Wizard]);   // nothing to strip: the definition itself
+  });
+});
+
 describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   const PACK = join(__dirname, '../../assets-src/0x72');
   const sheet = decodePng(readFileSync(join(PACK, '0x72_DungeonTilesetII_v1.7.png')));
@@ -738,6 +748,15 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     // not chosen: cards, and the kit is not asked
     const c = make().frame(frame([ranger()]), cam(), look({ kit, is: () => false }));
     expect(c).toEqual(make().frame(frame([ranger()]), cam(), look()));
+  });
+
+  it('scales the weapon by the model weaponScale', () => {
+    const body = kit.get('elf')!;
+    const scaled: FigureKit = { ...kit, get: (k) => (k === 'elf' ? { ...body, weaponScale: 1.5 } : kit.get(k)) };
+    const sword = (k: FigureKit) => make().frame(frame([ranger()]), cam(), look({ kit: k, ...all })).models.find((m) => m.bone >= 0)!;
+    const plain = sword(kit), big = sword(scaled);
+    expect(plain.boneScale).toBeGreaterThan(0);
+    expect(big.boneScale).toBeCloseTo(plain.boneScale * 1.5, 6);
   });
 
   it('draws a figure without a weapon, and warns once, when its weapon sprite has no model', () => {

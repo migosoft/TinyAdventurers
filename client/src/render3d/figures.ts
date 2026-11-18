@@ -199,18 +199,28 @@ const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Ch
 /** The frozen figure's cool tint (multiplies). */
 const FROZEN_TINT = 0xa8d8ff;
 
+const UNTINTED = new WeakMap<FigureDef, FigureDef>();
+
+/** The definition without its `tint` (a model never wears it; the tint belongs to the card's sprite). The same copy each time; a definition with no tint is returned as it is. */
+export function untinted(d: FigureDef): FigureDef {
+  if (d.tint === undefined) return d;
+  let u = UNTINTED.get(d);
+  if (!u) { u = { ...d }; delete u.tint; UNTINTED.set(d, u); }
+  return u;
+}
+
 /**
  * The tint of a model figure: the pose's multiply tint. A fill (the hurt flash, a silhouette) and the wind-up's red flash are not
- * carried over (the model shows hits and wind-ups by moving), so a wind-up wears the figure's own tint; frozen adds a cool one.
+ * carried over (the model shows hits and wind-ups by moving), so a wind-up wears no tint (`figurePose` gets the untinted definition); frozen adds a cool one.
  * Whatever else `figurePose` chose (poison, slowed, the dark of a fall) is passed on as it is; nothing is added for minions.
  */
-function modelTint(pose: Pose, d: FigureDef, s: ViewState): [number, number, number] {
+function modelTint(pose: Pose, s: ViewState): [number, number, number] {
   // The hurt flash is a fill: the tint the pose chose without it is worn instead (a silhouette's fill stays a fill and is dropped as before).
   const chosen = pose.tint.mode === 'fill' && pose.tintUnhurt.mode === 'mul' ? pose.tintUnhurt : pose.tint;
   let rgb = chosen.mode === 'mul' ? chosen.rgb : 0xffffff;
   const fx = s.effects ?? 0, iced = has(fx, EFFECT.Frozen);
   // The red flash is only shown by `figurePose` when the figure is neither stone nor ice (pose.ts), so only then is there something to undo.
-  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = d.tint ?? 0xffffff;
+  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = 0xffffff;
   const t = rgbOf(rgb);
   if (iced) { const f = rgbOf(FROZEN_TINT); t[0] *= f[0]; t[1] *= f[1]; t[2] *= f[2]; }
   return t;
@@ -709,7 +719,7 @@ export class Figures3d {
   private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
     const { s, fig, dashing, skims, start } = this.figOf(e, f, FIGURES[e.kind]);
     const d = fig.def;
-    const pose = figurePose(d, { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    const pose = figurePose(untinted(d), { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
     // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
@@ -738,7 +748,7 @@ export class Figures3d {
     // A model with a footprint takes its half length instead.
     const hl = m.footprint ? (m.footprint[0] * ms * sc) / TILE : 0, hw = m.footprint ? (m.footprint[1] * ms * sc) / TILE : 0;
     const reach = pose.lie ? 0 : m.footprint ? hl : ((fb.r - fb.l + 1) * sc) / 2 / TILE;   // a lying card (a decal) carries none
-    const tint = modelTint(pose, d, s);
+    const tint = modelTint(pose, s);
     tint[0] *= v.tone; tint[1] *= v.tone; tint[2] *= v.tone;
     const insts: FigureInst[] = [];
     const body: FigureInst = {
@@ -762,7 +772,7 @@ export class Figures3d {
         // The instance is scaled by the drawn model's scale (the hand's place follows the fitted body); the weapon's own size is what the card path
         // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
         // `size`, so `boneScale` makes up the difference.
-        const bs = (wp.scale * (d.scale ?? 1) * m.size) / ms;
+        const bs = (wp.scale * (d.scale ?? 1) * m.size * (m.weaponScale ?? 1)) / ms;
         const w: FigureInst = {
           owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: ms, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
           tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, groundY: body.groundY, sight: { hard: 0, soft: 0 }, reach,
