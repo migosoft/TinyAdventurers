@@ -86,7 +86,7 @@ const b = await chromium.launch({
   ...(gpuOn ? gpuLaunch() : {}),
 });
 // GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
-const backend = (gpuOn && mode === 'webgl' ? '&backend=webgl' : '') + (process.env.QUALITY ? `&quality=${process.env.QUALITY}` : '');
+const urlExtra = (gpuOn && mode === 'webgl' ? '&backend=webgl' : '') + (process.env.QUALITY ? `&quality=${process.env.QUALITY}` : '');
 const errs = [];
 const failures = [];
 const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 };
@@ -101,7 +101,7 @@ async function open(url, tag, lose = false) {
     if (m.type() === 'warning' && !lose && /device lost/i.test(t)) errs.push(`${tag}: ${t}`);
     if (m.type() === 'warning' && /^3D model /.test(t)) errs.push(`${tag}: ${t}`);
   });
-  await p.goto(url + backend);
+  await p.goto(url + urlExtra);
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });
   return p;
 }

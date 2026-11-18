@@ -1,10 +1,11 @@
 // Frame cost of the gallery crowd (#364): the crowd as models against cards, with the work light and the torch light, on WebGL2 and on the
 // default backend (WebGPU where there is one). One line per run: mean, median and 99th percentile frame time, the figures and draws the
-// model layer published, the render size and the renderer's draw calls when the page publishes them.
+// model layer published and the render size.
 // Usage: GPU=uncapped node models-cost.mjs <baseUrl> <label>
 // Env: BROWSER (the executable), GPU (1 or uncapped: the real card, gpu.mjs; without it the run is SwiftShader and the numbers mean nothing),
 //      SECS (10: seconds measured), CROWD (40), KINDS (e.g. stag,deer,boar,bunny: passed as &crowdKinds=).
-// Fails (exit 1) on a console error or a "device lost" warning.
+// Fails (exit 1) on a console error, a "device lost" warning, a software renderer or a missing WebGPU adapter when GPU is set, or a page
+// that does not draw 10 frames in 40 s (that one stops the run at once; the others are listed at the end).
 import { chromium } from 'playwright-core';
 import { gpuLaunch, printGpu } from './gpu.mjs';
 
@@ -46,12 +47,8 @@ for (const backend of ['webgl', 'auto']) {
           return g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'no webgl2 context on the page canvas';
         });
         console.log(`renderer (page canvas, ${backend}): ${gl}`);
-        // With GPU set the numbers are worthless on a software renderer: stop at once.
-        if (process.env.GPU && SOFTWARE.test(gl)) {
-          console.log(`FAILED: a software renderer draws (${gl}), the numbers would be worthless`);
-          await b.close();
-          process.exit(1);
-        }
+        // With GPU set the numbers are worthless on a software renderer: a failure (the run goes on, the exit code is 1).
+        if (process.env.GPU && SOFTWARE.test(gl)) failures.push(`${run}: software renderer ${gl}`);
       } else if (process.env.GPU) {
         const adapter = await p.evaluate(async () => {
           const a = await navigator.gpu?.requestAdapter().catch(() => null);
@@ -73,13 +70,12 @@ for (const backend of ['webgl', 'auto']) {
               mean: (ts[ts.length - 1] - ts[0]) / (ts.length - 1), med: d[d.length >> 1], p99: d[Math.floor(d.length * 0.99)],
               backend: w.backend, size: w.renderSize,
               models: w.models && { figures: w.models.figures, draws: w.models.draws },
-              calls: w.drawCalls ?? w.calls ?? w.renderer?.calls ?? null,
             });
           }
         };
         requestAnimationFrame(f);
       }), SECS);
-      console.log(`${label}\t${r.backend}\t${light ? 'torch' : 'work'}\t${as}\tmean ${r.mean.toFixed(2)} ms\tmed ${r.med.toFixed(2)}\tp99 ${r.p99.toFixed(2)}\t${JSON.stringify(r.models)}\t${r.size}${r.calls !== null ? `\tcalls ${r.calls}` : ''}${errs.length ? `\tERR ${errs[0]}` : ''}`);
+      console.log(`${label}\t${r.backend}\t${light ? 'torch' : 'work'}\t${as}\tmean ${r.mean.toFixed(2)} ms\tmed ${r.med.toFixed(2)}\tp99 ${r.p99.toFixed(2)}\t${JSON.stringify(r.models)}\t${r.size}${errs.length ? `\tERR ${errs[0]}` : ''}`);
       if (errs.length) failures.push(`${backend} ${light || 'work'} ${as}: ${errs[0]}`);
       await p.close();
     }
