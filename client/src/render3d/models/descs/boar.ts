@@ -3,7 +3,7 @@
 // bodyThick 1.25, tusks 1).
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { ANIMAL_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 
 const COAT = 0x9a5a34, MANE = 0x6e4028, RUMP = 0xf2e6cf, LEG = 0x5a3524, HOOF = 0x2a211e, MUZZLE = 0xc9a077, NOSE = 0x2a211e, EYE = 0x1c1614;
 
@@ -54,7 +54,8 @@ function boarDesc(): TubeDesc {
   }
 
   return {
-    name: 'Boar', size: 0.9, outline: 0x222222, pieces, pivots,
+    // The shoulder (the chest's top, page y 11.4) is drawn 12.376 game px high at size 1; the factor sets it to 8 px.
+    name: 'Boar', size: fitSize(ANIMAL_FACTOR.boar, 11.4 * 1.0856), outline: 0x222222, pieces, pivots,
     parents: { head: 'body', hat: 'head', handR: 'armR', handL: 'armL', leg1: 'leg0', leg3: 'leg2' },
     legs, footprint: [9.3, 4.32],
   };

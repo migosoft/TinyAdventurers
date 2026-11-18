@@ -9,6 +9,11 @@ import type { TubeOpts, TubePoint } from './tubes';
 export const HUMAN_HEIGHT = 18;
 /** The height factors of the two-legged models, of `HUMAN_HEIGHT`. The robes are drawn to their factor (robed.ts); the others are scaled by `fitSize`. */
 export const HEIGHT_FACTOR = { knight: 1, robed: 1, orc: 1.1, goblin: 0.65, imp: 0.45, chort: 1.05 } as const;
+/**
+ * The woodland animals' height factors, of `HUMAN_HEIGHT` (a human of 18 px is 1.75 m): the shoulder (the top of the chest) of the deer
+ * and the boar, the ears' base of the sitting bunny. The stag (shoulder 12 px, head top 16) is within 10 % of its target and keeps its size.
+ */
+export const ANIMAL_FACTOR = { deer: 9 / 18, boar: 8 / 18, bunny: 3.5 / 18 } as const;
 /** The glow of the demons' eyes (the Imp, the Chort): a bright saturated yellow (not a pack colour: the user's wish, 2026-11-18). */
 export const DEMON_EYE = 0xffd21f;
 /** `TubeDesc.size` that makes a figure drawn `drawn` game px high (at size 1; each description names the measured value) as tall as `factor` humans. */

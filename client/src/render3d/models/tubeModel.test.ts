@@ -12,7 +12,8 @@ import { robedDesc } from './descs/robed';
 import { KNIGHT_ACCENT, KNIGHT_SHIELD } from './descs/npcKnight';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
-const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
+/** The deer, boar and bunny are sized by `ANIMAL_FACTOR` (shoulder 9 and 8 px, the bunny's ears' base 3.5 px): size = px / (page height x PAGE_TO_GAME). */
+const SIZE = { stag: 0.95, deer: 9 / (11.25 * 1.0856), boar: 8 / (11.4 * 1.0856), bunny: 3.5 / (6.8 * 1.0856) } as const;
 const deers = (key: string): boolean => key === 'stag' || key === 'deer';
 const bone = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
 const rgb = (hex: number): number[] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
@@ -142,10 +143,10 @@ describe('buildTubeFigure', () => {
     expect(m.bends.some((b) => b.neck)).toBe(false);
     expect(m.neckBend).toBe(-1);
     expect(m.butt).toBe(true);
-    expect(m.scale).toBeCloseTo(0.9 * PAGE_TO_GAME, 6);
+    expect(m.scale).toBeCloseTo(SIZE.boar * PAGE_TO_GAME, 6);
     const torso = d.pieces.find((p) => p.torso)!, sh = torso.shape as Extract<typeof torso.shape, { tube: unknown }>;
     expect(Math.max(...sh.tube.map((q) => q.r))).toBeCloseTo(3.5 * 1.25, 9);
-    expect(hitRadius(d)).toBe(6);
+    expect(hitRadius(d)).toBe(4);
     expect(d.pieces.filter((p) => p.bone === 'hat')).toHaveLength(2);
   });
 
@@ -157,7 +158,7 @@ describe('buildTubeFigure', () => {
     expect(d.pieces.some((p) => p.bone === 'body' && 'ball' in p.shape && !p.bend)).toBe(true);
     expect(m.hop).toBe(1.3);
     expect(m.butt).toBeFalsy();
-    expect(m.scale).toBeCloseTo(0.75 * PAGE_TO_GAME, 6);
+    expect(m.scale).toBeCloseTo(SIZE.bunny * PAGE_TO_GAME, 6);
     expect(hitRadius(d)).toBe(4);
     for (const b of ['leg0', 'leg2'] as const) expect(d.pieces.filter((p) => p.bone === b)).toHaveLength(2);
   });
@@ -208,12 +209,14 @@ describe('buildTubeFigure', () => {
 
   it('hit radius', () => {
     expect(hitRadius(TUBE_DESCS.stag)).toBe(5);
-    expect(hitRadius(TUBE_DESCS.deer)).toBe(5);
+    expect(hitRadius(TUBE_DESCS.deer)).toBe(4);
   });
 
-  it("each animal's baseR is its model's hit radius", () => {
+  it("the stag's baseR is its model's hit radius; the resized animals' server circles are kept (#356 rework 1, part G)", () => {
     const kinds = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny } as const;
-    for (const key of keys) expect(FIGURES[kinds[key]].baseR, key).toBe(hitRadius(TUBE_DESCS[key]));
+    expect(FIGURES[kinds.stag].baseR).toBe(hitRadius(TUBE_DESCS.stag));
+    // The models' own circles after the resize: the server's circles above are the larger.
+    expect(keys.map((k) => hitRadius(TUBE_DESCS[k]))).toEqual([5, 4, 4, 4]);
     expect(keys.map((k) => FIGURES[kinds[k]].baseR)).toEqual([5, 5, 6, 4]);
   });
 

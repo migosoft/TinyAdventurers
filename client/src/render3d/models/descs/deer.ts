@@ -2,7 +2,7 @@
 // the red-brown coat of the try-out page; the front along +x, the feet at y 0.
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { ANIMAL_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 
 const COAT = 0x9a5a34, MANE = 0x6e4028, BELLY = 0xd9b88a, RUMP = 0xf2e6cf, LEG = 0x5a3524, HOOF = 0x2a211e, ANTLER = 0xd9c9a3, MUZZLE = 0xc9a077, NOSE = 0x2a211e, EYE = 0x1c1614;
 
@@ -81,4 +81,5 @@ export function deerDesc(v: DeerLook): TubeDesc {
 }
 
 export const stag = deerDesc({ name: 'Stag', size: 0.95, neckLen: 4, ear: 1, antlers: true, darkNeck: true });
-export const deer = deerDesc({ name: 'Deer', size: 0.88, neckLen: 3.8, ear: 1.1, antlers: false, darkNeck: false });
+// The deer's shoulder (the chest's top, page y 11.25) is drawn 12.213 game px high at size 1; the factor sets it to 9 px.
+export const deer = deerDesc({ name: 'Deer', size: fitSize(ANIMAL_FACTOR.deer, 11.25 * 1.0856), neckLen: 3.8, ear: 1.1, antlers: false, darkNeck: false });
