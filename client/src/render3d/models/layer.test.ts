@@ -175,16 +175,16 @@ describe('FigureLayer', () => {
       inst('elf', { owner: 7, x: 5 }),   // a dash copy of 7
     ]), cam, slot);
     const rows = layer.rowsData();
-    const owners = new Map<string, number>();
-    // The rows are written group by group; read each row's owner number and which instance it is by the place.
-    const no = (r: number): number => rows[r * ROW_TEXELS * 4 + ROW.flags * 4 + 2];
-    const seen = new Set<number>();
-    for (let r = 0; r < 4; r++) seen.add(no(r));
-    expect(seen.size).toBe(2);
-    const counts = new Map<number, number>();
-    for (let r = 0; r < 4; r++) counts.set(no(r), (counts.get(no(r)) ?? 0) + 1);
-    expect([...counts.values()].sort()).toEqual([1, 3]);
-    void owners;
+    // The rows are written group by group: tell them apart by the place in the root's shift (x of each instance).
+    const at = (r: number, c: number): number => rows[r * ROW_TEXELS * 4 + c];
+    const byX = (x: number): number[] => [0, 1, 2, 3].filter((r) => Math.abs(at(r, ROW.root * 4 + 3) - x) < 0.01);
+    const no = (r: number): number => at(r, ROW.flags * 4 + 2);
+    expect(byX(0)).toHaveLength(2);   // the elf and its bow (the bow takes the wielder's root)
+    expect(byX(5)).toHaveLength(1);
+    expect(byX(20)).toHaveLength(1);
+    expect(no(byX(0)[0])).toBe(no(byX(0)[1]));
+    expect(no(byX(5)[0])).toBe(no(byX(0)[0]));   // the dash copy holds its owner's number
+    expect(no(byX(20)[0])).not.toBe(no(byX(0)[0]));
     layer.dispose();
   }, SLOW);
 
