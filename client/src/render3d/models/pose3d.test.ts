@@ -57,13 +57,13 @@ const WOLF_TABLE: Record<string, number[]> = {
   sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
 };
 
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp';
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
 /** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
-const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp'];
+const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
 const TUBE_KIND: Record<TubeKey, number> = {
   stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher, npcKnight: KIND.Knight,
-  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp,
+  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp, chort: KIND.Chort,
 };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
@@ -456,6 +456,33 @@ describe('the woodland animals in every animation', () => {
     const a = flap(0.6), b = flap(0.68);
     for (const i of [0, 1]) expect(Math.abs(a[i] - b[i])).toBeGreaterThan(0.1);
     for (const f of [a, b]) { expect(Math.sign(f[0])).toBe(-Math.sign(f[1])); expect(f[0]).toBeCloseTo(-f[1], 6); }
+  }, SLOW);
+
+  it('pose the chort: claws with its arm and casts, never butts; the lower leg of the leg coming forward turns forwards; the feet stay near the ground', () => {
+    const m = tube('chort'), d = tdef('chort');
+    expect(m.butt).toBe(true);
+    const melee = poseFigure(m, d, view({ anim: ANIM.Melee, animT: STRIKE_T }), 1 / 60, settled());
+    expect(melee.attack?.style).toBe('swing');
+    expect(melee.root.x).toBeGreaterThanOrEqual(0);   // no rearing back
+    expect(poseFigure(m, d, view({ anim: ANIM.Cast, animT: STRIKE_T }), 1 / 60, settled()).attack?.style).toBe('cast');
+    // The walk: at phi 0 the right leg (z > 0) comes forward and its lower leg is turned forwards by WALK.knee; the left one is at rest.
+    const at = (phi: number): Pose3d => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi }));
+    const p0 = at(0);
+    expect(turnOf(m, p0, m.legs![0].lower)).toBeCloseTo(WALK.knee, 6);
+    expect(turnOf(m, p0, m.legs![1].lower)).toBeCloseTo(0, 6);
+    // The feet over a whole stride, in game px: the lower foot stands on the ground (never sunk, never floating), the other is lifted
+    // as it comes forward, and no foot ever goes under the ground by more than a hair.
+    const n = m.position.length / 3, out: [number, number, number] = [0, 0, 0];
+    const feet = m.legs!.map((l) => { const v: number[] = []; for (let i = 0; i < n; i++) if (m.skin[i * 4] === l.lower && m.skin[i * 4 + 1] === 0) v.push(i); return v; });
+    let lifted = 0;
+    for (let j = 0; j < 32; j++) {
+      const p = at(j / 32 * 2 * Math.PI);
+      const low = feet.map((v) => { let y = Infinity; for (const i of v) { skinVertex(m, p, i, out); y = Math.min(y, out[1]); } return y; });
+      expect(Math.min(...low), `step ${j}`).toBeGreaterThan(-0.6);
+      expect(Math.min(...low), `step ${j}`).toBeLessThan(0.6);
+      lifted = Math.max(lifted, Math.max(...low));
+    }
+    expect(lifted).toBeGreaterThan(1);
   }, SLOW);
 
   it('pose the robes: all three cast (the Disciple with its sleeve arms, no weapon), glide without a hop and swing the hem; only a tip sways', () => {

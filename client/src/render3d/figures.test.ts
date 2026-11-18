@@ -708,7 +708,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'weapon_red_magic_staff', 'weapon_green_magic_staff'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'chort', 'weapon_red_magic_staff', 'weapon_green_magic_staff'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -776,6 +776,17 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(imp({ anim: ANIM.Cast })[0].pose!.attack?.style).toBe('cast');
     // A summoner's imp is the same kind (the snapshot has no mark for it): the one model, grey tint (the id's tone only).
     const idle = imp({})[0];
+    expect(idle.tint[0]).toBe(idle.tint[1]); expect(idle.tint[1]).toBe(idle.tint[2]);
+  });
+
+  it('claws with the arm of a horned chort in a melee and casts its bolt: one body instance, no weapon, no butt, no tint', () => {
+    const chort = (o: Partial<EntState>) => make().frame(frame([ent(14, KIND.Chort, { animMs: 100, ...o })]), cam(), look({ kit, ...all })).models;
+    expect(kit.get('chort')!.butt).toBe(true);
+    const melee = chort({ anim: ANIM.Melee });
+    expect(melee.map((m) => [m.model, m.bone])).toEqual([['chort', -1]]);
+    expect(melee[0].pose!.attack?.style).toBe('swing');
+    expect(chort({ anim: ANIM.Cast })[0].pose!.attack?.style).toBe('cast');
+    const idle = chort({})[0];
     expect(idle.tint[0]).toBe(idle.tint[1]); expect(idle.tint[1]).toBe(idle.tint[2]);
   });
 

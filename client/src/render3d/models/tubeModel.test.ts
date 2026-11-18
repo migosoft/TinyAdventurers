@@ -316,6 +316,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'summoner', kind: KIND.Summoner, height: 19, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'disciple', kind: KIND.Disciple, height: 16, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
   { key: 'imp', kind: KIND.Imp, height: 10, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0xfdf7ed], weapon: null },
+  { key: 'chort', kind: KIND.Chort, height: 21, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0xfdf7ed], weapon: null },
 ];
 
 describe('the two-legged creatures', () => {
@@ -398,6 +399,66 @@ describe('the two-legged creatures', () => {
     expect(m.stands! * m.scale).toBeGreaterThan(m.baseHeight + 0.5);
     // Three claws on each hand, drops; arms, so it claws and casts (never butts with the horns).
     for (const h of ['handR', 'handL'] as const) expect(d.pieces.filter((p) => p.bone === h && 'drop' in p.shape)).toHaveLength(3);
+    expect(m.butt).toBe(true); expect(m.armLength).toBeGreaterThan(0);
+    expect(d.weapon).toBeUndefined();
+  });
+
+  it('the chort: goat legs whose rest angles are in the geometry, a darker painted back, long white horns on the hat bone, a grin wider than the eyes, long claws, a tail', () => {
+    const d = TUBE_DESCS.chort, m = buildJob('chort', null);
+    // The legs: the thigh leans forward and the shin back (both turned pieces of the upper bone), so the joint the walk bends lies
+    // behind the hip; the lower piece leans forward again and ends in a hoof under the hip, where a swing of the hip lifts it least.
+    for (const [upper, lower] of [['leg0', 'leg1'], ['leg2', 'leg3']] as const) {
+      const up = d.pieces.filter((p) => p.bone === upper).map((p) => p.turn ?? 0), low = d.pieces.filter((p) => p.bone === lower).map((p) => p.turn ?? 0);
+      expect(up.some((a) => a > 0.2), upper).toBe(true);
+      expect(up.some((a) => a < -0.2), upper).toBe(true);
+      expect(low.some((a) => a > 0.1), lower).toBe(true);
+      expect(low.every((a) => a >= 0), lower).toBe(true);
+      const hip = d.pivots[upper]!, hock = d.pivots[lower]!;
+      expect(hock[0]).toBeLessThan(hip[0] - 1);
+      expect(hock[1]).toBeLessThan(hip[1]);
+      expect(hock[2]).toBe(hip[2]);
+      // The foot: the lowest tenth of the lower bone's vertices lies under the hip (within 1 px before and behind).
+      let lo = Infinity, x0 = Infinity, x1 = -Infinity;
+      const n = m.position.length / 3, b = bone(lower);
+      for (let i = 0; i < n; i++) if (m.skin[i * 4] === b && m.skin[i * 4 + 1] === 0) lo = Math.min(lo, m.position[i * 3 + 1]);
+      for (let i = 0; i < n; i++) if (m.skin[i * 4] === b && m.skin[i * 4 + 1] === 0 && m.position[i * 3 + 1] < lo + 0.3) { x0 = Math.min(x0, m.position[i * 3]); x1 = Math.max(x1, m.position[i * 3]); }
+      expect(Math.abs(lo)).toBeLessThan(0.05);
+      expect((x0 + x1) / 2 - hip[0]).toBeGreaterThan(-1);
+      expect((x0 + x1) / 2 - hip[0]).toBeLessThan(1);
+    }
+    // The painted torso: the back (d 0) darker, the front (d 1) the skin's red.
+    const torso = d.pieces.find((p) => p.torso)!;
+    expect(typeof torso.colour).toBe('function');
+    const paint = torso.colour as (u: number, d: number) => number;
+    for (const u of [0.1, 0.5, 0.9]) { expect(paint(u, 0)).toBe(0x9f294e); expect(paint(u, 1)).toBe(0xda4e38); }
+    // The horns: the only pieces on the hat bone, white, long (their tips well above the head), their foot inside the head.
+    const horns = d.pieces.filter((p) => p.bone === 'hat');
+    expect(horns).toHaveLength(2);
+    expect(horns.every((p) => p.colour === 0xfdf7ed)).toBe(true);
+    expect(m.parents[bone('hat')]).toBe(bone('head'));
+    expect(d.pivots.hat![1] * m.scale).toBeLessThan(m.baseHeight);
+    expect(m.stands! * m.scale).toBeGreaterThan(m.baseHeight + 3);
+    // The face: the two highest white pieces on the head are the eyes; the rest is the grin, at least five teeth, all below the eyes
+    // and reaching further to each side than the eyes do.
+    const white = d.pieces.filter((p) => p.bone === 'head' && p.colour === 0xfdf7ed && p.at).sort((a, b) => b.at![1] - a.at![1]);
+    const eyes = white.slice(0, 2), teeth = white.slice(2);
+    expect(teeth.length).toBeGreaterThanOrEqual(5);
+    expect(Math.max(...teeth.map((p) => p.at![1]))).toBeLessThan(Math.min(...eyes.map((p) => p.at![1])));
+    expect(Math.max(...teeth.map((p) => Math.abs(p.at![2])))).toBeGreaterThan(Math.max(...eyes.map((p) => Math.abs(p.at![2]))));
+    // Three long claws on each hand: drops, white, longer than the hand is wide.
+    for (const h of ['handR', 'handL'] as const) {
+      const claws = d.pieces.filter((p) => p.bone === h && 'drop' in p.shape);
+      expect(claws).toHaveLength(3);
+      for (const c of claws) {
+        expect(c.colour).toBe(0xfdf7ed);
+        if ('drop' in c.shape) expect(c.shape.drop.len - c.shape.drop.sink).toBeGreaterThan(2 * d.arms!.radius * 1.5);
+      }
+    }
+    // The tail: the one bend, on the body, out of the back, wagging.
+    expect(m.bends).toHaveLength(1);
+    expect([m.bends[0].k, m.bends[0].wag, m.bends[0].bone]).toEqual([1, 1, bone('body')]);
+    expect(m.bends[0].dir[0]).toBeLessThan(0);
+    expect(m.bends[0].origin[0]).toBeLessThan(d.pivots.body![0]);
     expect(m.butt).toBe(true); expect(m.armLength).toBeGreaterThan(0);
     expect(d.weapon).toBeUndefined();
   });
