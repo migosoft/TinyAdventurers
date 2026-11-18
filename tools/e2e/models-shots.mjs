@@ -21,7 +21,7 @@ const STATES = ['idle', 'move', 'melee', 'shoot', 'cast', 'windup', 'dash'];
 /** The model rows of the gallery, in order (kind ids ascending): the description each one wears. */
 const KINDS = [
   ['wizard', 'wizard'], ['paladin', 'knight'], ['barbarian', 'dwarf'], ['ranger', 'elf'], ['goblin', 'goblin'],
-  ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['orcwarrior', 'orc'], ['orcarcher', 'orcArcher'], ['necromancer', 'necromancer'],
+  ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['orcwarrior', 'orc'], ['orcarcher', 'orc'], ['necromancer', 'necromancer'],
   ['raisedskel', 'skelet'], ['disciple', 'disciple'], ['imp', 'imp'], ['chort', 'chort'], ['summoner', 'summoner'], ['ogre', 'ogre'], ['wolf', 'wolf'],
   ['npcknight', 'npcKnight'], ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
@@ -31,7 +31,7 @@ const row = (name) => {
   if (i < 0) throw new Error(`models-shots: no kind named ${name}`);
   return i;
 };
-const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
+const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
 /** The woodland page's line-up: the seven figures it places, no animals. */
 const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
 /** The animals (#357); their rows are looked up by name with `row()`. */
@@ -63,14 +63,16 @@ for (const [r, [name, desc]] of [['stag', 'stag'], ['deer', 'deer'], ['boar', 'b
 shots.push({ name: 'torch-light-stag', q: `&at=model:${row('stag')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 // The nine two-legged creatures (#356): [row name, description, liquids key, attack state]. Aimed at the camera in the attack state (the
 // swoosh or the aimed weapon from the south), each in the torch light of its row, and on the liquids page (wading, the chasm, the lava).
+// The Orc Archer wears the orc's model with its bow: the liquids page takes model keys, so its liquids shots are the warrior's (key null).
 const HUMANOIDS = [
-  ['goblin', 'goblin', 'goblin', 'shoot'], ['orcwarrior', 'orc', 'orc', 'melee'], ['orcarcher', 'orcArcher', 'orcArcher', 'shoot'],
+  ['goblin', 'goblin', 'goblin', 'shoot'], ['orcwarrior', 'orc', 'orc', 'melee'], ['orcarcher', 'orc', null, 'shoot'],
   ['necromancer', 'necromancer', 'necromancer', 'cast'], ['summoner', 'summoner', 'summoner', 'cast'], ['disciple', 'disciple', 'disciple', 'cast'],
   ['imp', 'imp', 'imp', 'cast'], ['chort', 'chort', 'chort', 'melee'], ['npcknight', 'npcKnight', 'npcKnight', 'melee'],
 ];
 for (const [name, desc, key, attack] of HUMANOIDS) {
   shots.push({ name: `aim-${name}`, q: `&focus=models&at=model:${row(name)}&zoom=6&state=${attack}&aim=90${STILL}`, need: [desc] });
   shots.push({ name: `torch-light-${name}`, q: `&at=model:${row(name)}&light=torch&zoom=6&state=idle${STILL}`, need: [desc] });
+  if (!key) continue;
   shots.push({ name: `liquids-${key}-wade`, page: 'liquids', q: `&models=${key}&t=4&zoom=3`, need: [desc] });
   shots.push({ name: `liquids-${key}-chasm`, page: 'liquids', q: `&models=${key}&push=chasm&t=1.6&zoom=3`, need: [desc] });
   shots.push({ name: `liquids-${key}-lava`, page: 'liquids', q: `&models=${key}&t=4.5&zoom=3`, need: [desc] });

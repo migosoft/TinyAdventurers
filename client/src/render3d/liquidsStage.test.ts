@@ -192,7 +192,7 @@ describe('the models of the ?r3d=liquids stage (#357)', () => {
     expect(parseLiquids('?models=skelet').models).toBe(KIND.SkeletonWarrior);
     expect(parseLiquids('?models=ogre').models).toBe(KIND.Ogre);
     // every model key of the table (#356: the nine humanoids too)
-    const keys: [string, number][] = [['goblin', KIND.GoblinArcher], ['orc', KIND.OrcWarrior], ['orcArcher', KIND.OrcArcher], ['necromancer', KIND.Necromancer], ['summoner', KIND.Summoner], ['disciple', KIND.Disciple], ['imp', KIND.Imp], ['chort', KIND.Chort], ['npcKnight', KIND.Knight]];
+    const keys: [string, number][] = [['goblin', KIND.GoblinArcher], ['orc', KIND.OrcWarrior],['necromancer', KIND.Necromancer], ['summoner', KIND.Summoner], ['disciple', KIND.Disciple], ['imp', KIND.Imp], ['chort', KIND.Chort], ['npcKnight', KIND.Knight]];
     for (const [key, kind] of keys) expect(parseLiquids(`?models=${key}`).models, key).toBe(kind);
     expect(parseLiquids('?models=nothing').models).toBeNull();
     expect(parseLiquids('?models=dragon').models).toBeNull();

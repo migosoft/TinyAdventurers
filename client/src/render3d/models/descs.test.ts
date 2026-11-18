@@ -60,7 +60,7 @@ describe('figure descriptions', () => {
     expect(modelKeyOf(KIND.Paladin)).toBe('knight');
     expect(modelKeyOf(KIND.GoblinArcher)).toBe('goblin');
     expect(modelKeyOf(KIND.OrcWarrior)).toBe('orc');
-    expect(modelKeyOf(KIND.OrcArcher)).toBe('orcArcher');
+    expect(modelKeyOf(KIND.OrcArcher)).toBe('orc');   // the same orc, with the kind's bow
     expect(modelKeyOf(KIND.Stag)).toBe('stag');
     expect(modelKeyOf(KIND.Deer)).toBe('deer');
     expect(modelKeyOf(KIND.Boar)).toBe('boar');

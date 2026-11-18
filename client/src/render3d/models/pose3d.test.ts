@@ -57,18 +57,19 @@ const WOLF_TABLE: Record<string, number[]> = {
   sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
 };
 
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort';
+/** The tube models as the kinds wear them. `orcBow` is no model key: it is the `orc` model worn by the Orc Archer (the same model, the kind's bow). */
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcBow' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
 /** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
-const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
+const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcBow', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
 const TUBE_KIND: Record<TubeKey, number> = {
-  stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher, npcKnight: KIND.Knight,
+  stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcBow: KIND.OrcArcher, npcKnight: KIND.Knight,
   necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp, chort: KIND.Chort,
 };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
   let m = tmemo.get(k);
-  if (!m) tmemo.set(k, (m = buildJob(k, null)));
+  if (!m) tmemo.set(k, (m = buildJob(k === 'orcBow' ? 'orc' : k, null)));
   return m;
 };
 const tdef = (k: TubeKey): FigureDef => FIGURES[TUBE_KIND[k]];
@@ -462,8 +463,8 @@ describe('the woodland animals in every animation', () => {
   it('pose the two-legged creatures\' attacks by what they hold: the cleaver swings, the bow shoots and swings in a melee', () => {
     const style = (k: TubeKey, anim: number): string | undefined => poseFigure(tube(k), tdef(k), view({ anim, animT: STRIKE_T }), 1 / 60, settled()).attack?.style;
     expect(style('orc', ANIM.Melee)).toBe('swing');
-    expect(style('orcArcher', ANIM.Shoot)).toBe('shot');
-    expect(style('orcArcher', ANIM.Melee)).toBe('swing');
+    expect(style('orcBow', ANIM.Shoot)).toBe('shot');   // the same orc model, posed by the archer kind's bow
+    expect(style('orcBow', ANIM.Melee)).toBe('swing');
     expect(style('goblin', ANIM.Shoot)).toBe('shot');
     expect(style('goblin', ANIM.Melee)).toBe('swing');
     expect(style('npcKnight', ANIM.Melee)).toBe('swing');

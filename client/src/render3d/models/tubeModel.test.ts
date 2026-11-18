@@ -7,7 +7,6 @@ import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube, type TubePoint } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
-import { orcDesc } from './descs/orc';
 import { HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
 import { DEMON_EYE } from './descs/imp';
@@ -339,6 +338,8 @@ interface BipedFacts {
   key: TubeKey;
   /** The game kind that wears it: its `FIGURES` entry says which weapon it carries. */
   kind: number;
+  /** A second kind that wears a model already listed: the name of its row. */
+  as?: string;
   /** Game px to the top of the head (the `head` stage). */
   height: number;
   bends: number;
@@ -353,7 +354,8 @@ interface BipedFacts {
 const BIPEDS: BipedFacts[] = [
   { key: 'goblin', kind: KIND.GoblinArcher, height: HUMAN_HEIGHT * 0.65, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
   { key: 'orc', kind: KIND.OrcWarrior, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
-  { key: 'orcArcher', kind: KIND.OrcArcher, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
+  // The Orc Archer wears the same model: its row differs only in the kind, whose bow hangs in the left hand.
+  { key: 'orc', kind: KIND.OrcArcher, as: 'the Orc Archer', height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
   { key: 'npcKnight', kind: KIND.Knight, height: HUMAN_HEIGHT, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, KNIGHT_ACCENT], weapon: 'weaponR' },
   { key: 'necromancer', kind: KIND.Necromancer, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'summoner', kind: KIND.Summoner, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
@@ -364,7 +366,7 @@ const BIPEDS: BipedFacts[] = [
 
 describe('the two-legged creatures', () => {
   for (const f of BIPEDS) {
-    describe(f.key, () => {
+    describe(f.as ? `${f.key} as ${f.as}` : f.key, () => {
       const m = buildJob(f.key, null), d = TUBE_DESCS[f.key], n = m.position.length / 3;
       const piv = (b: (typeof BONES)[number]): number[] => [...m.pivots.subarray(bone(b) * 3, bone(b) * 3 + 3)];
 
@@ -528,20 +530,14 @@ describe('the two-legged creatures', () => {
     expect(d.weapon).toBeUndefined();
   });
 
-  it('the orcs: one build; the archer has arms 0.75 as thick, a bone mask instead of tusks, and a strap', () => {
-    const w = buildJob('orc', null), a = buildJob('orcArcher', null);
-    expect(a.armRadius / w.armRadius).toBeCloseTo(0.75, 6);
-    expect(a.armLength).toBe(w.armLength);
-    expect(a.baseHeight).toBeCloseTo(w.baseHeight, 6);
-    expect(a.scale).toBe(w.scale);
-    const white = (d: TubeDesc): number => d.pieces.filter((p) => p.colour === 0xfdf7ed).length;
-    const drops = (d: TubeDesc): number => d.pieces.filter((p) => 'drop' in p.shape && p.colour === 0xfdf7ed).length;
-    expect(drops(TUBE_DESCS.orc)).toBe(2);         // the two tusks
-    expect(white(TUBE_DESCS.orc)).toBe(2);
-    expect(drops(TUBE_DESCS.orcArcher)).toBe(0);   // none through the mask
-    expect(white(TUBE_DESCS.orcArcher)).toBeGreaterThan(0);
-    expect(orcDesc({ name: 'Plain', arms: 1, mask: false, strap: false }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length);
-    expect(orcDesc({ name: 'Strapped', arms: 1, mask: false, strap: true }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length + 1);
+  it('the orcs: the warrior and the archer wear one model, with two tusks and no mask; only the kind\'s weapon differs', () => {
+    expect(MODEL_OF_KIND[KIND.OrcWarrior]).toBe('orc');
+    expect(MODEL_OF_KIND[KIND.OrcArcher]).toBe('orc');
+    expect(Object.keys(TUBE_DESCS)).not.toContain('orcArcher');
+    const white = TUBE_DESCS.orc.pieces.filter((p) => p.colour === 0xfdf7ed);
+    expect(white).toHaveLength(2);                                   // the two tusks, nothing else in bone white (no mask)
+    expect(white.every((p) => 'drop' in p.shape)).toBe(true);
+    expect([FIGURES[KIND.OrcWarrior].weapon, FIGURES[KIND.OrcArcher].weapon]).toEqual(['weapon_cleaver', 'weapon_bow']);
   });
 
   it('the robes: one build; the Summoner is the Necromancer in other colours, the Disciple is as tall, has no tip and shows no hands', () => {
