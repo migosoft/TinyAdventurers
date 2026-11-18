@@ -142,14 +142,17 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf, 'piece') })).not.toMatch(own);
     });
 
-    it('the id leaves out what is below the ground whatever the figure\'s cut flag (the floor hides it in the picture, so it must not cut the hull there); the piece only when cut', () => {
+    it('the id leaves out what the world hides, by the figure\'s own height (the row\'s fourth flag float), not by a constant 0; the piece keeps only its cut rule', () => {
       const { mats } = make(true);
-      const ground = /figPos\.y >= 0\.0/g;
-      const count = (src: string): number => (src.match(ground) ?? []).length;
       const id = fragment(B, mats.id, { compare: true, geometry: geometryOf(elf, 'piece') });
       const piece = fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf, 'piece') });
-      expect(count(piece)).toBe(1);
-      expect(count(id)).toBe(2);
+      // The fragment's true height against the flags' fourth float (a flat varying of the row), and the cut rule's own test against 0.
+      const against = /figPos\.y >= figFlags\.w/g, cutRule = /figPos\.y >= 0\.0/g;
+      const n = (src: string, re: RegExp): number => (src.match(re) ?? []).length;
+      expect(n(id, against)).toBe(1);
+      expect(n(id, cutRule)).toBe(1);
+      expect(n(piece, against)).toBe(0);
+      expect(n(piece, cutRule)).toBe(1);
     });
 
     it('the id and the piece share one vertex stage: the rows texture read and the stretch by cos(pitch)', () => {

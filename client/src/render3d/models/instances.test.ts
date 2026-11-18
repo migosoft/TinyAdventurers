@@ -11,7 +11,7 @@ const near = (a: ArrayLike<number>, b: ArrayLike<number>): void => {
 };
 const inst = (o: Partial<FigureInst> = {}): FigureInst => ({
   owner: 1, model: 'skelet', x: 0, z: 0, lift: 0, scale: 1, pose: restPose(skelet, 0), bone: -1, boneScale: 1,
-  tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, ...o,
+  tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, groundY: 0, sight: { hard: 0, soft: 0 }, ...o,
 });
 const row = (i: FigureInst, slot = 0, ownerNo = 0): Float32Array => { const out = new Float32Array(ROW_TEXELS * 4 * 2); packInstance(out, 1, i, slot, ownerNo); return out.subarray(ROW_TEXELS * 4, ROW_TEXELS * 8); };
 /** The 3x4 matrix at a texel column, applied to a point. */
@@ -68,6 +68,13 @@ describe('packInstance', () => {
     const r = row(inst({ dark: true, cut: false }), -1, 300);
     near(r.subarray(ROW.flags * 4, ROW.flags * 4 + 3), [1, 0, 300]);
     expect(OWNER_MAX).toBe(65536);
+  });
+
+  it('writes the height below which the world hides the figure in the fourth float of the flags texel', () => {
+    for (const groundY of [0, -0.15, -1000]) {
+      const r = row(inst({ dark: true, groundY }), -1, 300);
+      near(r.subarray(ROW.flags * 4, ROW.flags * 4 + 4), [1, 0, 300, groundY]);
+    }
   });
 
   it('writes a weapon: the wielder bone times boneScale about its pivot, in bone 0', () => {

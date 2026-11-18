@@ -20,7 +20,7 @@ import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
 import { drownY, lavaSinkOf, sinkCell, standY, stepLavaSink } from './dips/descent';
-import { bedAt, depthFade, surfaceAt, walkBedAt } from './dips/shape';
+import { bedAt, depthFade, hidingHeightAt, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
@@ -388,7 +388,7 @@ export class Figures3d {
         out.models.push({
           // Its own negative owner (no entity has one: no caster slot, no sight), so every skull has its own id in the id pass.
           owner: -1 - si, model: 'skull', x, z, lift: this.groundLift(x, z, 0.3), scale: this.models?.kit.get('skelet')?.scale ?? 1, pose: skullPose, bone: -1, boneScale: 1,
-          tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 },
+          tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 },
         });
         continue;
       }
@@ -744,7 +744,7 @@ export class Figures3d {
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
       owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
-      cut: false, sight: { hard: 0, soft: 0 }, reach,
+      cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     };
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
     const push = (i: FigureInst): void => {
@@ -765,7 +765,7 @@ export class Figures3d {
         const bs = (wp.scale * (d.scale ?? 1) * m.size) / ms;
         const w: FigureInst = {
           owner: e.id, model: wp.frame, x, z, lift: this.lifted(y), scale: ms, pose: p3, bone, boneScale: bs, pivot: [m.pivots[bone * 3], m.pivots[bone * 3 + 1], m.pivots[bone * 3 + 2]],
-          tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, sight: { hard: 0, soft: 0 }, reach,
+          tint: pose.weaponTint !== null ? rgbOf(pose.weaponTint) : [1, 1, 1], stone: pose.grey, alpha: wp.alpha * pose.alpha * k, dark, cut: false, groundY: body.groundY, sight: { hard: 0, soft: 0 }, reach,
         };
         if (has(s.effects ?? 0, EFFECT.Frozen)) { const t = rgbOf(FROZEN_TINT); w.tint[0] *= t[0]; w.tint[1] *= t[1]; w.tint[2] *= t[2]; }
         push(w);

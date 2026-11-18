@@ -130,6 +130,21 @@ export function surfaceAt(map: TileMap, x: number, z: number): number {
   return -Infinity;
 }
 
+/** `hidingHeightAt` where the world hides nothing of a figure: below everything (a dip's deepest bed is CHASM_BED). */
+export const NOTHING_HIDDEN = -1000;
+
+/**
+ * The height below which the picture's world hides a figure standing at (x, z), whatever the figure's own parts: 0 on the floor (a part
+ * below the floor is behind it), the opaque lava surface in lava, and `NOTHING_HIDDEN` where the ground is a dip (wading in the
+ * clear water, falling into the chasm: the parts below 0 are seen). The id pass of the models keeps only what is above it, so a hidden
+ * piece cannot cut its own figure's outline. One value per figure, by its foot: a figure with its feet on the floor and its other end
+ * over a dip is taken as on the floor.
+ */
+export function hidingHeightAt(map: TileMap, x: number, z: number): number {
+  if (surfaceAt(map, x, z) === LAVA_LEVEL) return LAVA_LEVEL;
+  return bedAt(map, x, z) < -LIP ? NOTHING_HIDDEN : 0;
+}
+
 /** A height-0 cell the dip mesh draws: a terrain cell, or a non-terrain cell with a terrain cell among its eight neighbours. */
 export function inDipMesh(map: TileMap, x: number, z: number): boolean {
   const t = map.get(x, z);

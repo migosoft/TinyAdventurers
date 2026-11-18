@@ -22,6 +22,8 @@ export interface FigureInst {
   pivot?: readonly [number, number, number];
   tint: [number, number, number]; stone: boolean; alpha: number; dark: boolean;
   cut: boolean;             // nothing below the ground is drawn (sinking, drowning)
+  /** Height (tiles) below which the picture's world hides the figure (`hidingHeightAt`): the id pass leaves out what lies below it. */
+  groundY: number;
   sight: { hard: number; soft: number };
   /** Tiles: for the sight mask's wide-figure rule, what the figure's card would use (half the opaque width of its body frame x the pose scale), so it is seen and hidden where the card would be. 0 when absent. */
   reach?: number;
@@ -43,7 +45,7 @@ const PX = 1 / 16;  // tiles per sprite px
  *  - `robe` (1 texel): dx, dz, the dip, 0 (as `pose.robe`);
  *  - `tint` (1 texel): r, g, b, stone (0 or 1);
  *  - `seen` (1 texel): alpha, sight hard, sight soft, the caster slot;
- *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), the owner's number (see `OWNER_MAX`), 0.
+ *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), the owner's number (see `OWNER_MAX`), `groundY`.
  * The rest of the 64 texels is free.
  */
 export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51, flags: 52 } as const;
@@ -88,7 +90,7 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
   o = base + ROW.seen * 4;
   out[o] = inst.alpha; out[o + 1] = inst.sight.hard; out[o + 2] = inst.sight.soft; out[o + 3] = slot;
   o = base + ROW.flags * 4;
-  out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = 0;
+  out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = inst.groundY;
 }
 
 /** A float array that keeps its content and at least doubles when `rows` (a count of floats) exceeds it. */

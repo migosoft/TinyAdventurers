@@ -3,7 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
   CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  bedAt, depthFade, dipOf, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
+  NOTHING_HIDDEN, bedAt, depthFade, dipOf, hidingHeightAt, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -158,6 +158,16 @@ describe('dip shape', () => {
     expect(surfaceAt(pool('L', 5), mid, mid)).toBe(LAVA_LEVEL);
     expect(surfaceAt(pool('C', 5), mid, mid)).toBe(-Infinity);
     expect(surfaceAt(pool('L', 5), 1.5, 1.5)).toBe(-Infinity);
+  });
+
+  it('gives the height below which the world hides a figure: 0 on the floor, the lava surface in lava, nothing hidden in water or a chasm', () => {
+    expect(hidingHeightAt(pool('.', 5), mid, mid)).toBe(0);
+    expect(hidingHeightAt(pool('L', 5), mid, mid)).toBe(LAVA_LEVEL);
+    expect(hidingHeightAt(pool('~', 5), mid, mid)).toBe(NOTHING_HIDDEN);
+    expect(hidingHeightAt(pool('W', 5), mid, mid)).toBe(NOTHING_HIDDEN);
+    expect(hidingHeightAt(pool('C', 5), mid, mid)).toBe(NOTHING_HIDDEN);
+    expect(hidingHeightAt(pool('L', 5), 1.5, 1.5)).toBe(0);
+    expect(NOTHING_HIDDEN).toBeLessThan(-CHASM_BED);
   });
 
   it('lists the mesh cells', () => {

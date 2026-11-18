@@ -20,7 +20,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
-import { bedAt, depthFade, LAVA_LEVEL, walkBedAt, WATER_LEVEL } from './dips/shape';
+import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, type FigureOut } from './figures';
@@ -782,6 +782,19 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(kit.get('wizard')!.size).toBe(1);
     expect(kit.get('dwarf')!.size).toBe(0.77);
     expect(kit.get('knight')!.size).toBe(0.87);
+  });
+
+  it('tells the id pass what the world hides: 0 on the floor, the lava surface in lava, nothing in water or over the chasm (body and weapon alike)', () => {
+    const groundOf = (tx: number, tz: number): number[] => {
+      const out = dipFigs().frame(frame([ent(10, KIND.ElvenRanger, at2(tx, tz))]), cam(), look({ kit, ...all }));
+      expect(out.models.length, 'body and bow').toBe(2);
+      return out.models.map((m) => m.groundY);
+    };
+    expect(groundOf(8, 5)).toEqual([0, 0]);                           // floor
+    expect(groundOf(6, 1)).toEqual([LAVA_LEVEL, LAVA_LEVEL]);         // lava
+    expect(groundOf(1, 1)).toEqual([NOTHING_HIDDEN, NOTHING_HIDDEN]); // wading
+    expect(groundOf(3, 1)).toEqual([NOTHING_HIDDEN, NOTHING_HIDDEN]); // deep water
+    expect(groundOf(2, 4)).toEqual([NOTHING_HIDDEN, NOTHING_HIDDEN]); // over the chasm
   });
 
   it('stands a wading model figure on the bed, uncropped: the caster and the opener follow the foot', () => {
