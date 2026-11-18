@@ -35,7 +35,7 @@ export interface FigureModel {
   /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 0 lit, 1 polished steel, 2 unlit (the seams). */
   look: Float32Array;
   index: Uint32Array; ranges: ModelRange[];
-  pieceIndex: Uint32Array; lineIndex: Uint32Array; // the same triangles as two unbroken lists (sun pass; seal)
+  pieceIndex: Uint32Array; lineIndex: Uint32Array; // the same triangles as two unbroken lists (the piece index serves the piece, id and sun draws; the line index serves the hull)
   pivots: Float32Array; // MAX_BONES x 3: where each bone turns, sprite px
   parents: Int8Array;   // MAX_BONES: hips -1, body 0, head 1, hat 2, arms 1, hands their arm, legs 0, weapons their hand
   bends: BendDef[]; robeTop: number | null;

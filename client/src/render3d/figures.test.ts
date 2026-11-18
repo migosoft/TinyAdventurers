@@ -1085,7 +1085,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       sizes.add(o.models.filter((m) => m.model === 'skull')[0].scale);
     }
     expect([...sizes]).toEqual([skelScale]);
-    // two skulls never share an owner (so batching can separate them), and every owner is negative
+    // two skulls never share an owner (each skull has its own owner number in the id pass), and every owner is negative
     fg.frame(frame([ent(11, KIND.ElvenRanger), ent(12, KIND.ElvenRanger)]), cam(), l);
     fg.event({ t: 'Died', id: 11, x: at(1), y: 8, kind: KIND.ElvenRanger });
     fg.event({ t: 'Died', id: 12, x: at(1), y: 8, kind: KIND.ElvenRanger });

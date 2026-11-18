@@ -968,7 +968,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       else if (trees.meshCount > 0) trees.clear();
       timer?.lap('upload');
       if (f.models) figureSight(f.models.insts, frameMask);
-      figures.frame(f.models, f.cam, (id) => slotOf.get(id) ?? -1);
+      figures.frame(f.models, (id) => slotOf.get(id) ?? -1);
       timer?.lap('models');
       lighting.setLights(f.lights);
       lighting.cracks.set(f.cracks ?? []);

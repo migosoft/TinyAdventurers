@@ -7,7 +7,6 @@ import {
   Mesh, NearestFilter, NoColorSpace, RGBAFormat, RepeatWrapping, UnsignedByteType, type Scene, type Texture,
 } from 'three/webgpu';
 import { growRows, OWNER_MAX, packInstance, ROW_TEXELS, type FigureInst } from './instances';
-import type { Cam } from '../camera';
 import type { FigureFrame } from '../view';
 import { FIGURE_ORDER, HULL_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
 import type { FigureModel } from './model';
@@ -153,7 +152,7 @@ export class FigureLayer {
    * Writes the frame's instances into the rows and sets which meshes draw how many of them. An instance whose model has not arrived is
    * skipped (the caller draws its card). `slotOf`: the caster slot of an entity (-1 none).
    */
-  frame(f: FigureFrame | undefined, _cam: Cam, slotOf: (id: number) => number): void {
+  frame(f: FigureFrame | undefined, slotOf: (id: number) => number): void {
     const insts = f ? f.insts : NO_INSTS;
     // Nothing to draw and nothing drawn last frame: nothing to hide either (the common run without models).
     if (insts.length === 0 && this.drawn.draws === 0 && this.drawn.figures === 0) return;
