@@ -32,7 +32,9 @@ for n in sorted(na & nb):
     if a.size != b.size:
         rows.append((10**12, f"{n}\tsize differs {a.size} vs {b.size}"))
         continue
-    diff = ImageChops.difference(a, b).convert("L").point(lambda v: 255 if v else 0)
+    # A pixel counts when any channel differs, however little (a luma conversion would lose small red or blue differences).
+    r, g, bl = ImageChops.difference(a, b).split()
+    diff = ImageChops.lighter(ImageChops.lighter(r, g), bl).point(lambda v: 255 if v else 0)
     box = diff.getbbox()
     if box is None:
         rows.append((0, f"{n}\t0"))
