@@ -142,6 +142,16 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf, 'piece') })).not.toMatch(own);
     });
 
+    it('the id leaves out what is below the ground whatever the figure\'s cut flag (the floor hides it in the picture, so it must not cut the hull there); the piece only when cut', () => {
+      const { mats } = make(true);
+      const ground = /figPos\.y >= 0\.0/g;
+      const count = (src: string): number => (src.match(ground) ?? []).length;
+      const id = fragment(B, mats.id, { compare: true, geometry: geometryOf(elf, 'piece') });
+      const piece = fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf, 'piece') });
+      expect(count(piece)).toBe(1);
+      expect(count(id)).toBe(2);
+    });
+
     it('the id and the piece share one vertex stage: the rows texture read and the stretch by cos(pitch)', () => {
       const { mats } = make(true);
       const g = geometryOf(elf, 'piece');

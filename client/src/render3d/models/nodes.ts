@@ -175,7 +175,9 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
 
   // The piece's own vertex stage, front side, stipple, sight and `cut`: the id target matches the picture's piece pixels. Not lit, no paint.
   const id = make(p.screen);
-  id.colorNode = vec4(ownerLo.div(255), ownerHi.div(255), stage.add(1).div(255), gate(keep));
+  // The id pass has no world: a piece below the ground is hidden by the floor in the picture, so it must not cover the hull there (the
+  // outline round a figure's feet would be cut away). It is left out of the id target whatever the figure's `cut`.
+  id.colorNode = vec4(ownerLo.div(255), ownerHi.div(255), stage.add(1).div(255), gate(keep.and(p.P.y.greaterThanEqual(0))));
 
   const line = make(p.screen);
   // Not lit by the lamps, but dimmed by the ambient light like everything else: in the dark a flat 0x222222 would show as a grey outline on black.
