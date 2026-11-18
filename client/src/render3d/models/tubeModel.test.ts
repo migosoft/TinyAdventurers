@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
-import { BONES, MAX_BENDS, STAGES } from './bones';
+import { BONES, MAX_BENDS, STAGES, weaponBoneOf } from './bones';
 import { buildJob, transferList } from './build';
 import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube } from './tubes';
-import { DESCS, TUBE_DESCS, type TubeKey } from './table';
+import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { orcDesc } from './descs/orc';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
@@ -293,6 +293,8 @@ describe('two-legged tube figures', () => {
 /** What each two-legged creature (#356) must be: a new creature adds a row here, the loop below checks it. */
 interface BipedFacts {
   key: TubeKey;
+  /** The game kind that wears it: its `FIGURES` entry says which weapon it carries. */
+  kind: number;
   /** Game px to the top of the head (the `head` stage). */
   height: number;
   bends: number;
@@ -305,8 +307,9 @@ interface BipedFacts {
   weapon: 'weaponR' | 'weaponL' | null;
 }
 const BIPEDS: BipedFacts[] = [
-  { key: 'orc', height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
-  { key: 'orcArcher', height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
+  { key: 'goblin', kind: KIND.GoblinArcher, height: 12, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
+  { key: 'orc', kind: KIND.OrcWarrior, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'orcArcher', kind: KIND.OrcArcher, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
 ];
 
 describe('the two-legged creatures', () => {
@@ -345,7 +348,11 @@ describe('the two-legged creatures', () => {
         expect(d.pieces.filter((p) => p.torso)).toHaveLength(1);
       });
 
-      it('holds its weapon below the shoulder, at the side of its hand', () => {
+      it('holds its weapon below the shoulder, at the side of its hand: the hand the figure code hangs its weapon on', () => {
+        // The row's hand is the one `Figures3d` picks for the weapon this kind carries (a bow in the left); a kind without a weapon states null.
+        const carried = FIGURES[f.kind].weapon;
+        expect(MODEL_OF_KIND[f.kind]).toBe(f.key);
+        expect(carried ? weaponBoneOf(carried) : null).toBe(f.weapon);
         if (!f.weapon) return;
         const side = f.weapon === 'weaponR' ? 'armR' : 'armL';
         expect(piv(f.weapon)[1]).toBeLessThan(piv(side)[1]);

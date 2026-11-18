@@ -26,7 +26,7 @@ import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
-import { BONES, BOW_WEAPONS } from './models/bones';
+import { BONES, weaponBoneOf } from './models/bones';
 import type { FigureModel } from './models/model';
 import { LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
 import { modelKeyOf, outlineFrame } from './models/table';
@@ -768,7 +768,7 @@ export class Figures3d {
       // The kit logs a weapon it cannot make (once) and gives nothing until the model is built; the figure goes without it.
       const wm = kit.get(wp.frame);
       if (wm) {
-        const bone = BONES.indexOf(BOW_WEAPONS.has(wp.frame) ? 'weaponL' : 'weaponR');
+        const bone = BONES.indexOf(weaponBoneOf(wp.frame));
         // The instance is scaled by the drawn model's scale (the hand's place follows the fitted body); the weapon's own size is what the card path
         // draws (the game's weapon scale times the figure's `FigureDef.scale`), shrunk with the figure by its
         // `size`, so `boneScale` makes up the difference.

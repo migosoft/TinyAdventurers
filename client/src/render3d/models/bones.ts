@@ -10,3 +10,6 @@ export type Stage = (typeof STAGES)[number];
 
 /** The weapon sprites whose model is a bow (held in the left hand). The weapon table in `weapons.ts` marks the same ones `kind: 'bow'`; a test keeps the two equal. */
 export const BOW_WEAPONS: ReadonlySet<string> = new Set(['weapon_bow', 'weapon_bow_2']);
+
+/** The bone a weapon hangs on: a bow in the left hand, anything else in the right. */
+export const weaponBoneOf = (frame: string): 'weaponL' | 'weaponR' => (BOW_WEAPONS.has(frame) ? 'weaponL' : 'weaponR');

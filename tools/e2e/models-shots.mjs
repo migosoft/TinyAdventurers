@@ -20,7 +20,7 @@ mkdirSync(out, { recursive: true });
 const STATES = ['idle', 'move', 'melee', 'shoot', 'cast', 'windup', 'dash'];
 /** The model rows of the gallery, in order (kind ids ascending): the description each one wears. */
 const KINDS = [
-  ['wizard', 'wizard'], ['paladin', 'knight'], ['barbarian', 'dwarf'], ['ranger', 'elf'],
+  ['wizard', 'wizard'], ['paladin', 'knight'], ['barbarian', 'dwarf'], ['ranger', 'elf'], ['goblin', 'goblin'],
   ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['orcwarrior', 'orc'], ['orcarcher', 'orcArcher'], ['raisedskel', 'skelet'], ['ogre', 'ogre'], ['wolf', 'wolf'],
   ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
@@ -30,7 +30,7 @@ const row = (name) => {
   if (i < 0) throw new Error(`models-shots: no kind named ${name}`);
   return i;
 };
-const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'orc', 'orcArcher'];
+const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'orcArcher'];
 /** The woodland page's line-up: the seven figures it places, no animals. */
 const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
 /** The animals (#357): their rows in KINDS start here. */

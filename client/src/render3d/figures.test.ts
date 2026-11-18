@@ -708,7 +708,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -757,6 +757,14 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const plain = sword(kit), big = sword(scaled);
     expect(plain.boneScale).toBeGreaterThan(0);
     expect(big.boneScale).toBeCloseTo(plain.boneScale * 1.5, 6);
+  });
+
+  it('swings the right arm of a bow carrier in a melee, with the bow still in its left hand; a shot is a shot', () => {
+    const goblin = (anim: number) => make().frame(frame([ent(12, KIND.GoblinArcher, { anim, animMs: 100 })]), cam(), look({ kit, ...all })).models;
+    const melee = goblin(ANIM.Melee);
+    expect(melee.map((m) => [m.model, m.bone])).toEqual([['goblin', -1], ['weapon_bow', BONES.indexOf('weaponL')]]);
+    expect(melee[0].pose!.attack?.style).toBe('swing');
+    expect(goblin(ANIM.Shoot)[0].pose!.attack?.style).toBe('shot');
   });
 
   it('draws a figure without a weapon, and warns once, when its weapon sprite has no model', () => {

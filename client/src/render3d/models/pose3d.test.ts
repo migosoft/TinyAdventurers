@@ -57,11 +57,11 @@ const WOLF_TABLE: Record<string, number[]> = {
   sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
 };
 
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'orc' | 'orcArcher';
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
 /** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
-const BIPEDS: TubeKey[] = ['orc', 'orcArcher'];
-const TUBE_KIND: Record<TubeKey, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher };
+const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher'];
+const TUBE_KIND: Record<TubeKey, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
   let m = tmemo.get(k);
@@ -434,6 +434,8 @@ describe('the woodland animals in every animation', () => {
     expect(style('orc', ANIM.Melee)).toBe('swing');
     expect(style('orcArcher', ANIM.Shoot)).toBe('shot');
     expect(style('orcArcher', ANIM.Melee)).toBe('swing');
+    expect(style('goblin', ANIM.Shoot)).toBe('shot');
+    expect(style('goblin', ANIM.Melee)).toBe('swing');
   }, SLOW);
 
   it('hold a stone or frozen animal\'s pose mid-stride and mid-butt, hit or not, whatever the crest', () => {
