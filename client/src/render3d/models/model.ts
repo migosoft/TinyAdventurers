@@ -25,6 +25,8 @@ export interface BendDef {
   bone: number; origin: [number, number, number]; dir: [number, number, number]; len: number; k: number; up: 1 | -1; wag: number;
   /** A tube model's neck: it bends as a whole about `origin`, more the nearer the head (`skin.w`). */
   neck?: true;
+  /** The bend also flutters (a wing, a pennant): `rate` in Hz, `angle` in rad at the tip. */
+  flutter?: { rate: number; angle: number };
 }
 
 export interface FigureModel {
@@ -51,7 +53,11 @@ export interface FigureModel {
   shoulderY: number; handY: number; armLength: number; armRadius: number; quad: boolean; scale: number; hipY: number; neck: [number, number];
   // The fields below are set by tube models (tubeModel.ts) only.
   /** The legs as bone indices (`lower` -1: none), front legs first. */
-  legs?: { upper: number; lower: number; front: boolean }[];
+  legs?: { upper: number; lower: number; front: boolean; /** 1 (default) or -1: the knee bends the other way. */ knee?: 1 | -1 }[];
+  /** 'walk': the legs swing in turn (two-legged tube models). */
+  gait?: 'walk';
+  /** A factor on the size of the held weapon (default 1). */
+  weaponScale?: number;
   /** How high the model hops, in model px per unit of the hop. */
   hop?: number;
   /** The index in `bends` of the neck. */

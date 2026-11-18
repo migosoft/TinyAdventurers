@@ -212,4 +212,63 @@ describe('buildTubeFigure', () => {
 
 import { buildTubeFigure } from './tubeModel';
 import type { TubeDesc } from './tubeDesc';
+import { biped, robedBiped } from './bipedFixture';
 const require_build = (d: TubeDesc) => buildTubeFigure('bad', d);
+
+describe('two-legged tube figures', () => {
+  const m = buildTubeFigure('biped', biped), b = (n: (typeof BONES)[number]): number => BONES.indexOf(n), piv = (n: (typeof BONES)[number]): number[] => [...m.pivots.subarray(b(n) * 3, b(n) * 3 + 3)];
+  const smooth = (x: number): number => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
+  it('is not a quad, walks, and lists two legs with knees', () => {
+    expect(m.quad).toBe(false); expect(m.gait).toBe('walk');
+    expect(m.legs).toEqual([{ upper: b('leg0'), lower: b('leg1'), front: false, knee: 1 }, { upper: b('leg2'), lower: b('leg3'), front: false, knee: 1 }]);
+  });
+  it('takes the knee that bends the other way, and the weapon factor', () => {
+    const k = buildTubeFigure('k', { ...biped, weapon: 1.5, legs: [{ upper: 'leg0', lower: 'leg1', front: false, knee: -1 }, biped.legs[1]] });
+    expect(k.legs!.map((l) => l.knee)).toEqual([-1, 1]);
+    expect(k.weaponScale).toBe(1.5);
+    expect(m.weaponScale).toBeUndefined();
+  });
+  it('hangs hands and weapons on the arms', () => {
+    const A = biped.arms!;
+    expect(m.armLength).toBe(A.length); expect(m.armRadius).toBe(A.radius);
+    expect(piv('handR')).toEqual(piv('armR'));
+    expect(piv('weaponR')[1]).toBeCloseTo(piv('armR')[1] - A.length + 0.8 * A.radius, 6);
+    expect(m.handY).toBeCloseTo(-A.length + 0.8 * A.radius, 6);
+    expect(m.parents[b('handL')]).toBe(b('armL')); expect(m.parents[b('weaponL')]).toBe(b('handL')); expect(m.parents[b('armR')]).toBe(b('body'));
+    expect(m.shoulderY).toBe(piv('armR')[1]);
+  });
+  it('marks steel and carries the flutter', () => {
+    const n = m.position.length / 3;
+    let steel = 0;
+    for (let i = 0; i < n; i++) if (m.look[i * 4 + 3] === 1) { steel++; expect(m.skin[i * 4 + 1], 'hull vertex').toBe(0); }
+    expect(steel).toBeGreaterThan(0);
+    expect(m.bends).toHaveLength(1);
+    expect(m.bends[0].flutter).toEqual({ rate: 3, angle: 0.4 });
+  });
+  it('weights a robe from 0 at robeTop to 1 at the hem', () => {
+    const r = buildTubeFigure('robed', robedBiped), n = r.position.length / 3;
+    let robe = 0;
+    for (let i = 0; i < n; i++) {
+      const y = r.position[i * 3 + 1];
+      if (r.skin[i * 4 + 2] === -2) { robe++; expect(y).toBeLessThan(6); expect(Math.abs(r.skin[i * 4 + 3] - smooth((6 - y) / 6))).toBeLessThan(1e-6); } else if (y >= 6) expect(r.skin[i * 4 + 2]).not.toBe(-2);
+    }
+    expect(robe).toBeGreaterThan(0);
+    expect(r.robeTop).toBe(6);
+    expect(r.legs).toEqual([]);
+  });
+  it('throws for arms without a shoulder pivot, a robe without robeTop, a robe that bends, and a piece on a bone without a pivot', () => {
+    const { armR: _a, ...noShoulder } = biped.pivots, { leg1: _l, ...noKnee } = biped.pivots;
+    expect(() => buildTubeFigure('x', { ...biped, name: 'NoShoulder', pivots: noShoulder })).toThrow(/NoShoulder/);
+    expect(() => buildTubeFigure('x', { ...robedBiped, name: 'NoRobeTop', robeTop: undefined })).toThrow(/NoRobeTop/);
+    const robe = robedBiped.pieces[0];
+    expect(() => buildTubeFigure('x', { ...robedBiped, name: 'BendingRobe', pieces: [{ ...robe, bend: { sway: 1 } }, ...robedBiped.pieces.slice(1)] })).toThrow(/BendingRobe/);
+    expect(() => buildTubeFigure('x', { ...biped, name: 'NoKnee', pivots: noKnee })).toThrow(/NoKnee.*leg1/);
+  });
+  it('leaves the four animals as they were', () => {
+    for (const key of keys) {
+      const a = buildJob(key, null);
+      expect(a.quad).toBe(true); expect(a.gait).toBeUndefined(); expect(a.armLength).toBe(0); expect(a.robeTop).toBeNull();
+      expect(a.legs!.every((l) => l.knee === undefined)).toBe(true);
+    }
+  });
+});

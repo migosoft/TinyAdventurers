@@ -19,7 +19,11 @@ export interface TubePiece {
   /** Turned about `at` by this angle (rad, about z) before it is placed: a hind leg's rest angle. */
   turn?: number;
   /** A loose piece sways about its foot (a drop's or a tube's own direction and length); the neck bends as a whole about `origin`. */
-  bend?: { sway: number; wag?: number } | { neck: { origin: readonly [number, number]; from: number; to: number } };
+  bend?: { sway: number; wag?: number; /** The piece also flutters: `rate` in Hz, `angle` in rad at the tip. */ flutter?: { rate: number; angle: number } } | { neck: { origin: readonly [number, number]; from: number; to: number } };
+  /** The part of this piece below `TubeDesc.robeTop` swings as the robe's hem. */
+  robe?: true;
+  /** Polished steel (look value 1). */
+  metal?: true;
   /** The body tube the hit circle and the lying thickness are measured from. */
   torso?: boolean;
 }
@@ -31,7 +35,15 @@ export interface TubeDesc {
   pivots: Partial<Record<Bone, Vec3>>;
   /** Parents that differ from "hips": e.g. head: 'body', hat: 'head', handR: 'armR', leg1: 'leg0'. A parent must come before its child in BONES. */
   parents: Partial<Record<Bone, Bone>>;
-  legs: readonly { upper: Bone; lower?: Bone; front: boolean }[];
+  /** 'two': an upright figure that walks on two legs (or none). Absent: four legs, as before. */
+  stance?: 'two';
+  /** 'two' only: both arms hang straight down from the pivots of armR and armL; a hand ball ends each. */
+  arms?: { length: number; radius: number };
+  /** The height (page px) below which `robe` pieces swing. */
+  robeTop?: number;
+  /** A factor on the size of the held weapon (default 1). */
+  weapon?: number;
+  legs: readonly { upper: Bone; lower?: Bone; front: boolean; /** -1: the knee bends the other way. */ knee?: -1 }[];
   /** Half length and half width of the ground oval, page px at size 1. */
   footprint: readonly [number, number];
   hop?: number;

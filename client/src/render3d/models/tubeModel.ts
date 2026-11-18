@@ -4,6 +4,7 @@
 import { hull } from './addons';
 import { BONES, MAX_BENDS, MAX_BONES, STAGES, type Bone } from './bones';
 import { splitIndex, type BendDef, type FigureModel, type ModelRange } from './model';
+import type { Vec3 } from './desc';
 import type { Mesh3 } from './part';
 import type { Shape, TubeDesc, TubePiece } from './tubeDesc';
 import { ball, drop, tube } from './tubes';
@@ -44,7 +45,27 @@ function swayAxis(name: string, s: Shape): { dir: [number, number, number]; len:
 
 interface Built { piece: TubePiece; stage: number; line: boolean; mesh: Mesh3; uv: Float32Array | null; bend: number }
 
-function check(d: TubeDesc): void {
+/** The pivots of a description: its own, and with arms the hands' and weapons' derived from the shoulders. */
+function pivotsOf(d: TubeDesc): Partial<Record<Bone, Vec3>> {
+  const pv = { ...d.pivots };
+  if (d.stance === 'two' && d.arms) {
+    const handY = -d.arms.length + 0.8 * d.arms.radius;
+    for (const s of ['R', 'L'] as const) {
+      const shoulder = d.pivots[`arm${s}`];
+      if (!shoulder) throw new Error(`${d.name}: arms need a pivot for arm${s}`);
+      pv[`hand${s}`] = [shoulder[0], shoulder[1], shoulder[2]];
+      pv[`weapon${s}`] = [shoulder[0], shoulder[1] + handY, shoulder[2]];
+    }
+  }
+  return pv;
+}
+
+function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
+  for (const p of d.pieces) {
+    if (p.bone !== 'hips' && !pv[p.bone]) throw new Error(`${d.name}: the bone ${p.bone} of a piece has no pivot`);
+    if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);
+    if (p.robe && p.bend) throw new Error(`${d.name}: a robe piece cannot also bend`);
+  }
   const bending = d.pieces.filter((p) => p.bend).length;
   if (bending > MAX_BENDS) throw new Error(`${d.name}: ${bending} bending pieces, at most ${MAX_BENDS} fit the GPU's bend array`);
   if (d.pieces.filter((p) => typeof p.colour === 'function').length > 1) throw new Error(`${d.name}: more than one painted piece`);
@@ -54,7 +75,8 @@ function check(d: TubeDesc): void {
 }
 
 export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
-  check(d);
+  const pv = pivotsOf(d), two = d.stance === 'two';
+  check(d, pv);
   const scale = d.size * PAGE_TO_GAME, bends: BendDef[] = [], built: Built[] = [];
   for (const p of d.pieces) {
     const src = turned(meshOf(p.shape), p.turn), at = p.at ?? [0, 0, 0];
@@ -64,7 +86,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
       if ('neck' in p.bend) bends.push({ bone: BONES.indexOf(p.bone), origin: [p.bend.neck.origin[0], p.bend.neck.origin[1], 0], dir: [0, 1, 0], len: 1, k: 0, up: 1, wag: 0, neck: true });
       else {
         const { dir, len } = swayAxis(d.name, p.shape);
-        bends.push({ bone: BONES.indexOf(p.bone), origin: [at[0], at[1], at[2]], dir, len, k: p.bend.sway, up: dir[1] > 0 ? 1 : -1, wag: p.bend.wag ?? 0 });
+        bends.push({ bone: BONES.indexOf(p.bone), origin: [at[0], at[1], at[2]], dir, len, k: p.bend.sway, up: dir[1] > 0 ? 1 : -1, wag: p.bend.wag ?? 0, ...(p.bend.flutter ? { flutter: p.bend.flutter } : {}) });
       }
     }
     const stage = STAGES.indexOf(p.stage);
@@ -96,8 +118,10 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
         const nb = (p.bend as { neck: { from: number; to: number } }).neck;
         along = smooth((b.uv![i * 2] - nb.from) / (nb.to - nb.from));
       } else if (B) along = Math.max(0, Math.min(1, (lx * B.dir[0] + ly * B.dir[1] + lz * B.dir[2]) / B.len));
-      skin.set([boneIdx, b.line ? 1 : 0, b.bend, along], o * 4);
-      if (painted && !b.line) { look.set([-1, -1, -1, 0], o * 4); uv[o * 2] = b.uv![i * 2]; uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, 0], o * 4);
+      const swings = p.robe && d.robeTop !== undefined && y < d.robeTop;
+      skin.set([boneIdx, b.line ? 1 : 0, swings ? -2 : b.bend, swings ? smooth((d.robeTop! - y) / d.robeTop!) : along], o * 4);
+      const steel = p.metal && !b.line ? 1 : 0;
+      if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = b.uv![i * 2]; uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, steel], o * 4);
       if (!b.line) {
         stands = Math.max(stands, y);
         if (b.stage === STAGES.indexOf('head')) headTop = Math.max(headTop, y);
@@ -115,15 +139,18 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
   }
 
   const pivots = new Float32Array(MAX_BONES * 3), parents = new Int8Array(MAX_BONES);
-  for (const [b, at] of Object.entries(d.pivots) as [Bone, readonly [number, number, number]][]) pivots.set(at, BONES.indexOf(b) * 3);
-  BONES.forEach((b, i) => { parents[i] = i === 0 ? -1 : BONES.indexOf(d.parents[b] ?? 'hips'); });
+  for (const [b, at] of Object.entries(pv) as [Bone, readonly [number, number, number]][]) pivots.set(at, BONES.indexOf(b) * 3);
+  const armed = two && !!d.arms, armParent: Partial<Record<Bone, Bone>> = armed ? { armR: 'body', armL: 'body', handR: 'armR', handL: 'armL', weaponR: 'handR', weaponL: 'handL' } : {};
+  BONES.forEach((b, i) => { parents[i] = i === 0 ? -1 : BONES.indexOf(d.parents[b] ?? armParent[b] ?? 'hips'); });
   const head = d.pivots.head ?? [0, 0, 0], body = d.pivots.body ?? [0, 0, 0];
   return {
     key, position, normal, uv, skin, look, index, ranges, pieceIndex, lineIndex, pivots, parents,
-    bends, robeTop: null, paint: { w: PAINT_W, h: PAINT_H, data: paint },
+    bends, robeTop: d.robeTop ?? null, paint: { w: PAINT_W, h: PAINT_H, data: paint },
     baseHeight: headTop * scale, radius: reach / 16 * scale, hatSway: 0, size: 1,
-    shoulderY: head[1] + 1, handY: 0, armLength: 0, armRadius: 0, quad: true, scale, hipY: body[1], neck: [head[0], head[1]],
-    legs: d.legs.map((l) => ({ upper: BONES.indexOf(l.upper), lower: l.lower ? BONES.indexOf(l.lower) : -1, front: l.front })),
+    shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length + 0.8 * d.arms!.radius : 0,
+    armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],
+    ...(two ? { gait: 'walk' as const } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
+    legs: d.legs.map((l) => ({ upper: BONES.indexOf(l.upper), lower: l.lower ? BONES.indexOf(l.lower) : -1, front: two ? false : l.front, ...(two ? { knee: l.knee ?? 1 } : {}) })),
     hop: d.hop, neckBend: bends.findIndex((b) => b.neck), butt: d.pieces.some((p) => p.bone === 'hat'), varies: true,
     stands, footprint: [d.footprint[0], d.footprint[1]],
   };
