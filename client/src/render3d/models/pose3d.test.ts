@@ -8,6 +8,7 @@ import { buildJob } from './build';
 import { ATTACK_IN_SECS, BUTT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
+import { HERO_TABLE } from './heroTable';
 
 const SLOW = 120000;
 const KIND_OF: Record<DescKey, number> = { elf: KIND.ElvenRanger, knight: KIND.Paladin, wizard: KIND.Wizard, dwarf: KIND.Barbarian, skelet: KIND.SkeletonWarrior, ogre: KIND.Ogre, wolf: KIND.DireWolf };
@@ -99,6 +100,31 @@ describe('the wolf is unchanged', () => {
       expect(got.length).toBe(want.length);
       for (let i = 0; i < want.length; i++) expect(Math.abs(got[i] - want[i]), `${k}[${i}]`).toBeLessThan(1e-6);
     }, SLOW);
+  }
+});
+
+describe('the two-legged #338 figures are unchanged', () => {
+  for (const key of Object.keys(HERO_TABLE)) {
+    const m = model(key as DescKey), d = def(key as DescKey);
+    const cases: Record<string, () => Pose3d> = {
+      idle: () => poseFigure(m, d, view(), 1 / 60, settled({ clock: 0.6 })),
+      move0: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: 0 })),
+      move1: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 4 })),
+      move2: () => poseFigure(m, d, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 2 })),
+      windup: () => poseFigure(m, d, view({ anim: ANIM.Windup }), 0, settled({ clock: 0.03 })),
+      atk0: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.03 }), 0, settled()),
+      atk1: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.075 }), 0, settled()),
+      atk2: () => poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.2 }), 0, settled()),
+      hit: () => poseFigure(m, d, view({ flags: FLAG.HURT }), 0.05, settled({ clock: 1.3 })),
+      sleep: () => poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 1 / 60, settled({ clock: 0.4 })),
+    };
+    for (const k of Object.keys(cases)) {
+      it(`gives the numbers of before for ${key} ${k}`, () => {
+        const got = flat(cases[k]()), want = HERO_TABLE[key][k];
+        expect(got.length).toBe(want.length);
+        for (let i = 0; i < want.length; i++) expect(Math.abs(got[i] - want[i]), `${key} ${k}[${i}]`).toBeLessThan(1e-6);
+      }, SLOW);
+    }
   }
 });
 
