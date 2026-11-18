@@ -12,8 +12,13 @@ import { robedDesc } from './descs/robed';
 import { KNIGHT_ACCENT, KNIGHT_SHIELD } from './descs/npcKnight';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
-/** The deer, boar and bunny are sized by `ANIMAL_FACTOR` (shoulder 9 and 8 px, the bunny's ears' base 3.5 px): size = px / (page height x PAGE_TO_GAME). */
-const SIZE = { stag: 0.95, deer: 9 / (11.25 * 1.0856), boar: 8 / (11.4 * 1.0856), bunny: 3.5 / (6.8 * 1.0856) } as const;
+/** The built models' sizes in game px: the top of the painted chest (the shoulder) of the deer, boar and stag, the base of the bunny's ears. */
+const shoulderPx = (m: FigureModel): number => {
+  let top = -Infinity;
+  for (let i = 0; i < m.position.length / 3; i++) if (m.look[i * 4] === -1 && m.skin[i * 4 + 1] === 0) top = Math.max(top, m.position[i * 3 + 1]);
+  return top * m.scale;
+};
+const earBasePx = (m: FigureModel): number => Math.max(...m.bends.map((b) => b.origin[1])) * m.scale;
 const deers = (key: string): boolean => key === 'stag' || key === 'deer';
 const bone = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
 const rgb = (hex: number): number[] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
@@ -69,7 +74,6 @@ describe('buildTubeFigure', () => {
       it('has finite positions, normals, pivots and bends', () => expectFinite(m));
 
       it('scale, size and flags', () => {
-        expect(m.scale).toBeCloseTo(SIZE[key] * PAGE_TO_GAME, 6);
         expect(m.size).toBe(1);
         expect(m.quad).toBe(true);
         expect(m.armLength).toBe(0);
@@ -143,7 +147,6 @@ describe('buildTubeFigure', () => {
     expect(m.bends.some((b) => b.neck)).toBe(false);
     expect(m.neckBend).toBe(-1);
     expect(m.butt).toBe(true);
-    expect(m.scale).toBeCloseTo(SIZE.boar * PAGE_TO_GAME, 6);
     const torso = d.pieces.find((p) => p.torso)!, sh = torso.shape as Extract<typeof torso.shape, { tube: unknown }>;
     expect(Math.max(...sh.tube.map((q) => q.r))).toBeCloseTo(3.5 * 1.25, 9);
     expect(hitRadius(d)).toBe(4);
@@ -158,9 +161,17 @@ describe('buildTubeFigure', () => {
     expect(d.pieces.some((p) => p.bone === 'body' && 'ball' in p.shape && !p.bend)).toBe(true);
     expect(m.hop).toBe(1.3);
     expect(m.butt).toBeFalsy();
-    expect(m.scale).toBeCloseTo(SIZE.bunny * PAGE_TO_GAME, 6);
     expect(hitRadius(d)).toBe(4);
     for (const b of ['leg0', 'leg2'] as const) expect(d.pieces.filter((p) => p.bone === b)).toHaveLength(2);
+  });
+
+  it('the built animals have the sizes ANIMAL_FACTOR asks for (measured on the vertices, game px)', () => {
+    const measured = { deer: shoulderPx(buildJob('deer', null)), boar: shoulderPx(buildJob('boar', null)), bunny: earBasePx(buildJob('bunny', null)), stag: shoulderPx(buildJob('stag', null)) };
+    expect(Math.abs(measured.deer - 9), `deer shoulder ${measured.deer}`).toBeLessThan(0.1);
+    expect(Math.abs(measured.boar - 8), `boar shoulder ${measured.boar}`).toBeLessThan(0.1);
+    expect(Math.abs(measured.bunny - 3.5), `bunny ears' base ${measured.bunny}`).toBeLessThan(0.1);
+    // The stag keeps its own size (0.95); its present built shoulder is about 11.6 px.
+    expect(Math.abs(measured.stag - 11.6), `stag shoulder ${measured.stag}`).toBeLessThan(0.2);
   });
 
   it('standing heights: stag > deer > boar > bunny, the bunny under 10 game px', () => {

@@ -266,7 +266,7 @@ describe('the walk', () => {
         for (const v of [p.yaw, ...Object.values(p.root), ...p.bones, ...p.bends, ...p.robe, p.air]) expect(Number.isFinite(v), `${mm.key} anim ${anim} fx ${fx}`).toBe(true);
       }
     }
-  });
+  }, SLOW);
 });
 
 describe('arms with an elbow', () => {

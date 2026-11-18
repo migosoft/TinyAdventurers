@@ -3,6 +3,7 @@
 
 import type { Vec3 } from '../desc';
 import { ANIMAL_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
+import { PAGE_TO_GAME } from '../tubeModel';
 
 const COAT = 0x9a5a34, BELLY = 0xd9b88a, RUMP = 0xf2e6cf, NOSE = 0x2a211e, EYE = 0x1c1614;
 
@@ -52,7 +53,7 @@ function bunnyDesc(): TubeDesc {
 
   return {
     // The ears' base (page y 6.8) is drawn 7.382 game px high at size 1; the factor sets it to 3.5 px.
-    name: 'Bunny', size: fitSize(ANIMAL_FACTOR.bunny, 6.8 * 1.0856), outline: 0x222222, pieces, pivots,
+    name: 'Bunny', size: fitSize(ANIMAL_FACTOR.bunny, 6.8 * PAGE_TO_GAME), outline: 0x222222, pieces, pivots,
     parents: { head: 'body' },
     legs, footprint: [5.1, 3.72], hop: 1.3,
   };
