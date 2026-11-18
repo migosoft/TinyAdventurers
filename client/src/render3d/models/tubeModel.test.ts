@@ -390,8 +390,8 @@ describe('the two-legged creatures', () => {
     let steel = 0;
     for (let i = 0; i < n; i++) if (m.look[i * 4 + 3] === 1) { steel++; expect(m.skin[i * 4 + 1], 'hull vertex').toBe(0); }
     expect(steel).toBeGreaterThan(0);
-    // The shield: the one flat steel ball; on armL, wholly beyond the arm's outer side and clear of the ground.
-    const shields = d.pieces.filter((p) => 'ball' in p.shape && p.metal && p.shape.ball[2] < p.shape.ball[0] / 3);
+    // The shield: the one flat steel ball on the left arm (the pauldron there is a thick ball); wholly beyond the arm's outer side, between the knee and the shoulder.
+    const shields = d.pieces.filter((p) => p.bone === 'armL' && 'ball' in p.shape && p.metal && p.shape.ball[2] < p.shape.ball[0] / 3);
     expect(shields).toHaveLength(1);
     const s = shields[0], ball = (s.shape as { ball: readonly [number, number, number] }).ball, arm = d.pivots.armL!;
     expect(s.bone).toBe('armL');
@@ -400,4 +400,22 @@ describe('the two-legged creatures', () => {
     expect(s.at![1] - ball[1]).toBeGreaterThan(d.pivots.leg1![1]);
     expect(s.at![1] + ball[1]).toBeLessThan(arm[1]);
   });
+});
+
+describe('the tube descriptions', () => {
+  // The limit of the tube models: a thinner tube is a sliver that flickers at game zoom. `wide` scales one axis of a ring, so a
+  // point's thinnest half-width is r x min(1, wide). Checked for the two-legged descriptions (#356); the stag's antler tines (#357) are thinner.
+  for (const key of (Object.keys(TUBE_DESCS) as TubeKey[]).filter((k) => TUBE_DESCS[k].stance === 'two')) {
+    it(`${key}: no tube point is thinner than 0.35 px`, () => {
+      const d = TUBE_DESCS[key], thin: string[] = [];
+      d.pieces.forEach((p, i) => {
+        if (!('tube' in p.shape)) return;
+        for (const q of p.shape.tube) {
+          const half = q.r * Math.min(1, q.wide ?? 1);
+          if (half < 0.35 - 1e-9) thin.push(`piece ${i} (${p.stage} on ${p.bone}): ${half.toFixed(3)}`);
+        }
+      });
+      expect(thin).toEqual([]);
+    });
+  }
 });

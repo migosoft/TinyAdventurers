@@ -65,7 +65,7 @@ add({ shape: { tube: bar, opts: { K: 8, N: 24, ref: [0, 1, 0] } }, stage: 'spike
 add({ shape: { tube: down, opts: { K: 8, N: 12, ref: [0, 0, 1] } }, stage: 'spikes', bone: 'head', line: 0, colour: DARK });
 // The comb: a low dark ridge over the crown, from above the visor to the nape.
 const comb: TubePoint[] = [];
-for (let i = 0; i <= 6; i++) { const a = 0.3 - i / 6 * 1.7; comb.push({ p: [helm[0] + hr[0] * Math.sin(a), helm[1] + hr[1] * Math.cos(a), 0], r: 0.4, wide: 0.6 }); }
+for (let i = 0; i <= 6; i++) { const a = 0.3 - i / 6 * 1.7; comb.push({ p: [helm[0] + hr[0] * Math.sin(a), helm[1] + hr[1] * Math.cos(a), 0], r: 0.4, wide: 0.9 }); }
 add({ shape: { tube: comb, opts: { K: 8, N: 18, ref: [0, 0, 1] } }, stage: 'hair', bone: 'head', line: 0.3, colour: MAIL });
 
 export const npcKnight: TubeDesc = {
@@ -74,5 +74,5 @@ export const npcKnight: TubeDesc = {
   // Arms of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
   stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],
-  footprint: [2.3, 3.0],
+  footprint: [2.3, 2.5],
 };
