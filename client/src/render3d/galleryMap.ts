@@ -42,11 +42,11 @@ export const MODEL_EFFECT_STRIDE = 20;
 /** The effect rows are 4 tiles apart: the ogre stands taller than 3 tiles on the screen. */
 export const MODEL_ROW_PITCH = 4;
 export const MODEL_EFFECT_ROWS = 9;
-export const MODEL_EFFECT_COLS = 9;
+export const MODEL_EFFECT_COLS = 12;
 export const CROWD_PER_ROW = 23;
 export const CROWD_ROWS = 8;
 /** The variety block (#357), below the crowd: one row per animal kind, `VARIETY_COLS` animals each, `VARIETY_PITCH` tiles apart. */
-export const VARIETY_ROWS = 4;
+export const VARIETY_ROWS = 8;
 export const VARIETY_COLS = 6;
 export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;

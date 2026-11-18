@@ -144,11 +144,11 @@ const EFFECT_ROWS: { effect?: number; flag?: number; run?: boolean }[] = [
 ];
 const EFFECT_KINDS = [KIND.Knight, KIND.SkeletonWarrior, KIND.Ogre, KIND.Lich];
 const PARTY_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger];
-/** The model block's effect rows: every row of `EFFECT_ROWS` that shows something (not the plain wading one), for the four heroes, a skeleton, the ogre, the wolf, the stag and the boar. */
+/** The model block's effect rows: every row of `EFFECT_ROWS` that shows something (not the plain wading one), for the four heroes, a skeleton, the ogre, the wolf, the stag, the boar, the Necromancer, the Imp and the Knight (#356). */
 const MODEL_EFFECT_ROW_LIST = EFFECT_ROWS.filter((r) => r.effect !== undefined || r.flag !== undefined);
-const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar];
-/** The variety block's rows: one animal kind each, `VARIETY_COLS` animals per row. */
-const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny];
+const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar, KIND.Necromancer, KIND.Imp, KIND.Knight];
+/** The variety block's rows: one kind each, `VARIETY_COLS` figures per row. */
+const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny, KIND.GoblinArcher, KIND.OrcWarrior, KIND.Imp, KIND.Chort];
 /** The kinds with a model, in the order of the model rows. */
 const MODEL_KINDS = Object.keys(MODEL_OF_KIND).map(Number);
 /** A figure of the dying row lives this many seconds of every `DIE_PERIOD`, then dies (and leaves its skull). */

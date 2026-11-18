@@ -5,7 +5,7 @@ import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
-import { CROWD_MAX, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
+import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
 import { GALLERY, ID, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, modelsOf, parseGallery } from './galleryStage';
 import { MODEL_OF_KIND, modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
@@ -184,16 +184,20 @@ describe('the gallery stage', () => {
     for (const e of rows) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
   });
 
-  it('has the effect block: 9 effect rows of the four heroes, a skeleton, the ogre, the wolf, the stag and the boar', () => {
+  it('has the effect block: 9 effect rows of 12 columns: the four heroes, a skeleton, the ogre, the wolf, the stag, the boar, the Necromancer, the Imp and the Knight', () => {
     const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, 200));
-    expect(ents).toHaveLength(9 * 9);
-    const kinds = ents.slice(0, 9).map((e) => e.kind);
-    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar]);
+    expect(MODEL_EFFECT_COLS).toBe(12);
+    expect(ents).toHaveLength(9 * 12);
+    const kinds = ents.slice(0, 12).map((e) => e.kind);
+    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar, KIND.Necromancer, KIND.Imp, KIND.Knight]);
     for (const eff of ['Sleep', 'Petrified', 'Frozen', 'Slowed', 'Poisoned', 'Chilled', 'Tainted', 'Invisible'] as const) {
-      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(9);
+      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(12);
     }
-    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(9);
-    for (const e of ents) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(12);
+    for (const e of ents) {
+      expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+      expect(e.x / 16).toBeLessThan(GALLERY.map.w - 1);
+    }
   });
 
   it('has the model rows of the four animals in every state of the cycle', () => {
@@ -203,11 +207,11 @@ describe('the gallery stage', () => {
     for (const [name, anim] of STATES) expect(rowOf(0.1, name).map((e) => e.anim), name).toEqual([anim, anim, anim, anim]);
   });
 
-  it('has the variety block: 4 rows (stag, deer, boar, bunny) of 6 animals standing idle, facing right, as models', () => {
+  it('has the variety block: 8 rows (stag, deer, boar, bunny, goblin archer, orc warrior, imp, chort) of 6 figures standing idle, facing right, as models', () => {
     const v = galleryEnts(1.7, null).filter((e) => inRange(e.id, ID.variety, 100));
-    expect(v).toHaveLength(24);
-    expect(v.map((e) => e.id)).toEqual(Array.from({ length: 4 }, (_, r) => Array.from({ length: 6 }, (_, c) => ID.variety + r * 10 + c)).flat());
-    const rowKinds = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny];
+    expect(v).toHaveLength(48);
+    expect(v.map((e) => e.id)).toEqual(Array.from({ length: 8 }, (_, r) => Array.from({ length: 6 }, (_, c) => ID.variety + r * 10 + c)).flat());
+    const rowKinds = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny, KIND.GoblinArcher, KIND.OrcWarrior, KIND.Imp, KIND.Chort];
     v.forEach((e, i) => {
       expect(e.kind).toBe(rowKinds[Math.floor(i / 6)]);
       expect([e.anim, e.aim, e.flags, e.effects]).toEqual([ANIM.Idle, 0, 0, 0]);
@@ -274,9 +278,9 @@ describe('the gallery stage', () => {
   it('gives the model effect ids room: ID.modelEffect + row * MODEL_EFFECT_STRIDE + col, all distinct, all below ID.dying', () => {
     expect(MODEL_EFFECT_STRIDE).toBe(20);
     const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, ID.dying - ID.modelEffect));
-    expect(ents).toHaveLength(81);
-    expect(new Set(ents.map((e) => e.id)).size).toBe(81);
-    ents.forEach((e, i) => expect(e.id).toBe(ID.modelEffect + Math.floor(i / 9) * MODEL_EFFECT_STRIDE + (i % 9)));
+    expect(ents).toHaveLength(108);
+    expect(new Set(ents.map((e) => e.id)).size).toBe(108);
+    ents.forEach((e, i) => expect(e.id).toBe(ID.modelEffect + Math.floor(i / 12) * MODEL_EFFECT_STRIDE + (i % 12)));
     expect(Math.max(...ents.map((e) => e.id))).toBeLessThan(ID.dying);
   });
 
@@ -326,7 +330,7 @@ describe('the gallery stage', () => {
     const yes = ents.filter(is).map((e) => e.id);
     expect(yes.every((id) => id >= ID.model)).toBe(true);
     expect(yes.filter((id) => inRange(id, ID.model, KINDS))).toHaveLength(KINDS);
-    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(81);
+    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(108);
     expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
     expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);
     const cards = modelsOf(parseGallery('?crowd=5&crowdAs=cards'));

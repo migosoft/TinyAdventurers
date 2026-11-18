@@ -57,9 +57,24 @@ for (const [name, i] of ANIMALS.map((n) => [n, row(n)])) {
   shots.push({ name: `kind-${name}-aim`, q: `&focus=models&at=model:${i}&zoom=6&state=melee&aim=90${STILL}`, need: [name] });
 }
 // The variety block: six animals of each kind in a row, each with its own look from its id (the antlers, tusks, size and coat vary).
-for (const [r, name] of ['stag', 'deer', 'boar', 'bunny'].entries()) shots.push({ name: `variety-${name}`, q: `&at=variety:${r}&zoom=4&state=idle${STILL}`, need: [name] });
+// #356 adds four rows: the goblin archer, the orc warrior, the imp and the chort.
+for (const [r, [name, desc]] of [['stag', 'stag'], ['deer', 'deer'], ['boar', 'boar'], ['bunny', 'bunny'], ['goblin', 'goblin'], ['orc', 'orc'], ['imp', 'imp'], ['chort', 'chort']].entries()) shots.push({ name: `variety-${name}`, q: `&at=variety:${r}&zoom=4&state=idle${STILL}`, need: [desc] });
 // The lamp's own outline of the stag as its shadow.
 shots.push({ name: 'torch-light-stag', q: `&at=model:${row('stag')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
+// The nine two-legged creatures (#356): [row name, description, liquids key, attack state]. Aimed at the camera in the attack state (the
+// swoosh or the aimed weapon from the south), each in the torch light of its row, and on the liquids page (wading, the chasm, the lava).
+const HUMANOIDS = [
+  ['goblin', 'goblin', 'goblin', 'shoot'], ['orcwarrior', 'orc', 'orc', 'melee'], ['orcarcher', 'orcArcher', 'orcArcher', 'shoot'],
+  ['necromancer', 'necromancer', 'necromancer', 'cast'], ['summoner', 'summoner', 'summoner', 'cast'], ['disciple', 'disciple', 'disciple', 'cast'],
+  ['imp', 'imp', 'imp', 'cast'], ['chort', 'chort', 'chort', 'melee'], ['npcknight', 'npcKnight', 'npcKnight', 'melee'],
+];
+for (const [name, desc, key, attack] of HUMANOIDS) {
+  shots.push({ name: `aim-${name}`, q: `&focus=models&at=model:${row(name)}&zoom=6&state=${attack}&aim=90${STILL}`, need: [desc] });
+  shots.push({ name: `torch-light-${name}`, q: `&at=model:${row(name)}&light=torch&zoom=6&state=idle${STILL}`, need: [desc] });
+  shots.push({ name: `liquids-${key}-wade`, page: 'liquids', q: `&models=${key}&t=4&zoom=3`, need: [desc] });
+  shots.push({ name: `liquids-${key}-chasm`, page: 'liquids', q: `&models=${key}&push=chasm&t=1.6&zoom=3`, need: [desc] });
+  shots.push({ name: `liquids-${key}-lava`, page: 'liquids', q: `&models=${key}&t=4.5&zoom=3`, need: [desc] });
+}
 // The animals on the liquids page: wading, the fall into the chasm and the sink into the lava.
 for (const name of ANIMALS) {
   shots.push({ name: `liquids-${name}-wade`, page: 'liquids', q: `&models=${name}&t=4&zoom=3`, need: [name] });
@@ -68,7 +83,8 @@ for (const name of ANIMALS) {
 }
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of ['wizard', 'paladin', 'barbarian', 'ranger', 'skelwarrior', 'ogre', 'wolf'].map(row)) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
-for (const [name, effRow] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${effRow},3&zoom=3${STILL}`, need: ALL });
+// Column 10 is the Imp, between the Necromancer (9) and the Knight (11) (#356): the three new kinds in view.
+for (const [name, effRow] of [['asleep', 0], ['top', 1], ['frozen', 2], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${effRow},10&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):
 // this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
 shots.push({ name: 'state-cycle', q: '&focus=models&zoom=2&t=12.5&slow=1', need: ALL, until: 16 });
