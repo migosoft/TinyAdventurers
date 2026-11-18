@@ -36,7 +36,7 @@ export const EFFECT_GROUPS = 10;
 export const MODEL_PITCH = 3;
 /** The kinds stand in rows of `MODEL_PER_ROW` (22 kinds at 3 tiles do not fit the 50 tile stage), the rows `MODEL_KIND_ROW_PITCH` tiles apart, each with its own pillar torches. */
 export const MODEL_PER_ROW = 11;
-export const MODEL_KIND_ROW_PITCH = 5;
+export const MODEL_KIND_ROW_PITCH = 7;
 /** The effect rows' entity ids are `ID.modelEffect + row * MODEL_EFFECT_STRIDE + col`. */
 export const MODEL_EFFECT_STRIDE = 20;
 /** The effect rows are 4 tiles apart: the ogre stands taller than 3 tiles on the screen. */

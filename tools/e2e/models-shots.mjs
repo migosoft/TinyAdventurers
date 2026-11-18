@@ -52,13 +52,13 @@ shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:${row('wolf')}&z
 shots.push({ name: 'swoosh-paladin-south', q: `&focus=models&at=model:${row('paladin')}&zoom=6&state=melee&aim=90${STILL}`, need: ['knight'] });
 shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:${row('wolf')}&zoom=6&state=melee&aim=90${STILL}`, need: ['wolf'] });
 // The animals (#357) have their state shots from the loop above; here the swing's reach from the south (aim 90).
-for (const [name, i] of ANIMALS.map((n) => [n, KINDS.findIndex((k) => k[0] === n)])) {
+for (const [name, i] of ANIMALS.map((n) => [n, row(n)])) {
   shots.push({ name: `kind-${name}-aim`, q: `&focus=models&at=model:${i}&zoom=6&state=melee&aim=90${STILL}`, need: [name] });
 }
 // The variety block: six animals of each kind in a row, each with its own look from its id (the antlers, tusks, size and coat vary).
 for (const [r, name] of ['stag', 'deer', 'boar', 'bunny'].entries()) shots.push({ name: `variety-${name}`, q: `&at=variety:${r}&zoom=4&state=idle${STILL}`, need: [name] });
 // The lamp's own outline of the stag as its shadow.
-shots.push({ name: 'torch-light-stag', q: `&at=model:${KINDS.findIndex((k) => k[0] === 'stag')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
+shots.push({ name: 'torch-light-stag', q: `&at=model:${row('stag')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 // The animals on the liquids page: wading, the fall into the chasm and the sink into the lava.
 for (const name of ANIMALS) {
   shots.push({ name: `liquids-${name}-wade`, page: 'liquids', q: `&models=${name}&t=4&zoom=3`, need: [name] });
@@ -67,7 +67,7 @@ for (const name of ANIMALS) {
 }
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of ['wizard', 'paladin', 'barbarian', 'ranger', 'skelwarrior', 'ogre', 'wolf'].map(row)) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
-for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
+for (const [name, effRow] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${effRow},3&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):
 // this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
 shots.push({ name: 'state-cycle', q: '&focus=models&zoom=2&t=12.5&slow=1', need: ALL, until: 16 });

@@ -54,7 +54,7 @@ const ALL_VISIBLE = { isVisible: (): boolean => true };
 const REPLAY = 6;
 const STEP = 1 / 60;
 
-/** The kinds `&models=` names. */
+/** The kind `&models=<key>` names: the first kind, in ascending kind order, whose `MODEL_OF_KIND` entry is `key`; null for any other text. */
 export function modelKindOf(key: string): number | null {
   for (const k of Object.keys(MODEL_OF_KIND).map(Number)) if (MODEL_OF_KIND[k] === key) return k;
   return null;

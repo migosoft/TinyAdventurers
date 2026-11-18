@@ -245,7 +245,16 @@ describe('the gallery stage', () => {
       expect(own, `model ${i} has torches in its row`).toHaveLength(4);
       expect(Math.min(...own.map((t) => Math.hypot(t.x - p.x, t.z - p.z))), `model ${i} torch distance`).toBeLessThanOrEqual(D);
     }
-    expect(L.pillarTorches.slice(4).map((p) => p.z - L.pillarTorches[0].z)).toEqual([5, 5, 5, 5]);
+    expect(L.pillarTorches.slice(4).map((p) => p.z - L.pillarTorches[0].z)).toEqual(Array(4).fill(MODEL_KIND_ROW_PITCH));
+    // no pillar stands in front of a figure: no wall in a kind's column within 3 tiles south of it, for 22 and for 33 kinds
+    for (const n of [22, 33]) {
+      const W = layoutOf(Object.keys(FIGURES).length, n);
+      for (let i = 0; i < n; i++) {
+        const p = W.model(i);
+        for (let dz = 0; dz <= 3; dz += 0.5) expect(W.map.get(Math.floor(p.x), Math.floor(p.z + dz)), `n ${n}, model ${i}, ${dz} south`).not.toBe(TILE_ID.Wall);
+      }
+      expect(W.model(n - 1).z).toBeLessThan(W.map.h - 1);
+    }
     for (const p of L.pillarTorches) expect(L.map.get(Math.floor(p.x), Math.floor(p.z) - 1)).toBe(TILE_ID.Wall);
     // everything else starts below the last kind row
     const lastKind = L.model(21).z;
@@ -325,11 +334,6 @@ describe('the gallery stage', () => {
   it('has a lit torch on each pillar of the model block, on a wall', () => {
     const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 10));
     expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 8 }, () => [KIND.Torch, 1, 0]));
-    // the cells of the first kind row's last columns have a pillar's torch within 5 tiles
-    for (const i of [9, 10]) {
-      const p = GALLERY.model(i);
-      expect(Math.min(...t.map((e) => Math.hypot(e.x / 16 - p.x, e.y / 16 - p.z)))).toBeLessThan(5);
-    }
     for (const e of t) expect(GALLERY.map.get(Math.floor(e.x / 16), Math.floor(e.y / 16) - 1)).toBe(TILE_ID.Wall);
   });
 
