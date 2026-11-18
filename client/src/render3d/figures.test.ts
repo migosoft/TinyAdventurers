@@ -708,7 +708,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'weapon_red_magic_staff', 'weapon_green_magic_staff'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -922,6 +922,54 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const stone = make().frame(frame([ranger({ anim: ANIM.Windup, effects: slow | (1 << EFFECT.Petrified) })]), cam(), look({ kit, ...all }));
     expect(stone.models[0].tint[0]).toBeCloseTo(0xa0 / 255, 6);
     expect(stone.models[0].stone).toBe(true);
+  });
+
+  describe('the robes (#356): a model never wears FigureDef.tint', () => {
+    const one = (e: EntState, dt = 0.016, models = true) => make().frame(frame([e], { dt }), cam(), look(models ? { kit, ...all } : undefined));
+    const near = (a: readonly number[], b: readonly number[]) => a.forEach((x, i) => expect(x).toBeCloseTo(b[i], 6));
+    // The wind-up's telegraph changes 16 times a second: after one frame of 0.016 s it is off (the card wears its own tint), after one of 0.07 s it flashes red.
+    const OFF = 0.016, FLASH = 0.07;
+
+    it('the two frame times used here are the two phases of the wind-up: the Disciple\'s card wears its tint, then the red flash', () => {
+      expect(FIGURES[KIND.Disciple].tint).toBe(0xff7070);
+      const card = (dt: number) => [...one(ent(7, KIND.Disciple, { anim: ANIM.Windup }), dt, false).cards.look.slice(0, 3)];
+      near(card(OFF), [1, 0x70 / 255, 0x70 / 255]);
+      near(card(FLASH), [1, 0x80 / 255, 0x80 / 255]);
+    });
+
+    it('the Disciple\'s body is its tone alone: standing, and in both phases of a wind-up', () => {
+      for (const id of [7, 8]) {
+        const tone = variationOf(id).tone, want = [tone, tone, tone];
+        const idle = one(ent(id, KIND.Disciple)).models;
+        expect(idle.map((m) => [m.model, m.bone])).toEqual([['disciple', -1]]);   // no weapon
+        near(idle[0].tint, want);
+        for (const dt of [OFF, FLASH]) near(one(ent(id, KIND.Disciple, { anim: ANIM.Windup }), dt).models[0].tint, want);
+      }
+    });
+
+    it('a poisoned Disciple wears the poison as the Necromancer does, for the same id and clock, and nothing of its own tint', () => {
+      const poisoned = 1 << EFFECT.Poisoned;
+      for (const dt of [OFF, FLASH, 0.2]) {
+        const dis = one(ent(7, KIND.Disciple, { effects: poisoned }), dt).models[0], nec = one(ent(7, KIND.Necromancer, { effects: poisoned }), dt).models[0];
+        expect([dis.model, nec.model]).toEqual(['disciple', 'necromancer']);
+        expect(dis.tint).toEqual(nec.tint);
+        const tone = variationOf(7).tone;
+        expect(dis.tint[0]).toBeLessThan(tone);   // the poison's green: red and blue are taken down ...
+        expect(dis.tint[1]).toBeGreaterThan(dis.tint[0]);   // ... below the green, which the Disciple's card tint (0xff7070) would turn round
+      }
+    });
+
+    it('the Summoner\'s staff keeps its weaponTint, on a body that is its tone alone', () => {
+      const out = one(ent(7, KIND.Summoner)).models, tone = variationOf(7).tone;
+      expect(out.map((m) => [m.model, m.bone])).toEqual([['summoner', -1], ['weapon_red_magic_staff', BONES.indexOf('weaponR')]]);
+      near(out[0].tint, [tone, tone, tone]);
+      expect(FIGURES[KIND.Summoner].weaponTint).toBe(0xffb080);
+      near(out[1].tint, [1, 0xb0 / 255, 0x80 / 255]);
+      // The Necromancer's green staff has none.
+      const nec = one(ent(7, KIND.Necromancer)).models;
+      expect(nec.map((m) => m.model)).toEqual(['necromancer', 'weapon_green_magic_staff']);
+      expect(nec[1].tint).toEqual([1, 1, 1]);
+    });
   });
 
   describe('the lamp caster is the model\'s own outline (#357)', () => {

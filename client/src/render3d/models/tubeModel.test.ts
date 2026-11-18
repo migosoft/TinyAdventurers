@@ -8,6 +8,7 @@ import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { orcDesc } from './descs/orc';
+import { robedDesc } from './descs/robed';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
 const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
@@ -311,6 +312,9 @@ const BIPEDS: BipedFacts[] = [
   { key: 'orc', kind: KIND.OrcWarrior, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'orcArcher', kind: KIND.OrcArcher, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
   { key: 'npcKnight', kind: KIND.Knight, height: 18, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, 0x417089], weapon: 'weaponR' },
+  { key: 'necromancer', kind: KIND.Necromancer, height: 19, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'summoner', kind: KIND.Summoner, height: 19, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'disciple', kind: KIND.Disciple, height: 16, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
 ];
 
 describe('the two-legged creatures', () => {
@@ -382,6 +386,52 @@ describe('the two-legged creatures', () => {
     expect(white(TUBE_DESCS.orcArcher)).toBeGreaterThan(0);
     expect(orcDesc({ name: 'Plain', arms: 1, mask: false, strap: false }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length);
     expect(orcDesc({ name: 'Strapped', arms: 1, mask: false, strap: true }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length + 1);
+  });
+
+  it('the robes: one build; the Summoner is the Necromancer in other colours, the Disciple is slighter, has no tip and shows no hands', () => {
+    const [n, s, d] = [TUBE_DESCS.necromancer, TUBE_DESCS.summoner, TUBE_DESCS.disciple];
+    const shapes = (t: TubeDesc): string => JSON.stringify(t.pieces.map((p) => [p.shape, p.at, p.stage, p.bone, p.line, p.bend, p.robe, p.torso]));
+    expect(shapes(s)).toBe(shapes(n));
+    expect(s.pieces.map((p) => p.colour)).not.toEqual(n.pieces.map((p) => p.colour));
+    const [mn, ms, md] = [buildJob('necromancer', null), buildJob('summoner', null), buildJob('disciple', null)];
+    expect(ms.position).toEqual(mn.position);
+    expect(md.armRadius).toBeLessThan(mn.armRadius);
+    expect(md.radius).toBeLessThan(mn.radius);
+    const hands = (t: TubeDesc): number => t.pieces.filter((p) => p.bone === 'handR' || p.bone === 'handL').length;
+    expect([hands(n), hands(s), hands(d)]).toEqual([2, 2, 0]);
+    expect(md.armLength).toBeGreaterThan(0);   // sleeve arms: it casts, it does not bite
+    expect([mn.weaponScale, ms.weaponScale]).toEqual([0.8, 0.8]);   // the staff a little smaller than on the card
+    // The tip is the one bending piece, on the head, above the hood's top; the Disciple has none.
+    const tips = n.pieces.filter((p) => p.bend);
+    expect(tips).toHaveLength(1);
+    expect(tips[0].bone).toBe('head');
+    expect(mn.stands! * mn.scale).toBeGreaterThan(mn.baseHeight + 1);
+    expect(d.pieces.some((p) => p.bend)).toBe(false);
+    expect(md.stands! * md.scale).toBeCloseTo(md.baseHeight, 6);
+    expect(robedDesc({ name: 'Bare', height: 19, robe: 1, edge: 2, hood: 'deep', tip: false, hands: false }).pieces).toHaveLength(n.pieces.length - 3);
+  });
+
+  it('the robes: no legs; one robe piece, the torso, whose part below the waist swings, and nothing else does', () => {
+    for (const key of ['necromancer', 'summoner', 'disciple'] as const) {
+      const d = TUBE_DESCS[key], m = buildJob(key, null), n = m.position.length / 3;
+      expect(d.legs).toEqual([]);
+      expect(d.pieces.filter((p) => p.robe)).toHaveLength(1);
+      expect(d.pieces.find((p) => p.robe)!.torso).toBe(true);
+      expect(m.robeTop).toBe(d.pivots.body![1]);   // at the waist
+      expect(m.robeTop! * m.scale / m.baseHeight).toBeGreaterThan(0.3);
+      expect(m.robeTop! * m.scale / m.baseHeight).toBeLessThan(0.5);
+      let swings = 0, hem = 0;
+      for (let i = 0; i < n; i++) if (m.skin[i * 4 + 2] === -2) {
+        swings++;
+        expect(m.skin[i * 4]).toBe(bone('body'));
+        expect(m.position[i * 3 + 1]).toBeLessThan(m.robeTop!);
+        if (m.skin[i * 4 + 3] > 0.9) hem++;
+      }
+      expect(swings).toBeGreaterThan(0);
+      expect(hem).toBeGreaterThan(0);
+      // Nothing but the robe and the sleeves reaches below the waist: no piece shows under the hem when it swings.
+      for (const p of d.pieces) if (!p.robe && p.bone !== 'armR' && p.bone !== 'armL' && p.bone !== 'handR' && p.bone !== 'handL') expect((p.at ?? [0, 99, 0])[1], `${p.stage} on ${p.bone}`).toBeGreaterThan(m.robeTop!);
+    }
   });
 
   it('the Knight: every turquoise piece is polished steel and no dark one is; the round shield hangs on the left arm, outside it', () => {
