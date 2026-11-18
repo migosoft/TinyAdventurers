@@ -5,7 +5,7 @@ import { BONES, MAX_BENDS, STAGES, weaponBoneOf } from './bones';
 import { buildJob, transferList } from './build';
 import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
-import { tube } from './tubes';
+import { tube, type TubePoint } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { orcDesc } from './descs/orc';
 import { HUMAN_HEIGHT } from './tubeDesc';
@@ -501,13 +501,31 @@ describe('the two-legged creatures', () => {
     expect([hands(n), hands(s), hands(d)]).toEqual([2, 2, 0]);
     expect(md.armLength).toBeGreaterThan(0);   // sleeve arms: it casts, it does not bite
     expect([mn.weaponScale, ms.weaponScale]).toEqual([0.8, 0.8]);   // the staff a little smaller than on the card
-    // The tip is the one bending piece, on the head, above the hood's top; the Disciple has none.
+    // The tip is the one bending piece, on the head; it has fallen back: it hangs down behind the head and adds no height (#356 rework 1).
+    // The Disciple has none.
     const tips = n.pieces.filter((p) => p.bend);
     expect(tips).toHaveLength(1);
     expect(tips[0].bone).toBe('head');
-    expect(mn.stands! * mn.scale).toBeGreaterThan(mn.baseHeight + 1);
+    const tip = tips[0].shape as { drop: { dir: readonly number[] } };
+    expect(tip.drop.dir[0]).toBeLessThan(0);
+    expect(tip.drop.dir[1]).toBeLessThan(0);
+    expect(tips[0].at![0]).toBeLessThan(n.pivots.head![0]);
+    expect(mn.stands! * mn.scale).toBeCloseTo(mn.baseHeight, 6);
     expect(d.pieces.some((p) => p.bend)).toBe(false);
     expect(md.stands! * md.scale).toBeCloseTo(md.baseHeight, 6);
+    for (const t of [n, d]) {
+      // The body has real depth: above the hem's flare no ring is thinner front to back than 2.1 px, nor less than 0.8 as deep as wide.
+      const robe = (t.pieces.find((p) => p.torso)!.shape as { tube: readonly TubePoint[] }).tube;
+      for (const q of robe.slice(2)) { expect(q.r).toBeGreaterThanOrEqual(2.1); expect(1 / q.wide!).toBeGreaterThanOrEqual(0.8); }
+      // The hood is a cowl that falls back: its line starts on the upper back, below the shoulders' pivot and behind it, climbs to the
+      // crown and ends at the open front, which is lower than the crown.
+      const hood = (t.pieces.find((p) => p.stage === 'head')!.shape as { tube: readonly TubePoint[] }).tube;
+      const ys = hood.map((q) => q.p[1]), crown = ys.indexOf(Math.max(...ys));
+      expect(crown).toBeGreaterThan(0);
+      expect(crown).toBeLessThan(hood.length - 1);
+      expect(hood[0].p[0]).toBeLessThan(t.pivots.head![0] - 1.5);
+      expect(hood[0].p[1]).toBeLessThan(t.pivots.head![1]);
+    }
     expect(robedDesc({ name: 'Bare', height: 19, robe: 1, edge: 2, hood: 'deep', tip: false, hands: false }).pieces).toHaveLength(n.pieces.length - 3);
   });
 
