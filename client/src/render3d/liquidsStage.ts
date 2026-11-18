@@ -207,7 +207,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         r.figures = figures.count;
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
-        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 }, t);
+        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, t);
         r.liquids = { t, fallers: figures.fallers, ripples: wo.live, bubbles: lo.live };
       }
       c.timer.renderStart();

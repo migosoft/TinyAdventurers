@@ -3,7 +3,7 @@ import { DataTexture, FloatType, GLSLNodeBuilder, InstancedBufferAttribute, Near
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
-import { FIGURE_ORDER, FIGURE_SHADE, OUTLINE, figureMaterials, makeFigureShared } from './nodes';
+import { FIGURE_ORDER, FIGURE_SHADE, HULL_ORDER, OUTLINE, figureMaterials, makeFigureShared } from './nodes';
 import { figureGeometry, modelBuffers } from './layer';
 import { buildFigure, type FigureModel } from './model';
 import { ROW_TEXELS } from './instances';
@@ -24,7 +24,7 @@ function rowsTexture(): DataTexture {
 
 function make(hasSun: boolean) {
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
-  const mats = figureMaterials({ lighting, sight: makeSight(), hasSun, rows: rowsTexture(), paint: new Texture(), stone: new Texture(), sky: new Texture(), shared: makeFigureShared() });
+  const mats = figureMaterials({ lighting, sight: makeSight(), hasSun, rows: rowsTexture(), paint: new Texture(), stone: new Texture(), sky: new Texture(), shared: makeFigureShared(), idTex: new Texture() });
   return { mats, lighting };
 }
 
@@ -38,6 +38,7 @@ describe('constants', () => {
   it('are the brief\'s', () => {
     expect(FIGURE_SHADE).toBe(0.55);
     expect(FIGURE_ORDER).toBe(10);
+    expect(HULL_ORDER).toBe(FIGURE_ORDER + 0.5);
     expect(OUTLINE).toBe(0x222222);
   });
 });
@@ -98,7 +99,8 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       for (const sun of [true, false]) {
         const { mats } = make(sun);
         expect(mats.sun !== null).toBe(sun);
-        const list = [[mats.piece, 'all'], [mats.line, 'line'], [mats.seal, 'line'], [mats.sun, 'piece']] as const;
+        expect('seal' in mats).toBe(false);
+        const list = [[mats.piece, 'all'], [mats.line, 'line'], [mats.id, 'piece'], [mats.sun, 'piece']] as const;
         for (const [m, which] of list) {
           if (!m) continue;
           const g = geometryOf(elf, which);
@@ -108,20 +110,38 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       }
     });
 
-    it('the render states: the outline writes no depth, the seal writes no colour but depth, the piece both', () => {
+    it('the render states: the outline, the id and the piece write colour and depth, the sun depth only', () => {
       const { mats } = make(true);
-      expect(mats.line.depthWrite).toBe(false);
-      expect(mats.line.colorWrite).toBe(true);
-      expect(mats.seal.colorWrite).toBe(false);
-      expect(mats.seal.depthWrite).toBe(true);
-      expect(mats.piece.depthWrite).toBe(true);
-      expect(mats.piece.colorWrite).toBe(true);
+      for (const m of [mats.line, mats.id, mats.piece]) {
+        expect(m.depthWrite).toBe(true);
+        expect(m.colorWrite).toBe(true);
+      }
       expect(mats.sun!.colorWrite).toBe(false);
-      // One cull mode serves the hull and the piece.
+      // One cull mode serves the hull, the id and the piece.
       expect(mats.piece.side).toBe(FrontSide);
       expect(mats.line.side).toBe(mats.piece.side);
-      expect(mats.seal.side).toBe(mats.piece.side);
+      expect(mats.id.side).toBe(mats.piece.side);
       expect(mats.sun!.side).toBe(DoubleSide);
+    });
+
+    it('the line reads the id target and the shared switch; the id writes no light, no paint and has no switch', () => {
+      const { mats } = make(true);
+      const line = fragment(B, mats.line, { compare: true, geometry: geometryOf(elf, 'line') });
+      expect(line).toMatch(/figIdOn/);
+      const id = fragment(B, mats.id, { compare: true, geometry: geometryOf(elf, 'piece') });
+      expect(id).not.toMatch(/lightAmbient/);
+      expect(id).not.toMatch(/figPaint|figStone|figSky/);
+      expect(id).not.toMatch(/figIdOn/);
+    });
+
+    it('the id and the piece share one vertex stage: the rows texture read and the stretch by cos(pitch)', () => {
+      const { mats } = make(true);
+      const g = geometryOf(elf, 'piece');
+      for (const m of [mats.id, mats.piece]) {
+        const v = vertex(B, m, { compare: true, geometry: g });
+        expect(v).toMatch(wgsl ? /textureLoad\(/ : /texelFetch\(/);
+        expect(v).toMatch(/figCosP/);
+      }
     });
 
     it('the piece reads the rows texture in the vertex stage, one instance row for every read', () => {

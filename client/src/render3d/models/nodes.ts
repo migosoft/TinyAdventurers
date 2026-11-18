@@ -1,10 +1,14 @@
-// The materials of the 3D figures (#338) in TSL. One vertex stage skins every vertex from its instance's row of the rows texture (the
+// The materials of the 3D figures (#338, #364) in TSL. One vertex stage skins every vertex from its instance's row of the rows texture (the
 // bend or the robe, the bone, the root: the steps of `skinVertex` in rig.ts, which is the written spec of this file); four fragment
-// stages draw it: the piece (lit, painted), the outline hull (flat, not lit), the seal (the hull again, depth only) and the sun's pass.
-// The page `figures.html` is the reference for the look; `layer.ts` owns the meshes, the textures and the batches.
+// stages draw it: the id (owner and stage of a piece, into the id target), the piece (lit, painted), the outline hull (flat, not lit,
+// after every piece) and the sun's pass.
+// The outline is two rules per pixel: the hull passes the depth test against everything opaque, and it is cut where the nearest piece
+// is a piece of its own figure with a stage at or above its own. The id pass writes who that nearest piece is (`id`), the hull reads it
+// at its own pixel (`line`), so there is one draw per model and kind however many figures overlap.
+// The page `figures.html` is the reference for the look; `layer.ts` owns the meshes and the textures, `view.ts` the id target.
 import { DoubleSide, FrontSide, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { Fn, asin, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, max, mix, normalize, reflect, select, sin, step, texture, textureLoad, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, asin, screenCoordinate, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, max, mix, normalize, reflect, select, sin, step, texture, textureLoad, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import { CARD_SUN_NUDGE, bayerAt } from '../materials';
 import type { Sight } from '../sightNodes';
@@ -16,26 +20,32 @@ type N = any;
 
 /** How much of the light depends on the surface's direction (the page's `shade`): the light's wrap is `1 - FIGURE_SHADE`. First guess, as the page's. */
 export const FIGURE_SHADE = 0.55;
-/** The render order base of the figures: after every other opaque thing. A batch adds its index, a draw less than 1 on top. */
+/** The render order of the figures' pieces: after every other opaque thing. */
 export const FIGURE_ORDER = 10;
+/** The render order of the hulls: after the pieces of every model, so the id pass and the pieces' depth are complete when a hull reads them. */
+export const HULL_ORDER = FIGURE_ORDER + 0.5;
 /** The outline colour (sRGB, as every colour here). */
 export const OUTLINE = 0x222222;
 /** How much the polished steel takes of the sky it mirrors, and how bright that sky is shown (the brief's values). */
 const STEEL = { mix: 0.8, gain: 1.3 } as const;
 
-/** The uniforms every figure material of a view shares; the view sets `cosP` each frame (the layer holds them). */
+/**
+ * The uniforms every figure material of a view shares (the layer holds them). The view sets `cosP` each frame, and `idOn`: 1 while the
+ * id target holds this frame's id pass (the picture), 0 for every other camera (the mirror, the shafts' depth), where the hull is a
+ * plain depth-tested hull.
+ */
 export function makeFigureShared() {
-  return { cosP: uniform(1).setName('figCosP') };
+  return { cosP: uniform(1).setName('figCosP'), idOn: uniform(0).setName('figIdOn') };
 }
 export type FigureShared = ReturnType<typeof makeFigureShared>;
 
 export interface FigureMaterials {
   /** The lit, painted surface. */
   piece: MeshBasicNodeMaterial;
-  /** The outline hull: the outline colour, not lit, no depth written. */
+  /** The outline hull: the outline colour, not lit, depth written; cut where its own figure's piece of the same or a later stage is nearest (reads the id target). */
   line: MeshBasicNodeMaterial;
-  /** The hulls again after the pieces: depth only. */
-  seal: MeshBasicNodeMaterial;
+  /** The id pass: the piece's own stipple, written as owner (2 bytes) and stage + 1 (1 byte) into the id target. */
+  id: MeshBasicNodeMaterial;
   /** The sun's pass (the pieces, depth only); null without a sun. */
   sun: MeshBasicNodeMaterial | null;
 }
@@ -43,7 +53,8 @@ export interface FigureMaterials {
 const rgbOf = (hex: number): [number, number, number] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 
 /**
- * The vertex stage. The geometry carries `position`, `normal`, `uv`, `skin` (bone, hull flag, bend index, how far along), `look`, `origin`
+ * The vertex stage. The geometry carries `position`, `normal`, `uv`, `skin` (bone, stage, bend index, how far along; the layer's copy
+ * holds the vertex's stage in the second float, the model's own `skin[1]` is the hull flag), `look`, `origin`
  * (the vertex's bend's pivot in the rest pose, 0 for any other vertex: the per-model bend constants are baked per vertex, which keeps
  * the material independent of the model) and the instanced `row`: the row of this instance in `rows`. Everything per instance is read
  * from that row (instances.ts `ROW`): the root (3 texels), the bones (3 each), the bends' axes and angles, the robe, the tint, what is
@@ -99,11 +110,12 @@ function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: 
 
 /**
  * The four materials of one model (`paint` is the model's own). `rows` is the float rows texture the layer fills; `stone` and `sky` are
- * the shared pictures (`stonePaint`, `skyPaint`, uploaded with `figureLooks`). `hasSun` false: `sun` is null and the piece carries
+ * the shared pictures (`stonePaint`, `skyPaint`, uploaded with `figureLooks`); `idTex` is the id target's texture, which the hull reads
+ * and which always has the size of the target the picture is drawn into. `hasSun` false: `sun` is null and the piece carries
  * no sun code. All four cull the same side (the hull's triangles are wound the other way round, so the hull shows its inside, which is
  * the outline); the sun's pass sees both sides.
  */
-export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: boolean; rows: Texture; paint: Texture; stone: Texture; sky: Texture; shared: FigureShared }): FigureMaterials {
+export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: boolean; rows: Texture; paint: Texture; stone: Texture; sky: Texture; shared: FigureShared; idTex: Texture }): FigureMaterials {
   const { lighting, sight, hasSun, paint, stone, sky } = o;
   const p = figurePoint(o.rows, o.shared);
   const look = attribute('look', 'vec4');
@@ -154,16 +166,27 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     return vec4(sight.apply(colour, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   })();
 
-  // ---------------------------------------------------------------- the outline and its seal
+  // ---------------------------------------------------------------- the id pass and the outline
+  // The vertex's stage (the layer's copy of `skin.y`) and the owner's number (`flags.z`), both the same over a triangle.
+  const stage: N = varying(attribute('skin', 'vec4').y, 'figStage').setInterpolation('flat');
+  const owner: N = p.flags.z.add(0.5).floor();
+  const ownerLo: N = owner.mod(256), ownerHi: N = owner.div(256).floor();
+  const keep = keepOf(p, sight, { bySight: true });
+
+  // The piece's own vertex stage, front side, stipple, sight and `cut`: the id target matches the picture's piece pixels. Not lit, no paint.
+  const id = make(p.screen);
+  id.colorNode = vec4(ownerLo.div(255), ownerHi.div(255), stage.add(1).div(255), gate(keep));
+
   const line = make(p.screen);
   // Not lit by the lamps, but dimmed by the ambient light like everything else: in the dark a flat 0x222222 would show as a grey outline on black.
   const outline = lighting.finish(vec3(...rgbOf(OUTLINE)), ambientOnly);
-  line.colorNode = vec4(sight.apply(outline, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
-  line.depthWrite = false;
-
-  const seal = make(p.screen);
-  seal.colorNode = vec4(0, 0, 0, gate(keepOf(p, sight, { bySight: true })));
-  seal.colorWrite = false;
+  // The id texel at this fragment's own pixel; bytes recovered exactly. Third byte 0: no figure there.
+  const texel: N = textureLoad(o.idTex, ivec2(screenCoordinate.xy));
+  const bytes: N = texel.mul(255).add(0.5).floor();
+  const own = bytes.x.equal(ownerLo).and(bytes.y.equal(ownerHi)).and(bytes.z.greaterThan(0.5));
+  // Rule 2: covered where the nearest piece is its own figure's with a stage at or above the hull's.
+  const covered = o.shared.idOn.greaterThan(0.5).and(own).and(bytes.z.sub(1).greaterThanEqual(stage));
+  line.colorNode = vec4(sight.apply(outline, p.P, seenXY), gate(keep.and(covered.not())));
 
   // ---------------------------------------------------------------- the sun's pass
   let sun: MeshBasicNodeMaterial | null = null;
@@ -174,5 +197,5 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     sun.colorWrite = false;
     sun.side = DoubleSide;
   }
-  return { piece, line, seal, sun };
+  return { piece, line, id, sun };
 }

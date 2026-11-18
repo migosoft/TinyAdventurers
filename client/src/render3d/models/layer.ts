@@ -1,14 +1,15 @@
-// The 3D figures in the view's scenes (#338): per (batch, model) the meshes that draw its instances (a hull draw and a piece draw per
-// stage, the seal, and the sun's pass), one rows texture the vertex shader reads, one paint texture per model. A `FigureLayer` belongs to
-// one view: after a lost device the rebuilt view makes a new layer, which finds every model it needs still in the same kit.
+// The 3D figures in the view's scenes (#338, #364): per model the meshes that draw all its instances: an id draw (in the id scene), a
+// piece draw, a hull draw (after every piece) and the sun's pass; one rows texture the vertex shader reads, one paint texture per model.
+// A `FigureLayer` belongs to one view: after a lost device the rebuilt view makes a new layer, which finds every model it needs still in
+// the same kit.
 import {
   BufferAttribute, ClampToEdgeWrapping, DataTexture, FloatType, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter,
   Mesh, NearestFilter, NoColorSpace, RGBAFormat, RepeatWrapping, UnsignedByteType, type Scene, type Texture,
 } from 'three/webgpu';
-import { batchFigures, growRows, OWNER_MAX, packInstance, ROW_TEXELS, type FigureInst } from './instances';
+import { growRows, OWNER_MAX, packInstance, ROW_TEXELS, type FigureInst } from './instances';
 import type { Cam } from '../camera';
 import type { FigureFrame } from '../view';
-import { FIGURE_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
+import { FIGURE_ORDER, HULL_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
 import type { FigureModel } from './model';
 import { skyPaint, stonePaint, type PaintImage } from './paint';
 
@@ -47,7 +48,7 @@ export function figureLooks(): { stone: Texture; sky: Texture; dispose(): void }
   return { stone, sky, dispose: () => { stone.dispose(); sky.dispose(); } };
 }
 
-/** The vertex streams and index lists of one model as attributes; the draws of the model (and of all its batches) share them. */
+/** The vertex streams and index lists of one model as attributes; the draws of the model share them. */
 export interface ModelBuffers {
   position: BufferAttribute; normal: BufferAttribute; uv: BufferAttribute; skin: BufferAttribute; look: BufferAttribute; origin: BufferAttribute;
   /** All triangles in draw order (the stages' ranges index into it), the pieces' alone and the hulls' alone. */
@@ -80,7 +81,7 @@ export function modelBuffers(m: FigureModel): ModelBuffers {
   };
 }
 
-/** A geometry of the shared streams with its own instanced `row` (the row of each instance) and, for a stage, a draw range of `index`. */
+/** A geometry of the shared streams with its own instanced `row` (the row of each instance) and, optionally, a draw range of `index`. */
 export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: InstancedBufferAttribute, range: { start: number; count: number } | null): InstancedBufferGeometry {
   const g = new InstancedBufferGeometry();
   g.setAttribute('position', b.position);
@@ -96,48 +97,42 @@ export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: Ins
   return g;
 }
 
-/** Everything of one model the batches share. */
+/** Everything of one model its draws share. */
 interface ModelRes { model: FigureModel; buffers: ModelBuffers; paint: DataTexture; mats: FigureMaterials }
 
-/** The draws of one model in one batch. */
+/** The draws of one model: id, piece, hull (none without hull triangles) and the sun's. */
 interface Entry {
-  res: ModelRes; batch: number;
+  res: ModelRes;
   row: InstancedBufferAttribute;
   geoms: InstancedBufferGeometry[];
-  /** The scene draws in range order, then the seal; and the sun's. */
   meshes: { mesh: Mesh; scene: Scene }[];
-  /** How many draws the entry makes in the picture's scene. */
+  /** How many id, piece and hull draws the entry makes (the sun's is not counted). */
   draws: number;
 }
 
-/** The mesh order of a stage's draw: the hull (0) before the piece (1), stage by stage; the seal after all of them. */
-const orderOf = (batch: number, stage: number, line: boolean): number => FIGURE_ORDER + batch + (2 * stage + (line ? 0 : 1)) / 64;
-const SEAL_ORDER = 63 / 64;
-
 const NO_INSTS: FigureInst[] = [];
-const NO_BATCHES = new Int32Array(0);
 
 export class FigureLayer {
-  /** The uniforms the materials share; the view sets `cosP` each frame. */
+  /** The uniforms the materials share; the view sets `cosP` and `idOn` each frame. */
   readonly shared: FigureShared = makeFigureShared();
-  /** What the last `frame` drew: instances, batches (distinct), and draws in the picture's scene. */
-  readonly drawn = { figures: 0, batches: 0, draws: 0 };
+  /** What the last `frame` drew: instances, and the id, piece and hull draws of the models shown. */
+  readonly drawn = { figures: 0, draws: 0 };
   private rows: Float32Array = new Float32Array(START_ROWS * ROW_FLOATS);
   private readonly rowsTex: DataTexture;
   private readonly models = new Map<string, ModelRes>();
   private readonly entries = new Map<string, Entry>();
   /** Per-frame scratch, cleared at the top of `frame` so a frame allocates no containers. */
-  private readonly groups = new Map<string, { batch: number; key: string; model: FigureModel; list: number[] }>();
+  private readonly groups = new Map<string, { model: FigureModel; list: number[] }>();
   private readonly live = new Set<Entry>();
-  private readonly usedBatches = new Set<number>();
   /** The frame's owner numbers: an entity id to its index in order of first appearance. */
   private readonly ownerNos = new Map<number, number>();
 
   /**
-   * `sunScene`: the sun's pass, or null without a sun. `make` builds the four materials of a model from the rows texture and the model's paint
-   * texture (once per model; the view adds the lighting, the sight and the shared pictures).
+   * `sunScene`: the sun's pass, or null without a sun. `idScene`: the id pass (the view draws it into the id target before the picture).
+   * `make` builds the materials of a model from the rows texture and the model's paint texture (once per model; the view adds the
+   * lighting, the sight, the shared pictures and the id target).
    */
-  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly make: (rows: Texture, paint: Texture) => FigureMaterials) {
+  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly idScene: Scene, private readonly make: (rows: Texture, paint: Texture) => FigureMaterials) {
     this.rowsTex = new DataTexture(this.rows, ROW_TEXELS, START_ROWS, RGBAFormat, FloatType);
     // Floats need exact texels (a bone matrix in sprite px, a root in tiles: half floats would not hold them), read by integer coordinates.
     this.rowsTex.magFilter = NearestFilter;
@@ -159,30 +154,28 @@ export class FigureLayer {
    * Writes the frame's instances into the rows and sets which meshes draw how many of them. An instance whose model has not arrived is
    * skipped (the caller draws its card). `slotOf`: the caster slot of an entity (-1 none).
    */
-  frame(f: FigureFrame | undefined, cam: Cam, slotOf: (id: number) => number): void {
+  frame(f: FigureFrame | undefined, _cam: Cam, slotOf: (id: number) => number): void {
     const insts = f ? f.insts : NO_INSTS;
     // Nothing to draw and nothing drawn last frame: nothing to hide either (the common run without models).
     if (insts.length === 0 && this.drawn.draws === 0 && this.drawn.figures === 0) return;
-    const batches = insts.length > 0 ? batchFigures(insts, cam) : NO_BATCHES;
-    const groups = this.groups, live = this.live, usedBatches = this.usedBatches;
+    const groups = this.groups, live = this.live;
     const ownerNos = this.ownerNos;
-    groups.clear(); live.clear(); usedBatches.clear(); ownerNos.clear();
+    groups.clear(); live.clear(); ownerNos.clear();
     let ready = 0;
     for (let i = 0; i < insts.length; i++) {
       const m = f!.kit.get(insts[i].model);
       if (!m) continue;
       ready++;
       if (!ownerNos.has(insts[i].owner)) ownerNos.set(insts[i].owner, ownerNos.size % OWNER_MAX);
-      const k = `${batches[i]}|${insts[i].model}`;
-      let g = groups.get(k);
-      if (!g) groups.set(k, g = { batch: batches[i], key: insts[i].model, model: m, list: [] });
+      let g = groups.get(insts[i].model);
+      if (!g) groups.set(insts[i].model, g = { model: m, list: [] });
       g.list.push(i);
     }
     this.fit(ready);
     let row = 0;
     let draws = 0;
-    for (const g of groups.values()) {
-      const e = this.entry(g.batch, g.key, g.model, g.list.length);
+    for (const [key, g] of groups) {
+      const e = this.entry(key, g.model, g.list.length);
       const first = row;
       for (const i of g.list) { packInstance(this.rows, row, insts[i], slotOf(insts[i].owner), ownerNos.get(insts[i].owner)!); row++; }
       const ids = e.row.array as Float32Array;
@@ -191,7 +184,6 @@ export class FigureLayer {
       for (const geom of e.geoms) geom.instanceCount = g.list.length;
       for (const m of e.meshes) m.mesh.visible = true;
       live.add(e);
-      usedBatches.add(g.batch);
       draws += e.draws;
     }
     for (const e of this.entries.values()) {
@@ -201,7 +193,6 @@ export class FigureLayer {
     }
     if (ready > 0) this.rowsTex.needsUpdate = true;
     this.drawn.figures = ready;
-    this.drawn.batches = usedBatches.size;
     this.drawn.draws = draws;
   }
 
@@ -213,12 +204,12 @@ export class FigureLayer {
     }
     this.entries.clear();
     for (const r of this.models.values()) {
-      for (const m of [r.mats.piece, r.mats.line, r.mats.seal, r.mats.sun]) m?.dispose();
+      for (const m of [r.mats.piece, r.mats.line, r.mats.id, r.mats.sun]) m?.dispose();
       r.paint.dispose();
     }
     this.models.clear();
     this.rowsTex.dispose();
-    this.drawn.figures = this.drawn.batches = this.drawn.draws = 0;
+    this.drawn.figures = this.drawn.draws = 0;
   }
 
   /** Room for `n` rows. The texture is the same object (the materials hold it): it takes a bigger image and is uploaded anew. */
@@ -240,10 +231,9 @@ export class FigureLayer {
     return r;
   }
 
-  /** The draws of `model` in `batch`, made on first use and given room for `n` instances. */
-  private entry(batch: number, key: string, model: FigureModel, n: number): Entry {
-    const k = `${batch}|${key}`;
-    let e = this.entries.get(k);
+  /** The draws of `model`, made on first use and given room for `n` instances. */
+  private entry(key: string, model: FigureModel, n: number): Entry {
+    let e = this.entries.get(key);
     if (e && n > (e.row.array as Float32Array).length) {
       // A longer row list: a new attribute (an attribute cannot grow in place) for all the entry's geometries.
       e.row = new InstancedBufferAttribute(new Float32Array(Math.max(n, (e.row.array as Float32Array).length * 2)), 1);
@@ -252,7 +242,7 @@ export class FigureLayer {
     if (e) return e;
     const res = this.model(key, model), b = res.buffers;
     const row = new InstancedBufferAttribute(new Float32Array(Math.max(n, 8)), 1);
-    e = { res, batch, row, geoms: [], meshes: [], draws: 0 };
+    e = { res, row, geoms: [], meshes: [], draws: 0 };
     const add = (geom: InstancedBufferGeometry, material: Mesh['material'], into: Scene, order: number, counted: boolean): void => {
       const mesh = new Mesh(geom, material);
       mesh.frustumCulled = false;
@@ -262,10 +252,11 @@ export class FigureLayer {
       e!.meshes.push({ mesh, scene: into });
       if (counted) e!.draws++;
     };
-    for (const r of model.ranges) add(figureGeometry(b, b.index, row, r), r.line ? res.mats.line : res.mats.piece, this.scene, orderOf(batch, r.stage, r.line), true);
-    if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row, null), res.mats.seal, this.scene, FIGURE_ORDER + batch + SEAL_ORDER, true);
+    add(figureGeometry(b, b.pieceIndex, row, null), res.mats.id, this.idScene, 0, true);
+    add(figureGeometry(b, b.pieceIndex, row, null), res.mats.piece, this.scene, FIGURE_ORDER, true);
+    if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row, null), res.mats.line, this.scene, HULL_ORDER, true);
     if (this.sunScene && res.mats.sun) add(figureGeometry(b, b.pieceIndex, row, null), res.mats.sun, this.sunScene, 0, false);
-    this.entries.set(k, e);
+    this.entries.set(key, e);
     return e;
   }
 }

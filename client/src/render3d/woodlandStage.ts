@@ -238,7 +238,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
-        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 });
+        if (readout) r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 });
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
         r.plants = { built: forest.built, total: forest.total };

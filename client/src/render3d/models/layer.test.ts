@@ -6,8 +6,8 @@ import { decodePng } from '../../../scripts/png';
 import type { Cam } from '../camera';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
-import { FIGURE_ORDER, figureMaterials } from './nodes';
-import { FigureLayer, figureLooks, stageSkin } from './layer';
+import { FIGURE_ORDER, HULL_ORDER, figureMaterials } from './nodes';
+import { FigureLayer, figureLooks, modelBuffers, stageSkin } from './layer';
 import { STAGES } from './bones';
 import { ROW, ROW_TEXELS, type FigureInst } from './instances';
 import { createKit, directRunner, type FigureKit } from './kit';
@@ -55,15 +55,15 @@ const inst = (model: string, o: Partial<FigureInst> = {}): FigureInst => {
 const frame = (insts: FigureInst[]): FigureFrame => ({ insts, kit });
 
 /** `hasSun`: the materials carry a sun material; `sunScene`: the layer is given a scene for it. */
-function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; scene: Scene; sunScene: Scene | null; made: number } {
-  const scene = new Scene(), sunScene = withSunScene ? new Scene() : null;
+function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; scene: Scene; sunScene: Scene | null; idScene: Scene; made: number } {
+  const scene = new Scene(), sunScene = withSunScene ? new Scene() : null, idScene = new Scene();
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
   const sight = makeSight();
   const looks = figureLooks();
-  const out = { layer: null as unknown as FigureLayer, scene, sunScene, made: 0 };
-  out.layer = new FigureLayer(scene, sunScene, (rows, paint) => {
+  const out = { layer: null as unknown as FigureLayer, scene, sunScene, idScene, made: 0 };
+  out.layer = new FigureLayer(scene, sunScene, idScene, (rows, paint) => {
     out.made++;
-    return figureMaterials({ lighting, sight, hasSun, rows, paint, stone: looks.stone, sky: looks.sky, shared: out.layer.shared });
+    return figureMaterials({ lighting, sight, hasSun, rows, paint, stone: looks.stone, sky: looks.sky, shared: out.layer.shared, idTex: new Texture() });
   });
   return out;
 }
@@ -90,66 +90,51 @@ const meshes = (s: Scene): Mesh[] => s.children.filter((c): c is Mesh => (c as M
 const slot = (): number => -1;
 
 describe('FigureLayer', () => {
-  it('draws one elf in one batch: a hull draw and a piece draw per stage it uses, and the seal', () => {
+  it('draws one elf with an id draw, a piece draw and a hull draw, each on the model\'s own index list', () => {
+    const { layer, scene, idScene } = layerOf(false);
+    const elf = kit.get('elf')!;
+    layer.frame(frame([inst('elf')]), cam, slot);
+    expect(layer.drawn).toEqual({ figures: 1, draws: 3 });
+    const picture = meshes(scene).filter((m) => m.visible), ids = meshes(idScene).filter((m) => m.visible);
+    expect(picture).toHaveLength(2);
+    expect(ids).toHaveLength(1);
+    expect(picture.map((m) => m.renderOrder).sort((a, b) => a - b)).toEqual([FIGURE_ORDER, HULL_ORDER]);
+    const b = modelBuffers(elf);
+    const indexOf = (m: Mesh): ArrayLike<number> => (m.geometry.index as { array: ArrayLike<number> }).array;
+    const byOrder = (o: number): Mesh => picture.find((m) => m.renderOrder === o)!;
+    expect(indexOf(byOrder(FIGURE_ORDER))).toEqual(b.pieceIndex.array);
+    expect(indexOf(byOrder(HULL_ORDER))).toEqual(b.lineIndex.array);
+    expect(indexOf(ids[0])).toEqual(b.pieceIndex.array);
+    for (const m of [...picture, ...ids]) {
+      expect(m.geometry.drawRange).toEqual({ start: 0, count: Infinity });
+    }
+    layer.dispose();
+  }, SLOW);
+
+  it('12 elves on one spot: still 3 draws, 12 instances in each, 12 different owner numbers', () => {
+    const { layer, scene, idScene } = layerOf(false);
+    layer.frame(frame(Array.from({ length: 12 }, (_, i) => inst('elf', { owner: i + 1 }))), cam, slot);
+    expect(layer.drawn).toEqual({ figures: 12, draws: 3 });
+    for (const m of [...meshes(scene), ...meshes(idScene)].filter((x) => x.visible)) expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(12);
+    const rows = layer.rowsData();
+    const owners = new Set<number>();
+    for (let r = 0; r < 12; r++) owners.add(rows[(r * ROW_TEXELS + ROW.flags) * 4 + 2]);
+    expect(owners.size).toBe(12);
+    layer.dispose();
+  }, SLOW);
+
+  it('an elf and its bow: 6 draws, every hull after every piece', () => {
     const { layer, scene } = layerOf(false);
     const elf = kit.get('elf')!;
-    const stages = new Set(elf.ranges.map((r) => r.stage));
-    layer.frame(frame([inst('elf')]), cam, slot);
-    expect(layer.drawn.figures).toBe(1);
-    expect(layer.drawn.batches).toBe(1);
-    expect(elf.ranges.length).toBe(2 * stages.size);   // every stage has a hull and a piece
-    expect(layer.drawn.draws).toBe(2 * stages.size + 1);
-    const visible = meshes(scene).filter((m) => m.visible);
-    expect(visible.length).toBe(2 * stages.size + 1);
-    layer.dispose();
-  }, SLOW);
-
-  it('draws the hull of a stage before its pieces, the stages in order, and the seal last of the batch', () => {
-    const { layer, scene } = layerOf(false);
-    layer.frame(frame([inst('elf')]), cam, slot);
-    const orders = meshes(scene).map((m) => m.renderOrder).sort((a, b) => a - b);
-    expect(orders[0]).toBeGreaterThanOrEqual(FIGURE_ORDER);
-    expect(orders[orders.length - 1]).toBe(FIGURE_ORDER + 63 / 64);
-    expect(new Set(orders).size).toBe(orders.length);   // one model: no two draws share an order
-    const elf = kit.get('elf')!;
-    const byRange = meshes(scene).filter((m) => m.renderOrder < FIGURE_ORDER + 63 / 64);
-    expect(byRange.length).toBe(elf.ranges.length);
-    for (const r of elf.ranges) expect(orders).toContain(FIGURE_ORDER + (2 * r.stage + (r.line ? 0 : 1)) / 64);
-    layer.dispose();
-  }, SLOW);
-
-  it('gives two elves that overlap two batches, one order step apart', () => {
-    const { layer, scene } = layerOf(false);
-    layer.frame(frame([inst('elf', { owner: 1, x: 0, z: 0 }), inst('elf', { owner: 2, x: 0.2, z: 0 })]), cam, slot);
-    expect(layer.drawn.figures).toBe(2);
-    expect(layer.drawn.batches).toBe(2);
-    const floor = new Set(meshes(scene).filter((m) => m.visible).map((m) => Math.floor(m.renderOrder)));
-    expect([...floor].sort()).toEqual([FIGURE_ORDER, FIGURE_ORDER + 1]);
-    layer.dispose();
-  }, SLOW);
-
-  it('gives two elves far apart one batch with two instances in each draw', () => {
-    const { layer, scene } = layerOf(false);
-    layer.frame(frame([inst('elf', { owner: 1, x: 0, z: 0 }), inst('elf', { owner: 2, x: 20, z: 0 })]), cam, slot);
-    expect(layer.drawn.batches).toBe(1);
-    expect(layer.drawn.figures).toBe(2);
-    for (const m of meshes(scene).filter((x) => x.visible)) expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(2);
-    layer.dispose();
-  }, SLOW);
-
-  it('puts an elf and its bow in one batch, the bow\'s ranges after the elf\'s arms', () => {
-    const { layer, scene } = layerOf(false);
-    const elf = kit.get('elf')!, bow = kit.get('weapon_bow')!;
     const hand = BONES.indexOf('handR');
     layer.frame(frame([inst('elf', { owner: 1 }), inst('weapon_bow', { owner: 1, bone: hand, boneScale: 0.6, pose: restPose(elf, 0), scale: elf.scale })]), cam, slot);
-    expect(layer.drawn.batches).toBe(1);
-    expect(layer.drawn.figures).toBe(2);
-    expect(layer.drawn.draws).toBe(elf.ranges.length + 1 + bow.ranges.length + 1);
-    const arms = Math.max(...elf.ranges.map((r) => 2 * r.stage + (r.line ? 0 : 1)));
-    const weaponOrders = bow.ranges.map((r) => FIGURE_ORDER + (2 * r.stage + (r.line ? 0 : 1)) / 64);
-    for (const o of weaponOrders) expect(o).toBeGreaterThan(FIGURE_ORDER + arms / 64 - 1e-9);
+    expect(layer.drawn).toEqual({ figures: 2, draws: 6 });
     const all = meshes(scene).filter((m) => m.visible);
-    expect(all.length).toBe(layer.drawn.draws);
+    expect(all).toHaveLength(4);
+    const hulls = all.filter((m) => m.renderOrder === HULL_ORDER), pieces = all.filter((m) => m.renderOrder === FIGURE_ORDER);
+    expect(hulls).toHaveLength(2);
+    expect(pieces).toHaveLength(2);
+    for (const h of hulls) for (const p of pieces) expect(h.renderOrder).toBeGreaterThan(p.renderOrder);
     layer.dispose();
   }, SLOW);
 
@@ -189,13 +174,15 @@ describe('FigureLayer', () => {
   }, SLOW);
 
   it('removes all of its meshes from the scenes on dispose', () => {
-    const { layer, scene, sunScene } = layerOf(true);
+    const { layer, scene, sunScene, idScene } = layerOf(true);
     layer.frame(frame([inst('elf'), inst('skelet', { owner: 2, x: 9 })]), cam, slot);
     expect(meshes(scene).length).toBeGreaterThan(0);
     expect(meshes(sunScene!).length).toBeGreaterThan(0);
+    expect(meshes(idScene).length).toBeGreaterThan(0);
     layer.dispose();
     expect(meshes(scene)).toHaveLength(0);
     expect(meshes(sunScene!)).toHaveLength(0);
+    expect(meshes(idScene)).toHaveLength(0);
   }, SLOW);
 
   it('makes no sun mesh without a sun scene', () => {
@@ -203,8 +190,7 @@ describe('FigureLayer', () => {
     const { layer, scene, sunScene } = layerOf(true, false);
     expect(sunScene).toBeNull();
     layer.frame(frame([inst('elf')]), cam, slot);
-    const elf = kit.get('elf')!;
-    expect(meshes(scene).length).toBe(elf.ranges.length + 1);
+    expect(meshes(scene)).toHaveLength(2);
     layer.dispose();
   }, SLOW);
 
@@ -217,15 +203,16 @@ describe('FigureLayer', () => {
   }, SLOW);
 
   it('hides the draws of a model nobody shows this frame, and shows them again', () => {
-    const { layer, scene } = layerOf(false);
+    const { layer, scene, idScene } = layerOf(false);
     layer.frame(frame([inst('elf'), inst('skelet', { owner: 2, x: 9 })]), cam, slot);
-    const both = layer.drawn.draws;
+    expect(layer.drawn).toEqual({ figures: 2, draws: 6 });
     layer.frame(frame([inst('elf')]), cam, slot);
-    expect(layer.drawn.draws).toBeLessThan(both);
-    expect(meshes(scene).filter((m) => m.visible).length).toBe(layer.drawn.draws);
+    expect(layer.drawn).toEqual({ figures: 1, draws: 3 });
+    expect(meshes(scene).filter((m) => m.visible).length + meshes(idScene).filter((m) => m.visible).length).toBe(layer.drawn.draws);
     layer.frame(undefined, cam, slot);
-    expect(layer.drawn).toEqual({ figures: 0, batches: 0, draws: 0 });
+    expect(layer.drawn).toEqual({ figures: 0, draws: 0 });
     expect(meshes(scene).filter((m) => m.visible)).toHaveLength(0);
+    expect(meshes(idScene).filter((m) => m.visible)).toHaveLength(0);
     layer.dispose();
   }, SLOW);
 
@@ -235,23 +222,24 @@ describe('FigureLayer', () => {
     layer.frame(undefined, cam, slot);
     expect(meshes(scene)).toHaveLength(0);
     expect(made).toBe(0);
-    expect(layer.drawn).toEqual({ figures: 0, batches: 0, draws: 0 });
+    expect(layer.drawn).toEqual({ figures: 0, draws: 0 });
     layer.frame(frame([inst('elf')]), cam, slot);
     expect(meshes(scene).filter((m) => m.visible).length).toBeGreaterThan(0);
     layer.frame(frame([]), cam, slot);
     expect(meshes(scene).filter((m) => m.visible)).toHaveLength(0);
-    expect(layer.drawn).toEqual({ figures: 0, batches: 0, draws: 0 });
+    expect(layer.drawn).toEqual({ figures: 0, draws: 0 });
     layer.frame(frame([]), cam, slot);
     expect(meshes(scene).filter((m) => m.visible)).toHaveLength(0);
     layer.dispose();
   }, SLOW);
 
   it('skips an instance whose model has not arrived, and draws it when it has', async () => {
-    const { layer } = layerOf(false);
+    const { layer, idScene } = layerOf(false);
     const late = createKit(sprite, directRunner);
     const f: FigureFrame = { insts: [inst('elf')], kit: late };
     layer.frame(f, cam, slot);
     expect(layer.drawn.figures).toBe(0);
+    expect(meshes(idScene).filter((m) => m.visible)).toHaveLength(0);
     await settle(); await settle();
     layer.frame(f, cam, slot);
     expect(layer.drawn.figures).toBe(1);
@@ -289,14 +277,14 @@ describe('FigureLayer', () => {
     expect(second.layer.drawn.figures).toBe(1);
     expect(second.layer.drawn.draws).toBeGreaterThan(0);
     expect(kit.version).toBe(version);
-    expect(meshes(second.scene).filter((m) => m.visible).length).toBe(second.layer.drawn.draws);
+    expect(meshes(second.scene).filter((m) => m.visible).length + meshes(second.idScene).filter((m) => m.visible).length).toBe(second.layer.drawn.draws);
     second.layer.dispose();
   }, SLOW);
 
   it('every geometry stays within 8 vertex buffers and the materials are made once per model', () => {
     const l = layerOf(true);
     l.layer.frame(frame([inst('elf'), inst('elf', { owner: 2, x: 0.1 }), inst('skelet', { owner: 3, x: 9 })]), cam, slot);
-    for (const s of [l.scene, l.sunScene!]) for (const m of meshes(s)) expect(Object.keys(m.geometry.attributes).length).toBeLessThanOrEqual(8);
+    for (const s of [l.scene, l.sunScene!, l.idScene]) for (const m of meshes(s)) expect(Object.keys(m.geometry.attributes).length).toBeLessThanOrEqual(8);
     expect(l.made).toBe(2);
     l.layer.dispose();
   }, SLOW);

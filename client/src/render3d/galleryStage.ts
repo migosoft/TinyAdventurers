@@ -378,7 +378,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
-        r.models = readout(c.view.figuresDrawn ?? { figures: 0, batches: 0, draws: 0 }, t);
+        r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, t);
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
       }

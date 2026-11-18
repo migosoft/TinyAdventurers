@@ -178,7 +178,7 @@ for (const s of shots) {
         await p.waitForTimeout(800);
         await snap(p, s.name);
         const m = await p.evaluate(() => window.__r3d.models ?? null);
-        console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys ? keys.split(',').length : 0} models${m ? `, drew ${m.figures} figures in ${m.batches} batches, ${m.draws} draws` : ''}`);
+        console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys ? keys.split(',').length : 0} models${m ? `, drew ${m.figures} figures, ${m.draws} draws` : ''}`);
       })(),
       new Promise((_, no) => { cap = setTimeout(() => no(new Error('timeout: the shot took more than 4 minutes')), 240000); }),
     ]);

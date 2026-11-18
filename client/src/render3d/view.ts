@@ -235,8 +235,8 @@ export interface View {
   readonly chunks: { total: number; drawn: number };
   /** Scene objects, for the F3 panel. */
   readonly meshes: number;
-  /** What the 3D figure layer drew in the last frame: instances, batches and draws (#338; for `window.__r3d.models`). */
-  readonly figuresDrawn?: Readonly<{ figures: number; batches: number; draws: number }>;
+  /** What the 3D figure layer drew in the last frame: instances and the id, piece and hull draws (#338, #364; for `window.__r3d.models`). */
+  readonly figuresDrawn?: Readonly<{ figures: number; draws: number }>;
 }
 
 /** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
@@ -589,7 +589,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover }));
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
-  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, (rows, paint) => figureMaterials({ lighting, sight, hasSun, rows, paint, ...(figureTex ??= figureLooks()), shared: figures.shared }));
+  // The id pass (#364): the pieces of the model figures drawn into an id target of the picture's size; the hulls read it (nodes.ts).
+  const idScene = new Scene();
+  const idTarget = new RenderTarget(1, 1, { depthBuffer: true, type: UnsignedByteType, format: RGBAFormat, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
+  idTarget.texture.colorSpace = NoColorSpace;
+  const idSize = new Vector2();
+  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, idScene, (rows, paint) => figureMaterials({ lighting, sight, hasSun, rows, paint, idTex: idTarget.texture, ...(figureTex ??= figureLooks()), shared: figures.shared }));
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
   const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
@@ -854,6 +859,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (disposed || lost || !lastSize) return null;
       const [w, h] = lastSize;
       const rt = new RenderTarget(w, h, { depthBuffer: true, type: UnsignedByteType, format: RGBAFormat, generateMipmaps: false });
+      // The hulls read the id target: only valid when it has the size of this redraw's target.
+      const idWas = figures.shared.idOn.value;
+      figures.shared.idOn.value = idWas > 0.5 && idTarget.width === w && idTarget.height === h ? 1 : 0;
       try {
         // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does. The composite keeps the last
         // frame's `uvScale`, so this is right only when the readback target matches the picture's plan (its crop of the art-size frustum).
@@ -873,6 +881,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         // WebGL2 reads the bottom row first, WebGPU the top row first (seen with the same scene on both): make it top first.
         return { w, h, data: be.isWebGPUBackend ? data : flipRows(data, w, h) };
       } finally {
+        figures.shared.idOn.value = idWas;
         rt.dispose();
       }
     },
@@ -896,6 +905,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
       trees.shared.cosP.value = Math.cos(f.cam.pitch);
       figures.shared.cosP.value = Math.cos(f.cam.pitch);
+      figures.shared.idOn.value = 0;   // the shafts' depth pass and the mirror run before the id pass
       coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
@@ -1073,6 +1083,22 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         water.setMirror({ picture: mirrorTarget.texture, matrix: mirrorMatrix });
         timer?.lap('mirror');
       } else water.setMirror(null);
+      if (figures.drawn.figures > 0) {
+        // The id pass: the size of the target the picture is drawn into, so the hull's texel fetch hits its own pixel on both backends.
+        let iw = p.targetW, ih = p.targetH;
+        if (p.direct && !wp.copy) {
+          const sz = renderer.getDrawingBufferSize(idSize);
+          iw = sz.x;
+          ih = sz.y;
+        }
+        if (idTarget.width !== iw || idTarget.height !== ih) idTarget.setSize(iw, ih);
+        renderer.setRenderTarget(idTarget);
+        renderer.setClearColor(0x000000, 0);
+        renderer.render(idScene, camera);
+        renderer.setClearColor(clearColour, 1);
+        figures.shared.idOn.value = 1;
+        timer?.lap('models');
+      }
       if (p.direct && !wp.copy) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
@@ -1124,6 +1150,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         shimmer.material.dispose();
         sceneCopy.dispose();
         mirrorTarget.dispose();
+        idTarget.dispose();
         ceiling?.geometry.dispose();
         ceilingMat?.dispose();
         fieldMesh?.geometry.dispose();
