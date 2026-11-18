@@ -7,7 +7,8 @@ import type { Cam } from '../camera';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { FIGURE_ORDER, figureMaterials } from './nodes';
-import { FigureLayer, figureLooks } from './layer';
+import { FigureLayer, figureLooks, stageSkin } from './layer';
+import { STAGES } from './bones';
 import { ROW, ROW_TEXELS, type FigureInst } from './instances';
 import { createKit, directRunner, type FigureKit } from './kit';
 import { BONES } from './model';
@@ -38,8 +39,9 @@ const SLOW = 120000;
 let kit: FigureKit;
 beforeAll(async () => {
   kit = createKit(sprite, directRunner);
-  for (const k of ['elf', 'skelet', 'weapon_bow']) kit.get(k);
-  while (kit.version < 3) await settle();
+  const keys = ['elf', 'skelet', 'weapon_bow', 'stag'];
+  for (const k of keys) kit.get(k);
+  while (keys.some((k) => !kit.get(k))) await settle();
 }, SLOW);
 afterAll(() => kit.dispose());
 
@@ -65,6 +67,25 @@ function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; 
   });
   return out;
 }
+describe('stageSkin', () => {
+  const check = (key: string, allStage?: number): void => {
+    const m = kit.get(key)!;
+    const before = m.skin.slice();
+    const out = stageSkin(m);
+    expect(Array.from(m.skin)).toEqual(Array.from(before));
+    expect(out).not.toBe(m.skin);
+    for (const r of m.ranges) {
+      for (let i = r.start; i < r.start + r.count; i++) {
+        expect(out[m.index[i] * 4 + 1]).toBe(allStage ?? r.stage);
+      }
+    }
+    for (let v = 0; v < m.skin.length / 4; v++) for (const c of [0, 2, 3]) expect(out[v * 4 + c]).toBe(m.skin[v * 4 + c]);
+  };
+  it('puts the range\'s stage in the second float of every vertex of an elf', () => check('elf'), SLOW);
+  it('puts the weapon stage in every vertex of a bow', () => check('weapon_bow', STAGES.indexOf('weapon')), SLOW);
+  it('does the same for a tube model (the stag)', () => check('stag'), SLOW);
+});
+
 const meshes = (s: Scene): Mesh[] => s.children.filter((c): c is Mesh => (c as Mesh).isMesh);
 const slot = (): number => -1;
 
@@ -141,6 +162,29 @@ describe('FigureLayer', () => {
     expect(Array.from(rows.subarray(o, o + 4))).toEqual([0.5, 0.25, 0.5, 7]);
     expect(rows[ROW.root * 4 + 3]).toBeCloseTo(3, 5);   // the place in the root's shift
     expect(rows[ROW.root * 4 + 11]).toBeCloseTo(5, 5);
+    layer.dispose();
+  }, SLOW);
+
+  it('gives every owner of the frame a number in its rows: an owner\'s weapon and dash copy share it', () => {
+    const { layer } = layerOf(false);
+    const elf = kit.get('elf')!, hand = BONES.indexOf('handR');
+    layer.frame(frame([
+      inst('elf', { owner: 7 }),
+      inst('weapon_bow', { owner: 7, bone: hand, boneScale: 0.6, pose: restPose(elf, 0), scale: elf.scale }),
+      inst('elf', { owner: 9, x: 20 }),
+      inst('elf', { owner: 7, x: 5 }),   // a dash copy of 7
+    ]), cam, slot);
+    const rows = layer.rowsData();
+    const owners = new Map<string, number>();
+    // The rows are written group by group; read each row's owner number and which instance it is by the place.
+    const no = (r: number): number => rows[r * ROW_TEXELS * 4 + ROW.flags * 4 + 2];
+    const seen = new Set<number>();
+    for (let r = 0; r < 4; r++) seen.add(no(r));
+    expect(seen.size).toBe(2);
+    const counts = new Map<number, number>();
+    for (let r = 0; r < 4; r++) counts.set(no(r), (counts.get(no(r)) ?? 0) + 1);
+    expect([...counts.values()].sort()).toEqual([1, 3]);
+    void owners;
     layer.dispose();
   }, SLOW);
 

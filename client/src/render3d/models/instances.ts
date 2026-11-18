@@ -31,7 +31,9 @@ export interface FigureInst {
 
 /** Texels per row, 4 floats each. */
 export const ROW_TEXELS = 64, MAX_BATCHES = 8;
-const PX = 1 / 16;   // tiles per sprite px
+/** The owners of a frame are numbered 0 .. OWNER_MAX - 1 (modulo) in the rows. */
+export const OWNER_MAX = 65536;
+const PX = 1 / 16;  // tiles per sprite px
 
 /**
  * The texel columns of a row (a texel is 4 floats; a 3x4 matrix is 3 texels, one per matrix row: a, b, c, d with d the shift):
@@ -43,7 +45,7 @@ const PX = 1 / 16;   // tiles per sprite px
  *  - `robe` (1 texel): dx, dz, the dip, 0 (as `pose.robe`);
  *  - `tint` (1 texel): r, g, b, stone (0 or 1);
  *  - `seen` (1 texel): alpha, sight hard, sight soft, the caster slot;
- *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), 0, 0.
+ *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), the owner's number (see `OWNER_MAX`), 0.
  * The rest of the 64 texels is free.
  */
 export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51, flags: 52 } as const;
@@ -54,7 +56,7 @@ export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51,
  * weapon vertex `v` lands where the wielder's rest-space point `pivot + boneScale * v` does. Its other bones are not written, its
  * bends and robe are zero. The root (yaw, place, the wielder's scale and stretch) is the wielder's, as for a figure.
  */
-export function packInstance(out: Float32Array, row: number, inst: FigureInst, slot: number): void {
+export function packInstance(out: Float32Array, row: number, inst: FigureInst, slot: number, ownerNo: number): void {
   const base = row * ROW_TEXELS * 4, pose = inst.pose, R = pose.root;
   const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw), cr = Math.cos(R.roll), sr = Math.sin(R.roll);
   const Sx = R.sx * inst.scale * PX, Sy = R.sy * inst.scale * PX, Sz = R.sz * inst.scale * PX;
@@ -88,7 +90,7 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
   o = base + ROW.seen * 4;
   out[o] = inst.alpha; out[o + 1] = inst.sight.hard; out[o + 2] = inst.sight.soft; out[o + 3] = slot;
   o = base + ROW.flags * 4;
-  out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = 0; out[o + 3] = 0;
+  out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = 0;
 }
 
 /**

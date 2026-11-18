@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Cam } from '../camera';
 import { BONES, MAX_BENDS, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { MAX_BATCHES, ROW, ROW_TEXELS, batchFigures, growRows, packInstance, type FigureInst } from './instances';
+import { MAX_BATCHES, OWNER_MAX, ROW, ROW_TEXELS, batchFigures, growRows, packInstance, type FigureInst } from './instances';
 import { restPose, type Pose3d } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS } from './table';
@@ -14,7 +14,7 @@ const inst = (o: Partial<FigureInst> = {}): FigureInst => ({
   owner: 1, model: 'skelet', x: 0, z: 0, lift: 0, scale: 1, pose: restPose(skelet, 0), bone: -1, boneScale: 1,
   tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, sight: { hard: 0, soft: 0 }, radius: 0.5, ...o,
 });
-const row = (i: FigureInst, slot = 0): Float32Array => { const out = new Float32Array(ROW_TEXELS * 4 * 2); packInstance(out, 1, i, slot); return out.subarray(ROW_TEXELS * 4, ROW_TEXELS * 8); };
+const row = (i: FigureInst, slot = 0, ownerNo = 0): Float32Array => { const out = new Float32Array(ROW_TEXELS * 4 * 2); packInstance(out, 1, i, slot, ownerNo); return out.subarray(ROW_TEXELS * 4, ROW_TEXELS * 8); };
 /** The 3x4 matrix at a texel column, applied to a point. */
 const mat = (r: Float32Array, col: number, v: [number, number, number]): [number, number, number] => {
   const o = col * 4, m = (k: number) => r[o + k];
@@ -63,6 +63,12 @@ describe('packInstance', () => {
     near(r.subarray(ROW.tint * 4, ROW.tint * 4 + 4), [0.1, 0.2, 0.3, 1]);
     near(r.subarray(ROW.seen * 4, ROW.seen * 4 + 4), [0.4, 0.7, 0.9, 3]);
     near(r.subarray(ROW.flags * 4, ROW.flags * 4 + 2), [1, 1]);
+  });
+
+  it('writes the owner number in the third float of the flags texel', () => {
+    const r = row(inst({ dark: true, cut: false }), -1, 300);
+    near(r.subarray(ROW.flags * 4, ROW.flags * 4 + 3), [1, 0, 300]);
+    expect(OWNER_MAX).toBe(65536);
   });
 
   it('writes a weapon: the wielder bone times boneScale about its pivot, in bone 0', () => {

@@ -5,7 +5,7 @@ import {
   BufferAttribute, ClampToEdgeWrapping, DataTexture, FloatType, InstancedBufferAttribute, InstancedBufferGeometry, LinearFilter, LinearMipmapLinearFilter,
   Mesh, NearestFilter, NoColorSpace, RGBAFormat, RepeatWrapping, UnsignedByteType, type Scene, type Texture,
 } from 'three/webgpu';
-import { batchFigures, growRows, packInstance, ROW_TEXELS, type FigureInst } from './instances';
+import { batchFigures, growRows, OWNER_MAX, packInstance, ROW_TEXELS, type FigureInst } from './instances';
 import type { Cam } from '../camera';
 import type { FigureFrame } from '../view';
 import { FIGURE_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
@@ -54,6 +54,18 @@ export interface ModelBuffers {
   index: BufferAttribute; pieceIndex: BufferAttribute; lineIndex: BufferAttribute;
 }
 
+/**
+ * A copy of `m.skin` whose second float of every vertex is the stage of the range its triangles belong to (the model's own
+ * `skin[1]` stays the hull flag). A vertex belongs to one range: ranges do not share vertices.
+ */
+export function stageSkin(m: FigureModel): Float32Array {
+  const out = m.skin.slice();
+  for (const r of m.ranges) {
+    for (let i = r.start; i < r.start + r.count; i++) out[m.index[i] * 4 + 1] = r.stage;
+  }
+  return out;
+}
+
 export function modelBuffers(m: FigureModel): ModelBuffers {
   // A bending vertex carries the pivot of its bend (the rest pose's), any other vertex 0.
   const n = m.skin.length / 4, origin = new Float32Array(n * 3);
@@ -63,7 +75,7 @@ export function modelBuffers(m: FigureModel): ModelBuffers {
   }
   return {
     position: new BufferAttribute(m.position, 3), normal: new BufferAttribute(m.normal, 3), uv: new BufferAttribute(m.uv, 2),
-    skin: new BufferAttribute(m.skin, 4), look: new BufferAttribute(m.look, 4), origin: new BufferAttribute(origin, 3),
+    skin: new BufferAttribute(stageSkin(m), 4), look: new BufferAttribute(m.look, 4), origin: new BufferAttribute(origin, 3),
     index: new BufferAttribute(m.index, 1), pieceIndex: new BufferAttribute(m.pieceIndex, 1), lineIndex: new BufferAttribute(m.lineIndex, 1),
   };
 }
@@ -118,6 +130,8 @@ export class FigureLayer {
   private readonly groups = new Map<string, { batch: number; key: string; model: FigureModel; list: number[] }>();
   private readonly live = new Set<Entry>();
   private readonly usedBatches = new Set<number>();
+  /** The frame's owner numbers: an entity id to its index in order of first appearance. */
+  private readonly ownerNos = new Map<number, number>();
 
   /**
    * `sunScene`: the sun's pass, or null without a sun. `make` builds the four materials of a model from the rows texture and the model's paint
@@ -151,12 +165,14 @@ export class FigureLayer {
     if (insts.length === 0 && this.drawn.draws === 0 && this.drawn.figures === 0) return;
     const batches = insts.length > 0 ? batchFigures(insts, cam) : NO_BATCHES;
     const groups = this.groups, live = this.live, usedBatches = this.usedBatches;
-    groups.clear(); live.clear(); usedBatches.clear();
+    const ownerNos = this.ownerNos;
+    groups.clear(); live.clear(); usedBatches.clear(); ownerNos.clear();
     let ready = 0;
     for (let i = 0; i < insts.length; i++) {
       const m = f!.kit.get(insts[i].model);
       if (!m) continue;
       ready++;
+      if (!ownerNos.has(insts[i].owner)) ownerNos.set(insts[i].owner, ownerNos.size % OWNER_MAX);
       const k = `${batches[i]}|${insts[i].model}`;
       let g = groups.get(k);
       if (!g) groups.set(k, g = { batch: batches[i], key: insts[i].model, model: m, list: [] });
@@ -168,7 +184,7 @@ export class FigureLayer {
     for (const g of groups.values()) {
       const e = this.entry(g.batch, g.key, g.model, g.list.length);
       const first = row;
-      for (const i of g.list) { packInstance(this.rows, row, insts[i], slotOf(insts[i].owner)); row++; }
+      for (const i of g.list) { packInstance(this.rows, row, insts[i], slotOf(insts[i].owner), ownerNos.get(insts[i].owner)!); row++; }
       const ids = e.row.array as Float32Array;
       for (let k = 0; k < g.list.length; k++) ids[k] = first + k;
       e.row.needsUpdate = true;

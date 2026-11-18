@@ -847,7 +847,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(bow.boneScale * bow.scale).toBeCloseTo(0.48 * elf.size, 6);   // the game's weapon scale for the ranger's bow (0.8 x the 0.6 of a drawn-small weapon) times the figure's size, whatever the body's fit
     expect(bow.scale).toBe(elf.scale);
     const row = new Float32Array(ROW_TEXELS * 4);
-    packInstance(row, 0, bow, 0);
+    packInstance(row, 0, bow, 0, 0);
     const o = ROW.bones * 4;
     const origin = [row[o + 3], row[o + 7], row[o + 11]];
     // the wielder's hand bone at its pivot, through the same bone matrix
