@@ -50,6 +50,10 @@ export const VARIETY_ROWS = 8;
 export const VARIETY_COLS = 6;
 export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
+/** The size line-up (#356), the last block: one row of every model key, `LINEUP_PITCH` tiles apart (the 19 model keys fit the 48 floor tiles). */
+export const LINEUP_PITCH = 2.4;
+export const LINEUP_MAX = 19;
+const LINEUP_DEPTH = 6;
 /** The pillars' columns (tiles) in the model block, over the kind cells 0, 3, 6 and 9 of a row (kinds stand at x 3.5 to 33.5): every kind is at most 3 tiles across from a torch of its row. */
 export const PILLAR_X = [3, 12, 21, 30] as const;
 
@@ -66,10 +70,12 @@ export interface Layout {
   crowd(i: number): { x: number; z: number };
   /** Foot of the animal in column `col` of variety row `row`, in tiles. */
   variety(row: number, col: number): { x: number; z: number };
+  /** Foot of place `i` of the size line-up, in tiles (all on one line, equal depth). */
+  lineup(i: number): { x: number; z: number };
   /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
   pillarTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
-  focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models', { x: number; z: number }>;
+  focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup', { x: number; z: number }>;
 }
 
 /** `nModels` is the number of model kinds in the kind row (the camera of `focus.models` centres on that row). */
@@ -85,7 +91,10 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
   const dyingZ = effTop2 + MODEL_EFFECT_ROWS * MODEL_ROW_PITCH + 1.5;
   const crowdTop = dyingZ + kindRows * MODEL_PITCH;
   const varTop = crowdTop + CROWD_ROWS * 2 + 1;
-  const h = Math.ceil(varTop + VARIETY_ROWS * VARIETY_PITCH) + 2;
+  const lineTop = varTop + VARIETY_ROWS * VARIETY_PITCH + 1;
+  const h = Math.ceil(lineTop + LINEUP_DEPTH) + 2;
+  const lineX = (i: number): number => 2 + (i + 0.5) * LINEUP_PITCH;
+  const lineZ = lineTop + LINEUP_DEPTH / 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
   const floor = (x0: number, x1: number, z0: number, z1: number, t: number = TILE_ID.Floor): void => {
     for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) tiles[z * GALLERY_W + x] = t;
@@ -96,6 +105,8 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
     x: 2 + (g % GROUPS_PER_ROW) * GROUP_PITCH + k * CELL + 1,
     z: effTop + Math.floor(g / GROUPS_PER_ROW) * GROUP_ROW_PITCH + 1.5,
   });
+  // A wall row behind the line-up, so no other block shows between the figures' heads.
+  floor(1, GALLERY_W - 2, Math.floor(lineTop), Math.floor(lineTop), TILE_ID.Wall);
   for (let r = 0; r < kindRows; r++) for (const x of PILLAR_X) tiles[(mTop + r * MODEL_KIND_ROW_PITCH) * GALLERY_W + x] = TILE_ID.Wall;
   // Group 8 wades: shallow water under its four cells.
   const w = effect(8, 0);
@@ -109,6 +120,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
     dying: (i) => ({ x: 2 + (i % MODEL_PER_ROW) * MODEL_PITCH + 1.5, z: dyingZ + Math.floor(i / MODEL_PER_ROW) * MODEL_PITCH }),
     crowd: (i) => ({ x: 2 + (i % CROWD_PER_ROW) * 2 + 1, z: crowdTop + Math.floor(i / CROWD_PER_ROW) * 2 + 1 }),
     variety: (row, col) => ({ x: 2 + col * VARIETY_PITCH + 1.5, z: varTop + row * VARIETY_PITCH + 2 }),
+    lineup: (i) => ({ x: lineX(i), z: lineZ }),
     pillarTorches: Array.from({ length: kindRows }, (_, r) => PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + r * MODEL_KIND_ROW_PITCH + 1 }))).flat(),
     focus: {
       models: { x: 2 + (Math.min(nModels, MODEL_PER_ROW) * MODEL_PITCH) / 2, z: mTop + 3.5 },
@@ -116,6 +128,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
       corridor: { x: 18, z: 3.5 },
       effects: { x: 24, z: effTop + 2 },
       objects: { x: 18, z: 8 },
+      lineup: { x: 2 + (LINEUP_MAX * LINEUP_PITCH) / 2, z: lineZ },
     },
   };
 }

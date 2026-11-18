@@ -13,12 +13,12 @@ import { atlasBounds } from './atlasBounds';
 import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
-import { CROWD_MAX, EFFECT_GROUPS, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
+import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
 import type { FigureKit } from './models/kit';
-import { MODEL_OF_KIND } from './models/table';
+import { MODEL_OF_KIND, type ModelKey } from './models/table';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
@@ -67,11 +67,13 @@ export const ID = {
   dying: 4300,
   /** The variety block (#357): `+ row * 10 + col`. Its ids decide what each animal looks like. */
   variety: 4500,
+  /** The size line-up (#356): `+ place`. */
+  lineup: 4700,
   pillarTorch: 4900,
   crowd: 5000,
 } as const;
 
-export type Focus = 'figures' | 'corridor' | 'effects' | 'objects' | 'models';
+export type Focus = 'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup';
 export interface GalleryOpts {
   state: string | null; slow: number; focus: Focus; start: number;
   /** Walking model figures added in a 2 tile grid, and whether they are drawn as models or as cards. */
@@ -88,7 +90,8 @@ export interface GalleryOpts {
 
 /**
  * `&state=<name>` pins one state, `&slow=<n>` slows the clock, `&focus=` picks where the camera starts (`&at=x,z` in tiles, or
- * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>` / `variety:<row>` (the middle of the row), overrides it),
+ * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>` / `lineup:<place>` / `variety:<row>` (the middle of the row), overrides it;
+ * `&focus=lineup` is the size line-up of every model key, shortest left, whole row in one picture at `&zoom=1`),
  * `&t=<s>` starts the clock there (the hurt flash is on at 0), `&crowd=<n>` adds walking model figures (`&crowdAs=cards` as cards),
  * `&light=torch` lights it with the torches.
  */
@@ -103,11 +106,12 @@ export function parseGallery(search: string): GalleryOpts {
   const crowdKinds = (q.get('crowdKinds') ?? '').split(',').flatMap((key) => MODEL_KINDS.filter((k) => MODEL_OF_KIND[k] === key));
   const atRaw = q.get('at') ?? '';
   // `at=x,z` in tiles, or the foot of a figure of the model block: `model:<kind>`, `effect:<row>,<col>`, `dying:<i>`, `crowd:<i>`.
-  const named = /^(model|effect|dying|crowd|variety):(\d+)(?:,(\d+))?$/.exec(atRaw);
+  const named = /^(model|effect|dying|crowd|variety|lineup):(\d+)(?:,(\d+))?$/.exec(atRaw);
   const at = named
     ? (() => {
       const [, what, a, b] = named;
       const n = Number(a);
+      if (what === 'lineup') return GALLERY.lineup(Math.min(n, LINEUP_MAX - 1));
       if (what === 'variety') return GALLERY.variety(n, b === undefined ? (VARIETY_COLS - 1) / 2 : Number(b));
       return what === 'model' ? GALLERY.model(n) : what === 'effect' ? GALLERY.modelEffect(n, Number(b ?? 0)) : what === 'dying' ? GALLERY.dying(n) : GALLERY.crowd(n);
     })()
@@ -117,7 +121,7 @@ export function parseGallery(search: string): GalleryOpts {
     start: Number.isFinite(start) && start > 0 ? start : 0,
     state: STATES.some(([n]) => n === state) ? state : null,
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
-    focus: focus === 'corridor' || focus === 'effects' || focus === 'objects' || focus === 'models' ? focus : 'figures',
+    focus: focus === 'corridor' || focus === 'effects' || focus === 'objects' || focus === 'models' || focus === 'lineup' ? focus : 'figures',
     crowd: Number.isFinite(crowd) && crowd > 0 ? Math.min(crowd, CROWD_MAX) : 0,
     crowdAs: q.get('crowdAs') === 'cards' ? 'cards' : 'models',
     crowdKinds: crowdKinds.length > 0 ? crowdKinds : null,
@@ -149,6 +153,16 @@ const MODEL_EFFECT_ROW_LIST = EFFECT_ROWS.filter((r) => r.effect !== undefined |
 const MODEL_EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar, KIND.Necromancer, KIND.Imp, KIND.Knight];
 /** The variety block's rows: one kind each, `VARIETY_COLS` figures per row. */
 const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny, KIND.GoblinArcher, KIND.OrcWarrior, KIND.Imp, KIND.Chort];
+/**
+ * The size line-up (#356, `&focus=lineup`): every model key once, shortest left, by the built model's `baseHeight` (a test builds them and
+ * checks the order). Each stands for the first kind that wears it; the line is one row at equal depth, idle, facing right.
+ */
+export const LINEUP_KEYS: readonly ModelKey[] = [
+  'bunny', 'boar', 'imp', 'goblin', 'skelet', 'wolf', 'deer', 'wizard', 'dwarf', 'knight', 'ogre', 'stag', 'elf',
+  'npcKnight', 'necromancer', 'summoner', 'disciple', 'chort', 'orc',
+];
+/** The kind that stands for a model key in the line-up. */
+export const lineupKind = (key: ModelKey): number => Number(Object.keys(MODEL_OF_KIND).find((k) => MODEL_OF_KIND[Number(k)] === key));
 /** The kinds with a model, in the order of the model rows. */
 const MODEL_KINDS = Object.keys(MODEL_OF_KIND).map(Number);
 /** A figure of the dying row lives this many seconds of every `DIE_PERIOD`, then dies (and leaves its skull). */
@@ -221,6 +235,10 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
       const p = GALLERY.variety(r, c);
       out.push(ent(ID.variety + r * 10 + c, kind, p.x, p.z, { anim: ANIM.Idle, animMs: (t % 1) * 1000, aim: 0 }));
     }
+  });
+  LINEUP_KEYS.forEach((key, i) => {
+    const p = GALLERY.lineup(i);
+    out.push(ent(ID.lineup + i, lineupKind(key), p.x, p.z, { anim: ANIM.Idle, animMs: 0, aim: 0 }));
   });
   GALLERY.pillarTorches.forEach((p, i) => out.push(ent(ID.pillarTorch + i, KIND.Torch, p.x, p.z, { side: SIDE.Neutral, anim: 1, extra: 0 })));
   for (let i = 0; i < crowd; i++) {

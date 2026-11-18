@@ -6,7 +6,9 @@ import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
-import { GALLERY, ID, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, modelsOf, parseGallery } from './galleryStage';
+import { GALLERY, ID, LINEUP_KEYS, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupKind, modelsOf, parseGallery } from './galleryStage';
+import { LINEUP_MAX } from './galleryMap';
+import { buildJob } from './models/build';
 import { MODEL_OF_KIND, modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 import type { Cam } from './camera';
@@ -225,6 +227,46 @@ describe('the gallery stage', () => {
       for (const o of others) expect(Math.hypot(o.x - e.x, o.y - e.y), `${e.id} / ${o.id}`).toBeGreaterThan(16);
     }
     expect(parseGallery('?at=variety:2').at).toEqual(GALLERY.variety(2, 2.5));
+  });
+
+  describe('the size line-up (#356)', () => {
+    const line = (): ReturnType<typeof galleryEnts> => galleryEnts(1.7, null).filter((e) => inRange(e.id, ID.lineup, 100));
+
+    it('shows every distinct model key exactly once', () => {
+      const keys = new Set(Object.values(MODEL_OF_KIND));
+      expect(LINEUP_KEYS).toHaveLength(LINEUP_MAX);
+      expect(new Set(LINEUP_KEYS)).toEqual(keys);
+      expect(line().map((e) => modelKeyOf(e.kind))).toEqual([...LINEUP_KEYS]);
+      for (const k of keys) expect(modelKeyOf(lineupKind(k!)), String(k)).toBe(k);
+    });
+
+    it('stands them idle, facing right, on one line at equal depth, on floor and inside the map', () => {
+      const L = line();
+      expect(new Set(L.map((e) => e.y)).size).toBe(1);
+      for (const e of L) {
+        expect(e.anim).toBe(ANIM.Idle);
+        expect(e.aim).toBe(0);
+        expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
+        expect(e.x / 16).toBeGreaterThan(1);
+        expect(e.x / 16).toBeLessThan(GALLERY.map.w - 1);
+      }
+      expect(L.map((e) => e.x)).toEqual([...L.map((e) => e.x)].sort((a, b) => a - b));
+      expect(L.every((e) => e.id < ID.pillarTorch && e.id >= ID.lineup)).toBe(true);
+    });
+
+    it('is ordered by the built height, shortest first, and every figure is a model', () => {
+      const h = LINEUP_KEYS.map((k) => buildJob(k, null).baseHeight);
+      expect(h).toEqual([...h].sort((a, b) => a - b));
+      const is = modelsOf(parseGallery(''));
+      expect(line().every(is)).toBe(true);
+    });
+
+    it('opens on the middle of the row with &focus=lineup', () => {
+      expect(parseGallery('?focus=lineup').focus).toBe('lineup');
+      expect(GALLERY.focus.lineup.x).toBeCloseTo((GALLERY.lineup(0).x + GALLERY.lineup(LINEUP_MAX - 1).x) / 2, 9);
+      expect(GALLERY.focus.lineup.z).toBe(GALLERY.lineup(0).z);
+      expect(parseGallery('?at=lineup:4').at).toEqual(GALLERY.lineup(4));
+    });
   });
 
   it('opens the models block on the middle of the first kind row, however many kinds it has', () => {
