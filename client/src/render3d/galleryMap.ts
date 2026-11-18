@@ -50,8 +50,8 @@ export const VARIETY_ROWS = 4;
 export const VARIETY_COLS = 6;
 export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
-/** The pillars' columns (tiles) in the model block: between the kind cells 2/3, 5/6, 8/9 and 11/12 (the animals' cells have a torch beside them). */
-export const PILLAR_X = [11, 20, 29, 38] as const;
+/** The pillars' columns (tiles) in the model block, over the kind cells 0, 3, 6 and 9 of a row (kinds stand at x 3.5 to 33.5): every kind is at most 3 tiles across from a torch of its row. */
+export const PILLAR_X = [3, 12, 21, 30] as const;
 
 export interface Layout {
   map: TileMap;

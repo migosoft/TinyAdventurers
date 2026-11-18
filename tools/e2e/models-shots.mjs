@@ -72,6 +72,8 @@ for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push
 // this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
 shots.push({ name: 'state-cycle', q: '&focus=models&zoom=2&t=12.5&slow=1', need: ALL, until: 16 });
 shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=2&state=idle${STILL}`, need: ALL });
+// The pillar torches light every kind of a row: the first, a middle and the last column of the first row.
+for (const c of [0, 5, 10]) shots.push({ name: `torch-light-col${c}`, q: `&at=model:${c}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'torch-light-close', q: `&at=model:${row('ranger')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: ALL, skull: true });
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });

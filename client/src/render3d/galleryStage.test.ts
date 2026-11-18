@@ -237,6 +237,14 @@ describe('the gallery stage', () => {
       expect(L.map.get(Math.floor(p.x), Math.floor(p.z)), `model ${i} on a floor`).toBe(TILE_ID.Floor);
     }
     expect(L.pillarTorches).toHaveLength(8);
+    // `&light=torch`: every kind is lit by a torch of its own row (the torches of a row share one z)
+    const D = 4.5;
+    for (let i = 0; i < 22; i++) {
+      const p = L.model(i);
+      const own = L.pillarTorches.filter((t) => Math.abs(t.z - (p.z - 2.5)) < 0.01);
+      expect(own, `model ${i} has torches in its row`).toHaveLength(4);
+      expect(Math.min(...own.map((t) => Math.hypot(t.x - p.x, t.z - p.z))), `model ${i} torch distance`).toBeLessThanOrEqual(D);
+    }
     expect(L.pillarTorches.slice(4).map((p) => p.z - L.pillarTorches[0].z)).toEqual([5, 5, 5, 5]);
     for (const p of L.pillarTorches) expect(L.map.get(Math.floor(p.x), Math.floor(p.z) - 1)).toBe(TILE_ID.Wall);
     // everything else starts below the last kind row
