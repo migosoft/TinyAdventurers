@@ -11,6 +11,7 @@ import { orcDesc } from './descs/orc';
 import { HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
 import { DEMON_EYE } from './descs/imp';
+import { KNIGHT_ACCENT, KNIGHT_SHIELD } from './descs/npcKnight';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
 const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
@@ -353,7 +354,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'goblin', kind: KIND.GoblinArcher, height: HUMAN_HEIGHT * 0.65, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
   { key: 'orc', kind: KIND.OrcWarrior, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'orcArcher', kind: KIND.OrcArcher, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
-  { key: 'npcKnight', kind: KIND.Knight, height: HUMAN_HEIGHT, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, 0x417089], weapon: 'weaponR' },
+  { key: 'npcKnight', kind: KIND.Knight, height: HUMAN_HEIGHT, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, KNIGHT_ACCENT], weapon: 'weaponR' },
   { key: 'necromancer', kind: KIND.Necromancer, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'summoner', kind: KIND.Summoner, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'disciple', kind: KIND.Disciple, height: HUMAN_HEIGHT, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
@@ -612,21 +613,48 @@ describe('the two-legged creatures', () => {
     }
   });
 
-  it('the Knight: every turquoise piece is polished steel and no dark one is; the round shield hangs on the left arm, outside it', () => {
+  it('the Knight: every turquoise piece is polished steel and no other is; the accent is its own colour', () => {
     const d = TUBE_DESCS.npcKnight, m = buildJob('npcKnight', null), n = m.position.length / 3;
     for (const p of d.pieces) expect(!!p.metal, `${p.stage} on ${p.bone}`).toBe(p.colour === 0x72d6ce);
     let steel = 0;
     for (let i = 0; i < n; i++) if (m.look[i * 4 + 3] === 1) { steel++; expect(m.skin[i * 4 + 1], 'hull vertex').toBe(0); }
     expect(steel).toBeGreaterThan(0);
-    // The shield: the one flat steel ball on the left arm (the pauldron there is a thick ball); wholly beyond the arm's outer side, between the knee and the shoulder.
-    const shields = d.pieces.filter((p) => p.bone === 'armL' && 'ball' in p.shape && p.metal && p.shape.ball[2] < p.shape.ball[0] / 3);
-    expect(shields).toHaveLength(1);
-    const s = shields[0], ball = (s.shape as { ball: readonly [number, number, number] }).ball, arm = d.pivots.armL!;
-    expect(s.bone).toBe('armL');
-    expect(ball[0]).toBe(ball[1]);
-    expect(s.at![2] + ball[2]).toBeLessThanOrEqual(arm[2] - d.arms!.radius);
-    expect(s.at![1] - ball[1]).toBeGreaterThan(d.pivots.leg1![1]);
-    expect(s.at![1] + ball[1]).toBeLessThan(arm[1]);
+    // The accent: the sprite's dull blue is gone; the accent is no steel and shows on the comb, the skirt and the shield's field.
+    expect(d.pieces.some((p) => p.colour === 0x417089)).toBe(false);
+    expect(KNIGHT_ACCENT).not.toBe(0x72d6ce);
+    for (const stage of ['hair', 'body'] as const) expect(d.pieces.some((p) => p.stage === stage && p.colour === KNIGHT_ACCENT), stage).toBe(true);
+  });
+
+  it('the Knight: a heater shield on the left arm, from the shoulder to the hip, its face turned out and a little to the front', () => {
+    const d = TUBE_DESCS.npcKnight, arm = d.pivots.armL!, { face, rim, normal } = KNIGHT_SHIELD;
+    expect(d.pieces).toContain(face); expect(d.pieces).toContain(rim);
+    // Both hang on the arm (no bone of their own), so the shield follows it in every pose; neither bends.
+    for (const p of [face, rim]) { expect(p.bone).toBe('armL'); expect(p.bend).toBeUndefined(); }
+    expect(face.colour).toBe(KNIGHT_ACCENT);
+    expect(rim.colour).toBe(0x72d6ce); expect(rim.metal).toBe(true);
+    // The field: a tube down the shield's middle whose radius is the half width. Nearly as wide at the top as at its widest, narrowing to a point.
+    const pts = (face.shape as { tube: readonly TubePoint[] }).tube, ys = pts.map((q) => q.p[1]), rs = pts.map((q) => q.r);
+    const top = Math.max(...ys), tip = Math.min(...ys), wide = Math.max(...rs);
+    expect(ys[0]).toBe(top); expect(ys[ys.length - 1]).toBe(tip);
+    expect(Math.abs(top - arm[1])).toBeLessThan(0.8);
+    expect(tip).toBeLessThan(d.pivots.body![1]);
+    expect(tip).toBeGreaterThan(d.pivots.leg1![1]);
+    expect(rs[0]).toBeGreaterThan(wide * 0.9);
+    expect(rs[rs.length - 1]).toBeLessThan(wide * 0.3);
+    for (let i = 1; i < rs.length; i++) if (ys[i] < (top + tip) / 2) expect(rs[i], `point ${i}`).toBeLessThan(rs[i - 1]);
+    expect(top - tip).toBeGreaterThan(2 * wide);          // taller than wide (the rim adds the point below and the peak above)
+    expect(top - tip).toBeGreaterThan(5);                 // the round one was 5.4 across at most; this one is larger
+    expect(2 * wide).toBeGreaterThan(4);
+    // Domed: thicker in the middle than at the rim, and a thin plate everywhere.
+    for (const q of pts) expect(q.r * Math.min(1, q.wide ?? 1)).toBeLessThan(0.8);
+    // The face looks out to the left and a little forward, and its middle lies beyond the arm's outer side.
+    expect(Math.hypot(...normal)).toBeCloseTo(1, 6);
+    expect(normal[2]).toBeLessThan(-0.7); expect(normal[0]).toBeGreaterThan(0.2); expect(normal[1]).toBe(0);
+    for (const q of pts) expect(q.p[2]!).toBeLessThan(arm[2] - d.arms!.radius);
+    // The rim runs round the field's outline: a closed loop, no point of it inside the field's own half width.
+    const loop = (rim.shape as { tube: readonly TubePoint[] }).tube, a = loop[0].p, z = loop[loop.length - 1].p;
+    expect(Math.hypot(a[0] - z[0], a[1] - z[1], a[2]! - z[2]!)).toBeLessThan(1e-6);
+    expect(Math.max(...loop.map((q) => q.p[1])) - Math.min(...loop.map((q) => q.p[1]))).toBeGreaterThan(top - tip - 0.5);
   });
 });
 
