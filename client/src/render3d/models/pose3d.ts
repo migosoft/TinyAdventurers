@@ -15,7 +15,7 @@ import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import type { FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
-import { BONES, MAX_BENDS, MAX_BONES } from './bones';
+import { BONES, MAX_BENDS, MAX_BONES, weaponBoneOf } from './bones';
 import type { FigureModel } from './model';
 import { composeBones, identityLocal, type BoneLocal } from './rig';
 
@@ -124,6 +124,19 @@ function relQ(a: Q4, b: Q4, out: Q4): Q4 {
   out[3] = aw * b[3] - ax * b[0] - ay * b[1] - az * b[2];
   return out;
 }
+/** a * b: the turn `b`, then the turn `a`. `out` must be neither of them. */
+function mulQ(a: Q4, b: Q4, out: Q4): Q4 {
+  out[0] = a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1];
+  out[1] = a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0];
+  out[2] = a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3];
+  out[3] = a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2];
+  return out;
+}
+/** The turn about z by `a`: it swings a hanging arm forwards. */
+function aboutZ(a: number, out: Q4): Q4 {
+  out[0] = 0; out[1] = 0; out[2] = Math.sin(a / 2); out[3] = Math.cos(a / 2);
+  return out;
+}
 /** The page's `basisQ`: the turn that lays a weapon's length along `b` with its face towards `n`. False if `n` lies along `b`. */
 function basisQ(b: V3, n: V3, out: Q4): boolean {
   const d = n[0] * b[0] + n[1] * b[1] + n[2] * b[2];
@@ -162,6 +175,22 @@ const BODY = bi('body'), HEAD = bi('head'), HAT = bi('hat'), ARM = [bi('armR'), 
 const REST: Record<'melee' | 'bow' | 'cast', V3> = { melee: norm([0.42, 0.9, 0.1]), bow: norm([0.15, 1, 0]), cast: norm([0.08, 1, 0]) };
 const UP: V3 = [0, 1, 0], SIDE: V3 = [0, 0, 1];
 
+/**
+ * Arms with an elbow (`FigureModel.elbow`; the description's `arms.elbow`). Angles in rad, lengths as shares of the arm's length; first values.
+ * `carry`: how far forward of the hanging upper arm the forearm is held while its hand holds that kind of weapon, so the weapon stands in
+ * front of the body and not inside the arm; `free`: an empty hand's forearm. `carrySwing`: the share of the walk's arm swing a carrying
+ * arm keeps. `swing`, `cast`: how far the forearm is bent up from the upper arm's line in those poses (the bow arm is straight). `string`: the string's
+ * place behind the bow hand before the draw; `anchor`: how far from its shoulder the drawing hand stops at full draw (the arm is then bent);
+ * `clear`: how far ahead of its shoulder, along the line of the shot, the drawing hand stays at least.
+ */
+export const ELBOW = { carry: { melee: 0.95, bow: 1.2, cast: 1.0 }, free: 0.15, carrySwing: 0.3, swing: 0.3, cast: 0.5, string: 0.2, anchor: 0.8, clear: 0.3 } as const;
+/** How the hand of a bent arm carries its weapon, in the body's frame: its length and its face. Blade and bow are turned a little, so they are edge-on neither from the front nor from the side. */
+const CARRY: Record<'melee' | 'bow' | 'cast', { b: V3; n: V3 }> = {
+  melee: { b: norm([0.42, 0.9, 0.1]), n: [Math.sin(0.5), 0, Math.cos(0.5)] },
+  bow: { b: norm([0.1, 1, 0]), n: [Math.sin(0.5), 0, Math.cos(0.5)] },
+  cast: { b: norm([0.08, 1, 0]), n: [0, 0, 1] },
+};
+
 interface AttackScratch {
   k: number; right: V3; left: V3; useRight: boolean; useLeft: boolean; b: V3; n: V3; twist: number; lean: number;
   longR: number; longL: number; lunge: number; head: number;
@@ -169,8 +198,12 @@ interface AttackScratch {
   back: number; fwd: number;
   /** Which hand the pose's weapon basis (`b`, `n`) is for: 0 right, 1 left. */
   hand: 0 | 1;
+  /** For arms with an elbow only: how far each forearm is bent up from its upper arm's line (rad). */
+  flexR: number; flexL: number;
+  /** For arms with an elbow only: the right hand is on the string of the left hand's bow, drawn this far (0 to 1); -1: it is not. */
+  draw: number;
 }
-const AP: AttackScratch = { k: 0, right: [0, 0, 0], left: [0, 0, 0], useRight: false, useLeft: false, b: [0, 1, 0], n: [0, 0, 1], twist: 0, lean: 0, longR: 1, longL: 1, lunge: 0, head: 0, back: 0, fwd: 0, hand: 0 };
+const AP: AttackScratch = { k: 0, right: [0, 0, 0], left: [0, 0, 0], useRight: false, useLeft: false, b: [0, 1, 0], n: [0, 0, 1], twist: 0, lean: 0, longR: 1, longL: 1, lunge: 0, head: 0, back: 0, fwd: 0, hand: 0, flexR: 0, flexL: 0, draw: -1 };
 
 /**
  * The attack at `u` (0 = it starts, 1 = back in the carrying pose): where each arm points, how the weapon lies, and `k`, how much
@@ -178,6 +211,7 @@ const AP: AttackScratch = { k: 0, right: [0, 0, 0], left: [0, 0, 0], useRight: f
  */
 function attackPose(style: AttackStyle, u: number, arc: number): void {
   AP.k = 0; AP.useRight = AP.useLeft = false; AP.twist = AP.lean = 0; AP.longR = AP.longL = 1; AP.lunge = AP.head = 0; AP.back = AP.fwd = 0; AP.hand = 0;
+  AP.flexR = AP.flexL = 0; AP.draw = -1;
   if (u < 0) return;
   u = Math.min(1, u);
   if (style === 'butt') {
@@ -195,7 +229,7 @@ function attackPose(style: AttackStyle, u: number, arc: number): void {
     const s = ease((u - 0.2) / 0.36), a0 = arc / 2 + 0.45, a1 = -arc / 2 - 0.25, al = a0 + (a1 - a0) * s, e = 0.3 - 0.45 * s;
     norm(set3(AP.right, Math.cos(al), e, Math.sin(al))); AP.useRight = true;
     norm(set3(AP.b, Math.cos(al - 0.2 * s), e * 0.5, Math.sin(al - 0.2 * s))); AP.n[0] = UP[0]; AP.n[1] = UP[1]; AP.n[2] = UP[2];
-    AP.twist = -0.22 * al; AP.lean = 0.12 * s; AP.longR = 1.6;
+    AP.twist = -0.22 * al; AP.lean = 0.12 * s; AP.longR = 1.6; AP.flexR = ELBOW.swing;
   } else if (style === 'shot') {
     // Lift the bow, draw, let go at 0.55, lower.
     AP.k = u < 0.2 ? ease(u / 0.2) : 1 - ease((u - 0.72) / 0.28);
@@ -203,13 +237,13 @@ function attackPose(style: AttackStyle, u: number, arc: number): void {
     norm(set3(AP.left, 1, 0.12, 0.1)); AP.useLeft = true;
     norm(set3(AP.right, 1 - 1.25 * dr, 0.12 + 0.1 * dr, -0.45 + 0.9 * dr)); AP.useRight = true;
     set3(AP.b, 0, 1, 0); set3(AP.n, Math.sin(0.5), 0, Math.cos(0.5)); AP.twist = -0.5;   // the archer's stance: the left shoulder turns to the front
-    AP.lean = -0.03; AP.longL = 2.3; AP.longR = 2.3 - 1.3 * dr; AP.hand = 1;
+    AP.lean = -0.03; AP.longL = 2.3; AP.longR = 2.3 - 1.3 * dr; AP.hand = 1; AP.draw = dr;
   } else {
     // Lift the arm and tip the staff forward; the light leaves its head at 0.42.
     AP.k = u < 0.3 ? ease(u / 0.3) : 1 - ease((u - 0.62) / 0.38);
     const push = Math.sin(Math.PI * Math.min(1, u / 0.7));
     norm(set3(AP.right, 1, 0.3 + 0.25 * push, 0.2)); AP.useRight = true;
-    norm(set3(AP.b, 0.55 + 0.3 * push, 0.75, 0)); AP.n[0] = SIDE[0]; AP.n[1] = SIDE[1]; AP.n[2] = SIDE[2]; AP.lean = 0.06 * push; AP.longR = 1.5;
+    norm(set3(AP.b, 0.55 + 0.3 * push, 0.75, 0)); AP.n[0] = SIDE[0]; AP.n[1] = SIDE[1]; AP.n[2] = SIDE[2]; AP.lean = 0.06 * push; AP.longR = 1.5; AP.flexR = ELBOW.cast;
   }
 }
 
@@ -225,6 +259,7 @@ function slamPose(d: FigureDef, t: number): void {
   norm(set3(AP.b, 0.3 + 0.6 * down, 1 - 1.5 * down, 0)); AP.n[0] = SIDE[0]; AP.n[1] = SIDE[1]; AP.n[2] = SIDE[2];
   AP.twist = 0; AP.lean = -0.12 * (1 - 2 * down) * up;   // leaning back (the negative lean) while it is up, forward as it comes down
   AP.longR = AP.longL = 1.4; AP.lunge = 0; AP.head = 0; AP.back = AP.fwd = 0;
+  AP.flexR = AP.flexL = ELBOW.swing; AP.draw = -1;
 }
 
 /** The butt's curve (the page's): reared back by `u` 0.35, the strike takes `strike` of it; a wind-up holds `hold`, the strike and return last `secs` (s). */
@@ -305,6 +340,70 @@ function useQ(b: number, q: Q4): void {
 
 function resetLocals(): void {
   for (const L of locals) { L.rx = L.ry = L.rz = L.tx = L.ty = L.tz = 0; L.sx = L.sy = L.sz = 1; L.q = undefined; }
+}
+
+const qf: Q4 = [0, 0, 0, 1], qu: Q4 = [0, 0, 0, 1], qv: Q4 = [0, 0, 0, 1], qz: Q4 = [0, 0, 0, 1], qhand: Q4 = [0, 0, 0, 1];
+const dirU: V3 = [0, 0, 0], dirF: V3 = [0, 0, 0], bowDir: V3 = [0, 0, 0];
+
+/**
+ * The drawing arm of a shot, for an arm with an elbow: the right hand lies on the line of the shot behind the bow hand, at the string
+ * before the draw and, at full draw, where that line comes within `ELBOW.anchor` of the right shoulder; the elbow points back along the
+ * line and a little up and out. All in the body's frame at the full twist of the stance. Writes the upper arm's direction to `dirU` and
+ * the forearm's to `dirF`.
+ */
+function drawArm(m: FigureModel, up: number, fore: number): void {
+  const P = m.pivots, sR = ARM[0] * 3, sL = ARM[1] * 3, L = up + fore;
+  // The bow hand at the end of the straight left arm, seen from the right shoulder.
+  const rx = P[sL] + L * bowDir[0] - P[sR], ry = P[sL + 1] + L * bowDir[1] - P[sR + 1], rz = P[sL + 2] + L * bowDir[2] - P[sR + 2];
+  // The line of the shot: the figure's heading, in the frame of the twisted body.
+  const ax = Math.cos(AP.twist), az = Math.sin(AP.twist);
+  const along = rx * ax + rz * az, off2 = rx * rx + ry * ry + rz * rz - along * along, reach = ELBOW.anchor * L;
+  // At full draw: where the line comes within reach, but never nearer the shoulder's own place along the line than `clear` (the hand stays in front of the chest).
+  const rest = ELBOW.string * L, full = Math.max(rest, Math.min(along - Math.sqrt(Math.max(0, reach * reach - off2)), along - ELBOW.clear * L));
+  const s = rest + (full - rest) * clamp01(AP.draw);
+  const tx = rx - s * ax, ty = ry, tz = rz - s * az, dist = Math.hypot(tx, ty, tz) || 1e-6;
+  const ux = tx / dist, uy = ty / dist, uz = tz / dist;
+  // Two bones to a point: the angle at the shoulder from the three lengths (an unreachable point straightens the arm).
+  const dc = Math.max(Math.abs(up - fore) + 1e-3, Math.min((up + fore) * 0.999, dist));
+  const cosA = Math.max(-1, Math.min(1, (up * up + dc * dc - fore * fore) / (2 * up * dc))), sinA = Math.sqrt(1 - cosA * cosA);
+  // The elbow's side: back along the line, a little up and out, squared against the line to the hand.
+  let px = -ax, py = 0.35, pz = -az + 0.35;
+  const along2 = px * ux + py * uy + pz * uz;
+  px -= along2 * ux; py -= along2 * uy; pz -= along2 * uz;
+  const pl = Math.hypot(px, py, pz);
+  if (pl < 1e-4) { px = 0; py = 1; pz = 0; } else { px /= pl; py /= pl; pz /= pl; }
+  set3(dirU, cosA * ux + sinA * px, cosA * uy + sinA * py, cosA * uz + sinA * pz);
+  norm(set3(dirF, dc * ux - up * dirU[0], dc * uy - up * dirU[1], dc * uz - up * dirU[2]));
+}
+
+/**
+ * The arms of a model with elbows (`m.elbow`): the upper arm hangs and swings as any arm, the forearm (the hand bone, which turns about
+ * the elbow) is held forward while its hand carries a weapon, and bends in an attack; the drawing hand of a shot goes to the string
+ * (`drawArm`). These arms are never lengthened. `lift`: how far the arms stand off the sides (rad); `stride`: the walk's arm swing (rad);
+ * `sway`: the breathing.
+ */
+function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride: number, sway: number): void {
+  const up = m.elbow!, fore = m.armLength - up;
+  const held = d.weapon ? (weaponBoneOf(d.weapon) === 'weaponR' ? 0 : 1) : -1;
+  // Where the left arm points in an attack: the pose's own direction, or in a shot of a `bowAhead` model the line of the shot (the figure's heading in the twisted body's frame), lifted as the pose lifts it.
+  if (AP.draw >= 0 && m.bowAhead) norm(set3(bowDir, Math.cos(AP.twist), AP.left[1], Math.sin(AP.twist)));
+  else set3(bowDir, AP.left[0], AP.left[1], AP.left[2]);
+  for (let side = 0; side < 2; side++) {
+    const sd = side === 0 ? 1 : -1, holds = held === side;
+    const kind = side === 1 ? 'bow' : d.mount === 'staff' ? 'cast' : 'melee';
+    eulerQ(-sd * lift, 0, -sd * stride * (holds ? ELBOW.carrySwing : 1) + sway, qa);
+    mulQ(qa, aboutZ(holds ? ELBOW.carry[kind] : ELBOW.free, qz), qf);
+    if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) {
+      if (side === 0 && AP.draw >= 0) { drawArm(m, up, fore); fromDown(dirU, qu); fromDown(dirF, qv); }
+      else { fromDown(side === 0 ? AP.right : bowDir, qu); mulQ(qu, aboutZ(side === 0 ? AP.flexR : AP.flexL, qz), qv); }
+      slerp(qa, qu, k); slerp(qf, qv, k);
+    }
+    useQ(ARM[side], qa); useQ(HAND[side], relQ(qa, qf, qhand));
+    // The weapon keeps its carrying pose in the body's frame while the hand under it moves; an attack turns it from there.
+    if (holds) basisQ(CARRY[kind].b, CARRY[kind].n, qr); else basisQ(REST[kind], SIDE, qr);
+    if (k > 0 && AP.hand === side && basisQ(AP.b, AP.n, qw)) slerp(qr, qw, k);
+    useQ(WEAPON[side], relQ(qf, qr, qrel));
+  }
 }
 
 function newPose(yaw: number): Pose3d {
@@ -487,7 +586,8 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   }
 
   // ---- the arms and what they hold ----
-  if (m.armLength > 0) {
+  if (m.armLength > 0 && m.elbow !== undefined) elbowArms(m, d, k, 0.16 + 0.05 * w + 0.3 * armAir * w, th * 1.15 * GAIT.armSwing, 0.04 * breath * idle);
+  else if (m.armLength > 0) {
     for (let side = 0; side < 2; side++) {
       const sd = side === 0 ? 1 : -1;
       eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * armAir * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);

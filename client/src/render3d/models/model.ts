@@ -60,6 +60,10 @@ export interface FigureModel {
   weaponScale?: number;
   /** The share of a blow's arm lengthening this model takes (default 1: the whole of it, as the short-armed figures). */
   armStretch?: number;
+  /** The upper arm's length, model px: the hand bones turn about an elbow that far below the shoulders (their pivots), and carry the forearms. */
+  elbow?: number;
+  /** With an elbow: in a shot the bow arm points straight ahead from its shoulder (the description's `arms.bowAhead`). */
+  bowAhead?: true;
   /** How high the model hops, in model px per unit of the hop. */
   hop?: number;
   /** The index in `bends` of the neck. */

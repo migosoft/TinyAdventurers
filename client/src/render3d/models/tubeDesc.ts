@@ -60,8 +60,26 @@ export interface TubeDesc {
   parents: Partial<Record<Bone, Bone>>;
   /** 'two': an upright figure that walks on two legs (or none). Absent: four legs, as before. */
   stance?: 'two';
-  /** 'two' only: both arms hang straight down from the pivots of armR and armL; a hand ball ends each. */
-  arms?: { length: number; radius: number; /** The share of a blow's arm lengthening these arms take (default 1); arms of a natural length need little. */ stretch?: number };
+  /**
+   * 'two' only: both arms hang straight down from the pivots of armR and armL; a hand ball ends each, its middle `length` below the
+   * shoulder. A held weapon's grip lies in that middle (the weapon bones' pivots).
+   */
+  arms?: {
+    length: number; radius: number;
+    /** The share of a blow's arm lengthening these arms take (default 1); arms of a natural length need little. Arms with an elbow are never lengthened. */
+    stretch?: number;
+    /**
+     * The upper arm's length: the arm has an elbow that far below the shoulder. The pieces of the upper arm hang on `armR` / `armL`;
+     * the forearm's and the hand's hang on `handR` / `handL`, which then turn about the elbow. Such an arm carries a weapon with the
+     * forearm held forward, and draws a bow with a bent arm (pose3d.ts).
+     */
+    elbow?: number;
+    /**
+     * With an elbow: in a shot the bow arm points straight ahead from its shoulder, instead of crossing to the body's middle line. For a
+     * figure whose head stands in front of its shoulders: on the middle line the bow would pass through its face.
+     */
+    bowAhead?: true;
+  };
   /** The height (page px) below which `robe` pieces swing. */
   robeTop?: number;
   /** A factor on the size of the held weapon (default 1). */

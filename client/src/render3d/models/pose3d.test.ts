@@ -5,7 +5,7 @@ import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
 import { buildJob } from './build';
-import { ATTACK_IN_SECS, BUTT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { ATTACK_IN_SECS, BUTT, ELBOW, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
@@ -267,6 +267,121 @@ describe('the walk', () => {
       }
     }
   });
+});
+
+describe('arms with an elbow', () => {
+  // The fixture biped with an elbow 2.4 px below the shoulders (arms 5 long, shoulders 3 px to either side), posed by the game's own kinds.
+  const m = buildTubeFigure('elbowBiped', { ...biped, arms: { ...biped.arms!, elbow: 2.4 } }), straight = buildTubeFigure('biped', biped);
+  const L = m.armLength, blade = FIGURES[KIND.Knight], bow = FIGURES[KIND.OrcArcher], staff = FIGURES[KIND.Necromancer], bare = FIGURES[KIND.Imp];
+  type Side = 'R' | 'L';
+  /** Where the grip (the middle of the hand) is, moved by the hand bone and by the weapon bone, and the shoulder and the elbow: all in model space. */
+  const grip = (p: Pose3d, s: Side): [number, number, number] => apply(p, bone(`hand${s}`), pivot(m, `weapon${s}`));
+  const shoulder = (p: Pose3d, s: Side): [number, number, number] => apply(p, bone(`arm${s}`), pivot(m, `arm${s}`));
+  const elbowAt = (p: Pose3d, s: Side): [number, number, number] => apply(p, bone(`hand${s}`), pivot(m, `hand${s}`));
+  const sub = (a: number[], b: number[]): [number, number, number] => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const len = (a: number[]): number => Math.hypot(a[0], a[1], a[2]);
+  const angle = (a: number[], b: number[]): number => Math.acos(Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (len(a) * len(b)))));
+  /** How far the arm is bent at the elbow (0: straight). */
+  const bent = (p: Pose3d, s: Side): number => angle(sub(elbowAt(p, s), shoulder(p, s)), sub(grip(p, s), elbowAt(p, s)));
+  /** Where a weapon's own direction `v` (y its length, x its front) points in model space. */
+  const weaponDir = (p: Pose3d, s: Side, v: [number, number, number]): [number, number, number] => sub(apply(p, bone(`weapon${s}`), sub(pivot(m, `weapon${s}`), [-v[0], -v[1], -v[2]])), apply(p, bone(`weapon${s}`), pivot(m, `weapon${s}`)));
+  const idle = (d: FigureDef): Pose3d => copyPose(poseFigure(m, d, view(), 0, settled()));
+  /** The full draw: the shot's pose once it is blended in (the game's shot starts at the release, so the string hand is at its anchor). */
+  const drawn = (mm: FigureModel = m): Pose3d => copyPose(poseFigure(mm, bow, view({ anim: ANIM.Shoot, animT: ATTACK_IN_SECS }), 0, settled()));
+
+  it('turn the hand bones about the elbow, and keep the two parts of the arm their lengths in every pose', () => {
+    expect(m.elbow).toBe(2.4); expect(straight.elbow).toBeUndefined();
+    expect(pivot(m, 'handR')[1]).toBeCloseTo(12 - 2.4, 5);
+    for (const p of [idle(blade), idle(bow), drawn(), copyPose(poseFigure(m, blade, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, settled())), copyPose(poseFigure(m, staff, view({ anim: ANIM.Cast, animT: 0.05 }), 0, settled()))]) {
+      for (const s of ['R', 'L'] as const) {
+        expect(len(sub(elbowAt(p, s), shoulder(p, s)))).toBeCloseTo(2.4, 5);   // never lengthened
+        expect(len(sub(grip(p, s), elbowAt(p, s)))).toBeCloseTo(L - 2.4, 5);
+        // The grip of the weapon is the middle of the hand, whatever the arm does.
+        const g = grip(p, s), w = apply(p, bone(`weapon${s}`), pivot(m, `weapon${s}`));
+        for (let i = 0; i < 3; i++) expect(w[i]).toBeCloseTo(g[i], 5);
+      }
+    }
+  });
+
+  it('hold the forearm of the hand that carries a weapon forward, by the angle of its kind; an empty hand hangs', () => {
+    expect(ELBOW.carry).toEqual({ melee: 0.95, bow: 1.2, cast: 1.0 });
+    const cases: [FigureDef, Side, number][] = [[blade, 'R', ELBOW.carry.melee], [bow, 'L', ELBOW.carry.bow], [staff, 'R', ELBOW.carry.cast]];
+    for (const [d, s, want] of cases) {
+      const p = idle(d), other = s === 'R' ? 'L' : 'R';
+      expect(bent(p, s)).toBeCloseTo(want, 5);
+      expect(bent(p, other)).toBeCloseTo(ELBOW.free, 5);
+      expect(grip(p, s)[0]).toBeGreaterThan(shoulder(p, s)[0] + 0.3 * L);   // the hand is in front of the body ...
+      expect(grip(p, s)[1]).toBeLessThan(shoulder(p, s)[1] - 0.4 * L);      // ... below the shoulder
+      expect(Math.abs(grip(p, other)[0] - shoulder(p, other)[0])).toBeLessThan(0.15 * L);
+    }
+    const p = idle(bare);
+    expect(bent(p, 'R')).toBeCloseTo(ELBOW.free, 5); expect(bent(p, 'L')).toBeCloseTo(ELBOW.free, 5);
+  });
+
+  it('carry a blade up and forward out of the fist, a bow upright with the string towards the body, a staff upright', () => {
+    const sword = weaponDir(idle(blade), 'R', [0, 1, 0]);
+    expect(sword[1]).toBeGreaterThan(0.8); expect(sword[0]).toBeGreaterThan(0.3);
+    const p = idle(bow), limb = weaponDir(p, 'L', [0, 1, 0]), string = weaponDir(p, 'L', [-1, 0, 0]);   // a bow's string lies on the -x side of its grip (weapons.ts)
+    expect(limb[1]).toBeGreaterThan(0.95);
+    expect(string[0]).toBeLessThan(-0.7);
+    expect(weaponDir(idle(staff), 'R', [0, 1, 0])[1]).toBeGreaterThan(0.95);
+    // Neither blade nor bow is edge-on from the front or from the side: its face is turned between the two.
+    for (const [d, s] of [[blade, 'R'], [bow, 'L']] as const) {
+      const face = weaponDir(idle(d), s, [0, 0, 1]);
+      expect(Math.abs(face[0])).toBeGreaterThan(0.3); expect(Math.abs(face[2])).toBeGreaterThan(0.3);
+    }
+  });
+
+  it('swing a carrying arm less in the walk than a free one', () => {
+    const p = copyPose(poseFigure(m, blade, view({ anim: ANIM.Move }), 0, settled({ walk: 1, phi: Math.PI / 2 })));
+    const ratio = Math.abs(turnOf(m, p, bone('armR')) / turnOf(m, p, bone('armL')));
+    expect(ELBOW.carrySwing).toBe(0.3);
+    expect(ratio).toBeGreaterThan(0.25); expect(ratio).toBeLessThan(0.35);
+  });
+
+  it('draw the bow with a bent arm: the hand on the line of the shot behind the bow hand, ELBOW.anchor of the arm from its shoulder, the elbow behind it', () => {
+    const p = drawn(), g = grip(p, 'R'), s = shoulder(p, 'R'), b = grip(p, 'L');
+    expect(bent(p, 'R')).toBeGreaterThan(0.9);                    // a clear bend, not a stick
+    expect(bent(p, 'L')).toBeLessThan(1e-3);                      // the bow arm is straight
+    expect(len(sub(g, s))).toBeCloseTo(ELBOW.anchor * L, 3);
+    // In model space the figure's heading is +x: the drawing hand is straight behind the bow hand (further than the string's place), at its height
+    // (but for the stance's slight lean).
+    expect(b[0] - g[0]).toBeGreaterThan(ELBOW.string * L + 0.3 * L);
+    expect(Math.abs(g[2] - b[2])).toBeLessThan(0.05); expect(Math.abs(g[1] - b[1])).toBeLessThan(0.25);
+    expect(g[0]).toBeGreaterThan(s[0]);                           // in front of the chest
+    expect(elbowAt(p, 'R')[0]).toBeLessThan(g[0]);                // the elbow points back
+    // In a wind-up (the drawn bow held) the arm is as bent.
+    expect(bent(copyPose(poseFigure(m, bow, view({ anim: ANIM.Windup }), 0, settled())), 'R')).toBeCloseTo(bent(p, 'R'), 3);
+  });
+
+  it('aim the bow straight ahead from its shoulder when the model says so (bowAhead), on the body\'s middle line otherwise', () => {
+    const ahead = drawn({ ...m, bowAhead: true }), cross = drawn();
+    const z = (p: Pose3d): number => grip(p, 'L')[2];
+    expect(Math.abs(z(ahead) - shoulder(ahead, 'L')[2])).toBeLessThan(0.05);   // but for the stance's slight lean
+    expect(Math.abs(z(cross))).toBeLessThan(Math.abs(z(ahead)) - 0.5);
+    // The drawing hand still reaches towards that line, in front of the chest by at least ELBOW.clear of the arm.
+    const g = grip(ahead, 'R'), s = shoulder(ahead, 'R');
+    expect(len(sub(g, s))).toBeLessThanOrEqual(L + 1e-6);
+    expect(g[0] - s[0]).toBeGreaterThan(0.5 * ELBOW.clear * L);
+    expect(g[2]).toBeLessThan(s[2] - 0.3 * L);                    // across the chest, towards the bow
+  });
+
+  it('bend the forearm up in a swing and a cast, and are never lengthened', () => {
+    const swing = copyPose(poseFigure(m, blade, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, settled()));
+    expect(bent(swing, 'R')).toBeCloseTo(ELBOW.swing, 2);
+    expect(stretchOf(m, swing, bone('armR'))).toBeCloseTo(1, 6);
+    expect(stretchOf(m, swing, bone('handR'))).toBeCloseTo(1, 6);
+    const cast = copyPose(poseFigure(m, staff, view({ anim: ANIM.Windup }), 0, settled()));
+    expect(bent(cast, 'R')).toBeCloseTo(ELBOW.cast, 2);
+    expect(grip(cast, 'R')[1]).toBeGreaterThan(grip(idle(staff), 'R')[1] + 0.3 * L);   // the staff hand is lifted
+  });
+
+  it('are what the weapon carriers of the nine have: goblin, orc, knight and the robes; the imp and the chort keep straight arms', () => {
+    for (const k of ['goblin', 'orc', 'npcKnight', 'necromancer', 'summoner', 'disciple'] as const) expect(tube(k).elbow, k).toBeGreaterThan(0.3 * tube(k).armLength);
+    for (const k of ['imp', 'chort'] as const) expect(tube(k).elbow, k).toBeUndefined();
+    expect(tube('goblin').bowAhead).toBe(true);
+    expect(tube('orc').bowAhead).toBeUndefined();
+  }, SLOW);
 });
 
 describe('legs of two bones', () => {

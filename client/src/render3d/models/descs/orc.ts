@@ -35,12 +35,13 @@ add({
 add({ shape: { tube: [{ p: [0, 7.7], r: 2.8, wide: 1.2 }, { p: [0, 5.6], r: 3.2, wide: 1.18 }], opts: { K: 22, N: 6, ref: [0, 0, 1], cap: 0.2 } }, stage: 'body', bone: 'body', line: 0.45, colour: WRAP });
 add({ shape: { tube: [{ p: [0, 7.9], r: 2.9, wide: 1.2 }, { p: [0.03, 8.6], r: 2.75, wide: 1.2 }], opts: { K: 22, N: 4, ref: [0, 0, 1], cap: 0.12 } }, stage: 'collar', bone: 'body', line: 0.3, colour: BELT });
 
-// ---- the arms: thick, hanging to the thighs, a round shoulder on each ----
-const R = 1.25, armLen = 6.2, shoulderY = 12.2, shoulderZ = 3.0 * 1.38 + 0.35 * R;
+// ---- the arms: thick, hanging to the thighs, a round shoulder on each; the upper arm to the elbow, the forearm and the fist on the hand bone ----
+const R = 1.25, armLen = 6.2, elbow = 2.9, shoulderY = 12.2, shoulderZ = 3.0 * 1.38 + 0.35 * R;
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const z = sd * shoulderZ;
   add({ shape: { ball: [R * 1.25, R * 1.1, R * 1.2] }, at: [0.3, shoulderY + 0.15, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: SKIN });
-  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 1.1 }, { p: [0, -armLen * 0.45, 0], r: R * 1.05 }, { p: [0, -armLen, 0], r: R * 0.95 }], opts: { K: 12, N: 10 } }, at: [0.3, shoulderY, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 1.1 }, { p: [0, -elbow, 0], r: R * 1.05 }], opts: { K: 12, N: 6 } }, at: [0.3, shoulderY, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, -elbow, 0], r: R * 1.05 }, { p: [0, -armLen, 0], r: R * 0.95 }], opts: { K: 12, N: 6 } }, at: [0.3, shoulderY, z], stage: 'arms', bone: `hand${s}`, line: 0.4, colour: SKIN });
   add({ shape: { ball: [R * 1.05, R * 1.05, R * 1.05] }, at: [0.3, shoulderY - armLen, z], stage: 'arms', bone: `hand${s}`, line: 0.4, colour: SKIN });
   pivots[`arm${s}`] = [0.3, shoulderY, z];
 }
@@ -65,8 +66,7 @@ for (const sd of [1, -1]) {
 export const orc: TubeDesc = {
   name: 'Orc', size: fitSize(HEIGHT_FACTOR.orc, 18.998), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
-  // Arms of this length reach a blow almost by themselves: they take a third of the lengthening the short-armed figures need.
-  stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
+  stance: 'two', arms: { length: armLen, radius: R, elbow },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],
   footprint: [2.4, 3.2],
 };

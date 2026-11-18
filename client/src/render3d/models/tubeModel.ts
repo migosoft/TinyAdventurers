@@ -45,16 +45,18 @@ function swayAxis(name: string, s: Shape): { dir: [number, number, number]; len:
 
 interface Built { piece: TubePiece; stage: number; line: boolean; mesh: Mesh3; uv: Float32Array | null; bend: number }
 
-/** The pivots of a description: its own, and with arms the hands' and weapons' derived from the shoulders. */
+/**
+ * The pivots of a description: its own, and with arms the hands' and weapons' derived from the shoulders. A hand bone turns about
+ * the shoulder, or about the elbow if the arms have one; a weapon's grip lies in the middle of the hand ball, `length` below the shoulder.
+ */
 function pivotsOf(d: TubeDesc): Partial<Record<Bone, Vec3>> {
   const pv = { ...d.pivots };
   if (d.stance === 'two' && d.arms) {
-    const handY = -d.arms.length + 0.8 * d.arms.radius;
     for (const s of ['R', 'L'] as const) {
       const shoulder = d.pivots[`arm${s}`];
       if (!shoulder) throw new Error(`${d.name}: arms need a pivot for arm${s}`);
-      pv[`hand${s}`] = [shoulder[0], shoulder[1], shoulder[2]];
-      pv[`weapon${s}`] = [shoulder[0], shoulder[1] + handY, shoulder[2]];
+      pv[`hand${s}`] = [shoulder[0], shoulder[1] - (d.arms.elbow ?? 0), shoulder[2]];
+      pv[`weapon${s}`] = [shoulder[0], shoulder[1] - d.arms.length, shoulder[2]];
     }
   }
   return pv;
@@ -63,6 +65,7 @@ function pivotsOf(d: TubeDesc): Partial<Record<Bone, Vec3>> {
 function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
   if (d.arms && d.stance !== 'two') throw new Error(`${d.name}: arms need stance 'two'`);
   if (d.arms && (['handR', 'handL', 'weaponR', 'weaponL'] as const).some((b) => d.pivots[b])) throw new Error(`${d.name}: hand and weapon pivots are derived from arms`);
+  if (d.arms?.elbow !== undefined && !(d.arms.elbow > 0 && d.arms.elbow < d.arms.length)) throw new Error(`${d.name}: the elbow must lie between the shoulder and the hand`);
   for (const p of d.pieces) {
     if (p.bone !== 'hips' && !pv[p.bone]) throw new Error(`${d.name}: the bone ${p.bone} of a piece has no pivot`);
     if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);
@@ -160,10 +163,12 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     key, position, normal, uv, skin, look, index, ranges, pieceIndex, lineIndex, pivots, parents,
     bends, robeTop: d.robeTop ?? null, paint: { w: PAINT_W, h: PAINT_H, data: paint },
     baseHeight: headTop * scale, radius: reach / 16 * scale, hatSway: 0, size: 1,
-    shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length + 0.8 * d.arms!.radius : 0,
+    shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length : 0,
     armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],
     ...(two ? { gait: 'walk' as const } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
     ...(armed && d.arms!.stretch !== undefined ? { armStretch: d.arms!.stretch } : {}),
+    ...(armed && d.arms!.elbow !== undefined ? { elbow: d.arms!.elbow } : {}),
+    ...(armed && d.arms!.elbow !== undefined && d.arms!.bowAhead ? { bowAhead: true as const } : {}),
     legs: d.legs.map((l) => ({ upper: BONES.indexOf(l.upper), lower: l.lower ? BONES.indexOf(l.lower) : -1, front: two ? false : l.front, ...(two ? { knee: l.knee ?? 1 } : {}) })),
     hop: d.hop, neckBend: bends.findIndex((b) => b.neck), butt: d.pieces.some((p) => p.bone === 'hat'), varies: true,
     stands, footprint: [d.footprint[0], d.footprint[1]],

@@ -36,11 +36,12 @@ add({ shape: { tube: [{ p: [0, 7.5], r: 2.35, wide: 1.2 }, { p: [0, 5.8], r: 2.7
 add({ shape: { tube: [{ p: [0, 7.6], r: 2.42, wide: 1.2 }, { p: [0.03, 8.3], r: 2.36, wide: 1.2 }], opts: { K: 22, N: 4, ref: [0, 0, 1], cap: 0.12 } }, stage: 'collar', bone: 'body', line: 0.3, colour: ACCENT });
 
 // ---- the arms: mail at the upper arm, a plate vambrace, a blue gauntlet, a pauldron over each shoulder ----
-const R = 0.95, armLen = 5.4, shoulderX = 0.3, shoulderY = 11.5, shoulderZ = chestR * chestW + 0.35 * R;
+// The mail reaches to the elbow; the vambrace and the gauntlet hang on the hand bone, which turns there.
+const R = 0.95, armLen = 5.4, elbow = 2.55, shoulderX = 0.3, shoulderY = 11.5, shoulderZ = chestR * chestW + 0.35 * R;
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const z = sd * shoulderZ;
-  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 0.95 }, { p: [0, -armLen * 0.5, 0], r: R * 0.9 }], opts: { K: 12, N: 6 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: ACCENT });
-  add({ shape: { tube: [{ p: [0, -armLen * 0.45, 0], r: R * 1.1 }, { p: [0, -armLen, 0], r: R * 0.95 }], opts: { K: 12, N: 6, cap: 0.4 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: STEEL, metal: true });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 0.95 }, { p: [0, -elbow, 0], r: R * 0.9 }], opts: { K: 12, N: 6 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: ACCENT });
+  add({ shape: { tube: [{ p: [0, -elbow + 0.1, 0], r: R * 1.1 }, { p: [0, -armLen, 0], r: R * 0.95 }], opts: { K: 12, N: 6, cap: 0.4 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `hand${s}`, line: 0.4, colour: STEEL, metal: true });
   add({ shape: { ball: [R * 1.1, R * 1.1, R * 1.1] }, at: [shoulderX, shoulderY - armLen, z], stage: 'arms', bone: `hand${s}`, line: 0.4, colour: ACCENT });
   // The pauldron: a flat cap, wider than the arm, that sits on the shoulder and reaches out to the side.
   add({ shape: { ball: [1.7, 1.05, 1.75] }, at: [shoulderX, shoulderY + 0.5, z + sd * 0.2], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: STEEL, metal: true });
@@ -106,8 +107,7 @@ add({ shape: { tube: comb, opts: { K: 8, N: 18, ref: [0, 0, 1] } }, stage: 'hair
 export const npcKnight: TubeDesc = {
   name: 'Knight', size: fitSize(HEIGHT_FACTOR.knight, 18.021), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
-  // Arms of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
-  stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
+  stance: 'two', arms: { length: armLen, radius: R, elbow },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],
   footprint: [2.3, 2.5],
 };

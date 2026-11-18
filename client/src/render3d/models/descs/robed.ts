@@ -65,13 +65,16 @@ export function robedDesc(v: RobedLook): TubeDesc {
   add({ shape: { ball: [2.35 * wk, 1.3, 2.8 * wk], pow: 0.85 }, at: [0.2, S - 0.15, 0], stage: 'body', bone: 'body', line: 0.45, colour: v.robe });
 
   // ---- the sleeves: long, widening to the cuff; a hand under each, or none ----
-  const R = 0.95 * wk, armLen = 0.46 * S, shoulderY = S - 0.35, shoulderZ = 2.2 * wk * 1.2 + 0.55 * R;
+  // The upper sleeve reaches to the elbow (a ball closes the joint); the lower sleeve, the cuff and the hand hang on the hand bone, which turns there.
+  const R = 0.95 * wk, armLen = 0.46 * S, elbow = 0.47 * armLen, shoulderY = S - 0.35, shoulderZ = 2.2 * wk * 1.2 + 0.55 * R;
   const pivots: TubeDesc['pivots'] = { body: [0, waist, 0], head: [0.3, S + 0.3, 0] };
   for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
     const at: Vec3 = [0.15, shoulderY, sd * shoulderZ], end = v.hands ? armLen - 0.75 * R : armLen;
     add({ shape: { ball: [R * 1.15, R * 1.1, R * 1.1] }, at: [at[0], at[1] + 0.1, at[2]], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: v.robe });
-    add({ shape: { tube: [{ p: [0, 0, 0], r: R }, { p: [0, -0.55 * end, 0], r: R * 1.1 }, { p: [0, -end, 0], r: R * 1.5 }], opts: { K: 14, N: 12, cap: 0.3 } }, at, stage: 'arms', bone: `arm${s}`, line: 0.4, colour: v.robe });
-    add({ shape: { tube: [{ p: [0, 0.55 - end, 0], r: R * 1.55 }, { p: [0, -end, 0], r: R * 1.6 }], opts: { K: 14, N: 3, cap: 0.3 } }, at, stage: 'arms', bone: `arm${s}`, line: 0.3, colour: v.edge });
+    add({ shape: { tube: [{ p: [0, 0, 0], r: R }, { p: [0, -elbow, 0], r: R * 1.08 }], opts: { K: 14, N: 6, cap: 0.3 } }, at, stage: 'arms', bone: `arm${s}`, line: 0.4, colour: v.robe });
+    add({ shape: { ball: [R * 1.08, R * 1.08, R * 1.08] }, at: [at[0], at[1] - elbow, at[2]], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: v.robe });
+    add({ shape: { tube: [{ p: [0, -elbow, 0], r: R * 1.08 }, { p: [0, -end, 0], r: R * 1.5 }], opts: { K: 14, N: 8, cap: 0.3 } }, at, stage: 'arms', bone: `hand${s}`, line: 0.4, colour: v.robe });
+    add({ shape: { tube: [{ p: [0, 0.55 - end, 0], r: R * 1.55 }, { p: [0, -end, 0], r: R * 1.6 }], opts: { K: 14, N: 3, cap: 0.3 } }, at, stage: 'arms', bone: `hand${s}`, line: 0.3, colour: v.edge });
     if (v.hands) add({ shape: { ball: [R * 0.95, R * 0.95, R * 0.95] }, at: [at[0], at[1] - armLen, at[2]], stage: 'arms', bone: `hand${s}`, line: 0.35, colour: HOLLOW });
     pivots[`arm${s}`] = at;
   }
@@ -105,8 +108,7 @@ export function robedDesc(v: RobedLook): TubeDesc {
   return {
     name: v.name, size: 1, outline: 0x222222, pieces, pivots,
     parents: { head: 'body' },
-    // Sleeves of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
-    stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 }, robeTop: waist,
+    stance: 'two', arms: { length: armLen, radius: R, elbow }, robeTop: waist,
     // The staff a little smaller: at the card's size its head stands in front of the hood and hides the face from the side.
     weapon: 0.8,
     legs: [],

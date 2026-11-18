@@ -252,10 +252,27 @@ describe('two-legged tube figures', () => {
     const A = biped.arms!;
     expect(m.armLength).toBe(A.length); expect(m.armRadius).toBe(A.radius);
     expect(piv('handR')).toEqual(piv('armR'));
-    expect(piv('weaponR')[1]).toBeCloseTo(piv('armR')[1] - A.length + 0.8 * A.radius, 6);
-    expect(m.handY).toBeCloseTo(-A.length + 0.8 * A.radius, 6);
+    // The grip of a weapon is the middle of the hand ball, `length` below the shoulder.
+    expect(piv('weaponR')[1]).toBeCloseTo(piv('armR')[1] - A.length, 6);
+    expect(m.handY).toBeCloseTo(-A.length, 6);
     expect(m.parents[b('handL')]).toBe(b('armL')); expect(m.parents[b('weaponL')]).toBe(b('handL')); expect(m.parents[b('armR')]).toBe(b('body'));
     expect(m.shoulderY).toBe(piv('armR')[1]);
+    expect(m.elbow).toBeUndefined(); expect(m.bowAhead).toBeUndefined();
+  });
+  it('gives arms an elbow when the description states one: the hand bones turn there, the grip stays in the hand', () => {
+    const A = biped.arms!, e = buildTubeFigure('e', { ...biped, arms: { ...A, elbow: 2, bowAhead: true } });
+    const at = (n: (typeof BONES)[number]): number[] => [...e.pivots.subarray(b(n) * 3, b(n) * 3 + 3)];
+    expect(e.elbow).toBe(2); expect(e.bowAhead).toBe(true);
+    for (const s of ['R', 'L'] as const) {
+      // (the fixture's numbers are whole, so the float32 pivots are exact)
+      expect(at(`hand${s}`)).toEqual([at(`arm${s}`)[0], at(`arm${s}`)[1] - 2, at(`arm${s}`)[2]]);
+      expect(at(`weapon${s}`)).toEqual([at(`arm${s}`)[0], at(`arm${s}`)[1] - A.length, at(`arm${s}`)[2]]);
+    }
+    expect(e.parents[b('handR')]).toBe(b('armR')); expect(e.parents[b('weaponR')]).toBe(b('handR'));
+    expect(buildTubeFigure('n', { ...biped, arms: { ...A, bowAhead: true } }).bowAhead).toBeUndefined();   // only an arm with an elbow aims that way
+    for (const bad of [0, -1, A.length, A.length + 1]) {
+      expect(() => buildTubeFigure('x', { ...biped, name: 'BadElbow', arms: { ...A, elbow: bad } }), `${bad}`).toThrow(/BadElbow: the elbow must lie between the shoulder and the hand/);
+    }
   });
   it('marks steel and carries the flutter', () => {
     const n = m.position.length / 3;
@@ -413,6 +430,20 @@ describe('the two-legged creatures', () => {
         expect(m.parents[bone(f.weapon)]).toBe(bone(f.weapon === 'weaponR' ? 'handR' : 'handL'));
       });
 
+      it('a weapon carrier has an elbow: the forearm and the fist hang on the hand bone below it, the grip is the middle of the fist', () => {
+        if (!f.weapon) return;
+        const hand = f.weapon === 'weaponR' ? 'handR' : 'handL', side = f.weapon === 'weaponR' ? 'armR' : 'armL';
+        expect(m.elbow).toBe(d.arms!.elbow);
+        expect(piv(hand)[1]).toBeCloseTo(piv(side)[1] - m.elbow!, 6);
+        // Both hands' pieces: none starts above the elbow (they would break off the upper arm when the elbow bends).
+        for (const p of d.pieces.filter((q) => q.bone === 'handR' || q.bone === 'handL')) {
+          const top = 'tube' in p.shape ? Math.max(...p.shape.tube.map((t) => t.p[1])) + (p.at?.[1] ?? 0) : (p.at?.[1] ?? 0);
+          expect(top, d.name).toBeLessThanOrEqual(piv(hand)[1] + 0.11);
+        }
+        const fist = d.pieces.find((p) => p.bone === hand && 'ball' in p.shape)!;
+        for (let i = 0; i < 3; i++) expect(fist.at![i]).toBeCloseTo(piv(f.weapon)[i], 5);
+      });
+
       it('survives the worker hand-over', () => {
         expect(structuredClone(m)).toEqual(m);
       });
@@ -551,7 +582,8 @@ describe('the two-legged creatures', () => {
     expect([mn.baseHeight, md.baseHeight]).toEqual([ms.baseHeight, ms.baseHeight]);
     expect(md.armRadius).toBeLessThanOrEqual(mn.armRadius);
     expect(md.radius).toBeLessThanOrEqual(mn.radius);
-    const hands = (t: TubeDesc): number => t.pieces.filter((p) => p.bone === 'handR' || p.bone === 'handL').length;
+    // The hand bones carry the lower sleeve and its cuff (they turn about the elbow); a hand is the ball on one.
+    const hands = (t: TubeDesc): number => t.pieces.filter((p) => (p.bone === 'handR' || p.bone === 'handL') && 'ball' in p.shape).length;
     expect([hands(n), hands(s), hands(d)]).toEqual([2, 2, 0]);
     expect(md.armLength).toBeGreaterThan(0);   // sleeve arms: it casts, it does not bite
     expect([mn.weaponScale, ms.weaponScale]).toEqual([0.8, 0.8]);   // the staff a little smaller than on the card

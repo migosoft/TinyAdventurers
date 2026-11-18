@@ -34,11 +34,13 @@ add({ shape: { drop: { r: 1.0, len: 2.7, sink: 0.5, wide: 0.45, dir: [0.12, -1, 
 add({ shape: { drop: { r: 1.0, len: 2.4, sink: 0.5, wide: 0.45, dir: [-0.15, -1, 0] } }, at: [hipX - 1.9, hipY - 0.1, 0], stage: 'collar', bone: 'body', line: 0.3, colour: RAG });
 
 // ---- the arms: thin, hanging from the forward shoulders, with big hands ----
-const R = 0.52, armLen = 3.6, shoulderZ = 1.3 * 1.3 + 0.5;
+// The upper arm reaches to the elbow; the forearm and the hand hang on the hand bone, which turns there.
+const R = 0.52, armLen = 3.6, elbow = 1.7, shoulderZ = 1.3 * 1.3 + 0.5;
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const at: Vec3 = [shoulder[0] + 0.1, shoulder[1] - 0.1, sd * shoulderZ];
   add({ shape: { ball: [R * 1.35, R * 1.3, R * 1.3] }, at: [at[0], at[1] + 0.1, at[2]], stage: 'arms', bone: `arm${s}`, line: 0.35, colour: SKIN });
-  add({ shape: { tube: [{ p: [0, 0, 0], r: R }, { p: [0, -armLen, 0], r: R * 0.9 }], opts: { K: 10, N: 8 } }, at, stage: 'arms', bone: `arm${s}`, line: 0.35, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: R }, { p: [0, -elbow, 0], r: R * 0.95 }], opts: { K: 10, N: 5 } }, at, stage: 'arms', bone: `arm${s}`, line: 0.35, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, -elbow, 0], r: R * 0.95 }, { p: [0, -armLen, 0], r: R * 0.9 }], opts: { K: 10, N: 5 } }, at, stage: 'arms', bone: `hand${s}`, line: 0.35, colour: SKIN });
   add({ shape: { ball: [R * 1.5, R * 1.5, R * 1.35] }, at: [at[0], at[1] - armLen, at[2]], stage: 'arms', bone: `hand${s}`, line: 0.35, colour: SKIN });
   pivots[`arm${s}`] = at;
 }
@@ -60,8 +62,8 @@ for (const sd of [1, -1]) {
 export const goblin: TubeDesc = {
   name: 'Goblin Archer', size: fitSize(HEIGHT_FACTOR.goblin, 11.996), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
-  // Thin arms of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
-  stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
+  // The head stands in front of the shoulders: the bow is aimed beside it, straight ahead from its shoulder.
+  stance: 'two', arms: { length: armLen, radius: R, elbow, bowAhead: true },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],
   footprint: [1.8, 2.3],
 };
