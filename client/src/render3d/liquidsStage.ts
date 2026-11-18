@@ -12,7 +12,7 @@ import { LightField } from '../game/light';
 import { TERRAIN } from '../game/terrain-layers';
 import type { EntState } from '../game/world';
 import { atlasBounds } from './atlasBounds';
-import { freeClamp, keysToWorld } from './camera';
+import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { Effects3d, FX_KIND } from './fx/effects3d';
@@ -218,7 +218,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       return c.view.draw(
         {
           ...(kit ? { models: { insts: fo.models, kit } } : {}),
-          cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },

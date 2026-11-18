@@ -2,6 +2,7 @@
 // Pitch is the angle between the view direction and the ground; yaw turns the
 // view about the vertical axis. All angles are radians.
 import { SHOT_LIFT_PX } from '../run/aim';
+import { HUMAN_HEIGHT } from './models/tubeDesc';
 
 export const ART = 16; // art px per tile
 
@@ -70,6 +71,22 @@ export function followClamp(map: { w: number; h: number }, cam: Cam, halfW: numb
     x: axis(cam.x, map.w, c * halfW + s * hd),
     z: axis(cam.z, map.h, s * halfW + c * hd),
   };
+}
+
+/** The dev pages' zoom range over which the aim rises: none up to `CLOSE_FROM` (the old closest zoom), all of it from `CLOSE_TO`. */
+export const CLOSE_FROM = 8, CLOSE_TO = 16;
+
+/**
+ * The dev pages' camera for the close zoom (#356): past `CLOSE_FROM` the aim rises, so that the focused figure's middle (`half` art px
+ * above the floor, default half a human) comes to the middle of the screen instead of its foot; up to `CLOSE_FROM` the camera is the same.
+ * A figure stands `h` art px high on the screen whatever the pitch (the height stretch), so the foot goes `half / ART` tiles below the
+ * middle, which is `half / ART / sin(pitch)` of ground along the view axis. Drawing only: the page keeps its own target.
+ */
+export function closeCam(cam: Cam, zoom: number, half = HUMAN_HEIGHT / 2): Cam {
+  const k = Math.min(1, Math.max(0, (zoom - CLOSE_FROM) / (CLOSE_TO - CLOSE_FROM)));
+  if (k === 0) return cam;
+  const p = unrotate(cam.yaw, 0, -(k * half) / ART / Math.sin(cam.pitch), cam.x, cam.z);
+  return { ...cam, x: p.x, z: p.z };
 }
 
 /** The free camera's target, kept inside the map's rectangle. */

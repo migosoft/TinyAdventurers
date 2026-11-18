@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OrthographicCamera, Vector3 } from 'three/webgpu';
-import { ART, facesLeft, followClamp, freeClamp, groundAt, keysToWorld, project, snapGround, viewRay } from './camera';
+import { HUMAN_HEIGHT } from './models/tubeDesc';
+import { ART, closeCam, facesLeft, followClamp, freeClamp, groundAt, keysToWorld, project, snapGround, viewRay } from './camera';
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -135,5 +136,24 @@ describe('followClamp', () => {
 describe('freeClamp', () => {
   it('keeps the target inside the map', () => {
     expect(freeClamp({ w: 100, h: 60 }, -3, 70)).toEqual({ x: 0, z: 60 });
+  });
+});
+
+describe('closeCam (the dev pages\' close zoom keeps the figure in the picture, #356)', () => {
+  const cam = { x: 20, z: 15, pitch: 0.85, yaw: 0.6 };
+  it('is the same camera up to the old closest zoom', () => {
+    for (const z of [1, 2, 4, 8]) expect(closeCam(cam, z)).toEqual(cam);
+  });
+  it('past it the foot sinks below the middle until the figure\'s middle is at the middle', () => {
+    const mid = HUMAN_HEIGHT / 2 / ART;
+    const foot = (c: typeof cam) => project(c, cam.x, 0, cam.z).sy;
+    expect(foot(closeCam(cam, 12))).toBeCloseTo(-mid / 2, 9);
+    for (const z of [16, 30, 48]) expect(foot(closeCam(cam, z))).toBeCloseTo(-mid, 9);
+    expect(project(closeCam(cam, 30), cam.x, HUMAN_HEIGHT / 2 / ART / Math.cos(cam.pitch), cam.z).sy).toBeCloseTo(0, 9);
+  });
+  it('moves only along the view axis and honours the figure\'s own half height', () => {
+    const c = closeCam(cam, 30, 5);
+    expect(project(c, cam.x, 0, cam.z).sx).toBeCloseTo(0, 9);
+    expect(project(c, cam.x, 0, cam.z).sy).toBeCloseTo(-5 / ART, 9);
   });
 });

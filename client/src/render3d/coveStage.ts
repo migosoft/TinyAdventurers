@@ -12,7 +12,7 @@ import { CoverField } from './cover/coverField';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { atlasBounds } from './atlasBounds';
-import { keysToWorld } from './camera';
+import { closeCam, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Cove3d } from './cove3d';
 import { Figures3d } from './figures';
@@ -184,7 +184,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           lava: null, lavaVersion: 0, darkvision: null, casters, sight,
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),

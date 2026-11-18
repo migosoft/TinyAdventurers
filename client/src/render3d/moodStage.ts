@@ -19,7 +19,7 @@ import { TILE } from '../sim/map';
 import { View as SightView } from '../sim/view';
 import { Air3d } from './air/air';
 import { atlasBounds } from './atlasBounds';
-import { freeClamp, keysToWorld } from './camera';
+import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
@@ -230,7 +230,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0,
           darkvision: null,

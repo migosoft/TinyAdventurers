@@ -11,7 +11,7 @@ import { snap } from '../run/testing';
 import type { PictureEv, ShotView } from '../run/view';
 import { TILE, TileMap } from '../sim/map';
 import { atlasBounds } from './atlasBounds';
-import { freeClamp, keysToWorld } from './camera';
+import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Effects3d } from './fx/effects3d';
 import { FxPass } from './fx/pass';
@@ -511,7 +511,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
         },

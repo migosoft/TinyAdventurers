@@ -8,7 +8,7 @@ import type { MovingLight } from '../generated/MovingLight';
 import type { EntState } from '../game/world';
 import { View as SightView } from '../sim/view';
 import { atlasBounds } from './atlasBounds';
-import { keysToWorld } from './camera';
+import { closeCam, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Pixies3d } from './cove3d';
 import { Critters3d } from './critters3d';
@@ -248,7 +248,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           ...(kit ? { models: { insts: fo.models, kit } } : {}),
           lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),

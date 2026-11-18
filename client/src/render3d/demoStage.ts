@@ -1,6 +1,6 @@
 // The stage of the ?r3d=demo page (#301): a small walled room with a few figures and the player to walk around.
 
-import { keysToWorld } from './camera';
+import { closeCam, keysToWorld } from './camera';
 import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
@@ -48,7 +48,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) }, cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now } },
+        { cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) }, cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now } },
         c.timer,
       );
     },
