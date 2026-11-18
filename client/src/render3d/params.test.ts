@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
+import { DEFAULTS, ZOOM_MAX, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
 
 describe('reflects', () => {
   it('needs the switch and a quality above Fast', () => {
@@ -44,7 +44,7 @@ describe('parseParams', () => {
     expect(parseParams('?pitch=abc').pitch).toBe(48.6);
     expect(parseParams('?pitch=5').pitch).toBe(30);
     expect(parseParams('?pitch=200').pitch).toBe(80);
-    expect(parseParams('?zoom=99').zoom).toBe(8);
+    expect(parseParams('?zoom=99').zoom).toBe(ZOOM_MAX);
     expect(parseParams('?zoom=1.5').zoom).toBeNull();
     expect(parseParams('?quality=ultra').quality).toBe('balanced');
     expect(parseParams('?yaw=720').yaw).toBe(0);
@@ -61,10 +61,13 @@ describe('parseParams', () => {
     expect(toSearch({ ...DEFAULTS, smooth: false }, '?r3d')).toBe('?r3d&smooth=0');
   });
 
-  it('reads free, light and zoom 1..8', () => {
+  it('reads free, light and zoom 1..ZOOM_MAX (the dev pages go closer than 8, #356)', () => {
     expect(parseParams('?r3d&free=1&light=work&zoom=1')).toMatchObject({ free: true, light: 'work', zoom: 1 });
     expect(parseParams('?r3d&zoom=0').zoom).toBe(1);
-    expect(parseParams('?r3d&zoom=9').zoom).toBe(8);
+    expect(ZOOM_MAX).toBeGreaterThanOrEqual(40);
+    expect(parseParams('?r3d&zoom=9').zoom).toBe(9);
+    expect(parseParams('?r3d&zoom=40').zoom).toBe(40);
+    expect(parseParams(`?r3d&zoom=${ZOOM_MAX + 1}`).zoom).toBe(ZOOM_MAX);
     expect(parseParams('?r3d&light=x').light).toBe('game');
     expect(parseParams('?r3d&light=lantern').light).toBe('game');
     expect(parseParams('?r3d')).toMatchObject({ free: false, light: 'game' });

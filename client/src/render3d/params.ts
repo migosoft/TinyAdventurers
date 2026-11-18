@@ -73,6 +73,8 @@ function num(v: string | null): number | null {
 export const PITCH_MIN = 30;
 /** The steepest camera pitch (degrees) the URL accepts. */
 export const PITCH_MAX = 80;
+/** The closest zoom (canvas px per art px) of the dev pages and the panel's slider; a Goblin (12 px) fills most of a 768 px window at 48 (#356). */
+export const ZOOM_MAX = 48;
 
 /** Whether the water's mirror pass runs: the Reflections switch, and never on quality Fast (#345). */
 export function reflects(p: Pick<R3dParams, 'refl' | 'quality'>): boolean {
@@ -108,7 +110,7 @@ export function parseParams(search: string): R3dParams {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
-    zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(8, Math.max(1, zoom)) : null,
+    zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(ZOOM_MAX, Math.max(1, zoom)) : null,
     backend: q.get('backend') === 'webgl' ? 'webgl' : 'auto',
     shadows: q.get('shadows') === '0' ? false : DEFAULTS.shadows,
     orb: q.get('orb') === '0' ? false : DEFAULTS.orb,

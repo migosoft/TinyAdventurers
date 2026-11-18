@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { createPanel } from './panel';
-import { DEFAULTS, type R3dParams } from './params';
+import { DEFAULTS, ZOOM_MAX, type R3dParams } from './params';
 
 function setup(p: R3dParams = DEFAULTS, mode: 'demo' | 'run' = 'demo') {
   const host = document.createElement('div');
@@ -255,6 +255,18 @@ describe('panel', () => {
     expect(btn('Auto').getAttribute('aria-pressed')).toBe('true');
     btn('8').click();
     expect(calls[2].zoom).toBe(8);
+  });
+
+  it('the zoom slider goes to ZOOM_MAX, follows the params and sets zoom (#356)', () => {
+    const { host, calls, panel } = setup({ ...DEFAULTS, zoom: 3 });
+    const s = host.querySelector<HTMLInputElement>('#r3d-zoom')!;
+    expect(Number(s.max)).toBe(ZOOM_MAX);
+    expect(s.value).toBe('3');
+    s.value = String(ZOOM_MAX);
+    s.dispatchEvent(new Event('input'));
+    expect(calls[0].zoom).toBe(ZOOM_MAX);
+    panel.setParams({ ...DEFAULTS, zoom: 20 });
+    expect(s.value).toBe('20');
   });
 
   it('shows a dev page\'s own buttons only while it has some (#307)', () => {

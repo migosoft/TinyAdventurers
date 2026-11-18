@@ -1,6 +1,6 @@
 // The DOM panel of the ?r3d page: the single place that renders the params.
 
-import { DEFAULT_HOUR, PITCH_MAX, PITCH_MIN, wrapYaw, type R3dParams } from './params';
+import { DEFAULT_HOUR, PITCH_MAX, PITCH_MIN, ZOOM_MAX, wrapYaw, type R3dParams } from './params';
 import { QUALITIES } from './quality';
 import type { SeeMode } from './seeThrough';
 import { hourLabel } from './sun';
@@ -149,6 +149,13 @@ export function createPanel(
   zRow.appendChild(el('span', undefined, 'Zoom'));
   button(zRow, 'Auto', () => cur.zoom === null, () => change({ zoom: null }));
   for (const z of ZOOMS) button(zRow, String(z), () => cur.zoom === z, () => change({ zoom: z }));
+  // The slider reaches ZOOM_MAX (#356); under Auto it rests at the buttons' middle.
+  const zoomRow = el('div', 'r3d-row');
+  const zoomLabel = el('label');
+  const zoom = slider(1, ZOOM_MAX, 1, () => cur.zoom ?? 4, (v) => change({ zoom: v }));
+  zoom.input.id = 'r3d-zoom';
+  zoomLabel.htmlFor = 'r3d-zoom';
+  zoomRow.append(zoomLabel, zoom.input);
   const swRow = el('div', 'r3d-row');
   for (const sw of SWITCHES[mode]) button(swRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
 
@@ -248,7 +255,7 @@ export function createPanel(
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, airRow, airDevRow, pageRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, zoomRow, swRow, airRow, airDevRow, pageRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -278,6 +285,8 @@ export function createPanel(
     yawLabel.textContent = `Camera turn ${deg(cur.yaw)}`;
     pitch.sync();
     yaw.sync();
+    zoomLabel.textContent = cur.zoom === null ? 'Zoom auto' : `Zoom ${cur.zoom}`;
+    zoom.sync();
     hourLabelEl.textContent = `Time of day ${hourLabel(cur.hour ?? DEFAULT_HOUR)}`;
     hour.sync();
     ghLabel.textContent = `Cover height ${Math.round(cur.gh * 100) / 100}`;
