@@ -97,6 +97,7 @@ for (const a of animals) (animalYs.push(animalsEnd), (animalsEnd += a.img.h));
 const outlines = buildModelOutlines(src.w);
 const outlineY = animalsEnd;
 const outH = outlineY + outlines.img.h;
+if (outH > 2048) throw new Error('atlas: ' + outH + ' px high, over the 2048 px every WebGL2 device has');
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {

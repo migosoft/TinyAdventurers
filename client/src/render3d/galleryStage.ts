@@ -13,7 +13,7 @@ import { atlasBounds } from './atlasBounds';
 import { freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
-import { CROWD_MAX, EFFECT_GROUPS, VARIETY_COLS, GROUP_CELLS, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
+import { CROWD_MAX, EFFECT_GROUPS, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
@@ -61,7 +61,7 @@ export const ID = {
   corridorKnight: 3010,
   /** What opens walls in the corridor: the hero, five skeletons, the wolf, the chest and the closed mimic. */
   corridorOpeners: [3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008],
-  /** The 3D models (#338): one row per kind with a model, the effect rows (`+ row * 10 + col`), the figures that die, the pillars' torches, the crowd. */
+  /** The 3D models (#338): one row per kind with a model, the effect rows (`+ row * MODEL_EFFECT_STRIDE + col`), the figures that die, the pillars' torches, the crowd. */
   model: 4000,
   modelEffect: 4100,
   dying: 4300,
@@ -209,7 +209,7 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
   MODEL_EFFECT_ROW_LIST.forEach((row, r) => MODEL_EFFECT_KINDS.forEach((kind, c) => {
     const p = GALLERY.modelEffect(r, c);
     const dx = row.run ? Math.sin(t * 3) * (18 / TILE) : 0;
-    out.push(ent(ID.modelEffect + r * 10 + c, kind, p.x + dx, p.z, {
+    out.push(ent(ID.modelEffect + r * MODEL_EFFECT_STRIDE + c, kind, p.x + dx, p.z, {
       anim: row.run ? ANIM.Move : ANIM.Idle, animMs: (t % 1) * 1000,
       aim: row.run ? (Math.cos(t * 3) > 0 ? 0 : Math.PI) : (c + swapM) % 2 ? Math.PI : 0,
       effects: row.effect !== undefined ? 1 << row.effect : 0, flags: row.flag ?? 0,

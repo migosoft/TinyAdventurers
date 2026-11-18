@@ -25,6 +25,7 @@ import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, 
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import type { FigureKit } from './models/kit';
+import { MODEL_OF_KIND } from './models/table';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
 import { Lava3d, type LavaIn } from './lava/lava';
@@ -54,7 +55,10 @@ const REPLAY = 6;
 const STEP = 1 / 60;
 
 /** The kinds `&models=` names. */
-const MODEL_NAMES: Record<string, number> = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, wolf: KIND.DireWolf };
+export function modelKindOf(key: string): number | null {
+  for (const k of Object.keys(MODEL_OF_KIND).map(Number)) if (MODEL_OF_KIND[k] === key) return k;
+  return null;
+}
 
 export interface LiquidsOpts { push: Push | null; start: number; pinned: boolean; slow: number; /** The kind that plays every role, drawn as a model; null for the ordinary cast. */ models: number | null }
 
@@ -67,7 +71,7 @@ export function parseLiquids(search: string): LiquidsOpts {
     push: push === 'chasm' || push === 'water' || push === 'barrel' ? push : null,
     start: Number.isFinite(t) && t > 0 ? t : 0, pinned: q.has('t') && Number.isFinite(t),
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
-    models: Object.hasOwn(MODEL_NAMES, q.get('models') ?? '') ? MODEL_NAMES[q.get('models')!] : null,
+    models: modelKindOf(q.get('models') ?? ''),
   };
 }
 

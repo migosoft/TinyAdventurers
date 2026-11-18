@@ -24,6 +24,12 @@ const KINDS = [
   ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['raisedskel', 'skelet'], ['ogre', 'ogre'], ['wolf', 'wolf'],
   ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
+/** A kind's row in the gallery's model rows (they wrap, so a position is looked up by name, never counted). */
+const row = (name) => {
+  const i = KINDS.findIndex((k) => k[0] === name);
+  if (i < 0) throw new Error(`models-shots: no kind named ${name}`);
+  return i;
+};
 const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny'];
 /** The woodland page's line-up: the seven figures it places, no animals. */
 const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
@@ -41,10 +47,10 @@ for (const [i, [name, desc]] of KINDS.entries()) {
 }
 for (const s of STATES) shots.push({ name: `row-${s}`, q: `&focus=models&zoom=2&state=${s}${still(s)}`, need: ALL, wait: s === 'dash' ? 6000 : 0 });
 // The small effects (Task 11): the channel swirl, the wolf's bite state and the swing's swoosh from the south (aim 90).
-shots.push({ name: 'kind-wizard-channel', q: `&focus=models&at=model:0&zoom=6&state=channel${STILL}`, need: ['wizard'] });
-shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:8&zoom=6&state=bite${STILL}`, need: ['wolf'] });
-shots.push({ name: 'swoosh-paladin-south', q: `&focus=models&at=model:1&zoom=6&state=melee&aim=90${STILL}`, need: ['knight'] });
-shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:8&zoom=6&state=melee&aim=90${STILL}`, need: ['wolf'] });
+shots.push({ name: 'kind-wizard-channel', q: `&focus=models&at=model:${row('wizard')}&zoom=6&state=channel${STILL}`, need: ['wizard'] });
+shots.push({ name: 'kind-wolf-bite', q: `&focus=models&at=model:${row('wolf')}&zoom=6&state=bite${STILL}`, need: ['wolf'] });
+shots.push({ name: 'swoosh-paladin-south', q: `&focus=models&at=model:${row('paladin')}&zoom=6&state=melee&aim=90${STILL}`, need: ['knight'] });
+shots.push({ name: 'fangs-wolf-south', q: `&focus=models&at=model:${row('wolf')}&zoom=6&state=melee&aim=90${STILL}`, need: ['wolf'] });
 // The animals (#357) have their state shots from the loop above; here the swing's reach from the south (aim 90).
 for (const [name, i] of ANIMALS.map((n) => [n, KINDS.findIndex((k) => k[0] === n)])) {
   shots.push({ name: `kind-${name}-aim`, q: `&focus=models&at=model:${i}&zoom=6&state=melee&aim=90${STILL}`, need: [name] });
@@ -60,13 +66,13 @@ for (const name of ANIMALS) {
   shots.push({ name: `liquids-${name}-lava`, page: 'liquids', q: `&models=${name}&t=4.5&zoom=3`, need: [name] });
 }
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
-for (const i of [0, 1, 2, 3, 4, 7, 8]) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
+for (const i of ['wizard', 'paladin', 'barbarian', 'ranger', 'skelwarrior', 'ogre', 'wolf'].map(row)) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
 for (const [name, row] of [['top', 1], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${row},3&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):
 // this shot lets the clock run through them (stage time 12.5 to 16 s) and any "3D frame failed" error fails the run.
 shots.push({ name: 'state-cycle', q: '&focus=models&zoom=2&t=12.5&slow=1', need: ALL, until: 16 });
 shots.push({ name: 'torch-light', q: `&focus=models&light=torch&zoom=2&state=idle${STILL}`, need: ALL });
-shots.push({ name: 'torch-light-close', q: `&at=model:3&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
+shots.push({ name: 'torch-light-close', q: `&at=model:${row('ranger')}&light=torch&zoom=6&state=idle${STILL}`, need: ALL });
 shots.push({ name: 'dying-skulls', q: '&at=dying:4&zoom=3&t=1.5&slow=2', need: ALL, skull: true });
 shots.push({ name: 'crowd-models', q: '&crowd=40&at=crowd:20&zoom=3&slow=1000&t=0.6', need: ALL, readout: true });
 shots.push({ name: 'crowd-cards', q: '&crowd=40&crowdAs=cards&at=crowd:20&zoom=3&slow=1000&t=0.6', need: [], readout: true });

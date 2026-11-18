@@ -5,7 +5,7 @@ import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
-import { CROWD_MAX } from './galleryMap';
+import { CROWD_MAX, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
 import { GALLERY, ID, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, modelsOf, parseGallery } from './galleryStage';
 import { MODEL_OF_KIND, modelKeyOf } from './models/table';
 import type { FrameRects } from './worldMesh';
@@ -220,10 +220,44 @@ describe('the gallery stage', () => {
     expect(parseGallery('?at=variety:2').at).toEqual(GALLERY.variety(2, 2.5));
   });
 
-  it('opens the models block on the middle of the kind row, however many kinds it has', () => {
+  it('opens the models block on the middle of the first kind row, however many kinds it has', () => {
     const n = Object.keys(MODEL_OF_KIND).length;
-    expect(GALLERY.focus.models.x).toBeCloseTo((GALLERY.model(0).x + GALLERY.model(n - 1).x) / 2, 9);
+    expect(GALLERY.focus.models.x).toBeCloseTo((GALLERY.model(0).x + GALLERY.model(Math.min(n, MODEL_PER_ROW) - 1).x) / 2, 9);
     expect(GALLERY.focus.models.z).toBe(GALLERY.model(0).z);
+  });
+
+  it('wraps the kinds into rows of 11, each row with its own four pillar torches', () => {
+    const L = layoutOf(Object.keys(FIGURES).length, 22);
+    expect(MODEL_PER_ROW).toBe(11);
+    expect(L.model(11).x).toBe(L.model(0).x);
+    expect(L.model(11).z).toBe(L.model(0).z + MODEL_KIND_ROW_PITCH);
+    for (let i = 0; i < 22; i++) {
+      const p = L.model(i);
+      expect(p.x > 0 && p.x < L.map.w && p.z > 0 && p.z < L.map.h, `model ${i} inside`).toBe(true);
+      expect(L.map.get(Math.floor(p.x), Math.floor(p.z)), `model ${i} on a floor`).toBe(TILE_ID.Floor);
+    }
+    expect(L.pillarTorches).toHaveLength(8);
+    expect(L.pillarTorches.slice(4).map((p) => p.z - L.pillarTorches[0].z)).toEqual([5, 5, 5, 5]);
+    for (const p of L.pillarTorches) expect(L.map.get(Math.floor(p.x), Math.floor(p.z) - 1)).toBe(TILE_ID.Wall);
+    // everything else starts below the last kind row
+    const lastKind = L.model(21).z;
+    for (const p of [L.modelEffect(0, 0), L.dying(0), L.crowd(0), L.variety(0, 0)]) expect(p.z).toBeGreaterThan(lastKind + 1);
+    expect(L.dying(0).z).toBeGreaterThan(L.modelEffect(8, 0).z);
+    expect(L.crowd(0).z).toBeGreaterThan(L.dying(21).z);
+    expect(L.variety(0, 0).z).toBeGreaterThan(L.crowd(CROWD_MAX - 1).z);
+    for (let i = 0; i < 22; i++) expect(L.map.get(Math.floor(L.dying(i).x), Math.floor(L.dying(i).z)), `dying ${i}`).toBe(TILE_ID.Floor);
+    const one = layoutOf(Object.keys(FIGURES).length, 11);
+    expect(one.pillarTorches).toHaveLength(4);
+    expect(one.modelEffect(0, 0).z).toBeLessThan(L.modelEffect(0, 0).z);
+  });
+
+  it('gives the model effect ids room: ID.modelEffect + row * MODEL_EFFECT_STRIDE + col, all distinct, all below ID.dying', () => {
+    expect(MODEL_EFFECT_STRIDE).toBe(20);
+    const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, ID.dying - ID.modelEffect));
+    expect(ents).toHaveLength(81);
+    expect(new Set(ents.map((e) => e.id)).size).toBe(81);
+    ents.forEach((e, i) => expect(e.id).toBe(ID.modelEffect + Math.floor(i / 9) * MODEL_EFFECT_STRIDE + (i % 9)));
+    expect(Math.max(...ents.map((e) => e.id))).toBeLessThan(ID.dying);
   });
 
   it('lets one figure of each kind die every 6 s and leave its skull', () => {
@@ -282,9 +316,9 @@ describe('the gallery stage', () => {
 
   it('has a lit torch on each pillar of the model block, on a wall', () => {
     const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 10));
-    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 4 }, () => [KIND.Torch, 1, 0]));
-    // the animals' cells (columns 9 to 12 of the kind row) have a pillar's torch within 5 tiles
-    for (const i of [9, 10, 11, 12]) {
+    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 8 }, () => [KIND.Torch, 1, 0]));
+    // the cells of the first kind row's last columns have a pillar's torch within 5 tiles
+    for (const i of [9, 10]) {
       const p = GALLERY.model(i);
       expect(Math.min(...t.map((e) => Math.hypot(e.x / 16 - p.x, e.y / 16 - p.z)))).toBeLessThan(5);
     }
