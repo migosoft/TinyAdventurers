@@ -25,8 +25,8 @@ export interface BendDef {
   bone: number; origin: [number, number, number]; dir: [number, number, number]; len: number; k: number; up: 1 | -1; wag: number;
   /** A tube model's neck: it bends as a whole about `origin`, more the nearer the head (`skin.w`). */
   neck?: true;
-  /** The bend also flutters (a wing, a pennant): `rate` in Hz, `angle` in rad at the tip. */
-  flutter?: { rate: number; angle: number };
+  /** The bend also flutters (a wing, a pennant): `rate` in Hz, `angle` in rad at the tip; `axis` (a unit vector, rest pose) is what the beat turns about, absent: x, the two sides opposite ways. */
+  flutter?: { rate: number; angle: number; axis?: readonly [number, number, number] };
 }
 
 export interface FigureModel {
@@ -34,7 +34,7 @@ export interface FigureModel {
   position: Float32Array; normal: Float32Array; uv: Float32Array; // uv into `paint`
   /** 4 per vertex: bone index, 1 on a hull vertex (written, but no shader reads it today), bend index (-1 none, -2 the robe), how far along the bend (0..1; the robe's weight). */
   skin: Float32Array;
-  /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 0 lit, 1 polished steel, 2 unlit (the seams). */
+  /** 4 per vertex: r, g, b (sRGB, 0 to 1) of a flat colour, or -1 to read the paint; then 0 lit, 1 polished steel, 2 unlit (the seams), 3 glowing (its own colour in any light: a tube model's `glow` pieces). */
   look: Float32Array;
   index: Uint32Array; ranges: ModelRange[];
   pieceIndex: Uint32Array; lineIndex: Uint32Array; // the same triangles as two unbroken lists (the piece index serves the piece, id and sun draws; the line index serves the hull)

@@ -210,6 +210,14 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect((f.match(/lightAmbient/g) ?? []).length).toBeGreaterThanOrEqual(3);
     });
 
+    it('the glowing look (3: a tube model\'s eyes) is told from the unlit one by the look value 2.5 (#356)', () => {
+      const { mats } = make(false);
+      const f = fragment(B, mats.piece, { compare: true, geometry: geometryOf(elf) });
+      expect(f).toMatch(/2\.5/);
+      // The hull has no looks: it never glows.
+      expect(fragment(B, mats.line, { compare: true, geometry: geometryOf(elf, 'line') })).not.toMatch(/2\.5/);
+    });
+
     it('the piece without a sun carries no shadow-map sampler', () => {
       const { mats } = make(false);
       const shadowMap = wgsl ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/;

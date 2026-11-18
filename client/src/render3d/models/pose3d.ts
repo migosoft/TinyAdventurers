@@ -539,9 +539,13 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     if (B.neck) { pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = 0; pose.bends[i * 4 + 2] = 1; pose.bends[i * 4 + 3] = nbend; continue; }
     const kk = B.k * loose * 1.5;
     let wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle;
-    if (B.flutter && !asleep) wx += Math.sign(B.dir[2] || 1) * B.flutter.angle * Math.sin(2 * Math.PI * B.flutter.rate * t);   // a wing or pennant, also standing
-    const wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
-    const wz = kk * (B.up * 0.12 * w + 0.2 * Math.sin(2 * phi - 1.1) * w + 0.03 * Math.sin(t * 1.7) * idle) - B.up * 0.5 * HJ;   // a hit: the loose end lags behind the knocked body
+    let wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
+    let wz = kk * (B.up * 0.12 * w + 0.2 * Math.sin(2 * phi - 1.1) * w + 0.03 * Math.sin(t * 1.7) * idle) - B.up * 0.5 * HJ;   // a hit: the loose end lags behind the knocked body
+    if (B.flutter && !asleep) {   // a wing or pennant, also standing
+      const beat = B.flutter.angle * Math.sin(2 * Math.PI * B.flutter.rate * t), ax = B.flutter.axis;
+      if (ax) { wx += ax[0] * beat; wy += ax[1] * beat; wz += ax[2] * beat; }   // about the axis the description names: a wing beats across its surface
+      else wx += Math.sign(B.dir[2] || 1) * beat;   // about the line of sight, the two sides opposite ways
+    }
     // The turn at the tip: its axis and its angle, which levels off so that a strong setting cannot fold the piece over.
     const raw = Math.hypot(wx, wy, wz) || 1e-6, ang = 0.75 * Math.tanh(raw / 0.75);
     pose.bends[i * 4] = wx / raw; pose.bends[i * 4 + 1] = wy / raw; pose.bends[i * 4 + 2] = wz / raw; pose.bends[i * 4 + 3] = ang;

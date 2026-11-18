@@ -26,11 +26,27 @@ export interface TubePiece {
   /** Turned about `at` by this angle (rad, about z) before it is placed: a hind leg's rest angle. */
   turn?: number;
   /** A loose piece sways about its foot (a drop's or a tube's own direction and length); the neck bends as a whole about `origin`. */
-  bend?: { sway: number; wag?: number; /** The piece also flutters: `rate` in Hz, `angle` in rad at the tip. */ flutter?: { rate: number; angle: number } } | { neck: { origin: readonly [number, number]; from: number; to: number } };
+  bend?:
+    | {
+      sway: number; wag?: number;
+      /**
+       * The piece also flutters: `rate` in Hz, `angle` in rad at the tip. `axis` (a unit vector in the rest pose) is what the beat turns
+       * about: for a wing, a line in its surface across its span, so the wing beats across its surface. Absent: about the line of sight (x),
+       * the two sides opposite ways.
+       */
+      flutter?: { rate: number; angle: number; axis?: Vec3 };
+      /** The share of the piece's length over which the bend builds up (default 1: the whole piece curls). Below 1 the piece is stiff beyond it: it turns about its foot like a hinged wing. */
+      hinge?: number;
+    }
+    | { neck: { origin: readonly [number, number]; from: number; to: number } }
+    /** The piece bends with an earlier swaying piece of the description on the same bone, as one part of it (a wing's finger bones on its membrane): the same foot, line and turn. It takes no bend of its own. */
+    | { with: TubePiece };
   /** The part of this piece below `TubeDesc.robeTop` swings as the robe's hem. */
   robe?: true;
   /** Polished steel (look value 1). */
   metal?: true;
+  /** The piece glows (look value 3): it shows its own colour whatever light falls on it (eyes in the dark). Give it `line` 0. */
+  glow?: true;
   /** The body tube the hit circle and the lying thickness are measured from. */
   torso?: boolean;
 }

@@ -68,7 +68,12 @@ function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
     if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);
     if (p.robe && p.bend) throw new Error(`${d.name}: a robe piece cannot also bend`);
   }
-  const bending = d.pieces.filter((p) => p.bend).length;
+  d.pieces.forEach((p, i) => {
+    if (!p.bend || !('with' in p.bend)) return;
+    const of = d.pieces.indexOf(p.bend.with), b = of < 0 ? undefined : d.pieces[of].bend;
+    if (of < 0 || of >= i || !b || !('sway' in b) || d.pieces[of].bone !== p.bone) throw new Error(`${d.name}: a piece bends with a piece that is not an earlier swaying piece on the same bone`);
+  });
+  const bending = d.pieces.filter((p) => p.bend && !('with' in p.bend)).length;
   if (bending > MAX_BENDS) throw new Error(`${d.name}: ${bending} bending pieces, at most ${MAX_BENDS} fit the GPU's bend array`);
   if (d.pieces.filter((p) => typeof p.colour === 'function').length > 1) throw new Error(`${d.name}: more than one painted piece`);
   for (const [child, parent] of Object.entries(d.parents) as [Bone, Bone][]) {
@@ -80,15 +85,19 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
   const pv = pivotsOf(d), two = d.stance === 'two';
   check(d, pv);
   const scale = d.size * PAGE_TO_GAME, bends: BendDef[] = [], built: Built[] = [];
+  // The bend of each swaying piece and the share of its length the bend builds up over, for the pieces that bend with it.
+  const bendOf = new Map<TubePiece, number>(), hinges: number[] = [];
   for (const p of d.pieces) {
     const src = turned(meshOf(p.shape), p.turn), at = p.at ?? [0, 0, 0];
     let bend = -1;
-    if (p.bend) {
+    if (p.bend && 'with' in p.bend) bend = bendOf.get(p.bend.with)!;
+    else if (p.bend) {
       bend = bends.length;
       if ('neck' in p.bend) bends.push({ bone: BONES.indexOf(p.bone), origin: [p.bend.neck.origin[0], p.bend.neck.origin[1], 0], dir: [0, 1, 0], len: 1, k: 0, up: 1, wag: 0, neck: true });
       else {
         const { dir, len } = swayAxis(d.name, p.shape);
         bends.push({ bone: BONES.indexOf(p.bone), origin: [at[0], at[1], at[2]], dir, len, k: p.bend.sway, up: dir[1] > 0 ? 1 : -1, wag: p.bend.wag ?? 0, ...(p.bend.flutter ? { flutter: p.bend.flutter } : {}) });
+        bendOf.set(p, bend); hinges[bend] = p.bend.hinge ?? 1;
       }
     }
     const stage = STAGES.indexOf(p.stage);
@@ -110,6 +119,8 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     for (const i of m.index) all.push(v0 + i);
     const B = b.bend >= 0 ? bends[b.bend] : null, painted = typeof p.colour === 'function';
     const flat = b.line ? outline : rgb(painted ? 0 : (p.colour as number));
+    // A piece that bends with another lies off that bend's foot by `off`; the bend builds up over `over` px of its line.
+    const off = B && !B.neck ? [at[0] - B.origin[0], at[1] - B.origin[1], at[2] - B.origin[2]] : [0, 0, 0], over = B && !B.neck ? B.len * hinges[b.bend] : 1;
     for (let i = 0; i < c; i++) {
       const o = v0 + i, lx = m.position[i * 3], ly = m.position[i * 3 + 1], lz = m.position[i * 3 + 2];
       const x = lx + at[0], y = ly + at[1], z = lz + at[2];
@@ -119,10 +130,10 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
       if (B?.neck) {
         const nb = (p.bend as { neck: { from: number; to: number } }).neck;
         along = smooth((b.uv![i * 2] - nb.from) / (nb.to - nb.from));
-      } else if (B) along = Math.max(0, Math.min(1, (lx * B.dir[0] + ly * B.dir[1] + lz * B.dir[2]) / B.len));
+      } else if (B) along = Math.max(0, Math.min(1, ((lx + off[0]) * B.dir[0] + (ly + off[1]) * B.dir[1] + (lz + off[2]) * B.dir[2]) / over));
       const swings = p.robe && d.robeTop !== undefined && y < d.robeTop;
       skin.set([boneIdx, b.line ? 1 : 0, swings ? -2 : b.bend, swings ? smooth((d.robeTop! - y) / d.robeTop!) : along], o * 4);
-      const steel = p.metal && !b.line ? 1 : 0;
+      const steel = b.line ? 0 : p.glow ? 3 : p.metal ? 1 : 0;
       if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = b.uv![i * 2]; uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, steel], o * 4);
       if (!b.line) {
         stands = Math.max(stands, y);

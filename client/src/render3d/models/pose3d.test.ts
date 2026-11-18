@@ -210,6 +210,33 @@ describe('the walk', () => {
     for (const c of [0.1, 0.2]) expect(angle(m, c, sleep)).toBeCloseTo(angle(plain, c, sleep), 9);
     for (const c of [1e6, 1e6 + 0.0625, 1e6 + 0.1]) expect(angle(m, c, { anim: ANIM.Move }, 1)).toBeLessThan(0.75 + 1e-9);
   });
+  it('beats a bend about the axis its flutter names, also standing; without an axis about the line of sight as before; not asleep; within the cap', () => {
+    const AX: [number, number, number] = [0.6, 0.8, 0];
+    const beat: FigureModel = { ...m, bends: m.bends.map((b) => (b.flutter ? { ...b, flutter: { ...b.flutter, axis: AX } } : b)) };
+    const rate = m.bends[flutterBend].flutter!.rate, peak = 1 / (4 * rate);
+    // The turn at the tip as a vector (axis times angle).
+    const turn = (mm: FigureModel, clock: number, extra: Partial<ViewState> = {}, walk = 0): number[] => {
+      const p = poseFigure(mm, d, view(extra), 0, settled({ clock, walk })), o = flutterBend * 4;
+      return [p.bends[o] * p.bends[o + 3], p.bends[o + 1] * p.bends[o + 3], p.bends[o + 2] * p.bends[o + 3]];
+    };
+    const along = (v: number[]): number => v[0] * AX[0] + v[1] * AX[1] + v[2] * AX[2];
+    // At the beat's peak nearly all of the turn is about the named axis, and half a beat later it is the other way.
+    const up = turn(beat, peak), down = turn(beat, 3 * peak);
+    expect(along(up)).toBeGreaterThan(0.9 * Math.hypot(...up));
+    expect(along(up)).toBeGreaterThan(0.25);
+    expect(along(down)).toBeLessThan(-0.25);
+    // The same model without the axis turns about x at that moment, as before.
+    const old = turn(m, peak);
+    expect(Math.abs(old[0])).toBeGreaterThan(0.9 * Math.hypot(...old));
+    expect(Math.abs(along(old))).toBeLessThan(0.8 * Math.hypot(...old));
+    const sleep = { effects: 1 << EFFECT.Sleep };
+    for (const c of [peak, 3 * peak]) turn(beat, c, sleep).forEach((v, i) => expect(v).toBeCloseTo(turn(plain, c, sleep)[i], 9));
+    for (const c of [1e6, 1e6 + 0.0625, 1e6 + 0.1]) {
+      const v = turn({ ...beat, bends: beat.bends.map((b) => (b.flutter ? { ...b, flutter: { ...b.flutter, angle: 5 } } : b)) }, c, { anim: ANIM.Move }, 1);
+      expect(v.every(Number.isFinite)).toBe(true);
+      expect(Math.hypot(...v)).toBeLessThan(0.75 + 1e-9);
+    }
+  });
   it('lies asleep with straight knees, holds entangled legs, and holds a stone or frozen pose mid-stride', () => {
     const sleep = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 0.2, settled({ walk: 1, phi: 1 }));
     expect(sleep.asleep).toBe(true);
@@ -451,11 +478,33 @@ describe('the woodland animals in every animation', () => {
     expect(poseFigure(m, d, view({ anim: ANIM.Cast, animT: STRIKE_T }), 1 / 60, settled()).attack?.style).toBe('cast');
     const wings = m.bends.map((b, i) => (b.flutter ? i : -1)).filter((i) => i >= 0);
     expect(wings).toHaveLength(2);
-    // The turn about the line of sight (x) at the tip: axis x times the angle.
-    const flap = (clock: number): number[] => { const p = poseFigure(m, d, view(), 0, settled({ clock })); return wings.map((i) => p.bends[i * 4] * p.bends[i * 4 + 3]); };
-    const a = flap(0.6), b = flap(0.68);
-    for (const i of [0, 1]) expect(Math.abs(a[i] - b[i])).toBeGreaterThan(0.1);
-    for (const f of [a, b]) { expect(Math.sign(f[0])).toBe(-Math.sign(f[1])); expect(f[0]).toBeCloseTo(-f[1], 6); }
+    // The beat's two ends are a quarter and three quarters of its period (5 Hz: 0.05 and 0.15 s). The turn at the tip (axis times angle)
+    // of the two wings mirrors: x and y turned round, z the same.
+    const at = (clock: number): Pose3d => copyPose(poseFigure(m, d, view(), 0, settled({ clock })));
+    const up = at(0.05), down = at(0.15);
+    const turn = (p: Pose3d, i: number): number[] => [0, 1, 2].map((k) => p.bends[i * 4 + k] * p.bends[i * 4 + 3]);
+    for (const p of [up, down]) {
+      const [r, l] = wings.map((i) => turn(p, i));
+      expect(l[0]).toBeCloseTo(-r[0], 6); expect(l[1]).toBeCloseTo(-r[1], 6); expect(l[2]).toBeCloseTo(r[2], 6);
+      expect(Math.hypot(...r)).toBeGreaterThan(0.4);
+    }
+    // Each wing's tip moves across the wing's surface (along the surface's normal: the bend's line crossed with the beat's axis), not within it.
+    const n = m.position.length / 3, a: [number, number, number] = [0, 0, 0], b: [number, number, number] = [0, 0, 0];
+    for (const i of wings) {
+      const B = m.bends[i], ax = B.flutter!.axis!;
+      const nrm = [B.dir[1] * ax[2] - B.dir[2] * ax[1], B.dir[2] * ax[0] - B.dir[0] * ax[2], B.dir[0] * ax[1] - B.dir[1] * ax[0]], nl = Math.hypot(...nrm);
+      let tip = -1, far = 0;
+      for (let v = 0; v < n; v++) {
+        if (m.skin[v * 4 + 2] !== i) continue;
+        const s = (m.position[v * 3] - B.origin[0]) * B.dir[0] + (m.position[v * 3 + 1] - B.origin[1]) * B.dir[1] + (m.position[v * 3 + 2] - B.origin[2]) * B.dir[2];
+        if (s > far) { far = s; tip = v; }
+      }
+      expect(m.skin[tip * 4 + 3]).toBe(1);
+      skinVertex(m, up, tip, a); skinVertex(m, down, tip, b);
+      const move = [a[0] - b[0], a[1] - b[1], a[2] - b[2]], across = Math.abs(move[0] * nrm[0] + move[1] * nrm[1] + move[2] * nrm[2]) / nl;
+      expect(Math.hypot(...move)).toBeGreaterThan(2 * m.scale);   // more than 2 page px between the two ends of the beat
+      expect(across).toBeGreaterThan(0.9 * Math.hypot(...move));
+    }
   }, SLOW);
 
   it('pose the chort: claws with its arm and casts, never butts; the lower leg of the leg coming forward turns forwards; the feet stay near the ground', () => {

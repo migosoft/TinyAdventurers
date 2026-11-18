@@ -10,6 +10,7 @@ import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { orcDesc } from './descs/orc';
 import { HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
+import { DEMON_EYE } from './descs/imp';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
 const SIZE = { stag: 0.95, deer: 0.88, boar: 0.9, bunny: 0.75 } as const;
@@ -228,7 +229,7 @@ describe('buildTubeFigure', () => {
 });
 
 import { buildTubeFigure } from './tubeModel';
-import type { TubeDesc } from './tubeDesc';
+import type { TubeDesc, TubePiece } from './tubeDesc';
 import { biped, robedBiped } from './bipedFixture';
 const require_build = (d: TubeDesc) => buildTubeFigure('bad', d);
 
@@ -263,6 +264,40 @@ describe('two-legged tube figures', () => {
     expect(steel).toBeGreaterThan(0);
     expect(m.bends).toHaveLength(1);
     expect(m.bends[0].flutter).toEqual({ rate: 3, angle: 0.4 });
+  });
+  it('takes a beat axis and a hinge, lets a piece bend with another, and marks a glow', () => {
+    const ear = biped.pieces.find((p) => p.bend)!, GLOW = 0xffd23a;
+    const wing: TubePiece = { ...ear, bend: { sway: 0.8, flutter: { rate: 3, angle: 0.4, axis: [0, 1, 0] }, hinge: 0.5 } };
+    const rider: TubePiece = { shape: { ball: [0.5, 0.5, 0.5] }, at: [-0.6, 17.2, 3.8], stage: 'hair', bone: 'head', line: 0.3, colour: GLOW, glow: true, bend: { with: wing } };
+    const others = biped.pieces.filter((p) => p !== ear);
+    const g = buildTubeFigure('g', { ...biped, pieces: [...others, wing, rider] }), n = g.position.length / 3;
+    // The rider adds no bend of its own; the bend carries the axis.
+    expect(g.bends).toHaveLength(1);
+    expect(g.bends[0].flutter).toEqual({ rate: 3, angle: 0.4, axis: [0, 1, 0] });
+    expect(g.bends[0].len).toBeCloseTo(m.bends[0].len, 9);
+    const B = g.bends[0], [gr, gg, gb] = [0xff / 255, 0xd2 / 255, 0x3a / 255];
+    let riders = 0, stiff = 0, glowing = 0;
+    for (let i = 0; i < n; i++) {
+      const hullVertex = g.skin[i * 4 + 1] === 1, w = g.look[i * 4 + 3];
+      if (w === 3) { glowing++; expect(hullVertex, 'a hull never glows').toBe(false); }
+      if (g.skin[i * 4 + 2] !== 0) continue;
+      // Every bending vertex, the rider's too: how far along the bend's own line from the bend's foot, over half the length (the hinge).
+      const s = (g.position[i * 3] - B.origin[0]) * B.dir[0] + (g.position[i * 3 + 1] - B.origin[1]) * B.dir[1] + (g.position[i * 3 + 2] - B.origin[2]) * B.dir[2];
+      expect(Math.abs(g.skin[i * 4 + 3] - Math.max(0, Math.min(1, s / (B.len * 0.5))))).toBeLessThan(1e-5);
+      if (s > B.len * 0.5 && s < B.len * 0.9) { stiff++; expect(g.skin[i * 4 + 3]).toBe(1); }
+      if (!hullVertex && Math.abs(g.look[i * 4] - gr) < 1e-6 && Math.abs(g.look[i * 4 + 1] - gg) < 1e-6 && Math.abs(g.look[i * 4 + 2] - gb) < 1e-6) { riders++; expect(w).toBe(3); }
+    }
+    expect(riders).toBeGreaterThan(0); expect(stiff).toBeGreaterThan(0); expect(glowing).toBe(riders);
+    // Without the new data nothing glows and the bend has no axis.
+    expect(m.look.some((v, i) => i % 4 === 3 && v === 3)).toBe(false);
+    expect(m.bends[0].flutter).not.toHaveProperty('axis');
+    // Riders do not count against the bend limit; a rider must name an earlier swaying piece of the same description.
+    const many = Array.from({ length: 6 }, (): TubePiece => ({ ...rider, glow: undefined }));
+    expect(buildTubeFigure('many', { ...biped, pieces: [...others, wing, ...many] }).bends).toHaveLength(1);
+    expect(() => buildTubeFigure('x', { ...biped, name: 'RiderFirst', pieces: [...others, rider, wing] })).toThrow(/RiderFirst/);
+    expect(() => buildTubeFigure('x', { ...biped, name: 'RiderAlone', pieces: [...others, rider] })).toThrow(/RiderAlone/);
+    expect(() => buildTubeFigure('x', { ...biped, name: 'RiderOtherBone', pieces: [...others, wing, { ...rider, bone: 'body' }] })).toThrow(/RiderOtherBone/);
+    expect(() => buildTubeFigure('x', { ...biped, name: 'RiderOfRider', pieces: [...others, wing, rider, { ...rider, bend: { with: rider } }] })).toThrow(/RiderOfRider/);
   });
   it('weights a robe from 0 at robeTop to 1 at the hem', () => {
     const r = buildTubeFigure('robed', robedBiped), n = r.position.length / 3;
@@ -322,7 +357,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'necromancer', kind: KIND.Necromancer, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'summoner', kind: KIND.Summoner, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'disciple', kind: KIND.Disciple, height: HUMAN_HEIGHT, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
-  { key: 'imp', kind: KIND.Imp, height: HUMAN_HEIGHT * 0.45, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0xfdf7ed], weapon: null },
+  { key: 'imp', kind: KIND.Imp, height: HUMAN_HEIGHT * 0.45, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0x62232f, DEMON_EYE], weapon: null },
   { key: 'chort', kind: KIND.Chort, height: HUMAN_HEIGHT * 1.05, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0xfdf7ed], weapon: null },
 ];
 
@@ -381,10 +416,32 @@ describe('the two-legged creatures', () => {
     });
   }
 
-  it('the imp: two fluttering wings on the back that mirror each other, a wagging tail, horns on the hat bone above the head, claws on the hands', () => {
+  it('the imp: two bat wings on the back that mirror each other and beat across their surface, a wagging tail, horns on the hat bone above the head, claws on the hands, glowing eyes', () => {
     const d = TUBE_DESCS.imp, m = buildJob('imp', null);
     const wings = m.bends.filter((b) => b.flutter), tail = m.bends.filter((b) => !b.flutter);
-    expect(wings.map((b) => b.flutter)).toEqual([{ rate: 6, angle: 0.5 }, { rate: 6, angle: 0.5 }]);
+    expect(wings.map((b) => [b.flutter!.rate, b.flutter!.angle])).toEqual([[5, 0.9], [5, 0.9]]);
+    // The beat's axis: a unit vector across the span, mirrored like the wings (an axis mirrors with x and y turned round).
+    const [a0, a1] = wings.map((b) => b.flutter!.axis!);
+    expect(Math.hypot(...a0)).toBeCloseTo(1, 6);
+    expect([a1[0], a1[1], a1[2]]).toEqual([-a0[0], -a0[1], a0[2]]);
+    for (const w of wings) expect(Math.abs(w.flutter!.axis![0] * w.dir[0] + w.flutter!.axis![1] * w.dir[1] + w.flutter!.axis![2] * w.dir[2])).toBeLessThan(0.4);
+    // Each wing: one membrane (a flat tube, the thinnest allowed, that sways with a hinge), and four bones and a claw that bend with it.
+    const webs = d.pieces.filter((p) => p.bend && 'flutter' in p.bend && p.bend.flutter);
+    expect(webs).toHaveLength(2);
+    for (const web of webs) {
+      expect(web.colour).toBe(0x62232f);
+      expect(web.bend && 'hinge' in web.bend && web.bend.hinge).toBeLessThan(0.5);
+      if (!('tube' in web.shape)) throw new Error('the membrane is a tube');
+      for (const q of web.shape.tube) expect(q.r * Math.min(1, q.wide ?? 1)).toBeLessThan(0.4);
+      const riders = d.pieces.filter((p) => p.bend && 'with' in p.bend && p.bend.with === web);
+      expect(riders.filter((p) => 'tube' in p.shape && p.colour === 0xda4e38)).toHaveLength(4);
+      expect(riders.filter((p) => 'drop' in p.shape && p.colour === 0x5f2d56)).toHaveLength(1);
+    }
+    // The eyes: two glowing yellow slits on the head, without a hull and without pupils.
+    const eyes = d.pieces.filter((p) => p.glow);
+    expect(eyes).toHaveLength(2);
+    expect(eyes.every((p) => p.colour === DEMON_EYE && p.line === 0 && p.bone === 'head' && 'tube' in p.shape)).toBe(true);
+    expect(d.pieces.some((p) => p.colour === 0x222222 || p.colour === 0xfdf7ed)).toBe(false);
     // Back, up and outwards, one to each side, from behind the shoulders; on the body, so the head's turn leaves them.
     for (const w of wings) {
       expect(w.bone).toBe(bone('body'));

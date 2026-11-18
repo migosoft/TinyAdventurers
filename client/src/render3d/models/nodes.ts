@@ -151,7 +151,9 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     const flatColour = look.xyz;
     const isStone = p.tint.w.greaterThan(0.5);
     const isSteel = look.w.greaterThan(0.5).and(look.w.lessThan(1.5)).and(isStone.not());
-    const isUnlit = look.w.greaterThan(1.5);
+    const isUnlit = look.w.greaterThan(1.5).and(look.w.lessThan(2.5));
+    // A glowing piece (look 3: eyes) shows its own colour whatever light falls on it; a stone figure's does not glow.
+    const isGlow = look.w.greaterThan(2.5).and(isStone.not());
     const base = select(look.x.lessThan(-0.5), painted, flatColour).mul(p.tint.xyz);
     const albedo = select(isStone, stoned, select(isSteel, mix(base, mirrored, STEEL.mix), base));
 
@@ -162,7 +164,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour = select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit));
+    const colour = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit)));
     return vec4(sight.apply(colour, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   })();
 
