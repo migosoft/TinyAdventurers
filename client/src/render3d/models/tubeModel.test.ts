@@ -315,6 +315,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'necromancer', kind: KIND.Necromancer, height: 19, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'summoner', kind: KIND.Summoner, height: 19, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'disciple', kind: KIND.Disciple, height: 16, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
+  { key: 'imp', kind: KIND.Imp, height: 10, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0xfdf7ed], weapon: null },
 ];
 
 describe('the two-legged creatures', () => {
@@ -371,6 +372,35 @@ describe('the two-legged creatures', () => {
       });
     });
   }
+
+  it('the imp: two fluttering wings on the back that mirror each other, a wagging tail, horns on the hat bone above the head, claws on the hands', () => {
+    const d = TUBE_DESCS.imp, m = buildJob('imp', null);
+    const wings = m.bends.filter((b) => b.flutter), tail = m.bends.filter((b) => !b.flutter);
+    expect(wings.map((b) => b.flutter)).toEqual([{ rate: 6, angle: 0.5 }, { rate: 6, angle: 0.5 }]);
+    // Back, up and outwards, one to each side, from behind the shoulders; on the body, so the head's turn leaves them.
+    for (const w of wings) {
+      expect(w.bone).toBe(bone('body'));
+      expect(w.dir[0]).toBeLessThan(0); expect(w.dir[1]).toBeGreaterThan(0);
+      expect(w.origin[0]).toBeLessThan(d.pivots.armR![0]);
+    }
+    expect(wings[0].dir[2]).toBeCloseTo(-wings[1].dir[2], 6);
+    expect(Math.abs(wings[0].dir[2])).toBeGreaterThan(0.3);
+    expect(wings[0].origin[2]).toBe(-wings[1].origin[2]);
+    expect(tail).toHaveLength(1);
+    expect([tail[0].k, tail[0].wag, tail[0].bone]).toEqual([1, 1, bone('body')]);
+    expect(tail[0].dir[1]).toBeGreaterThan(0);   // the end stands up, so the wag shows
+    // The horns: the only pieces on the hat bone, 0x5f2d56, their foot (the hat pivot) inside the head and their tips above it.
+    const horns = d.pieces.filter((p) => p.bone === 'hat');
+    expect(horns).toHaveLength(2);
+    expect(horns.every((p) => p.colour === 0x5f2d56 && 'drop' in p.shape)).toBe(true);
+    expect(m.parents[bone('hat')]).toBe(bone('head'));
+    expect(d.pivots.hat![1] * m.scale).toBeLessThan(m.baseHeight);
+    expect(m.stands! * m.scale).toBeGreaterThan(m.baseHeight + 0.5);
+    // Three claws on each hand, drops; arms, so it claws and casts (never butts with the horns).
+    for (const h of ['handR', 'handL'] as const) expect(d.pieces.filter((p) => p.bone === h && 'drop' in p.shape)).toHaveLength(3);
+    expect(m.butt).toBe(true); expect(m.armLength).toBeGreaterThan(0);
+    expect(d.weapon).toBeUndefined();
+  });
 
   it('the orcs: one build; the archer has arms 0.75 as thick, a bone mask instead of tusks, and a strap', () => {
     const w = buildJob('orc', null), a = buildJob('orcArcher', null);

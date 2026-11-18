@@ -57,13 +57,13 @@ const WOLF_TABLE: Record<string, number[]> = {
   sleep: [0,2.8973734,0,1.5707963,1,1,1,0,0,1,0.0351051,0,0,1,0.0351051,0.8971993,0,0.4416259,0.0988572,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0,1,0,0,0,0,1.0237764,0,-0.0951058,0,0,1,0],
 };
 
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple';
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
 /** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
-const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple'];
+const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp'];
 const TUBE_KIND: Record<TubeKey, number> = {
   stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcArcher: KIND.OrcArcher, npcKnight: KIND.Knight,
-  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple,
+  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp,
 };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
@@ -440,6 +440,22 @@ describe('the woodland animals in every animation', () => {
     expect(style('goblin', ANIM.Shoot)).toBe('shot');
     expect(style('goblin', ANIM.Melee)).toBe('swing');
     expect(style('npcKnight', ANIM.Melee)).toBe('swing');
+  }, SLOW);
+
+  it('pose the imp: a horned model with arms claws with its arm in a melee and casts, never butts; both wings flutter standing, opposite ways', () => {
+    const m = tube('imp'), d = tdef('imp');
+    expect(m.butt).toBe(true);
+    const melee = poseFigure(m, d, view({ anim: ANIM.Melee, animT: STRIKE_T }), 1 / 60, settled());
+    expect(melee.attack?.style).toBe('swing');
+    expect(melee.root.x).toBeGreaterThanOrEqual(0);   // no rearing back
+    expect(poseFigure(m, d, view({ anim: ANIM.Cast, animT: STRIKE_T }), 1 / 60, settled()).attack?.style).toBe('cast');
+    const wings = m.bends.map((b, i) => (b.flutter ? i : -1)).filter((i) => i >= 0);
+    expect(wings).toHaveLength(2);
+    // The turn about the line of sight (x) at the tip: axis x times the angle.
+    const flap = (clock: number): number[] => { const p = poseFigure(m, d, view(), 0, settled({ clock })); return wings.map((i) => p.bends[i * 4] * p.bends[i * 4 + 3]); };
+    const a = flap(0.6), b = flap(0.68);
+    for (const i of [0, 1]) expect(Math.abs(a[i] - b[i])).toBeGreaterThan(0.1);
+    for (const f of [a, b]) { expect(Math.sign(f[0])).toBe(-Math.sign(f[1])); expect(f[0]).toBeCloseTo(-f[1], 6); }
   }, SLOW);
 
   it('pose the robes: all three cast (the Disciple with its sleeve arms, no weapon), glide without a hop and swing the hem; only a tip sways', () => {

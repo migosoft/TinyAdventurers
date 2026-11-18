@@ -10,6 +10,7 @@ import { boar } from './descs/boar';
 import { bunny } from './descs/bunny';
 import { deer, stag } from './descs/deer';
 import { goblin } from './descs/goblin';
+import { imp } from './descs/imp';
 import { npcKnight } from './descs/npcKnight';
 import { orc, orcArcher } from './descs/orc';
 import { disciple, necromancer, summoner } from './descs/robed';
@@ -18,11 +19,11 @@ import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
 
-export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple';
+export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcArcher' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp';
 export type ModelKey = DescKey | TubeKey;
 
 /** The models built from tubes and balls: the woodland animals (#357) and the two-legged creatures (#356). */
-export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, orcArcher, npcKnight, necromancer, summoner, disciple };
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, orcArcher, npcKnight, necromancer, summoner, disciple, imp };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
@@ -48,6 +49,8 @@ export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   [KIND.Necromancer]: 'necromancer',
   [KIND.Summoner]: 'summoner',
   [KIND.Disciple]: 'disciple',
+  // The summoner's imps are this kind too: one look, no tint.
+  [KIND.Imp]: 'imp',
 };
 
 /**
