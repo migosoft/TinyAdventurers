@@ -25,26 +25,20 @@ for (const backend of ['webgl', 'auto']) {
       p.on('pageerror', (e) => errs.push(e.message.slice(0, 200)));
       p.on('console', (m) => { if (m.type() === 'error' || /device lost/i.test(m.text())) errs.push(m.text().slice(0, 200)); });
       await p.goto(`${base}?r3d=gallery&focus=models&crowd=${CROWD}${kinds}${as === 'cards' ? '&crowdAs=cards' : ''}${light}&backend=${backend}`);
-      await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });
+      const run = `${backend} ${light || 'work'} ${as}`;
+      try {
+        await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });
+      } catch (e) {
+        console.log(`FAILED: the page of the run "${run}" did not draw 10 frames in 40 s (${e.message.split('\n')[0]})`);
+        await b.close();
+        process.exit(1);
+      }
       if (first) {
         await printGpu(p);
         first = false;
-        if (process.env.GPU) {
-          // With GPU set the numbers are worthless on a software renderer: stop at once.
-          const info = await p.evaluate(async () => {
-            const g = document.createElement('canvas').getContext('webgl2');
-            const e = g?.getExtension('WEBGL_debug_renderer_info');
-            const a = await navigator.gpu?.requestAdapter().catch(() => null);
-            return `${g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'none'} | ${a ? [a.info?.vendor, a.info?.architecture, a.info?.device, a.info?.description].join(' ') : 'no adapter'}`;
-          });
-          if (SOFTWARE.test(info)) {
-            console.log(`FAILED: a software renderer draws (${info}), the numbers would be worthless`);
-            await b.close();
-            process.exit(1);
-          }
-        }
       }
       if (backend === 'webgl') {
+        // The renderer of the page's own canvas: the one that draws the run.
         const gl = await p.evaluate(() => {
           const c = document.querySelector('canvas');
           const g = c?.getContext('webgl2');
@@ -52,7 +46,18 @@ for (const backend of ['webgl', 'auto']) {
           return g ? (e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)) : 'no webgl2 context on the page canvas';
         });
         console.log(`renderer (page canvas, ${backend}): ${gl}`);
-        if (process.env.GPU && SOFTWARE.test(gl)) failures.push(`${backend}: software renderer ${gl}`);
+        // With GPU set the numbers are worthless on a software renderer: stop at once.
+        if (process.env.GPU && SOFTWARE.test(gl)) {
+          console.log(`FAILED: a software renderer draws (${gl}), the numbers would be worthless`);
+          await b.close();
+          process.exit(1);
+        }
+      } else if (process.env.GPU) {
+        const adapter = await p.evaluate(async () => {
+          const a = await navigator.gpu?.requestAdapter().catch(() => null);
+          return a ? [a.info?.vendor, a.info?.architecture, a.info?.device, a.info?.description].join(' ') : null;
+        });
+        if (!adapter || SOFTWARE.test(adapter)) failures.push(`${run}: ${adapter ? `software adapter ${adapter}` : 'no WebGPU adapter'}`);
       }
       await p.waitForTimeout(6000);
       const r = await p.evaluate((secs) => new Promise((res) => {

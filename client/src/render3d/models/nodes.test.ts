@@ -136,6 +136,7 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
 
     it('the hull\'s cut rule: the line fetches the id texel at its own fragment coordinate; the piece does not', () => {
       const { mats } = make(true);
+      // These patterns match the text TSL generates today: re-read them when three.js is updated.
       // The fetch of a texture at the fragment's own pixel: `texelFetch` of an `ivec2` of `gl_FragCoord`, or `textureLoad` at `fragCoord.xy`.
       const own = wgsl ? /textureLoad\(\s*\w+,\s*vec2<i32>\(\s*fragCoord\.xy\s*\)/ : /ivec2\(\s*vec2\(\s*gl_FragCoord\.xy\.x[^;]*;[\s\S]*?texelFetch\(/;
       expect(fragment(B, mats.line, { compare: true, geometry: geometryOf(elf, 'line') })).toMatch(own);

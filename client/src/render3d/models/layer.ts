@@ -120,7 +120,7 @@ export class FigureLayer {
   private readonly rowsTex: DataTexture;
   private readonly models = new Map<string, ModelRes>();
   private readonly entries = new Map<string, Entry>();
-  /** Per-frame scratch, cleared at the top of `frame` so a frame allocates no containers. */
+  /** Per-frame scratch: the maps are cleared and reused at the top of `frame`; the per-model group object and its list are made new each frame. */
   private readonly groups = new Map<string, { key: string; model: FigureModel; list: number[] }>();
   private readonly live = new Set<Entry>();
   /** The frame's owner numbers: an entity id to its index in order of first appearance. */
