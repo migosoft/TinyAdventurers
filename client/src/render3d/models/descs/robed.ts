@@ -6,7 +6,7 @@
 // the figure's right. The colours are the pack sprite's (necromancer) and the red set of the summoner's recolour.
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, HUMAN_HEIGHT, type TubeDesc, type TubePiece } from '../tubeDesc';
 import { PAGE_TO_GAME } from '../tubeModel';
 import type { TubePoint } from '../tubes';
 
@@ -109,7 +109,7 @@ export function robedDesc(v: RobedLook): TubeDesc {
   };
 }
 
-export const necromancer = robedDesc({ name: 'Necromancer', height: 19, robe: 0x5f2d56, edge: 0x9f294e, hood: 'deep', tip: true, hands: true });
-export const summoner = robedDesc({ name: 'Summoner', height: 19, robe: 0x62232f, edge: 0xda4e38, hood: 'deep', tip: true, hands: true });
+export const necromancer = robedDesc({ name: 'Necromancer', height: HUMAN_HEIGHT * HEIGHT_FACTOR.robed, robe: 0x5f2d56, edge: 0x9f294e, hood: 'deep', tip: true, hands: true });
+export const summoner = robedDesc({ name: 'Summoner', height: HUMAN_HEIGHT * HEIGHT_FACTOR.robed, robe: 0x62232f, edge: 0xda4e38, hood: 'deep', tip: true, hands: true });
 // The Disciple's own colours: the red set one step darker than the Summoner's (the cloth is the Summoner's 0x62232f at 85 %, the edge is the pack's dark red).
-export const disciple = robedDesc({ name: 'Disciple', height: 16, robe: 0x531d28, edge: 0x9f294e, hood: 'low', tip: false, hands: false });
+export const disciple = robedDesc({ name: 'Disciple', height: HUMAN_HEIGHT * HEIGHT_FACTOR.robed, robe: 0x531d28, edge: 0x9f294e, hood: 'low', tip: false, hands: false });

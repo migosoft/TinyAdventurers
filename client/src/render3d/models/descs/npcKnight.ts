@@ -4,7 +4,7 @@
 // are the sprite's (npc_knight). The plate is polished steel (`metal`); the dark parts are not, so they stay dark beside the mirror.
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 import type { TubePoint } from '../tubes';
 
 const STEEL = 0x72d6ce, MAIL = 0x417089, DARK = 0x222222;
@@ -69,7 +69,7 @@ for (let i = 0; i <= 6; i++) { const a = 0.3 - i / 6 * 1.7; comb.push({ p: [helm
 add({ shape: { tube: comb, opts: { K: 8, N: 18, ref: [0, 0, 1] } }, stage: 'hair', bone: 'head', line: 0.3, colour: MAIL });
 
 export const npcKnight: TubeDesc = {
-  name: 'Knight', size: 1, outline: 0x222222, pieces, pivots,
+  name: 'Knight', size: fitSize(HEIGHT_FACTOR.knight, 18.021), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
   // Arms of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
   stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },

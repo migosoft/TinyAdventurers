@@ -3,7 +3,7 @@
 // at y 0, z to the figure's right. The colours are the pack sprite's (goblin).
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 
 const SKIN = 0x3d734f, RAG = 0x314152, EYE = 0xfdf7ed, DARK = 0x222222;
 
@@ -58,7 +58,7 @@ for (const sd of [1, -1]) {
 }
 
 export const goblin: TubeDesc = {
-  name: 'Goblin Archer', size: 1, outline: 0x222222, pieces, pivots,
+  name: 'Goblin Archer', size: fitSize(HEIGHT_FACTOR.goblin, 11.996), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
   // Thin arms of a natural length: they take a third of the lengthening the short-armed figures need in a blow.
   stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },

@@ -8,6 +8,7 @@ import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { orcDesc } from './descs/orc';
+import { HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
@@ -314,15 +315,15 @@ interface BipedFacts {
   weapon: 'weaponR' | 'weaponL' | null;
 }
 const BIPEDS: BipedFacts[] = [
-  { key: 'goblin', kind: KIND.GoblinArcher, height: 12, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
-  { key: 'orc', kind: KIND.OrcWarrior, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
-  { key: 'orcArcher', kind: KIND.OrcArcher, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
-  { key: 'npcKnight', kind: KIND.Knight, height: 18, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, 0x417089], weapon: 'weaponR' },
-  { key: 'necromancer', kind: KIND.Necromancer, height: 19, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
-  { key: 'summoner', kind: KIND.Summoner, height: 19, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
-  { key: 'disciple', kind: KIND.Disciple, height: 16, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
-  { key: 'imp', kind: KIND.Imp, height: 10, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0xfdf7ed], weapon: null },
-  { key: 'chort', kind: KIND.Chort, height: 21, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0xfdf7ed], weapon: null },
+  { key: 'goblin', kind: KIND.GoblinArcher, height: HUMAN_HEIGHT * 0.65, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
+  { key: 'orc', kind: KIND.OrcWarrior, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'orcArcher', kind: KIND.OrcArcher, height: HUMAN_HEIGHT * 1.1, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
+  { key: 'npcKnight', kind: KIND.Knight, height: HUMAN_HEIGHT, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, 0x417089], weapon: 'weaponR' },
+  { key: 'necromancer', kind: KIND.Necromancer, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x5f2d56, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'summoner', kind: KIND.Summoner, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
+  { key: 'disciple', kind: KIND.Disciple, height: HUMAN_HEIGHT, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
+  { key: 'imp', kind: KIND.Imp, height: HUMAN_HEIGHT * 0.45, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0xfdf7ed], weapon: null },
+  { key: 'chort', kind: KIND.Chort, height: HUMAN_HEIGHT * 1.05, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0xfdf7ed], weapon: null },
 ];
 
 describe('the two-legged creatures', () => {
@@ -337,7 +338,7 @@ describe('the two-legged creatures', () => {
       it('stands upright on the ground at its height and walks', () => {
         expect(d.stance).toBe('two');
         expect(m.quad).toBe(false); expect(m.gait).toBe('walk'); expect(m.varies).toBe(true);
-        expect(Math.abs(m.baseHeight - f.height)).toBeLessThan(0.5);
+        expect(Math.abs(m.baseHeight - f.height)).toBeLessThan(0.1);
         let low = Infinity;
         for (let i = 0; i < n; i++) if (m.skin[i * 4 + 1] === 0) low = Math.min(low, m.position[i * 3 + 1]);
         expect(Math.abs(low)).toBeLessThan(0.3 / m.scale);
@@ -485,15 +486,17 @@ describe('the two-legged creatures', () => {
     expect(orcDesc({ name: 'Strapped', arms: 1, mask: false, strap: true }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length + 1);
   });
 
-  it('the robes: one build; the Summoner is the Necromancer in other colours, the Disciple is slighter, has no tip and shows no hands', () => {
+  it('the robes: one build; the Summoner is the Necromancer in other colours, the Disciple is as tall, has no tip and shows no hands', () => {
     const [n, s, d] = [TUBE_DESCS.necromancer, TUBE_DESCS.summoner, TUBE_DESCS.disciple];
     const shapes = (t: TubeDesc): string => JSON.stringify(t.pieces.map((p) => [p.shape, p.at, p.stage, p.bone, p.line, p.bend, p.robe, p.torso]));
     expect(shapes(s)).toBe(shapes(n));
     expect(s.pieces.map((p) => p.colour)).not.toEqual(n.pieces.map((p) => p.colour));
     const [mn, ms, md] = [buildJob('necromancer', null), buildJob('summoner', null), buildJob('disciple', null)];
     expect(ms.position).toEqual(mn.position);
-    expect(md.armRadius).toBeLessThan(mn.armRadius);
-    expect(md.radius).toBeLessThan(mn.radius);
+    // All three are exactly as tall (one human to the top of the hood) and, from one build, as thick (#356 rework 1).
+    expect([mn.baseHeight, md.baseHeight]).toEqual([ms.baseHeight, ms.baseHeight]);
+    expect(md.armRadius).toBeLessThanOrEqual(mn.armRadius);
+    expect(md.radius).toBeLessThanOrEqual(mn.radius);
     const hands = (t: TubeDesc): number => t.pieces.filter((p) => p.bone === 'handR' || p.bone === 'handL').length;
     expect([hands(n), hands(s), hands(d)]).toEqual([2, 2, 0]);
     expect(md.armLength).toBeGreaterThan(0);   // sleeve arms: it casts, it does not bite

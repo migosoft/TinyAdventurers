@@ -5,6 +5,13 @@ import type { Bone, Stage } from './bones';
 import type { Vec3 } from './desc';
 import type { TubeOpts, TubePoint } from './tubes';
 
+/** One human's height in game px (a tile is 16): the default the two-legged tube models are sized by (#356). */
+export const HUMAN_HEIGHT = 18;
+/** The height factors of the nine, of `HUMAN_HEIGHT`. The robes are drawn to their factor (robed.ts); the others are scaled by `fitSize`. */
+export const HEIGHT_FACTOR = { knight: 1, robed: 1, orc: 1.1, goblin: 0.65, imp: 0.45, chort: 1.05 } as const;
+/** `TubeDesc.size` that makes a figure drawn `drawn` game px high (at size 1; each description names the measured value) as tall as `factor` humans. */
+export const fitSize = (factor: number, drawn: number): number => factor * HUMAN_HEIGHT / drawn;
+
 export type Shape =
   | { tube: readonly TubePoint[]; opts?: TubeOpts }
   | { ball: readonly [number, number, number]; pow?: number; turnZ?: number }

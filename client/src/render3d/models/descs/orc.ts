@@ -4,7 +4,7 @@
 // figure's right. The colours are the pack sprites' (orc_warrior, masked_orc).
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 import type { TubePoint } from '../tubes';
 
 const SKIN = 0x3d734f, WRAP = 0x8f4029, BELT = 0x62232f, BONE = 0xfdf7ed, BONE_SHADE = 0xd3bfa9, DARK = 0x222222;
@@ -95,7 +95,7 @@ export function orcDesc(v: OrcLook): TubeDesc {
   }
 
   return {
-    name: v.name, size: 1, outline: 0x222222, pieces, pivots,
+    name: v.name, size: fitSize(HEIGHT_FACTOR.orc, 18.998), outline: 0x222222, pieces, pivots,
     parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
     // Arms of this length reach a blow almost by themselves: they take a third of the lengthening the short-armed figures need.
     stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },

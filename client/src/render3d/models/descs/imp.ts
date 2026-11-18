@@ -3,7 +3,7 @@
 // y 0, z to the figure's right. The colours are the pack sprite's (imp).
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 
 const SKIN = 0xda4e38, HORN = 0x5f2d56, SHADE = 0x62232f, EYE = 0xfdf7ed, DARK = 0x222222;
 
@@ -80,7 +80,7 @@ for (const sd of [1, -1]) {
 }
 
 export const imp: TubeDesc = {
-  name: 'Imp', size: 1, outline: 0x222222, pieces, pivots,
+  name: 'Imp', size: fitSize(HEIGHT_FACTOR.imp, 9.998), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', hat: 'head', leg1: 'leg0', leg3: 'leg2' },
   stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],

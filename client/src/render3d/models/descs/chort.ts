@@ -3,7 +3,7 @@
 // Page px (one wolf model px), the front along +x, the feet at y 0, z to the figure's right. The colours are the pack sprite's (chort).
 
 import type { Vec3 } from '../desc';
-import type { TubeDesc, TubePiece } from '../tubeDesc';
+import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 
 const SKIN = 0xda4e38, BACK = 0x9f294e, HOOF = 0x5f2d56, BONE = 0xfdf7ed, DARK = 0x222222;
 
@@ -91,7 +91,7 @@ for (const sd of [1, -1]) {
 }
 
 export const chort: TubeDesc = {
-  name: 'Chort', size: 1, outline: 0x222222, pieces, pivots,
+  name: 'Chort', size: fitSize(HEIGHT_FACTOR.chort, 21.006), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', hat: 'head', leg1: 'leg0', leg3: 'leg2' },
   stance: 'two', arms: { length: armLen, radius: R, stretch: 0.3 },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false, knee: -1 }, { upper: 'leg2', lower: 'leg3', front: false, knee: -1 }],
