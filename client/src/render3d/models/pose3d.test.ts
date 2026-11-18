@@ -5,10 +5,12 @@ import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
 import { buildJob } from './build';
-import { ATTACK_IN_SECS, BUTT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { ATTACK_IN_SECS, BUTT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
+import { biped, robedBiped } from './bipedFixture';
+import { buildTubeFigure } from './tubeModel';
 
 const SLOW = 120000;
 const KIND_OF: Record<DescKey, number> = { elf: KIND.ElvenRanger, knight: KIND.Paladin, wizard: KIND.Wizard, dwarf: KIND.Barbarian, skelet: KIND.SkeletonWarrior, ogre: KIND.Ogre, wolf: KIND.DireWolf };
@@ -126,6 +128,103 @@ describe('the two-legged #338 figures are unchanged', () => {
       }, SLOW);
     }
   }
+});
+
+describe('the walk', () => {
+  const m = buildTubeFigure('biped', biped), rm = buildTubeFigure('robedBiped', robedBiped), d = FIGURES[KIND.OrcWarrior];
+  const at = (phi: number, extra: Partial<ViewState> = {}, mm: FigureModel = m): Pose3d => poseFigure(mm, d, view({ anim: ANIM.Move, ...extra }), 0, settled({ walk: 1, phi }));
+  const lowerTurn = (p: Pose3d, i: number, mm: FigureModel = m): number => turnOf(mm, p, mm.legs![i].lower);
+  const sideOf = (i: number): number => Math.sign(m.pivots[m.legs![i].upper * 3 + 2]);
+  const flutterBend = m.bends.findIndex((b) => b.flutter);
+  const plain: FigureModel = { ...m, bends: m.bends.map((b) => ({ ...b, flutter: undefined })) };
+
+  it('swings the legs in turn by WALK.swing', () => {
+    expect(WALK).toEqual({ swing: 0.5, knee: 0.9 });
+    const p = at(Math.PI / 2);
+    expect(turnOf(m, p, m.legs![0].upper)).toBeCloseTo(-turnOf(m, p, m.legs![1].upper), 6);
+    expect(Math.abs(turnOf(m, p, m.legs![0].upper))).toBeCloseTo(WALK.swing, 6);
+  });
+  it('bends the knee back only on the leg that comes forward, never beyond WALK.knee', () => {
+    const p = at(0);
+    for (let i = 0; i < 2; i++) expect(lowerTurn(p, i)).toBeCloseTo(Math.cos(0) * sideOf(i) > 0 ? -WALK.knee : 0, 6);
+    let bent = 0;
+    for (let j = 0; j < 16; j++) {
+      const phi = j / 16 * 2 * Math.PI, q = at(phi);
+      for (let i = 0; i < 2; i++) {
+        const t = lowerTurn(q, i);
+        expect(t).toBeLessThanOrEqual(1e-9);
+        expect(t).toBeGreaterThanOrEqual(-WALK.knee - 1e-9);
+        if (Math.cos(phi) * sideOf(i) > 1e-6) expect(t, `phi ${phi}`).toBeCloseTo(-WALK.knee * Math.cos(phi) * sideOf(i), 6);
+        else expect(t).toBeCloseTo(0, 6);
+        if (t < -0.1) bent++;
+      }
+    }
+    expect(bent).toBeGreaterThan(0);
+  });
+  it('bends a knee of -1 the other way', () => {
+    const back: FigureModel = { ...m, legs: m.legs!.map((l) => ({ ...l, knee: -1 as const })) };
+    const p = at(0, {}, back);
+    for (let i = 0; i < 2; i++) expect(lowerTurn(p, i, back)).toBeCloseTo(sideOf(i) > 0 ? WALK.knee : 0, 6);
+  });
+  it('dips with the stride instead of hopping, and keeps the ground shadow', () => {
+    const hip = m.pivots[m.legs![0].upper * 3 + 1];
+    expect(at(Math.PI / 2).root.y).toBeCloseTo(-(1 - Math.cos(WALK.swing)) * hip * m.scale, 6);
+    expect(at(0).root.y).toBeCloseTo(0, 9);
+    for (let j = 0; j < 16; j++) expect(at(j / 16 * 2 * Math.PI).air).toBe(0);
+  });
+  it('swings each arm against the leg of its side', () => {
+    const p = at(Math.PI / 2);
+    expect(Math.sign(turnOf(m, p, bone('armR')))).toBe(-Math.sign(turnOf(m, p, m.legs![0].upper)));
+    expect(Math.sign(turnOf(m, p, bone('armL')))).toBe(-Math.sign(turnOf(m, p, m.legs![1].upper)));
+  });
+  it('is straight at rest', () => {
+    const p = poseFigure(m, d, view(), 0, settled());
+    for (const l of m.legs!) { expect(isIdentity(p, l.upper)).toBe(true); expect(isIdentity(p, l.lower)).toBe(true); }
+  });
+  it('glides a figure without legs and swings its hem', () => {
+    const p = at(Math.PI / 2, {}, rm);
+    expect(p.root.y).toBe(0);
+    expect(p.robe[0]).not.toBe(0);
+    for (const b of [bone('leg0'), bone('leg1'), bone('leg2'), bone('leg3')]) expect(isIdentity(p, b), `bone ${b}`).toBe(true);
+  });
+  it('flutters a bend that states it, also standing; not asleep; within the cap', () => {
+    expect(flutterBend).toBeGreaterThanOrEqual(0);
+    const angle = (mm: FigureModel, clock: number, extra: Partial<ViewState> = {}, walk = 0): number => poseFigure(mm, d, view(extra), 0, settled({ clock, walk })).bends[flutterBend * 4 + 3];
+    expect(angle(m, 0.1)).not.toBeCloseTo(angle(m, 0.2), 4);
+    expect(angle(m, 0.1)).not.toBeCloseTo(angle(plain, 0.1), 4);
+    const sleep = { effects: 1 << EFFECT.Sleep };
+    for (const c of [0.1, 0.2]) expect(angle(m, c, sleep)).toBeCloseTo(angle(plain, c, sleep), 9);
+    for (const c of [1e6, 1e6 + 0.0625, 1e6 + 0.1]) expect(angle(m, c, { anim: ANIM.Move }, 1)).toBeLessThan(0.75 + 1e-9);
+  });
+  it('lies asleep with straight knees, holds entangled legs, and holds a stone or frozen pose mid-stride', () => {
+    const sleep = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), 0.2, settled({ walk: 1, phi: 1 }));
+    expect(sleep.asleep).toBe(true);
+    for (const l of m.legs!) { expect(isIdentity(sleep, l.upper)).toBe(true); expect(isIdentity(sleep, l.lower)).toBe(true); }
+    const mem = settled();
+    for (let i = 0; i < 20; i++) poseFigure(m, d, view({ anim: ANIM.Move, x: i * 2, effects: 1 << EFFECT.Entangled }), 1 / 60, mem);
+    const ent = poseFigure(m, d, view({ anim: ANIM.Move, x: 40, effects: 1 << EFFECT.Entangled }), 1 / 60, mem);
+    for (const l of m.legs!) { expect(isIdentity(ent, l.upper)).toBe(true); expect(isIdentity(ent, l.lower)).toBe(true); }
+    expect(ent.root.y).toBe(0);
+    for (const fx of [EFFECT.Petrified, EFFECT.Frozen]) {
+      const held = settled({ walk: 1, phi: 1 });
+      const a = poseFigure(m, d, view({ anim: ANIM.Move, effects: 1 << fx }), 1 / 60, held);
+      expect(Math.abs(turnOf(m, a, m.legs![0].upper))).toBeGreaterThan(0.1);
+      const b = poseFigure(m, d, view({ anim: ANIM.Move, x: 30, effects: 1 << fx }), 0.5, held);
+      expect(b.bones).toEqual(a.bones);
+      expect(b.root).toEqual(a.root);
+    }
+  });
+  it('is finite in every ANIM at dt 0 and 1/60 with HURT and each effect', () => {
+    const anims = Object.values(ANIM) as number[];
+    const effects = [0, 1 << EFFECT.Sleep, 1 << EFFECT.Petrified, 1 << EFFECT.Frozen, 1 << EFFECT.Entangled];
+    for (const mm of [m, rm]) for (const dt of [0, 1 / 60]) for (const anim of anims) for (const fx of effects) for (const flags of [0, FLAG.HURT]) {
+      const mem = newPose3dMemory();
+      for (let step = 0; step < 2; step++) {
+        const p = poseFigure(mm, d, view({ anim, effects: fx, flags, animT: 0.05, x: 3 + step, y: -4, aim: 1 }), dt, mem);
+        for (const v of [p.yaw, ...Object.values(p.root), ...p.bones, ...p.bends, ...p.robe, p.air]) expect(Number.isFinite(v), `${mm.key} anim ${anim} fx ${fx}`).toBe(true);
+      }
+    }
+  });
 });
 
 describe('legs of two bones', () => {

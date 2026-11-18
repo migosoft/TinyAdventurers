@@ -21,6 +21,8 @@ import { composeBones, identityLocal, type BoneLocal } from './rig';
 
 /** The approved skip; the bound uses the same numbers. */
 export const GAIT = { rate: 1.4, stride: 1, armSwing: 1.2, bounce: 1, loose: 1.5 } as const;
+/** The walk of a two-legged tube model (`gait: 'walk'`): how far a leg swings at the hip, and how far the knee bends back (rad). */
+export const WALK = { swing: 0.5, knee: 0.9 } as const;
 export const TURN_RATE = 12, HIT_SECS = 0.26;
 /** The walk blends in and out by `dt * 9` per frame, as on the page (the page wins over the brief's 0.2 s): an exponential, 83 % after 0.2 s. */
 const BLEND_RATE = 9;
@@ -411,7 +413,9 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   // ---- the gait ----
   const t = mem.clock, w = mem.walk, idle = 1 - w, phi = mem.phi;
   const sP = Math.sin(phi), cos2 = Math.cos(2 * phi), breath = asleep ? 0 : Math.sin(t * 2.6);
-  const A = 0.62 * GAIT.stride, th = A * sP * w, air = Math.abs(sP), lim = Math.min(1, GAIT.bounce);
+  const walking = m.gait === 'walk' && !m.quad;
+  const A = 0.62 * GAIT.stride, th = (walking ? WALK.swing : A) * sP * w, air = Math.abs(sP), lim = Math.min(1, GAIT.bounce);
+  const armAir = walking ? 0 : air;   // the walk does not lift the arms sideways
   const rise = asleep ? 0.03 * (0.5 + 0.5 * Math.sin(t * 1.5)) : 0;   // a sleeper does not breathe; its body slowly swells and sinks
   const k = AP.k;
   let bob = 0;
@@ -451,16 +455,32 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     }
     body.sy *= 1 - 0.1 * Math.abs(HJ);
   } else {
-    // Skipping: one hop per step. Landing with the legs together, highest with them apart, a little stretch in the air.
-    bob = 2.4 * GAIT.bounce * air * w;
-    for (let j = 0; j < 4; j++) {
-      const b = LEG0 + j, sd = Math.sign(m.pivots[b * 3 + 2]), L = locals[b];
-      L.rz = th * sd; L.sy = 1 - 0.38 * Math.max(0, sP * sd) * w;
+    if (walking) {
+      // Walking: the legs swing in turn, the knee of the leg coming forward bends back, the body dips as the legs spread (no hop).
+      const cP = Math.cos(phi), legs = m.legs ?? [];
+      for (const l of legs) {
+        const sd = Math.sign(m.pivots[l.upper * 3 + 2]);
+        locals[l.upper].rz = WALK.swing * sP * sd * w;
+        if (l.lower >= 0) locals[l.lower].rz = -(l.knee ?? 1) * WALK.knee * Math.max(0, cP * sd) * w;
+      }
+      if (legs.length > 0) bob = (Math.cos(WALK.swing * sP * w) - 1) * m.pivots[legs[0].upper * 3 + 1];
+      body.ry = -0.10 * sP * w; body.rz = -0.04 * w;
+      body.sy = 1 + 0.02 * breath * idle + rise;
+      head.ry = 0.08 * sP * w;
+      head.ty = 0.12 * breath * idle;
+      if (legs.length === 0) { body.rx = 0.03 * sP * w; body.rz = -0.06 * w; }   // a robe glides: it leans and rocks instead of stepping
+    } else {
+      // Skipping: one hop per step. Landing with the legs together, highest with them apart, a little stretch in the air.
+      bob = 2.4 * GAIT.bounce * air * w;
+      for (let j = 0; j < 4; j++) {
+        const b = LEG0 + j, sd = Math.sign(m.pivots[b * 3 + 2]), L = locals[b];
+        L.rz = th * sd; L.sy = 1 - 0.38 * Math.max(0, sP * sd) * w;
+      }
+      body.rx = 0.08 * sP * w; body.ry = -0.16 * sP * w; body.rz = -0.03 * w;
+      body.sy = 1 + 0.02 * breath * idle + 0.09 * lim * (air - 0.45) * w + rise;
+      head.ry = 0.11 * sP * w; head.rz = 0.05 * cos2 * w + 0.015 * breath * idle;   // the head keeps looking ahead and nods a little
+      head.ty = 0.12 * breath * idle;
     }
-    body.rx = 0.08 * sP * w; body.ry = -0.16 * sP * w; body.rz = -0.03 * w;
-    body.sy = 1 + 0.02 * breath * idle + 0.09 * lim * (air - 0.45) * w + rise;
-    head.ry = 0.11 * sP * w; head.rz = 0.05 * cos2 * w + 0.015 * breath * idle;   // the head keeps looking ahead and nods a little
-    head.ty = 0.12 * breath * idle;
     if (k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }   // the body twists and leans, the head keeps looking at the target
     body.rz += leanBack;
     if (HJ) { body.rz += 0.32 * HJ; head.rz += 0.22 * HJ; body.sy *= 1 - 0.1 * Math.abs(HJ); }
@@ -470,7 +490,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (m.armLength > 0) {
     for (let side = 0; side < 2; side++) {
       const sd = side === 0 ? 1 : -1;
-      eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * air * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
+      eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * armAir * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
       if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) slerp(qa, fromDown(side === 0 ? AP.right : AP.left, qt), k);
       const long = 1 + ((side === 0 ? AP.longR : AP.longL) - 1) * k, more = (long - 1) * (m.armLength - m.armRadius);
       const arm = locals[ARM[side]], hand = locals[HAND[side]];
@@ -509,7 +529,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     R.roll = Math.PI / 2;
     R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground
   }
-  pose.air = asleep ? 0 : air * w * lim;
+  pose.air = asleep || walking ? 0 : air * w * lim;
   pose.asleep = asleep; pose.channel = anim === ANIM.Channel;
   if (struck && !asleep) { mem.atk.style = style; mem.atk.u = u; pose.attack = mem.atk; }
 
@@ -518,7 +538,9 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     const B = m.bends[i];
     if (B.neck) { pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = 0; pose.bends[i * 4 + 2] = 1; pose.bends[i * 4 + 3] = nbend; continue; }
     const kk = B.k * loose * 1.5;
-    const wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle, wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
+    let wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle;
+    if (B.flutter && !asleep) wx += Math.sign(B.dir[2] || 1) * B.flutter.angle * Math.sin(2 * Math.PI * B.flutter.rate * t);   // a wing or pennant, also standing
+    const wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
     const wz = kk * (B.up * 0.12 * w + 0.2 * Math.sin(2 * phi - 1.1) * w + 0.03 * Math.sin(t * 1.7) * idle) - B.up * 0.5 * HJ;   // a hit: the loose end lags behind the knocked body
     // The turn at the tip: its axis and its angle, which levels off so that a strong setting cannot fold the piece over.
     const raw = Math.hypot(wx, wy, wz) || 1e-6, ang = 0.75 * Math.tanh(raw / 0.75);
