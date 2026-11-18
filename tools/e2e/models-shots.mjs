@@ -34,7 +34,7 @@ const row = (name) => {
 const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'orcArcher', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
 /** The woodland page's line-up: the seven figures it places, no animals. */
 const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
-/** The animals (#357): their rows in KINDS start here. */
+/** The animals (#357); their rows are looked up by name with `row()`. */
 const ANIMALS = ['bunny', 'deer', 'stag', 'boar'];
 // A still picture: the clock nearly stopped (slow) at t = 0.6 (past the hurt flash).
 const STILL = '&slow=1000&t=0.6';

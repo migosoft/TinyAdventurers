@@ -61,6 +61,8 @@ function pivotsOf(d: TubeDesc): Partial<Record<Bone, Vec3>> {
 }
 
 function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
+  if (d.arms && d.stance !== 'two') throw new Error(`${d.name}: arms need stance 'two'`);
+  if (d.arms && (['handR', 'handL', 'weaponR', 'weaponL'] as const).some((b) => d.pivots[b])) throw new Error(`${d.name}: hand and weapon pivots are derived from arms`);
   for (const p of d.pieces) {
     if (p.bone !== 'hips' && !pv[p.bone]) throw new Error(`${d.name}: the bone ${p.bone} of a piece has no pivot`);
     if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);

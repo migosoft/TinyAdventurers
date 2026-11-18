@@ -282,6 +282,12 @@ describe('two-legged tube figures', () => {
     expect(() => buildTubeFigure('x', { ...robedBiped, name: 'BendingRobe', pieces: [{ ...robe, bend: { sway: 1 } }, ...robedBiped.pieces.slice(1)] })).toThrow(/BendingRobe/);
     expect(() => buildTubeFigure('x', { ...biped, name: 'NoKnee', pivots: noKnee })).toThrow(/NoKnee.*leg1/);
   });
+  it('throws for arms that state a hand or weapon pivot, and for arms without stance two', () => {
+    for (const b of ['handR', 'handL', 'weaponR', 'weaponL'] as const) {
+      expect(() => buildTubeFigure('x', { ...biped, name: 'OwnHand', pivots: { ...biped.pivots, [b]: [0, 5, 0] } }), b).toThrow(/OwnHand: hand and weapon pivots are derived from arms/);
+    }
+    expect(() => buildTubeFigure('x', { ...biped, name: 'NoStance', stance: undefined })).toThrow(/NoStance: arms need stance 'two'/);
+  });
   it('leaves the four animals as they were', () => {
     for (const key of keys) {
       const a = buildJob(key, null);
@@ -520,8 +526,11 @@ describe('the two-legged creatures', () => {
       }
       expect(swings).toBeGreaterThan(0);
       expect(hem).toBeGreaterThan(0);
-      // Nothing but the robe and the sleeves reaches below the waist: no piece shows under the hem when it swings.
-      for (const p of d.pieces) if (!p.robe && p.bone !== 'armR' && p.bone !== 'armL' && p.bone !== 'handR' && p.bone !== 'handL') expect((p.at ?? [0, 99, 0])[1], `${p.stage} on ${p.bone}`).toBeGreaterThan(m.robeTop!);
+      // Nothing but the robe and the sleeves reaches below the waist: every vertex under it swings with the robe or belongs to an arm or hand.
+      const armBones = [bone('armR'), bone('armL'), bone('handR'), bone('handL')];
+      for (let i = 0; i < n; i++) if (m.position[i * 3 + 1] < m.robeTop!) {
+        expect(m.skin[i * 4 + 2] === -2 || armBones.includes(m.skin[i * 4]), `${key} vertex ${i}: bone ${m.skin[i * 4]}, bend ${m.skin[i * 4 + 2]}, y ${m.position[i * 3 + 1]}`).toBe(true);
+      }
     }
   });
 

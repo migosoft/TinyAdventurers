@@ -34,7 +34,7 @@ export const EFFECT_GROUPS = 10;
  * die in turn, and the crowd's grid (2 tiles) of `CROWD_PER_ROW` x `CROWD_ROWS` places.
  */
 export const MODEL_PITCH = 3;
-/** The kinds stand in rows of `MODEL_PER_ROW` (22 kinds at 3 tiles do not fit the 50 tile stage), the rows `MODEL_KIND_ROW_PITCH` tiles apart, each with its own pillar torches. */
+/** The kinds stand in rows of `MODEL_PER_ROW` (22 kinds at 3 tiles do not fit the 50 tile stage), the rows `MODEL_KIND_ROW_PITCH` tiles apart, each with its own pillar torches. The pitch is 7 so the next row's pillars stand 3.5 tiles in front of a row's kinds and hide none. */
 export const MODEL_PER_ROW = 11;
 export const MODEL_KIND_ROW_PITCH = 7;
 /** The effect rows' entity ids are `ID.modelEffect + row * MODEL_EFFECT_STRIDE + col`. */

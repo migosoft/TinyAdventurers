@@ -60,7 +60,7 @@ export function orcDesc(v: OrcLook): TubeDesc {
   }
 
   // ---- the arms: thick, hanging to the thighs, a round shoulder on each ----
-  const R = 1.25 * v.arms, armLen = 6.2,shoulderY = 12.2, shoulderZ = 3.0 * 1.38 + 0.35 * R;
+  const R = 1.25 * v.arms, armLen = 6.2, shoulderY = 12.2, shoulderZ = 3.0 * 1.38 + 0.35 * R;
   for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
     const z = sd * shoulderZ;
     add({ shape: { ball: [R * 1.25, R * 1.1, R * 1.2] }, at: [0.3, shoulderY + 0.15, z], stage: 'arms', bone: `arm${s}`, line: 0.4, colour: SKIN });
