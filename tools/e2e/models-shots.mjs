@@ -22,7 +22,7 @@ const STATES = ['idle', 'move', 'melee', 'shoot', 'cast', 'windup', 'dash'];
 const KINDS = [
   ['wizard', 'wizard'], ['paladin', 'knight'], ['barbarian', 'dwarf'], ['ranger', 'elf'], ['goblin', 'goblin'],
   ['skelwarrior', 'skelet'], ['skelarcher', 'skelet'], ['orcwarrior', 'orc'], ['orcarcher', 'orcArcher'], ['raisedskel', 'skelet'], ['ogre', 'ogre'], ['wolf', 'wolf'],
-  ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
+  ['npcknight', 'npcKnight'], ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
 /** A kind's row in the gallery's model rows (they wrap, so a position is looked up by name, never counted). */
 const row = (name) => {
@@ -30,7 +30,7 @@ const row = (name) => {
   if (i < 0) throw new Error(`models-shots: no kind named ${name}`);
   return i;
 };
-const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'orcArcher'];
+const ALL = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf', 'stag', 'deer', 'boar', 'bunny', 'goblin', 'orc', 'orcArcher', 'npcKnight'];
 /** The woodland page's line-up: the seven figures it places, no animals. */
 const WOODLAND = ['wizard', 'knight', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf'];
 /** The animals (#357): their rows in KINDS start here. */

@@ -310,6 +310,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'goblin', kind: KIND.GoblinArcher, height: 12, bends: 2, knees: [1, 1], robe: false, colours: [0x3d734f, 0x314152, 0xfdf7ed], weapon: 'weaponL' },
   { key: 'orc', kind: KIND.OrcWarrior, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'orcArcher', kind: KIND.OrcArcher, height: 19, bends: 0, knees: [1, 1], robe: false, colours: [0x3d734f, 0x8f4029, 0x62232f, 0xfdf7ed], weapon: 'weaponL' },
+  { key: 'npcKnight', kind: KIND.Knight, height: 18, bends: 0, knees: [1, 1], robe: false, colours: [0x72d6ce, 0x417089], weapon: 'weaponR' },
 ];
 
 describe('the two-legged creatures', () => {
@@ -381,5 +382,22 @@ describe('the two-legged creatures', () => {
     expect(white(TUBE_DESCS.orcArcher)).toBeGreaterThan(0);
     expect(orcDesc({ name: 'Plain', arms: 1, mask: false, strap: false }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length);
     expect(orcDesc({ name: 'Strapped', arms: 1, mask: false, strap: true }).pieces).toHaveLength(TUBE_DESCS.orc.pieces.length + 1);
+  });
+
+  it('the Knight: every turquoise piece is polished steel and no dark one is; the round shield hangs on the left arm, outside it', () => {
+    const d = TUBE_DESCS.npcKnight, m = buildJob('npcKnight', null), n = m.position.length / 3;
+    for (const p of d.pieces) expect(!!p.metal, `${p.stage} on ${p.bone}`).toBe(p.colour === 0x72d6ce);
+    let steel = 0;
+    for (let i = 0; i < n; i++) if (m.look[i * 4 + 3] === 1) { steel++; expect(m.skin[i * 4 + 1], 'hull vertex').toBe(0); }
+    expect(steel).toBeGreaterThan(0);
+    // The shield: the one flat steel ball; on armL, wholly beyond the arm's outer side and clear of the ground.
+    const shields = d.pieces.filter((p) => 'ball' in p.shape && p.metal && p.shape.ball[2] < p.shape.ball[0] / 3);
+    expect(shields).toHaveLength(1);
+    const s = shields[0], ball = (s.shape as { ball: readonly [number, number, number] }).ball, arm = d.pivots.armL!;
+    expect(s.bone).toBe('armL');
+    expect(ball[0]).toBe(ball[1]);
+    expect(s.at![2] + ball[2]).toBeLessThanOrEqual(arm[2] - d.arms!.radius);
+    expect(s.at![1] - ball[1]).toBeGreaterThan(d.pivots.leg1![1]);
+    expect(s.at![1] + ball[1]).toBeLessThan(arm[1]);
   });
 });
