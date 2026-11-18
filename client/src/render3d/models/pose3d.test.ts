@@ -318,6 +318,20 @@ describe('arms with an elbow', () => {
     expect(bent(p, 'R')).toBeCloseTo(ELBOW.free, 5); expect(bent(p, 'L')).toBeCloseTo(ELBOW.free, 5);
   });
 
+  it('hold an empty hand\'s forearm forward by the model\'s own angle when it names one (elbowFree): claws held ready; a carrying hand and an attack are as ever', () => {
+    const ready: FigureModel = { ...m, elbowFree: 0.8 };
+    const stand = (d: FigureDef): Pose3d => copyPose(poseFigure(ready, d, view(), 0, settled()));
+    const p = stand(bare);
+    for (const s of ['R', 'L'] as const) {
+      expect(bent(p, s)).toBeCloseTo(0.8, 5);
+      expect(grip(p, s)[0]).toBeGreaterThan(shoulder(p, s)[0] + 0.2 * L);   // the hand is in front of the shoulder
+    }
+    const armed = stand(blade);
+    expect(bent(armed, 'R')).toBeCloseTo(ELBOW.carry.melee, 5); expect(bent(armed, 'L')).toBeCloseTo(0.8, 5);
+    const swing = copyPose(poseFigure(ready, bare, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, settled()));
+    expect(bent(swing, 'R')).toBeCloseTo(ELBOW.swing, 2);
+  });
+
   it('carry a blade up and forward out of the fist, a bow upright with the string towards the body, a staff upright', () => {
     const sword = weaponDir(idle(blade), 'R', [0, 1, 0]);
     expect(sword[1]).toBeGreaterThan(0.8); expect(sword[0]).toBeGreaterThan(0.3);
@@ -376,9 +390,18 @@ describe('arms with an elbow', () => {
     expect(grip(cast, 'R')[1]).toBeGreaterThan(grip(idle(staff), 'R')[1] + 0.3 * L);   // the staff hand is lifted
   });
 
-  it('are what the weapon carriers of the nine have: goblin, orc, knight and the robes; the imp and the chort keep straight arms', () => {
-    for (const k of ['goblin', 'orc', 'npcKnight', 'necromancer', 'summoner', 'disciple'] as const) expect(tube(k).elbow, k).toBeGreaterThan(0.3 * tube(k).armLength);
-    for (const k of ['imp', 'chort'] as const) expect(tube(k).elbow, k).toBeUndefined();
+  it('are what the weapon carriers of the nine have: goblin, orc, knight and the robes; the chort has them to hold its claws ready; the imp keeps straight arms', () => {
+    for (const k of ['goblin', 'orc', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'chort'] as const) expect(tube(k).elbow, k).toBeGreaterThan(0.3 * tube(k).armLength);
+    expect(tube('imp').elbow).toBeUndefined();
+    // Only the chort names its own angle for an empty hand: standing, both hands are in front of the shoulders and below them.
+    for (const k of ['goblin', 'orc', 'npcKnight', 'necromancer', 'summoner', 'disciple'] as const) expect(tube(k).elbowFree, k).toBeUndefined();
+    const c = tube('chort'), p = poseFigure(c, tdef('chort'), view(), 0, settled());
+    expect(c.elbowFree).toBeGreaterThan(0.5);
+    for (const s of ['R', 'L'] as const) {
+      const g = apply(p, bone(`hand${s}`), pivot(c, `weapon${s}`)), sh = apply(p, bone(`arm${s}`), pivot(c, `arm${s}`));
+      expect(g[0], s).toBeGreaterThan(sh[0] + 0.25 * c.armLength);
+      expect(g[1], s).toBeLessThan(sh[1] - 0.5 * c.armLength);
+    }
     expect(tube('goblin').bowAhead).toBe(true);
     expect(tube('orc').bowAhead).toBeUndefined();
   }, SLOW);

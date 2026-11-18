@@ -178,7 +178,7 @@ const UP: V3 = [0, 1, 0], SIDE: V3 = [0, 0, 1];
 /**
  * Arms with an elbow (`FigureModel.elbow`; the description's `arms.elbow`). Angles in rad, lengths as shares of the arm's length; first values.
  * `carry`: how far forward of the hanging upper arm the forearm is held while its hand holds that kind of weapon, so the weapon stands in
- * front of the body and not inside the arm; `free`: an empty hand's forearm. `carrySwing`: the share of the walk's arm swing a carrying
+ * front of the body and not inside the arm; `free`: an empty hand's forearm (a model's own `elbowFree` replaces it). `carrySwing`: the share of the walk's arm swing a carrying
  * arm keeps. `swing`, `cast`: how far the forearm is bent up from the upper arm's line in those poses (the bow arm is straight). `string`: the string's
  * place behind the bow hand before the draw; `anchor`: how far from its shoulder the drawing hand stops at full draw (the arm is then bent);
  * `clear`: how far ahead of its shoulder, along the line of the shot, the drawing hand stays at least.
@@ -392,7 +392,7 @@ function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride
     const sd = side === 0 ? 1 : -1, holds = held === side;
     const kind = side === 1 ? 'bow' : d.mount === 'staff' ? 'cast' : 'melee';
     eulerQ(-sd * lift, 0, -sd * stride * (holds ? ELBOW.carrySwing : 1) + sway, qa);
-    mulQ(qa, aboutZ(holds ? ELBOW.carry[kind] : ELBOW.free, qz), qf);
+    mulQ(qa, aboutZ(holds ? ELBOW.carry[kind] : m.elbowFree ?? ELBOW.free, qz), qf);
     if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) {
       if (side === 0 && AP.draw >= 0) { drawArm(m, up, fore); fromDown(dirU, qu); fromDown(dirF, qv); }
       else { fromDown(side === 0 ? AP.right : bowDir, qu); mulQ(qu, aboutZ(side === 0 ? AP.flexR : AP.flexL, qz), qv); }

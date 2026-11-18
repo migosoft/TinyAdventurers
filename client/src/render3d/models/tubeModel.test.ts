@@ -7,9 +7,8 @@ import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube, type TubePoint } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
-import { HUMAN_HEIGHT } from './tubeDesc';
+import { DEMON_EYE, HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
-import { DEMON_EYE } from './descs/imp';
 import { KNIGHT_ACCENT, KNIGHT_SHIELD } from './descs/npcKnight';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
@@ -270,6 +269,10 @@ describe('two-legged tube figures', () => {
     }
     expect(e.parents[b('handR')]).toBe(b('armR')); expect(e.parents[b('weaponR')]).toBe(b('handR'));
     expect(buildTubeFigure('n', { ...biped, arms: { ...A, bowAhead: true } }).bowAhead).toBeUndefined();   // only an arm with an elbow aims that way
+    // An empty hand's own forearm angle: carried to the model with an elbow only.
+    expect(e.elbowFree).toBeUndefined();
+    expect(buildTubeFigure('f', { ...biped, arms: { ...A, elbow: 2, free: 0.8 } }).elbowFree).toBe(0.8);
+    expect(buildTubeFigure('g', { ...biped, arms: { ...A, free: 0.8 } }).elbowFree).toBeUndefined();
     for (const bad of [0, -1, A.length, A.length + 1]) {
       expect(() => buildTubeFigure('x', { ...biped, name: 'BadElbow', arms: { ...A, elbow: bad } }), `${bad}`).toThrow(/BadElbow: the elbow must lie between the shoulder and the hand/);
     }
@@ -378,7 +381,7 @@ const BIPEDS: BipedFacts[] = [
   { key: 'summoner', kind: KIND.Summoner, height: HUMAN_HEIGHT, bends: 1, knees: [], robe: true, colours: [0x62232f, 0xda4e38, 0x2a2a3a, 0xfdf7ed], weapon: 'weaponR' },
   { key: 'disciple', kind: KIND.Disciple, height: HUMAN_HEIGHT, bends: 0, knees: [], robe: true, colours: [0x531d28, 0x9f294e, 0x2a2a3a, 0xfdf7ed], weapon: null },
   { key: 'imp', kind: KIND.Imp, height: HUMAN_HEIGHT * 0.45, bends: 3, knees: [1, 1], robe: false, colours: [0xda4e38, 0x5f2d56, 0x62232f, DEMON_EYE], weapon: null },
-  { key: 'chort', kind: KIND.Chort, height: HUMAN_HEIGHT * 1.05, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0xfdf7ed], weapon: null },
+  { key: 'chort', kind: KIND.Chort, height: HUMAN_HEIGHT * 1.05, bends: 1, knees: [-1, -1], robe: false, colours: [0xda4e38, 0x9f294e, 0x5f2d56, 0xfdf7ed, DEMON_EYE], weapon: null },
 ];
 
 describe('the two-legged creatures', () => {
@@ -501,7 +504,7 @@ describe('the two-legged creatures', () => {
     expect(d.weapon).toBeUndefined();
   });
 
-  it('the chort: goat legs whose rest angles are in the geometry, a darker painted back, long white horns on the hat bone, a grin wider than the eyes, long claws, a tail', () => {
+  it('the chort: goat legs whose rest angles are in the geometry, a heavy chest over a narrow waist with a darker painted back, the head low and forward, large white horns on the hat bone that sweep out, glowing eyes and two fangs, bent arms with long claws, hooves, a tail', () => {
     const d = TUBE_DESCS.chort, m = buildJob('chort', null);
     // The legs: the thigh leans forward and the shin back (both turned pieces of the upper bone), so the joint the walk bends lies
     // behind the hip; the lower piece leans forward again and ends in a hoof under the hip, where a swing of the hip lifts it least.
@@ -536,22 +539,44 @@ describe('the two-legged creatures', () => {
     expect(m.parents[bone('hat')]).toBe(bone('head'));
     expect(d.pivots.hat![1] * m.scale).toBeLessThan(m.baseHeight);
     expect(m.stands! * m.scale).toBeGreaterThan(m.baseHeight + 3);
-    // The face: the two highest white pieces on the head are the eyes; the rest is the grin, at least five teeth, all below the eyes
-    // and reaching further to each side than the eyes do.
-    const white = d.pieces.filter((p) => p.bone === 'head' && p.colour === 0xfdf7ed && p.at).sort((a, b) => b.at![1] - a.at![1]);
-    const eyes = white.slice(0, 2), teeth = white.slice(2);
-    expect(teeth.length).toBeGreaterThanOrEqual(5);
-    expect(Math.max(...teeth.map((p) => p.at![1]))).toBeLessThan(Math.min(...eyes.map((p) => p.at![1])));
-    expect(Math.max(...teeth.map((p) => Math.abs(p.at![2])))).toBeGreaterThan(Math.max(...eyes.map((p) => Math.abs(p.at![2]))));
-    // Three long claws on each hand: drops, white, longer than the hand is wide.
+    // They sweep out: each tip is further to its side than the shoulder's pivot is half way out.
+    for (const h of horns) {
+      if (!('tube' in h.shape)) throw new Error('a horn is a tube');
+      const tip = h.shape.tube[h.shape.tube.length - 1].p, side = Math.sign(h.at![2]);
+      expect(side * (h.at![2] + (tip[2] ?? 0))).toBeGreaterThan(0.75 * d.pivots.armR![2]);
+    }
+    // The build: the chest more than twice as wide as the waist, the shoulders in front of the hips (it leans forward), and the head
+    // low and forward: its middle in front of the shoulders and its top less than a head's height above them.
+    if (!('tube' in torso.shape)) throw new Error('the torso is a tube');
+    const [hips, waist, chest] = torso.shape.tube.map((q) => q.r * (q.wide ?? 1));
+    expect(chest).toBeGreaterThan(2 * waist); expect(hips).toBeGreaterThan(waist);
+    const skull = d.pieces.find((p) => p.stage === 'head')!, sh = d.pivots.armR!;
+    if (!('ball' in skull.shape)) throw new Error('the head is a ball');
+    expect(sh[0]).toBeGreaterThan(d.pivots.body![0] + 1.5);
+    expect(skull.at![0]).toBeGreaterThan(sh[0] + skull.shape.ball[0]);
+    expect(skull.at![1] + skull.shape.ball[1] - sh[1]).toBeLessThan(2 * skull.shape.ball[1]);
+    expect(sh[2] * 2).toBeGreaterThan(0.45 * (skull.at![1] + skull.shape.ball[1]));   // shoulder to shoulder nearly half the height
+    // The face: two glowing eyes without pupils (the demons' yellow, no hull), and two white fangs below them.
+    const eyes = d.pieces.filter((p) => p.glow);
+    expect(eyes).toHaveLength(2);
+    expect(eyes.every((p) => p.colour === DEMON_EYE && p.line === 0 && p.bone === 'head' && 'tube' in p.shape)).toBe(true);
+    const fangs = d.pieces.filter((p) => p.bone === 'head' && p.colour === 0xfdf7ed);
+    expect(fangs).toHaveLength(2);
+    expect(fangs.every((p) => 'drop' in p.shape && p.at![1] < skull.at![1])).toBe(true);
+    // Three long claws on each hand: drops, white, each longer than the hand ball is high. The arms have an elbow and hold the
+    // forearms forward when the hands are empty (the claws ready in front of the body); the forearm and the hand hang on the hand bone.
     for (const h of ['handR', 'handL'] as const) {
       const claws = d.pieces.filter((p) => p.bone === h && 'drop' in p.shape);
       expect(claws).toHaveLength(3);
       for (const c of claws) {
         expect(c.colour).toBe(0xfdf7ed);
-        if ('drop' in c.shape) expect(c.shape.drop.len - c.shape.drop.sink).toBeGreaterThan(2 * d.arms!.radius * 1.5);
+        if ('drop' in c.shape) expect(c.shape.drop.len - c.shape.drop.sink).toBeGreaterThan(2 * d.arms!.radius);
       }
     }
+    expect(m.elbow).toBe(d.arms!.elbow); expect(m.elbowFree).toBe(d.arms!.free);
+    expect(m.elbowFree).toBeGreaterThan(0.5);
+    // Hooves: the dark ball that ends each lower leg.
+    for (const lower of ['leg1', 'leg3'] as const) expect(d.pieces.filter((p) => p.bone === lower && 'ball' in p.shape && p.colour === 0x5f2d56)).toHaveLength(1);
     // The tail: the one bend, on the body, out of the back, wagging.
     expect(m.bends).toHaveLength(1);
     expect([m.bends[0].k, m.bends[0].wag, m.bends[0].bone]).toEqual([1, 1, bone('body')]);

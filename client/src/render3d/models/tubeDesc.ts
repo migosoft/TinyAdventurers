@@ -9,6 +9,8 @@ import type { TubeOpts, TubePoint } from './tubes';
 export const HUMAN_HEIGHT = 18;
 /** The height factors of the two-legged models, of `HUMAN_HEIGHT`. The robes are drawn to their factor (robed.ts); the others are scaled by `fitSize`. */
 export const HEIGHT_FACTOR = { knight: 1, robed: 1, orc: 1.1, goblin: 0.65, imp: 0.45, chort: 1.05 } as const;
+/** The glow of the demons' eyes (the Imp, the Chort): a bright saturated yellow (not a pack colour: the user's wish, 2026-11-18). */
+export const DEMON_EYE = 0xffd21f;
 /** `TubeDesc.size` that makes a figure drawn `drawn` game px high (at size 1; each description names the measured value) as tall as `factor` humans. */
 export const fitSize = (factor: number, drawn: number): number => factor * HUMAN_HEIGHT / drawn;
 
@@ -74,6 +76,8 @@ export interface TubeDesc {
      * forearm held forward, and draws a bow with a bent arm (pose3d.ts).
      */
     elbow?: number;
+    /** With an elbow: how far forward (rad) the forearm of an empty hand is held, instead of hanging nearly straight (pose3d.ts, `ELBOW.free`): claws held ready in front of the body. */
+    free?: number;
     /**
      * With an elbow: in a shot the bow arm points straight ahead from its shoulder, instead of crossing to the body's middle line. For a
      * figure whose head stands in front of its shoulders: on the middle line the bow would pass through its face.

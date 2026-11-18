@@ -62,6 +62,8 @@ export interface FigureModel {
   armStretch?: number;
   /** The upper arm's length, model px: the hand bones turn about an elbow that far below the shoulders (their pivots), and carry the forearms. */
   elbow?: number;
+  /** With an elbow: how far forward (rad) the forearm of an empty hand is held (the description's `arms.free`); absent: `ELBOW.free`. */
+  elbowFree?: number;
   /** With an elbow: in a shot the bow arm points straight ahead from its shoulder (the description's `arms.bowAhead`). */
   bowAhead?: true;
   /** How high the model hops, in model px per unit of the hop. */

@@ -3,11 +3,9 @@
 // model px), the front along +x, the feet at y 0, z to the figure's right. The reds and the horn colour are the pack sprite's (imp).
 
 import type { Vec3 } from '../desc';
-import { HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
+import { DEMON_EYE, HEIGHT_FACTOR, fitSize, type TubeDesc, type TubePiece } from '../tubeDesc';
 import type { TubePoint } from '../tubes';
 
-/** The eyes' glow: a bright saturated yellow (not a pack colour: the user's wish, 2026-11-18). */
-export const DEMON_EYE = 0xffd21f;
 const SKIN = 0xda4e38, HORN = 0x5f2d56, SHADE = 0x62232f;
 
 const pieces: TubePiece[] = [];
