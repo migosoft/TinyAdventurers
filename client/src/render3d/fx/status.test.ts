@@ -9,10 +9,12 @@ import { VEIL_DEATH_LIFE } from '../../game/shadeHaze';
 import { SMOKE_TONES } from '../models/tubeDesc';
 import { shade } from '../models/descs/shade';
 import { buildTubeFigure } from '../models/tubeModel';
-import { restPose } from '../models/pose3d';
+import { copyPose, restPose } from '../models/pose3d';
+import { BONES } from '../models/bones';
+import { skinVertex } from '../models/rig';
 import { SPECTRE_FORM } from '../figures';
 import { smooth } from './shapes';
-import { clearVeils, registerStatus, SMOKE_FRAME, SMOKES } from './status';
+import { clearVeils, registerStatus, SMOKE_FRAME, SMOKES, smokePlace } from './status';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -315,6 +317,77 @@ describe('the Shade model\'s smoke (#359)', () => {
     expect(hid.smoke.n).toBe(0);
   });
 
+  it('smoke whose Shade left the frame is stepped on while it fades: its clock runs, its wisps move, its alpha falls; then it is forgotten', () => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 5, () => [model(7)]);
+    fx.frame(frameOf(1.2, [model(7)]), newOut());
+    const a = newOut(), b = newOut(), c = newOut();
+    fx.frame(frameOf(1.25, []), a);
+    fx.frame(frameOf(1.35, []), b);
+    expect(a.smoke.n).toBeGreaterThan(0);
+    expect(b.smoke.c[3] - a.smoke.c[3]).toBeCloseTo(0.1 * SMOKE.clock, 9);
+    const k0 = Math.round(quads(a.smoke) * 0.9);   // a wisp quad
+    expect(centre(b.smoke, k0)).not.toEqual(centre(a.smoke, k0));
+    expect(peak(b.smoke)).toBeLessThan(peak(a.smoke));
+    expect(a.smoke.position.every(Number.isFinite) && b.smoke.position.every(Number.isFinite)).toBe(true);
+    fx.frame(frameOf(1.2 + SMOKE_FRAME.fade + 0.05, []), c);
+    expect(c.smoke.n).toBe(0);
+    expect(SMOKES.has(7)).toBe(false);
+  });
+
+  it('the fading smoke of a Shade that left is written in the same far-to-near order as the live ones', () => {
+    const up: [number, number] = [Math.sin(cam.yaw), -Math.cos(cam.yaw)];
+    const at = (d: number, id: number): DrawnFig => model(id, { x: 5 + up[0] * d, z: 5 + up[1] * d });
+    const depthAt = (o: SmokeBuf, k: number): number => { const c = centre(o, k); return c[0] * up[0] + c[2] * up[1]; };
+    for (const [gone, live] of [[-2, 2], [2, -2]]) {
+      clearVeils();
+      const fx = new Effects3d(map);
+      fx.frame(frameOf(1, [at(gone, 1), at(live, 2)]), newOut());
+      fx.frame(frameOf(1.05, [at(gone, 1), at(live, 2)]), newOut());
+      const out = newOut();
+      fx.frame(frameOf(1.1, [at(live, 2)]), out);
+      const per = quads(out.smoke) / 2;
+      expect(depthAt(out.smoke, 0), `gone at ${gone}`).toBeGreaterThan(depthAt(out.smoke, per));
+    }
+  });
+
+  it('places a point of a bone as skinVertex does, then the yaw, the camera\'s stretch and the lift (a head vertex, yaw 1.2, a moved root)', () => {
+    const pose = copyPose(restPose(M, 0));
+    pose.root.x = 2; pose.root.y = 5; pose.root.z = -1;
+    const rig = { pose, scale: M.scale, lift: 0.3 }, yaw = 1.2, st = 1 / Math.cos(cam.pitch), head = BONES.indexOf('head');
+    let v = -1;
+    for (let i = 0; i < M.skin.length / 4 && v < 0; i++) if (M.skin[i * 4] === head && M.skin[i * 4 + 2] < 0) v = i;
+    expect(v).toBeGreaterThanOrEqual(0);
+    const sv: [number, number, number] = [0, 0, 0], out: [number, number, number] = [0, 0, 0];
+    skinVertex(M, pose, v, sv);
+    smokePlace(rig, 5, 6, yaw, st, head, [M.position[v * 3], M.position[v * 3 + 1], M.position[v * 3 + 2]], out);
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    expect(out[0]).toBeCloseTo(5 + (sv[0] * c - sv[2] * s) / TILE, 3);
+    expect(out[1]).toBeCloseTo((sv[1] / TILE) * st + 0.3, 3);
+    expect(out[2]).toBeCloseTo(6 + (sv[0] * s + sv[2] * c) / TILE, 3);
+  });
+
+  it('the drawer puts the head\'s carried-smoke patch where the head bone is (hips matrix for the spine), at yaw 1.2', () => {
+    const pose = copyPose(restPose(M, 0));
+    pose.root.x = 2; pose.root.y = 5; pose.root.z = -1;
+    const rig = { pose, scale: M.scale, lift: 0.3 }, st = 1 / Math.cos(cam.pitch);
+    const fx = new Effects3d(map), out = newOut();
+    fx.frame(frameOf(1, [model(7, { yaw: 1.2, rig, x: 5, z: 6 })]), out);
+    const sm = SMOKES.get(7)!.smoke, head = BONES.indexOf('head');
+    const idx = sm.core.findIndex((c) => c.on && c.bone === head);
+    const k = sm.core.slice(0, idx).filter((c) => c.patch).length;
+    const on = sm.core[idx];
+    const want: [number, number, number] = [0, 0, 0];
+    smokePlace(rig, 5, 6, 1.2, st, head, on.local, want);
+    const got = centre(out.smoke, k);
+    for (let a = 0; a < 3; a++) expect(got[a]).toBeCloseTo(want[a], 3);
+    // the spine's first point is the hips' matrix: finite and near the body
+    const hips: [number, number, number] = [0, 0, 0];
+    smokePlace(rig, 5, 6, 1.2, st, -1, sm.core[0].local, hips);
+    expect(hips.every(Number.isFinite)).toBe(true);
+    expect(Math.hypot(hips[0] - 5, hips[2] - 6)).toBeLessThan(1);
+  });
+
   it('forms out of its pool: the first frame at form 0 is invisible and low; the parts\' alpha follows SPECTRE_FORM', () => {
     const fx = new Effects3d(map), out = newOut();
     fx.frame(frameOf(1, [model(7, { form: 0 })]), out);
@@ -349,9 +422,25 @@ describe('the Shade model\'s smoke (#359)', () => {
       expect(d1.smoke.n).toBe(alive.n);
       expect(peak(d1.smoke)).toBeCloseTo(peak(alive) * (1 - 0.2 / VEIL_DEATH_LIFE), 3);
       expect(peak(d2.smoke)).toBeCloseTo(peak(alive) * (1 - 0.6 / VEIL_DEATH_LIFE), 3);
-      // the first core patch is `1 + 0.6 * age` times as wide as it was alive (the smoke's clock stands still in death)
+      // the first core patch is `1 + 0.6 * age` times as wide as it was alive (its wobble moves with the clock, which runs on: under 0.5 %)
       const width = (o: SmokeBuf): number => Math.hypot(o.position[3] - o.position[0], o.position[4] - o.position[1], o.position[5] - o.position[2]);
-      expect(width(d1.smoke) / width(alive)).toBeCloseTo(1 + 0.6 * 0.2, 3);
+      expect(width(d1.smoke) / width(alive)).toBeCloseTo(1 + 0.6 * 0.2, 2);
+    });
+
+    it('the smoke\'s clock runs on while it spreads, except for a petrified or frozen body', () => {
+      const clockIn = (effects: number): number => {
+        clearVeils();
+        const fx = new Effects3d(map);
+        for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7, { effects })]), newOut());
+        fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 1.2, false);
+        const a = newOut(), b = newOut();
+        fx.frame(frameOf(1.25, []), a);
+        fx.frame(frameOf(1.3, []), b);
+        return b.smoke.c[3] - a.smoke.c[3];
+      };
+      expect(clockIn(0)).toBeCloseTo(0.05 * SMOKE.clock, 9);
+      expect(clockIn(bit(EFFECT.Petrified))).toBe(0);
+      expect(clockIn(bit(EFFECT.Frozen))).toBe(0);
     });
 
     it('spreads outward SMOKE.death.spread px a second', () => {

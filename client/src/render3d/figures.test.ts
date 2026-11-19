@@ -829,6 +829,19 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(gg.frame(frame([], { now: 10.0, dt: 0.01 }), cam(), look({ kit, ...all })).models.length).toBe(0);
     });
 
+    it('the sink is gated by the model\'s `apart`: the same Shade model without it keeps its lift through the fade', () => {
+      // No model without `apart` leaves a copy on `Died` (only the Shade does), so the gate is tested on the Shade's own model with `apart` taken off.
+      const body = kit.get('shade')!;
+      const whole: FigureKit = { ...kit, get: (k) => (k === 'shade' ? { ...body, apart: undefined } : kit.get(k)) };
+      const fg2 = make();
+      const l0 = fg2.frame(frame([spec(7, KIND.Shade)], { now: 10 }), cam(), look({ kit: whole, ...all })).models[0].lift;
+      fg2.event({ t: 'Died', id: 7, x: at(0), y: 8, kind: KIND.Shade } as never);
+      fg2.frame(frame([], { now: 10.0, dt: SHADE_FADE / 2 }), cam(), look({ kit: whole, ...all }));
+      const half = fg2.frame(frame([], { now: 10.15, dt: 0.01 }), cam(), look({ kit: whole, ...all }));
+      expect(half.models.length).toBe(1);
+      expect(half.models[0].lift).toBeCloseTo(l0, 9);
+    });
+
     it('pulses a Ghost, blinks it in the ambush and lists its halo', () => {
       const fg = make();
       const out = one(spec(7, KIND.Ghost), fg);

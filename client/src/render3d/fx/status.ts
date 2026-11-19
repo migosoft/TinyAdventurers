@@ -14,6 +14,7 @@ import { hash3, rng } from './rand';
 import { BALL1, dot, fireBall, groundRing, PX, smooth, streak, type Axes, type MV3, type V3 } from './shapes';
 import { stretchOf } from './figureFx';
 import { Smoke, SMOKE, type PlaceOf } from './smoke';
+import { copyPose } from '../models/pose3d';
 import { BONES } from '../models/bones';
 import { bonePoint } from '../models/rig';
 import type { SmokeSpec } from '../models/tubeDesc';
@@ -170,7 +171,15 @@ type Tone = readonly [number, number, number];
  * The smoke of the figures with `spectre.smoke` (the Shade's model, #359), per id: its state, the clock of its last frame (`t`), the smoke's own clock,
  * the spot, the alpha it was drawn with (for the fade), the tone and size it was written with, and the clock of its last dying step (-1 while alive).
  */
-interface SmokeMem { smoke: Smoke; t: number; clock: number; x: number; z: number; alpha: number; dying: number; tone: Tone; px: number }
+interface SmokeMem {
+  smoke: Smoke; t: number; clock: number; x: number; z: number; alpha: number; dying: number; tone: Tone; px: number;
+  /** How fast the smoke's clock runs of the frame's time: 1, a half asleep, 0 petrified or frozen. */
+  rate: number;
+  /** The clock of the smoke's last step (it goes on stepping after its figure left the frame, or died). */
+  stepped: number;
+  /** What `place` needs from the last frame the figure was drawn (storage reused): its rig (a copy of the pose), yaw, form and foot. */
+  rig: NonNullable<DrawnFig['rig']>; yaw: number; form: number; foot: number;
+}
 export const SMOKES = new Map<number, SmokeMem>();
 /** The look of the last smoke drawn since `clearVeils()`: a Shade then dies as smoke even when its own was not seen. */
 let smokeSeen: { spec: SmokeSpec; px: number; tone: Tone } | null = null;
@@ -193,76 +202,109 @@ function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: numb
 }
 
 const drawnSmokes = new Set<number>();
-const smokeOrder: DrawnFig[] = [];
+/** A smoke to write this frame: a figure of the frame (`f`) or an entry whose figure left (`m` only), and how far it is from the camera. Pooled. */
+interface SmokeJob { far: number; f: DrawnFig | null; m: SmokeMem | null }
+const jobPool: SmokeJob[] = [];
+const jobs: SmokeJob[] = [];
 const moved: [number, number] = [0, 0];
+const noMove: readonly [number, number] = [0, 0];
 const tmpP: [number, number, number] = [0, 0, 0];
-/** What `place` reads: the figure's rig, its place and yaw, and the stretch of the camera. */
-const here = { rig: null as DrawnFig['rig'], x: 0, z: 0, cos: 1, sin: 0, st: 1 };
+/** What `place` reads: the rig, the figure's place and yaw, and the stretch of the camera. */
+const here = { rig: null as DrawnFig['rig'], x: 0, z: 0, yaw: 0, st: 1 };
 
 /**
- * The world place of a rest point of `bone` (model px, the figure's frame): the frame's pose, turned by the yaw as `skinVertex`'s comment says
- * (world.x = x cos - z sin, world.z = x sin + z cos), in tiles, the height stretched by the camera and lifted to the figure's root. Bone -1 is the hips.
+ * The world place of a rest point of `bone` (model px, the figure's frame), in tiles: the pose's point (`bonePoint`), turned by the yaw as `skinVertex`'s
+ * comment says (world.x = x cos - z sin, world.z = x sin + z cos), its height stretched by the camera and lifted to the figure's root (`rig.lift`).
+ * Bone -1 is the figure's root, the hips' matrix (hover, lean, twist, lunge; no part's own drift).
  */
-const place: PlaceOf = (bone, p, out) => {
-  const r = here.rig!;
-  bonePoint(r.pose, r.scale, bone < 0 ? HIPS : bone, p, tmpP);
-  out[0] = here.x + (tmpP[0] * here.cos - tmpP[2] * here.sin) / TILE;
-  out[1] = (tmpP[1] / TILE) * here.st + r.lift;
-  out[2] = here.z + (tmpP[0] * here.sin + tmpP[2] * here.cos) / TILE;
-};
+export function smokePlace(rig: NonNullable<DrawnFig['rig']>, x: number, z: number, yaw: number, stretch: number, bone: number, p: readonly [number, number, number], out: [number, number, number]): void {
+  bonePoint(rig.pose, rig.scale, bone < 0 ? HIPS : bone, p, tmpP);
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  out[0] = x + (tmpP[0] * c - tmpP[2] * s) / TILE;
+  out[1] = (tmpP[1] / TILE) * stretch + rig.lift;
+  out[2] = z + (tmpP[0] * s + tmpP[2] * c) / TILE;
+}
+const place: PlaceOf = (bone, p, out) => smokePlace(here.rig!, here.x, here.z, here.yaw, here.st, bone, p, out);
 
-/** A smoke that is not drawn is held by a figure's frozen or petrified body. */
-const held = (f: DrawnFig): boolean => has(f.effects, EFFECT.Petrified) || has(f.effects, EFFECT.Frozen);
+/** The speed of a smoke's clock for a figure's effects: stone and ice hold it, sleep halves it. */
+const rateOf = (effects: number): number => (has(effects, EFFECT.Petrified) || has(effects, EFFECT.Frozen) ? 0 : has(effects, EFFECT.Sleep) ? 0.5 : 1);
 
 /** Steps (or restarts) the smoke of a figure with `spectre.smoke`; returns its entry. */
 function stepSmoke(frame: FxFrame, f: DrawnFig): SmokeMem {
   const ctx = frame.ctx, now = ctx.now, spec = f.spectre!.smoke!, rig = f.rig!, px = rig.scale / TILE, tone = spec.tone;
-  here.rig = rig; here.x = f.x; here.z = f.z; here.cos = Math.cos(f.yaw); here.sin = Math.sin(f.yaw); here.st = stretchOf(ctx);
+  here.rig = rig; here.x = f.x; here.z = f.z; here.yaw = f.yaw; here.st = stretchOf(ctx);
   // the hard parts carry smoke as they fade in
   const parts = smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], f.form);
   let m = SMOKES.get(f.id);
+  const rate = rateOf(f.effects);
   if (!m) {
-    m = { smoke: new Smoke(spec, rng(f.id * 7919 + 1), ctx.detail), t: now, clock: 0, x: f.x, z: f.z, alpha: 1, dying: -1, tone, px };
+    m = {
+      smoke: new Smoke(spec, rng(f.id * 7919 + 1), ctx.detail), t: now, clock: 0, x: f.x, z: f.z, alpha: 1, dying: -1, tone, px, rate, stepped: now,
+      rig: { pose: copyPose(rig.pose), scale: rig.scale, lift: rig.lift }, yaw: f.yaw, form: f.form, foot: f.foot,
+    };
     SMOKES.set(f.id, m);
     m.smoke.settle(place, ctx.ax, px, f.form, f.foot, parts);
   } else if (now - m.t > SMOKE_FRAME.gap || now < m.t - SMOKE_STEP.rewind || Math.hypot(f.x - m.x, f.z - m.z) > SMOKE_FRAME.jump) {
     // out of sight for long, a clock that ran back, or moved far in one frame: all of it starts at the new place, with no streak across the room
     m.smoke.settle(place, ctx.ax, px, f.form, f.foot, parts);
-  } else if (!held(f)) {
+  } else if (rate > 0) {
     // a frozen clock repeats the picture (`step` ignores a step of 0); stone and ice hold their smoke still
     const dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.t));
     moved[0] = f.x - m.x; moved[1] = f.z - m.z;
     m.smoke.step(dt, place, ctx.ax, px, moved, f.form, parts, f.foot);
-    m.clock += has(f.effects, EFFECT.Sleep) ? dt / 2 : dt;
+    m.clock += dt * rate;
   }
-  m.t = now; m.x = f.x; m.z = f.z; m.alpha = f.alpha; m.dying = -1; m.tone = tone; m.px = px;
+  m.t = now; m.stepped = now; m.x = f.x; m.z = f.z; m.alpha = f.alpha; m.dying = -1; m.tone = tone; m.px = px; m.rate = rate;
+  // what the smoke keeps stepping with once its figure is gone (the pose copied into the entry's own storage)
+  m.rig.pose.bones.set(rig.pose.bones); Object.assign(m.rig.pose.root, rig.pose.root); m.rig.scale = rig.scale; m.rig.lift = rig.lift;
+  m.yaw = f.yaw; m.form = f.form; m.foot = f.foot;
   smokeSeen = { spec, px, tone };
   return m;
 }
 
-/** The smokes of the frame: those of the visible figures, written far to near, and the fading ones of figures that left the frame. */
+/** Steps a smoke whose figure left the frame, on its held place: nothing is born on the hard parts (`parts` 0), the body does not move. */
+function stepGone(frame: FxFrame, m: SmokeMem): void {
+  const ctx = frame.ctx, now = ctx.now, dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.stepped));
+  m.stepped = now;
+  if (m.rate <= 0 || !(dt > 0)) return;
+  here.rig = m.rig; here.x = m.x; here.z = m.z; here.yaw = m.yaw; here.st = stretchOf(ctx);
+  m.smoke.step(dt, place, ctx.ax, m.px, noMove, m.form, 0, m.foot);
+  m.clock += dt * m.rate;
+}
+
+/** The smokes of the frame: those of the visible figures and the fading ones of figures that left the frame, written far to near. */
 function smokes(out: FxOut, frame: FxFrame, fx: Effects3d): void {
   const ctx = frame.ctx, now = ctx.now, sy = Math.sin(ctx.cam.yaw), cy = Math.cos(ctx.cam.yaw);
   drawnSmokes.clear();
-  smokeOrder.length = 0;
+  jobs.length = 0;
+  const add = (x: number, z: number, f: DrawnFig | null, m: SmokeMem | null): void => {
+    const j = (jobPool[jobs.length] ??= { far: 0, f: null, m: null });
+    j.far = x * sy - z * cy; j.f = f; j.m = m;   // along the ground's far direction (up the screen): larger is further from the camera
+    jobs.push(j);
+  };
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
     if (!f.spectre?.smoke || !f.rig || frame.hidden.has(f.id) || f.alpha < SMOKE_STEP.minAlpha || fx.following(FX_KIND.ShadeVeil, f.id)) continue;
-    smokeOrder.push(f);
+    add(f.x, f.z, f, null);
     drawnSmokes.add(f.id);
   }
-  const far = (f: DrawnFig): number => f.x * sy - f.z * cy;   // along the ground's far direction (up the screen): larger is further from the camera
-  smokeOrder.sort((a, b) => far(b) - far(a));
   for (const [id, m] of SMOKES) {
     if (now - m.t > SMOKE_FRAME.gap || now < m.t - SMOKE_STEP.rewind) { SMOKES.delete(id); continue; }
     // gone from the frame (out of view, faint): it fades where it was; a dying one belongs to its record, a hidden one shows nothing
     if (drawnSmokes.has(id) || frame.hidden.has(id) || fx.following(FX_KIND.ShadeVeil, id)) continue;
-    const age = now - m.t;
-    if (age >= 0 && age < SMOKE_FRAME.fade) m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, m.alpha * (1 - age / SMOKE_FRAME.fade), 1);
+    if (now - m.t >= SMOKE_FRAME.fade) { SMOKES.delete(id); continue; }
+    add(m.x, m.z, null, m);
   }
-  for (const f of smokeOrder) {
-    const m = stepSmoke(frame, f);
-    m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, f.alpha, 1);
+  jobs.sort((a, b) => b.far - a.far);
+  for (const j of jobs) {
+    if (j.f) {
+      const m = stepSmoke(frame, j.f);
+      m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, j.f.alpha, 1);
+    } else {
+      const m = j.m!;
+      stepGone(frame, m);
+      m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, m.alpha * Math.max(0, 1 - (now - m.t) / SMOKE_FRAME.fade), 1);
+    }
   }
 }
 
@@ -291,14 +333,17 @@ const FRESH = 0.15;
 const RESTING = new WeakMap<FxRec, VeilStrand[]>();
 
 /** A dying smoke out of sight just before it died: the smoke is made at the record's spot once and spreads from there. */
-interface RestingSmoke { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number }
+interface RestingSmoke { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number; rate: number }
 const RESTING_SMOKE = new WeakMap<FxRec, RestingSmoke>();
 
 /** A dying smoke: it spreads outward from (x, z), thins over `VEIL_DEATH_LIFE` and swells. `s.dying` is the clock of its last step. */
-function dissolveSmoke(out: FxOut, frame: FxFrame, s: { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number }, rec: FxRec, age: number, x: number, z: number, alive: number): void {
+function dissolveSmoke(out: FxOut, frame: FxFrame, s: { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number; rate: number }, rec: FxRec, age: number, x: number, z: number, alive: number): void {
   const ctx = frame.ctx, now = ctx.now;
   if (s.dying < 0) s.dying = rec.start;
-  s.smoke.spread(Math.max(0, Math.min(SMOKE_STEP.max, now - s.dying)), x, z);
+  const dt = Math.max(0, Math.min(SMOKE_STEP.max, now - s.dying));
+  s.smoke.spread(dt, x, z);
+  // the clock runs on (the picture's streaks must not freeze for the length of the death), but not for stone or ice
+  s.clock += dt * s.rate;
   s.dying = now;
   // it thins from the alpha it had alive (`alive`), so a part-formed or faint Shade does not jump to full darkness
   s.smoke.write(out.smoke, ctx.ax, s.px, ctx.smokeTone ?? s.tone, s.clock, alive * Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + SMOKE.death.grow * age);
@@ -310,7 +355,7 @@ function restingSmoke(frame: FxFrame, rec: FxRec): RestingSmoke {
   const at: PlaceOf = (_b, p, out) => { out[0] = rec.x + p[0] * seen.px; out[1] = p[1] * seen.px * st; out[2] = rec.z + p[2] * seen.px; };
   const smoke = new Smoke(seen.spec, rng(rec.seed), frame.ctx.detail);
   smoke.settle(at, frame.ctx.ax, seen.px, 1, 0, 1);
-  return { smoke, dying: -1, clock: rec.start, tone: seen.tone, px: seen.px };
+  return { smoke, dying: -1, clock: rec.start, tone: seen.tone, px: seen.px, rate: 1 };
 }
 
 function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
