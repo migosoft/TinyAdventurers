@@ -6,7 +6,15 @@ import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
-import { GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectreAt, spectreDiedBetween } from './galleryStage';
+import { GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectrePassIn, spectreAt, spectreDiedBetween } from './galleryStage';
+import { Effects3d, clearFxRegistry } from './fx/effects3d';
+import { registerFigureFx } from './fx/figureFx';
+import { clearVeils, registerStatus } from './fx/status';
+import { newGlowBuf } from './cards';
+import { shade } from './models/descs/shade';
+import type { DrawnFig, FxOut } from './fx/types';
+import type { EntState } from '../game/world';
+import { TileMap } from '../sim/map';
 import { FxTris } from './fx/tris';
 import { LINEUP_MAX, OBJECT_PLACES, SPECTRE_PITCH, SPECTRE_PLACES } from './galleryMap';
 import { buildJob } from './models/build';
@@ -561,6 +569,43 @@ describe('the gallery stage', () => {
     it('reads &at=spectre:<i> as the place\'s foot, clamped to the block', () => {
       expect(parseGallery('?at=spectre:4').at).toEqual(GALLERY.spectre(4));
       expect(parseGallery('?at=spectre:99').at).toEqual(GALLERY.spectre(SPECTRE_PLACES - 1));
+    });
+  });
+
+  describe('the effects pass over the spectre models (#359)', () => {
+    const drawn = (id: number, kind: number, spectre: DrawnFig['spectre']): DrawnFig => ({
+      id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects: 0, alpha: 1, dashing: false, model: true, side: 0, def: FIGURES[kind],
+      yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre, form: 1,
+    });
+    const entOf = (id: number, kind: number): EntState => ({ id, kind, x: 80, y: 80, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 1, entangled: 0 });
+    const triangles = (figs: DrawnFig[], ents: EntState[]): number => {
+      clearFxRegistry(); registerFigureFx(); registerStatus(); clearVeils();
+      const fx = new Effects3d(new TileMap(4, 4, new Uint8Array(16)));
+      const out: FxOut = { tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] };
+      fx.frame({
+        ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0.3 }, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2 },
+        figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null,
+      }, out);
+      return out.tris.n + out.lit.n;
+    };
+
+    it('lets a model Shade of an effect row and of the kind rows through, wherever its id is, and gives it fog', () => {
+      const ids = [ID.modelEffect + 7 * MODEL_EFFECT_STRIDE + 12, ID.model + 3, ID.dying + 1, ID.lineup + 2, ID.crowd];
+      const figs = ids.map((id) => drawn(id, KIND.Shade, shade.spectre!));
+      const ents = ids.map((id) => entOf(id, KIND.Shade));
+      const outFigs: DrawnFig[] = [], outEnts = new Map<number, EntState>();
+      spectrePassIn(figs, ents, outFigs, outEnts);
+      expect(outFigs.map((f) => f.id)).toEqual(ids);
+      expect([...outEnts.keys()]).toEqual(ids);
+      for (const f of outFigs) expect(triangles([f], [outEnts.get(f.id)!]), `${f.id}`).toBeGreaterThan(0);
+    });
+
+    it('never lets a figure of another kind or a card Ghost through', () => {
+      const figs = [drawn(ID.model, KIND.Wizard, null), drawn(ID.spectre, KIND.Ghost, null), drawn(ID.crowd, KIND.Imp, null)];
+      const outFigs: DrawnFig[] = [], outEnts = new Map<number, EntState>();
+      spectrePassIn(figs, [entOf(ID.model, KIND.Wizard), entOf(ID.crowd, KIND.Imp)], outFigs, outEnts);
+      expect(outFigs).toHaveLength(0);
+      expect(outEnts.size).toBe(0);
     });
   });
 

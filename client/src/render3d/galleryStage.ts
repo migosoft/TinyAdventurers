@@ -77,12 +77,12 @@ export const ID = {
   lineup: 4700,
   /** The spectre block (#359): `+ place` (`SPECTRE_PLACES` of them). */
   spectre: 4800,
-  /** The kind rows' pillar torches (`+ i`, 12 of them); the spectre block's six are `+ SPECTRE_TORCH_ID + j`. */
+  /** The kind rows' pillar torches (`+ i`, 4 per kind row: 12 at the present kind count, room for `SPECTRE_TORCH_ID`); the spectre block's six are `+ SPECTRE_TORCH_ID + j`. */
   pillarTorch: 4900,
   crowd: 5000,
 } as const;
 
-/** Where the spectre block's torches start among the `ID.pillarTorch` ids (the kind rows use the first 20). */
+/** Where the spectre block's torches start among the `ID.pillarTorch` ids (the kind rows' torches stay below it). */
 const SPECTRE_TORCH_ID = 20;
 
 export type Focus = 'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup';
@@ -208,6 +208,14 @@ function dyingAt(t: number): EntState[] {
     const p = GALLERY.dying(i);
     return ent(ID.dying + i, k, p.x, p.z, { anim: ANIM.Idle, animMs: (t % 1) * 1000 });
   });
+}
+
+/** The effects pass's share of a frame (#359): the drawn figures that are spectres (a model Ghost or Shade, wherever it stands) and their entities, copied into the reused containers. Other kinds never reach the pass. */
+export function spectrePassIn(figs: readonly DrawnFig[], ents: readonly EntState[], outFigs: DrawnFig[], outEnts: Map<number, EntState>): void {
+  outFigs.length = 0;
+  outEnts.clear();
+  for (const f of figs) if (f.spectre !== null) outFigs.push(f);
+  for (const e of ents) if (e.kind === KIND.Ghost || e.kind === KIND.Shade) outEnts.set(e.id, e);
 }
 
 /** The `Died` events of the dying row between two times (the stage sends them to the figures, which leave a skull): one per figure when a period's `DIE_AT` falls in (t0, t1]. */
@@ -448,7 +456,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   document.body.appendChild(label);
 
   const ringTris = new FxTris(LINEUP_MAX * 64);
-  // The effects run only over the spectre block's figures (reused containers), so no other block changes.
+  // The effects run only over the spectre models' figures wherever they stand (reused containers), so no other kind changes.
   const pass = new FxPass(NO_IDS);
   const fx = new Effects3d(map);
   const specFigs: DrawnFig[] = [];
@@ -479,7 +487,11 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       c.timer.lap('sim');
       if (!c.view) return 0;
       // The figures that died since the last frame leave their skulls; the event comes before the frame that no longer has them.
-      for (const ev of diedBetween(t0, t)) figures.event(ev);
+      // The spectres of the dying row also send theirs to the effects (the Shade's death fog, the Ghost's death effect); no other kind has one here.
+      for (const ev of diedBetween(t0, t)) {
+        figures.event(ev);
+        if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade) fx.event(ev, t, false);
+      }
       // The block's lives that ended since the last frame, to the figures and the effects (stamped with the moment they ended). The first
       // frame looks back `CATCH_UP` s, so a page that starts just after a death shows the death's fog.
       const from = first ? Math.max(0, t0 - CATCH_UP) : t0;
@@ -491,10 +503,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (torch) for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !torch, oval: 1, models: { kit, is } });
-      specFigs.length = 0;
-      for (const f of fo.figs) if (f.id >= ID.spectre && f.id < ID.spectre + SPECTRE_PLACES) specFigs.push(f);
-      specEnts.clear();
-      for (const e of ents) if (e.id >= ID.spectre && e.id < ID.spectre + SPECTRE_PLACES) specEnts.set(e.id, e);
+      spectrePassIn(fo.figs, ents, specFigs, specEnts);
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: specFigs, ents: specEnts, shots: [], hiddenShots: NO_IDS, snap: undefined, hidden: NO_IDS, you: -1, ownCast: null }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');

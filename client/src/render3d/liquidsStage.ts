@@ -8,6 +8,7 @@
 // `&models=stag|deer|boar|bunny|wolf` (#357) lets that kind play all four roles, drawn as its 3D model (the stage makes a kit and ends it).
 // The run's own light list (torches, lava), the sight off, the game light; WASD pans a free camera.
 import { KIND, LIGHT_KIND } from '../generated/defs';
+import type { PictureEv } from '../run/view';
 import { LightField } from '../game/light';
 import { TERRAIN } from '../game/terrain-layers';
 import type { EntState } from '../game/world';
@@ -95,6 +96,11 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const readout = kit ? modelsReadouter(kit) : null;
   const pass = new FxPass(NONE_IDS);
   const fx = new Effects3d(map);
+  // A script event goes to the figures as a run sends it; the Died of a spectre (the Shade's death fog, the Ghost's death effect) also goes to the effects, at the time it was born.
+  const send = (ev: PictureEv, at: number): void => {
+    figures.event(ev);
+    if (ev.t === 'Died' && (ev.kind === KIND.Ghost || ev.kind === KIND.Shade)) fx.event(ev, at, false);
+  };
   // Made with the stage, whose clock only runs forward: a new page makes a new one.
   const water = new Water3d(map);
   // The lava (#344) with a seeded source, so a pinned page shows the same bubbles on every boot.
@@ -177,7 +183,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             const tau = t - k * STEP;
             if (tau < 0) continue;
             const w = liquidsScript(tau, STEP, pushes, opts.models ?? undefined);
-            for (const ev of w.events) figures.event(ev);
+            for (const ev of w.events) send(ev, tau);
             const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
             // The droplets of the replayed seconds too, stamped with the replay's own time (the cues of the main frame go through the pass).
@@ -191,7 +197,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       // The actors and the events born since the last frame, sent to the figures as a run sends them.
       const sc = liquidsScript(t, Math.max(0, t - prev), pushes, opts.models ?? undefined);
       prev = t;
-      for (const ev of sc.events) figures.event(ev);
+      for (const ev of sc.events) send(ev, t);
       const ents = [...torchEnts, ...sc.ents];
       label.textContent = `liquids (#324): t ${t.toFixed(2)} s; 1 push into the chasm, 2 into deep water, 3 the barrel; WASD pans`;
       c.timer.lap('sim');
