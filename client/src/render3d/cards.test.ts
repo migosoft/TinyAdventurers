@@ -299,6 +299,15 @@ describe('shadows and glows', () => {
     expect(b.color).toEqual([0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3]);
   });
 
+  it('pushGlow with lift 0 keeps the quad\'s centre at the given point; the default lifts it toward the camera', () => {
+    const mid = (b: GlowBuf, k: number): number => { const v = b.position.filter((_, i) => i % 3 === k); return (Math.max(...v) + Math.min(...v)) / 2; };
+    const flat = newGlowBuf(), lifted = newGlowBuf();
+    pushGlow(flat, 1, 2, 3, 0.5, [1, 1, 1], cam(0), undefined, 0);
+    pushGlow(lifted, 1, 2, 3, 0.5, [1, 1, 1], cam(0));
+    expect([mid(flat, 0), mid(flat, 1), mid(flat, 2)]).toEqual([expect.closeTo(1, 6), expect.closeTo(2, 6), expect.closeTo(3, 6)]);
+    expect(mid(lifted, 1)).not.toBeCloseTo(2, 3);
+  });
+
   it('the demo fills only cards, flames and glows', () => {
     const d = buildDynamic(newScene(), frames, cam(0), 0, false);
     expect([d.ghosts.count, d.decals.count, d.shadows.count]).toEqual([0, 0, 0]);

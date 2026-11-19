@@ -1,16 +1,18 @@
 // Status marks round figures in 3D (#308, design §6): the marks of the `effects` bits of every drawn figure, card or model. The Accelerated afterimage is `Figures3d`'s own (dash copies path) and the body tints
 // (Frozen's cool one, Poisoned's green) are the figures'. Every picture is a pure function of the clock and the figure's id. Figures in
 // `hidden` get no marks and add no light. The Shade's veil (`game/shadeHaze.ts`) is stateful (its strands trail the figure): the state
-// is kept per Shade id in `VEILS`, and a dead Shade's veil drifts apart for a second (`FX_KIND.ShadeVeil`).
+// is kept per Shade id in `VEILS`, and a dead Shade's veil drifts apart for a second (`FX_KIND.ShadeVeil`). A figure whose model has
+// `spectre.fog` (#359) wears the clinging fog of `shadeFog.ts` instead of strands (kept per id in `FOGS`); a dead one's fog spreads and thins.
 import { has } from '../../game/effectBits';
 import { ENTANGLE_LOOKS, flameSpotAt, GLOOM, snowflakeAlpha } from '../../game/fxLooks';
 import { dissolveVeil, restingVeil, VeilStrands, VEIL_DEATH_LIFE, type VeilStrand } from '../../game/shadeHaze';
 import { EFFECT, EFFECT_LOOK, LIGHT_KIND } from '../../generated/defs';
 import { TILE } from '../../sim/map';
 import { addLight } from './booms';
-import { FX_KIND, registerFrameFx, registerFx, type FxFrame, type FxRec } from './effects3d';
+import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';
 import { hash3, rng } from './rand';
 import { BALL1, dot, fireBall, groundRing, PX, streak, type Axes, type MV3, type V3 } from './shapes';
+import { FOG, FOG_FRAME, fogTris, ShadeFog } from './shadeFog';
 import type { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -152,8 +154,16 @@ interface VeilMem {
   t: number; sx: number; sy: number; wx: number; wz: number; face: 1 | -1;
 }
 const VEILS = new Map<number, VeilMem>();
-/** Forgets every veil (tests). */
-export function clearVeils(): void { VEILS.clear(); }
+/**
+ * The clinging fog of the figures with `spectre.fog` (the Shade's model, #359), per id: its patches, the clock and spot of its last frame, its form,
+ * the alpha it was drawn with (for the fade) and the clock of its last dying step (-1 while alive).
+ */
+interface FogMem { fog: ShadeFog; t: number; x: number; z: number; form: number; stretch: number; alpha: number; dying: number }
+export const FOGS = new Map<number, FogMem>();
+/** True once any fog was drawn since the last `clearVeils()`: a Shade then dies as fog even when its own was not seen. */
+let fogSeen = false;
+/** Forgets every veil and fog (tests). */
+export function clearVeils(): void { VEILS.clear(); FOGS.clear(); fogSeen = false; }
 
 /** Draws strands in the plane of the screen round the world spot (`wx`, `wz`), whose screen position is (`sx`, `sy`) px. Alpha follows the dither steps: solid, then two see-through ones. */
 function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: number, wz: number, sx: number, sy: number, alpha: number): void {
@@ -170,11 +180,55 @@ function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: numb
   }
 }
 
+const smooth = (a: number, b: number, x: number): number => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const stretchOf = (frame: FxFrame): number => 1 / Math.cos(frame.ctx.cam.pitch);
+const drawnFogs = new Set<number>();
+
+/** Steps (or restarts) and draws the fog of a figure with `spectre.fog`. */
+function drawFog(out: FxOut, frame: FxFrame, f: DrawnFig): void {
+  const ctx = frame.ctx, now = ctx.now, st = stretchOf(frame);
+  let m = FOGS.get(f.id);
+  if (!m) {
+    m = { fog: new ShadeFog(rng(f.id * 7919 + 1), ctx.detail), t: now, x: f.x, z: f.z, form: f.form, stretch: st, alpha: 0, dying: -1 };
+    FOGS.set(f.id, m);
+    m.fog.settle(now, f.x, f.z, f.form, st);
+  } else if (now - m.t > FOG_FRAME.gap || now < m.t - 1 || Math.hypot(f.x - m.x, f.z - m.z) > FOG_FRAME.jump) {
+    // out of sight for long, or moved far in one frame: the fog starts at the new spot, with no streak across the room
+    m.fog.settle(now, f.x, f.z, f.form, st);
+  } else {
+    // a frozen clock repeats the picture
+    m.fog.step(Math.max(0, Math.min(FOG_FRAME.maxStep, now - m.t)), now, f.x, f.z, f.form, st);
+  }
+  m.t = now; m.x = f.x; m.z = f.z; m.form = f.form; m.stretch = st; m.dying = -1;
+  m.alpha = smooth(0, FOG_FRAME.formAlpha, f.form) * f.alpha;
+  fogSeen = true;
+  fogTris(out.tris, ctx.ax, m.fog, now, m.alpha, 1);
+}
+
+/** The fogs of the frame: those of the visible figures with fog, and the fading ones of figures that left the frame. */
+function fogs(out: FxOut, frame: FxFrame, fx: Effects3d): void {
+  const ctx = frame.ctx, now = ctx.now;
+  drawnFogs.clear();
+  for (let i = 0; i < frame.figs.length; i++) {
+    const f = frame.figs[i];
+    if (!f.spectre?.fog || frame.hidden.has(f.id) || f.alpha < FOG_FRAME.minAlpha || fx.following(FX_KIND.ShadeVeil, f.id)) continue;
+    drawFog(out, frame, f);
+    drawnFogs.add(f.id);
+  }
+  for (const [id, m] of FOGS) {
+    if (now - m.t > FOG_FRAME.gap || now < m.t - 1) { FOGS.delete(id); continue; }
+    // gone from the frame (out of view, faint): it fades where it was; a dying one belongs to its record, a hidden one shows nothing
+    if (drawnFogs.has(id) || frame.hidden.has(id) || fx.following(FX_KIND.ShadeVeil, id)) continue;
+    const age = now - m.t;
+    if (age >= 0 && age < FOG.fade) fogTris(out.tris, ctx.ax, m.fog, now, m.alpha * (1 - age / FOG.fade), 1);
+  }
+}
+
 function veils(out: FxOut, frame: FxFrame): void {
   const ctx = frame.ctx, now = ctx.now, ax = ctx.ax;
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
-    if (!f.def.veil || frame.hidden.has(f.id) || f.alpha < 0.05) continue;
+    if (!f.def.veil || f.spectre?.fog || frame.hidden.has(f.id) || f.alpha < 0.05) continue;
     const sx = (f.x * ax.right[0] + f.z * ax.right[2]) * TILE, sy = -(f.x * ax.up[0] + f.z * ax.up[2]) * TILE;
     let m = VEILS.get(f.id);
     if (!m) { m = { veil: new VeilStrands(rng(f.id * 7919 + 1)), t: now, sx, sy, wx: f.x, wz: f.z, face: 1 }; VEILS.set(f.id, m); }
@@ -194,9 +248,35 @@ function veils(out: FxOut, frame: FxFrame): void {
 const FRESH = 0.15;
 const RESTING = new WeakMap<FxRec, VeilStrand[]>();
 
+/** A dying fog out of sight just before it died: the fog is made at the record's spot once and spreads from there. */
+const RESTING_FOG = new WeakMap<FxRec, { fog: ShadeFog; dying: number }>();
+
+/** A dying fog: it spreads outward from (x, z), thins over `VEIL_DEATH_LIFE` and swells. `s.dying` is the clock of its last step. */
+function dissolveFog(out: FxOut, frame: FxFrame, fog: ShadeFog, s: { dying: number }, rec: FxRec, age: number, x: number, z: number): void {
+  const now = frame.ctx.now;
+  if (s.dying < 0) s.dying = rec.start;
+  fog.spread(Math.max(0, Math.min(FOG_FRAME.maxStep, now - s.dying)), x, z);
+  s.dying = now;
+  fogTris(out.tris, frame.ctx.ax, fog, now, Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + FOG_FRAME.grow * age);
+}
+
 function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
   if (frame.hidden.has(rec.follow)) return;
-  const ax = frame.ctx.ax, m = VEILS.get(rec.follow);
+  const ax = frame.ctx.ax, fogM = FOGS.get(rec.follow);
+  if (fogM && rec.start - fogM.t < FRESH) { dissolveFog(out, frame, fogM.fog, fogM, rec, age, fogM.x, fogM.z); return; }
+  if (fogSeen) {
+    // a Shade of fog that died out of sight: a resting fog at the death spot (built once per record)
+    let r = RESTING_FOG.get(rec);
+    if (!r) {
+      const fog = new ShadeFog(rng(rec.seed), frame.ctx.detail);
+      fog.settle(rec.start, rec.x, rec.z, 1, stretchOf(frame));
+      r = { fog, dying: -1 };
+      RESTING_FOG.set(rec, r);
+    }
+    dissolveFog(out, frame, r.fog, r, rec, age, rec.x, rec.z);
+    return;
+  }
+  const m = VEILS.get(rec.follow);
   let lines: readonly VeilStrand[], sx: number, sy: number, wx: number, wz: number;
   if (m && rec.start - m.t < FRESH) { lines = m.veil.lines; sx = m.sx; sy = m.sy; wx = m.wx; wz = m.wz; }
   else {
@@ -211,7 +291,7 @@ function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): voi
 }
 
 /** The status marks of the frame's figures, the burning light and the Shade veils. */
-export function drawStatus(out: FxOut, frame: FxFrame): void {
+export function drawStatus(out: FxOut, frame: FxFrame, fx: Effects3d): void {
   nearN = 0;
   const figs = frame.figs;
   for (let i = 0; i < figs.length; i++) {
@@ -225,6 +305,7 @@ export function drawStatus(out: FxOut, frame: FxFrame): void {
     addLight(out, `bn${f.id}`, f.x, f.foot + f.top * 0.4, f.z, 2.5, 1.2 * I, 0.6 * I, 0.2 * I, LIGHT_KIND.Fire);
   }
   veils(out, frame);
+  fogs(out, frame, fx);
 }
 
 /** Registers the status drawer and the drawer of the Shade's dying veil. */

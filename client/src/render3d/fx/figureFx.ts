@@ -2,7 +2,8 @@
 // channel's swirl, the release sparks, the lich's nova wind-up, the slam telegraph on the floor, the dragon's breath and bite, the stone
 // gaze, the lich's drain and the mimic's wake and landing. The trigger, place and timing come from the figure's state. Each picture is a pure
 // function of the figure's `animT` (and the clock for pulses); the one-shot sparks are records, started once per action.
-import { ANIM, EFFECT, KIND } from '../../generated/defs';
+import { ANIM, EFFECT, KIND, LIGHT_KIND } from '../../generated/defs';
+import { addLight } from './booms';
 import { has } from '../../game/effectBits';
 import { GLOOM, gazePulse } from '../../game/fxLooks';
 import { MELEE_T } from '../../game/anim/pose';
@@ -45,7 +46,26 @@ function swoosh(T: FxTris, f: DrawnFig): void {
   if (!sw) return;
   if (tail && d.weapon) return;
   const wind = d.windups?.[a] ?? 0;
-  swooshTris(T, f.x, f.z, f.swingY, tail ? f.yaw + Math.PI : f.yaw, sw.reach, tail ? sw.arc : f.arc, sw.color ?? FX_WHITE, (f.animT - wind) / MELEE_T);
+  swooshTris(T, f.x, f.z, f.swingY, tail ? f.yaw + Math.PI : f.yaw, sw.reach, tail ? sw.arc : f.arc, f.spectre?.swoosh.colour ?? sw.color ?? FX_WHITE, (f.animT - wind) / MELEE_T, f.spectre?.swoosh.head);
+}
+
+// ---- the halo of a spectre ----
+/** The light's height above the foot (px), and the alpha under which a figure shows no halo (the same gate as the other figure effects). */
+const HALO = { lightUp: 5, minAlpha: 0.05 } as const;
+const glowRgb: MV3 = [0, 0, 0];
+/** A soft glow on the body (not lifted toward the camera: it is drawn with the figure) and a light on the floor, both of the figure's alpha over the see-through peak. */
+function halo(out: FxOut, frame: FxFrame): void {
+  const ctx = frame.ctx, st = stretchOf(ctx);
+  for (let i = 0; i < frame.figs.length; i++) {
+    const f = frame.figs[i], h = f.spectre?.halo;
+    if (!h || frame.hidden.has(f.id) || f.alpha < HALO.minAlpha || has(f.effects, EFFECT.Petrified)) continue;
+    const k = f.alpha / (f.spectre?.seeThrough?.peak ?? 1);
+    rgbIn(h.glow, glowRgb);
+    glowRgb[0] *= h.k * k; glowRgb[1] *= h.k * k; glowRgb[2] *= h.k * k;
+    pushGlow(out.glows, f.x, f.foot + h.height * PX * st, f.z, h.size * PX, glowRgb, ctx.cam, undefined, 0);
+    rgbIn(h.light, c0);
+    addLight(out, `gh${f.id}`, f.x, f.foot + HALO.lightUp * PX, f.z, h.radius, c0[0] * k, c0[1] * k, c0[2] * k, LIGHT_KIND.Magic);
+  }
 }
 
 // ---- the sparks of a release ----
@@ -278,6 +298,7 @@ export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
 /** Registers the figure effects (the frame drawer and the drawers of the Spark and mimic records). */
 export function registerFigureFx(): void {
   registerFrameFx(drawFigureFx);
+  registerFrameFx(halo);
   registerFx(FX_KIND.Spark, (o, f, r, a) => { drawSpark(o, f, r, a); });
   registerFx(FX_KIND.MimicWake, (o, f, r, a) => {
     if (f.hidden.has(r.follow)) return;

@@ -110,3 +110,27 @@ describe('swirlTris', () => {
     expect(c.position).not.toEqual(a.position);
   });
 });
+
+describe('swooshTris with a head colour', () => {
+  const BASE = 0x102030, HEAD = 0xf0e0d0;
+  it('the triangles nearest the leading edge take the head colour, the tail the base colour; without it nothing changes', () => {
+    const k = 0.5, yaw = 0, arc = 2, s = k * k * (3 - 2 * k);
+    const withHead = made((T) => swooshTris(T, 0, 0, 1, yaw, 28, arc, BASE, k, HEAD));
+    const plain = made((T) => swooshTris(T, 0, 0, 1, yaw, 28, arc, BASE, k));
+    expect(withHead.position).toEqual(plain.position);
+    expect(plain.n).toBeGreaterThan(0);
+    const lum = (b: FxBuf, i: number): number => b.rgba[i * 4] + b.rgba[i * 4 + 1] + b.rgba[i * 4 + 2];
+    const base = (BASE >> 16) / 255 + ((BASE >> 8) & 255) / 255 + (BASE & 255) / 255;
+    // without a head every colour is the base
+    for (let i = 0; i < plain.n * 3; i++) expect(lum(plain, i)).toBeCloseTo(base, 4);
+    // with one, the angle along the arc decides: t = (yaw + arc / 2 - angle) / arc, the head at s * 1.15
+    let nearest = Infinity, nearI = 0, tailI = -1, tail = -Infinity;
+    for (let i = 0; i < withHead.n * 3; i++) {
+      const a = Math.atan2(withHead.position[i * 3 + 2], withHead.position[i * 3]), t = (arc / 2 - a) / arc, d = s * 1.15 - t;
+      if (d >= 0 && d < nearest) { nearest = d; nearI = i; }
+      if (d > tail) { tail = d; tailI = i; }
+    }
+    expect(lum(withHead, nearI)).toBeGreaterThan(base + 0.3);
+    expect(lum(withHead, tailI)).toBeCloseTo(base, 4);
+  });
+});

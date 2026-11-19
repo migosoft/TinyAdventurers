@@ -4,6 +4,9 @@ import { FIGURES } from '../../game/anim/defs';
 import { TileMap } from '../../sim/map';
 import { newGlowBuf } from '../cards';
 import { Effects3d, FX_KIND, clearFxRegistry, type FxFrame } from './effects3d';
+import { VEIL_DEATH_LIFE } from '../../game/shadeHaze';
+import type { SpectreSpec } from '../models/tubeDesc';
+import { FOG } from './shadeFog';
 import { clearVeils, registerStatus } from './status';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
@@ -123,5 +126,108 @@ describe('status marks', () => {
     expect(gone.tris.n).toBe(0);
     expect(fx.records).toBe(0);
     expect(FX_KIND.ShadeVeil).toBeDefined();
+  });
+});
+
+describe('the Shade model\'s fog', () => {
+  const SPEC: SpectreSpec = { eyes: { y: 15, z: 1, front: 1, half: [1, 0.5], slant: 0, core: 0xffffff, ring: 0xffffff, strength: 1 }, fog: true, swoosh: { colour: 0 } };
+  const model = (id: number, o: Partial<DrawnFig> = {}): DrawnFig => fig(id, KIND.Shade, 0, { model: true, spectre: SPEC, ...o });
+  const FULL = FOG.patches * FOG.segs * 3;
+  const pos = (T: FxTris): Float32Array => (T as unknown as { pos: Float32Array }).pos;
+  const col = (T: FxTris): Float32Array => (T as unknown as { col: Float32Array }).col;
+  /** The largest alpha of a drawn list. */
+  const peak = (T: FxTris): number => { let m = 0; for (let i = 0; i < T.n * 3; i++) m = Math.max(m, col(T)[i * 4 + 3]); return m; };
+
+  it('a model Shade draws fog and no strands; a card Shade draws strands', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    const out = newOut();
+    fx.frame(frameOf(1.3, [model(7)]), out);
+    expect(out.tris.n).toBe(FULL);
+    clearVeils();
+    let card = newOut();
+    for (let i = 0; i < 5; i++) { card = newOut(); fx.frame(frameOf(5 + i * 0.05, [fig(8, KIND.Shade, 0)]), card); }
+    expect(card.tris.n).toBeGreaterThan(0);
+    expect(card.tris.n).not.toBe(FULL);
+  });
+
+  it('not seen for over 3 s, then drawn 5 tiles away: the fog starts at the new spot', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    const out = newOut();
+    fx.frame(frameOf(6, [model(7, { x: 10 })]), out);
+    const p = pos(out.tris);
+    for (let i = 0; i < out.tris.n * 3; i++) {
+      expect(Math.abs(p[i * 3] - 10)).toBeLessThan(1.5);
+      expect(Math.abs(p[i * 3 + 2] - 5)).toBeLessThan(1.5);
+    }
+  });
+
+  it('a jump of over a tile also starts the fog at the new spot', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    const out = newOut();
+    fx.frame(frameOf(1.25, [model(7, { x: 8 })]), out);
+    const p = pos(out.tris);
+    for (let i = 0; i < out.tris.n * 3; i++) expect(Math.abs(p[i * 3] - 8)).toBeLessThan(1.5);
+  });
+
+  it('a pinned clock repeats the picture', () => {
+    const fx = new Effects3d(map);
+    fx.frame(frameOf(1, [model(7)]), newOut());
+    const a = newOut(), b = newOut();
+    fx.frame(frameOf(1.2, [model(7)]), a);
+    fx.frame(frameOf(1.2, [model(7)]), b);
+    expect(Array.from(pos(b.tris).slice(0, 90))).toEqual(Array.from(pos(a.tris).slice(0, 90)));
+  });
+
+  it('fog whose Shade left the frame fades over FOG.fade s at its last place, and a hidden one shows none', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    const live = newOut();
+    fx.frame(frameOf(1.2, [model(7)]), live);
+    const early = newOut();
+    fx.frame(frameOf(1.2 + FOG.fade / 2, []), early);
+    expect(early.tris.n).toBe(FULL);
+    expect(peak(early.tris)).toBeLessThan(peak(live.tris));
+    expect(peak(early.tris)).toBeGreaterThan(0);
+    const late = newOut();
+    fx.frame(frameOf(1.2 + FOG.fade + 0.05, []), late);
+    expect(late.tris.n).toBe(0);
+    const fx2 = new Effects3d(map);
+    for (let i = 0; i < 5; i++) fx2.frame(frameOf(1 + i * 0.05, [model(7)], [7]), newOut());
+    const hid = newOut();
+    fx2.frame(frameOf(1.3, [model(7)], [7]), hid);
+    expect(hid.tris.n).toBe(0);
+  });
+
+  it('a dying model Shade\'s fog spreads and thins; one never seen falls back to a resting fog; no fog, strands', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    const live = newOut();
+    fx.frame(frameOf(1.95, [model(7)]), live);
+    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
+    const d1 = newOut(), d2 = newOut();
+    fx.frame(frameOf(2.2, []), d1);
+    fx.frame(frameOf(2.6, []), d2);
+    expect(d1.tris.n).toBe(FULL);
+    expect(peak(d1.tris)).toBeCloseTo(FOG.alpha[1] * (1 - 0.2 / VEIL_DEATH_LIFE), 3);
+    expect(peak(d2.tris)).toBeCloseTo(FOG.alpha[1] * (1 - 0.6 / VEIL_DEATH_LIFE), 3);
+    // a Shade of another id that died unseen: a resting fog at the record's spot
+    fx.event({ t: 'Died', id: 99, x: 12 * 16, y: 12 * 16, kind: KIND.Shade } as never, 3, false);
+    const rest = newOut();
+    fx.frame(frameOf(3.2, []), rest);
+    expect(rest.tris.n).toBe(FULL);
+    const p = pos(rest.tris);
+    for (let i = 0; i < rest.tris.n * 3; i++) expect(Math.abs(p[i * 3] - 12)).toBeLessThan(2.5);
+  });
+
+  it('a session without fogs keeps the strands for a dead card Shade', () => {
+    const fx = new Effects3d(map);
+    fx.event({ t: 'Died', id: 5, x: 80, y: 80, kind: KIND.Shade } as never, 1, false);
+    const out = newOut();
+    fx.frame(frameOf(1.2, []), out);
+    expect(out.tris.n).toBeGreaterThan(0);
+    expect(out.tris.n).not.toBe(FOG.patches * FOG.segs * 3);
   });
 });

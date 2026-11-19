@@ -29,6 +29,10 @@ function quad(b: FxTris, p: ArrayLike<number>, c: ArrayLike<number>, a: ArrayLik
 }
 
 const SWOOSH_SEGMENTS = 28;
+/** How far behind the leading edge (a share of the arc) the head colour fades out into the base colour. */
+const SWOOSH_HEAD_WIDTH = 0.25;
+/** A colour channel (0..255) mixed `k` of the way toward another, as 0..1. */
+const mixTo = (a: number, k: number, b: number): number => (a + (b - a) * k) / 255;
 const swooshP = new Array<number>(12), swooshA = new Array<number>(4), swooshC = [0, 0, 0];
 
 /**
@@ -36,19 +40,22 @@ const swooshP = new Array<number>(12), swooshA = new Array<number>(4), swooshC =
  * radians, centred on the facing `yaw`. Its bright head runs along the arc from the right to the left and fades behind, then the whole
  * arc fades while the weapon returns. `k` is the seconds into the swing over `MELEE_T` (the sweep is 0 to 1, the return 1 to 2);
  * nothing before the sweep starts and once the arc has faded (k about 1.61: the page's fade, a little after the sweep).
+ * `head` (0xRRGGBB, optional): the colour of the leading edge; a segment within `SWOOSH_HEAD_WIDTH` (a share of the arc) of the head mixes from `colour` toward it.
  */
-export function swooshTris(b: FxTris, x: number, z: number, y: number, yaw: number, reach: number, arc: number, colour: number, k: number): void {
+export function swooshTris(b: FxTris, x: number, z: number, y: number, yaw: number, reach: number, arc: number, colour: number, k: number, head?: number): void {
   if (k <= 0) return;
   const s = ease(k);
   const u = k <= 1 ? 0.2 + 0.36 * k : 0.56 + 0.44 * (k - 1);   // the page's u (pose3d's `uOf`)
   const fade = 1 - Math.max(0, Math.min(1, (u - 0.58) / 0.25));
   if (fade <= 0) return;
-  swooshC[0] = (colour >> 16) / 255; swooshC[1] = ((colour >> 8) & 255) / 255; swooshC[2] = (colour & 255) / 255;
   const R = reach * PX, N = SWOOSH_SEGMENTS;
   let prevA = 0;
   for (let i = 0; i <= N; i++) {
-    const t = i / N, al = yaw + arc / 2 - arc * t, head = s * 1.15 - t;
-    const a = head < 0 ? 0 : Math.max(0, 1 - head / 0.8) * fade * 0.9;
+    const t = i / N, al = yaw + arc / 2 - arc * t, ahead = s * 1.15 - t;
+    const a = ahead < 0 ? 0 : Math.max(0, 1 - ahead / 0.8) * fade * 0.9;
+    // the colour of the step ending here: the base, mixed toward the head colour near the leading edge
+    const mix = head === undefined ? 0 : Math.max(0, Math.min(1, 1 - ahead / SWOOSH_HEAD_WIDTH));
+    swooshC[0] = mixTo(colour >> 16, mix, (head ?? 0) >> 16); swooshC[1] = mixTo((colour >> 8) & 255, mix, ((head ?? 0) >> 8) & 255); swooshC[2] = mixTo(colour & 255, mix, (head ?? 0) & 255);
     const ci = Math.cos(al), si = Math.sin(al);
     // The step's quad runs: last inner, last outer, this outer, this inner (the last pair is in slots 0..5).
     if (i > 0 && (a > 0 || prevA > 0)) {

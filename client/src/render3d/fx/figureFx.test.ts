@@ -9,6 +9,8 @@ import { registerFigureFx } from './figureFx';
 import { registerBooms } from './booms';
 import { FxTris } from './tris';
 import { newGlowBuf } from '../cards';
+import { ghost } from '../models/descs/ghost';
+import type { SpectreSpec } from '../models/tubeDesc';
 import type { DrawnFig, FxOut, MimicCue } from './types';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
@@ -210,5 +212,77 @@ describe('figure effects', () => {
     const snap = { drain: [[160, 160], [100, 100], [200, 100]] } as unknown as Partial<Snapshot>;
     fx.frame(frameOf(1, [fig(7, KIND.Lich)], { snap }), out);
     expect(out.tris.n).toBeGreaterThan(2 * 3 * 12 * 2);
+  });
+});
+
+describe('spectre effects (#359)', () => {
+  const SWOOSH = { colour: 0x2040a0, head: 0xf0e0d0 };
+  const spec = (): SpectreSpec => ({ ...ghost.spectre!, swoosh: SWOOSH });
+  const rgb = (c: number): number[] => [(c >> 16) & 255, (c >> 8) & 255, c & 255].map((v) => v / 255);
+  const tris = (T: FxTris): { pos: Float32Array; col: Float32Array } => T as unknown as { pos: Float32Array; col: Float32Array };
+  const melee = (o: Partial<DrawnFig> = {}): DrawnFig => fig(1, KIND.Ghost, { anim: ANIM.Melee, animT: 0.12, arc: 1.2, yaw: 0.4, ...o });
+
+  it('a model\'s swoosh takes the spectre colours, at the swing\'s reach and the figure\'s arc; a card Ghost keeps the touch colour', () => {
+    const fx = new Effects3d(map), out = newOut();
+    fx.frame(frameOf(1, [melee({ model: true, spectre: spec() })]), out);
+    const { pos, col } = tris(out.tris);
+    expect(out.tris.n).toBeGreaterThan(0);
+    const reach = FIGURES[KIND.Ghost].swing!.reach / 16;
+    let far = 0, lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < out.tris.n * 3; i++) {
+      const dx = pos[i * 3] - 5, dz = pos[i * 3 + 2] - 5;
+      far = Math.max(far, Math.hypot(dx, dz));
+      const a = Math.atan2(dz, dx) - 0.4;
+      lo = Math.min(lo, a); hi = Math.max(hi, a);
+    }
+    expect(far).toBeCloseTo(reach, 4);
+    expect(hi - lo).toBeLessThanOrEqual(1.2 + 1e-6);
+    // every colour lies between the base and the head colour; the base is there, and the head mixes in somewhere
+    const base = rgb(SWOOSH.colour), head = rgb(SWOOSH.head), seen = new Set<string>();
+    for (let i = 0; i < out.tris.n * 3; i++) {
+      for (let k = 0; k < 3; k++) {
+        expect(col[i * 4 + k]).toBeGreaterThanOrEqual(Math.min(base[k], head[k]) - 1e-3);
+        expect(col[i * 4 + k]).toBeLessThanOrEqual(Math.max(base[k], head[k]) + 1e-3);
+      }
+      seen.add(`${col[i * 4].toFixed(3)},${col[i * 4 + 1].toFixed(3)},${col[i * 4 + 2].toFixed(3)}`);
+    }
+    expect(seen.has(base.map((v) => v.toFixed(3)).join())).toBe(true);
+    expect(seen.size).toBeGreaterThan(1);
+    const card = newOut();
+    fx.frame(frameOf(2, [melee()]), card);
+    const want = rgb(FIGURES[KIND.Ghost].swing!.color ?? 0xfff8e0);
+    expect(card.tris.n).toBeGreaterThan(0);
+    for (let k = 0; k < 3; k++) expect(tris(card.tris).col[k]).toBeCloseTo(want[k], 3);
+  });
+
+  it('a halo adds one glow and one floor light of the spectre\'s colours', () => {
+    const fx = new Effects3d(map), out = newOut();
+    const s = spec(), h = s.halo!, peak = s.seeThrough!.peak;
+    fx.frame(frameOf(1, [fig(3, KIND.Ghost, { model: true, spectre: s, alpha: 0.6 })]), out);
+    expect(out.glows.n).toBe(1);
+    const ys = out.glows.position.filter((_, i) => i % 3 === 1), xs = out.glows.position.filter((_, i) => i % 3 === 0);
+    expect((Math.max(...ys) + Math.min(...ys)) / 2).toBeCloseTo(h.height / 16 / Math.cos(cam.pitch), 4);
+    expect((Math.max(...xs) + Math.min(...xs)) / 2).toBeCloseTo(5, 4);
+    const g = rgb(h.glow);
+    for (let k = 0; k < 3; k++) expect(out.glows.color[k]).toBeCloseTo(g[k] * h.k * 0.6 / peak, 5);
+    expect(out.lights.length).toBe(1);
+    const L = out.lights[0], l = rgb(h.light);
+    expect(L.id).toBe('gh3');
+    expect(L.radius).toBe(h.radius);
+    expect(L.shadow).toBe(false);
+    expect(L.y).toBeCloseTo(5 / 16, 6);
+    expect(L.r).toBeCloseTo(l[0] * 0.6 / peak, 5);
+    expect(L.g).toBeCloseTo(l[1] * 0.6 / peak, 5);
+    expect(L.b).toBeCloseTo(l[2] * 0.6 / peak, 5);
+  });
+
+  it('a faint, a hidden and a plain figure get no halo', () => {
+    const fx = new Effects3d(map);
+    const s = spec();
+    const faint = newOut(), hidden = newOut(), plain = newOut();
+    fx.frame(frameOf(1, [fig(3, KIND.Ghost, { model: true, spectre: s, alpha: 0.04 })]), faint);
+    fx.frame(frameOf(1, [fig(3, KIND.Ghost, { model: true, spectre: s })], { hidden: [3] }), hidden);
+    fx.frame(frameOf(1, [fig(4, KIND.Ghost)]), plain);
+    for (const o of [faint, hidden, plain]) expect(o.glows.n + o.lights.length).toBe(0);
   });
 });

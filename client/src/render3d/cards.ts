@@ -215,12 +215,12 @@ export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: num
  * Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
  * unchanged (orthographic view) but puts the whole disc in front of its wall, the wall top and the floor.
  * `sightAt`: the point the sight mask is read at (default the centre); a wall torch passes a point in front of its face.
+ * `lift`: how far toward the camera the centre moves (tiles); 0 leaves it at the given point (a halo that sits on a figure, drawn with it).
  * Known cost: it is added over figures standing within about `size` in front of a torch.
  */
-export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: number, rgb: [number, number, number], cam: Cam, sightAt?: [number, number]): void {
+export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: number, rgb: [number, number, number], cam: Cam, sightAt?: [number, number], lift: number = size + GLOW_LIFT): void {
   const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw), sp = Math.sin(cam.pitch), cpi = Math.cos(cam.pitch);
   const ray = viewRay(cam.pitch, cam.yaw);
-  const lift = size + GLOW_LIFT;
   const x = x0 + ray[0] * lift, y = y0 + ray[1] * lift, z = z0 + ray[2] * lift;
   const rx = size * c, rz = size * sn;
   const ux = size * sn * sp, uy = size * cpi, uz = -size * c * sp;

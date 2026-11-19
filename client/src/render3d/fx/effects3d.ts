@@ -213,6 +213,12 @@ export class Effects3d {
     return this.recs.length;
   }
 
+  /** True while a record of `kind` follows entity `id` (a frame drawer asks, to leave to the record what the record draws). */
+  following(kind: FxKind, id: number): boolean {
+    for (const r of this.recs) if (r.kind === kind && r.follow === id) return true;
+    return false;
+  }
+
   private add(kind: FxKind, now: number, x: number, z: number, follow: number, a = 0, b = 0, c = 0, d = 0): FxRec {
     // the oldest of a kind goes first (records are in start order)
     let count = 0;
