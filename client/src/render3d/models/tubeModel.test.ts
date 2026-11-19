@@ -861,8 +861,12 @@ describe('the spectres', () => {
     });
     it('refuses a floating-apart description without its pivots', () => {
       const { armR: _a, ...pivots } = d.pivots;
-      expect(() => buildTubeFigure('bad', { ...d, pivots })).toThrow(/Shade/);
-      expect(() => buildTubeFigure('bad', { ...d, float: undefined })).toThrow(/Shade/);
+      expect(() => buildTubeFigure('bad', { ...d, pivots })).toThrow('Shade: apart needs a pivot for armR');
+      expect(() => buildTubeFigure('bad', { ...d, float: undefined })).toThrow('Shade: apart needs float');
+    });
+    it('survives the worker hand-over, smoke included, and carries its description\'s spectre', () => {
+      expect(structuredClone(m)).toEqual(m);
+      expect(m.spectre).toEqual(d.spectre);
     });
   });
 });

@@ -43,10 +43,28 @@ add({ shape: { ball: [0.95, 0.85, 0.85] }, at: [3.65, 13.65, 0], stage: 'head', 
 // ---- the arms: a socket, an elbow, a wrist; a hand with four claws and a thumb ----
 const CLAWS: readonly (readonly [number, number, number])[] = [[-1, 0.2, 3.4], [-0.33, 0.55, 4.0], [0.33, 0.55, 3.9], [1, 0.25, 3.2]];   // [dz, dx, length]
 const THUMB_LENGTH = 2.6;
+/** A claw's base lies off the wrist by `CLAW_BASE` (z times the claw's dz); its first direction is `[dx + CLAW_FORWARD, -1, CLAW_SPREAD * dz]`. */
+const CLAW_BASE = { x: 0.1, y: -0.1, z: 0.7 } as const, CLAW_FORWARD = 0.25, CLAW_SPREAD = 0.7;
+/** The thumb: its base off the wrist in z (times the side), its first direction. */
+const THUMB_BASE_Z = 0.35, THUMB_DIR: Vec3 = [0.9, -0.5, -0.9];
+/** One arm's joints (page px): the socket the arm bone turns about, the elbow the hand bone turns about, the wrist. `sd` is +1 for the right side, -1 for the left. */
+const SOCKET: Vec3 = [0.9, 13.6, 4.2], UPPER_ARM: Vec3 = [-1.0, -3.8, 1.5], FOREARM: Vec3 = [2.4, -3.0, -0.6];
+const joints = (sd: 1 | -1): { S: Vec3; E: Vec3; W: Vec3 } => {
+  const S: Vec3 = [SOCKET[0], SOCKET[1], SOCKET[2] * sd], E = plus(S, [UPPER_ARM[0], UPPER_ARM[1], UPPER_ARM[2] * sd]);
+  return { S, E, W: plus(E, [FOREARM[0], FOREARM[1], FOREARM[2] * sd]) };
+};
+const mid = (a: Vec3, b: Vec3): Vec3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+/** The smoke the hard parts carry (a point on a bone, its radius, its share of the wisps and its rise factor): the head's, and per arm the socket, the middle of the upper arm, the elbow, the middle of the forearm and the wrist. */
+const carried: SmokeSpec['on'][number][] = [{ bone: 'head', at: [2.3, 15.0, 0], r: 1.5, weight: 2, rise: 1.6 }];
+const ARM_SMOKE = { weight: 0.25, rise: 0.8 }, JOINT_R = 0.45, SOCKET_R = 1.5;
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const armBone = `arm${s}` as Bone, handBone = `hand${s}` as Bone;
-  const S: Vec3 = [0.9, 13.6, 4.2 * sd], E = plus(S, [-1.0, -3.8, 1.5 * sd]), W = plus(E, [2.4, -3.0, -0.6 * sd]);
+  const { S, E, W } = joints(sd);
   pivots[armBone] = S; pivots[handBone] = E;
+  carried.push(
+    { bone: armBone, at: S, r: SOCKET_R, ...ARM_SMOKE }, { bone: armBone, at: mid(S, E), r: JOINT_R, ...ARM_SMOKE }, { bone: armBone, at: E, r: JOINT_R, ...ARM_SMOKE },
+    { bone: handBone, at: mid(E, W), r: JOINT_R, ...ARM_SMOKE }, { bone: handBone, at: W, r: JOINT_R, ...ARM_SMOKE },
+  );
   const rel = (from: Vec3, to: Vec3): Vec3 => minus(to, from);
   add({ shape: { ball: [0.6, 0.6, 0.6] }, at: S, stage: 'arms', bone: armBone });
   add({ shape: { tube: [{ p: [0, 0, 0], r: 0.5 }, { p: rel(S, E), r: 0.42 }], opts: { K: 8, N: 8 } }, at: S, stage: 'arms', bone: armBone });
@@ -55,24 +73,10 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   add({ shape: { ball: [0.65, 0.55, 0.85] }, at: W, stage: 'arms', bone: handBone });
   for (const [dzR, dx, length] of CLAWS) {
     const dz = dzR * sd;   // the left hand is the right one mirrored in z
-    add({ shape: { tube: clawPoints(norm([dx + 0.25, -1, 0.7 * dz]), length), opts: { K: 8, N: 12 } }, at: plus(W, [0.1, -0.1, 0.7 * dz]), stage: 'arms', bone: handBone });
+    add({ shape: { tube: clawPoints(norm([dx + CLAW_FORWARD, -1, CLAW_SPREAD * dz]), length), opts: { K: 8, N: 12 } }, at: plus(W, [CLAW_BASE.x, CLAW_BASE.y, CLAW_BASE.z * dz]), stage: 'arms', bone: handBone });
   }
-  add({ shape: { tube: clawPoints(norm([0.9, -0.5, -0.9 * sd]), THUMB_LENGTH), opts: { K: 8, N: 12 } }, at: plus(W, [0, 0, -0.35 * sd]), stage: 'arms', bone: handBone });
+  add({ shape: { tube: clawPoints(norm([THUMB_DIR[0], THUMB_DIR[1], THUMB_DIR[2] * sd]), THUMB_LENGTH), opts: { K: 8, N: 12 } }, at: plus(W, [0, 0, -THUMB_BASE_Z * sd]), stage: 'arms', bone: handBone });
 }
-
-/** The smoke the hard parts carry (a point on a bone, its radius, its share of the wisps and its rise factor): the head's, and per arm the socket, the middle of the upper arm, the elbow, the middle of the forearm and the wrist. */
-const carried: SmokeSpec['on'] = [
-  { bone: 'head', at: [2.3, 15.0, 0], r: 1.5, weight: 2, rise: 1.6 },
-  ...(['R', 'L'] as const).flatMap((s) => {
-    const sd = s === 'R' ? 1 : -1, S: Vec3 = [0.9, 13.6, 4.2 * sd], E = plus(S, [-1.0, -3.8, 1.5 * sd]), W = plus(E, [2.4, -3.0, -0.6 * sd]);
-    const mid = (a: Vec3, b: Vec3): Vec3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
-    const arm = `arm${s}` as Bone, hand = `hand${s}` as Bone;
-    return [
-      { bone: arm, at: S, r: 1.5, weight: 0.25, rise: 0.8 }, { bone: arm, at: mid(S, E), r: 0.45, weight: 0.25, rise: 0.8 }, { bone: arm, at: E, r: 0.45, weight: 0.25, rise: 0.8 },
-      { bone: hand, at: mid(E, W), r: 0.45, weight: 0.25, rise: 0.8 }, { bone: hand, at: W, r: 0.45, weight: 0.25, rise: 0.8 },
-    ];
-  }),
-];
 
 export const shade: TubeDesc = {
   name: 'Shade', size: SPIKE_SIZE / PAGE_TO_GAME, outline: 0x222222, pieces, pivots,
