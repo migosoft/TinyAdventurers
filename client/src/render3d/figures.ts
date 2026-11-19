@@ -2,12 +2,15 @@
 // weapons, tints and effects, and the shots. The look of a figure is `figurePose` (game/anim/pose.ts); this file turns the pose
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
-import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ghostPhase } from '../game/anim/entityAlpha';
+import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
+import { MELEE_T } from '../game/anim/pose';
 import { FigureStates } from '../game/anim/figureState';
 import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import type { EntState } from '../game/world';
@@ -54,6 +57,17 @@ const ACCEL_SECS = 0.2;
 const ACCEL_ALPHA = 0.35;
 /** The dying Shade's body fades over this long (s). */
 const SHADE_FADE = 0.3;
+/**
+ * How a fog spectre forms during its ambush warning (first values, #359): `form` is the fraction of the warning gone; the body's alpha
+ * is the smoothstep of `form` between `body`, the eyes open between `eyes`.
+ */
+export const SPECTRE_FORM = { body: [0.45, 0.95], eyes: [0.8, 1] } as const;
+/** A melee swing flares the eyes: `sin(min(1, FLARE_RATE * animT / MELEE_T) * PI)`, so the flare peaks at the 0.3125th of the swing and is gone after 1 / FLARE_RATE of it. */
+const FLARE_RATE = 1.6;
+const smooth = (a: number, b: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
 /** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
@@ -217,6 +231,15 @@ export function untinted(d: FigureDef): FigureDef {
   return u;
 }
 
+const SPECTRAL = new WeakMap<FigureDef, FigureDef>();
+
+/** The definition of a spectre model for `figurePose` (#359): untinted, its own alpha rules (the model's look carries them) and no silhouette in the ambush. */
+function spectral(d: FigureDef): FigureDef {
+  let r = SPECTRAL.get(d);
+  if (!r) { r = { ...untinted(d), incorporealAlpha: 1, silhouette: false }; SPECTRAL.set(d, r); }
+  return r;
+}
+
 /**
  * The tint of a model figure: the pose's multiply tint. A fill (the hurt flash, a silhouette) and the wind-up's red flash are not
  * carried over (the model shows hits and wind-ups by moving), so a wind-up wears no tint (`figurePose` gets the untinted definition); frozen adds a cool one.
@@ -317,7 +340,8 @@ export class Figures3d {
     if (ev.kind === KIND.Shade) {
       // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart.
       const fig = this.figs.get(ev.id);
-      if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, alpha: i.alpha * 0.75 }))), secs: SHADE_FADE, left: SHADE_FADE });
+      // The model's body already wears its own alpha (1); the eyes shut as it goes.
+      if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, eye: 0 }))), secs: SHADE_FADE, left: SHADE_FADE });
       else if (fig?.body) this.images.push({ card: { ...fig.body }, alpha0: 0.75, secs: SHADE_FADE, left: SHADE_FADE });
       return false;
     }
@@ -798,7 +822,8 @@ export class Figures3d {
   private drawModel(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, key: string, m: FigureModel, kit: FigureKit): boolean {
     const { s, fig, dashing, skims, start } = this.figOf(e, f, FIGURES[e.kind]);
     const d = fig.def;
-    const pose = figurePose(untinted(d), { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    const sp = m.spectre ?? null;
+    const pose = figurePose(sp ? spectral(d) : untinted(d), { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
     // The anchors are the card's numbers times the model's `size`, from the standing idle frame the model replaces (`standingAnchor`, the
     // card path's own): the bar and the name sit just above the smaller model. Lying, only `head` changes (the body's thickness on the floor); the bar and the name stay at the standing height.
     const idle = `${d.idle}0`, ib = this.bounds(idle), footY = d.footY ?? ib.h;
@@ -814,6 +839,7 @@ export class Figures3d {
     if (!pose.visible || foot.gone) return false;
     const mem3 = (fig.mem3 ??= newPose3dMemory());
     mem3.crest = v.crest;
+    if (sp) mem3.phase = ghostPhase(e.id);
     const p3 = poseFigure(m, d, s, f.dt, mem3);
 
     const { x, z, y } = foot;
@@ -830,11 +856,19 @@ export class Figures3d {
     const tint = modelTint(pose, s);
     tint[0] *= v.tone; tint[1] *= v.tone; tint[2] *= v.tone;
     const insts: FigureInst[] = [];
+    // A fog spectre forms out of its fog during the ambush warning: the body fades in late, the eyes later still (the fog itself draws from `form`).
+    const forming = !!sp?.fog && s.anim === ANIM.Ambush;
+    const form = forming ? Math.min(1, Math.max(0, s.animT / CONST.AMBUSH_WARNING)) : 1;
+    const bodyForm = forming ? smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], form) : 1;
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k * bodyForm, dark,
       cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     };
+    if (sp) {
+      body.eye = forming ? smooth(SPECTRE_FORM.eyes[0], SPECTRE_FORM.eyes[1], form) : 1;
+      body.flare = s.anim === ANIM.Melee ? Math.sin(Math.min(1, (FLARE_RATE * s.animT) / MELEE_T) * Math.PI) : 0;
+    }
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */
     const push = (i: FigureInst): void => {
       kept?.insts.push({ base: i, ox: i.x - x, oz: i.z - z, dl: i.lift - this.lifted(y) });
@@ -862,7 +896,7 @@ export class Figures3d {
       }
     }
     // The shadow caster: the model's own side outline (a baked atlas frame, one px per model px) at the foot; a faller casts none.
-    if (pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
+    if (!sp && pose.alpha >= 1 && !pose.lie && this.shadowed(e.id) && !falling) {
       const card: Card = { frame: outlineFrame(key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: ms * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
       const c = casterOf(card, e.id, this.frames, cam);
       if (c) out.casters.push(c);
@@ -877,7 +911,7 @@ export class Figures3d {
       this.parts.set(e.id, kept);
     } else this.parts.delete(e.id);
 
-    if (pose.shadow.visible && this.shadowed(e.id) && !foot.d && this.ovalOk(x, z, y)) {
+    if (!sp && pose.shadow.visible && this.shadowed(e.id) && !foot.d && this.ovalOk(x, z, y)) {
       const gf = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc * m.size) / TILE;
       // A hop shrinks the oval by how high the figure is; a lying figure's oval is stretched (the pose's own numbers).
@@ -897,7 +931,7 @@ export class Figures3d {
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
     const bite = m.armLength > 0 || m.butt || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing);
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
     this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
@@ -909,10 +943,10 @@ export class Figures3d {
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
    */
-  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number, dashing: boolean): DrawnFig {
+  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number, dashing: boolean, spectre: SpectreSpec | null = null, form = 1): DrawnFig {
     // The camera passes stretch the figure by 1 / cos(pitch) (nodes.ts): so is the top. `y` is the foot's world height; `handY` is a world height.
     const top = height / TILE / Math.cos(cam.pitch);
-    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1 });
+    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1, spectre: null, form: 1 });
     this.figUsed++;
     f.id = e.id; f.kind = e.kind; f.x = x; f.z = z; f.top = top; f.foot = y;
     // The weapon hand (the model's shoulder, the card's hand height): a hand's reach in front of the body, along its facing.
@@ -920,6 +954,7 @@ export class Figures3d {
     h[0] = x + Math.cos(yaw) * reach; h[1] = handY; h[2] = z + Math.sin(yaw) * reach;
     f.aim = s.aim; f.anim = s.anim; f.animT = s.animT; f.effects = s.effects ?? 0; f.alpha = alpha; f.dashing = dashing; f.model = model; f.side = e.side; f.def = d;
     f.yaw = yaw; f.swingY = handY; f.arc = s.swingArc ?? d.swing?.arc ?? 0; f.bite = bite;
+    f.spectre = spectre; f.form = form;
     f.mouth = undefined; f.nostril = undefined;
     out.figs.push(f);
     return f;

@@ -12,8 +12,8 @@ import { DESCS, FIT_KIND, modelKeyOf, outlineFrame, TUBE_DESCS, type DescKey } f
 import type { SpritePixels } from './models/weapons';
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
-import { INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
-import type { FrameBounds } from '../game/anim/pose';
+import { ghostPhase, ghostPulse, INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
+import { MELEE_T, type FrameBounds } from '../game/anim/pose';
 import { CHEST_HEIGHT } from '../game/objectPose';
 import { TILE, TileMap } from '../sim/map';
 import type { EntState } from '../game/world';
@@ -24,7 +24,7 @@ import { project, snapGround, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
-import { Figures3d, screenAim, untinted, type FigureOut } from './figures';
+import { Figures3d, screenAim, SPECTRE_FORM, untinted, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
 
 const FIG = { w: 16, h: 28 };
@@ -709,7 +709,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'chort', 'weapon_red_magic_staff', 'weapon_green_magic_staff', 'chest', 'mimic', 'barrel'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'chort', 'weapon_red_magic_staff', 'weapon_green_magic_staff', 'chest', 'mimic', 'barrel', 'ghost', 'shade'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -737,6 +737,85 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(out.openers[0].mid).toBeCloseTo(fg.anchors.get(10)!.head / 2 / 16, 6);
     // the model's own scale, not the pose's fall shrink
     expect(out.models[0].scale).toBe(kit.get('elf')!.scale);
+  });
+
+  describe('the spectres on the model path (#359)', () => {
+    const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const spec = (id: number, kind: number, o: Partial<EntState> = {}) => ent(id, kind, { flags: FLAG.INCORPOREAL, ...o });
+    const one = (e: EntState, fg = make(), now = 10) => fg.frame(frame([e], { now }), cam(), look({ kit, ...all }));
+    const clockOf = (fg: Figures3d, id: number): number => (fg as unknown as { figs: Map<number, { mem: { clock: number } }> }).figs.get(id)!.mem.clock;
+    const phaseOf = (fg: Figures3d, id: number): number => (fg as unknown as { figs: Map<number, { mem3: { phase: number } }> }).figs.get(id)!.mem3.phase;
+    const WARN = CONST.AMBUSH_WARNING;
+
+    it.each([KIND.Ghost, KIND.Shade])('gives kind %i no oval, no caster, no fangs, no weapon, and the id\'s phase', (kind) => {
+      const fg = make(), out = one(spec(7, kind), fg);
+      expect(out.models.length).toBe(1);
+      expect(out.shadows.n).toBe(0);
+      expect(out.casters.length).toBe(0);
+      expect(out.figs[0].bite).toBe(-1);
+      expect(phaseOf(fg, 7)).toBe(ghostPhase(7));
+    });
+
+    it('draws a Shade whole when idle: alpha 1, eyes open, no flare, fog and form 1', () => {
+      const out = one(spec(7, KIND.Shade));
+      const b = out.models[0];
+      expect([b.alpha, b.eye ?? 1, b.flare ?? 0]).toEqual([1, 1, 0]);
+      expect(out.figs[0].spectre?.fog).toBe(true);
+      expect(out.figs[0].form).toBe(1);
+      expect(out.figs[0].alpha).toBe(1);
+    });
+
+    it('forms a Shade out of its fog during the ambush warning', () => {
+      const at3 = (k: number) => one(spec(7, KIND.Shade, { anim: ANIM.Ambush, animMs: k * WARN * 1000 }));
+      const a = at3(0.3);
+      expect(a.models[0].alpha).toBe(0);
+      expect(a.figs[0].alpha).toBe(1);
+      expect(a.figs[0].form).toBeCloseTo(0.3, 9);
+      const b = at3(0.7);
+      expect(b.models[0].alpha).toBeCloseTo(smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], 0.7), 9);
+      expect(b.models[0].eye).toBe(0);
+      expect(b.figs[0].form).toBeCloseTo(0.7, 9);
+      const c = at3(0.95);
+      expect(c.models[0].eye).toBeCloseTo(smooth(SPECTRE_FORM.eyes[0], SPECTRE_FORM.eyes[1], 0.95), 9);
+      expect(c.figs[0].form).toBeCloseTo(0.95, 9);
+    });
+
+    it('flares a Shade\'s eyes in a melee swing only', () => {
+      const melee = (t: number) => one(spec(7, KIND.Shade, { anim: ANIM.Melee, animMs: t * 1000 })).models[0].flare ?? 0;
+      expect(melee(MELEE_T * 0.3125)).toBeCloseTo(1, 9);
+      expect(melee(MELEE_T * 0.1)).toBeCloseTo(Math.sin(Math.min(1, (1.6 * 0.1)) * Math.PI), 9);
+      expect(melee(MELEE_T * 2)).toBeCloseTo(0, 9);
+      expect(one(spec(7, KIND.Shade)).models[0].flare ?? 0).toBe(0);
+    });
+
+    it('fades a dead Shade\'s model from its body alpha with the eyes shut', () => {
+      const fg = make();
+      one(spec(7, KIND.Shade), fg);
+      fg.event({ t: 'Died', id: 7, x: at(0), y: 8, kind: KIND.Shade });
+      const out = fg.frame(frame([], { now: 10.1, dt: 0.016 }), cam(), look({ kit, ...all }));
+      expect(out.models.length).toBe(1);
+      expect(out.models[0].alpha).toBe(1);   // the copy starts at the body's alpha (the 0.75 of the card's veil is not applied)
+      expect(out.models[0].eye).toBe(0);
+    });
+
+    it('pulses a Ghost, blinks it in the ambush and lists its halo', () => {
+      const fg = make();
+      const out = one(spec(7, KIND.Ghost), fg);
+      expect(out.models[0].alpha).toBeCloseTo(ghostPulse(clockOf(fg, 7), ghostPhase(7)), 9);
+      expect(out.figs[0].spectre?.halo).toBeDefined();
+      expect(out.figs[0].form).toBe(1);
+      expect(one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 10 })).models[0].alpha).toBe(0);
+      expect(one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 70 })).figs[0].form).toBe(1);
+    });
+
+    it('leaves a card Shade as it was', () => {
+      const out = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
+      expect(out.figs[0].spectre).toBeNull();
+      expect(out.figs[0].form).toBe(1);
+      const a = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
+      expect(a.models.length).toBe(0);
+      expect(a.ghosts.look[4]).toBeCloseTo(0.75, 6);
+    });
   });
 
   it('draws the card when the model is not built, or the kind has no description: the same output as without models', () => {

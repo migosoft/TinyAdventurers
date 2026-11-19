@@ -16,7 +16,7 @@ const ID = 7, X = 5, Z = 6;
 const newOut = (): FxOut => ({ tris: new FxTris(5000), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
 const fig = (o: Partial<DrawnFig> = {}): DrawnFig => ({
   id: ID, kind: KIND.Wizard, x: X, z: Z, top: 1, foot: 0, hand: [X, 0.6, Z], aim: 0, anim: ANIM.Windup, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: SIDE.Friendly,
-  def: FIGURES[KIND.Wizard], yaw: 0, swingY: 0.6, arc: 0, bite: -1, ...o,
+  def: FIGURES[KIND.Wizard], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
 });
 const ent = (o: Partial<EntState> = {}): EntState => ({
   id: ID, kind: KIND.Wizard, x: X * 16, y: Z * 16, hp: 10, anim: ANIM.Windup, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Friendly, entangled: 0, ...o,

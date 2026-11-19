@@ -5,6 +5,7 @@ import type { Cand } from '../lights';
 import type { FigureDef } from '../../game/anim/defs';
 import type { FxTris } from './tris';
 import type { V3 } from './shapes';
+import type { SpectreSpec } from '../models/tubeDesc';
 
 /** What the effects write into each frame: blended triangles, lit triangles (stone, dust, smoke, floor marks), glow quads and client lights. */
 export interface FxOut { tris: FxTris; lit: FxTris; glows: GlowBuf; lights: Cand[] }
@@ -54,6 +55,10 @@ export interface DrawnFig {
   arc: number;
   /** A biter's (wolf's) bite progress `u` (0.25 held in the wind-up), -1 for a figure that does not bite with fangs. */
   bite: number;
+  /** The model's spectre look (#359), null for a card and for every other model. */
+  spectre: SpectreSpec | null;
+  /** How far a fog model has formed out of its fog: 0..1 in the ambush warning (`animT / AMBUSH_WARNING`), else 1. */
+  form: number;
 }
 
 /** A mimic's one-shot cue from its pose: the reveal (gold motes) or the landing (a dust puff), at the foot (tiles). */
