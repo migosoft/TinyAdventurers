@@ -6,11 +6,14 @@ import { PAGE_TO_GAME } from '../tubeModel';
 
 const STAVE = 0xc56025, SEAM = 0x38262d, HOOP = 0x7b8994, RED = 0xda4e38;
 
-/** The body's paint: `u` runs up the barrel, `d` round it (0..1). Hoops at the lower and upper third, a red band between, staves elsewhere. */
+/**
+ * The body's paint: `u` runs up the barrel, `d` from the top (0) to the underside (1) and mirrors back on the other half. Hoops at the
+ * lower and upper third, a red band between, staves elsewhere: seams centred on d = 0, 0.25, 0.5, 0.75, 1, so 8 even staves round.
+ */
 export const barrelPaint = (u: number, d: number): number => {
   if ((u >= 0.2 && u <= 0.27) || (u >= 0.68 && u <= 0.75)) return HOOP;
   if (u >= 0.42 && u <= 0.56) return RED;
-  return (d * 5) % 1 < 0.2 ? SEAM : STAVE;
+  return (d * 4 + 0.125) % 1 < 0.25 ? SEAM : STAVE;
 };
 
 const pieces: TubePiece[] = [

@@ -126,6 +126,7 @@ describe('the barrel', () => {
     const { lo, hi } = boxOf(barrel.pieces);
     expect(Math.max(-lo[0], hi[0])).toBeCloseTo(6.4, 1);
     expect(Math.max(-lo[2], hi[2])).toBeCloseTo(6.4, 1);
+    // The lid top sits at 15.4, the tolerance of 0.4 is met by 0.005.
     expect(Math.abs(hi[1] - lo[1] - 15), `y ${lo[1]}..${hi[1]}`).toBeLessThanOrEqual(0.4);
   });
 
@@ -138,7 +139,26 @@ describe('the barrel', () => {
     expect(paint(0.23, 0.5)).toBe(0x7b8994);
     expect(paint(0.5, 0.5)).toBe(0xda4e38);
     expect(paint(0.1, 0.02)).toBe(0x38262d);
-    expect(paint(0.1, 0.5)).toBe(0xc56025);
+    expect(paint(0.1, 0.125)).toBe(0xc56025);
+  });
+
+  it('the baked paint has 8 even staves round: 8 seams of 2 rows, 8 woods of 6 rows', () => {
+    const { paint } = buildJob('barrel', null), x = Math.floor(0.1 * paint.w);
+    const seam = Array.from({ length: paint.h }, (_, y) => {
+      const i = (y * paint.w + x) * 4, c = (paint.data[i] << 16) | (paint.data[i + 1] << 8) | paint.data[i + 2];
+      expect([0x38262d, 0xc56025]).toContain(c);
+      return c === 0x38262d;
+    });
+    // Runs counted cyclically: start at a change of colour, so a run across the wrap is one.
+    const start = seam.findIndex((s, y) => s !== seam[(y + paint.h - 1) % paint.h]);
+    const runs: { seam: boolean; len: number }[] = [];
+    for (let k = 0; k < paint.h; k++) {
+      const s = seam[(start + k) % paint.h];
+      if (runs.length && runs[runs.length - 1].seam === s) runs[runs.length - 1].len++; else runs.push({ seam: s, len: 1 });
+    }
+    expect(runs.filter((r) => r.seam)).toHaveLength(8);
+    expect(runs.filter((r) => !r.seam)).toHaveLength(8);
+    for (const r of runs) expect(r.len).toBe(r.seam ? 2 : 6);
   });
 
   it('has no bends', () => {
