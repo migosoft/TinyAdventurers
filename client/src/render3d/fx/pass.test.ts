@@ -25,4 +25,12 @@ describe('the effects pass and the smoke buffer (#359)', () => {
     pass.noteFrame();
     expect(pass.droppedTotal).toBe(14);
   });
+
+  it('triCount counts the smoke\'s triangles with the blended and the lit ones', () => {
+    clearFxRegistry();
+    const pass = new FxPass(new Set());
+    pass.out.smoke.n = 728;
+    pass.noteFrame();
+    expect(pass.triCount).toBe(728);
+  });
 });

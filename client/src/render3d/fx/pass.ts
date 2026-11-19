@@ -86,7 +86,7 @@ export class FxPass {
   /** Books the frame's triangle count and what the caps refused. */
   noteFrame(): void {
     const o = this.out;
-    this.triCount = o.tris.n + o.lit.n;
+    this.triCount = o.tris.n + o.lit.n + o.smoke.n;
     this.droppedTotal += o.tris.dropped + o.lit.dropped + o.smoke.dropped;
   }
 

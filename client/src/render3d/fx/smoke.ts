@@ -1,4 +1,4 @@
-// The smoke of a body of smoke (#359 round 2): a dense, near-black core of camera-facing patches along the body's middle line and on the
+// The smoke of a body of smoke (#359): a dense, near-black core of camera-facing patches along the body's middle line and on the
 // parts that carry smoke, and wisps that are born on the core's rim, drift slowly outward and fade into a second tone. Pure maths: it reads a
 // `SmokeSpec` and writes quads (two triangles each, a corner coordinate per vertex) into a `SmokeBuf`; the material (round shapes made of
 // noise, never a disc) and the mesh are the view's. World lengths are tiles; the spec's and `SMOKE`'s are model px, `px` of a tile each.
@@ -20,12 +20,13 @@ export const SMOKE = {
 } as const;
 
 /** Constants of the shapes that `SMOKE` does not name: the patch's wobble phase step, the wisp's rim and fade, the seed's spreads. */
-const SHAPE = { wobblePhase: 2.1, wobbleRate: 0.6, rim: [0.75, 0.5], sizeBase: 0.7, sizeR: 0.3, hue: [0.05, 0.7], fadeIn: 0.15, fadeOut: [0.35, 1], seedStep: 0.137, seedMix: 0.1, minHalf: 0.05, gap: 1e-9 } as const;
+const SHAPE = { wobblePhase: 2.1, wobbleRate: 0.6, rim: [0.75, 0.5], sizeBase: 0.7, sizeR: 0.3, hue: [0.05, 0.7], fadeIn: 0.15, fadeOut: [0.35, 1], seedStep: 0.137, seedMix: 0.1, minHalf: 0.05, gap: 1e-9,
+  lineRadius: 0.8, lineWeight: 0.6, wigSeed: 40 } as const;   // a line point's patch: radius floor (share of the half width) and weight base; the wisp's sway phase per seed
 
 /** Triangles (two per quad) with a corner coordinate: `c` holds cx, cy, seed, clock per corner. `n` is the triangle count, so the fx sight data reads it as an `FxBuf`. */
 export interface SmokeBuf { position: number[]; rgba: number[]; c: number[]; n: number; dropped: number }
 export const newSmokeBuf = (): SmokeBuf => ({ position: [], rgba: [], c: [], n: 0, dropped: 0 });
-export const FX_SMOKE_CAP = 16000;   // triangles a frame; more are dropped and counted
+export const FX_SMOKE_CAP = 32000;   // triangles a frame (one Shade writes 728, so 43 Shades fit); more are dropped and counted, nearest last
 
 /** A point of the body in the world this frame. */
 export type PlaceOf = (bone: number, p: readonly [number, number, number], out: [number, number, number]) => void;
@@ -76,7 +77,7 @@ export class Smoke {
       const u = i / (K.points - 1);
       lineAt(spec.line, u, s);
       const [x, y, d, w] = s, rate = u < R.from ? R.top : R.top - (R.top - R.tail) * smooth(R.from, 1, u), rise = u < SMOKE.topUntil ? SMOKE.topRise : 1;
-      this.core.push(this.point(-1, [x, y, 0], Math.max(d, 0.8 * w), d * w + 0.6, rise, rate, u, w, false, false));
+      this.core.push(this.point(-1, [x, y, 0], Math.max(d, SHAPE.lineRadius * w), d * w + SHAPE.lineWeight, rise, rate, u, w, false, false));
       if (w > K.pairOver) for (const side of [-1, 1]) this.core.push(this.point(-1, [x, y, side * K.pairAt * w], w * K.pairR, w, rise, rate, u, w, false, true));
     }
     for (const e of spec.on) this.core.push(this.point(BONES.indexOf(e.bone), e.at, e.r, e.weight, e.rise, R.part, -1, 0, true, false, e.r > 1));
@@ -154,7 +155,7 @@ export class Smoke {
     for (const w of this.wisps) {
       w.age += dt / w.life;
       if (w.age >= 1) this.birth(w, ax, px);
-      const wig = W.wig[0] * Math.sin(W.wig[1] * this.t + 40 * w.seed) * px;
+      const wig = W.wig[0] * Math.sin(W.wig[1] * this.t + SHAPE.wigSeed * w.seed) * px;
       w.x += (w.vx + ax.right[0] * wig) * dt + fx;
       w.y += (w.vy + ax.right[1] * wig) * dt;
       w.z += (w.vz + ax.right[2] * wig) * dt + fz;

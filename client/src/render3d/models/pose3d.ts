@@ -39,7 +39,7 @@ export const FLOAT = {
   lean: { per: 0.12, max: 0.22 },
   knee: [0.1, 0.45], arm: [0.06, 0.5], head: 0.22, spread: 0.06, sway: 0.04, hitLean: 0.2,
 } as const;
-/** Floating parts (`FigureModel.apart`, #359 round 2): the approved try-out's numbers. Lengths in model px, angles in rad. */
+/** Floating parts (`FigureModel.apart`, #359): the approved try-out's numbers. Lengths in model px, angles in rad. */
 export const APART = {
   hover: 2,                               // game px; replaces FLOAT.hover for such a model (the bob stays FLOAT.bob)
   // drift of each part: [amplitude, rad/s, share of the phase] for x, y, z; the arms use the phase `ph + side * arm.phase`
@@ -52,7 +52,7 @@ export const APART = {
   other: { at: [-2.2, 0, 1.5], turn: -0.7 },                                              // the other arm in a blow, times R: x, y, z (z times its side), and its turn about z
   // the blow's clock, in units of MELEE_T: the sweep is 0..1, held to `hold`, back by `back`; the reach lasts `reach`
   time: { hold: 1.5, back: 5, reach: 4, reachPow: 0.6, windIn: 12, windOut: 0.4, carry: 12 },
-  form: [0.45, 0.95], inside: [0.5, 13.0, 0],                                             // the ambush: the parts drift in from this point of the smoke
+  form: [0.45, 0.95], inside: [0.5, 13.0, 0], // (form is `SPECTRE_FORM.body` in figures.ts: change both together)                                            // the ambush: the parts drift in from this point of the smoke
   asleep: { hover: 0.5, droop: -0.35 },
 } as const;
 export const TURN_RATE = 12, HIT_SECS = 0.26;
@@ -468,7 +468,8 @@ const reachOf = (tau: number): number => (tau < 0 ? 0 : Math.sin(Math.pow(Math.m
 /**
  * The clocks of the blow: `mem.blowT`, `mem.wind` and `mem.carry` for this frame's animation, and the result in `BLOW`. A melee or a
  * wind-up that begins takes what is left of the blow before it as `carry`, so the swing and the reach do not jump (a second blow in
- * the drift back starts where the parts are); `carry` then decays.
+ * the drift back starts where the parts are); `carry` then decays. A melee that begins right after a wind-up takes nothing: the wind-up
+ * took the carry and the melee goes on from there.
  */
 function blowClock(mem: Pose3dMemory, anim: number, animT: number, dt: number): void {
   const K = APART.time, melee = anim === ANIM.Melee, windup = anim === ANIM.Windup;

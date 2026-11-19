@@ -13,7 +13,7 @@ export const PX = 1 / 16;
 export const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 export const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
 export const smooth = (a: number, b: number, x: number): number => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-export const easeOut =(v: number): number => 1 - (1 - clamp01(v)) ** 3;
+export const easeOut = (v: number): number => 1 - (1 - clamp01(v)) ** 3;
 
 /** The camera's screen-right and screen-up, for the small squares that face it. */
 export function screenAxes(cam: Cam, out: MAxes): MAxes {

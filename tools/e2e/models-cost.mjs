@@ -70,12 +70,14 @@ for (const backend of ['webgl', 'auto']) {
               mean: (ts[ts.length - 1] - ts[0]) / (ts.length - 1), med: d[d.length >> 1], p99: d[Math.floor(d.length * 0.99)],
               backend: w.backend, size: w.renderSize,
               models: w.models && { figures: w.models.figures, draws: w.models.draws },
+              fx: w.fx && { tris: w.fx.tris, dropped: w.fx.dropped },
             });
           }
         };
         requestAnimationFrame(f);
       }), SECS);
-      console.log(`${label}\t${r.backend}\t${light ? 'torch' : 'work'}\t${as}\tmean ${r.mean.toFixed(2)} ms\tmed ${r.med.toFixed(2)}\tp99 ${r.p99.toFixed(2)}\t${JSON.stringify(r.models)}\t${r.size}${errs.length ? `\tERR ${errs[0]}` : ''}`);
+      console.log(`${label}\t${r.backend}\t${light ? 'torch' : 'work'}\t${as}\tmean ${r.mean.toFixed(2)} ms\tmed ${r.med.toFixed(2)}\tp99 ${r.p99.toFixed(2)}\t${JSON.stringify(r.models)}\t${r.size}\tfx tris ${r.fx?.tris}\tdropped ${r.fx?.dropped}${errs.length ? `\tERR ${errs[0]}` : ''}`);
+      if (r.fx?.dropped > 0) failures.push(`${backend} ${light || 'work'} ${as}: the effects dropped ${r.fx.dropped} triangles at their caps`);
       if (errs.length) failures.push(`${backend} ${light || 'work'} ${as}: ${errs[0]}`);
       await p.close();
     }

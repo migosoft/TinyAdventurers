@@ -95,8 +95,9 @@ for (const [name, place] of [['ghost', 1], ['shade', 4]]) {
 }
 for (let i = 0; i < 6; i++) shots.push({ name: `spectre-place-${i}`, q: `&at=spectre:${i}&zoom=8${SPOT}`, need: [SPECTRES[i < 3 ? 0 : 1][0]] });
 // The life loop. The ambush warning is the first 0.5 s (`AMBUSH_WARNING`): the Ghost blinks in 0.06 s steps (on in 0.06-0.12, 0.18-0.24,
-// 0.30-0.36, 0.42-0.48), so it is shot at 0.21 and 0.45 (blinked on) and once at 0.4 (blinked off, named so); the Shade forms (fog pool,
-// fog risen with the body fading in, the eyes lighting last) at 0.15, 0.35 and 0.47. Then the blow (3.1) and the death (7.3).
+// 0.30-0.36, 0.42-0.48), so it is shot at 0.21 and 0.45 (blinked on) and once at 0.4 (blinked off, named so); then the blow (3.1) and the death (7.3).
+// The Shade is shot at 0.15, 0.3 and 0.47 (the pool, the rising body, the parts and eyes arriving), 2.9 (the wind-up), 3.08 and 3.18 (the sweep
+// and its end), 3.6 (the drift back) and 7.1 and 7.6 (the death).
 const LIFE = { ghost: ['0.21', '0.45', 'blinkoff-0.4', '3.1', '7.3'], shade: ['0.15', '0.3', '0.47', '2.9', '3.08', '3.18', '3.6', '7.1', '7.6'] };
 for (const [key, , life] of SPECTRES) {
   for (const label of LIFE[key]) shots.push({ name: `spectre-life-${key}-${label}`, q: `&at=spectre:${life}&zoom=8&slow=1000&t=${label.replace('blinkoff-', '')}`, need: [key] });
@@ -246,6 +247,11 @@ for (const s of shots) {
         await snap(p, s.name);
         const m = await p.evaluate(() => window.__r3d.models ?? null);
         console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${keys ? keys.split(',').length : 0} models${m ? `, drew ${m.figures} figures, ${m.draws} draws` : ''}`);
+        // A spectre shot whose smoke hit the triangle cap is a wrong picture (the nearest Shades lose theirs): it fails.
+        if (s.name.startsWith('spectre-')) {
+          const dropped = await p.evaluate(() => window.__r3d.fx?.dropped ?? 0);
+          if (dropped > 0) throw new Error(`the effects dropped ${dropped} triangles at their caps`);
+        }
       })(),
       new Promise((_, no) => { cap = setTimeout(() => no(new Error('timeout: the shot took more than 4 minutes')), 240000); }),
     ]);

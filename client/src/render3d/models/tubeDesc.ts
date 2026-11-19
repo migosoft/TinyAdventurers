@@ -132,7 +132,7 @@ export interface TubeDesc {
   hop?: number;
   /** The figure floats: no legs step, nothing moves in time with the speed (pose3d.ts). Two-legged descriptions (`stance: 'two'`) only; the builder ignores it otherwise. */
   float?: true;
-  /** With `float`: a melee swings the arm from its limp hang (the Ghost; the user, 2026-11-19). Without it the arms stay limp in a blow (the Shade). */
+  /** With `float`: a melee swings the arm from its limp hang (the Ghost; the user, 2026-11-19). Without it a blow does not swing the arms from their hang (a description with `apart`, the Shade, has `swipe` and is posed through `apart`). */
   swipe?: true;
   /** With `float`: the parts float apart. Nothing joins them; each drifts on its own and a blow moves an arm's root (pose3d.ts, `APART`). The description gives explicit pivots for armR, handR (the elbow), armL, handL and no `arms`. */
   apart?: true;

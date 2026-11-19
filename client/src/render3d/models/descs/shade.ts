@@ -1,4 +1,4 @@
-// The Shade (#359 round 2): a creature of smoke. The hard parts are a low head and two thin, bony arms with clawed hands; they float apart
+// The Shade (#359): a creature of smoke. The hard parts are a low head and two thin, bony arms with clawed hands; they float apart
 // and nothing solid joins them (no torso, no neck, no shoulders, no legs). Between them hangs a body of smoke, which the effects draw
 // from `spectre.smoke` (`fx/smoke.ts`). Page px (one wolf model px), the front along +x, z to the figure's right. Every piece is flat
 // near-black and unlit-glowing (`glow`) with no hull. First values for the user's eye.

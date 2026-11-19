@@ -813,6 +813,15 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(make().frame(frame([spec(7, KIND.Shade)]), cam(), look()).figs[0].rig).toBeNull();
     });
 
+    it('gives a model without a smoke no rig, and a smoke body the same rig object every frame', () => {
+      expect(one(spec(8, KIND.Ghost)).figs[0].rig).toBeNull();
+      const fg = make();
+      const a = one(spec(7, KIND.Shade), fg).figs[0].rig;
+      const b = one(spec(7, KIND.Shade), fg, 10.1).figs[0].rig;
+      expect(a).not.toBeNull();
+      expect(b).toBe(a);
+    });
+
     it('sinks a dead Shade\'s copy by SPECTRE_SINK px over the fade; a dead Ghost\'s copy does not sink', () => {
       const fg = make();
       const l0 = one(spec(7, KIND.Shade), fg).models[0].lift;

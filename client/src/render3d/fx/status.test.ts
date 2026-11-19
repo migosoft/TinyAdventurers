@@ -255,6 +255,31 @@ describe('the Shade model\'s smoke (#359)', () => {
     expect(clockAt(bit(EFFECT.Sleep))).toBeCloseTo(0.025 * SMOKE.clock, 9);
   });
 
+  it('asleep, the smoke steps by half of the frame time (it moves slower), awake by all of it', () => {
+    const stepOf = (effects: number): number => {
+      clearVeils();
+      const fx = new Effects3d(map);
+      fx.frame(frameOf(1, [model(7, { effects })]), newOut());
+      const spy = vi.spyOn(Smoke.prototype, 'step');
+      fx.frame(frameOf(1.05, [model(7, { effects })]), newOut());
+      const dt = spy.mock.calls[0][0];
+      spy.mockRestore();
+      return dt;
+    };
+    expect(stepOf(0)).toBeCloseTo(0.05, 9);
+    expect(stepOf(bit(EFFECT.Sleep))).toBeCloseTo(0.025, 9);
+  });
+
+  it('a Shade gone for a moment and back: the smoke\'s clock advanced by the wall time once', () => {
+    clearVeils();
+    const fx = new Effects3d(map), a = newOut(), b = newOut();
+    run(fx, 1, 5, () => [model(7)]);
+    fx.frame(frameOf(1.2, [model(7)]), a);
+    fx.frame(frameOf(1.25, []), newOut());
+    fx.frame(frameOf(1.3, [model(7)]), b);
+    expect(b.smoke.c[3] - a.smoke.c[3]).toBeCloseTo(0.1 * SMOKE.clock, 9);
+  });
+
   it('a figure\'s alpha scales every quad, and a hidden id writes none', () => {
     const fx = new Effects3d(map);
     run(fx, 1, 5, () => [model(7)]);

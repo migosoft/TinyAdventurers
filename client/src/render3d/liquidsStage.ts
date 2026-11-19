@@ -32,6 +32,7 @@ import { reflects, shimmers, type R3dParams } from './params';
 import { Lava3d, type LavaIn } from './lava/lava';
 import { emitLavaCues } from './fx/lavaFx';
 import { rng } from './fx/rand';
+import { clearVeils } from './fx/status';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import { SIGHT_OFF } from './sightNodes';
@@ -251,6 +252,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
     },
     dispose(): void {
       label.remove();
+      clearVeils();
       kit?.dispose();
       host?.setPageButtons([]);
     },

@@ -58,7 +58,7 @@ const ACCEL_ALPHA = 0.35;
 export const SHADE_FADE = 0.3;
 /**
  * How a smoke spectre forms during its ambush warning (first values, #359): `form` is the fraction of the warning gone; the body's alpha
- * is the smoothstep of `form` between `body`, the eyes open between `eyes`.
+ * is the smoothstep of `form` between `body`, the eyes open between `eyes`. `body` is also `APART.form` in `models/pose3d.ts`: change both together.
  */
 export const SPECTRE_FORM = { body: [0.45, 0.95], eyes: [0.8, 1] } as const;
 /** The hard parts of a dying smoke body sink this far (px) while their copy fades. */
@@ -267,6 +267,8 @@ export class Figures3d {
   private modelImages: ModelImage[] = [];
   /** The `DrawnFig` objects, reused every frame, and how many this frame used. */
   private readonly figPool: DrawnFig[] = [];
+  /** The rig objects of the smoke bodies, by figure slot (`figUsed`), reused every frame. */
+  private readonly rigPool: NonNullable<DrawnFig['rig']>[] = [];
   private figUsed = 0;
   /** The mouth and nostril vectors of the listed figures, by slot (reused). */
   private readonly mouthPool: MV3[] = [];
@@ -940,7 +942,13 @@ export class Figures3d {
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
     const bite = m.armLength > 0 || m.butt || m.gait === 'float' || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form, { pose: p3, scale: ms, lift: body.lift / this.cp });
+    // A smoke body's rig (the pose, its drawn scale and world lift, for the effects); one object per figure slot, reused, and none for the rest.
+    let rig: DrawnFig['rig'] = null;
+    if (sp?.smoke) {
+      rig = (this.rigPool[this.figUsed] ??= { pose: p3, scale: ms, lift: 0 });
+      rig.pose = p3; rig.scale = ms; rig.lift = body.lift / this.cp;
+    }
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form, rig);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
     this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);

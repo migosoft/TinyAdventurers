@@ -182,9 +182,9 @@ interface SmokeMem {
 }
 export const SMOKES = new Map<number, SmokeMem>();
 /** The look of the last smoke drawn since `clearVeils()`: a Shade then dies as smoke even when its own was not seen. */
-let smokeSeen: { spec: SmokeSpec; px: number; tone: Tone } | null = null;
+const smokeSeen: { on: boolean; spec: SmokeSpec | null; px: number; tone: Tone } = { on: false, spec: null, px: 1, tone: [0, 0, 0] };
 /** Forgets every veil and smoke (tests). */
-export function clearVeils(): void { VEILS.clear(); SMOKES.clear(); smokeSeen = null; }
+export function clearVeils(): void { VEILS.clear(); SMOKES.clear(); smokeSeen.on = false; smokeSeen.spec = null; }
 
 /** Draws strands in the plane of the screen round the world spot (`wx`, `wz`), whose screen position is (`sx`, `sy`) px. Alpha follows the dither steps: solid, then two see-through ones. */
 function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: number, wz: number, sx: number, sy: number, alpha: number): void {
@@ -248,28 +248,29 @@ function stepSmoke(frame: FxFrame, f: DrawnFig): SmokeMem {
     // out of sight for long, a clock that ran back, or moved far in one frame: all of it starts at the new place, with no streak across the room
     m.smoke.settle(place, ctx.ax, px, f.form, f.foot, parts);
   } else if (rate > 0) {
-    // a frozen clock repeats the picture (`step` ignores a step of 0); stone and ice hold their smoke still
-    const dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.t));
+    // a frozen clock repeats the picture (`step` ignores a step of 0); stone and ice hold their smoke still, sleep moves it at half speed.
+    // The step runs from the last one (`stepped`), which a fade after the figure left may have moved past `t`.
+    const dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.stepped)) * rate;
     moved[0] = f.x - m.x; moved[1] = f.z - m.z;
     m.smoke.step(dt, place, ctx.ax, px, moved, f.form, parts, f.foot);
-    m.clock += dt * rate;
+    m.clock += dt;
   }
   m.t = now; m.stepped = now; m.x = f.x; m.z = f.z; m.alpha = f.alpha; m.dying = -1; m.tone = tone; m.px = px; m.rate = rate;
   // what the smoke keeps stepping with once its figure is gone (the pose copied into the entry's own storage)
   m.rig.pose.bones.set(rig.pose.bones); Object.assign(m.rig.pose.root, rig.pose.root); m.rig.scale = rig.scale; m.rig.lift = rig.lift;
   m.yaw = f.yaw; m.form = f.form; m.foot = f.foot;
-  smokeSeen = { spec, px, tone };
+  smokeSeen.on = true; smokeSeen.spec = spec; smokeSeen.px = px; smokeSeen.tone = tone;
   return m;
 }
 
 /** Steps a smoke whose figure left the frame, on its held place: nothing is born on the hard parts (`parts` 0), the body does not move. */
 function stepGone(frame: FxFrame, m: SmokeMem): void {
-  const ctx = frame.ctx, now = ctx.now, dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.stepped));
+  const ctx = frame.ctx, now = ctx.now, dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.stepped)) * m.rate;
   m.stepped = now;
-  if (m.rate <= 0 || !(dt > 0)) return;
+  if (!(dt > 0)) return;
   here.rig = m.rig; here.x = m.x; here.z = m.z; here.yaw = m.yaw; here.st = stretchOf(ctx);
   m.smoke.step(dt, place, ctx.ax, m.px, noMove, m.form, 0, m.foot);
-  m.clock += dt * m.rate;
+  m.clock += dt;
 }
 
 /** The smokes of the frame: those of the visible figures and the fading ones of figures that left the frame, written far to near. */
@@ -351,9 +352,9 @@ function dissolveSmoke(out: FxOut, frame: FxFrame, s: { smoke: Smoke; dying: num
 
 /** The rest point of the model at the record's spot, upright and unturned: the place of a smoke that was never seen alive. */
 function restingSmoke(frame: FxFrame, rec: FxRec): RestingSmoke {
-  const seen = smokeSeen!, st = stretchOf(frame.ctx);
+  const seen = smokeSeen, st = stretchOf(frame.ctx);
   const at: PlaceOf = (_b, p, out) => { out[0] = rec.x + p[0] * seen.px; out[1] = p[1] * seen.px * st; out[2] = rec.z + p[2] * seen.px; };
-  const smoke = new Smoke(seen.spec, rng(rec.seed), frame.ctx.detail);
+  const smoke = new Smoke(seen.spec!,rng(rec.seed), frame.ctx.detail);
   smoke.settle(at, frame.ctx.ax, seen.px, 1, 0, 1);
   return { smoke, dying: -1, clock: rec.start, tone: seen.tone, px: seen.px, rate: 1 };
 }
@@ -363,7 +364,7 @@ function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): voi
   const ax = frame.ctx.ax, sm = SMOKES.get(rec.follow), m = VEILS.get(rec.follow);
   // in order: the smoke or the veil that was drawn just before it died; else, in a session that draws smoke, a resting smoke; else a resting veil
   if (sm && rec.start - sm.t < FRESH) { dissolveSmoke(out, frame, sm, rec, age, sm.x, sm.z, sm.alpha); return; }
-  if (smokeSeen && !(m && rec.start - m.t < FRESH)) {
+  if (smokeSeen.on && !(m && rec.start - m.t < FRESH)) {
     // a Shade of smoke that died out of sight: a resting smoke at the death spot (built once per record)
     let r = RESTING_SMOKE.get(rec);
     if (!r) { r = restingSmoke(frame, rec); RESTING_SMOKE.set(rec, r); }

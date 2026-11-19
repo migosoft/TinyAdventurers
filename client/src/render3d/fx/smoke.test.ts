@@ -164,10 +164,9 @@ describe('Smoke: standing and moving', () => {
   }, SLOW);
 
   it('overshoots nothing after a stop and leaves no old wisp after 3.5 s (Review focus 1)', () => {
-    const olds: number[] = [];
     let alive = -1;
     run(3.5, (sm, _p, moving, born) => {
-      if (moving) { olds.length = 0; olds.push(...sm.wisps.map((_, k) => k).filter((k) => !born.has(k))); return; }
+      if (moving) return;
       for (const c of sm.core) expect(c.x - c.tx, 'core point ahead of its place').toBeLessThanOrEqual(c.r * PXW + 1e-9);
       for (const k of born) {
         const w = sm.wisps[k], a = sm.core[w.a];
@@ -256,6 +255,16 @@ describe('Smoke: colours and the cap', () => {
       if (w.tone > 0 && m > 0.5) { purple++; expect(rgb[2]).toBeGreaterThan(rgb[1]); }
     });
     expect(purple).toBeGreaterThan(10);
+  });
+
+  it('the cap holds the smoke of 43 Shades (the gallery crowd of 40 with both spectre kinds has 34)', () => {
+    const sm = make(), p = body();
+    sm.settle(p.place, ax, PXW, 1, 0);
+    const o = newSmokeBuf();
+    sm.write(o, ax, PXW, SMOKE_TONES.grey, 1, 1, 1);
+    expect(o.n).toBe(728);
+    expect(FX_SMOKE_CAP).toBe(32000);
+    expect(Math.floor(FX_SMOKE_CAP / o.n)).toBe(43);
   });
 
   it('takes no more than the cap and counts the rest in `dropped`', () => {
