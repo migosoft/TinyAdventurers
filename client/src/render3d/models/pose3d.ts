@@ -23,6 +23,21 @@ import { composeBones, identityLocal, type BoneLocal } from './rig';
 export const GAIT = { rate: 1.4, stride: 1, armSwing: 1.2, bounce: 1, loose: 1.5 } as const;
 /** The walk of a two-legged tube model (`gait: 'walk'`): how far a leg swings at the hip, and how far the knee bends back (rad). */
 export const WALK = { swing: 0.5, knee: 0.9 } as const;
+/**
+ * The floating gait of the spectres (`gait: 'float'`, #359): nothing steps; the limbs hang limp and trail behind it by how fast it goes, following the
+ * speed late. `hover`: game px over the ground; `bob`: three slow sines of the height, [px, rad/s, share of the entity's phase]; `rate`: 1/s, how late
+ * `drag` (the legs and arms trailing) and `lean` (the whole body, at the hips) follow the speed; `drag`, `lean`: rad per tile/s and their ceiling;
+ * `knee`, `arm`: [at rest, extra at full drag] (rad); `head`: the head droops; `spread`: the legs hang a little apart; `sway`: the limbs' slow sway at
+ * rest; `hitLean`: the hips' lean into a hit. First values, those of the approved try-out.
+ */
+export const FLOAT = {
+  hover: 1.5,
+  bob: [[0.55, 0.9, 1], [0.3, 2.3, 1.7], [0.15, 3.7, 0.6]],
+  rate: 3,
+  drag: { per: 0.6, max: 0.85 },
+  lean: { per: 0.12, max: 0.22 },
+  knee: [0.1, 0.45], arm: [0.06, 0.5], head: 0.22, spread: 0.06, sway: 0.04, hitLean: 0.2,
+} as const;
 export const TURN_RATE = 12, HIT_SECS = 0.26;
 /** The walk blends in and out by `dt * 9` per frame, as on the page (the page wins over the brief's 0.2 s): an exponential, 83 % after 0.2 s. */
 const BLEND_RATE = 9;
@@ -38,9 +53,11 @@ export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: n
   /** A Windup came before this attack (the figure already holds the wound-up pose): no blend-in. */
   woundUp: boolean;
   /** The scale of the hat bone (the antlers of a stag): 1 unless the caller sets it. */
-  crest: number }
+  crest: number;
+  /** The floating gait (`FLOAT`): the entity's own phase (the caller sets it; 0 by default), and how far the limbs trail and the body leans (rad; they follow the speed late). */
+  phase: number; drag: number; lean: number }
 export function newPose3dMemory(): Pose3dMemory {
-  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1 };
+  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0 };
 }
 
 export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite' | 'butt';
@@ -167,7 +184,7 @@ function basisQ(b: V3, n: V3, out: Q4): boolean {
 // ---- the bones ----
 
 const bi = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
-const BODY = bi('body'), HEAD = bi('head'), HAT = bi('hat'), ARM = [bi('armR'), bi('armL')], HAND = [bi('handR'), bi('handL')], LEG0 = bi('leg0'), WEAPON = [bi('weaponR'), bi('weaponL')];
+const HIPS = bi('hips'), BODY = bi('body'), HEAD = bi('head'), HAT = bi('hat'), ARM = [bi('armR'), bi('armL')], HAND = [bi('handR'), bi('handL')], LEG0 = bi('leg0'), WEAPON = [bi('weaponR'), bi('weaponL')];
 
 // ---- the attacks: the page's `attackPose` ----
 
@@ -284,7 +301,7 @@ function uOf(style: AttackStyle, animT: number): number {
   if (style === 'swing') return animT <= MELEE_T ? 0.2 + 0.36 * animT / MELEE_T : 0.56 + 0.44 * (animT - MELEE_T) / MELEE_T;
   return T.u0 + (1 - T.u0) * animT / T.secs;
 }
-const LUNGE_SECS = 0.15;
+export const LUNGE_SECS = 0.15;
 /** The legs of a model: its own list (the tube models), else the four leg bones, the front ones by the sign of the pivot's x, none with a lower bone. */
 const legLists = new WeakMap<FigureModel, { upper: number; lower: number; front: boolean }[]>();
 function legsOf(m: FigureModel): { upper: number; lower: number; front: boolean }[] {
@@ -380,9 +397,10 @@ function drawArm(m: FigureModel, up: number, fore: number): void {
  * The arms of a model with elbows (`m.elbow`): the upper arm hangs and swings as any arm, the forearm (the hand bone, which turns about
  * the elbow) is held forward while its hand carries a weapon, and bends in an attack; the drawing hand of a shot goes to the string
  * (`drawArm`). These arms are never lengthened. `lift`: how far the arms stand off the sides (rad); `stride`: the walk's arm swing (rad);
- * `sway`: the breathing.
+ * `sway`: the breathing. `limp`: for a floating model (the Ghost's swipe): the turn about z of a limp arm, from which the arm the attack uses
+ * is blended and at which the other arm hangs, with its forearm straight on and its hand and weapon bones at rest; absent: the walk's arms.
  */
-function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride: number, sway: number): void {
+function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride: number, sway: number, limp?: number): void {
   const up = m.elbow!, fore = m.armLength - up;
   const held = d.weapon ? (weaponBoneOf(d.weapon) === 'weaponR' ? 0 : 1) : -1;
   // Where the left arm points in an attack: the pose's own direction, or in a shot of a `bowAhead` model the line of the shot (the figure's heading in the twisted body's frame), lifted as the pose lifts it.
@@ -391,8 +409,13 @@ function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride
   for (let side = 0; side < 2; side++) {
     const sd = side === 0 ? 1 : -1, holds = held === side;
     const kind = side === 1 ? 'bow' : d.mount === 'staff' ? 'cast' : 'melee';
-    eulerQ(-sd * lift, 0, -sd * stride * (holds ? ELBOW.carrySwing : 1) + sway, qa);
-    mulQ(qa, aboutZ(holds ? ELBOW.carry[kind] : m.elbowFree ?? ELBOW.free, qz), qf);
+    if (limp !== undefined) {
+      if (!(k > 0 && (side === 0 ? AP.useRight : AP.useLeft))) { useQ(ARM[side], aboutZ(limp, qa)); continue; }
+      aboutZ(limp, qa); qf[0] = qa[0]; qf[1] = qa[1]; qf[2] = qa[2]; qf[3] = qa[3];
+    } else {
+      eulerQ(-sd * lift, 0, -sd * stride * (holds ? ELBOW.carrySwing : 1) + sway, qa);
+      mulQ(qa, aboutZ(holds ? ELBOW.carry[kind] : m.elbowFree ?? ELBOW.free, qz), qf);
+    }
     if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) {
       if (side === 0 && AP.draw >= 0) { drawArm(m, up, fore); fromDown(dirU, qu); fromDown(dirF, qv); }
       else { fromDown(side === 0 ? AP.right : bowDir, qu); mulQ(qu, aboutZ(side === 0 ? AP.flexR : AP.flexL, qz), qv); }
@@ -510,7 +533,9 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   const leanBack = windup ? 0.12 : 0;
 
   // ---- the gait ----
-  const t = mem.clock, w = mem.walk, idle = 1 - w, phi = mem.phi;
+  // A floating model does not read the walk's clock: nothing on it moves in time with its speed.
+  const floating = m.gait === 'float' && !m.quad;
+  const t = mem.clock, w = floating ? 0 : mem.walk, idle = 1 - w, phi = floating ? 0 : mem.phi;
   const sP = Math.sin(phi), cos2 = Math.cos(2 * phi), breath = asleep ? 0 : Math.sin(t * 2.6);
   const walking = m.gait === 'walk' && !m.quad;
   const A = 0.62 * GAIT.stride, th = (walking ? WALK.swing : A) * sP * w, air = Math.abs(sP), lim = Math.min(1, GAIT.bounce);
@@ -518,6 +543,8 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   const rise = asleep ? 0.03 * (0.5 + 0.5 * Math.sin(t * 1.5)) : 0;   // a sleeper does not breathe; its body slowly swells and sinks
   const k = AP.k;
   let bob = 0;
+  /** A floating model: its height over the ground in game px (not scaled by the model), and the limp turn of its arms. */
+  let floatY = 0, limp = 0;
   resetLocals();
   const body = locals[BODY], head = locals[HEAD];
   const neck = m.neckBend !== undefined && m.neckBend >= 0 ? m.bends[m.neckBend] : null;
@@ -553,6 +580,26 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       head.ty = 0.1 * breath * idle;
     }
     body.sy *= 1 - 0.1 * Math.abs(HJ);
+  } else if (floating) {
+    // Floating: nothing steps. The legs hang from the hips and trail behind when it moves, bent a little more at the knee; the arms hang and trail less;
+    // the head droops; the body leans into its movement. The trailing and the lean follow the speed late.
+    const v = mem.speed / 16, kf = 1 - Math.exp(-dt * FLOAT.rate);
+    mem.drag += ((asleep ? 0 : Math.min(FLOAT.drag.max, v * FLOAT.drag.per)) - mem.drag) * kf;
+    mem.lean += ((asleep ? 0 : Math.min(FLOAT.lean.max, v * FLOAT.lean.per)) - mem.lean) * kf;
+    const ph = mem.phase, sway = FLOAT.sway * Math.sin(1.1 * t + ph), D = mem.drag;
+    for (const l of m.legs ?? []) {
+      const right = m.pivots[l.upper * 3 + 2] > 0;
+      locals[l.upper].rz = right ? -(0.03 + D) + FLOAT.spread + sway : -(0.03 + 0.8 * D) - FLOAT.spread - sway;
+      if (l.lower >= 0) locals[l.lower].rz = -(FLOAT.knee[0] + FLOAT.knee[1] * D);
+    }
+    limp = -(FLOAT.arm[0] + FLOAT.arm[1] * D) + 0.03 * Math.sin(0.8 * t + 2 * ph);
+    head.rz = -FLOAT.head;
+    locals[HIPS].rz = -mem.lean + FLOAT.hitLean * HJ;
+    body.sy = 1 + rise;
+    if (!asleep) { floatY = FLOAT.hover; for (const b of FLOAT.bob) floatY += b[0] * Math.sin(b[1] * t + b[2] * ph); }
+    // The swipe: the body twists and leans into the blow, the head keeps looking at the target.
+    if (m.swipe && k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }
+    if (HJ) body.sy *= 1 - 0.1 * Math.abs(HJ);
   } else {
     if (walking) {
       // Walking: the legs swing in turn, the knee of the leg coming forward bends back, the body dips as the legs spread (no hop).
@@ -586,11 +633,18 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   }
 
   // ---- the arms and what they hold ----
-  if (m.armLength > 0 && m.elbow !== undefined) elbowArms(m, d, k, 0.16 + 0.05 * w + 0.3 * armAir * w, th * 1.15 * GAIT.armSwing, 0.04 * breath * idle);
+  // A floating model's arms hang limp, hand and weapon bones at rest; only a model with the swipe raises the arm its attack uses.
+  const limpArms = floating && !(m.swipe && k > 0);
+  if (limpArms) {
+    if (m.armLength > 0) for (let side = 0; side < 2; side++) locals[ARM[side]].rz = limp;
+  } else if (m.armLength > 0 && m.elbow !== undefined) elbowArms(m, d, k, 0.16 + 0.05 * w + 0.3 * armAir * w, th * 1.15 * GAIT.armSwing, 0.04 * breath * idle, floating ? limp : undefined);
   else if (m.armLength > 0) {
     for (let side = 0; side < 2; side++) {
       const sd = side === 0 ? 1 : -1;
-      eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * armAir * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
+      if (floating) {
+        aboutZ(limp, qa);
+        if (!(k > 0 && (side === 0 ? AP.useRight : AP.useLeft))) { useQ(ARM[side], qa); continue; }
+      } else eulerQ(-sd * (0.16 + 0.05 * w + 0.3 * armAir * w), 0, -sd * th * 1.15 * GAIT.armSwing + 0.04 * breath * idle, qa);
       if (k > 0 && (side === 0 ? AP.useRight : AP.useLeft)) slerp(qa, fromDown(side === 0 ? AP.right : AP.left, qt), k);
       const long = 1 + ((side === 0 ? AP.longR : AP.longL) - 1) * k * (m.armStretch ?? 1), more = (long - 1) * (m.armLength - m.armRadius);
       const arm = locals[ARM[side]], hand = locals[HAND[side]];
@@ -623,13 +677,13 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   // The steps (lunge, jolt, shiver) are the game's px, scaled by the game's figure scale and the fall shrink as the card scales its own.
   const gameScale = (d.scale ?? 1) * fallK;
   R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back) * gameScale;   // the butt rears back, the lunge goes forward
-  R.y = bob * m.scale;
+  R.y = floating ? floatY : bob * m.scale;   // the hover is the game's px, as the lunge is
   if (windup) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
   if (asleep) {
     R.roll = Math.PI / 2;
     R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground
   }
-  pose.air = asleep || walking ? 0 : air * w * lim;
+  pose.air = asleep || walking || floating ? 0 : air * w * lim;
   pose.asleep = asleep; pose.channel = anim === ANIM.Channel;
   if (struck && !asleep) { mem.atk.style = style; mem.atk.u = u; pose.attack = mem.atk; }
 

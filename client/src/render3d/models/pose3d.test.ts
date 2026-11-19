@@ -5,7 +5,7 @@ import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
 import { buildJob } from './build';
-import { ATTACK_IN_SECS, BUTT, ELBOW, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { ATTACK_IN_SECS, BUTT, ELBOW, FLOAT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, LUNGE_SECS, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
@@ -1122,5 +1122,211 @@ describe('restPose and skinVertex', () => {
     const w = m.skin[hem * 4 + 3];
     expect(out[0] / m.scale).toBeCloseTo(m.position[hem * 3] + 2 * w, 4);
     expect(out[2] / m.scale).toBeCloseTo(m.position[hem * 3 + 2] - 1 * w, 4);
+  }, SLOW);
+});
+
+describe('the floating gait', () => {
+  const STEP = 1 / 60;
+  const HIPS = bone('hips'), BODY = bone('body'), HEAD = bone('head'), ARM_R = bone('armR'), ARM_L = bone('armL');
+  /** The hips have no parent: their turn about z is read from their world matrix. */
+  const hipsTurn = (p: Pose3d): number => Math.atan2(p.bones[HIPS * 12 + 4], p.bones[HIPS * 12]);
+  /** The way a bone's own matrix points a hanging limb: its (0, -1, 0) in the parent's frame. */
+  const hang = (m: FigureModel, p: Pose3d, b: number): [number, number, number] => { const e = localOf(m, p, b).elements; return [-e[4], -e[5], -e[6]]; };
+  const angle = (a: [number, number, number], b: [number, number, number]): number => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+  /** The upper legs of the model: the right one has its pivot at z > 0. */
+  const legsOf = (m: FigureModel): { r: { upper: number; lower: number }; l: { upper: number; lower: number } } => {
+    const [a, b] = m.legs!;
+    return m.pivots[a.upper * 3 + 2] > 0 ? { r: a, l: b } : { r: b, l: a };
+  };
+  /** Stands still for `secs` of 1/60 s steps. */
+  const stand = (k: TubeKey, secs: number, mem: Pose3dMemory = settled()): Pose3d => {
+    let p!: Pose3d;
+    for (let i = 0; i < Math.round(secs / STEP); i++) p = poseFigure(tube(k), tdef(k), view(), STEP, mem);
+    return p;
+  };
+  /** Moves along +x at `speed` px/s for `secs`. `from`: the x it starts at (a run of the same memory goes on from there). */
+  const glide = (k: TubeKey, secs: number, mem: Pose3dMemory, speed = 50, from = 0): { p: Pose3d; x: number } => {
+    let p!: Pose3d, x = from;
+    for (let i = 0; i < Math.round(secs / STEP); i++) { x += speed * STEP; p = poseFigure(tube(k), tdef(k), view({ anim: ANIM.Move, x, y: 0 }), STEP, mem); }
+    return { p, x };
+  };
+
+  for (const k of SPECTRES) {
+    describe(k, () => {
+      const m = tube(k), d = tdef(k);
+
+      it('is a floating model with legs and arms', () => {
+        expect(m.gait).toBe('float');
+        expect(m.legs!.length).toBe(2);
+        expect(m.armLength).toBeGreaterThan(0);
+      }, SLOW);
+
+      it('hovers and bobs while standing, without a period under ten seconds', () => {
+        const mem = settled(), ys: number[] = [];
+        for (let i = 0; i < 20 * 60; i++) ys.push(poseFigure(m, d, view(), STEP, mem).root.y);
+        for (let i = 0; i < 120; i++) {
+          expect(ys[i]).toBeGreaterThanOrEqual(FLOAT.hover - 1.0);
+          expect(ys[i]).toBeLessThanOrEqual(FLOAT.hover + 1.0);
+          expect(ys[i + 1], `frame ${i}`).not.toBe(ys[i]);
+        }
+        // Frame i is the clock (i + 1) / 60: the first bob term repeats after 6.98 s, the others do not.
+        let most = 0;
+        for (let i = 0; i < 13 * 60; i += 30) {
+          const diff = Math.abs(ys[i] - ys[i + Math.round(6.98 * 60)]);
+          expect(diff, `at ${i / 60} s`).toBeGreaterThan(1e-4);
+          most = Math.max(most, diff);
+        }
+        expect(most).toBeGreaterThan(0.05);
+      }, SLOW);
+
+      it('bobs differently with another phase', () => {
+        const a = settled({ phase: 0 }), b = settled({ phase: 2 });
+        for (let i = 0; i < 30; i++) { poseFigure(m, d, view(), STEP, a); poseFigure(m, d, view(), STEP, b); }
+        expect(Math.abs(poseFigure(m, d, view(), STEP, a).root.y - poseFigure(m, d, view(), STEP, b).root.y)).toBeGreaterThan(0.01);
+      }, SLOW);
+
+      it('trails its limbs behind it when it moves, and leans', () => {
+        const { p } = glide(k, 2, settled());
+        const { r, l } = legsOf(m);
+        for (const leg of [r, l]) {
+          const up = turnOf(m, p, leg.upper), low = turnOf(m, p, leg.lower);
+          expect(up).toBeLessThan(-0.6);
+          expect(up).toBeGreaterThan(-0.95);
+          expect(low).toBeLessThan(-0.3);
+          expect(low).toBeGreaterThan(-0.6);
+          for (const arm of [ARM_R, ARM_L]) {
+            expect(turnOf(m, p, arm)).toBeLessThan(0);
+            expect(Math.abs(turnOf(m, p, arm))).toBeLessThan(Math.abs(up));
+          }
+        }
+        expect(turnOf(m, p, HEAD)).toBeCloseTo(-FLOAT.head, 6);
+        expect(Math.abs(hipsTurn(p) + FLOAT.lean.max)).toBeLessThan(0.01);
+      }, SLOW);
+
+      it('does not step', () => {
+        const mem = settled(), { r, l } = legsOf(m);
+        let { x } = glide(k, 2, mem);
+        const rs: number[] = [], diffs: number[] = [];
+        for (let i = 0; i < 60; i++) {
+          const g = glide(k, STEP, mem, 50, x); x = g.x;
+          const a = turnOf(m, g.p, r.upper), b = turnOf(m, g.p, l.upper);
+          rs.push(a, b); diffs.push(a - b);
+        }
+        expect(Math.max(...rs) - Math.min(...rs)).toBeLessThan(0.12);
+        // A stride would swing the two legs through each other (about +-0.5 rad apart); here they stay near one another, the right one a little further back.
+        expect(Math.max(...diffs)).toBeLessThan(0.1);
+        expect(Math.min(...diffs)).toBeGreaterThan(-0.2);
+      }, SLOW);
+
+      it('follows the speed late', () => {
+        const mem = settled(), { r } = legsOf(m);
+        const early = glide(k, 0.1, mem).p;
+        expect(Math.abs(turnOf(m, early, r.upper))).toBeLessThan(0.82 / 3);
+        const late = glide(k, 2, settled()).p;
+        expect(Math.abs(turnOf(m, late, r.upper))).toBeGreaterThan(0.6);
+      }, SLOW);
+
+      it('lunges in a melee with the legs limp, and shows the strike', () => {
+        const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
+        const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: LUNGE_SECS / 2 }), 0, mem);
+        expect(p.root.x).toBeCloseTo(3 * (d.scale ?? 1), 5);
+        expect(p.attack?.style).toBe('swing');
+        for (const leg of m.legs!) {
+          expect(turnOf(m, p, leg.upper)).toBeCloseTo(turnOf(m, standing, leg.upper), 6);
+          expect(turnOf(m, p, leg.lower)).toBeCloseTo(turnOf(m, standing, leg.lower), 6);
+        }
+        expect(hipsTurn(p)).toBeCloseTo(hipsTurn(standing), 6);
+        expect(p.root.y).toBeCloseTo(standing.root.y, 6);
+      }, SLOW);
+
+      it('has no airborne hop, moving or not', () => {
+        expect(stand(k, 0.5).air).toBe(0);
+        expect(glide(k, 1, settled()).p.air).toBe(0);
+      }, SLOW);
+
+      it('holds the pose when petrified or frozen, and lies when asleep', () => {
+        for (const fx of [1 << EFFECT.Petrified, 1 << EFFECT.Frozen]) {
+          const mem = settled(), a = copyPose(poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0.1, effects: fx }), STEP, mem));
+          const b = poseFigure(m, d, view({ anim: ANIM.Idle, effects: fx, flags: FLAG.HURT, x: 5 }), 0.3, mem);
+          expect(b.bones).toEqual(a.bones);
+          expect(b.root).toEqual(a.root);
+        }
+        const s = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), STEP, settled());
+        expect(s.root.roll).toBeCloseTo(Math.PI / 2, 6);
+        expect(s.asleep).toBe(true);
+      }, SLOW);
+    });
+  }
+
+  describe('the Shade, in a melee', () => {
+    it('does not swing its arms', () => {
+      const m = tube('shade'), d = tdef('shade'), mem = settled();
+      const standing = copyPose(poseFigure(m, d, view(), 0, mem));
+      for (const animT of [0, 0.05, MELEE_T / 2, MELEE_T, 1.5 * MELEE_T]) {
+        const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, mem);
+        for (const arm of [ARM_R, ARM_L]) expect(Math.abs(turnOf(m, p, arm) - turnOf(m, standing, arm)), `animT ${animT}`).toBeLessThan(0.05);
+        expect(p.attack).not.toBeNull();
+      }
+    }, SLOW);
+  });
+
+  describe('the Ghost, swiping', () => {
+    const m = tube('ghost'), d = tdef('ghost');
+    const sideOfHand = (p: Pose3d): number => hand(m, p, 'R')[2];
+
+    it('swings the right arm across the front through a melee, and keeps the left one limp', () => {
+      const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
+      const limpR = hang(m, standing, ARM_R), limpL = hang(m, standing, ARM_L);
+      let most = 0, lowSide = Infinity, highSide = -Infinity, bodyTurn = 0, headYaw = 0;
+      const yawOf = (p: Pose3d, b: number): number => Math.atan2(p.bones[b * 12 + 2], p.bones[b * 12]);
+      for (let i = 0; i <= Math.round(MELEE_T / STEP); i++) {
+        const animT = Math.min(MELEE_T, i * STEP);
+        const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, mem);
+        most = Math.max(most, angle(hang(m, p, ARM_R), limpR));
+        lowSide = Math.min(lowSide, sideOfHand(p)); highSide = Math.max(highSide, sideOfHand(p));
+        expect(angle(hang(m, p, ARM_L), limpL), `left arm at ${animT}`).toBeLessThan(0.05);
+        if (Math.abs(animT - MELEE_T / 2) < STEP / 2) { bodyTurn = yawOf(p, BODY); headYaw = yawOf(p, HEAD); }
+        expect(p.attack?.style).toBe('swing');
+      }
+      expect(most).toBeGreaterThan(0.8);
+      expect(lowSide).toBeLessThan(0);
+      expect(highSide).toBeGreaterThan(0);
+      expect(Math.abs(bodyTurn)).toBeGreaterThan(0.05);
+      expect(Math.abs(headYaw)).toBeLessThan(Math.abs(bodyTurn));
+    }, SLOW);
+
+    it('blends the strike in, and is limp again a second after it', () => {
+      const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
+      const limpR = hang(m, standing, ARM_R);
+      expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.1);
+      poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T }), 0, mem);
+      // The same clock: nothing else moves the arm.
+      expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Idle, animT: 1 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.05);
+    }, SLOW);
+
+    it('holds the arm raised in a wind-up, and strikes from there', () => {
+      const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
+      const limpR = hang(m, standing, ARM_R);
+      expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Windup }), 0, mem), ARM_R), limpR)).toBeGreaterThan(0.5);
+      expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, mem), ARM_R), limpR)).toBeGreaterThan(0.5);
+    }, SLOW);
+
+    it('keeps the legs and the hover still in a blow', () => {
+      const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
+      const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, mem);
+      for (const leg of m.legs!) expect(turnOf(m, p, leg.upper)).toBeCloseTo(turnOf(m, standing, leg.upper), 6);
+      expect(hipsTurn(p)).toBeCloseTo(hipsTurn(standing), 6);
+      expect(p.root.y).toBeCloseTo(standing.root.y, 6);
+    }, SLOW);
+  });
+
+  it('swipes with straight arms too (a model without an elbow that has the swipe flag)', () => {
+    const base = tube('shade'), m: FigureModel = { ...base, swipe: true }, d = tdef('shade'), mem = settled();
+    const standing = copyPose(poseFigure(m, d, view(), 0, mem));
+    const limpR = hang(m, standing, ARM_R), limpL = hang(m, standing, ARM_L);
+    const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, mem);
+    expect(angle(hang(m, p, ARM_R), limpR)).toBeGreaterThan(0.8);
+    expect(angle(hang(m, p, ARM_L), limpL)).toBeLessThan(0.05);
+    expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.1);
   }, SLOW);
 });
