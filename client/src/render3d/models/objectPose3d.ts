@@ -40,7 +40,7 @@ const smooth = (x: number): number => { const t = Math.min(1, Math.max(0, x)); r
 export function poseObject(m: FigureModel, o: ObjectPoseIn, out: Pose3d = newPose(0)): Pose3d {
   const R = REST_OBJECT, hat = fin(o.hat, R.hat);
   out.yaw = fin(o.yaw, R.yaw);
-  for (const b of [BODY, HEAD, HAT]) Object.assign(locals[b], identityLocal());
+  for (const L of locals) { L.rx = L.ry = L.rz = L.tx = L.ty = L.tz = 0; L.sx = L.sy = L.sz = 1; L.q = undefined; }
   locals[BODY].rz = fin(o.pitch, R.pitch);
   locals[HEAD].rz = fin(o.lid, R.lid);
   locals[HAT].sx = locals[HAT].sy = locals[HAT].sz = hat;
