@@ -22,7 +22,7 @@ const make = (seed = 7, detail = 1): Smoke => new Smoke(spec, rng(seed), detail)
 const still = (sm: Smoke, b: ReturnType<typeof body>, secs: number, form = 1, parts = 1): void => {
   for (let i = 0; i < secs * 60; i++) sm.step(1 / 60, b.place, ax, PXW, [0, 0], form, parts, 0);
 };
-const snapshot = (sm: Smoke): number[] => [...sm.core.flatMap((c) => [c.x, c.y, c.z]), ...sm.wisps.flatMap((w) => [w.x, w.y, w.z, w.age, w.left])];
+const snapshot = (sm: Smoke): number[] => [...sm.core.flatMap((c) => [c.x, c.y, c.z]), ...sm.wisps.flatMap((w) => [w.x, w.y, w.z, w.age])];
 const written = (sm: Smoke, clock = 1, alpha = 1, grow = 1, tone: readonly [number, number, number] = SMOKE_TONES.grey): SmokeBuf => {
   const o = newSmokeBuf();
   sm.write(o, ax, PXW, tone, clock, alpha, grow);
@@ -140,7 +140,7 @@ describe('Smoke: standing and moving', () => {
     }
   };
 
-  it('follows a move at 44 px/s with the core (top within 2.5 px of its place, tail within 5); no visible wisp is left more than SMOKE.leave[1] + 5 px behind', () => {
+  it('follows a move at 44 px/s with the core (top within 2.5 px of its place, tail within 5); no visible wisp is left more than SMOKE.leave + 5 px behind', () => {
     let top = 0, tail = 0, behind = 0, seen = 0;
     run(0, (sm, p) => {
       for (const c of sm.core) {
@@ -158,9 +158,8 @@ describe('Smoke: standing and moving', () => {
     expect(top).toBeLessThan(2.5);
     expect(tail).toBeLessThan(5);
     expect(seen).toBeGreaterThan(1000);
-    // The brief says leave[1] + 3 px (12), but a wisp is born up to 5 px behind the axis (on a tail point that lags, on a rim up to 1.25 r)
-    // before it has left anything, so with its own numbers the measured worst is 13.09 px: the bound is leave[1] + 5.
-    expect(behind).toBeLessThan(SMOKE.leave[1] + 5);
+    // A wisp is born up to 5 px behind the axis (on a tail point that lags, on a rim up to 1.25 r) and then leaves `SMOKE.leave` px behind in its life.
+    expect(behind).toBeLessThan(SMOKE.leave + 5);
   }, SLOW);
 
   it('does not carry a wisp with the body: one tiny step with a big `moved` moves it only by its own speed', () => {
@@ -178,40 +177,68 @@ describe('Smoke: standing and moving', () => {
     expect(checked).toBeGreaterThan(300);
   });
 
-  it('a standing smoke writes the wisps\' alphas of the age curve alone (the leave factor is 1, `left` stays 0)', () => {
+  it('a standing smoke writes the wisps\' alphas of the age curve alone', () => {
     const sm = make(6), p = body();
     sm.settle(p.place, ax, PXW, 1, 0);
     still(sm, p, 5);
     const o = written(sm), patches = coreCount();
     sm.wisps.forEach((w, i) => {
-      expect(w.left).toBe(0);
       expect(quad(o, patches + i).a).toBeCloseTo(SMOKE.wisp.alpha * smooth(0, 0.15, w.age) * (1 - smooth(0.35, 1, w.age)), 6);
     });
   }, SLOW);
 
-  it('a wisp\'s `left` sums the body\'s move since its birth, and its alpha falls to 0 as `left` goes from leave[0] to leave[1]', () => {
+  it('the distance the body leaves a wisp behind ages it: one step of 6 px advances every age by 6 / SMOKE.leave plus the time\'s part', () => {
     const sm = make(6), p = body();
     sm.settle(p.place, ax, PXW, 1, 0);
-    // fresh wisps, then one step of `moved` of 5 px (between the two bounds)
-    for (const w of sm.wisps) { w.age = 0.2; w.life = 3; w.left = 0; }
-    sm.step(1 / 60, p.place, ax, PXW, [5 * PXW, 0], 1, 1, 0);
-    const o = written(sm), patches = coreCount();
-    sm.wisps.forEach((w, i) => {
-      expect(w.left).toBeCloseTo(5, 6);
-      const age = w.age, want = SMOKE.wisp.alpha * smooth(0, 0.15, age) * (1 - smooth(0.35, 1, age)) * (1 - smooth(SMOKE.leave[0], SMOKE.leave[1], 5));
-      expect(quad(o, patches + i).a).toBeCloseTo(want, 6);
+    still(sm, p, 1);
+    const dt = 1 / 60, px6 = 6, before = sm.wisps.map((w) => w.age);
+    sm.step(dt, p.place, ax, PXW, [px6 * PXW, 0], 1, 1, 0);
+    let checked = 0;
+    sm.wisps.forEach((w, k) => {
+      if (w.age < before[k]) return;   // born again in this step
+      checked++;
+      expect(w.age - before[k]).toBeCloseTo(dt / w.life + px6 / SMOKE.leave, 9);
     });
-    // a wisp whose factor has reached 0 is born again at once, with `left` 0
-    for (const w of sm.wisps) { w.age = 0.2; w.life = 3; w.left = SMOKE.leave[1] - 0.1; }
-    sm.step(1 / 60, p.place, ax, PXW, [0.2 * PXW, 0], 1, 1, 0);
-    for (const w of sm.wisps) { expect(w.left).toBe(0); expect(w.age).toBe(0); }
+    expect(checked).toBeGreaterThan(100);
   });
 
-  it('overshoots nothing after a stop; the wisps left behind are gone within SMOKE.life[1] s; no wisp born after the stop has `left` (Review focus 1)', () => {
+  /** The sum of the written wisp alphas, and the mean written tone share (blue channel against the tone's) of the wisps that are not black. */
+  const layer = (sm: Smoke, tone: readonly [number, number, number]): { sum: number; share: number } => {
+    const o = written(sm, 1, 1, 1, tone), patches = coreCount();
+    let sum = 0, share = 0, n = 0;
+    sm.wisps.forEach((w, i) => {
+      const q = quad(o, patches + i);
+      sum += q.a;
+      if (w.tone > 0) { share += (q.rgb[2] - SMOKE.black[2]) / (tone[2] - SMOKE.black[2]); n++; }
+    });
+    return { sum, share: share / n };
+  };
+
+  it('a steady move at 44 px/s keeps the layer: no frame reborn more than 20 % of the wisps, the alpha sum of the last second at least 40 % of the standing one, the tone share at least half', () => {
+    const sm = make(5), p = body(), dx = 44 * PXW / 60, tone = SMOKE_TONES.purple;
+    sm.settle(p.place, ax, PXW, 1, 0);
+    still(sm, p, 5);
+    let standSum = 0, standShare = 0;
+    for (let i = 0; i < 60; i++) { still(sm, p, 1 / 60); const l = layer(sm, tone); standSum += l.sum / 60; standShare += l.share / 60; }
+    let worst = 0, minSum = 1e9, share = 0;
+    const prev = sm.wisps.map((w) => w.age);
+    for (let i = 0; i < 2 * 60; i++) {
+      p.s.x += dx;
+      sm.step(1 / 60, p.place, ax, PXW, [dx, 0], 1, 1, 0);
+      let reborn = 0;
+      sm.wisps.forEach((w, k) => { if (w.age < prev[k]) reborn++; prev[k] = w.age; });
+      worst = Math.max(worst, reborn / sm.wisps.length);
+      if (i >= 60) { const l = layer(sm, tone); minSum = Math.min(minSum, l.sum); share += l.share / 60; }
+    }
+    expect(worst).toBeLessThan(0.2);
+    expect(minSum).toBeGreaterThan(0.4 * standSum);
+    expect(share).toBeGreaterThan(0.5 * standShare);
+  }, SLOW);
+
+  it('overshoots nothing after a stop; the wisps left behind are gone within SMOKE.life[1] s (Review focus 1)', () => {
     let alive = -1;
     run(3.5, (sm, _p, moving, born) => {
       if (moving) return;
-      for (const k of born) expect(sm.wisps[k].left, 'a wisp born after the stop').toBe(0);
       for (const c of sm.core) expect(c.x - c.tx, 'core point ahead of its place').toBeLessThanOrEqual(c.r * PXW + 1e-9);
       for (const k of born) {
         const w = sm.wisps[k], a = sm.core[w.a];
