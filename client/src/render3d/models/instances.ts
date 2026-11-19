@@ -27,6 +27,8 @@ export interface FigureInst {
   sight: { hard: number; soft: number };
   /** Tiles: for the sight mask's wide-figure rule, what the figure's card would use (half the opaque width of its body frame x the pose scale), so it is seen and hidden where the card would be. 0 when absent. */
   reach?: number;
+  /** A prop that stays shown on a daylight map though the picture hides its place, as a scenery card does (`cardShown`): chests, barrels, a hiding Mimic. Default false. */
+  scenery?: boolean;
 }
 
 /** Texels per row, 4 floats each. */

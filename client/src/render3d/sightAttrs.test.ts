@@ -127,6 +127,29 @@ describe('daylight things', () => {
     pushShadow(s, cam, 30.5 + 8.5, 30.5, 0.4, 0.2, 0.45);
     expect(shadowSightData(shadowsOf(s), m, new Float32Array(12))[0]).toBe(0);
   });
+  it('a scenery model instance stays shown on a daylight map though the mask hides its place; a dungeon map and a figure hide it (#317)', () => {
+    const inst = (scenery: boolean | undefined): FigureInst => ({ owner: 1, x: 30.5 + 13, z: 30.5, reach: 0, scenery, sight: { hard: 9, soft: 9 } } as unknown as FigureInst);
+    const m = day();
+    expect(footSight(m, 30.5 + 13, 30.5, 0).hard).toBeGreaterThan(0.9);
+    const [prop, figure, plain] = [inst(true), inst(false), inst(undefined)];
+    figureSight([prop, figure, plain], m);
+    expect(prop.sight.hard).toBe(0);
+    expect(figure.sight.hard).toBeGreaterThan(0.9);
+    expect(plain.sight.hard).toBeGreaterThan(0.9);
+    // the id pass leaves the prop out of the hidden things as it does a scenery card
+    const out = new Set<number>();
+    hiddenByPicture([], m, new Set(), out, [prop]);
+    expect(out.size).toBe(0);
+    hiddenByPicture([], m, new Set(), out, [figure]);
+    expect([...out]).toEqual([1]);
+    // a dungeon map hides it
+    const dark = mask(), dprop = { ...inst(true), x: 38, z: 38 } as FigureInst;
+    figureSight([dprop], dark);
+    expect(dprop.sight.hard).toBeGreaterThan(0.9);
+    const hidden = new Set<number>();
+    hiddenByPicture([], dark, new Set(), hidden, [dprop]);
+    expect([...hidden]).toEqual([1]);
+  });
 });
 
 describe('the sight of model figures (#338)', () => {

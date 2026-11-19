@@ -1047,6 +1047,29 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(m.casters.map((k) => [k.u0, k.v0, k.u1, k.v1, k.w])).toEqual(c.casters.map((k) => [k.u0, k.v0, k.u1, k.v1, k.w]));
       expect(ovalOf(m)).toEqual(ovalOf(c));
       expect(m.floats).toEqual([]);
+      expect([b.scenery, a.scenery]).toEqual([true, true]);
+    });
+
+    it('draws the chest and the Mimic as models only when both are built, and asks for both builds at once', () => {
+      const asked: string[] = [];
+      const half: FigureKit = { ...kit, get: (k) => { asked.push(k); return k === 'mimic' ? null : kit.get(k); } };
+      const fg = make();
+      const out = fg.frame(frame([chest(), mimic(FLAG.HIDING, { x: at(1) })]), cam(), show({ kit: half, ...all }));
+      expect(out.models).toEqual([]);
+      expect(out.cards.n).toBe(2);
+      expect([fg.anchors.get(20)!.height, fg.anchors.get(21)!.height]).toEqual([CHEST_HEIGHT, CHEST_HEIGHT]);
+      expect(asked).toContain('chest');
+      expect(asked).toContain('mimic');
+      const both = make().frame(frame([chest(), mimic(FLAG.HIDING, { x: at(1) })]), cam(), withModels);
+      expect(both.models.map((i) => i.owner)).toEqual([20, 21]);
+    });
+
+    it('marks the instances as scenery as their cards are: a chest, a barrel and a hiding Mimic, not an awake Mimic', () => {
+      const scenery = (e: EntState): boolean | undefined => make().frame(frame([e]), cam(), withModels).models[0].scenery;
+      expect(scenery(chest())).toBe(true);
+      expect(scenery(barrel(22, 0, 0))).toBe(true);
+      expect(scenery(mimic(FLAG.HIDING))).toBe(true);
+      expect(scenery(mimic(0))).toBeFalsy();
     });
 
     it('turns an awake Mimic from south towards its aim, and opens its jaws; no reveal cue without a hiding frame', () => {

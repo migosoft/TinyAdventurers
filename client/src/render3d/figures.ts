@@ -474,7 +474,11 @@ export class Figures3d {
   private builtObject(e: EntState): { key: string; m: FigureModel } | null {
     const key = this.models && this.models.is(e) ? objectModelOf(e.kind) : null;
     const m = key ? this.models!.kit.get(key) : null;
-    return key && m ? { key, m } : null;
+    // A hiding Mimic must not be told from a chest: the two models are asked for together (so both builds start with the first of either kind)
+    // and both must be built, else both are cards.
+    const twin = key && e.kind === KIND.Chest ? 'mimic' : key && e.kind === KIND.Mimic ? 'chest' : null;
+    const other = twin ? this.models!.kit.get(twin) : m;
+    return key && m && other ? { key, m } : null;
   }
 
   /** The built height of an object model (art px): the bar, the name and the opener hang from it. */
@@ -487,13 +491,13 @@ export class Figures3d {
    * own pose object. `caster` is the outline frame of the lamp shadow. A faller goes out in the depth's dark and is returned as the
    * pieces it is drawn from once its entity is gone (it has no caster); the shake has stopped by then, so its offsets are 0.
    */
-  private pushObject(e: EntState, key: string, m: FigureModel, o: ObjectPoseIn, x: number, z: number, y: number, tint: [number, number, number], caster: string, falling: boolean, cam: Cam, out: FigureOut): FallParts | null {
+  private pushObject(e: EntState, key: string, m: FigureModel, o: ObjectPoseIn, x: number, z: number, y: number, tint: [number, number, number], caster: string, falling: boolean, scenery: boolean, cam: Cam, out: FigureOut): FallParts | null {
     const pose = poseObject(m, o, this.objectPoses.get(e.id));
     this.objectPoses.set(e.id, pose);
     const dark = this.dark.has(e.id);
     const inst: FigureInst = {
       owner: e.id, model: key, x, z, lift: this.lifted(y), scale: m.scale, pose, bone: -1, boneScale: 1, tint, stone: false, alpha: dark && this.darkFade ? this.fadeAlpha : 1, dark,
-      cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach: (Math.max(...m.footprint!) * m.scale) / TILE,
+      cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach: (Math.max(m.footprint![0], m.footprint![1]) * m.scale) / TILE, scenery,
     };
     if (falling) {
       out.models.push({ ...inst, tint: Figures3d.dim(tint, depthFade(y)) });
@@ -513,7 +517,7 @@ export class Figures3d {
     const bed = this.bedAt(x, z);
     const opened = e.anim === 1 ? e.animMs / 1000 : -1;
     const built = this.builtObject(e);
-    if (built) this.pushObject(e, built.key, built.m, chestPoseIn(opened), x, z, bed, [1, 1, 1], outlineFrame(built.key), false, cam, out);
+    if (built) this.pushObject(e, built.key, built.m, chestPoseIn(opened), x, z, bed, [1, 1, 1], outlineFrame(built.key), false, true, cam, out);
     else {
       const [bx, bz] = this.bodyFoot(x, z, cam);
       this.body({ frame: chestFrame(opened), x: bx, z: bz, lift: this.lifted(bed), flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
@@ -543,7 +547,7 @@ export class Figures3d {
     const built = this.builtObject(e);
     let kept: FallParts | null = null;
     if (built) {
-      if (!foot.gone) kept = this.pushObject(e, built.key, built.m, { ...REST_OBJECT, yaw: barrelYaw(e.id) }, x, z, foot.y, p.fill !== null ? [...FUSE_FLASH] : [1, 1, 1], outlineFrame(built.key), falling, cam, out);
+      if (!foot.gone) kept = this.pushObject(e, built.key, built.m, { ...REST_OBJECT, yaw: barrelYaw(e.id) }, x, z, foot.y, p.fill !== null ? [...FUSE_FLASH] : [1, 1, 1], outlineFrame(built.key), falling, true, cam, out);
     } else if (this.frames[frame] && !foot.gone) {
       const card: Card = { frame, x: bx, z: bz, lift: this.lifted(foot.y), flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
       if (falling) {
@@ -587,7 +591,7 @@ export class Figures3d {
       // A hit throws the model back along its facing and eases home; a hiding Mimic is a chest and is not told by it.
       if (!hiding && m.hitT >= 0) o.ahead -= MIMIC_JOLT * (1 - m.hitT / HIT_SECS) ** 2;
       // A hiding Mimic casts its lamp shadow as the chest does.
-      this.pushObject(e, built.key, built.m, o, x, z, bed, [1, 1, 1], outlineFrame(hiding ? 'chest' : built.key), false, cam, out);
+      this.pushObject(e, built.key, built.m, o, x, z, bed, [1, 1, 1], outlineFrame(hiding ? 'chest' : built.key), false, hiding, cam, out);
     } else {
       const [bx, bz] = this.bodyFoot(x, z, cam);
       this.body({

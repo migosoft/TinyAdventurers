@@ -28,7 +28,7 @@ export function figureSight(insts: readonly FigureInst[], mask: SightMask | null
   for (const i of insts) {
     if (!mask) { i.sight.hard = 0; i.sight.soft = 0; continue; }
     const s = footSight(mask, i.x, i.z, i.reach ?? 0);
-    i.sight.hard = thingHard(mask, s.hard);
+    i.sight.hard = i.scenery && mask.daylight ? 0 : thingHard(mask, s.hard);   // scenery on a daylight map is never hidden (`cardShown`)
     i.sight.soft = s.soft;
   }
 }
@@ -72,6 +72,7 @@ export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen:
   for (const i of models) {
     if (i.owner < 0 || seen.has(i.owner)) continue;
     seen.add(i.owner);
+    if (i.scenery && mask.daylight) continue;
     if (thingHard(mask, footSight(mask, i.x, i.z, i.reach ?? 0).hard) > 0.5) out.add(i.owner);
   }
   for (const q of passes) {
