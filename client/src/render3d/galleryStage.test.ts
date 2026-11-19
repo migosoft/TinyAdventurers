@@ -6,7 +6,8 @@ import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
-import { GALLERY, ID, LINEUP_KEYS, STATES, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupKind, modelsOf, parseGallery } from './galleryStage';
+import { GALLERY, ID, LINEUP_KEYS, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery } from './galleryStage';
+import { FxTris } from './fx/tris';
 import { LINEUP_MAX } from './galleryMap';
 import { buildJob } from './models/build';
 import { MODEL_OF_KIND, modelKeyOf } from './models/table';
@@ -138,8 +139,18 @@ describe('the gallery stage', () => {
     }
   });
 
+  it('&circles=1 draws the hit circle of every line-up figure: a monster its server radius, a hero the player radius', () => {
+    expect(parseGallery('?focus=lineup&circles=1').circles).toBe(true);
+    expect(parseGallery('?focus=lineup&circles=0').circles).toBe(false);
+    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 4, 5, 5, 4, 5, 5, 5, 10, 5, 5, 4, 4, 4, 4, 4, 4]);
+    const T = new FxTris(4096);
+    lineupCircles(T);
+    expect(T.n).toBe(LINEUP_KEYS.length * 64);
+    expect(T.dropped).toBe(0);
+  });
+
   it('reads the URL: state, slow and focus', () => {
-    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null };
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null, circles: false };
     expect(parseGallery('?r3d=gallery')).toEqual(d);
     expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
@@ -147,7 +158,7 @@ describe('the gallery stage', () => {
 
   it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
     expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
-      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null,
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null, circles: false,
     });
     expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
     expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));

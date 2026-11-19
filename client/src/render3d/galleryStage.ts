@@ -2,7 +2,7 @@
 // objects and shots, and a corridor behind a full-height wall where things walk for the see-through check. It runs on the real
 // path of a run: a synthetic `RunFrame` goes through `Figures3d`, its openers through `seenOpeners` (all visible here), and the
 // result into `FrameInput.see`. No server, no login.
-import { ANIM, CONST, EFFECT, FLAG, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, HITBOX, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
 import { LightField } from '../game/light';
 import type { PictureEv } from '../run/view';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -13,6 +13,9 @@ import { atlasBounds } from './atlasBounds';
 import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
+import { groundRing } from './fx/shapes';
+import { FxTris } from './fx/tris';
+import { newFxBuf } from './models/fx';
 import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
@@ -86,6 +89,8 @@ export interface GalleryOpts {
   at: { x: number; z: number } | null;
   /** `&aim=<deg>` (radians here): pins the aim of the figure rows and the model rows (90 faces the camera). */
   aim: number | null;
+  /** `&circles=1`: a ring on the ground under every figure of the line-up, the server's hit circle of its kind. */
+  circles: boolean;
 }
 
 /**
@@ -128,6 +133,7 @@ export function parseGallery(search: string): GalleryOpts {
     light: q.get('light') === 'torch' ? 'torch' : 'work',
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
     aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
+    circles: q.get('circles') === '1',
   };
 }
 
@@ -163,6 +169,16 @@ export const LINEUP_KEYS: readonly ModelKey[] = [
 ];
 /** The kind that stands for a model key in the line-up. */
 export const lineupKind = (key: ModelKey): number => Number(Object.keys(MODEL_OF_KIND).find((k) => MODEL_OF_KIND[Number(k)] === key));
+/** The server's hit circle of a kind in game px: a monster's exported radius; a hero's `PLAYER_RADIUS` (the Dire Wolf's `WOLF_RADIUS` on the server is the same 5). */
+export const circleOf = (kind: number): number => HITBOX[kind]?.r ?? CONST.PLAYER_RADIUS;
+const RING: readonly [number, number, number] = [1, 0.9, 0.2];
+/** `&circles=1`: the hit circle of every line-up figure as a thin ring on the ground (its outer edge is the circle). */
+export function lineupCircles(T: FxTris): void {
+  LINEUP_KEYS.forEach((key, i) => {
+    const p = GALLERY.lineup(i), r = circleOf(lineupKind(key)) / TILE;
+    groundRing(T, p.x, p.z, 0.03, r - 0.5 / TILE, r, RING, 1, 1);
+  });
+}
 /** The kinds with a model, in the order of the model rows. */
 const MODEL_KINDS = Object.keys(MODEL_OF_KIND).map(Number);
 /** A figure of the dying row lives this many seconds of every `DIE_PERIOD`, then dies (and leaves its skull). */
@@ -348,6 +364,8 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
   document.body.appendChild(label);
 
+  const ringTris = new FxTris(LINEUP_MAX * 64), rings = newFxBuf(), noLit = newFxBuf();
+
   return {
     world,
     frame(c: StageCtx): number {
@@ -400,12 +418,19 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
       }
+      if (opts.circles) {
+        ringTris.clear();
+        lineupCircles(ringTris);
+        rings.position.length = 0; rings.rgba.length = 0; rings.n = 0;
+        ringTris.flush(rings, cam, true);
+      }
       c.timer.renderStart();
       return c.view.draw(
         {
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit },
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
+          ...(opts.circles ? { fx: { tris: rings, lit: noLit } } : {}),
         },
         c.timer,
       );
