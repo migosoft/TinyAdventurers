@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FOG, ShadeFog, fogTris } from './shadeFog';
+import { FOG, FOG_MOVE, ShadeFog, fogTris, smooth } from './shadeFog';
 import { rng } from './rand';
 import { PX } from './shapes';
 import { FxTris } from './tris';
 
 const AX = { right: [Math.cos(0.3), 0, Math.sin(0.3)] as [number, number, number], up: [0, Math.cos(0.9), 0] as [number, number, number] };
 const ST = 1 / Math.cos(0.9);
-const smooth = (a: number, b: number, x: number): number => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const made = (seed = 5, detail = 1): ShadeFog => new ShadeFog(rng(seed), detail);
 /** Horizontal distance of a patch from a spot, in px. */
 const away = (p: { x: number; z: number }, x: number, z: number): number => Math.hypot(p.x - x, p.z - z) / PX;
@@ -83,8 +82,9 @@ describe('ShadeFog', () => {
     run(f, 0, 1, () => [5, 5]);
     const y0 = f.patches.map((p) => p.y);
     run(f, 1, 2, () => [5, 5]);
-    // the wobble is FOG_MOVE.bob px either way: 2 s of it is at most 2 * bob * sin(0.9) px
-    f.patches.forEach((p, i) => expect((p.y - y0[i]) / PX).toBeLessThanOrEqual(2 * 0.9 * Math.sin(0.9) + 0.1));
+    // the wobble is FOG_MOVE.bob px either way: 2 s of it is at most 2 * bob * sin(rate * 2 / 2) px
+    const most = 2 * FOG_MOVE.bob * Math.sin(FOG_MOVE.bobRate * 2 / 2);
+    f.patches.forEach((p, i) => expect((p.y - y0[i]) / PX).toBeLessThanOrEqual(most + 0.1));
   });
 
   it('form 0 pools the upright patches at the floor', () => {

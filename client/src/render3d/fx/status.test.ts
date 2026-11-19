@@ -6,8 +6,8 @@ import { newGlowBuf } from '../cards';
 import { Effects3d, FX_KIND, clearFxRegistry, type FxFrame } from './effects3d';
 import { VEIL_DEATH_LIFE } from '../../game/shadeHaze';
 import type { SpectreSpec } from '../models/tubeDesc';
-import { FOG } from './shadeFog';
-import { clearVeils, registerStatus } from './status';
+import { FOG, FOG_MOVE } from './shadeFog';
+import { clearVeils, FOGS, registerStatus } from './status';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -154,22 +154,17 @@ describe('the Shade model\'s fog', () => {
   it('not seen for over 3 s, then drawn 5 tiles away: the fog starts at the new spot', () => {
     const fx = new Effects3d(map);
     for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    const out = newOut();
-    fx.frame(frameOf(6, [model(7, { x: 10 })]), out);
-    const p = pos(out.tris);
-    for (let i = 0; i < out.tris.n * 3; i++) {
-      expect(Math.abs(p[i * 3] - 10)).toBeLessThan(1.5);
-      expect(Math.abs(p[i * 3 + 2] - 5)).toBeLessThan(1.5);
-    }
+    fx.frame(frameOf(6, [model(7, { x: 10 })]), newOut());
+    const patches = FOGS.get(7)!.fog.patches;
+    expect(patches.length).toBe(FOG.patches);
+    for (const p of patches) expect(Math.hypot(p.x - 10, p.z - 5)).toBeLessThan(1);
   });
 
   it('a jump of over a tile also starts the fog at the new spot', () => {
     const fx = new Effects3d(map);
     for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    const out = newOut();
-    fx.frame(frameOf(1.25, [model(7, { x: 8 })]), out);
-    const p = pos(out.tris);
-    for (let i = 0; i < out.tris.n * 3; i++) expect(Math.abs(p[i * 3] - 8)).toBeLessThan(1.5);
+    fx.frame(frameOf(1.25, [model(7, { x: 8 })]), newOut());
+    for (const p of FOGS.get(7)!.fog.patches) expect(Math.hypot(p.x - 8, p.z - 5)).toBeLessThan(1);
   });
 
   it('a pinned clock repeats the picture', () => {
@@ -220,6 +215,54 @@ describe('the Shade model\'s fog', () => {
     expect(rest.tris.n).toBe(FULL);
     const p = pos(rest.tris);
     for (let i = 0; i < rest.tris.n * 3; i++) expect(Math.abs(p[i * 3] - 12)).toBeLessThan(2.5);
+  });
+
+  it('a dying fog spreads and swells: after 0.5 s the patches are further out and drawn larger by the death grow', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
+    const mean = (): number => { const m = FOGS.get(7)!; return m.fog.patches.reduce((a, p) => a + Math.hypot(p.x - m.x, p.z - m.z), 0) / m.fog.patches.length; };
+    let out = newOut();
+    fx.frame(frameOf(2, []), out);
+    const d0 = mean();
+    for (let i = 1; i <= 5; i++) { out = newOut(); fx.frame(frameOf(2 + i * 0.1, []), out); }
+    // 0.5 s at FOG.spread px/s
+    expect(mean() - d0).toBeCloseTo(FOG.spread * 0.5 / 16, 4);
+    // the first patch's first triangle: centre vertex then the middle ring, `mid * size` apart
+    const P = pos(out.tris), p = FOGS.get(7)!.fog.patches[0];
+    const dist = Math.hypot(P[3] - P[0], P[4] - P[1], P[5] - P[2]);
+    const base = p.size * (FOG_MOVE.sizeBase + FOG_MOVE.breathe * Math.sin(FOG_MOVE.breatheRate * 2.5 + FOG_MOVE.breathePhase * p.ph)) / 16;
+    expect(dist / FOG.mid / base).toBeCloseTo(1 + 0.6 * 0.5, 3);
+  });
+
+  it('a Shade killed part-formed starts its death fog at the alpha it had alive', () => {
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 10; i++) fx.frame(frameOf(1 + i * 0.05, [model(7, { form: 0.2 })]), newOut());
+    const alive = newOut();
+    fx.frame(frameOf(1.5, [model(7, { form: 0.2 })]), alive);
+    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 1.55, false);
+    const dying = newOut();
+    fx.frame(frameOf(1.6, []), dying);
+    expect(peak(alive.tris)).toBeLessThan(FOG.alpha[1] * 0.9);
+    expect(peak(dying.tris)).toBeCloseTo(peak(alive.tris) * (1 - 0.05 / VEIL_DEATH_LIFE), 3);
+  });
+
+  it('a card Shade that dies after a model Shade drew fog keeps its strands', () => {
+    // the card Shade alone in a session without fogs: its dying strands
+    const alone = new Effects3d(map);
+    for (let i = 0; i < 20; i++) alone.frame(frameOf(1 + i * 0.05, [fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
+    alone.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
+    const strands = newOut();
+    alone.frame(frameOf(2.1, []), strands);
+    expect(strands.tris.n).toBeGreaterThan(0);
+    clearVeils();
+    // the same with a model Shade drawing fog beside it: the card's death adds the same strands, no fog
+    const fx = new Effects3d(map);
+    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7), fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
+    fx.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
+    const out = newOut();
+    fx.frame(frameOf(2.1, [model(7)]), out);
+    expect(out.tris.n).toBe(FULL + strands.tris.n);
   });
 
   it('a session without fogs keeps the strands for a dead card Shade', () => {

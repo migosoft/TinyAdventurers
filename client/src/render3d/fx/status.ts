@@ -12,7 +12,8 @@ import { addLight } from './booms';
 import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';
 import { hash3, rng } from './rand';
 import { BALL1, dot, fireBall, groundRing, PX, streak, type Axes, type MV3, type V3 } from './shapes';
-import { FOG, FOG_FRAME, fogTris, ShadeFog } from './shadeFog';
+import { stretchOf } from './figureFx';
+import { FOG, FOG_FRAME, fogTris, ShadeFog, smooth } from './shadeFog';
 import type { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -180,19 +181,17 @@ function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: numb
   }
 }
 
-const smooth = (a: number, b: number, x: number): number => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const stretchOf = (frame: FxFrame): number => 1 / Math.cos(frame.ctx.cam.pitch);
 const drawnFogs = new Set<number>();
 
 /** Steps (or restarts) and draws the fog of a figure with `spectre.fog`. */
 function drawFog(out: FxOut, frame: FxFrame, f: DrawnFig): void {
-  const ctx = frame.ctx, now = ctx.now, st = stretchOf(frame);
+  const ctx = frame.ctx, now = ctx.now, st = stretchOf(ctx);
   let m = FOGS.get(f.id);
   if (!m) {
     m = { fog: new ShadeFog(rng(f.id * 7919 + 1), ctx.detail), t: now, x: f.x, z: f.z, form: f.form, stretch: st, alpha: 0, dying: -1 };
     FOGS.set(f.id, m);
     m.fog.settle(now, f.x, f.z, f.form, st);
-  } else if (now - m.t > FOG_FRAME.gap || now < m.t - 1 || Math.hypot(f.x - m.x, f.z - m.z) > FOG_FRAME.jump) {
+  } else if (now - m.t > FOG_FRAME.gap || now < m.t - FOG_FRAME.rewind || Math.hypot(f.x - m.x, f.z - m.z) > FOG_FRAME.jump) {
     // out of sight for long, or moved far in one frame: the fog starts at the new spot, with no streak across the room
     m.fog.settle(now, f.x, f.z, f.form, st);
   } else {
@@ -216,7 +215,7 @@ function fogs(out: FxOut, frame: FxFrame, fx: Effects3d): void {
     drawnFogs.add(f.id);
   }
   for (const [id, m] of FOGS) {
-    if (now - m.t > FOG_FRAME.gap || now < m.t - 1) { FOGS.delete(id); continue; }
+    if (now - m.t > FOG_FRAME.gap || now < m.t - FOG_FRAME.rewind) { FOGS.delete(id); continue; }
     // gone from the frame (out of view, faint): it fades where it was; a dying one belongs to its record, a hidden one shows nothing
     if (drawnFogs.has(id) || frame.hidden.has(id) || fx.following(FX_KIND.ShadeVeil, id)) continue;
     const age = now - m.t;
@@ -252,31 +251,32 @@ const RESTING = new WeakMap<FxRec, VeilStrand[]>();
 const RESTING_FOG = new WeakMap<FxRec, { fog: ShadeFog; dying: number }>();
 
 /** A dying fog: it spreads outward from (x, z), thins over `VEIL_DEATH_LIFE` and swells. `s.dying` is the clock of its last step. */
-function dissolveFog(out: FxOut, frame: FxFrame, fog: ShadeFog, s: { dying: number }, rec: FxRec, age: number, x: number, z: number): void {
+function dissolveFog(out: FxOut, frame: FxFrame, fog: ShadeFog, s: { dying: number }, rec: FxRec, age: number, x: number, z: number, alive: number): void {
   const now = frame.ctx.now;
   if (s.dying < 0) s.dying = rec.start;
   fog.spread(Math.max(0, Math.min(FOG_FRAME.maxStep, now - s.dying)), x, z);
   s.dying = now;
-  fogTris(out.tris, frame.ctx.ax, fog, now, Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + FOG_FRAME.grow * age);
+  // it thins from the alpha it had alive (`alive`), so a part-formed or faint Shade does not jump to full darkness
+  fogTris(out.tris, frame.ctx.ax, fog, now, alive * Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + FOG_FRAME.grow * age);
 }
 
 function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
   if (frame.hidden.has(rec.follow)) return;
-  const ax = frame.ctx.ax, fogM = FOGS.get(rec.follow);
-  if (fogM && rec.start - fogM.t < FRESH) { dissolveFog(out, frame, fogM.fog, fogM, rec, age, fogM.x, fogM.z); return; }
-  if (fogSeen) {
+  const ax = frame.ctx.ax, fogM = FOGS.get(rec.follow), m = VEILS.get(rec.follow);
+  // in order: the fog or the veil that was drawn just before it died; else, in a session that draws fog, a resting fog; else a resting veil
+  if (fogM && rec.start - fogM.t < FRESH) { dissolveFog(out, frame, fogM.fog, fogM, rec, age, fogM.x, fogM.z, fogM.alpha); return; }
+  if (fogSeen && !(m && rec.start - m.t < FRESH)) {
     // a Shade of fog that died out of sight: a resting fog at the death spot (built once per record)
     let r = RESTING_FOG.get(rec);
     if (!r) {
       const fog = new ShadeFog(rng(rec.seed), frame.ctx.detail);
-      fog.settle(rec.start, rec.x, rec.z, 1, stretchOf(frame));
+      fog.settle(rec.start, rec.x, rec.z, 1, stretchOf(frame.ctx));
       r = { fog, dying: -1 };
       RESTING_FOG.set(rec, r);
     }
-    dissolveFog(out, frame, r.fog, r, rec, age, rec.x, rec.z);
+    dissolveFog(out, frame, r.fog, r, rec, age, rec.x, rec.z, 1);
     return;
   }
-  const m = VEILS.get(rec.follow);
   let lines: readonly VeilStrand[], sx: number, sy: number, wx: number, wz: number;
   if (m && rec.start - m.t < FRESH) { lines = m.veil.lines; sx = m.sx; sy = m.sy; wx = m.wx; wz = m.wz; }
   else {

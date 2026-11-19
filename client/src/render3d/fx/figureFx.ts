@@ -21,7 +21,7 @@ const c0: MV3 = [0, 0, 0], c1: MV3 = [0, 0, 0], gl: MV3 = [0, 0, 0];
 const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0];
 
 /** The camera passes stretch the figure by 1 / cos(pitch): so are the heights of the effects that sit on it. */
-const stretchOf = (ctx: FxCtx): number => 1 / Math.cos(ctx.cam.pitch);
+export const stretchOf = (ctx: FxCtx): number => 1 / Math.cos(ctx.cam.pitch);
 
 /** A figure that is stone, ice or asleep holds its pose and shows none of these. */
 const still = (f: DrawnFig): boolean => has(f.effects, EFFECT.Petrified) || has(f.effects, EFFECT.Frozen) || has(f.effects, EFFECT.Sleep);

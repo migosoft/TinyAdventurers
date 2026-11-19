@@ -14,6 +14,8 @@ export const FOG_MAKE = {
   upright: { r: [2.5, 6], hy: [2, 12.5], size: [3.6, 6.2] },
   rate: [5, 10],
   spin: [0.1, 0.25],
+  /** The chance that a patch turns the negative way round. */
+  spinBack: 0.5,
 } as const;
 
 /** How a patch moves and looks over time. `ring`: the ring's share while forming (a pool) to formed; `bob` the height wobble (px); the periods are rad/s of the clock; `breathe` the size's pulse. */
@@ -22,6 +24,8 @@ export const FOG_MOVE = {
   churnRate: 0.7, bob: 0.9, bobRate: 0.9,
   ringForm: [0.1, 1], heightForm: [0.15, 1],
   breathe: 0.12, breatheRate: 0.8, sizeBase: 0.9,
+  /** Multiples of a patch's phase `ph` for the height wobble and the size pulse, so the patches do not beat together. */
+  bobPhase: 2, breathePhase: 3,
   /** Share of the mid ring's alpha (a gaussian-like falloff sampled at `FOG.mid`), and of the rim: 0. */
   midAlpha: 0.49,
   /** The flat patch's height above the floor (tiles) and the spread between patches (z-fighting). */
@@ -31,11 +35,12 @@ export const FOG_MOVE = {
 } as const;
 
 /** The fog of a figure in a frame (used by `status.ts`): the gap (s) and the jump (tiles) after which the fog restarts at the figure; the longest step (s); the alpha under which a figure shows no fog; the dying fog's growth per second. */
-export const FOG_FRAME = { gap: 3, jump: 1, maxStep: 0.1, minAlpha: 0.05, formAlpha: 0.45, grow: 0.6 } as const;
+export const FOG_FRAME = { gap: 3, jump: 1, maxStep: 0.1, minAlpha: 0.05, formAlpha: 0.45, grow: 0.6, rewind: 1 } as const;
+// `rewind`: a clock that went back by more than this (s) is a new run's: the fog starts again.
 
 export interface FogPatch { a: number; r: number; hy: number; size: number; rate: number; ph: number; spin: number; x: number; y: number; z: number; flat: boolean }
 
-const smooth = (a: number, b: number, x: number): number => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+export const smooth = (a: number, b: number, x: number): number => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const place_: [number, number, number] = [0, 0, 0];
 
 export class ShadeFog {
@@ -49,7 +54,7 @@ export class ShadeFog {
       const a = rnd() * Math.PI * 2;
       this.patches.push({
         a, r: span(m.r), hy: span(m.hy), size: span(m.size),
-        rate: span(FOG_MAKE.rate), ph: rnd() * Math.PI * 2, spin: (rnd() < 0.5 ? -1 : 1) * span(FOG_MAKE.spin), x: 0, y: 0, z: 0, flat: low,
+        rate: span(FOG_MAKE.rate), ph: rnd() * Math.PI * 2, spin: (rnd() < FOG_MAKE.spinBack ? -1 : 1) * span(FOG_MAKE.spin), x: 0, y: 0, z: 0, flat: low,
       });
     }
   }
@@ -62,7 +67,7 @@ export class ShadeFog {
     place_[2] = z + Math.cos(ang) * ring;
     place_[1] = p.flat
       ? FOG_MOVE.floorY + FOG_MOVE.floorSpread * (p.ph % 1)
-      : (p.hy * stretch * smooth(FOG_MOVE.heightForm[0], FOG_MOVE.heightForm[1], form) + FOG_MOVE.bob * Math.sin(FOG_MOVE.bobRate * t + 2 * p.ph)) * PX;
+      : (p.hy * stretch * smooth(FOG_MOVE.heightForm[0], FOG_MOVE.heightForm[1], form) + FOG_MOVE.bob * Math.sin(FOG_MOVE.bobRate * t + FOG_MOVE.bobPhase * p.ph)) * PX;
     return place_;
   }
 
@@ -107,7 +112,7 @@ export function fogTris(T: FxTris, ax: Axes, fog: ShadeFog, t: number, alpha: nu
   if (alpha <= 0) return;
   const [cr, cg, cb] = FOG.rgb, N = FOG.segs, upY = Math.abs(ax.up[1]);
   for (const p of fog.patches) {
-    const size = p.size * (FOG_MOVE.sizeBase + FOG_MOVE.breathe * Math.sin(FOG_MOVE.breatheRate * t + 3 * p.ph)) * grow * PX;
+    const size = p.size * (FOG_MOVE.sizeBase + FOG_MOVE.breathe * Math.sin(FOG_MOVE.breatheRate * t + FOG_MOVE.breathePhase * p.ph)) * grow * PX;
     const a0 = FOG.alpha[p.flat ? 0 : 1] * alpha, a1 = a0 * FOG_MOVE.midAlpha;
     const cy = p.flat ? p.y : Math.max(p.y, size * upY + FOG_MOVE.clear);
     // the two rings (the middle one and the rim), flat on the floor or in the camera's plane
