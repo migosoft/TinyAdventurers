@@ -12,6 +12,7 @@ import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
 import { biped, robedBiped } from './bipedFixture';
 import { buildTubeFigure } from './tubeModel';
+import { FOREARM } from './descs/shade';
 
 const SLOW = 120000;
 const KIND_OF: Record<DescKey, number> = { elf: KIND.ElvenRanger, knight: KIND.Paladin, wizard: KIND.Wizard, dwarf: KIND.Barbarian, skelet: KIND.SkeletonWarrior, ogre: KIND.Ogre, wolf: KIND.DireWolf };
@@ -1156,7 +1157,7 @@ describe('the floating gait', () => {
     describe(k, () => {
       const m = tube(k), d = tdef(k);
       // The cases of a body with legs and limp arms (the Ghost); the Shade's parts float apart (see 'floating parts').
-      const oldBody = ((name: string, fn: () => void, timeout?: number): void => { if (k === 'ghost') it(name, fn, timeout); }) as typeof it;
+      const oldBody = (name: string, fn: () => void, timeout?: number): void => { if (k === 'ghost') it(name, fn, timeout); };
       const hover = m.apart ? APART.hover : FLOAT.hover;
 
       oldBody('is a floating model with legs and arms', () => {
@@ -1325,8 +1326,8 @@ describe('the floating gait', () => {
     const len = (v: number[]): number => Math.hypot(v[0], v[1], v[2]);
     const dist = (a: number[], b: number[]): number => len([a[0] - b[0], a[1] - b[1], a[2] - b[2]]);
     const hipsYaw = (p: Pose3d): number => Math.asin(p.bones[HIPS * 12 + 2]);
-    /** The right wrist: the elbow (the hand bone's pivot) plus the forearm of the description (`FOREARM` in descs/shade.ts). */
-    const wrist = (p: Pose3d): [number, number, number] => { const q = pivot(m, 'handR'); return apply(p, bone('handR'), [q[0] + 2.4, q[1] - 3.0, q[2] - 0.6]); };
+    /** The right wrist: the elbow (the hand bone's pivot) plus the description's forearm. */
+    const wrist = (p: Pose3d): [number, number, number] => { const q = pivot(m, 'handR'); return apply(p, bone('handR'), [q[0] + FOREARM[0], q[1] + FOREARM[1], q[2] + FOREARM[2]]); };
     const standFor = (secs: number, mem = settled()): Pose3d => { let p!: Pose3d; for (let i = 0; i < Math.round(secs / STEP); i++) p = poseFigure(m, d, view(), STEP, mem); return p; };
     /** A wind-up held for 0.5 s, then the melee's animT from 0 to `to`; the poses of the melee. */
     const strike = (mem: Pose3dMemory, to = MELEE_T): Pose3d[] => {
@@ -1418,6 +1419,23 @@ describe('the floating gait', () => {
       prev = copyPose(prev);
       const q = poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), STEP, mem);
       for (const n of ['head', 'armR', 'armL', 'handR', 'handL'] as const) expect(dist(at(prev, n), at(q, n)), n).toBeLessThan(1);
+    }, SLOW);
+
+    it('goes on smoothly through a melee, a wind-up straight after it, and a melee after that', () => {
+      const mem = settled();
+      for (let i = 0; i < 60; i++) poseFigure(m, d, view(), STEP, mem);
+      let prev!: Pose3d;
+      for (let i = 0; i < 24; i++) prev = poseFigure(m, d, view({ anim: ANIM.Melee, animT: i * STEP }), STEP, mem);
+      const names = ['head', 'armR', 'armL', 'handR', 'handL'] as const;
+      const jump = (a: Pose3d, b: Pose3d): number => Math.max(...names.map((n) => dist(at(a, n), at(b, n))));
+      prev = copyPose(prev);
+      let p = poseFigure(m, d, view({ anim: ANIM.Windup, animT: 0 }), STEP, mem);
+      // The wind-up's own first frame is not free: the wind follows 1 at APART.time.windIn (0.18 of it in one frame), which moves the arm by 1.77 px (measured); a jump of the swing (about 1) would be 4 px and more.
+      expect(jump(prev, p), 'into the wind-up').toBeLessThan(2);
+      for (let i = 1; i < 18; i++) { prev = copyPose(p); p = poseFigure(m, d, view({ anim: ANIM.Windup, animT: i * STEP }), STEP, mem); }
+      prev = copyPose(p);
+      p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), STEP, mem);
+      expect(jump(prev, p), 'into the second melee').toBeLessThan(1);
     }, SLOW);
 
     it('sweeps from the hang when no wind-up came before it', () => {

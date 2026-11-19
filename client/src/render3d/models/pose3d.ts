@@ -42,9 +42,9 @@ export const FLOAT = {
 /** Floating parts (`FigureModel.apart`, #359 round 2): the approved try-out's numbers. Lengths in model px, angles in rad. */
 export const APART = {
   hover: 2,                               // game px; replaces FLOAT.hover for such a model (the bob stays FLOAT.bob)
-  // drift of each part: [amplitude, rad/s, share of the phase] for x, y, z; the arms use the phase `ph + side * 1.3`
+  // drift of each part: [amplitude, rad/s, share of the phase] for x, y, z; the arms use the phase `ph + side * arm.phase`
   head: { at: [[0.3, 0.7, 1], [0.35, 1.1, 2], [0.25, 0.9, 3]], turn: [[0.06, 0.8, 1], [0.12, 0.5, 2], [0.07, 0.6, 1]], droop: -0.12 },
-  arm: { at: [[0.35, 0.6, 1], [0.45, 0.9, 2], [0.35, 0.7, 3]], turn: [[0.08, 0.5, 1], [0, 0, 0], [0.1, 0.8, 1]], elbow: [0.12, 1.0, 2] },
+  arm: { at: [[0.35, 0.6, 1], [0.45, 0.9, 2], [0.35, 0.7, 3]], turn: [[0.08, 0.5, 1], [0, 0, 0], [0.1, 0.8, 1]], elbow: [0.12, 1.0, 2], phase: 1.3 },
   // the blow, as factors of wind (W), swing (S) and reach (R); `side` is +1 for the striking arm's side
   body: { yaw: [-0.45, 0.6], lean: [0.2, -0.3], back: 1.5, lift: [1.2, -0.8] },          // hips: ry = yaw[0] W + yaw[1] S; rz += lean[0] W + lean[1] R; root x -= back W; root y += lift[0] W + lift[1] R
   headBlow: [1.8, -0.3],                                                                  // head x += 1.8 R, y -= 0.3 R
@@ -73,13 +73,13 @@ export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: n
   crest: number;
   /** The floating gait (`FLOAT`): the entity's own phase (the caller sets it; 0 by default), and how far the limbs trail and the body leans (rad; they follow the speed late). */
   phase: number; drag: number; lean: number;
-  /** Floating parts (`APART`): seconds since the last melee began (-1: none); how far the wind-up pose is held (0..1); what is left of the swing, the reach and the wind of the blow before, which a new blow starts from (it decays). */
-  blowT: number; wind: number; carry: [number, number, number];
+  /** Floating parts (`APART`): seconds since the last melee began (-1: none); how far the wind-up pose is held (0..1); what is left of the swing and the reach of the blow before, which a new blow starts from (it decays; the wind is continuous by its own follow, so it has no carry). */
+  blowT: number; wind: number; carry: [number, number];
   /** Floating parts: the wind when the current melee began, and the last frame's animation and its time (to tell a new blow from the same one). */
   windStart: number; prevAnim: number; prevAnimT: number }
 export function newPose3dMemory(): Pose3dMemory {
   return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0,
-    blowT: -1, wind: 0, carry: [0, 0, 0], windStart: 0, prevAnim: -1, prevAnimT: 0 };
+    blowT: -1, wind: 0, carry: [0, 0], windStart: 0, prevAnim: -1, prevAnimT: 0 };
 }
 
 export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite' | 'butt';
@@ -472,16 +472,17 @@ const reachOf = (tau: number): number => (tau < 0 ? 0 : Math.sin(Math.pow(Math.m
  */
 function blowClock(mem: Pose3dMemory, anim: number, animT: number, dt: number): void {
   const K = APART.time, melee = anim === ANIM.Melee, windup = anim === ANIM.Windup;
-  const wasBlow = mem.prevAnim === ANIM.Melee || mem.prevAnim === ANIM.Windup;
-  const meleeStarts = melee && (mem.prevAnim !== ANIM.Melee || animT < mem.prevAnimT);
-  if ((melee || windup) && (!wasBlow || (meleeStarts && mem.prevAnim === ANIM.Melee))) {   // neither before it, or a melee after a melee (its time began again)
+  const wasWind = mem.prevAnim === ANIM.Windup;
+  const meleeStarts = melee && (mem.prevAnim !== ANIM.Melee || animT < mem.prevAnimT);   // its time began (again)
+  // A wind-up begins (the frame before was not one: a melee included) or a melee begins out of anything but a wind-up (which holds the carry): the swing and the reach are carried on.
+  if ((windup && !wasWind) || (meleeStarts && !wasWind)) {
     const tau = melee ? animT : -1;
     mem.carry[0] = sweepOf(mem.blowT) + mem.carry[0] - sweepOf(tau);
     mem.carry[1] = reachOf(mem.blowT) + mem.carry[1] - reachOf(tau);
   }
   if (meleeStarts) mem.windStart = mem.wind;
   if (melee) mem.blowT = animT;
-  else if (windup) { if (!wasBlow) mem.blowT = -1; }
+  else if (windup) { if (!wasWind) mem.blowT = -1; }
   else if (mem.blowT >= 0) { mem.blowT += dt; if (mem.blowT > K.back * MELEE_T) mem.blowT = -1; }
   const follow = 1 - Math.exp(-dt * K.windIn);
   if (windup) mem.wind += (1 - mem.wind) * follow;
@@ -489,7 +490,7 @@ function blowClock(mem: Pose3dMemory, anim: number, animT: number, dt: number): 
   else mem.wind -= mem.wind * follow;
   BLOW.W = mem.wind; BLOW.S = sweepOf(mem.blowT) + mem.carry[0]; BLOW.R = reachOf(mem.blowT) + mem.carry[1];
   const keep = Math.exp(-dt * K.carry);
-  mem.carry[0] *= keep; mem.carry[1] *= keep; mem.carry[2] *= keep;
+  mem.carry[0] *= keep; mem.carry[1] *= keep;
   mem.prevAnim = anim; mem.prevAnimT = animT;
 }
 
@@ -535,7 +536,7 @@ function apartPose(m: FigureModel, mem: Pose3dMemory, asleep: boolean, anim: num
     place(head, HEAD);
   }
   if (!asleep) for (let side = 0; side < 2; side++) {
-    const sd = side === 0 ? 1 : -1, aph = ph + sd * 1.3, arm = locals[ARM[side]], hand = locals[HAND[side]];
+    const sd = side === 0 ? 1 : -1, aph = ph + sd * APART.arm.phase, arm = locals[ARM[side]], hand = locals[HAND[side]];
     driftOf(APART.arm.at, t, aph, dv); driftOf(APART.arm.turn, t, aph, tv);
     let rx = tv[0], ry = tv[1], rz = tv[2], ex = APART.arm.elbow[0] * Math.sin(APART.arm.elbow[1] * t + APART.arm.elbow[2] * aph);
     if (side === 0) {
@@ -725,7 +726,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     limp = -(FLOAT.arm[0] + FLOAT.arm[1] * D) + 0.03 * Math.sin(0.8 * t + 2 * ph);
     if (m.apart) {
       // Parts that float apart: their own pose and blow (`apartPose`); no legs, no limp arms.
-      if (asleep) { mem.blowT = -1; mem.wind = 0; mem.carry[0] = mem.carry[1] = mem.carry[2] = 0; mem.prevAnim = -1; BLOW.W = BLOW.S = BLOW.R = 0; }
+      if (asleep) { mem.blowT = -1; mem.wind = 0; mem.carry[0] = mem.carry[1] = 0; mem.prevAnim = -1; BLOW.W = BLOW.S = BLOW.R = 0; }
       else blowClock(mem, anim, animT, dt);
       apartPose(m, mem, asleep, anim, animT, HJ, t);
       floatY = BLOW.y;

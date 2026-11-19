@@ -48,7 +48,9 @@ const CLAW_BASE = { x: 0.1, y: -0.1, z: 0.7 } as const, CLAW_FORWARD = 0.25, CLA
 /** The thumb: its base off the wrist in z (times the side), its first direction. */
 const THUMB_BASE_Z = 0.35, THUMB_DIR: Vec3 = [0.9, -0.5, -0.9];
 /** One arm's joints (page px): the socket the arm bone turns about, the elbow the hand bone turns about, the wrist. `sd` is +1 for the right side, -1 for the left. */
-const SOCKET: Vec3 = [0.9, 13.6, 4.2], UPPER_ARM: Vec3 = [-1.0, -3.8, 1.5], FOREARM: Vec3 = [2.4, -3.0, -0.6];
+const SOCKET: Vec3 = [0.9, 13.6, 4.2], UPPER_ARM: Vec3 = [-1.0, -3.8, 1.5];
+/** The forearm, from the elbow to the wrist (the right arm's; the left one's z is mirrored). */
+export const FOREARM: Vec3 = [2.4, -3.0, -0.6];
 const joints = (sd: 1 | -1): { S: Vec3; E: Vec3; W: Vec3 } => {
   const S: Vec3 = [SOCKET[0], SOCKET[1], SOCKET[2] * sd], E = plus(S, [UPPER_ARM[0], UPPER_ARM[1], UPPER_ARM[2] * sd]);
   return { S, E, W: plus(E, [FOREARM[0], FOREARM[1], FOREARM[2] * sd]) };
