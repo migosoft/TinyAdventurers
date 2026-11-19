@@ -32,7 +32,7 @@ export interface FigureInst {
 }
 
 /** Texels per row, 4 floats each. */
-export const ROW_TEXELS = 64;
+export const ROW_TEXELS = 96;  // SPIKE: 64 -> 96 for the eyestalks' waves
 /** The owners of a frame are numbered 0 .. OWNER_MAX - 1 (modulo) in the rows. */
 export const OWNER_MAX = 65536;
 const PX = 1 / 16;  // tiles per sprite px
@@ -50,7 +50,7 @@ const PX = 1 / 16;  // tiles per sprite px
  *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), the owner's number (see `OWNER_MAX`), `groundY`.
  * The rest of the 64 texels is free.
  */
-export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51, flags: 52 } as const;
+export const ROW = { root: 0, bones: 3, bends: 45, waves: 57, robe: 81, tint: 82, seen: 83, flags: 84 } as const;  // SPIKE: 12 bends, then 2 wave texels per bend
 
 /**
  * Writes row `row` of `out` (ROW_TEXELS x 4 floats). A weapon instance (`bone >= 0`) is a one-bone model whose origin is the grip
@@ -71,7 +71,7 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
   o = base + ROW.bones * 4;
   if (inst.bone < 0) {
     for (let i = 0; i < MAX_BONES * 12; i++) out[o + i] = pose.bones[i];
-    for (let i = 0; i < MAX_BENDS * 4; i++) out[base + ROW.bends * 4 + i] = pose.bends[i];
+    for (let i = 0; i < MAX_BENDS * 12; i++) out[base + ROW.bends * 4 + i] = pose.bends[i];
     o = base + ROW.robe * 4;
     out[o] = pose.robe[0]; out[o + 1] = pose.robe[1]; out[o + 2] = pose.robe[2]; out[o + 3] = 0;
   } else {
@@ -82,7 +82,7 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
       out[o + r * 4] = M[m] * k; out[o + r * 4 + 1] = M[m + 1] * k; out[o + r * 4 + 2] = M[m + 2] * k;
       out[o + r * 4 + 3] = M[m] * px + M[m + 1] * py + M[m + 2] * pz + M[m + 3];
     }
-    for (let i = 0; i < MAX_BENDS * 4; i++) out[base + ROW.bends * 4 + i] = 0;
+    for (let i = 0; i < MAX_BENDS * 12; i++) out[base + ROW.bends * 4 + i] = 0;
     o = base + ROW.robe * 4;
     out[o] = out[o + 1] = out[o + 2] = out[o + 3] = 0;
   }

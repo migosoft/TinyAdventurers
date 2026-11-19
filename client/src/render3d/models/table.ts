@@ -19,15 +19,16 @@ import { npcKnight } from './descs/npcKnight';
 import { orc } from './descs/orc';
 import { disciple, necromancer, summoner } from './descs/robed';
 import { wolf } from './descs/wolf';
+import { watcher } from './descs/watcher';
 import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
 
-export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'chest' | 'mimic' | 'barrel';
+export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'chest' | 'mimic' | 'barrel' | 'watcher';
 export type ModelKey = DescKey | TubeKey;
 
 /** The models built from tubes and balls: the woodland animals (#357) and the two-legged creatures (#356). */
-export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort, chest, mimic, barrel };
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort, chest, mimic, barrel, watcher };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
@@ -57,6 +58,9 @@ export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   // The summoner's imps are this kind too: one look, no tint.
   [KIND.Imp]: 'imp',
   [KIND.Chort]: 'chort',
+  // SPIKE: the watcher try-out wears the Ghost's kind (a hovering monster without a model yet), on the `?r3d=` dev pages only:
+  // the live game keeps its Ghost cards.
+  ...(typeof location !== 'undefined' && /[?&]r3d=/.test(location.search) ? { [KIND.Ghost]: 'watcher' as const } : {}),
 };
 
 /** The game objects that have a 3D model (not creatures: `MODEL_OF_KIND` lists those), and the description each one wears. */

@@ -832,7 +832,7 @@ export class Figures3d {
     const insts: FigureInst[] = [];
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: (key === 'watcher' ? 1 : pose.alpha) * k, dark,   /* SPIKE: the watcher is not the Ghost's translucent body */
       cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     };
     /** Hands an instance to the model layer; a faller's goes out in the depth's dark, and is kept as it was (its offsets from the faller). */

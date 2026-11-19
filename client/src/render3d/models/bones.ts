@@ -3,7 +3,7 @@
 /** The draw order of the pieces: the page's `ORDER`, then the weapon. Within a stage the outline hulls come first, then the pieces. */
 export const STAGES = ['legs', 'body', 'head', 'collar', 'hair', 'hat', 'spikes', 'arms', 'weapon'] as const;
 export const BONES = ['hips', 'body', 'head', 'hat', 'armR', 'handR', 'armL', 'handL', 'leg0', 'leg1', 'leg2', 'leg3', 'weaponR', 'weaponL'] as const;
-export const MAX_BONES = 14, MAX_BENDS = 4;
+export const MAX_BONES = 14, MAX_BENDS = 12;  // SPIKE: 4 -> 12 for the watcher's stalks
 
 export type Bone = (typeof BONES)[number];
 export type Stage = (typeof STAGES)[number];

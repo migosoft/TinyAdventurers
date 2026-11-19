@@ -49,6 +49,8 @@ export interface TubePiece {
     | { neck: { origin: readonly [number, number]; from: number; to: number } }
     /** The piece bends with an earlier swaying piece of the description on the same bone, as one part of it (a wing's finger bones on its membrane): the same foot, line and turn. It takes no bend of its own. */
     | { with: TubePiece };
+  /** SPIKE: a piece that bends with another moves as one solid with that piece's tip (an eye on a stalk), instead of by how far along it lies. */
+  rigid?: true;
   /** The part of this piece below `TubeDesc.robeTop` swings as the robe's hem. */
   robe?: true;
   /** Polished steel (look value 1). */

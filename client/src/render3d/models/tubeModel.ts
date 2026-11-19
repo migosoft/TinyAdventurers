@@ -135,7 +135,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
       if (B?.neck) {
         const nb = (p.bend as { neck: { from: number; to: number } }).neck;
         along = smooth((b.uv![i * 2] - nb.from) / (nb.to - nb.from));
-      } else if (B) along = Math.max(0, Math.min(1, ((lx + off[0]) * B.dir[0] + (ly + off[1]) * B.dir[1] + (lz + off[2]) * B.dir[2]) / over));
+      } else if (B) along = p.rigid ? 1 : Math.max(0, Math.min(1, ((lx + off[0]) * B.dir[0] + (ly + off[1]) * B.dir[1] + (lz + off[2]) * B.dir[2]) / over));
       const swings = p.robe && d.robeTop !== undefined && y < d.robeTop;
       skin.set([boneIdx, b.line ? 1 : 0, swings ? -2 : b.bend, swings ? smooth((d.robeTop! - y) / d.robeTop!) : along], o * 4);
       const steel = b.line ? 0 : p.glow ? 3 : p.metal ? 1 : 0;

@@ -407,7 +407,7 @@ function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride
 }
 
 export function newPose(yaw: number): Pose3d {
-  return { yaw, root: { x: 0, y: 0, z: 0, roll: 0, sx: 1, sy: 1, sz: 1 }, bones: new Float32Array(MAX_BONES * 12), bends: new Float32Array(MAX_BENDS * 4), robe: [0, 0, 0], air: 0, attack: null, asleep: false, channel: false };
+  return { yaw, root: { x: 0, y: 0, z: 0, roll: 0, sx: 1, sy: 1, sz: 1 }, bones: new Float32Array(MAX_BONES * 12), bends: new Float32Array(MAX_BENDS * 12), robe: [0, 0, 0], air: 0, attack: null, asleep: false, channel: false };
 }
 
 /** A pose back to "nothing happens", in place. */
@@ -624,6 +624,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   const gameScale = (d.scale ?? 1) * fallK;
   R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back) * gameScale;   // the butt rears back, the lunge goes forward
   R.y = bob * m.scale;
+  if (m.key === 'watcher') R.y += (0.9 * Math.sin(t * 1.6) + 0.3 * Math.sin(t * 2.7 + 1)) * m.scale;   // SPIKE: the watcher's hover bob
   if (windup) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
   if (asleep) {
     R.roll = Math.PI / 2;
@@ -637,6 +638,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   for (let i = 0; i < m.bends.length && i < MAX_BENDS; i++) {
     const B = m.bends[i];
     if (B.neck) { pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = 0; pose.bends[i * 4 + 2] = 1; pose.bends[i * 4 + 3] = nbend; continue; }
+    if (m.key === 'watcher') { eyeStalk(pose.bends, i, t, B.dir); continue; }   // SPIKE: each eyestalk has a mind of its own
     const kk = B.k * loose * 1.5;
     let wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle;
     let wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
@@ -657,7 +659,63 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     pose.robe[2] = Math.max(0, -bob);
   }
 
+  if (m.key === 'watcher') watcherEye(t);   // SPIKE: the big eye blinks and looks around
   composeBones(m, locals, pose.bones);
   if (stone || iced) return (mem.held = copyPose(pose));   // the frame it began in (an attack and all), kept
   return pose;
+}
+
+/** SPIKE: a stable pseudo-random 0..1 for (a, b). */
+const hash01 = (a: number, b: number): number => { const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return v - Math.floor(v); };
+/**
+ * SPIKE: the watcher's eyestalk `i`: every few seconds (its own rhythm) its eye picks a new direction to look, holds it, then turns
+ * there quickly, the stalk curling with it; a small restless twitch on top. Writes the bend's axis and angle (the root stays put).
+ */
+function eyeStalk(out: Float32Array, i: number, t: number, dir: readonly number[]): void {
+  const period = 1.6 + 2.2 * hash01(i, 0), u = t / period + 7 * hash01(i, 1), k = Math.floor(u), f = u - k;
+  const look = (n: number): [number, number] => { const a = 2 * Math.PI * hash01(i, n + 0.37), r = 0.3 + 0.7 * hash01(i + 0.5, n); return [Math.cos(a) * r, Math.sin(a) * r]; };
+  const A = look(k), Bk = look(k + 1), q = Math.min(1, Math.max(0, (f - 0.72) / 0.28)), e = q * q * (3 - 2 * q);
+  const px = A[0] + (Bk[0] - A[0]) * e + 0.07 * Math.sin(t * 5.3 + i * 1.7) + 0.05 * Math.sin(t * 8.1 + i);
+  const py = A[1] + (Bk[1] - A[1]) * e + 0.07 * Math.sin(t * 4.7 + i * 2.3) + 0.05 * Math.sin(t * 7.3 + 2 * i);
+  // Two directions across the stalk: the turn's axis lies in their plane, so the stalk bends to every side.
+  const [dx, dy, dz] = dir, ref = Math.abs(dy) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let ax = dy * ref[2] - dz * ref[1], ay = dz * ref[0] - dx * ref[2], az = dx * ref[1] - dy * ref[0];
+  const l1 = Math.hypot(ax, ay, az) || 1; ax /= l1; ay /= l1; az /= l1;
+  const bx = dy * az - dz * ay, by = dz * ax - dx * az, bz = dx * ay - dy * ax;
+  let wx = ax * px + bx * py, wy = ay * px + by * py, wz = az * px + bz * py;
+  // Never droop: the turn about `lift` (dir x up) raises the tip; the curl keeps at least a little of it, so no stalk hangs to the floor
+  // or curls down over the face.
+  let lx = dy * 0 - dz * 1, ly = 0, lz = dx * 1 - dy * 0;
+  const ll = Math.hypot(lx, ly, lz) || 1; lx /= ll; ly /= ll; lz /= ll;
+  const up = wx * lx + wy * ly + wz * lz, MIN_UP = 0.15;
+  if (up < MIN_UP) { wx += (MIN_UP - up) * lx; wy += (MIN_UP - up) * ly; wz += (MIN_UP - up) * lz; }
+  const len = Math.hypot(wx, wy, wz) || 1e-6;
+  out[i * 4] = wx / len; out[i * 4 + 1] = wy / len; out[i * 4 + 2] = wz / len; out[i * 4 + 3] = 0.6 * Math.min(1, len);
+  // Two travelling waves up the stalk (nodes.ts: angle = a sin(F s) + b (cos(F s) - 1) at the share s of its length): one about the
+  // curl's own axis, one about the axis across it; each slithers at its own speed, the S running from the root to the eye.
+  const ux = wx / len, uy = wy / len, uz = wz / len;
+  let cx = dy * uz - dz * uy, cy = dz * ux - dx * uz, cz = dx * uy - dy * ux;
+  const l2 = Math.hypot(cx, cy, cz) || 1; cx /= l2; cy /= l2; cz /= l2;
+  const p1 = t * (2.2 + 1.4 * hash01(i, 5)) + 6.3 * hash01(i, 6), p2 = t * (1.5 + 1.1 * hash01(i, 7)) + 6.3 * hash01(i, 8);
+  const A1 = 0.26, A2 = 0.17, o = MAX_BENDS * 4 + i * 8;
+  out[o] = cx; out[o + 1] = cy; out[o + 2] = cz; out[o + 3] = A1 * Math.cos(p1);
+  out[o + 4] = -A1 * Math.sin(p1); out[o + 5] = A2 * Math.cos(p2); out[o + 6] = -A2 * Math.sin(p2); out[o + 7] = 0;
+}
+
+/**
+ * SPIKE: the watcher's big eye. The lids (bones leg0 upper, leg1 lower) and the iris (leg2) turn about the eye's middle, z the
+ * side axis. It blinks every few seconds, now and then twice; the iris glances about (a quick turn, then a held stare), the lids
+ * following it up and down a little, as real lids do.
+ */
+function watcherEye(t: number): void {
+  const UPPER = BONES.indexOf('leg0'), LOWER = BONES.indexOf('leg1'), GAZE = BONES.indexOf('leg2');
+  const P = 4.4, n = Math.floor(t / P), tb = t - n * P, twice = hash01(n, 3) > 0.7, B = 0.24;
+  const shut = (x: number): number => (x > 0 && x < B ? Math.sin((Math.PI * x) / B) ** 2 : 0);
+  const blink = Math.max(shut(tb - 1), twice ? shut(tb - 1 - B * 1.25) : 0);
+  const G = 1.9, u = t / G, k = Math.floor(u), q = Math.min(1, (u - k) / 0.1), e = q * q * (3 - 2 * q);
+  const aim = (i: number): [number, number] => [0.3 * (2 * hash01(i, 11) - 1), 0.16 * (2 * hash01(i, 12) - 1)];
+  const a = aim(k - 1), b = aim(k), side = a[0] + (b[0] - a[0]) * e, up = a[1] + (b[1] - a[1]) * e;
+  locals[GAZE].ry = side; locals[GAZE].rz = up;
+  locals[UPPER].rz = -0.98 * blink + 0.6 * up;
+  locals[LOWER].rz = 0.32 * blink + 0.35 * up;
 }

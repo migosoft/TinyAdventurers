@@ -73,10 +73,16 @@ export function figurePoint(rows: Texture, shared: FigureShared): FigurePoint {
   const position = attribute('position', 'vec3'), normal = attribute('normal', 'vec3'), skin = attribute('skin', 'vec4'), origin = attribute('origin', 'vec3');
 
   // 1. The bend and the robe.
-  const bendAt = T(max(skin.z, 0).add(0.5).floor().add(ROW.bends));
-  const axis = bendAt.xyz, ang = bendAt.w.mul(skin.w);
-  const ca = cos(ang), sa = sin(ang);
-  const turn = (v: N): N => v.mul(ca).add(cross(axis, v).mul(sa)).add(axis.mul(dot(axis, v).mul(float(1).sub(ca))));
+  const kI = max(skin.z, 0).add(0.5).floor();
+  const bendAt = T(kI.add(ROW.bends));
+  // SPIKE: two travelling waves on top of the curl (the watcher's stalks): wave texels [axis2.xyz, a1], [b1, a2, b2, 0].
+  const w1 = T(kI.mul(2).add(ROW.waves)), w2 = T(kI.mul(2).add(ROW.waves + 1));
+  const F = 2 * Math.PI * 1.25, sW = sin(skin.w.mul(F)), cW = cos(skin.w.mul(F)).sub(1);
+  const axis = bendAt.xyz, ang = bendAt.w.mul(skin.w).add(w1.w.mul(sW)).add(w2.x.mul(cW));
+  const ang2 = w2.y.mul(sW).add(w2.z.mul(cW)), axis2 = w1.xyz;
+  const ca = cos(ang), sa = sin(ang), ca2 = cos(ang2), sa2 = sin(ang2);
+  const turn1 = (v: N): N => v.mul(ca).add(cross(axis, v).mul(sa)).add(axis.mul(dot(axis, v).mul(float(1).sub(ca))));
+  const turn = (v0: N): N => { const v: N = turn1(v0); return v.mul(ca2).add(cross(axis2, v).mul(sa2)).add(axis2.mul(dot(axis2, v).mul(float(1).sub(ca2)))); };
   const isBend = skin.z.greaterThan(-0.5), isRobe = skin.z.lessThan(-1.5);
   const robe = T(ROW.robe).xyz;
   const bent: N = select(isBend, origin.add(turn(position.sub(origin))), select(isRobe, position.add(vec3(robe.x, robe.z, robe.y).mul(skin.w)), position));
