@@ -65,11 +65,14 @@ describe('the see-through draw', () => {
     expect(SEE.light).toEqual([0.92, 0.94, 0.98]);
   });
 
-  it('the render states: the depth draw writes depth only, opaque; the colour draw blends, writes no depth, one pass', () => {
+  it('the render states: the depth draw writes depth only; the colour draw blends, writes no depth, one pass', () => {
     const { depth, colour } = seeOf();
     expect(depth.colorWrite).toBe(false);
     expect(depth.depthWrite).toBe(true);
-    expect(depth.transparent).toBe(false);
+    // Transparent on purpose: three draws every non-transparent material in the opaque list, before the opaque figures (order 10), which
+    // would then fail their depth test behind the Ghost. In the transparent list it sorts by render order, after the opaque scene.
+    expect(depth.transparent).toBe(true);
+    expect(depth.forceSinglePass).toBe(true);
     expect(depth.side).toBe(FrontSide);
     expect(colour.transparent).toBe(true);
     expect(colour.depthWrite).toBe(false);
@@ -303,7 +306,13 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(c).not.toMatch(bayer);
       expect(c).not.toMatch(/lightAmbient|lightPos|lightCol|lava/i);
       expect(c).toMatch(/figExtra/);
-      expect(fragment(B, depth, { compare: true, geometry: g })).not.toMatch(/figExtra/);
+      // The depth draw gates on the colour draw's final alpha, so it reads the same row values (eyes, sight, instance alpha).
+      const d = fragment(B, depth, { compare: true, geometry: g });
+      for (const name of ['figExtra', 'figSeen', 'figFlags', 'figRestY']) {
+        expect(c).toMatch(new RegExp(name));
+        expect(d).toMatch(new RegExp(name));
+      }
+      expect(d).not.toMatch(bayer);
     });
 
     it('builds for a figure without bends too', () => {

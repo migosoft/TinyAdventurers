@@ -204,15 +204,7 @@ export function seeMaterials(o: { sight: Sight; rows: Texture; shared: FigureSha
     return m;
   };
 
-  // The depth draw: a fragment stays where the figure shows at all and is not cut.
-  const depth = make();
-  depth.colorNode = vec4(0, 0, 0, select(above.and(A.greaterThan(SEE.gate)), float(1), float(0)));
-  depth.alphaTest = 0.5;
-  depth.colorWrite = false;
-  depth.depthWrite = true;
-  depth.transparent = false;
-
-  // The colour draw.
+  // The colour draw's alpha comes first: the depth draw keeps a fragment exactly when the colour draw does.
   const restY: N = varying(attribute('position', 'vec3').y, 'figRestY');
   const h: N = restY.div(o.stands);
   const Nn: N = normalize(p.N);
@@ -230,12 +222,26 @@ export function seeMaterials(o: { sight: Sight; rows: Texture; shared: FigureSha
   const coreV: N = core.mul(live), haloV: N = halo.mul(live);
   const mixed: N = mix(mix(body, vec3(...rgbOf(o.eyes.ring)), haloV.mul(SEE.haloMix)), vec3(...rgbOf(o.eyes.core)), coreV);
   const alpha: N = max(a.add(haloV.mul(SEE.haloAlpha).mul(shown)), coreV.mul(SEE.coreAlpha).mul(shown));
+  // The final alpha (0 where the figure is cut): the one value both draws gate on (a fragment is dropped at `alpha <= SEE.gate`).
+  const finalAlpha: N = alpha.mul(select(above, float(1), float(0)));
+
   const colour = make();
-  colour.colorNode = vec4(sight.apply(mixed, p.P, seenXY), alpha.mul(select(above, float(1), float(0))));
+  colour.colorNode = vec4(sight.apply(mixed, p.P, seenXY), finalAlpha);
   colour.alphaTest = SEE.gate;
   colour.transparent = true;
   colour.depthWrite = false;
   colour.forceSinglePass = true;
+
+  // The depth draw: depth only, in the transparent list (three draws every non-transparent material first, in the opaque list, before
+  // the opaque figures at FIGURE_ORDER; a transparent one sorts by render order with the cards, so it comes after the opaque scene).
+  // A fragment has depth exactly when it has colour.
+  const depth = make();
+  depth.colorNode = vec4(0, 0, 0, select(finalAlpha.greaterThan(SEE.gate), float(1), float(0)));
+  depth.alphaTest = 0.5;
+  depth.colorWrite = false;
+  depth.depthWrite = true;
+  depth.transparent = true;
+  depth.forceSinglePass = true;
   return { depth, colour };
 }
 

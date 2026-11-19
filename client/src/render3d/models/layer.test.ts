@@ -33,7 +33,7 @@ const sprite = (name: string): SpritePixels | null => {
 
 /** The layer the see-through meshes go on in these tests (the view passes its AIR_SKIP_LAYER). */
 const SEE_LAYER = 1;
-const settle =(): Promise<void> => new Promise((r) => setTimeout(r, 0));
+const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const SLOW = 120000;
 
 let kit: FigureKit;
@@ -303,6 +303,19 @@ describe('FigureLayer', () => {
         expect(m.layers.mask).toBe(1 << SEE_LAYER);
         expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(1);
       }
+      layer.dispose();
+    }, SLOW);
+
+    it('the Ghost\'s two draws are in the transparent list (3.1 then 3.2, after the opaque scene); an ordinary figure\'s piece is opaque', () => {
+      const { layer, scene } = layerOf(false);
+      layer.frame(frame([inst('ghost'), inst('elf', { owner: 2, x: 5 })]), slot);
+      const visible = only(scene);
+      const mat = (m: Mesh): { transparent: boolean } => m.material as { transparent: boolean };
+      const see = visible.filter((m) => m.renderOrder === SEE_DEPTH_ORDER || m.renderOrder === SEE_ORDER);
+      expect(see).toHaveLength(2);
+      for (const m of see) expect(mat(m).transparent).toBe(true);
+      for (const m of visible.filter((x) => x.renderOrder === FIGURE_ORDER || x.renderOrder === HULL_ORDER)) expect(mat(m).transparent).toBe(false);
+      expect(visible.filter((m) => m.renderOrder === FIGURE_ORDER)).toHaveLength(1);
       layer.dispose();
     }, SLOW);
 
