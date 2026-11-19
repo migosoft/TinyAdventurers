@@ -15,6 +15,7 @@ import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import type { FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
+import { AMBUSH_WARNING } from '../../game/shadeHaze';
 import { BONES, MAX_BENDS, MAX_BONES, weaponBoneOf } from './bones';
 import type { FigureModel } from './model';
 import { composeBones, identityLocal, type BoneLocal } from './rig';
@@ -38,6 +39,22 @@ export const FLOAT = {
   lean: { per: 0.12, max: 0.22 },
   knee: [0.1, 0.45], arm: [0.06, 0.5], head: 0.22, spread: 0.06, sway: 0.04, hitLean: 0.2,
 } as const;
+/** Floating parts (`FigureModel.apart`, #359 round 2): the approved try-out's numbers. Lengths in model px, angles in rad. */
+export const APART = {
+  hover: 2,                               // game px; replaces FLOAT.hover for such a model (the bob stays FLOAT.bob)
+  // drift of each part: [amplitude, rad/s, share of the phase] for x, y, z; the arms use the phase `ph + side * 1.3`
+  head: { at: [[0.3, 0.7, 1], [0.35, 1.1, 2], [0.25, 0.9, 3]], turn: [[0.06, 0.8, 1], [0.12, 0.5, 2], [0.07, 0.6, 1]], droop: -0.12 },
+  arm: { at: [[0.35, 0.6, 1], [0.45, 0.9, 2], [0.35, 0.7, 3]], turn: [[0.08, 0.5, 1], [0, 0, 0], [0.1, 0.8, 1]], elbow: [0.12, 1.0, 2] },
+  // the blow, as factors of wind (W), swing (S) and reach (R); `side` is +1 for the striking arm's side
+  body: { yaw: [-0.45, 0.6], lean: [0.2, -0.3], back: 1.5, lift: [1.2, -0.8] },          // hips: ry = yaw[0] W + yaw[1] S; rz += lean[0] W + lean[1] R; root x -= back W; root y += lift[0] W + lift[1] R
+  headBlow: [1.8, -0.3],                                                                  // head x += 1.8 R, y -= 0.3 R
+  strike: { at: [[-2.6, 0, 6.5], [3.2, 0, 0.8], [2.4, -4.2, 0]], turn: [[-0.55, 0.2, 0], [-1.3, 2.2, 0], [-0.9, 0, 1.25]], elbow: [0.9, 0, -0.8] },   // rows x, y, z; columns W, S, R; z rows times `side`; turn order YXZ
+  other: { at: [-2.2, 0, 1.5], turn: -0.7 },                                              // the other arm in a blow, times R: x, y, z (z times its side), and its turn about z
+  // the blow's clock, in units of MELEE_T: the sweep is 0..1, held to `hold`, back by `back`; the reach lasts `reach`
+  time: { hold: 1.5, back: 5, reach: 4, reachPow: 0.6, windIn: 12, windOut: 0.4, carry: 12 },
+  form: [0.45, 0.95], inside: [0.5, 13.0, 0],                                             // the ambush: the parts drift in from this point of the smoke
+  asleep: { hover: 0.5, droop: -0.35 },
+} as const;
 export const TURN_RATE = 12, HIT_SECS = 0.26;
 /** The walk blends in and out by `dt * 9` per frame, as on the page (the page wins over the brief's 0.2 s): an exponential, 83 % after 0.2 s. */
 const BLEND_RATE = 9;
@@ -55,9 +72,14 @@ export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: n
   /** The scale of the hat bone (the antlers of a stag): 1 unless the caller sets it. */
   crest: number;
   /** The floating gait (`FLOAT`): the entity's own phase (the caller sets it; 0 by default), and how far the limbs trail and the body leans (rad; they follow the speed late). */
-  phase: number; drag: number; lean: number }
+  phase: number; drag: number; lean: number;
+  /** Floating parts (`APART`): seconds since the last melee began (-1: none); how far the wind-up pose is held (0..1); what is left of the swing, the reach and the wind of the blow before, which a new blow starts from (it decays). */
+  blowT: number; wind: number; carry: [number, number, number];
+  /** Floating parts: the wind when the current melee began, and the last frame's animation and its time (to tell a new blow from the same one). */
+  windStart: number; prevAnim: number; prevAnimT: number }
 export function newPose3dMemory(): Pose3dMemory {
-  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0 };
+  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0,
+    blowT: -1, wind: 0, carry: [0, 0, 0], windStart: 0, prevAnim: -1, prevAnimT: 0 };
 }
 
 export type AttackStyle = 'swing' | 'shot' | 'cast' | 'bite' | 'butt';
@@ -316,6 +338,7 @@ const ATTACK_ANIMS = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Bi
 const FACE_AIM = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Channel, ANIM.Windup, ANIM.Slam, ANIM.Bite]);
 
 function styleOf(m: FigureModel, d: FigureDef, anim: number): AttackStyle {
+  if (m.apart) return 'swing';
   if (m.armLength === 0) return m.butt ? 'butt' : 'bite';
   if (anim === ANIM.Melee && (d.swing || d.mount === 'bow')) return 'swing';
   if (d.mount === 'bow') return 'shot';
@@ -428,6 +451,112 @@ function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride
     if (k > 0 && AP.hand === side && basisQ(AP.b, AP.n, qw)) slerp(qr, qw, k);
     useQ(WEAPON[side], relQ(qf, qr, qrel));
   }
+}
+
+// ---- floating parts (`APART`) ----
+
+/** The blow of a model whose parts float apart, for the root: wind W, swing S, reach R, and the height over the ground in game px. */
+const BLOW = { W: 0, S: 0, R: 0, y: 0 };
+const smooth = (a: number, b: number, x: number): number => ease((x - a) / (b - a));
+const sweepOf = (tau: number): number => {
+  if (tau < 0) return 0;
+  const K = APART.time;
+  return tau < MELEE_T ? smooth(0, MELEE_T, tau) : 1 - smooth(K.hold * MELEE_T, K.back * MELEE_T, tau);
+};
+const reachOf = (tau: number): number => (tau < 0 ? 0 : Math.sin(Math.pow(Math.min(1, tau / (APART.time.reach * MELEE_T)), APART.time.reachPow) * Math.PI));
+
+/**
+ * The clocks of the blow: `mem.blowT`, `mem.wind` and `mem.carry` for this frame's animation, and the result in `BLOW`. A melee or a
+ * wind-up that begins takes what is left of the blow before it as `carry`, so the swing and the reach do not jump (a second blow in
+ * the drift back starts where the parts are); `carry` then decays.
+ */
+function blowClock(mem: Pose3dMemory, anim: number, animT: number, dt: number): void {
+  const K = APART.time, melee = anim === ANIM.Melee, windup = anim === ANIM.Windup;
+  const wasBlow = mem.prevAnim === ANIM.Melee || mem.prevAnim === ANIM.Windup;
+  const meleeStarts = melee && (mem.prevAnim !== ANIM.Melee || animT < mem.prevAnimT);
+  if ((melee || windup) && (!wasBlow || (meleeStarts && mem.prevAnim === ANIM.Melee))) {   // neither before it, or a melee after a melee (its time began again)
+    const tau = melee ? animT : -1;
+    mem.carry[0] = sweepOf(mem.blowT) + mem.carry[0] - sweepOf(tau);
+    mem.carry[1] = reachOf(mem.blowT) + mem.carry[1] - reachOf(tau);
+  }
+  if (meleeStarts) mem.windStart = mem.wind;
+  if (melee) mem.blowT = animT;
+  else if (windup) { if (!wasBlow) mem.blowT = -1; }
+  else if (mem.blowT >= 0) { mem.blowT += dt; if (mem.blowT > K.back * MELEE_T) mem.blowT = -1; }
+  const follow = 1 - Math.exp(-dt * K.windIn);
+  if (windup) mem.wind += (1 - mem.wind) * follow;
+  else if (melee) mem.wind = mem.windStart * (1 - smooth(0, K.windOut * MELEE_T, animT));
+  else mem.wind -= mem.wind * follow;
+  BLOW.W = mem.wind; BLOW.S = sweepOf(mem.blowT) + mem.carry[0]; BLOW.R = reachOf(mem.blowT) + mem.carry[1];
+  const keep = Math.exp(-dt * K.carry);
+  mem.carry[0] *= keep; mem.carry[1] *= keep; mem.carry[2] *= keep;
+  mem.prevAnim = anim; mem.prevAnimT = animT;
+}
+
+/** three.js's Quaternion.setFromEuler for the order YXZ (the try-out's order for the arms). */
+function eulerYXZ(x: number, y: number, z: number, out: Q4): Q4 {
+  const c1 = Math.cos(x / 2), c2 = Math.cos(y / 2), c3 = Math.cos(z / 2), s1 = Math.sin(x / 2), s2 = Math.sin(y / 2), s3 = Math.sin(z / 2);
+  out[0] = s1 * c2 * c3 + c1 * s2 * s3; out[1] = c1 * s2 * c3 - s1 * c2 * s3; out[2] = c1 * c2 * s3 - s1 * s2 * c3; out[3] = c1 * c2 * c3 + s1 * s2 * s3;
+  return out;
+}
+type Drift = readonly (readonly [number, number, number])[];
+const dv: V3 = [0, 0, 0], tv: V3 = [0, 0, 0];
+/** One part's slow drift: `[amplitude, rad/s, share of the phase]` per axis, at clock `t` and phase `ph`, into `out`. */
+function driftOf(spec: Drift, t: number, ph: number, out: V3): V3 {
+  for (let i = 0; i < 3; i++) out[i] = spec[i][0] * Math.sin(spec[i][1] * t + spec[i][2] * ph);
+  return out;
+}
+
+/**
+ * The pose of a model whose parts float apart (`FigureModel.apart`): the hips lean and turn into the blow, the head and each arm drift
+ * on their own (a loose shift and a small turn), a blow moves the striking arm's root as well as turning it, and in the ambush the parts
+ * drift in from `APART.inside`. A sleeper does not lie down: it hangs lower, the head drooped. The root's height goes to `BLOW.y`.
+ */
+function apartPose(m: FigureModel, mem: Pose3dMemory, asleep: boolean, anim: number, animT: number, HJ: number, t: number): void {
+  const B = APART.body, ST = APART.strike, ph = mem.phase;
+  const W = asleep ? 0 : BLOW.W, S = asleep ? 0 : BLOW.S, R = asleep ? 0 : BLOW.R;
+  locals[HIPS].rz = -mem.lean + FLOAT.hitLean * HJ + B.lean[0] * W + B.lean[1] * R;
+  locals[HIPS].ry = B.yaw[0] * W + B.yaw[1] * S;
+  // The ambush: how far each part has come out of the smoke (1: at its place).
+  const form = anim === ANIM.Ambush ? smooth(APART.form[0], APART.form[1], animT / AMBUSH_WARNING) : 1;
+  const place = (L: BoneLocal, b: number): void => {
+    if (form >= 1) return;
+    L.tx = APART.inside[0] - m.pivots[b * 3] + (L.tx - (APART.inside[0] - m.pivots[b * 3])) * form;
+    L.ty = APART.inside[1] - m.pivots[b * 3 + 1] + (L.ty - (APART.inside[1] - m.pivots[b * 3 + 1])) * form;
+    L.tz = APART.inside[2] - m.pivots[b * 3 + 2] + (L.tz - (APART.inside[2] - m.pivots[b * 3 + 2])) * form;
+  };
+  const head = locals[HEAD];
+  if (asleep) head.rz = APART.asleep.droop;
+  else {
+    driftOf(APART.head.at, t, ph, dv);
+    head.tx = dv[0] + APART.headBlow[0] * R; head.ty = dv[1] + APART.headBlow[1] * R; head.tz = dv[2];
+    driftOf(APART.head.turn, t, ph, tv);
+    head.rx = tv[0]; head.ry = tv[1]; head.rz = tv[2] + APART.head.droop;
+    place(head, HEAD);
+  }
+  if (!asleep) for (let side = 0; side < 2; side++) {
+    const sd = side === 0 ? 1 : -1, aph = ph + sd * 1.3, arm = locals[ARM[side]], hand = locals[HAND[side]];
+    driftOf(APART.arm.at, t, aph, dv); driftOf(APART.arm.turn, t, aph, tv);
+    let rx = tv[0], ry = tv[1], rz = tv[2], ex = APART.arm.elbow[0] * Math.sin(APART.arm.elbow[1] * t + APART.arm.elbow[2] * aph);
+    if (side === 0) {
+      dv[0] += ST.at[0][0] * W + ST.at[0][1] * S + ST.at[0][2] * R;
+      dv[1] += ST.at[1][0] * W + ST.at[1][1] * S + ST.at[1][2] * R;
+      dv[2] += sd * (ST.at[2][0] * W + ST.at[2][1] * S + ST.at[2][2] * R);
+      rx += sd * (ST.turn[0][0] * W + ST.turn[0][1] * S + ST.turn[0][2] * R);
+      ry += sd * (ST.turn[1][0] * W + ST.turn[1][1] * S + ST.turn[1][2] * R);
+      rz += ST.turn[2][0] * W + ST.turn[2][1] * S + ST.turn[2][2] * R;
+      ex += ST.elbow[0] * W + ST.elbow[1] * S + ST.elbow[2] * R;
+    } else {
+      dv[0] += APART.other.at[0] * R; dv[1] += APART.other.at[1] * R; dv[2] += sd * APART.other.at[2] * R;
+      rz += APART.other.turn * R;
+    }
+    arm.tx = dv[0]; arm.ty = dv[1]; arm.tz = dv[2];
+    place(arm, ARM[side]);
+    useQ(ARM[side], eulerYXZ(rx, ry, rz, qa));
+    hand.rz = ex;
+  }
+  BLOW.y = asleep ? APART.asleep.hover : APART.hover + B.lift[0] * W + B.lift[1] * R;
+  if (!asleep) for (const b of FLOAT.bob) BLOW.y += b[0] * Math.sin(b[1] * t + b[2] * ph);
 }
 
 export function newPose(yaw: number): Pose3d {
@@ -594,13 +723,21 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       if (l.lower >= 0) locals[l.lower].rz = -(FLOAT.knee[0] + FLOAT.knee[1] * D);
     }
     limp = -(FLOAT.arm[0] + FLOAT.arm[1] * D) + 0.03 * Math.sin(0.8 * t + 2 * ph);
-    head.rz = -FLOAT.head;
-    locals[HIPS].rz = -mem.lean + FLOAT.hitLean * HJ;
-    body.sy = 1 + rise;
-    if (!asleep) { floatY = FLOAT.hover; for (const b of FLOAT.bob) floatY += b[0] * Math.sin(b[1] * t + b[2] * ph); }
-    // The swipe: the body twists and leans into the blow, the head keeps looking at the target.
-    if (m.swipe && k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }
-    if (HJ) body.sy *= 1 - 0.1 * Math.abs(HJ);
+    if (m.apart) {
+      // Parts that float apart: their own pose and blow (`apartPose`); no legs, no limp arms.
+      if (asleep) { mem.blowT = -1; mem.wind = 0; mem.carry[0] = mem.carry[1] = mem.carry[2] = 0; mem.prevAnim = -1; BLOW.W = BLOW.S = BLOW.R = 0; }
+      else blowClock(mem, anim, animT, dt);
+      apartPose(m, mem, asleep, anim, animT, HJ, t);
+      floatY = BLOW.y;
+    } else {
+      head.rz = -FLOAT.head;
+      locals[HIPS].rz = -mem.lean + FLOAT.hitLean * HJ;
+      body.sy = 1 + rise;
+      if (!asleep) { floatY = FLOAT.hover; for (const b of FLOAT.bob) floatY += b[0] * Math.sin(b[1] * t + b[2] * ph); }
+      // The swipe: the body twists and leans into the blow, the head keeps looking at the target.
+      if (m.swipe && k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }
+      if (HJ) body.sy *= 1 - 0.1 * Math.abs(HJ);
+    }
   } else {
     if (walking) {
       // Walking: the legs swing in turn, the knee of the leg coming forward bends back, the body dips as the legs spread (no hop).
@@ -635,8 +772,10 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
 
   // ---- the arms and what they hold ----
   // A floating model's arms hang limp, hand and weapon bones at rest; only a model with the swipe raises the arm its attack uses.
+  const apart = floating && !!m.apart;   // its arms are posed by `apartPose`
   const limpArms = floating && !(m.swipe && k > 0);
-  if (limpArms) {
+  if (apart) { /* done above */ }
+  else if (limpArms) {
     if (m.armLength > 0) for (let side = 0; side < 2; side++) locals[ARM[side]].rz = limp;
   } else if (m.armLength > 0 && m.elbow !== undefined) elbowArms(m, d, k, 0.16 + 0.05 * w + 0.3 * armAir * w, th * 1.15 * GAIT.armSwing, 0.04 * breath * idle, floating ? limp : undefined);
   else if (m.armLength > 0) {
@@ -677,10 +816,10 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (!asleep && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
   // The steps (lunge, jolt, shiver) are the game's px, scaled by the game's figure scale and the fall shrink as the card scales its own.
   const gameScale = (d.scale ?? 1) * fallK;
-  R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back) * gameScale;   // the butt rears back, the lunge goes forward
+  R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back - (apart ? APART.body.back * BLOW.W : 0)) * gameScale;   // the butt rears back, the lunge goes forward; a wind-up draws the floating body back
   R.y = floating ? floatY : bob * m.scale;   // the hover is the game's px, as the lunge is
-  if (windup) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
-  if (asleep) {
+  if (windup && !apart) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
+  if (asleep && !apart) {
     R.roll = Math.PI / 2;
     R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground
   }

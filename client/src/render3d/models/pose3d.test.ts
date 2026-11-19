@@ -5,7 +5,8 @@ import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
 import { buildJob } from './build';
-import { ATTACK_IN_SECS, BUTT, ELBOW, FLOAT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, LUNGE_SECS, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { AMBUSH_WARNING } from '../../game/shadeHaze';
+import { APART, ATTACK_IN_SECS, BUTT, ELBOW, FLOAT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, LUNGE_SECS, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
@@ -1154,8 +1155,9 @@ describe('the floating gait', () => {
   for (const k of SPECTRES) {
     describe(k, () => {
       const m = tube(k), d = tdef(k);
-      // The Shade's old body (legs, torso, limp arms) is gone: R2 replaces these cases.
-      const oldBody = k === 'shade' ? it.skip : it;
+      // The cases of a body with legs and limp arms (the Ghost); the Shade's parts float apart (see 'floating parts').
+      const oldBody = ((name: string, fn: () => void, timeout?: number): void => { if (k === 'ghost') it(name, fn, timeout); }) as typeof it;
+      const hover = m.apart ? APART.hover : FLOAT.hover;
 
       oldBody('is a floating model with legs and arms', () => {
         expect(m.gait).toBe('float');
@@ -1167,8 +1169,8 @@ describe('the floating gait', () => {
         const mem = settled(), ys: number[] = [];
         for (let i = 0; i < 20 * 60; i++) ys.push(poseFigure(m, d, view(), STEP, mem).root.y);
         for (let i = 0; i < 120; i++) {
-          expect(ys[i]).toBeGreaterThanOrEqual(FLOAT.hover - 1.0);
-          expect(ys[i]).toBeLessThanOrEqual(FLOAT.hover + 1.0);
+          expect(ys[i]).toBeGreaterThanOrEqual(hover - 1.0);
+          expect(ys[i]).toBeLessThanOrEqual(hover + 1.0);
           expect(ys[i + 1], `frame ${i}`).not.toBe(ys[i]);
         }
         // Frame i is the clock (i + 1) / 60: the first bob term repeats after 6.98 s, the others do not.
@@ -1255,23 +1257,11 @@ describe('the floating gait', () => {
           expect(b.root).toEqual(a.root);
         }
         const s = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), STEP, settled());
-        expect(s.root.roll).toBeCloseTo(Math.PI / 2, 6);
+        if (!m.apart) expect(s.root.roll).toBeCloseTo(Math.PI / 2, 6);   // a body that floats apart does not lie down (see 'floating parts')
         expect(s.asleep).toBe(true);
       }, SLOW);
     });
   }
-
-  describe.skip('the Shade, in a melee (R2 replaces this)', () => {
-    it('does not swing its arms', () => {
-      const m = tube('shade'), d = tdef('shade'), mem = settled();
-      const standing = copyPose(poseFigure(m, d, view(), 0, mem));
-      for (const animT of [0, 0.05, MELEE_T / 2, MELEE_T, 1.5 * MELEE_T]) {
-        const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT }), 0, mem);
-        for (const arm of [ARM_R, ARM_L]) expect(Math.abs(turnOf(m, p, arm) - turnOf(m, standing, arm)), `animT ${animT}`).toBeLessThan(0.05);
-        expect(p.attack).not.toBeNull();
-      }
-    }, SLOW);
-  });
 
   describe('the Ghost, swiping', () => {
     const m = tube('ghost'), d = tdef('ghost');
@@ -1325,13 +1315,130 @@ describe('the floating gait', () => {
     }, SLOW);
   });
 
-  it.skip('swipes with straight arms too (a model without an elbow that has the swipe flag; R2 replaces this)', () => {
-    const base = tube('shade'), m: FigureModel = { ...base, swipe: true }, d = tdef('shade'), mem = settled();
-    const standing = copyPose(poseFigure(m, d, view(), 0, mem));
-    const limpR = hang(m, standing, ARM_R), limpL = hang(m, standing, ARM_L);
-    const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, mem);
-    expect(angle(hang(m, p, ARM_R), limpR)).toBeGreaterThan(0.8);
-    expect(angle(hang(m, p, ARM_L), limpL)).toBeLessThan(0.05);
-    expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.1);
-  }, SLOW);
+  describe('floating parts (the Shade)', () => {
+    const m = tube('shade'), d = tdef('shade'), gs = d.scale ?? 1;
+    type Part = 'head' | 'armR' | 'armL';
+    const PARTS: Part[] = ['head', 'armR', 'armL'];
+    /** Where a bone's pivot is in the model's frame, before the root (the pivot of the bone itself). */
+    const at = (p: Pose3d, name: (typeof BONES)[number]): [number, number, number] => apply(p, bone(name), pivot(m, name));
+    const off = (p: Pose3d, name: Part): [number, number, number] => { const a = at(p, name), q = pivot(m, name); return [a[0] - q[0], a[1] - q[1], a[2] - q[2]]; };
+    const len = (v: number[]): number => Math.hypot(v[0], v[1], v[2]);
+    const dist = (a: number[], b: number[]): number => len([a[0] - b[0], a[1] - b[1], a[2] - b[2]]);
+    const hipsYaw = (p: Pose3d): number => Math.asin(p.bones[HIPS * 12 + 2]);
+    /** The right wrist: the elbow (the hand bone's pivot) plus the forearm of the description (`FOREARM` in descs/shade.ts). */
+    const wrist = (p: Pose3d): [number, number, number] => { const q = pivot(m, 'handR'); return apply(p, bone('handR'), [q[0] + 2.4, q[1] - 3.0, q[2] - 0.6]); };
+    const standFor = (secs: number, mem = settled()): Pose3d => { let p!: Pose3d; for (let i = 0; i < Math.round(secs / STEP); i++) p = poseFigure(m, d, view(), STEP, mem); return p; };
+    /** A wind-up held for 0.5 s, then the melee's animT from 0 to `to`; the poses of the melee. */
+    const strike = (mem: Pose3dMemory, to = MELEE_T): Pose3d[] => {
+      for (let i = 0; i < 30; i++) poseFigure(m, d, view({ anim: ANIM.Windup, animT: i * STEP }), STEP, mem);
+      const out: Pose3d[] = [];
+      for (let i = 0; i <= Math.round(to * 120); i++) out.push(copyPose(poseFigure(m, d, view({ anim: ANIM.Melee, animT: Math.min(to, i / 120) }), 1 / 120, mem)));
+      return out;
+    };
+
+    it('drifts each part on its own by a fraction of a pixel, out of step', () => {
+      const mem = settled(), peak = { head: 0, armR: 0, armL: 0 };
+      for (let i = 0; i < 20 * 60; i++) {
+        const p = poseFigure(m, d, view(), STEP, mem);
+        for (const n of PARTS) peak[n] = Math.max(peak[n], len(off(p, n)));
+        expect(dist(off(p, 'head'), off(p, 'armR'))).toBeGreaterThan(1e-6);
+        expect(dist(off(p, 'armR'), off(p, 'armL'))).toBeGreaterThan(1e-6);
+        expect(dist(off(p, 'head'), off(p, 'armL'))).toBeGreaterThan(1e-6);
+      }
+      // The brief's 0.6 px peak is not met by its own numbers: the arm's three amplitudes (0.35, 0.45, 0.35) can add up to 0.667 px, measured 0.668 in 20 s.
+      for (const n of PARTS) { expect(peak[n], n).toBeGreaterThan(0.2); expect(peak[n], n).toBeLessThan(0.7); }
+      const a = settled({ phase: 0 }), b = settled({ phase: 2 });
+      expect(dist(off(standFor(3, a), 'armR'), off(standFor(3, b), 'armR'))).toBeGreaterThan(0.05);
+    }, SLOW);
+
+    it('hovers at APART.hover and bobs by the Ghost\'s bob', () => {
+      const mem = settled();
+      for (let i = 0; i < 20 * 60; i++) {
+        const y = poseFigure(m, d, view(), STEP, mem).root.y;
+        expect(y).toBeGreaterThanOrEqual(APART.hover - 1.0);
+        expect(y).toBeLessThanOrEqual(APART.hover + 1.0);
+      }
+    }, SLOW);
+
+    it('leans as the Ghost does when it moves, and nothing turns in time with its speed', () => {
+      const mem = settled(), arm: Record<'armR' | 'armL', number[]> = { armR: [], armL: [] };
+      let x = 0, p!: Pose3d;
+      for (let i = 0; i < 3 * 60; i++) { x += 50 * STEP; p = poseFigure(m, d, view({ anim: ANIM.Move, x, y: 0 }), STEP, mem); if (i >= 120) for (const n of ['armR', 'armL'] as const) arm[n].push(turnOf(m, p, bone(n))); }
+      expect(Math.abs(hipsTurn(p) + FLOAT.lean.max)).toBeLessThan(0.01);
+      for (const n of ['armR', 'armL'] as const) expect(Math.max(...arm[n]) - Math.min(...arm[n]), n).toBeLessThan(0.12);
+    }, SLOW);
+
+    it('winds up: the right hand rises and goes back, the hips turn, and nothing shivers', () => {
+      const mem = settled(), standing = standFor(0.5);
+      let p!: Pose3d;
+      for (let i = 0; i < 30; i++) {
+        p = poseFigure(m, d, view({ anim: ANIM.Windup, animT: i * STEP }), STEP, mem);
+        expect(p.root.z, `frame ${i}`).toBe(0);
+      }
+      const hr = at(p, 'handR'), hs = at(standing, 'handR');
+      expect(hr[1] - hs[1]).toBeGreaterThan(2);
+      expect(hr[0]).toBeLessThan(hs[0]);
+      expect(Math.abs(hipsYaw(p) - APART.body.yaw[0])).toBeLessThan(0.02);
+      expect(Math.abs(p.root.x + APART.body.back * gs)).toBeLessThan(0.05);
+    }, SLOW);
+
+    it('strikes: the claw crosses the front, the arm reaches, the head leans in, the other arm goes back, the lunge is the game\'s', () => {
+      const mem = settled(), standing = standFor(0.5), frames = strike(mem);
+      let lo = Infinity, hi = -Infinity;
+      for (const p of frames) { const z = wrist(p)[2]; lo = Math.min(lo, z); hi = Math.max(hi, z); expect(p.attack?.style).toBe('swing'); }
+      expect(lo).toBeLessThan(0);
+      expect(hi).toBeGreaterThan(0);
+      const last = frames[frames.length - 1];
+      expect(at(last, 'armR')[0] - at(standing, 'armR')[0]).toBeGreaterThan(5);
+      expect(at(last, 'head')[0] - at(standing, 'head')[0]).toBeGreaterThan(1);
+      expect(at(last, 'armL')[0]).toBeLessThan(at(standing, 'armL')[0]);
+      const mid = frames[Math.round(LUNGE_SECS / 2 * 120)];
+      expect(Math.abs(mid.root.x - d.lunge! * gs)).toBeLessThan(0.2);
+    }, SLOW);
+
+    it('drifts back after the blow: still off 0.3 s later, home after 5 MELEE_T and a little', () => {
+      const mem = settled(), ref = settled();
+      strike(mem);
+      let p!: Pose3d, q!: Pose3d, t = 0;
+      for (let i = 0; i < 30; i++) poseFigure(m, d, view(), STEP, ref);   // the standing figure's clock matches: the wind-up's 30 frames
+      for (let i = 0; i <= Math.round(MELEE_T * 120); i++) poseFigure(m, d, view(), 1 / 120, ref);
+      const secs = (s: number): void => { for (const stop = t + s; t < stop - 1e-9; t += STEP) { p = poseFigure(m, d, view({ anim: ANIM.Idle }), STEP, mem); q = poseFigure(m, d, view(), STEP, ref); } };
+      secs(0.3);
+      expect(dist(off(p, 'armR'), off(q, 'armR'))).toBeGreaterThan(1);
+      secs(5 * MELEE_T);
+      for (const n of PARTS) expect(dist(off(p, n), off(q, n)), n).toBeLessThan(0.6);
+    }, SLOW);
+
+    it('a second blow 0.4 s after the first began moves no bone by more than 1 px between the frames around its start', () => {
+      const mem = settled();
+      for (let i = 0; i < 60; i++) poseFigure(m, d, view(), STEP, mem);
+      // The first melee begins; its animation runs 0.4 s (animT keeps counting), then the next melee begins with animT 0 again.
+      let prev!: Pose3d;
+      for (let i = 0; i < 24; i++) prev = poseFigure(m, d, view({ anim: ANIM.Melee, animT: i * STEP }), STEP, mem);
+      prev = copyPose(prev);
+      const q = poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), STEP, mem);
+      for (const n of ['head', 'armR', 'armL', 'handR', 'handL'] as const) expect(dist(at(prev, n), at(q, n)), n).toBeLessThan(1);
+    }, SLOW);
+
+    it('sweeps from the hang when no wind-up came before it', () => {
+      const mem = settled(), standing = standFor(2, mem);
+      const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), STEP, mem);
+      expect(dist(at(p, 'armR'), at(standing, 'armR'))).toBeLessThan(0.5);
+    }, SLOW);
+
+    it('forms from the smoke in the ambush', () => {
+      const mem = settled();
+      const early = poseFigure(m, d, view({ anim: ANIM.Ambush, animT: 0.3 * AMBUSH_WARNING }), STEP, mem);
+      for (const n of PARTS) expect(dist(at(early, n), [...APART.inside]), n).toBeLessThan(0.5);
+      const late = poseFigure(m, d, view({ anim: ANIM.Ambush, animT: 1.0 * AMBUSH_WARNING }), STEP, mem);
+      for (const n of PARTS) expect(len(off(late, n)), n).toBeLessThan(0.7);
+    }, SLOW);
+
+    it('does not lie down asleep: it hangs lower with the head drooped', () => {
+      const p = poseFigure(m, d, view({ effects: 1 << EFFECT.Sleep }), STEP, settled());
+      expect(p.root.roll).toBe(0);
+      expect(p.root.y).toBeCloseTo(APART.asleep.hover, 2);
+      expect(turnOf(m, p, bone('head'))).toBeCloseTo(APART.asleep.droop, 6);
+    }, SLOW);
+  });
 });

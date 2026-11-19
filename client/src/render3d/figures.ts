@@ -934,7 +934,7 @@ export class Figures3d {
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
-    const bite = m.armLength > 0 || m.butt || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
+    const bite = m.armLength > 0 || m.butt || m.gait === 'float' || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
     const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale

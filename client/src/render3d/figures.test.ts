@@ -757,6 +757,10 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(phaseOf(fg, 7)).toBe(ghostPhase(7));
     });
 
+    it.each([KIND.Ghost, KIND.Shade])('gives kind %i no fangs in a wind-up either', (kind) => {
+      expect(one(spec(7, kind, { anim: ANIM.Windup })).figs[0].bite).toBe(-1);
+    });
+
     it('draws a Shade whole when idle: alpha 1, eyes open, no flare, fog and form 1', () => {
       const out = one(spec(7, KIND.Shade));
       const b = out.models[0];
