@@ -25,12 +25,13 @@ for (const [upper, lower, sd] of [['leg0', 'leg1', 1], ['leg2', 'leg3', -1]] as 
 }
 
 // ---- the torso: a lean tube, narrow at the waist, wider at the chest ----
-const torso: TubePoint[] = [{ p: [0, 7.2], r: 1.75, wide: 1.15 }, { p: [0.1, 9.4], r: 1.7, wide: 1.2 }, { p: [0.3, 11.5], r: 2.0, wide: 1.3 }];
+const chestR = 2.0, chestW = 1.52, armR = 0.6;
+const torso: TubePoint[] = [{ p: [0, 7.2], r: 1.75, wide: 1.15 }, { p: [0.1, 9.4], r: 1.7, wide: 1.2 }, { p: [0.3, 11.5], r: chestR, wide: chestW }];
 add({ shape: { tube: torso, opts: { K: 20, N: 14, ref: [0, 0, 1], cap: 0.7 } }, stage: 'body', bone: 'body', torso: true });
 add({ shape: { tube: [{ p: [0.3, 11.2], r: 0.7 }, { p: [0.4, 12.9], r: 0.7 }], opts: { K: 8, N: 8, cap: 0.5 } }, stage: 'body', bone: 'body' });
 
 // ---- the arms: long, limp, without an elbow, ending in a small hand ----
-const armLen = 5.6, shoulderX = 0.3, shoulderY = 11.5, shoulderZ = 3.4;
+const armLen = 5.6, shoulderX = 0.3, shoulderY = 11.5, shoulderZ = chestR * chestW + 0.35 * armR;   // the arm sinks into the chest, as the Knight's does
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const z = sd * shoulderZ;
   add({ shape: { tube: [{ p: [0, 0, 0], r: 0.6 }, { p: [0, -armLen, 0], r: 0.5 }], opts: { K: 12, N: 8 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}` });

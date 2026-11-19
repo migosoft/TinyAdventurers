@@ -7,7 +7,7 @@ import { expectFinite, expectStreams } from './modelChecks.testutil';
 import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube, type TubePoint } from './tubes';
-import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
+import { DESCS, MODEL_OF_KIND, TUBE_DESCS, floats, type TubeKey } from './table';
 import { DEMON_EYE, HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
 import { KNIGHT_ACCENT, KNIGHT_PIECES, KNIGHT_SHIELD } from './descs/npcKnight';
@@ -786,6 +786,19 @@ describe('the spectres', () => {
     expect(m.ranges.some((r) => r.stage === STAGES.indexOf('hair') && r.count > 0)).toBe(false);
     expect(d.pieces).toHaveLength(KNIGHT_PIECES.length - 3);
     expect(d.pieces.every((p) => p.line === 0)).toBe(true);
+  });
+  it("the Shade's arms sink into the chest at the shoulder: the arm's inner edge lies inside the chest's half width", () => {
+    const d = TUBE_DESCS.shade, chest = d.pieces.find((p) => p.torso)!.shape as { tube: readonly TubePoint[] };
+    const top = chest.tube[chest.tube.length - 1], half = top.r * (top.wide ?? 1);   // across z, as the Knight's shoulderZ is derived
+    for (const [bone, sd] of [['armR', 1], ['armL', -1]] as const) {
+      const arm = d.pieces.find((p) => p.bone === bone && 'tube' in p.shape)!, r = (arm.shape as { tube: readonly TubePoint[] }).tube[0].r;
+      expect(Math.abs(arm.at![2]) - r, bone).toBeLessThan(half);
+      expect(Math.sign(arm.at![2])).toBe(sd);
+    }
+  });
+  it('floats() is true for the Ghost and the Shade only', () => {
+    expect(floats(KIND.Ghost)).toBe(true); expect(floats(KIND.Shade)).toBe(true);
+    expect(floats(KIND.Knight)).toBe(false); expect(floats(9999)).toBe(false);
   });
   it('the Shade is black, lean and fogged', () => {
     const m = buildJob('shade', null), g = buildJob('ghost', null);

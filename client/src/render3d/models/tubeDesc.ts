@@ -120,7 +120,7 @@ export interface TubeDesc {
   /** Half length and half width of the ground oval, page px at size 1. */
   footprint: readonly [number, number];
   hop?: number;
-  /** The figure floats: no legs step, nothing moves in time with the speed (pose3d.ts). */
+  /** The figure floats: no legs step, nothing moves in time with the speed (pose3d.ts). Two-legged descriptions (`stance: 'two'`) only; the builder ignores it otherwise. */
   float?: true;
   /** With `float`: a melee swings the arm from its limp hang (the Ghost; the user, 2026-11-19). Without it the arms stay limp in a blow (the Shade). */
   swipe?: true;
