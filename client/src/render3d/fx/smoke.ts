@@ -9,7 +9,7 @@ import { smooth, type Axes } from './shapes';
 
 /** The look and the way it moves, first values for the user's eye. Sizes and speeds in model px, rates per second, ranges [low, high]. */
 export const SMOKE = {
-  wisps: 340, life: [1.4, 3.0], follow: 0.88,
+  wisps: 340, life: [1.4, 3.0], leave: [2, 9],                 // px the body may leave a wisp behind: the wisp starts to fade at the first, is gone (and born again) at the second
   core: { alpha: 0.97, size: [1.1, 0.5], tall: 1.35, wobble: 0.05, points: 13, pairOver: 2, pairAt: 0.55, pairR: 0.5 },
   rate: { top: 30, tail: 12, from: 0.45, part: 40 },          // 1/s: how fast a core point follows its place
   wisp: { alpha: 0.6, tall: 2.2, out: [0.3, 0.8], rise: [-0.15, 0.6], jitter: 0.8, wig: [0.45, 1.2], size: [0.75, 1.5], grow: [0.8, 0.7], black: 0.45, tone: [0.25, 0.85] },   // px, px/s
@@ -44,7 +44,9 @@ export interface CorePoint {
   /** The point's angle round the foot while forming. */
   ang: number;
 }
-export interface Wisp { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; size: number; tone: number; seed: number; a: number }
+export interface Wisp { x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; size: number; tone: number; seed: number; a: number;
+  /** How far the body has moved since the wisp's birth (model px). */
+  left: number }
 
 /** The Catmull-Rom of the line at `u` (0..1): [x, y, half depth, half width]. */
 function lineAt(line: SmokeSpec['line'], u: number, out: number[]): void {
@@ -82,7 +84,7 @@ export class Smoke {
     }
     for (const e of spec.on) this.core.push(this.point(BONES.indexOf(e.bone), e.at, e.r, e.weight, e.rise, R.part, -1, 0, true, false, e.r > 1));
     const n = Math.round(SMOKE.wisps * detail);
-    for (let i = 0; i < n; i++) this.wisps.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 1, life: 1, size: 1, tone: 0, seed: rnd(), a: 0 });
+    for (let i = 0; i < n; i++) this.wisps.push({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 1, life: 1, size: 1, tone: 0, seed: rnd(), a: 0, left: 0 });
     this.quads = this.core.filter((c) => c.patch).length + n;
   }
 
@@ -123,7 +125,7 @@ export class Smoke {
     w.vx = ax.right[0] * cs * out + (rnd() - 0.5) * W.jitter * px;
     w.vz = ax.right[2] * cs * out + (rnd() - 0.5) * W.jitter * px;
     w.vy = (W.rise[0] + rnd() * (W.rise[1] - W.rise[0])) * c.rise * px;
-    w.age = 0; w.a = a;
+    w.age = 0; w.a = a; w.left = 0;
     w.life = SMOKE.life[0] + rnd() * (SMOKE.life[1] - SMOKE.life[0]);
     w.size = (W.size[0] + rnd() * (W.size[1] - W.size[0])) * (SHAPE.sizeBase + SHAPE.sizeR * c.r);
     w.tone = rnd() < W.black ? 0 : W.tone[0] + rnd() * (W.tone[1] - W.tone[0]);
@@ -151,14 +153,15 @@ export class Smoke {
       const k = 1 - Math.exp(-dt * c.rate);
       c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; c.z += (c.tz - c.z) * k;
     }
-    const W = SMOKE.wisp, fx = SMOKE.follow * moved[0], fz = SMOKE.follow * moved[1];
+    const W = SMOKE.wisp, away = Math.hypot(moved[0], moved[1]) / px;
     for (const w of this.wisps) {
-      w.age += dt / w.life;
-      if (w.age >= 1) this.birth(w, ax, px);
+      w.age += dt / w.life; w.left += away;
+      // a wisp the body has left far behind is invisible: it is born again at once
+      if (w.age >= 1 || w.left >= SMOKE.leave[1]) this.birth(w, ax, px);
       const wig = W.wig[0] * Math.sin(W.wig[1] * this.t + SHAPE.wigSeed * w.seed) * px;
-      w.x += (w.vx + ax.right[0] * wig) * dt + fx;
+      w.x += (w.vx + ax.right[0] * wig) * dt;
       w.y += (w.vy + ax.right[1] * wig) * dt;
-      w.z += (w.vz + ax.right[2] * wig) * dt + fz;
+      w.z += (w.vz + ax.right[2] * wig) * dt;
     }
   }
 
@@ -190,7 +193,7 @@ export class Smoke {
     for (const w of this.wisps) {
       const m = w.tone * smooth(SHAPE.hue[0], SHAPE.hue[1], w.age), fade = smooth(0, SHAPE.fadeIn, w.age) * (1 - smooth(SHAPE.fadeOut[0], SHAPE.fadeOut[1], w.age));
       emit(out, ax, w.x, w.y, w.z, w.size * (W.grow[0] + W.grow[1] * w.age) * px * grow, W.tall,
-        B[0] + (tone[0] - B[0]) * m, B[1] + (tone[1] - B[1]) * m, B[2] + (tone[2] - B[2]) * m, W.alpha * fade * form * alpha, w.seed, clk);
+        B[0] + (tone[0] - B[0]) * m, B[1] + (tone[1] - B[1]) * m, B[2] + (tone[2] - B[2]) * m, W.alpha * fade * (1 - smooth(SMOKE.leave[0], SMOKE.leave[1], w.left)) * form * alpha, w.seed, clk);
     }
   }
 }

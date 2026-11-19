@@ -110,9 +110,9 @@ for (const [key, stand] of SPECTRES) {
     for (const [side, aim] of aims) shots.push({ name: `spectre-close-${key}-${side}-${light}`, q: `&at=spectre:${stand}&zoom=16&aim=${aim}${extra}${SPOT}`, need: [key] });
   }
 }
-// The Shade at game size (the standing place at zoom 2), with the purple tone (&tone=purple), and the walker at two clock values 0.5 s apart.
+// The Shade at game size (the standing place at zoom 2), with the grey tone (&tone=grey; the Shade's own is purple), and the walker at two clock values 0.5 s apart.
 shots.push({ name: 'spectre-shade-gamesize', q: `&at=spectre:3&zoom=2${SPOT}`, need: ['shade'] });
-shots.push({ name: 'spectre-shade-purple', q: `&at=spectre:3&zoom=8&tone=purple${SPOT}`, need: ['shade'] });
+shots.push({ name: 'spectre-shade-grey', q: `&at=spectre:3&zoom=8&tone=grey${SPOT}`, need: ['shade'] });
 for (const t of ['1.7', '2.2']) shots.push({ name: `spectre-shade-walk-t${t}`, q: `&at=spectre:4&zoom=8&slow=1000&t=${t}`, need: ['shade'] });
 // The pillar torches hang over the walkers (places 1 and 4): the Shade as a hole in front of the lit wall, the Ghost's own floor light, and the block whole.
 for (const [name, place] of [['ghost', 1], ['shade', 4]]) shots.push({ name: `spectre-torch-${name}-walk`, q: `&at=spectre:${place}&zoom=8&light=torch${SPOT}`, need: [name] });

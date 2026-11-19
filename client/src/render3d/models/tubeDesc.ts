@@ -28,7 +28,7 @@ export interface EyeSpec {
   core: number; ring: number;           // colours
   strength: number;                     // 0..1
 }
-/** The second tone mixed into the black smoke (linear rgb). Purple is kept for a later, stronger creature. */
+/** The second tone mixed into the black smoke (linear rgb). Purple is the Shade's; grey is the spare tone. */
 export const SMOKE_TONES = { grey: [0.105, 0.105, 0.125], purple: [0.13, 0.03, 0.26] } as const;
 /** A body of smoke (the effects draw it; `fx/smoke.ts`). Model px, rest pose. */
 export interface SmokeSpec {

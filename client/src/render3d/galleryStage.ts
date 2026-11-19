@@ -101,7 +101,7 @@ export interface GalleryOpts {
   aim: number | null;
   /** `&circles=1`: a ring on the ground under every figure of the line-up, the server's hit circle of its kind. */
   circles: boolean;
-  /** `&tone=purple`: every smoke body is drawn in the purple tone (null: the description's own tone). */
+  /** `&tone=grey`: every smoke body is drawn in the grey tone (null: the description's own tone). */
   smokeTone: readonly [number, number, number] | null;
 }
 
@@ -148,7 +148,7 @@ export function parseGallery(search: string): GalleryOpts {
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
     aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
     circles: q.get('circles') === '1',
-    smokeTone: q.get('tone') === 'purple' ? SMOKE_TONES.purple : null,
+    smokeTone: q.get('tone') === 'grey' ? SMOKE_TONES.grey : null,
   };
 }
 

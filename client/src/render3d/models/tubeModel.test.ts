@@ -831,11 +831,11 @@ describe('the spectres', () => {
       expect(l).toHaveLength(r.length);
       r.forEach((v, i) => v.forEach((x, k) => expect(l[i][k]).toBeCloseTo(x, 4)));
     });
-    it("carries the smoke's shape: the eleven points, the grey tone, thin smoke on hard parts only", () => {
+    it("carries the smoke's shape: the eleven points, the purple tone, thin smoke on hard parts only", () => {
       const s = m.spectre!.smoke!;
       expect(s.line).toEqual([[1.0, 17.0, 0.4, 0.6], [0.9, 16.0, 1.5, 2.8], [0.5, 14.2, 2.0, 4.6], [0.3, 12.2, 1.6, 2.8], [0.0, 10.2, 1.25, 1.8], [-0.4, 8.2, 1.15, 1.45],
         [-0.8, 6.2, 0.95, 1.05], [-0.6, 4.4, 0.8, 0.85], [0.2, 2.9, 0.62, 0.65], [0.7, 1.7, 0.42, 0.42], [0.2, 0.8, 0.14, 0.14]]);
-      expect(s.tone).toEqual(SMOKE_TONES.grey);
+      expect(s.tone).toEqual(SMOKE_TONES.purple);
       expect(s.on.length).toBe(11);
       for (const o of s.on) expect(['head', 'armR', 'handR', 'armL', 'handL']).toContain(o.bone);
     });

@@ -168,10 +168,10 @@ describe('the gallery stage', () => {
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
   });
 
-  it('&tone=purple gives the Shades the purple smoke; absent or any other value leaves the description\'s tone', () => {
-    expect(parseGallery('?focus=models&tone=purple').smokeTone).toEqual(SMOKE_TONES.purple);
+  it('&tone=grey gives the Shades the grey smoke; absent or any other value leaves the description\'s tone', () => {
+    expect(parseGallery('?focus=models&tone=grey').smokeTone).toEqual(SMOKE_TONES.grey);
     expect(parseGallery('?focus=models').smokeTone).toBeNull();
-    expect(parseGallery('?tone=grey').smokeTone).toBeNull();
+    expect(parseGallery('?tone=purple').smokeTone).toBeNull();
     expect(parseGallery('?tone=nope').smokeTone).toBeNull();
     expect(parseGallery('?tone=').smokeTone).toBeNull();
   });
