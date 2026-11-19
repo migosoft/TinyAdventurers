@@ -150,7 +150,7 @@ describe('the gallery stage', () => {
   it('&circles=1 draws the hit circle of every line-up figure: a monster its server radius, a hero the player radius', () => {
     expect(parseGallery('?focus=lineup&circles=1').circles).toBe(true);
     expect(parseGallery('?focus=lineup&circles=0').circles).toBe(false);
-    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 6, 6, 4, 5, 5, 4, 5, 5, 5, 6, 10, 5, 5, 6, 4, 6, 4, 4, 4, 4, 4]);
+    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 6, 6, 4, 5, 5, 4, 5, 5, 6, 5, 6, 10, 5, 5, 4, 6, 4, 4, 4, 4, 4]);
     const T = new FxTris(4096);
     lineupCircles(T);
     expect(T.n).toBe(LINEUP_KEYS.length * 64);

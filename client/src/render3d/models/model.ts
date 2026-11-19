@@ -59,6 +59,8 @@ export interface FigureModel {
   gait?: 'walk' | 'float';
   /** 'float' only: a melee swings the arm from its limp hang. */
   swipe?: true;
+  /** 'float' only: the parts float apart (the Shade): nothing joins them, a blow moves an arm's root. */
+  apart?: true;
   /** The description's spectre look (the Ghost, the Shade). */
   spectre?: SpectreSpec;
   /** A factor on the size of the held weapon (default 1). */

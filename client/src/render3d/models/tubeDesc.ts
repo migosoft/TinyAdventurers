@@ -28,8 +28,20 @@ export interface EyeSpec {
   core: number; ring: number;           // colours
   strength: number;                     // 0..1
 }
+/** The second tone mixed into the black smoke (linear rgb). Purple is kept for a later, stronger creature. */
+export const SMOKE_TONES = { grey: [0.105, 0.105, 0.125], purple: [0.13, 0.03, 0.26] } as const;
+/** A body of smoke (the effects draw it; `fx/smoke.ts`). Model px, rest pose. */
+export interface SmokeSpec {
+  /** The body's middle line from the hump down to the tail's tip: [x forward, y up, half depth, half width]. */
+  line: readonly (readonly [number, number, number, number])[];
+  tone: readonly [number, number, number];
+  /** Smoke the hard parts carry: a point on a bone, its radius, its share of the wisps, its rise factor. A point with `r` over 1 also gets a dense core patch. */
+  on: readonly { bone: Bone; at: Vec3; r: number; weight: number; rise: number }[];
+}
 /** What makes a figure a spectre (#359): the Ghost and the Shade. */
 export interface SpectreSpec {
+  /** A body of smoke round the hard parts (the Shade). */
+  smoke?: SmokeSpec;
   /** Drawn blended, nearest surface only. `peak`: the instance alpha that shows the approved look. */
   seeThrough?: { peak: number };
   eyes: EyeSpec;
@@ -124,5 +136,7 @@ export interface TubeDesc {
   float?: true;
   /** With `float`: a melee swings the arm from its limp hang (the Ghost; the user, 2026-11-19). Without it the arms stay limp in a blow (the Shade). */
   swipe?: true;
+  /** With `float`: the parts float apart. Nothing joins them; each drifts on its own and a blow moves an arm's root (pose3d.ts, `APART`). The description gives explicit pivots for armR, handR (the elbow), armL, handL and no `arms`. */
+  apart?: true;
   spectre?: SpectreSpec;
 }

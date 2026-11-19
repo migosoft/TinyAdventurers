@@ -118,7 +118,7 @@ for (const key of ['ghost', 'shade']) {
   shots.push({ name: `spectre-liquids-${key}-lava`, page: 'liquids', q: `&models=${key}&t=4.5&zoom=3`, need: [key] });
 }
 // The size line-up (#356): both halves, and the two spectres side by side (the Shade at place 16, the Ghost at 18).
-for (const place of [4, 14, 17]) shots.push({ name: `spectre-lineup-${place}`, q: `&focus=lineup&at=lineup:${place}&zoom=3&state=idle${STILL}`, need: ['ghost', 'shade'] });
+for (const place of [4, 11, 17]) shots.push({ name: `spectre-lineup-${place}`, q: `&focus=lineup&at=lineup:${place}&zoom=3&state=idle${STILL}`, need: ['ghost', 'shade'] });
 // Column 10 is the Imp, between the Necromancer (9) and the Knight (11) (#356): the three new kinds in view.
 for (const [name, effRow] of [['asleep', 0], ['top', 1], ['frozen', 2], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${effRow},10&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):

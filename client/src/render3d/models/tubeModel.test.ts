@@ -8,7 +8,7 @@ import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube, type TubePoint } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, floats, type TubeKey } from './table';
-import { DEMON_EYE, HUMAN_HEIGHT } from './tubeDesc';
+import { DEMON_EYE, HUMAN_HEIGHT, SMOKE_TONES } from './tubeDesc';
 import { robedDesc } from './descs/robed';
 import { KNIGHT_ACCENT, KNIGHT_PIECES, KNIGHT_SHIELD } from './descs/npcKnight';
 import { GHOST_ALPHA_MAX } from '../../game/anim/entityAlpha';
@@ -734,7 +734,7 @@ describe('the two-legged creatures', () => {
 describe('the tube descriptions', () => {
   // The limit of the tube models: a thinner tube is a sliver that flickers at game zoom. `wide` scales one axis of a ring, so a
   // point's thinnest half-width is r x min(1, wide). Checked for the two-legged descriptions (#356); the stag's antler tines (#357) are thinner.
-  for (const key of (Object.keys(TUBE_DESCS) as TubeKey[]).filter((k) => TUBE_DESCS[k].stance === 'two')) {
+  for (const key of (Object.keys(TUBE_DESCS) as TubeKey[]).filter((k) => TUBE_DESCS[k].stance === 'two' && k !== 'shade')) {   // the Shade's claws taper to a fine tip; its bones have their own test
     it(`${key}: no tube point is thinner than 0.35 px`, () => {
       const d = TUBE_DESCS[key], thin: string[] = [];
       d.pieces.forEach((p, i) => {
@@ -750,19 +750,7 @@ describe('the tube descriptions', () => {
 });
 
 describe('the spectres', () => {
-  /** The extent (model px x scale) in x and z of the pieces of the body, the legs and the arms (no hulls, no head, no eyes). */
-  const extent = (m: ReturnType<typeof buildJob>): [number, number] => {
-    const lo = [Infinity, Infinity], hi = [-Infinity, -Infinity], want = new Set(['legs', 'body', 'arms'].map((s) => STAGES.indexOf(s as (typeof STAGES)[number])));
-    for (const r of m.ranges) {
-      if (r.line || !want.has(r.stage)) continue;
-      for (const i of m.index.subarray(r.start, r.start + r.count)) {
-        const x = m.position[i * 3], z = m.position[i * 3 + 2];
-        lo[0] = Math.min(lo[0], x); hi[0] = Math.max(hi[0], x); lo[1] = Math.min(lo[1], z); hi[1] = Math.max(hi[1], z);
-      }
-    }
-    return [(hi[0] - lo[0]) * m.scale, (hi[1] - lo[1]) * m.scale];
-  };
-  for (const key of ['ghost', 'shade'] as const) {
+  for (const key of ['ghost'] as const) {
     describe(key, () => {
       const m = buildJob(key, null), d = TUBE_DESCS[key];
       it('has consistent streams and finite numbers', () => { expectStreams(m); expectFinite(m); });
@@ -776,9 +764,8 @@ describe('the spectres', () => {
       });
     });
   }
-  it('the Ghost swipes, the Shade does not', () => {
+  it('the Ghost swipes', () => {
     expect(buildJob('ghost', null).swipe).toBe(true);
-    expect(buildJob('shade', null).swipe).toBeUndefined();
   });
   it('the Ghost is the Knight without the shield and the comb, drawn blended', () => {
     const m = buildJob('ghost', null), d = TUBE_DESCS.ghost;
@@ -787,25 +774,95 @@ describe('the spectres', () => {
     expect(d.pieces).toHaveLength(KNIGHT_PIECES.length - 3);
     expect(d.pieces.every((p) => p.line === 0)).toBe(true);
   });
-  it("the Shade's arms sink into the chest at the shoulder: the arm's inner edge lies inside the chest's half width", () => {
-    const d = TUBE_DESCS.shade, chest = d.pieces.find((p) => p.torso)!.shape as { tube: readonly TubePoint[] };
-    const top = chest.tube[chest.tube.length - 1], half = top.r * (top.wide ?? 1);   // across z, as the Knight's shoulderZ is derived
-    for (const [bone, sd] of [['armR', 1], ['armL', -1]] as const) {
-      const arm = d.pieces.find((p) => p.bone === bone && 'tube' in p.shape)!, r = (arm.shape as { tube: readonly TubePoint[] }).tube[0].r;
-      expect(Math.abs(arm.at![2]) - r, bone).toBeLessThan(half);
-      expect(Math.sign(arm.at![2])).toBe(sd);
-    }
-  });
   it('floats() is true for the Ghost and the Shade only', () => {
     expect(floats(KIND.Ghost)).toBe(true); expect(floats(KIND.Shade)).toBe(true);
     expect(floats(KIND.Knight)).toBe(false); expect(floats(9999)).toBe(false);
   });
-  it('the Shade is black, lean and fogged', () => {
-    const m = buildJob('shade', null), g = buildJob('ghost', null);
-    for (let i = 0; i < m.position.length / 3; i++) if (m.skin[i * 4 + 1] === 0) expect([...m.look.subarray(i * 4, i * 4 + 4)]).toEqual([3 / 255, 2 / 255, 5 / 255, 3].map(Math.fround));
-    const [sx, sz] = extent(m), [gx, gz] = extent(g);
-    expect(sx / gx).toBeGreaterThan(0.7); expect(sx / gx).toBeLessThan(0.8);
-    expect(sz / gz).toBeGreaterThan(0.7); expect(sz / gz).toBeLessThan(0.8);
-    expect(m.spectre!.fog).toBe(true);
+  describe('the Shade, a head and two clawed arms that float apart (#359 round 2)', () => {
+    const m = buildJob('shade', null), d = TUBE_DESCS.shade, BLACK = [3 / 255, 2 / 255, 5 / 255, 3].map(Math.fround);
+    const verts = (bones: readonly (typeof BONES)[number][], mirror = false): [number, number, number][] => {
+      const idx = new Set(bones.map((b) => BONES.indexOf(b))), out: [number, number, number][] = [];
+      for (let i = 0; i < m.position.length / 3; i++) if (idx.has(m.skin[i * 4])) out.push([m.position[i * 3], m.position[i * 3 + 1], (mirror ? -1 : 1) * m.position[i * 3 + 2]]);
+      return out;
+    };
+    const claws = (b: 'handR' | 'handL') => d.pieces.filter((p) => p.bone === b && 'tube' in p.shape && p.shape.tube.length === 4);
+    const polyline = (p: TubePiece): number => {
+      const pts = (p.shape as { tube: readonly TubePoint[] }).tube;
+      let l = 0;
+      for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i].p[0] - pts[i - 1].p[0], pts[i].p[1] - pts[i - 1].p[1], (pts[i].p[2] ?? 0) - (pts[i - 1].p[2] ?? 0));
+      return l;
+    };
+    it('floats apart: no gait legs, a swipe, no hull, flat black, valid streams', () => {
+      expect(m.gait).toBe('float'); expect(m.apart).toBe(true); expect(m.swipe).toBe(true);
+      expect(m.lineIndex.length).toBe(0);
+      for (let i = 0; i < m.position.length / 3; i++) expect([...m.look.subarray(i * 4, i * 4 + 4)]).toEqual(BLACK);
+      expectStreams(m); expectFinite(m);
+    });
+    it('has no torso, body, leg, hat or weapon piece, no legs and no arms entry', () => {
+      expect(d.pieces.some((p) => p.torso)).toBe(false);
+      for (const b of ['body', 'leg0', 'leg1', 'leg2', 'leg3', 'hat', 'weaponR', 'weaponL'] as const) expect(d.pieces.some((p) => p.bone === b), b).toBe(false);
+      expect(d.legs).toHaveLength(0); expect(d.arms).toBeUndefined();
+    });
+    it('joins nothing: the head is over 1.5 px from either arm', () => {
+      const head = verts(['head']), arms = verts(['armR', 'handR']);
+      let min = Infinity;
+      for (const h of head) for (const a of arms) min = Math.min(min, Math.hypot(h[0] - a[0], h[1] - a[1], h[2] - a[2]));
+      expect(min).toBeGreaterThan(1.5);
+    });
+    it('keeps the bones and claws thick: every arm and claw tube point is 0.4 or more, but a claw tip', () => {
+      for (const p of d.pieces) {
+        if (!['armR', 'handR', 'armL', 'handL'].includes(p.bone) || !('tube' in p.shape)) continue;
+        const pts = p.shape.tube, claw = pts.length === 4;
+        // A claw tapers by its description's own radii (0.42, 0.34, 0.22, 0.03): only its base is held to 0.4 (the brief's "every point" contradicts its own claw radii).
+        pts.forEach((q, i) => { if (!claw || i === 0) expect(q.r, `${p.bone} point ${i}`).toBeGreaterThanOrEqual(0.4); });
+        if (claw) expect(pts.map((q) => q.r)).toEqual([0.42, 0.34, 0.22, 0.03]);
+      }
+    });
+    it('has five claw pieces on each hand, the left the right mirrored in z', () => {
+      for (const b of ['handR', 'handL'] as const) {
+        const c = claws(b).map(polyline).sort((x, y) => x - y);
+        expect(c).toHaveLength(5);
+        // the polyline is 1.04 of the claw's length (segments of 0.4, 0.34 and 0.3); the thumb is 2.6
+        expect(c[0]).toBeCloseTo(2.6 * 1.04, 6);
+        for (const l of c.slice(1)) { expect(l).toBeGreaterThanOrEqual(3.2); expect(l).toBeLessThanOrEqual(4.2); }
+      }
+      const key = (v: number[]) => v.map((x) => Math.round(x * 1e4)).join(',');
+      const r = verts(['armR', 'handR']).sort((a, b) => (key(a) < key(b) ? -1 : 1)), l = verts(['armL', 'handL'], true).sort((a, b) => (key(a) < key(b) ? -1 : 1));
+      expect(l).toHaveLength(r.length);
+      r.forEach((v, i) => v.forEach((x, k) => expect(l[i][k]).toBeCloseTo(x, 4)));
+    });
+    it("carries the smoke's shape: the eleven points, the grey tone, thin smoke on hard parts only", () => {
+      const s = m.spectre!.smoke!;
+      expect(s.line).toEqual([[1.0, 17.0, 0.4, 0.6], [0.9, 16.0, 1.5, 2.8], [0.5, 14.2, 2.0, 4.6], [0.3, 12.2, 1.6, 2.8], [0.0, 10.2, 1.25, 1.8], [-0.4, 8.2, 1.15, 1.45],
+        [-0.8, 6.2, 0.95, 1.05], [-0.6, 4.4, 0.8, 0.85], [0.2, 2.9, 0.62, 0.65], [0.7, 1.7, 0.42, 0.42], [0.2, 0.8, 0.14, 0.14]]);
+      expect(s.tone).toEqual(SMOKE_TONES.grey);
+      expect(s.on.length).toBe(11);
+      for (const o of s.on) expect(['head', 'armR', 'handR', 'armL', 'handL']).toContain(o.bone);
+    });
+    it('has each arm socket inside the smoke', () => {
+      const line = m.spectre!.smoke!.line;
+      for (const b of ['armR', 'armL'] as const) {
+        const [, y, z] = d.pivots[b]!, near = line.reduce((a, q) => (Math.abs(q[1] - y) < Math.abs(a[1] - y) ? q : a));
+        expect(near[3]).toBeGreaterThanOrEqual(Math.abs(z) - 0.5);
+      }
+    });
+    it('is measured to the smoke hump: 17 px of the drawing times 0.84', () => {
+      expect(Math.abs(m.baseHeight - 17 * m.scale)).toBeLessThan(0.05);
+      expect(Math.abs(17 * m.scale - 14.28)).toBeLessThan(0.1);
+      expect(m.shoulderY).toBe(d.pivots.armR![1]);
+    });
+    it('has two small round pale eyes with no ring', () => {
+      const e = m.spectre!.eyes;
+      expect(e.half).toEqual([0.22, 0.22]); expect(e.slant).toBe(0); expect(e.ring).toBe(0x000000); expect(e.z).toBe(0.5);
+    });
+    it("reads the hit circle from the smoke's line; a body with neither torso nor smoke still throws", () => {
+      expect(hitRadius(d)).toBe(4);
+      expect(() => hitRadius({ ...d, spectre: { ...d.spectre!, smoke: undefined } })).toThrow(/no torso/);
+    });
+    it('refuses a floating-apart description without its pivots', () => {
+      const { armR: _a, ...pivots } = d.pivots;
+      expect(() => buildTubeFigure('bad', { ...d, pivots })).toThrow(/Shade/);
+      expect(() => buildTubeFigure('bad', { ...d, float: undefined })).toThrow(/Shade/);
+    });
   });
 });

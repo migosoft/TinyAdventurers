@@ -67,6 +67,11 @@ function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
   if (d.arms && d.stance !== 'two') throw new Error(`${d.name}: arms need stance 'two'`);
   if (d.arms && (['handR', 'handL', 'weaponR', 'weaponL'] as const).some((b) => d.pivots[b])) throw new Error(`${d.name}: hand and weapon pivots are derived from arms`);
   if (d.arms?.elbow !== undefined && !(d.arms.elbow > 0 && d.arms.elbow < d.arms.length)) throw new Error(`${d.name}: the elbow must lie between the shoulder and the hand`);
+  if (d.apart) {
+    if (!d.float) throw new Error(`${d.name}: apart needs float`);
+    if (d.arms) throw new Error(`${d.name}: apart takes no arms entry`);
+    for (const b of ['armR', 'handR', 'armL', 'handL'] as const) if (!d.pivots[b]) throw new Error(`${d.name}: apart needs a pivot for ${b}`);
+  }
   for (const p of d.pieces) {
     if (p.bone !== 'hips' && !pv[p.bone]) throw new Error(`${d.name}: the bone ${p.bone} of a piece has no pivot`);
     if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);
@@ -148,6 +153,8 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     }
     v0 += c;
   }
+  // A body of smoke is measured to its hump, so `baseHeight` and the line-up reach it.
+  for (const q of d.spectre?.smoke?.line ?? []) headTop = Math.max(headTop, q[1]);
   const index = Uint32Array.from(all), { pieceIndex, lineIndex } = splitIndex(index, ranges);
 
   const paint = new Uint8Array(PAINT_W * PAINT_H * 4), pick = d.pieces.map((p) => p.colour).find((c) => typeof c === 'function');
@@ -165,9 +172,9 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     key, position, normal, uv, skin, look, index, ranges, pieceIndex, lineIndex, pivots, parents,
     bends, robeTop: d.robeTop ?? null, paint: { w: PAINT_W, h: PAINT_H, data: paint },
     baseHeight: headTop * scale, radius: reach / 16 * scale, hatSway: 0, size: 1,
-    shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length : 0,
+    shoulderY: armed || d.apart ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length : 0,
     armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],
-    ...(two ? { gait: d.float ? 'float' as const : 'walk' as const } : {}), ...(d.swipe ? { swipe: true as const } : {}), ...(d.spectre ? { spectre: d.spectre } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
+    ...(two ? { gait: d.float ? 'float' as const : 'walk' as const } : {}), ...(d.swipe ? { swipe: true as const } : {}), ...(d.apart ? { apart: true as const } : {}), ...(d.spectre ? { spectre: d.spectre } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
     ...(armed && d.arms!.stretch !== undefined ? { armStretch: d.arms!.stretch } : {}),
     ...(armed && d.arms!.elbow !== undefined ? { elbow: d.arms!.elbow } : {}),
     ...(armed && d.arms!.elbow !== undefined && d.arms!.free !== undefined ? { elbowFree: d.arms!.free } : {}),
@@ -180,9 +187,15 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
 
 /** The server's circle for this body: max(4, round(mean of the torso's half length and half width in game px)). */
 export function hitRadius(d: TubeDesc): number {
-  const t = d.pieces.find((p) => p.torso);
-  if (!t) throw new Error(`${d.name}: no torso piece`);
-  const m = turned(meshOf(t.shape), t.turn), lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < m.position.length; i++) { const a = i % 3; lo[a] = Math.min(lo[a], m.position[i]); hi[a] = Math.max(hi[a], m.position[i]); }
+  const t = d.pieces.find((p) => p.torso), line = d.spectre?.smoke?.line;
+  if (!t && !line) throw new Error(`${d.name}: no torso piece`);
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  if (t) {
+    const m = turned(meshOf(t.shape), t.turn);
+    for (let i = 0; i < m.position.length; i++) { const a = i % 3; lo[a] = Math.min(lo[a], m.position[i]); hi[a] = Math.max(hi[a], m.position[i]); }
+  } else {
+    // A body of smoke: the middle line's box (x by the half depth, z by the half width).
+    for (const [x, , hd, hw] of line!) { lo[0] = Math.min(lo[0], x - hd); hi[0] = Math.max(hi[0], x + hd); lo[2] = Math.min(lo[2], -hw); hi[2] = Math.max(hi[2], hw); }
+  }
   return Math.max(4, Math.round(((hi[0] - lo[0]) / 2 + (hi[2] - lo[2]) / 2) / 2 * d.size * PAGE_TO_GAME));
 }

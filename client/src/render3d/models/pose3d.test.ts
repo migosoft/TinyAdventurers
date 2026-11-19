@@ -1154,8 +1154,10 @@ describe('the floating gait', () => {
   for (const k of SPECTRES) {
     describe(k, () => {
       const m = tube(k), d = tdef(k);
+      // The Shade's old body (legs, torso, limp arms) is gone: R2 replaces these cases.
+      const oldBody = k === 'shade' ? it.skip : it;
 
-      it('is a floating model with legs and arms', () => {
+      oldBody('is a floating model with legs and arms', () => {
         expect(m.gait).toBe('float');
         expect(m.legs!.length).toBe(2);
         expect(m.armLength).toBeGreaterThan(0);
@@ -1185,7 +1187,7 @@ describe('the floating gait', () => {
         expect(Math.abs(poseFigure(m, d, view(), STEP, a).root.y - poseFigure(m, d, view(), STEP, b).root.y)).toBeGreaterThan(0.01);
       }, SLOW);
 
-      it('trails its limbs behind it when it moves, and leans', () => {
+      oldBody('trails its limbs behind it when it moves, and leans', () => {
         const { p } = glide(k, 2, settled());
         const { r, l } = legsOf(m);
         for (const leg of [r, l]) {
@@ -1203,7 +1205,7 @@ describe('the floating gait', () => {
         expect(Math.abs(hipsTurn(p) + FLOAT.lean.max)).toBeLessThan(0.01);
       }, SLOW);
 
-      it('does not step', () => {
+      oldBody('does not step', () => {
         const mem = settled(), { r, l } = legsOf(m);
         let { x } = glide(k, 2, mem);
         const rs: number[] = [], diffs: number[] = [];
@@ -1218,7 +1220,7 @@ describe('the floating gait', () => {
         expect(Math.min(...diffs)).toBeGreaterThan(-0.2);
       }, SLOW);
 
-      it('follows the speed late', () => {
+      oldBody('follows the speed late', () => {
         const mem = settled(), { r } = legsOf(m);
         const early = glide(k, 0.1, mem).p;
         const late = glide(k, 2, settled()).p;
@@ -1227,7 +1229,7 @@ describe('the floating gait', () => {
         expect(Math.abs(turnOf(m, early, r.upper))).toBeLessThan(full / 3);
       }, SLOW);
 
-      it('lunges in a melee with the legs limp, and shows the strike', () => {
+      oldBody('lunges in a melee with the legs limp, and shows the strike', () => {
         const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
         const p = poseFigure(m, d, view({ anim: ANIM.Melee, animT: LUNGE_SECS / 2 }), 0, mem);
         expect(p.root.x).toBeCloseTo(3 * (d.scale ?? 1), 5);
@@ -1259,7 +1261,7 @@ describe('the floating gait', () => {
     });
   }
 
-  describe('the Shade, in a melee', () => {
+  describe.skip('the Shade, in a melee (R2 replaces this)', () => {
     it('does not swing its arms', () => {
       const m = tube('shade'), d = tdef('shade'), mem = settled();
       const standing = copyPose(poseFigure(m, d, view(), 0, mem));
@@ -1323,7 +1325,7 @@ describe('the floating gait', () => {
     }, SLOW);
   });
 
-  it('swipes with straight arms too (a model without an elbow that has the swipe flag)', () => {
+  it.skip('swipes with straight arms too (a model without an elbow that has the swipe flag; R2 replaces this)', () => {
     const base = tube('shade'), m: FigureModel = { ...base, swipe: true }, d = tdef('shade'), mem = settled();
     const standing = copyPose(poseFigure(m, d, view(), 0, mem));
     const limpR = hang(m, standing, ARM_R), limpL = hang(m, standing, ARM_L);
