@@ -7,6 +7,7 @@ import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
+import { createDragonStage } from './dragonStage';
 import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
@@ -120,4 +121,10 @@ export function startRun3d(
       deps.hud.setToggles([]); // the log is gone with the session
     },
   };
+}
+
+/** SPIKE (#358): `?r3d=dragon`, the new red dragon as a 3D try-out in a 60 x 44 hall. */
+export async function bootDragon(el: HTMLElement, search: string): Promise<void> {
+  const p = parseParams(search);
+  await startHost(el, search, 'demo', (assets, host) => createDragonStage(assets, p, search, host));
 }
