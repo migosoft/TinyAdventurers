@@ -66,7 +66,8 @@ export interface Pose3d {
   yaw: number;
   /**
    * In the figure's frame, before the yaw. `x` (jolt, lunge) and `z` (shiver) are sprite px already multiplied by the game's `FigureDef.scale` (and the fall shrink), not by the model's `scale`; `y` (hop height, or the
-   * lift of a lying figure) is ALREADY multiplied by the model's `scale`, so the instance must not scale it again; `roll` is
+   * lift of a lying figure) is ALREADY multiplied by the model's `scale`, so the instance must not scale it again (a floating model's `y` is the hover in game px and is
+   * NOT multiplied by `m.scale`, as the lunge is not); `roll` is
    * about x; `sx, sy, sz` are the dash stretch and the fall shrink, WITHOUT the model's `scale` (`skinVertex` multiplies it in).
    */
   root: { x: number; y: number; z: number; roll: number; sx: number; sy: number; sz: number };

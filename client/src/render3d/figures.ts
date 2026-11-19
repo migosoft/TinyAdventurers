@@ -3,16 +3,15 @@
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
-import { ghostAlpha, ghostPhase } from '../game/anim/entityAlpha';
+import { ghostAlpha, ghostPhase, skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
+import { smooth } from './fx/shadeFog';
 import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
-import { skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
-import { MELEE_T } from '../game/anim/pose';
+import { MELEE_T, figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import { FigureStates } from '../game/anim/figureState';
-import { figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import type { WorldTextKind } from '../game/worldText';
@@ -64,10 +63,6 @@ const SHADE_FADE = 0.3;
 export const SPECTRE_FORM = { body: [0.45, 0.95], eyes: [0.8, 1] } as const;
 /** A melee swing flares the eyes: `sin(min(1, FLARE_RATE * animT / MELEE_T) * PI)`, so the flare peaks at the 0.3125th of the swing and is gone after 1 / FLARE_RATE of it. */
 const FLARE_RATE = 1.6;
-const smooth = (a: number, b: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
 /** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
@@ -865,7 +860,7 @@ export class Figures3d {
     // fades (appearing, falling), so dividing the same alpha out leaves those factors; a blinked-off Ghost stays 0. Invisible is not in
     // `pose.alpha` for a Ghost (the layer scales an instance by what the hero sees).
     let bodyAlpha = pose.alpha;
-    if (sp?.seeThrough && pose.grey) {
+    if (sp?.seeThrough && pose.grey && d.pulse) {
       const g = ghostAlpha(fig.mem.clock, ghostPhase(e.id), s.anim === ANIM.Ambush ? s.animT : null);
       bodyAlpha = g > 0 ? pose.alpha / g : 0;
     }

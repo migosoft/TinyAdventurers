@@ -34,9 +34,12 @@ export const FOG_MOVE = {
   clear: 0.03,
 } as const;
 
-/** The fog of a figure in a frame (used by `status.ts`): the gap (s) and the jump (tiles) after which the fog restarts at the figure; the longest step (s); the alpha under which a figure shows no fog; the dying fog's growth per second. */
+/**
+ * The fog of a figure in a frame (used by `status.ts`): the gap (s) and the jump (tiles) after which the fog restarts at the figure; the
+ * longest step (s); the alpha under which a figure shows no fog; the dying fog's growth per second; `rewind`: a clock that went back by
+ * more than this (s) is a new run's, and the fog starts again.
+ */
 export const FOG_FRAME = { gap: 3, jump: 1, maxStep: 0.1, minAlpha: 0.05, formAlpha: 0.45, grow: 0.6, rewind: 1 } as const;
-// `rewind`: a clock that went back by more than this (s) is a new run's: the fog starts again.
 
 export interface FogPatch { a: number; r: number; hy: number; size: number; rate: number; ph: number; spin: number; x: number; y: number; z: number; flat: boolean }
 

@@ -30,6 +30,9 @@ export const HULL_ORDER = FIGURE_ORDER + 0.5;
 export const OUTLINE = 0x222222;
 /** How much the polished steel takes of the sky it mirrors, and how bright that sky is shown (the brief's values). */
 const STEEL = { mix: 0.8, gain: 1.3 } as const;
+/** A vertex whose flat colour's red is below this is painted from the texture (the model writes -1 there). */
+const PAINTED_BELOW = -0.5;
+
 /** The painted eyes' tuning numbers (#359), first values for the user's eye. */
 export const EYE = {
   /** How much a full flare widens an eye: across (z) and in height. */
@@ -210,7 +213,7 @@ export function seeMaterials(o: { sight: Sight; rows: Texture; shared: FigureSha
   const Nn: N = normalize(p.N);
   const ray = cameraWorldMatrix.mul(vec4(0, 0, -1, 0)).xyz;
   const f: N = float(1).sub(abs(dot(Nn, ray)));
-  const lum: N = select(look.x.lessThan(-0.5), float(SEE.paintedLum), look.x.mul(SEE.lumWeights[0]).add(look.y.mul(SEE.lumWeights[1])).add(look.z.mul(SEE.lumWeights[2])));
+  const lum: N = select(look.x.lessThan(PAINTED_BELOW), float(SEE.paintedLum), look.x.mul(SEE.lumWeights[0]).add(look.y.mul(SEE.lumWeights[1])).add(look.z.mul(SEE.lumWeights[2])));
   const a: N = float(SEE.solid).add(f.pow(SEE.rimPow).mul(SEE.rim))
     .mul(float(SEE.foot).add(smoothstep(SEE.footEdge[0], SEE.footEdge[1], h).mul(1 - SEE.foot))).mul(A);
   const tone: N = lum.mul(SEE.toneLum).add(smoothstep(SEE.toneEdge[0], SEE.toneEdge[1], h).mul(SEE.toneHeight));
@@ -291,7 +294,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     const isUnlit = look.w.greaterThan(1.5).and(look.w.lessThan(2.5));
     // A glowing piece (look 3: eyes) shows its own colour whatever light falls on it; a stone figure's does not glow.
     const isGlow = look.w.greaterThan(2.5).and(isStone.not());
-    const base = select(look.x.lessThan(-0.5), painted, flatColour).mul(p.tint.xyz);
+    const base = select(look.x.lessThan(PAINTED_BELOW), painted, flatColour).mul(p.tint.xyz);
     const albedo = select(isStone, stoned, select(isSteel, mix(base, mirrored, STEEL.mix), base));
 
     // The light at the true point and normal; the sun reads its shadow map a hair off the surface toward the light, like a card.

@@ -122,6 +122,8 @@ export class FigureLayer {
   /** Per-frame scratch: the maps are cleared and reused at the top of `frame`; the per-model group object and its list are made new each frame. */
   private readonly groups = new Map<string, { key: string; modelKey: string; model: FigureModel; see: boolean; list: number[] }>();
   private readonly live = new Set<Entry>();
+  /** The entry key of a model's see-through instances, made once per model (no string per instance per frame). */
+  private readonly seeKeys = new Map<string, string>();
   /** The frame's owner numbers: an entity id to its index in order of first appearance. */
   private readonly ownerNos = new Map<number, number>();
 
@@ -172,7 +174,7 @@ export class FigureLayer {
       if (!ownerNos.has(insts[i].owner)) ownerNos.set(insts[i].owner, ownerNos.size % OWNER_MAX);
       // A see-through model's instances (not the petrified ones) are drawn by their own entry: the depth and the colour draw.
       const see = !!m.spectre?.seeThrough && !insts[i].stone;
-      const key = see ? `${insts[i].model}/see` : insts[i].model;
+      const key = see ? this.seeKey(insts[i].model) : insts[i].model;
       let g = groups.get(key);
       if (!g) groups.set(key, g = { key, modelKey: insts[i].model, model: m, see, list: [] });
       g.list.push(i);
@@ -235,6 +237,12 @@ export class FigureLayer {
       this.models.set(key, r = { model, buffers: modelBuffers(model), paint, mats: this.make(this.rowsTex, paint, model) });
     }
     return r;
+  }
+
+  private seeKey(model: string): string {
+    let k = this.seeKeys.get(model);
+    if (k === undefined) this.seeKeys.set(model, k = `${model}/see`);
+    return k;
   }
 
   /** The draws of `model` under the entry `key` (the model's key, or `<key>/see` for its see-through instances), made on first use and given room for `n` instances. */

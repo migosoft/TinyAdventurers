@@ -34,7 +34,7 @@ add({ shape: { tube: [{ p: [0.3, 11.2], r: 0.7 }, { p: [0.4, 12.9], r: 0.7 }], o
 const armLen = 5.6, shoulderX = 0.3, shoulderY = 11.5, shoulderZ = chestR * chestW + 0.35 * armR;   // the arm sinks into the chest, as the Knight's does
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const z = sd * shoulderZ;
-  add({ shape: { tube: [{ p: [0, 0, 0], r: 0.6 }, { p: [0, -armLen, 0], r: 0.5 }], opts: { K: 12, N: 8 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}` });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: armR },{ p: [0, -armLen, 0], r: 0.5 }], opts: { K: 12, N: 8 } }, at: [shoulderX, shoulderY, z], stage: 'arms', bone: `arm${s}` });
   add({ shape: { ball: [0.65, 0.65, 0.65] }, at: [shoulderX, shoulderY - armLen, z], stage: 'arms', bone: `hand${s}` });
   pivots[`arm${s}`] = [shoulderX, shoulderY, z];
 }
@@ -46,7 +46,7 @@ pivots.head = [0.3, 12.4, 0];
 export const shade: TubeDesc = {
   name: 'Shade', size: fitSize(HEIGHT_FACTOR.spectre, DRAWN), outline: 0x222222, pieces, pivots,
   parents: { head: 'body', leg1: 'leg0', leg3: 'leg2' },
-  stance: 'two', arms: { length: armLen, radius: 0.6 },
+  stance: 'two', arms: { length: armLen, radius: armR },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false }, { upper: 'leg2', lower: 'leg3', front: false }],
   footprint: [1.8, 2.0],
   float: true,
