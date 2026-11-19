@@ -1221,9 +1221,10 @@ describe('the floating gait', () => {
       it('follows the speed late', () => {
         const mem = settled(), { r } = legsOf(m);
         const early = glide(k, 0.1, mem).p;
-        expect(Math.abs(turnOf(m, early, r.upper))).toBeLessThan(0.82 / 3);
         const late = glide(k, 2, settled()).p;
-        expect(Math.abs(turnOf(m, late, r.upper))).toBeGreaterThan(0.6);
+        const full = Math.abs(turnOf(m, late, r.upper));
+        expect(full).toBeGreaterThan(0.6);
+        expect(Math.abs(turnOf(m, early, r.upper))).toBeLessThan(full / 3);
       }, SLOW);
 
       it('lunges in a melee with the legs limp, and shows the strike', () => {
@@ -1299,9 +1300,11 @@ describe('the floating gait', () => {
       const mem = settled(), standing = copyPose(poseFigure(m, d, view(), 0, mem));
       const limpR = hang(m, standing, ARM_R);
       expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Melee, animT: 0 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.1);
-      poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T }), 0, mem);
-      // The same clock: nothing else moves the arm.
-      expect(angle(hang(m, poseFigure(m, d, view({ anim: ANIM.Idle, animT: 1 }), 0, mem), ARM_R), limpR)).toBeLessThan(0.05);
+      poseFigure(m, d, view({ anim: ANIM.Melee, animT: MELEE_T / 2 }), 0, mem);
+      // A second of idle frames after the swing (the blend runs on the frames' own dt): nothing else moves the arm, so it hangs limp again.
+      let p = poseFigure(m, d, view({ anim: ANIM.Idle, animT: 0 }), 0, mem);
+      for (let i = 0; i < 60; i++) p = poseFigure(m, d, view({ anim: ANIM.Idle, animT: (i + 1) / 60 }), 1 / 60, mem);
+      expect(angle(hang(m, p, ARM_R), limpR)).toBeLessThan(0.05);
     }, SLOW);
 
     it('holds the arm raised in a wind-up, and strikes from there', () => {

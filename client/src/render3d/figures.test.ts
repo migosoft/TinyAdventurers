@@ -15,6 +15,7 @@ import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import { ghostPhase, ghostPulse, INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
 import { MELEE_T, type FrameBounds } from '../game/anim/pose';
 import { CHEST_HEIGHT } from '../game/objectPose';
+import { silhouetteAlpha } from '../game/shadeHaze';
 import { TILE, TileMap } from '../sim/map';
 import type { EntState } from '../game/world';
 import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
@@ -805,7 +806,10 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(out.figs[0].spectre?.halo).toBeDefined();
       expect(out.figs[0].form).toBe(1);
       expect(one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 10 })).models[0].alpha).toBe(0);
-      expect(one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 70 })).figs[0].form).toBe(1);
+      // the blink is on at an odd step (GHOST_FLICKER_SECS 0.06 s): the body shows
+      const on = one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 70 }));
+      expect(on.models[0].alpha).toBeGreaterThan(0);
+      expect(on.figs[0].form).toBe(1);
     });
 
     it('draws a petrified Ghost solid (alpha 1, stone), whatever the pulse, and a frozen one still pulses', () => {
@@ -830,13 +834,37 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect([plain.alpha, invisible.alpha, invisible.stone]).toEqual([1, 1, true]);
     });
 
-    it('leaves a card Shade as it was', () => {
+    it('a petrified Ghost that is fading in keeps the fade: only the pulse is removed', () => {
+      const e = spec(7, KIND.Ghost, { effects: 1 << EFFECT.Petrified });
+      const fg = make();
+      fg.frame(frame([]), cam());   // events are stamped with the clock of the last frame
+      fg.event({ t: 'Effect', id: 7, kind: EFFECT.Invisible, on: false, look: 0 });
+      const out = fg.frame(frame([e], { dt: VANISH_SECS / 2 }), cam(), look({ kit, ...all }));
+      expect(out.models[0].stone).toBe(true);
+      expect(out.models[0].alpha).toBeCloseTo(0.5, 9);
+    });
+
+    it('does not divide the alpha of a petrified see-through kind that has no pulse', () => {
+      const body = kit.get('shade')!;
+      const seeing: FigureKit = { ...kit, get: (k) => (k === 'shade' ? { ...body, spectre: { ...body.spectre!, seeThrough: { peak: 1 } } } : kit.get(k)) };
+      const e = spec(7, KIND.Shade, { effects: 1 << EFFECT.Petrified });
+      const plain = make().frame(frame([e]), cam(), look({ kit, ...all })).models[0];
+      const see = make().frame(frame([e]), cam(), look({ kit: seeing, ...all })).models[0];
+      expect(plain.stone).toBe(true);
+      expect(see.alpha).toBe(plain.alpha);
+    });
+
+    it('leaves a card Shade as it was, idle and in the ambush (the flat silhouette stays)', () => {
       const out = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
       expect(out.figs[0].spectre).toBeNull();
       expect(out.figs[0].form).toBe(1);
-      const a = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
-      expect(a.models.length).toBe(0);
-      expect(a.ghosts.look[4]).toBeCloseTo(0.75, 6);
+      expect(out.models.length).toBe(0);
+      expect(out.ghosts.look[4]).toBeCloseTo(0.75, 6);
+      const amb = make().frame(frame([spec(7, KIND.Shade, { anim: ANIM.Ambush, animMs: 600 })]), cam(), look());
+      expect(amb.figs[0].spectre).toBeNull();
+      expect(amb.models.length).toBe(0);
+      expect(amb.ghosts.n).toBeGreaterThan(0);
+      expect(amb.ghosts.look[4]).toBeCloseTo(silhouetteAlpha(0.6), 6);
     });
   });
 

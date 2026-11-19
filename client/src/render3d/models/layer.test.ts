@@ -374,11 +374,18 @@ describe('FigureLayer', () => {
       layer.dispose();
     }, SLOW);
 
-    it('dispose takes the see meshes out of the scene', () => {
+    it('dispose takes the see meshes out of the scene and frees both see materials', () => {
       const { layer, scene } = layerOf(false);
       layer.frame(frame([inst('ghost')]), slot);
+      const freed: string[] = [];
+      for (const m of meshes(scene)) {
+        const mat = m.material as { addEventListener(t: 'dispose', f: () => void): void };
+        mat.addEventListener('dispose', () => freed.push(m.renderOrder === SEE_DEPTH_ORDER ? 'depth' : 'colour'));
+      }
+      expect(meshes(scene)).toHaveLength(2);
       layer.dispose();
       expect(meshes(scene)).toHaveLength(0);
+      expect(freed.sort()).toEqual(['colour', 'depth']);
     }, SLOW);
   });
 
