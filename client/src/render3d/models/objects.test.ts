@@ -49,8 +49,24 @@ describe('the chest and the Mimic', () => {
     });
   }
 
-  it('both are hollow; the same size in both', () => {
+  it('the chest and the Mimic stand the same height', () => {
     expect(buildJob('chest', null).stands).toBe(buildJob('mimic', null).stands);
+  });
+
+  it('both are hollow: no body piece but the lining has a mesh point inside the cavity', () => {
+    const lining = chestShell(0).map((p) => p.colour === 0);
+    expect(lining.some(Boolean)).toBe(true);
+    for (const [name, desc] of [['chest', chest], ['mimic', mimic]] as const) {
+      const solid = desc.pieces.slice(0, lining.length).filter((p, i) => !lining[i] && p.bone === 'body');
+      expect(solid.length, name).toBeGreaterThan(0);
+      for (const p of solid) {
+        const m = meshOf(p.shape), at = p.at ?? [0, 0, 0];
+        for (let i = 0; i < m.position.length; i += 3) {
+          const [x, y, z] = [m.position[i] + at[0], m.position[i + 1] + at[1], m.position[i + 2] + at[2]];
+          expect(Math.abs(x) < 3.4 && Math.abs(z) < 5.9 && y > 1.1 && y < 5.5, `${name} point ${x}, ${y}, ${z}`).toBe(false);
+        }
+      }
+    }
   });
 
   it('the Mimic starts with the chest shell in its own lining; the lining is the only difference', () => {
