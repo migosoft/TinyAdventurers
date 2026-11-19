@@ -448,11 +448,13 @@ describe('the gallery stage', () => {
       for (let i = 0; i < LINEUP_MAX; i++) expect(GALLERY.lineup(i).z).toBeLessThan(GALLERY.spectre(0).z - 3);
     });
 
-    it('has two lit pillar torches on the wall row, ids clear of the kind rows', () => {
-      expect(GALLERY.spectreTorches).toHaveLength(2);
+    it('has a lit pillar torch over every place on the wall row, ids clear of the kind rows', () => {
+      expect(GALLERY.spectreTorches).toHaveLength(SPECTRE_PLACES);
+      GALLERY.spectreTorches.forEach((t, i) => expect(Math.abs(t.x - GALLERY.spectre(i).x)).toBeLessThanOrEqual(0.5));
       for (const p of GALLERY.spectreTorches) expect(GALLERY.map.get(Math.floor(p.x), Math.floor(p.z) - 1)).toBe(TILE_ID.Wall);
       const torches = galleryEnts(0, null).filter((e) => e.kind === KIND.Torch && e.y / 16 > GALLERY.spectre(0).z - 4);
-      expect(torches).toHaveLength(2);
+      expect(torches).toHaveLength(SPECTRE_PLACES);
+      expect(new Set(torches.map((e) => e.id)).size).toBe(SPECTRE_PLACES);
       expect(torches.every((e) => e.anim === 1 && e.id >= ID.pillarTorch && e.id < ID.crowd)).toBe(true);
       // the kind rows keep their own twelve
       expect(galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 20))).toHaveLength(12);

@@ -3,7 +3,7 @@
 // into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
-import { ghostPhase } from '../game/anim/entityAlpha';
+import { ghostAlpha, ghostPhase } from '../game/anim/entityAlpha';
 import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
@@ -860,8 +860,15 @@ export class Figures3d {
     const forming = !!sp?.fog && s.anim === ANIM.Ambush;
     const form = forming ? Math.min(1, Math.max(0, s.animT / CONST.AMBUSH_WARNING)) : 1;
     const bodyForm = forming ? smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], form) : 1;
-    // A petrified see-through model is drawn solid in the stone paint by the ordinary piece draw (its pulse would only stipple it into a dot pattern).
-    const bodyAlpha = sp?.seeThrough && pose.grey ? 1 : pose.alpha;
+    // A petrified see-through model is drawn solid in the stone paint by the ordinary piece draw (its pulse would only stipple it into a dot
+    // pattern). Only the pulse is replaced: `pose.alpha` is the Ghost's alpha (pulse, or 0 in the ambush's blink-off phase) times the other
+    // fades (appearing, falling), so dividing the same alpha out leaves those factors; a blinked-off Ghost stays 0. Invisible is not in
+    // `pose.alpha` for a Ghost (the layer scales an instance by what the hero sees).
+    let bodyAlpha = pose.alpha;
+    if (sp?.seeThrough && pose.grey) {
+      const g = ghostAlpha(fig.mem.clock, ghostPhase(e.id), s.anim === ANIM.Ambush ? s.animT : null);
+      bodyAlpha = g > 0 ? pose.alpha / g : 0;
+    }
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
       owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: bodyAlpha * k * bodyForm, dark,

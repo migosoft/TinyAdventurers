@@ -89,10 +89,17 @@ for (const i of ['wizard', 'paladin', 'barbarian', 'ranger', 'skelwarrior', 'ogr
 // Shade; the life figure (2, 5) forms for the 0.5 s ambush warning, stands, winds up at 2.75 s and 4.75 s, strikes at 3.0 s and 5.0 s, and dies at 7.0 s.
 const SPECTRES = [['ghost', 0, 2], ['shade', 3, 5]]; // [model key, standing place, life place]
 const SPOT = '&slow=1000&t=1.7';
-shots.push({ name: 'spectre-block', q: `&at=spectre:2&zoom=1.7&state=idle${SPOT}`, need: ['ghost', 'shade'] });
+// The two trios whole (the Ghost's places 0 to 2 centred on place 1, the Shade's 3 to 5 on place 4), in the work light and the torch light.
+for (const [name, place] of [['ghost', 1], ['shade', 4]]) {
+  for (const [light, extra] of [['work', ''], ['torch', '&light=torch']]) shots.push({ name: `spectre-trio-${name}-${light}`, q: `&at=spectre:${place}&zoom=4${extra}${SPOT}`, need: [name] });
+}
 for (let i = 0; i < 6; i++) shots.push({ name: `spectre-place-${i}`, q: `&at=spectre:${i}&zoom=8${SPOT}`, need: [SPECTRES[i < 3 ? 0 : 1][0]] });
+// The life loop. The ambush warning is the first 0.5 s (`AMBUSH_WARNING`): the Ghost blinks in 0.06 s steps (on in 0.06-0.12, 0.18-0.24,
+// 0.30-0.36, 0.42-0.48), so it is shot at 0.21 and 0.45 (blinked on) and once at 0.4 (blinked off, named so); the Shade forms (fog pool,
+// fog risen with the body fading in, the eyes lighting last) at 0.15, 0.35 and 0.47. Then the blow (3.1) and the death (7.3).
+const LIFE = { ghost: ['0.21', '0.45', 'blinkoff-0.4', '3.1', '7.3'], shade: ['0.15', '0.35', '0.47', '3.1', '7.3'] };
 for (const [key, , life] of SPECTRES) {
-  for (const t of ['0.4', '1.2', '3.1', '7.3']) shots.push({ name: `spectre-life-${key}-${t}`, q: `&at=spectre:${life}&zoom=8&slow=1000&t=${t}`, need: [key] });
+  for (const label of LIFE[key]) shots.push({ name: `spectre-life-${key}-${label}`, q: `&at=spectre:${life}&zoom=8&slow=1000&t=${label.replace('blinkoff-', '')}`, need: [key] });
 }
 // The eyes from the front (aim 90 faces the camera) and from the side (aim 0), close; in the work light and in the torch light.
 for (const [key, stand] of SPECTRES) {
@@ -102,7 +109,6 @@ for (const [key, stand] of SPECTRES) {
 }
 // The pillar torches hang over the walkers (places 1 and 4): the Shade as a hole in front of the lit wall, the Ghost's own floor light, and the block whole.
 for (const [name, place] of [['ghost', 1], ['shade', 4]]) shots.push({ name: `spectre-torch-${name}-walk`, q: `&at=spectre:${place}&zoom=8&light=torch${SPOT}`, need: [name] });
-shots.push({ name: 'spectre-torch-block', q: `&at=spectre:2&zoom=1.7&light=torch${SPOT}`, need: ['ghost', 'shade'] });
 // The effect rows at columns 12 (Ghost) and 13 (Shade): asleep, stone, frozen, poisoned, invisible.
 for (const [name, effRow] of [['asleep', 0], ['stone', 1], ['frozen', 2], ['poisoned', 4], ['invisible', 8]]) shots.push({ name: `spectre-effects-${name}`, q: `&at=effect:${effRow},12&zoom=6${STILL}`, need: ['ghost', 'shade'] });
 // The liquids page with the spectre playing every role: wading, the chasm, the lava.

@@ -818,6 +818,18 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(frozen.alpha).toBeLessThan(1);
     });
 
+    it('a petrified Ghost replaces only the pulse: the ambush blink-off stays 0, the other fades stay, Invisible is the sight\'s business', () => {
+      const stone = 1 << EFFECT.Petrified;
+      // blinked off in the ambush: still 0
+      expect(one(spec(7, KIND.Ghost, { effects: stone, anim: ANIM.Ambush, animMs: 10 })).models[0].alpha).toBe(0);
+      // blinked on in the ambush: solid
+      expect(one(spec(7, KIND.Ghost, { effects: stone, anim: ANIM.Ambush, animMs: 70 })).models[0].alpha).toBe(1);
+      // Invisible does not enter the pose alpha of a Ghost (the layer scales it by what the hero sees): the stone Ghost is the same with it
+      const plain = one(spec(7, KIND.Ghost, { effects: stone })).models[0];
+      const invisible = one(spec(7, KIND.Ghost, { effects: stone | (1 << EFFECT.Invisible) })).models[0];
+      expect([plain.alpha, invisible.alpha, invisible.stone]).toEqual([1, 1, true]);
+    });
+
     it('leaves a card Shade as it was', () => {
       const out = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
       expect(out.figs[0].spectre).toBeNull();

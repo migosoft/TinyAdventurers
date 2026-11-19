@@ -63,8 +63,8 @@ export const SPECTRE_PITCH = 6;
 /** Tiles from the block's wall row to the places' feet, and the floor rows below the feet. */
 const SPECTRE_FOOT = 3.5;
 const SPECTRE_DEPTH = 6;
-/** The block's two pillar torches hang on the wall row over the middle place of each trio (places 1 and 4). */
-const SPECTRE_TORCH_PLACES = [1, 4] as const;
+/** The block's pillar torches hang on the wall row, one over each place, so every figure stands in front of a lit wall (the Shade as a hole in it). */
+const SPECTRE_TORCH_PLACES = [0, 1, 2, 3, 4, 5] as const;
 /** The pillars' columns (tiles) in the model block, over the kind cells 0, 3, 6 and 9 of a row (kinds stand at x 3.5 to 33.5): every kind is at most 3 tiles across from a torch of its row. */
 export const PILLAR_X = [3, 12, 21, 30] as const;
 
@@ -89,7 +89,7 @@ export interface Layout {
   spectre(i: number): { x: number; z: number };
   /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
   pillarTorches: { x: number; z: number }[];
-  /** The spectre block's two torches, on its wall row. */
+  /** The spectre block's torches (one over each place), on its wall row. */
   spectreTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
   focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup', { x: number; z: number }>;

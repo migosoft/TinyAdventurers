@@ -77,7 +77,7 @@ export const ID = {
   lineup: 4700,
   /** The spectre block (#359): `+ place` (`SPECTRE_PLACES` of them). */
   spectre: 4800,
-  /** The kind rows' pillar torches (`+ i`, 12 of them); the spectre block's two are `+ SPECTRE_TORCH_ID + j`. */
+  /** The kind rows' pillar torches (`+ i`, 12 of them); the spectre block's six are `+ SPECTRE_TORCH_ID + j`. */
   pillarTorch: 4900,
   crowd: 5000,
 } as const;
@@ -85,7 +85,7 @@ export const ID = {
 /** Where the spectre block's torches start among the `ID.pillarTorch` ids (the kind rows use the first 20). */
 const SPECTRE_TORCH_ID = 20;
 
-export type Focus ='figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup';
+export type Focus = 'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup';
 export interface GalleryOpts {
   state: string | null; slow: number; focus: Focus; start: number;
   /** Walking model figures added in a 2 tile grid, and whether they are drawn as models or as cards. */
@@ -268,7 +268,7 @@ export function spectreAt(t: number, aimPin: number | null = null): EntState[] {
 }
 
 /** The time (s) a life figure dies in (t0, t1]: `SPECTRE_GONE` s into a loop; null when none falls in. */
-function spectreDeathIn(t0: number, t1: number): number | null {
+export function spectreDeathIn(t0: number, t1: number): number | null {
   const k = Math.floor((t1 - SPECTRE_GONE) / SPECTRE_LIFE);
   return k === Math.floor((t0 - SPECTRE_GONE) / SPECTRE_LIFE) ? null : SPECTRE_GONE + k * SPECTRE_LIFE;
 }
@@ -484,11 +484,8 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       // frame looks back `CATCH_UP` s, so a page that starts just after a death shows the death's fog.
       const from = first ? Math.max(0, t0 - CATCH_UP) : t0;
       first = false;
-      const died = spectreDiedBetween(from, t);
-      if (died.length > 0) {
-        const at = SPECTRE_GONE + Math.floor((t - SPECTRE_GONE) / SPECTRE_LIFE) * SPECTRE_LIFE;
-        for (const ev of died) { figures.event(ev); fx.event(ev, at, false); }
-      }
+      const diedAt = spectreDeathIn(from, t);
+      if (diedAt !== null) for (const ev of spectreDiedBetween(from, t)) { figures.event(ev); fx.event(ev, diedAt, false); }
       const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds);
       const torch = opts.light === 'torch';
       if (torch) for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
