@@ -28,8 +28,9 @@ import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { BONES, weaponBoneOf } from './models/bones';
 import type { FigureModel } from './models/model';
-import { LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
-import { modelKeyOf, outlineFrame } from './models/table';
+import { barrelYaw, chestPoseIn, mimicPoseIn, poseObject, REST_OBJECT, SOUTH, turnTo, type ObjectPoseIn } from './models/objectPose3d';
+import { HIT_SECS, LIE_SINK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './models/pose3d';
+import { modelKeyOf, objectModelOf, outlineFrame } from './models/table';
 import { variationOf } from './models/variation';
 import type { FrameRects } from './worldMesh';
 
@@ -174,8 +175,15 @@ interface ModelImage { insts: FigureInst[]; secs: number; left: number }
 interface Skull { x: number; z: number; flip: boolean; model?: boolean }
 /** A coin in flight: spot in tiles, launch speed in screen px/s (right, up), `born` null until the next frame stamps it. */
 interface Coin { x: number; z: number; /** The bed under its spot (tiles): where it rests. */ bed: number; vx: number; vy: number; life: number; born: number | null; frame: string }
-/** A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory. */
-interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean } }
+/**
+ * A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory; for the model path the facing (world rad, starts south,
+ * never set from a non-finite value), whether it was hurt last frame and the seconds since a hit began (-1: none).
+ */
+interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean }; yaw: number; hurt: boolean; hitT: number }
+/** How far (px) a hit throws the Mimic model back along its facing. */
+const MIMIC_JOLT = 1.5;
+/** The barrel model's tint on the fuse's flash frames: a bright warm one, as the card's fill is light. */
+const FUSE_FLASH: readonly [number, number, number] = [2.2, 2.0, 1.6];
 
 /**
  * The overlay anchor of a standing figure: from the opaque bounds `fb` of the frame it shows, its foot row and the
@@ -245,6 +253,8 @@ export class Figures3d {
   private skulls: Skull[] = [];
   private coins: Coin[] = [];
   private readonly mimics = new Map<number, MimicMem>();
+  /** The pose of every chest, Mimic and barrel drawn as a model, rewritten each frame (by id). */
+  private readonly objectPoses = new Map<number, Pose3d>();
   /** The clock of the last frame (`f.now`), which stamps the events; null before the first frame, so an early event starts on that frame (#319). */
   private now: number | null = null;
   private cam: Cam | null = null;
@@ -351,6 +361,7 @@ export class Figures3d {
       else if (e.kind === KIND.Mimic) this.drawMimic(e, f, cam, out);
     }
     for (const id of this.mimics.keys()) if (!seen.has(id)) this.mimics.delete(id);
+    for (const id of this.objectPoses.keys()) if (!seen.has(id)) this.objectPoses.delete(id);
     // The own figure is always drawn from prediction.
     if (!seen.has(f.you) && f.own.alive) {
       seen.add(f.you);
@@ -459,15 +470,58 @@ export class Figures3d {
     pushShadow(out.shadows, cam, foot.x, foot.z, rx, (OBJ_SHADOW_RY * scale) / TILE, alpha * this.oval, this.ground(foot.x, foot.z, rx));
   }
 
+  /** The model of a chest, a Mimic or a barrel when the stage chose models and it is built; else null (the object is drawn as a card). */
+  private builtObject(e: EntState): { key: string; m: FigureModel } | null {
+    const key = this.models && this.models.is(e) ? objectModelOf(e.kind) : null;
+    const m = key ? this.models!.kit.get(key) : null;
+    return key && m ? { key, m } : null;
+  }
+
+  /** The built height of an object model (art px): the bar, the name and the opener hang from it. */
+  private static objectHeight(m: FigureModel): number {
+    return Math.round(m.stands! * m.scale);
+  }
+
+  /**
+   * Hands one object model instance to the model layer (what `drawModel` does for a figure's body): the pose is written into the entity's
+   * own pose object. `caster` is the outline frame of the lamp shadow. A faller goes out in the depth's dark and is returned as the
+   * pieces it is drawn from once its entity is gone (it has no caster); the shake has stopped by then, so its offsets are 0.
+   */
+  private pushObject(e: EntState, key: string, m: FigureModel, o: ObjectPoseIn, x: number, z: number, y: number, tint: [number, number, number], caster: string, falling: boolean, cam: Cam, out: FigureOut): FallParts | null {
+    const pose = poseObject(m, o, this.objectPoses.get(e.id));
+    this.objectPoses.set(e.id, pose);
+    const dark = this.dark.has(e.id);
+    const inst: FigureInst = {
+      owner: e.id, model: key, x, z, lift: this.lifted(y), scale: m.scale, pose, bone: -1, boneScale: 1, tint, stone: false, alpha: dark && this.darkFade ? this.fadeAlpha : 1, dark,
+      cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach: (Math.max(...m.footprint!) * m.scale) / TILE,
+    };
+    if (falling) {
+      out.models.push({ ...inst, tint: Figures3d.dim(tint, depthFade(y)) });
+      return { cards: [], insts: [{ base: { ...inst, pose: copyPose(pose) }, ox: 0, oz: 0, dl: 0 }], dark };
+    }
+    out.models.push(inst);
+    if (this.shadowed(e.id)) {
+      const k = casterOf({ frame: caster, x, z, lift: this.lifted(y), flip: false, originX: 0.5, footY: 1, scale: m.scale, tint: [1, 1, 1], mode: 0, alpha: 1 }, e.id, this.frames, cam);
+      if (k) out.casters.push(k);
+    }
+    return null;
+  }
+
   private drawChest(e: EntState, cam: Cam, out: FigureOut): void {
     const x = e.x / TILE;
     const z = e.y / TILE;
-    const [bx, bz] = this.bodyFoot(x, z, cam);
     const bed = this.bedAt(x, z);
-    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: this.lifted(bed), flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
+    const opened = e.anim === 1 ? e.animMs / 1000 : -1;
+    const built = this.builtObject(e);
+    if (built) this.pushObject(e, built.key, built.m, chestPoseIn(opened), x, z, bed, [1, 1, 1], outlineFrame(built.key), false, cam, out);
+    else {
+      const [bx, bz] = this.bodyFoot(x, z, cam);
+      this.body({ frame: chestFrame(opened), x: bx, z: bz, lift: this.lifted(bed), flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
+    }
     this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out, bed);
-    this.objectAnchor(e, x, z, bed);
-    this.opener(e, false, x, z, bed + CHEST_HEIGHT / 2 / TILE, 'chest', out);
+    const h = built ? Figures3d.objectHeight(built.m) : CHEST_HEIGHT;
+    this.objectAnchor(e, x, z, bed, false, h);
+    this.opener(e, false, x, z, bed + h / 2 / TILE, 'chest', out);
   }
 
   /**
@@ -486,8 +540,11 @@ export class Figures3d {
     const z = foot.z + (Math.sin(cam.yaw) * p.dx) / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
     const frame = 'barrel_explosive';
+    const built = this.builtObject(e);
     let kept: FallParts | null = null;
-    if (this.frames[frame] && !foot.gone) {
+    if (built) {
+      if (!foot.gone) kept = this.pushObject(e, built.key, built.m, { ...REST_OBJECT, yaw: barrelYaw(e.id) }, x, z, foot.y, p.fill !== null ? [...FUSE_FLASH] : [1, 1, 1], outlineFrame(built.key), falling, cam, out);
+    } else if (this.frames[frame] && !foot.gone) {
       const card: Card = { frame, x: bx, z: bz, lift: this.lifted(foot.y), flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
       if (falling) {
         kept = { cards: [{ base: card, ox: card.x - foot.x, oz: card.z - foot.z, dl: card.lift - this.lifted(foot.y) }], insts: [], dark: this.dark.has(e.id) };
@@ -497,14 +554,22 @@ export class Figures3d {
     }
     if (kept) this.parts.set(e.id, kept); else this.parts.delete(e.id);
     if (p.shadow && !foot.d) this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out, foot.y);
-    this.objectAnchor(e, foot.x, foot.z, foot.y, !!foot.d);
-    this.opener(e, !!foot.d, x, z, foot.y + CHEST_HEIGHT / 2 / TILE, 'object', out);
+    const h = built ? Figures3d.objectHeight(built.m) : CHEST_HEIGHT;
+    this.objectAnchor(e, foot.x, foot.z, foot.y, !!foot.d, h);
+    this.opener(e, !!foot.d, x, z, foot.y + h / 2 / TILE, 'object', out);
   }
 
   private drawMimic(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): void {
     if (e.flags & FLAG.DEAD) return;
     let m = this.mimics.get(e.id);
-    if (!m) this.mimics.set(e.id, (m = { tracker: new MimicTracker(), mem: { lastHop: -1, wakeFx: false } }));
+    if (!m) this.mimics.set(e.id, (m = { tracker: new MimicTracker(), mem: { lastHop: -1, wakeFx: false }, yaw: SOUTH, hurt: false, hitT: -1 }));
+    // The model's facing and hit clock run on every frame, whichever way it is drawn, so a change of the way keeps them.
+    const hiding = !!(e.flags & FLAG.HIDING);
+    m.yaw = hiding ? SOUTH : turnTo(m.yaw, e.aim, f.dt);
+    const hurt = !!(e.flags & FLAG.HURT);
+    if (hurt && !m.hurt) m.hitT = 0;
+    m.hurt = hurt;
+    if (m.hitT >= 0) { m.hitT += f.dt; if (m.hitT > HIT_SECS) m.hitT = -1; }
     // The aim is read as it appears on screen (as the figures' is), so the facing and the lunge follow the camera.
     const aim = screenAim(cam.yaw, e.aim);
     const dist = f.own.alive ? Math.hypot(e.x - f.own.x, e.y - f.own.y) : Infinity;
@@ -515,20 +580,30 @@ export class Figures3d {
     const x = e.x / TILE;
     const z = e.y / TILE;
     if ((p.wakeCue || p.landCue) && !f.dark.has(e.id)) out.cues.push({ id: e.id, x, z, land: !p.wakeCue });
-    const [bx, bz] = this.bodyFoot(x, z, cam);
     const bed = this.bedAt(x, z);
-    this.body({
-      frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: this.lifted(bed) + p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
-      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: !!(e.flags & FLAG.HIDING), // a revealed mimic is a creature
-    }, e.id, cam, out);
+    const built = this.builtObject(e);
+    if (built) {
+      const o = mimicPoseIn(p, hiding, m.yaw, f.now);
+      // A hit throws the model back along its facing and eases home; a hiding Mimic is a chest and is not told by it.
+      if (!hiding && m.hitT >= 0) o.ahead -= MIMIC_JOLT * (1 - m.hitT / HIT_SECS) ** 2;
+      // A hiding Mimic casts its lamp shadow as the chest does.
+      this.pushObject(e, built.key, built.m, o, x, z, bed, [1, 1, 1], outlineFrame(hiding ? 'chest' : built.key), false, cam, out);
+    } else {
+      const [bx, bz] = this.bodyFoot(x, z, cam);
+      this.body({
+        frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: this.lifted(bed) + p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
+        angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: hiding, // a revealed mimic is a creature
+      }, e.id, cam, out);
+    }
     this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out, bed);
-    this.objectAnchor(e, x, z, bed);
-    this.opener(e, false, x, z, bed + CHEST_HEIGHT / 2 / TILE, 'mimic', out);
+    const h = built ? Figures3d.objectHeight(built.m) : CHEST_HEIGHT;
+    this.objectAnchor(e, x, z, bed, false, h);
+    this.opener(e, false, x, z, bed + h / 2 / TILE, 'mimic', out);
   }
 
-  /** A chest, a barrel or a mimic: `CHEST_HEIGHT` for the bar and the use hint. */
-  private objectAnchor(e: EntState, x: number, z: number, y: number, descending = false): void {
-    this.anchors.set(e.id, { x, z, y, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, descending, effects: e.effects });
+  /** A chest, a barrel or a mimic: the height `h` (`CHEST_HEIGHT` for a card, the built height for a model) for the bar and the use hint. */
+  private objectAnchor(e: EntState, x: number, z: number, y: number, descending = false, h = CHEST_HEIGHT): void {
+    this.anchors.set(e.id, { x, z, y, height: h, tag: h + 3, head: h, cx: 0, alpha: 1, tagShown: false, descending, effects: e.effects });
   }
 
   /** Reports a thing as a wall opener when `opensWalls` (openers.ts) says it may; the one rule lives there. */

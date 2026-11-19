@@ -5,6 +5,7 @@ import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
+import { SOUTH } from './models/objectPose3d';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
 import { DESCS, FIT_KIND, modelKeyOf, outlineFrame, TUBE_DESCS, type DescKey } from './models/table';
@@ -708,7 +709,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     return { w, h, data };
   };
   let kit: FigureKit;
-  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'chort', 'weapon_red_magic_staff', 'weapon_green_magic_staff'];
+  const BUILT = ['elf', 'weapon_bow', 'skull', 'knight', 'wolf', 'wizard', 'dwarf', 'skelet', 'ogre', 'stag', 'boar', 'deer', 'bunny', 'goblin', 'necromancer', 'summoner', 'disciple', 'imp', 'chort', 'weapon_red_magic_staff', 'weapon_green_magic_staff', 'chest', 'mimic', 'barrel'];
   beforeAll(async () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
@@ -992,6 +993,145 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       const nec = one(ent(7, KIND.Necromancer)).models;
       expect(nec.map((m) => m.model)).toEqual(['necromancer', 'weapon_green_magic_staff']);
       expect(nec[1].tint).toEqual([1, 1, 1]);
+    });
+  });
+
+  describe('chests, Mimics and barrels as models (#317)', () => {
+    const show = (models?: { kit: FigureKit; is(e: EntState): boolean }) => look(models);
+    // The kit is built in beforeAll, after this block runs: read it when a frame asks.
+    const withModels = show({ get kit() { return kit; }, ...all });
+    const chest = (id = 20, o: Partial<EntState> = {}) => ent(id, KIND.Chest, { side: SIDE.Neutral, ...o });
+    const mimic = (flags: number, o: Partial<EntState> = {}) => ent(21, KIND.Mimic, { flags, ...o });
+    const barrel = (id: number, anim: number, animMs: number, o: Partial<EntState> = {}) => ent(id, KIND.Barrel, { anim, animMs, side: SIDE.Neutral, ...o });
+    const ovalOf = (out: FigureOut): number[] => [...out.shadows.position.slice(0, 18), ...out.shadows.alpha.slice(0, 6)];
+
+    it('draws a closed chest as one model instance with the lamp caster, the opener and the built height as anchor', () => {
+      const fg = make();
+      const out = fg.frame(frame([chest()]), cam(), withModels);
+      expect(out.models.map((i) => [i.model, i.owner])).toEqual([['chest', 20]]);
+      expect(out.models[0].pose.yaw).toBe(SOUTH);
+      expect(owned(out.cards, 20) + owned(out.ghosts, 20)).toBe(0);
+      expect(total(out)).toBe(0);
+      const a = fg.anchors.get(20)!;
+      expect([a.height, a.head, a.tag]).toEqual([9, 9, 12]);
+      expect(out.casters.length).toBe(1);
+      const fr = atlasFrames[outlineFrame('chest')].frame;
+      expect([out.casters[0].id, out.casters[0].u0, out.casters[0].v0]).toEqual([20, fr.x, fr.y]);
+      expect(out.shadows.n).toBe(1);
+      expect(out.openers.map((o) => [o.id, o.who])).toEqual([[20, 'chest']]);
+      expect(out.openers[0].mid).toBeCloseTo(4.5 / 16, 9);
+    });
+
+    it('draws the card, at the card height, when the model is not built or not chosen', () => {
+      const gone: FigureKit = { ...kit, get: () => null };
+      for (const models of [{ kit: gone, ...all }, { kit, is: () => false }]) {
+        const fg = make();
+        const out = fg.frame(frame([chest()]), cam(), show(models));
+        expect(out.models).toEqual([]);
+        expect(out.cards.n).toBe(1);
+        expect(fg.anchors.get(20)!.height).toBe(CHEST_HEIGHT);
+        expect(out).toEqual(make().frame(frame([chest()]), cam(), show()));
+      }
+    });
+
+    it('draws a hiding Mimic like a closed chest in every part', () => {
+      const cf = make(), mf = make();
+      const c = cf.frame(frame([chest(20, { aim: 0 })]), cam(), withModels);
+      const m = mf.frame(frame([mimic(FLAG.HIDING, { aim: 1 })]), cam(), withModels);
+      const [a, b] = [c.models[0], m.models[0]];
+      expect([b.x, b.z, b.lift, b.scale, b.alpha, b.pose.yaw]).toEqual([a.x, a.z, a.lift, a.scale, a.alpha, a.pose.yaw]);
+      expect(b.tint).toEqual(a.tint);
+      expect(b.pose.root).toEqual(a.pose.root);
+      const [pa, pb] = [cf.anchors.get(20)!, mf.anchors.get(21)!];
+      expect([pb.height, pb.tag, pb.head]).toEqual([pa.height, pa.tag, pa.head]);
+      expect(m.casters.map((k) => [k.u0, k.v0, k.u1, k.v1, k.w])).toEqual(c.casters.map((k) => [k.u0, k.v0, k.u1, k.v1, k.w]));
+      expect(ovalOf(m)).toEqual(ovalOf(c));
+      expect(m.floats).toEqual([]);
+    });
+
+    it('turns an awake Mimic from south towards its aim, and opens its jaws; no reveal cue without a hiding frame', () => {
+      const fg = make(), yaws: number[] = [];
+      let all3: FigureOut[] = [];
+      for (let i = 0; i < 3; i++) {
+        const out = fg.frame(frame([mimic(0, { aim: 0 })], { dt: 0.016, now: 10 + i * 0.016 }), cam(), withModels);
+        yaws.push(out.models[0].pose.yaw);
+        all3 = [...all3, out];
+      }
+      expect(yaws[0]).toBeLessThan(SOUTH);
+      expect(yaws[1]).toBeLessThan(yaws[0]);
+      expect(yaws[2]).toBeLessThan(yaws[1]);
+      expect(yaws[2]).toBeGreaterThan(0);
+      expect(all3.flatMap((o) => o.floats)).toEqual([]);
+      expect(all3.flatMap((o) => o.cues)).toEqual([]);
+      const shut = make().frame(frame([mimic(FLAG.HIDING)]), cam(), withModels).models[0].pose.bones;
+      const lidBone = BONES.indexOf('head') * 12;
+      // Awake after a few frames, the jaws are somewhere other than shut: the lid's matrix differs from the hiding Mimic's.
+      let moved = false;
+      for (let i = 3; i < 40 && !moved; i++) {
+        const o = fg.frame(frame([mimic(0, { aim: 0 })], { dt: 0.05, now: 10.1 + i * 0.05 }), cam(), withModels);
+        moved = Array.from(o.models[0].pose.bones.slice(lidBone, lidBone + 12)).some((v, k) => v !== shut[lidBone + k]);
+      }
+      expect(moved).toBe(true);
+    });
+
+    it('gives one "!" and one wake cue on a reveal, and lifts the model, also when the card was drawn while it hid', () => {
+      const cards: FigureKit = { ...kit, get: () => null };
+      for (const hideLook of [withModels, show({ kit: cards, ...all })]) {
+        const fg = make();
+        fg.frame(frame([mimic(FLAG.HIDING)]), cam(), hideLook);
+        let floats = 0, cues = 0, lifted = false;
+        for (let i = 1; i <= 12; i++) {
+          const o = fg.frame(frame([mimic(0)], { dt: 0.1, now: 10 + i * 0.1 }), cam(), withModels);
+          floats += o.floats.filter((f) => f.text === '!').length;
+          cues += o.cues.filter((c) => !c.land).length;
+          if (o.models[0].pose.root.y > 0) lifted = true;
+        }
+        expect([floats, cues, lifted]).toEqual([1, 1, true]);
+      }
+    });
+
+    it('jolts a hurt Mimic back along its facing once, when the flag rises', () => {
+      const fg = make();
+      const ahead = (flags: number, now: number, dt = 0.016) => fg.frame(frame([mimic(flags, { aim: 0 })], { dt, now }), cam(), withModels).models[0].pose.root.x;
+      const rest = ahead(0, 10);
+      const hit = ahead(FLAG.HURT, 10.016);
+      expect(hit).toBeLessThan(rest - 0.5);
+      expect(ahead(FLAG.HURT, 10.4, 0.4)).toBeCloseTo(rest, 3);   // done, and the held flag does not start another
+    });
+
+    it('gives each barrel its own turn, flashes a burning fuse with a bright tint and shakes it', () => {
+      const fg = make();
+      const out = fg.frame(frame([barrel(20, 0, 0), barrel(22, 0, 0, { x: at(1) })]), cam(), withModels);
+      expect(out.models.map((i) => i.model)).toEqual(['barrel', 'barrel']);
+      expect(out.models[0].pose.yaw).not.toBe(out.models[1].pose.yaw);
+      expect(out.models[0].tint).toEqual([1, 1, 1]);
+      expect(fg.anchors.get(20)!.height).toBe(15);
+      let bright = false, shaken = false;
+      for (let i = 0; i < 40; i++) {
+        const m = make().frame(frame([barrel(20, 1, i * 25)]), cam(), withModels).models[0];
+        bright ||= m.tint[0] > 1;
+        shaken ||= m.x !== at(0) / TILE;
+      }
+      expect([bright, shaken]).toEqual([true, true]);
+    });
+
+    it('lets a barrel fall as a dimmed model that outlives its entity', () => {
+      const fg = dipFigs();
+      const b = (ms: number): EntState => barrel(20, 2, ms, at2(2, 4));
+      const rest = dipFigs().frame(frame([barrel(20, 0, 0)]), cam(), withModels).models[0];
+      let o = fg.frame(frame([b(0)], { now: 10 }), cam(), withModels);
+      expect(o.falls).toEqual([{ id: 20, x: 2.5, z: 4.5 }]);
+      for (let i = 1; i < 31; i++) o = fg.frame(frame([b(i * 16)], { now: 10 + i / 60 }), cam(), withModels);
+      expect(o.models.length).toBe(1);
+      expect(o.models[0].tint[0]).toBeLessThan(1);
+      expect(o.models[0].lift).toBeLessThan(rest.lift - 1);
+      expect(o.casters).toEqual([]);
+      expect(o.shadows.n).toBe(0);
+      o = fg.frame(frame([], { now: 11 }), cam(), withModels);
+      expect(o.models.map((i) => i.owner)).toEqual([20]);
+      expect(fg.fallers).toBe(1);
+      for (let i = 0; i < 90; i++) o = fg.frame(frame([], { now: 11.1 + i / 60 }), cam(), withModels);
+      expect(o.models).toEqual([]);
     });
   });
 
