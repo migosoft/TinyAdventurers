@@ -529,6 +529,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (r) {
         r.figures = figures.count;
         r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, t);
+        r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal };   // the spectres' effects pass: the cost and shot checks want 0 dropped
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;
       }
