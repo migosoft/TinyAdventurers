@@ -34,7 +34,7 @@ export const EFFECT_GROUPS = 10;
  * die in turn, and the crowd's grid (2 tiles) of `CROWD_PER_ROW` x `CROWD_ROWS` places.
  */
 export const MODEL_PITCH = 3;
-/** The kinds stand in rows of `MODEL_PER_ROW` (22 kinds at 3 tiles do not fit the 50 tile stage), the rows `MODEL_KIND_ROW_PITCH` tiles apart, each with its own pillar torches. The pitch is 7 so the next row's pillars stand 3.5 tiles in front of a row's kinds and hide none. */
+/** The kinds stand in rows of `MODEL_PER_ROW` (24 kinds at 3 tiles do not fit the 50 tile stage), the rows `MODEL_KIND_ROW_PITCH` tiles apart, each with its own pillar torches. The pitch is 7 so the next row's pillars stand 3.5 tiles in front of a row's kinds and hide none. */
 export const MODEL_PER_ROW = 11;
 export const MODEL_KIND_ROW_PITCH = 7;
 /** The effect rows' entity ids are `ID.modelEffect + row * MODEL_EFFECT_STRIDE + col`. */
@@ -50,9 +50,9 @@ export const VARIETY_ROWS = 8;
 export const VARIETY_COLS = 6;
 export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
-/** The size line-up (#356), the last block: one row of every model key, `LINEUP_PITCH` tiles apart (the 22 model keys, the chest, Mimic and barrel among them, fit the 48 floor tiles). */
-export const LINEUP_PITCH = 2.1;
-export const LINEUP_MAX = 22;
+/** The size line-up (#356), the last block: one row of every model key, `LINEUP_PITCH` tiles apart (the 24 model keys, the chest, Mimic and barrel among them, fit the 48 floor tiles). */
+export const LINEUP_PITCH = 2.0;
+export const LINEUP_MAX = 24;
 /** The object row's places (chest, opening chest, barrel, cycling barrel, three Mimics), 3 tiles apart from x 4, feet at `OBJECT_Z`. */
 export const OBJECT_PLACES = 7;
 const LINEUP_DEPTH = 6;
@@ -97,7 +97,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
   const varTop = crowdTop + CROWD_ROWS * 2 + 1;
   const lineTop = varTop + VARIETY_ROWS * VARIETY_PITCH + 1;
   const h = Math.ceil(lineTop + LINEUP_DEPTH) + 2;
-  const lineX = (i: number): number => 2 + (i + 0.5) * LINEUP_PITCH;
+  const lineX = (i: number): number => 1 + (i + 0.5) * LINEUP_PITCH;
   const lineZ = lineTop + LINEUP_DEPTH / 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
   const floor = (x0: number, x1: number, z0: number, z1: number, t: number = TILE_ID.Floor): void => {
@@ -133,7 +133,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
       corridor: { x: 18, z: 3.5 },
       effects: { x: 24, z: effTop + 2 },
       objects: { x: 18, z: 8 },
-      lineup: { x: 2 + (LINEUP_MAX * LINEUP_PITCH) / 2, z: lineZ },
+      lineup: { x: 1 + (LINEUP_MAX * LINEUP_PITCH) / 2, z: lineZ },
     },
   };
 }

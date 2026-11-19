@@ -12,22 +12,24 @@ import { bunny } from './descs/bunny';
 import { chest } from './descs/chest';
 import { chort } from './descs/chort';
 import { deer, stag } from './descs/deer';
+import { ghost } from './descs/ghost';
 import { goblin } from './descs/goblin';
 import { imp } from './descs/imp';
 import { mimic } from './descs/mimic';
 import { npcKnight } from './descs/npcKnight';
 import { orc } from './descs/orc';
+import { shade } from './descs/shade';
 import { disciple, necromancer, summoner } from './descs/robed';
 import { wolf } from './descs/wolf';
 import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
 
-export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'chest' | 'mimic' | 'barrel';
+export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'chest' | 'mimic' | 'barrel' | 'ghost' | 'shade';
 export type ModelKey = DescKey | TubeKey;
 
 /** The models built from tubes and balls: the woodland animals (#357) and the two-legged creatures (#356). */
-export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort, chest, mimic, barrel };
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort, chest, mimic, barrel, ghost, shade };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
@@ -57,6 +59,8 @@ export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   // The summoner's imps are this kind too: one look, no tint.
   [KIND.Imp]: 'imp',
   [KIND.Chort]: 'chort',
+  [KIND.Ghost]: 'ghost',
+  [KIND.Shade]: 'shade',
 };
 
 /** The game objects that have a 3D model (not creatures: `MODEL_OF_KIND` lists those), and the description each one wears. */
@@ -65,6 +69,11 @@ export const OBJECT_MODEL: Partial<Record<number, TubeKey>> = {
   [KIND.Mimic]: 'mimic',
   [KIND.Barrel]: 'barrel',
 };
+/** The kind's model floats (no steps, nothing in time with the speed): a tube description with `float`. */
+export function floats(kind: number): boolean {
+  const key = MODEL_OF_KIND[kind];
+  return key !== undefined && key in TUBE_DESCS && TUBE_DESCS[key as TubeKey].float === true;
+}
 export const objectModelOf = (kind: number): TubeKey | null => OBJECT_MODEL[kind] ?? null;
 
 /**

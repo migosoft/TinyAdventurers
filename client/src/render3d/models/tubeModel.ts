@@ -167,7 +167,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
     baseHeight: headTop * scale, radius: reach / 16 * scale, hatSway: 0, size: 1,
     shoulderY: armed ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length : 0,
     armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],
-    ...(two ? { gait: 'walk' as const } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
+    ...(two ? { gait: d.float ? 'float' as const : 'walk' as const } : {}), ...(d.swipe ? { swipe: true as const } : {}), ...(d.spectre ? { spectre: d.spectre } : {}), ...(d.weapon !== undefined ? { weaponScale: d.weapon } : {}),
     ...(armed && d.arms!.stretch !== undefined ? { armStretch: d.arms!.stretch } : {}),
     ...(armed && d.arms!.elbow !== undefined ? { elbow: d.arms!.elbow } : {}),
     ...(armed && d.arms!.elbow !== undefined && d.arms!.free !== undefined ? { elbowFree: d.arms!.free } : {}),

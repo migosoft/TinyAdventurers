@@ -49,8 +49,10 @@ describe('figure descriptions', () => {
     for (const key of Object.keys(DESCS) as DescKey[]) expect(modelKeyOf(FIT_KIND[key]), key).toBe(key);
   });
 
-  it('twenty-two game kinds have a model', () => {
-    expect(Object.keys(MODEL_OF_KIND).length).toBe(22);
+  it('twenty-four game kinds have a model', () => {
+    expect(Object.keys(MODEL_OF_KIND).length).toBe(24);
+    expect(modelKeyOf(KIND.Ghost)).toBe('ghost');
+    expect(modelKeyOf(KIND.Shade)).toBe('shade');
     expect(modelKeyOf(KIND.Chort)).toBe('chort');
     expect(modelKeyOf(KIND.Imp)).toBe('imp');
     expect(modelKeyOf(KIND.Necromancer)).toBe('necromancer');

@@ -10,7 +10,9 @@ import { tube, type TubePoint } from './tubes';
 import { DESCS, MODEL_OF_KIND, TUBE_DESCS, type TubeKey } from './table';
 import { DEMON_EYE, HUMAN_HEIGHT } from './tubeDesc';
 import { robedDesc } from './descs/robed';
-import { KNIGHT_ACCENT, KNIGHT_SHIELD } from './descs/npcKnight';
+import { KNIGHT_ACCENT, KNIGHT_PIECES, KNIGHT_SHIELD } from './descs/npcKnight';
+import { GHOST_ALPHA_MAX } from '../../game/anim/entityAlpha';
+import { STAGES } from './bones';
 
 const keys = ['stag', 'deer', 'boar', 'bunny'] as const;
 /** The built models' sizes in game px: the top of the painted chest (the shoulder) of the deer, boar and stag, the base of the bunny's ears. */
@@ -198,14 +200,16 @@ describe('buildTubeFigure', () => {
   it("every tube model's hit radius, as approved (#356 Task 12): the server's `radius` in enemies.rs is the same number", () => {
     const all = Object.keys(TUBE_DESCS) as TubeKey[];
     expect(Object.fromEntries(all.map((k) => [k, hitRadius(TUBE_DESCS[k])]))).toEqual({
-      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4, chest: 6, mimic: 6, barrel: 6,
+      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4, chest: 6, mimic: 6, barrel: 6, ghost: 4, shade: 4,
     });
     // Necromancer and Summoner share one server block: one circle.
     expect(hitRadius(TUBE_DESCS.necromancer)).toBe(hitRadius(TUBE_DESCS.summoner));
   });
 
   it("the baseR of every kind that wears a tube model is its model's hit radius", () => {
-    const worn = Object.entries(MODEL_OF_KIND).filter(([, key]) => key! in TUBE_DESCS);
+    // The Ghost's and the Shade's server circles are not yet the models' (Task 9 of #359 removes this list).
+    const PENDING_CIRCLE: number[] = [KIND.Ghost, KIND.Shade];
+    const worn = Object.entries(MODEL_OF_KIND).filter(([kind, key]) => key! in TUBE_DESCS && !PENDING_CIRCLE.includes(Number(kind)));
     expect(worn.length).toBeGreaterThanOrEqual(13);
     for (const [kind, key] of worn) expect(FIGURES[Number(kind)].baseR, `kind ${kind} (${key})`).toBe(hitRadius(TUBE_DESCS[key as TubeKey]));
   });
@@ -743,4 +747,52 @@ describe('the tube descriptions', () => {
       expect(thin).toEqual([]);
     });
   }
+});
+
+describe('the spectres', () => {
+  /** The extent (model px x scale) in x and z of the pieces of the body, the legs and the arms (no hulls, no head, no eyes). */
+  const extent = (m: ReturnType<typeof buildJob>): [number, number] => {
+    const lo = [Infinity, Infinity], hi = [-Infinity, -Infinity], want = new Set(['legs', 'body', 'arms'].map((s) => STAGES.indexOf(s as (typeof STAGES)[number])));
+    for (const r of m.ranges) {
+      if (r.line || !want.has(r.stage)) continue;
+      for (const i of m.index.subarray(r.start, r.start + r.count)) {
+        const x = m.position[i * 3], z = m.position[i * 3 + 2];
+        lo[0] = Math.min(lo[0], x); hi[0] = Math.max(hi[0], x); lo[1] = Math.min(lo[1], z); hi[1] = Math.max(hi[1], z);
+      }
+    }
+    return [(hi[0] - lo[0]) * m.scale, (hi[1] - lo[1]) * m.scale];
+  };
+  for (const key of ['ghost', 'shade'] as const) {
+    describe(key, () => {
+      const m = buildJob(key, null), d = TUBE_DESCS[key];
+      it('has consistent streams and finite numbers', () => { expectStreams(m); expectFinite(m); });
+      it('survives the worker hand-over', () => { expect(structuredClone(m)).toEqual(m); });
+      it('floats, upright at the height of a human, with no hull', () => {
+        expect(m.gait).toBe('float');
+        expect(m.lineIndex.length).toBe(0);
+        expect(m.armLength).toBeGreaterThan(0);
+        expect(Math.abs(m.baseHeight - HUMAN_HEIGHT)).toBeLessThan(0.1);
+        expect(m.spectre).toEqual(d.spectre);
+      });
+    });
+  }
+  it('the Ghost swipes, the Shade does not', () => {
+    expect(buildJob('ghost', null).swipe).toBe(true);
+    expect(buildJob('shade', null).swipe).toBeUndefined();
+  });
+  it('the Ghost is the Knight without the shield and the comb, drawn blended', () => {
+    const m = buildJob('ghost', null), d = TUBE_DESCS.ghost;
+    expect(m.spectre!.seeThrough!.peak).toBe(GHOST_ALPHA_MAX);
+    expect(m.ranges.some((r) => r.stage === STAGES.indexOf('hair') && r.count > 0)).toBe(false);
+    expect(d.pieces).toHaveLength(KNIGHT_PIECES.length - 3);
+    expect(d.pieces.every((p) => p.line === 0)).toBe(true);
+  });
+  it('the Shade is black, lean and fogged', () => {
+    const m = buildJob('shade', null), g = buildJob('ghost', null);
+    for (let i = 0; i < m.position.length / 3; i++) if (m.skin[i * 4 + 1] === 0) expect([...m.look.subarray(i * 4, i * 4 + 4)]).toEqual([3 / 255, 2 / 255, 5 / 255, 3].map(Math.fround));
+    const [sx, sz] = extent(m), [gx, gz] = extent(g);
+    expect(sx / gx).toBeGreaterThan(0.7); expect(sx / gx).toBeLessThan(0.8);
+    expect(sz / gz).toBeGreaterThan(0.7); expect(sz / gz).toBeLessThan(0.8);
+    expect(m.spectre!.fog).toBe(true);
+  });
 });

@@ -58,13 +58,15 @@ const WOLF_TABLE: Record<string, number[]> = {
 };
 
 /** The tube models as the kinds wear them. `orcBow` is no model key: it is the `orc` model worn by the Orc Archer (the same model, the kind's bow). */
-type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcBow' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort';
+type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'orcBow' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'ghost' | 'shade';
 const TUBES: TubeKey[] = ['stag', 'deer', 'boar', 'bunny'];
 /** The two-legged creatures (#356): a new one joins this list and `TUBE_KIND`. */
 const BIPEDS: TubeKey[] = ['goblin', 'orc', 'orcBow', 'npcKnight', 'necromancer', 'summoner', 'disciple', 'imp', 'chort'];
+/** The floating spectres (#359): their poses are Task 2's; here they only join the finiteness loop. */
+const SPECTRES: TubeKey[] = ['ghost', 'shade'];
 const TUBE_KIND: Record<TubeKey, number> = {
   stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny, goblin: KIND.GoblinArcher, orc: KIND.OrcWarrior, orcBow: KIND.OrcArcher, npcKnight: KIND.Knight,
-  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp, chort: KIND.Chort,
+  necromancer: KIND.Necromancer, summoner: KIND.Summoner, disciple: KIND.Disciple, imp: KIND.Imp, chort: KIND.Chort, ghost: KIND.Ghost, shade: KIND.Shade,
 };
 const tmemo = new Map<TubeKey, FigureModel>();
 const tube = (k: TubeKey): FigureModel => {
@@ -575,7 +577,7 @@ describe('the crest', () => {
 describe('the woodland animals in every animation', () => {
   it('give finite bones, bends and root, also with a stopped clock', () => {
     const anims = Object.values(ANIM) as number[];
-    for (const k of [...TUBES, ...BIPEDS]) for (const dt of [0, 1 / 60]) for (const anim of anims) {
+    for (const k of [...TUBES, ...BIPEDS, ...SPECTRES]) for (const dt of [0, 1 / 60]) for (const anim of anims) {
       const m = tube(k), mem = newPose3dMemory();
       const p = poseFigure(m, tdef(k), view({ anim, animT: dt, x: 3, y: -2 }), dt, mem);
       for (const v of [...flat(p), ...p.robe, p.air, p.yaw]) expect(Number.isFinite(v), `${k} anim ${anim} dt ${dt}`).toBe(true);

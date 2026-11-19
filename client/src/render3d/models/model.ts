@@ -8,6 +8,7 @@ import type { FigureDesc, PartRef } from './desc';
 import { skelet } from './descs/skelet';
 import { FH } from './grid';
 import { buildPart, type Mesh3 } from './part';
+import type { SpectreSpec } from './tubeDesc';
 
 import { BONES, MAX_BENDS, MAX_BONES, STAGES, type Bone, type Stage } from './bones';
 
@@ -55,7 +56,11 @@ export interface FigureModel {
   /** The legs as bone indices (`lower` -1: none), front legs first. */
   legs?: { upper: number; lower: number; front: boolean; /** 1 (default) or -1: the knee bends the other way. */ knee?: 1 | -1 }[];
   /** 'walk': the legs swing in turn (two-legged tube models). */
-  gait?: 'walk';
+  gait?: 'walk' | 'float';
+  /** 'float' only: a melee swings the arm from its limp hang. */
+  swipe?: true;
+  /** The description's spectre look (the Ghost, the Shade). */
+  spectre?: SpectreSpec;
   /** A factor on the size of the held weapon (default 1). */
   weaponScale?: number;
   /** The share of a blow's arm lengthening this model takes (default 1: the whole of it, as the short-armed figures). */

@@ -142,7 +142,7 @@ describe('the gallery stage', () => {
   it('&circles=1 draws the hit circle of every line-up figure: a monster its server radius, a hero the player radius', () => {
     expect(parseGallery('?focus=lineup&circles=1').circles).toBe(true);
     expect(parseGallery('?focus=lineup&circles=0').circles).toBe(false);
-    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 6, 6, 4, 5, 5, 4, 5, 5, 5, 6, 10, 5, 5, 4, 4, 4, 4, 4, 4]);
+    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 6, 6, 4, 5, 5, 4, 5, 5, 5, 6, 10, 5, 5, 6, 4, 6, 4, 4, 4, 4, 4]);
     const T = new FxTris(4096);
     lineupCircles(T);
     expect(T.n).toBe(LINEUP_KEYS.length * 64);
@@ -270,8 +270,8 @@ describe('the gallery stage', () => {
     it('shows every distinct model key, creatures and objects, exactly once', () => {
       const keys = new Set([...Object.values(MODEL_OF_KIND), ...Object.values(OBJECT_MODEL)]);
       const keyOf = (kind: number) => modelKeyOf(kind) ?? objectModelOf(kind);
-      expect(LINEUP_KEYS).toHaveLength(22);
-      expect(LINEUP_MAX).toBe(22);
+      expect(LINEUP_KEYS).toHaveLength(24);
+      expect(LINEUP_MAX).toBe(24);
       expect(new Set(LINEUP_KEYS)).toEqual(keys);
       expect(line().map((e) => keyOf(e.kind))).toEqual([...LINEUP_KEYS]);
       for (const k of keys) expect(keyOf(lineupKind(k!)), String(k)).toBe(k);
@@ -418,8 +418,9 @@ describe('the gallery stage', () => {
   });
 
   it('has a lit torch on each pillar of the model block, on a wall', () => {
-    const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 10));
-    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 8 }, () => [KIND.Torch, 1, 0]));
+    const t = galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 20));
+    // Three rows of kinds (24 kinds, 11 to a row), four pillars each.
+    expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 12 }, () => [KIND.Torch, 1, 0]));
     for (const e of t) expect(GALLERY.map.get(Math.floor(e.x / 16), Math.floor(e.y / 16) - 1)).toBe(TILE_ID.Wall);
   });
 

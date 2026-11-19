@@ -8,7 +8,7 @@ import type { TubeOpts, TubePoint } from './tubes';
 /** One human's height in game px (a tile is 16): the default the two-legged tube models are sized by (#356). */
 export const HUMAN_HEIGHT = 18;
 /** The height factors of the two-legged models, of `HUMAN_HEIGHT`. The robes are drawn to their factor (robed.ts); the others are scaled by `fitSize`. */
-export const HEIGHT_FACTOR = { knight: 1, robed: 1, orc: 1.1, goblin: 0.65, imp: 0.45, chort: 1.05 } as const;
+export const HEIGHT_FACTOR = { knight: 1, robed: 1, orc: 1.1, goblin: 0.65, imp: 0.45, chort: 1.05, spectre: 1 } as const;
 /**
  * The woodland animals' height factors, of `HUMAN_HEIGHT` (a human of 18 px is 1.75 m): the shoulder (the top of the chest) of the deer
  * and the boar, the ears' base of the sitting bunny. The stag (shoulder 12 px, head top 16) is within 10 % of its target and keeps its size.
@@ -18,6 +18,28 @@ export const ANIMAL_FACTOR = { deer: 9 / 18, boar: 8 / 18, bunny: 3.5 / 18 } as 
 export const DEMON_EYE = 0xffd21f;
 /** `TubeDesc.size` that makes a figure drawn `drawn` game px high (at size 1; each description names the measured value) as tall as `factor` humans. */
 export const fitSize = (factor: number, drawn: number): number => factor * HUMAN_HEIGHT / drawn;
+
+/** Eyes painted on the head's surface by the material (never pieces): two ovals mirrored in z, slanted down toward the middle. Model px, rest pose. */
+export interface EyeSpec {
+  y: number; z: number;                 // the centre of one eye: height, and |z| off the middle
+  front: number;                        // only where the rest x is at least this (the front of the head)
+  half: readonly [number, number];      // half width (across z) and half height
+  slant: number;                        // rad
+  core: number; ring: number;           // colours
+  strength: number;                     // 0..1
+}
+/** What makes a figure a spectre (#359): the Ghost and the Shade. */
+export interface SpectreSpec {
+  /** Drawn blended, nearest surface only. `peak`: the instance alpha that shows the approved look. */
+  seeThrough?: { peak: number };
+  eyes: EyeSpec;
+  /** Black fog clings to it (the effects). */
+  fog?: true;
+  /** A soft glow quad and a floor light: `size` and `height` in px, `k` the glow's strength. */
+  halo?: { size: number; height: number; glow: number; k: number; light: number; radius: number };
+  /** The melee swoosh's colour on the model path, and the colour of its leading edge. */
+  swoosh: { colour: number; head?: number };
+}
 
 export type Shape =
   | { tube: readonly TubePoint[]; opts?: TubeOpts }
@@ -98,4 +120,9 @@ export interface TubeDesc {
   /** Half length and half width of the ground oval, page px at size 1. */
   footprint: readonly [number, number];
   hop?: number;
+  /** The figure floats: no legs step, nothing moves in time with the speed (pose3d.ts). */
+  float?: true;
+  /** With `float`: a melee swings the arm from its limp hang (the Ghost; the user, 2026-11-19). Without it the arms stay limp in a blow (the Shade). */
+  swipe?: true;
+  spectre?: SpectreSpec;
 }

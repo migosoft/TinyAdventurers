@@ -13,6 +13,8 @@ export const KNIGHT_ACCENT = 0x1b3aa0;
 const STEEL = 0x72d6ce, ACCENT = KNIGHT_ACCENT, DARK = 0x222222;
 
 const pieces: TubePiece[] = [];
+/** The Knight's pieces (the Ghost wears its body without the shield and the comb). */
+export const KNIGHT_PIECES: readonly TubePiece[] = pieces;
 const add = (p: TubePiece): void => { pieces.push(p); };
 
 // ---- the legs: a plate thigh and a greave, a blue knee cop between them and a blue boot ----
