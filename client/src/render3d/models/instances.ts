@@ -29,6 +29,10 @@ export interface FigureInst {
   reach?: number;
   /** A prop that stays shown on a daylight map though the picture hides its place, as a scenery card does (`cardShown`): chests, barrels, a hiding Mimic. Default false. */
   scenery?: boolean;
+  /** How far the painted eyes widen and brighten, 0..1 (default 0). Only a model with eyes reads it. */
+  flare?: number;
+  /** How much of the painted eyes shows, 0..1 (default 1: open). */
+  eye?: number;
 }
 
 /** Texels per row, 4 floats each. */
@@ -48,9 +52,10 @@ const PX = 1 / 16;  // tiles per sprite px
  *  - `tint` (1 texel): r, g, b, stone (0 or 1);
  *  - `seen` (1 texel): alpha, sight hard, sight soft, the caster slot;
  *  - `flags` (1 texel): dark (0 or 1), cut (0 or 1), the owner's number (see `OWNER_MAX`), `groundY`.
+ *  - `extra` (1 texel): flare, eye, 0, 0 (the painted eyes of a spectre, #359: `FigureInst.flare` and `.eye`).
  * The rest of the 64 texels is free.
  */
-export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51, flags: 52 } as const;
+export const ROW = { root: 0, bones: 3, bends: 45, robe: 49, tint: 50, seen: 51, flags: 52, extra: 53 } as const;
 
 /**
  * Writes row `row` of `out` (ROW_TEXELS x 4 floats). A weapon instance (`bone >= 0`) is a one-bone model whose origin is the grip
@@ -93,6 +98,8 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
   out[o] = inst.alpha; out[o + 1] = inst.sight.hard; out[o + 2] = inst.sight.soft; out[o + 3] = slot;
   o = base + ROW.flags * 4;
   out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = inst.groundY;
+  o = base + ROW.extra * 4;
+  out[o] = inst.flare ?? 0; out[o + 1] = inst.eye ?? 1; out[o + 2] = 0; out[o + 3] = 0;
 }
 
 /** A float array that keeps its content and at least doubles when `rows` (a count of floats) exceeds it. */

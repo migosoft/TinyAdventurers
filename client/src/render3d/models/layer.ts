@@ -127,10 +127,10 @@ export class FigureLayer {
 
   /**
    * `sunScene`: the sun's pass, or null without a sun. `idScene`: the id pass (the view draws it into the id target before the picture).
-   * `make` builds the materials of a model from the rows texture and the model's paint texture (once per model; the view adds the
+   * `make` builds the materials of a model from the rows texture, the model's paint texture and the model itself (once per model; the view adds the
    * lighting, the sight, the shared pictures and the id target).
    */
-  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly idScene: Scene, private readonly make: (rows: Texture, paint: Texture) => FigureMaterials) {
+  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly idScene: Scene, private readonly make: (rows: Texture, paint: Texture, model: FigureModel) => FigureMaterials) {
     this.rowsTex = new DataTexture(this.rows, ROW_TEXELS, START_ROWS, RGBAFormat, FloatType);
     // Floats need exact texels (a bone matrix in sprite px, a root in tiles: half floats would not hold them), read by integer coordinates.
     this.rowsTex.magFilter = NearestFilter;
@@ -224,7 +224,7 @@ export class FigureLayer {
     let r = this.models.get(key);
     if (!r) {
       const paint = imageTexture(model.paint, { mips: true });
-      this.models.set(key, r = { model, buffers: modelBuffers(model), paint, mats: this.make(this.rowsTex, paint) });
+      this.models.set(key, r = { model, buffers: modelBuffers(model), paint, mats: this.make(this.rowsTex, paint, model) });
     }
     return r;
   }

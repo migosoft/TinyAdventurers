@@ -77,6 +77,14 @@ describe('packInstance', () => {
     }
   });
 
+  it('packs the eye values at ROW.extra: flare 0 and eye 1 by default, the given ones otherwise, also for a weapon', () => {
+    expect(ROW.extra).toBe(53);
+    const at = (r: Float32Array): number[] => Array.from(r.subarray(ROW.extra * 4, ROW.extra * 4 + 4));
+    expect(at(row(inst()))).toEqual([0, 1, 0, 0]);
+    expect(at(row(inst({ flare: 0.5, eye: 0.25 })))).toEqual([0.5, 0.25, 0, 0]);
+    expect(at(row(inst({ bone: BONES.indexOf('weaponR') })))).toEqual([0, 1, 0, 0]);
+  });
+
   it('writes a weapon: the wielder bone times boneScale about its pivot, in bone 0', () => {
     const pose = restPose(skelet, 0);
     const b = BONES.indexOf('weaponR');

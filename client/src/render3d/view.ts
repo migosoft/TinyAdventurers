@@ -594,7 +594,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const idTarget = new RenderTarget(1, 1, { depthBuffer: true, type: UnsignedByteType, format: RGBAFormat, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
   idTarget.texture.colorSpace = NoColorSpace;
   const idSize = new Vector2();
-  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, idScene, (rows, paint) => figureMaterials({ lighting, sight, hasSun, rows, paint, idTex: idTarget.texture, ...(figureTex ??= figureLooks()), shared: figures.shared }));
+  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, idScene, (rows, paint, model) => figureMaterials({ lighting, sight, hasSun, rows, paint, eyes: model.spectre?.seeThrough ? null : model.spectre?.eyes, idTex: idTarget.texture, ...(figureTex ??= figureLooks()), shared: figures.shared }));
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
   const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);

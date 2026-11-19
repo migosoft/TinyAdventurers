@@ -10,7 +10,7 @@ import { FigureLayer, figureLooks, modelBuffers, stageSkin } from './layer';
 import { STAGES } from './bones';
 import { ROW, ROW_TEXELS, type FigureInst } from './instances';
 import { createKit, directRunner, type FigureKit } from './kit';
-import { BONES } from './model';
+import { BONES, type FigureModel } from './model';
 import { restPose } from './pose3d';
 import type { SpritePixels } from './weapons';
 import type { FigureFrame } from '../view';
@@ -53,14 +53,15 @@ const inst = (model: string, o: Partial<FigureInst> = {}): FigureInst => {
 const frame = (insts: FigureInst[]): FigureFrame => ({ insts, kit });
 
 /** `hasSun`: the materials carry a sun material; `sunScene`: the layer is given a scene for it. */
-function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; scene: Scene; sunScene: Scene | null; idScene: Scene; made: number } {
+function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; scene: Scene; sunScene: Scene | null; idScene: Scene; made: number; models: FigureModel[] } {
   const scene = new Scene(), sunScene = withSunScene ? new Scene() : null, idScene = new Scene();
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
   const sight = makeSight();
   const looks = figureLooks();
-  const out = { layer: null as unknown as FigureLayer, scene, sunScene, idScene, made: 0 };
-  out.layer = new FigureLayer(scene, sunScene, idScene, (rows, paint) => {
+  const out = { layer: null as unknown as FigureLayer, scene, sunScene, idScene, made: 0, models: [] as FigureModel[] };
+  out.layer = new FigureLayer(scene, sunScene, idScene, (rows, paint, model) => {
     out.made++;
+    out.models.push(model);
     return figureMaterials({ lighting, sight, hasSun, rows, paint, stone: looks.stone, sky: looks.sky, shared: out.layer.shared, idTex: new Texture() });
   });
   return out;
@@ -284,6 +285,8 @@ describe('FigureLayer', () => {
     l.layer.frame(frame([inst('elf'), inst('elf', { owner: 2, x: 0.1 }), inst('skelet', { owner: 3, x: 9 })]), slot);
     for (const s of [l.scene, l.sunScene!, l.idScene]) for (const m of meshes(s)) expect(Object.keys(m.geometry.attributes).length).toBeLessThanOrEqual(8);
     expect(l.made).toBe(2);
+    // The factory is given the model it builds for.
+    expect(new Set(l.models)).toEqual(new Set([kit.get('elf')!, kit.get('skelet')!]));
     l.layer.dispose();
   }, SLOW);
 });

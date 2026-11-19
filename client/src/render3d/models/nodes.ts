@@ -8,11 +8,13 @@
 // The page `figures.html` is the reference for the look; `layer.ts` owns the meshes and the textures, `view.ts` the id target.
 import { DoubleSide, FrontSide, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { Fn, asin, screenCoordinate, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, max, mix, normalize, reflect, select, sin, step, texture, textureLoad, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, abs, asin, screenCoordinate, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, length, max, mix, normalize, reflect, select, sin, smoothstep, step, texture, textureLoad, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import { CARD_SUN_NUDGE, bayerAt } from '../materials';
 import type { Sight } from '../sightNodes';
+import { BONES } from './bones';
 import { ROW } from './instances';
+import type { EyeSpec } from './tubeDesc';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,9 +98,30 @@ export function figurePoint(rows: Texture, shared: FigureShared): FigurePoint {
   // The row's per-instance values go to the fragment stage flat: one value for the whole instance.
   const flat = (node: N, name: string): N => varying(node, name).setInterpolation('flat');
   const tint = flat(T(ROW.tint), 'figTint'), seen = flat(T(ROW.seen), 'figSeen'), flags = flat(T(ROW.flags), 'figFlags');
-  return { world, screen, P: varying(world, 'figPos') as N, N: varying(nWorld, 'figNormal') as N, tint: tint as N, seen: seen as N, flags: flags as N };
+  // The extra texel (flare, eye) is only a node here: nothing is emitted unless a material reads it (the painted eyes).
+  const extra = flat(T(ROW.extra), 'figExtra');
+  return { world, screen, P: varying(world, 'figPos') as N, N: varying(nWorld, 'figNormal') as N, tint: tint as N, seen: seen as N, flags: flags as N, extra: extra as N };
 }
-export type FigurePoint = { world: N; screen: N; P: N; N: N; tint: N; seen: N; flags: N };
+export type FigurePoint = { world: N; screen: N; P: N; N: N; tint: N; seen: N; flags: N; extra: N };
+
+/**
+ * The painted eyes of a spectre (#359): two ovals mirrored in z on the front of the head, from the vertex's rest position `q` (model
+ * px) and its bone (only the head and the hat carry them). `extra` is the row's extra texel (x: flare, y: eye). `core` is the bright
+ * oval, `halo` the wider glow round it; both are 0 off the head. A flare widens and brightens the eyes; `eye` 0 closes them.
+ */
+export function eyeMask(spec: EyeSpec, extra: N): { core: N; halo: N } {
+  const q: N = varying(attribute('position', 'vec3'), 'figRest');
+  const bone: N = varying(attribute('skin', 'vec4').x, 'figBone').setInterpolation('flat');
+  const headBone = step(float(BONES.indexOf('head') - 0.5), bone).mul(step(bone, float(BONES.indexOf('hat') + 0.5)));
+  const flare: N = extra.x, eye: N = extra.y;
+  const px = abs(q.z).sub(spec.z), py = q.y.sub(spec.y);
+  const c = Math.cos(spec.slant), s = Math.sin(spec.slant);
+  const xr = px.mul(c).add(py.mul(s)).div(flare.mul(0.6).add(1).mul(spec.half[0]));
+  const yr = py.mul(c).sub(px.mul(s)).div(flare.mul(0.9).add(1).mul(spec.half[1]));
+  const d = length(vec2(xr, yr));
+  const on = step(float(spec.front), q.x).mul(headBone).mul(spec.strength).mul(eye);
+  return { core: float(1).sub(smoothstep(0.75, 1.05, d)).mul(on), halo: float(1).sub(smoothstep(0.9, 2.6, d)).mul(on) };
+}
 
 /** The stipple of a draw: kept where the Bayer threshold is below what is shown (sight and see-through in one: `alpha` times how much the hero sees), and above the ground when the figure is cut. */
 function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: number }): N {
@@ -115,7 +138,7 @@ function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: 
  * no sun code. All four cull the same side (the hull's triangles are wound the other way round, so the hull shows its inside, which is
  * the outline); the sun's pass sees both sides.
  */
-export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: boolean; rows: Texture; paint: Texture; stone: Texture; sky: Texture; shared: FigureShared; idTex: Texture }): FigureMaterials {
+export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: boolean; rows: Texture; paint: Texture; stone: Texture; sky: Texture; shared: FigureShared; idTex: Texture; eyes?: EyeSpec | null }): FigureMaterials {
   const { lighting, sight, hasSun, paint, stone, sky } = o;
   const p = figurePoint(o.rows, o.shared);
   const look = attribute('look', 'vec4');
@@ -164,7 +187,16 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit)));
+    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit)));
+    // Painted eyes (only a material built with `eyes` has this code): a glow round them and the bright oval, before the sight; a stone figure shows none.
+    let colour = colour0;
+    if (o.eyes) {
+      const { core, halo } = eyeMask(o.eyes, p.extra);
+      const ring = vec3(...rgbOf(o.eyes.ring)), coreColour = vec3(...rgbOf(o.eyes.core));
+      const flare: N = p.extra.x;
+      const eyed = mix(colour0.add(ring.mul(halo.mul(halo)).mul(flare.mul(0.8).add(0.55))), coreColour, core);
+      colour = select(isStone, colour0, eyed);
+    }
     return vec4(sight.apply(colour, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
   })();
 

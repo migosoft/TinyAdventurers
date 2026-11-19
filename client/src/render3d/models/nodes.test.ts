@@ -7,7 +7,11 @@ import { FIGURE_ORDER, FIGURE_SHADE, HULL_ORDER, OUTLINE, figureMaterials, makeF
 import { figureGeometry, modelBuffers } from './layer';
 import { buildFigure, type FigureModel } from './model';
 import { ROW_TEXELS } from './instances';
-import { DESCS } from './table';
+import { DESCS, TUBE_DESCS } from './table';
+import { buildTubeFigure } from './tubeModel';
+import type { EyeSpec } from './tubeDesc';
+
+const shade: FigureModel = buildTubeFigure('shade', TUBE_DESCS.shade);
 
 // The cheapest figure with bends is the elf (a quiff or a plume); the skeleton is the cheapest without. Built once.
 const elf: FigureModel = buildFigure('elf', DESCS.elf);
@@ -22,9 +26,9 @@ function rowsTexture(): DataTexture {
   return t;
 }
 
-function make(hasSun: boolean) {
+function make(hasSun: boolean, eyes?: EyeSpec | null) {
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
-  const mats = figureMaterials({ lighting, sight: makeSight(), hasSun, rows: rowsTexture(), paint: new Texture(), stone: new Texture(), sky: new Texture(), shared: makeFigureShared(), idTex: new Texture() });
+  const mats = figureMaterials({ lighting, sight: makeSight(), hasSun, rows: rowsTexture(), paint: new Texture(), stone: new Texture(), sky: new Texture(), shared: makeFigureShared(), idTex: new Texture(), ...(eyes !== undefined ? { eyes } : {}) });
   return { mats, lighting };
 }
 
@@ -108,6 +112,23 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
           expect(vertex(B, m, { compare: true, geometry: g }).length).toBeGreaterThan(0);
         }
       }
+    });
+
+    it('eyes in the piece: the Shade\'s spec reads the row\'s extra texel (figExtra); without eyes the code does not have it', () => {
+      const eyes = shade.spectre!.eyes;
+      const g = geometryOf(shade, 'piece');
+      const withEyes = fragment(B, make(false, eyes).mats.piece, { compare: true, geometry: g });
+      expect(withEyes).toMatch(/figExtra/);
+      expect(vertex(B, make(false, eyes).mats.piece, { compare: true, geometry: g })).toMatch(/figExtra/);
+      for (const none of [undefined, null]) {
+        const plain = fragment(B, make(false, none).mats.piece, { compare: true, geometry: g });
+        expect(plain).not.toMatch(/figExtra/);
+        expect(plain).toBe(fragment(B, make(false).mats.piece, { compare: true, geometry: g }));
+      }
+      // The other materials of a figure with eyes pay nothing.
+      const m = make(false, eyes).mats;
+      expect(fragment(B, m.id, { compare: true, geometry: g })).not.toMatch(/figExtra/);
+      expect(fragment(B, m.line, { compare: true, geometry: geometryOf(shade, 'line') })).not.toMatch(/figExtra/);
     });
 
     it('the render states: the outline, the id and the piece write colour and depth, the sun depth only', () => {
