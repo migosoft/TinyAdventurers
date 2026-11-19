@@ -85,11 +85,22 @@ export function skinVertex(m: FigureModel, pose: Pose3d, i: number, out: [number
   } else if (bend === -2) {
     x += along * pose.robe[0]; y += along * pose.robe[2]; z += along * pose.robe[1];
   }
+  skinned(pose, m.scale, bone, x, y, z, out);
+}
+
+/** Steps 2 and 3 of `skinVertex`: the bone's matrix, then the root. */
+function skinned(pose: Pose3d, scale: number, bone: number, x: number, y: number, z: number, out: [number, number, number]): void {
   const o = bone * 12, b = pose.bones;
   const bx = b[o] * x + b[o + 1] * y + b[o + 2] * z + b[o + 3], by = b[o + 4] * x + b[o + 5] * y + b[o + 6] * z + b[o + 7], bz = b[o + 8] * x + b[o + 9] * y + b[o + 10] * z + b[o + 11];
-  const R = pose.root, sx = R.sx * m.scale, sy = R.sy * m.scale, sz = R.sz * m.scale;
+  const R = pose.root, sx = R.sx * scale, sy = R.sy * scale, sz = R.sz * scale;
   const px = bx * sx, py = by * sy, pz = bz * sz, cr = Math.cos(R.roll), sr = Math.sin(R.roll);
   out[0] = px + R.x;
   out[1] = py * cr - pz * sr + R.y;
   out[2] = py * sr + pz * cr + R.z;
+}
+
+/** Where the pose puts the rest point `p` of `bone`, in the figure's frame before the yaw (game px): `skinVertex`'s steps 2 and 3 with `scale` in place of `m.scale`. */
+export function bonePoint(pose: Pose3d, scale: number, bone: number, p: readonly [number, number, number], out: [number, number, number]): [number, number, number] {
+  skinned(pose, scale, bone, p[0], p[1], p[2], out);
+  return out;
 }

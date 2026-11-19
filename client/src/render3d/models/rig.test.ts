@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildFigure, BONES, MAX_BONES, type FigureModel } from './model';
-import { composeBones, identityLocals } from './rig';
+import { restPose } from './pose3d';
+import { bonePoint, composeBones, identityLocals, skinVertex } from './rig';
 import { DESCS } from './table';
 
 // One cheap figure, built once.
@@ -77,5 +78,28 @@ describe('composeBones', () => {
     local[bone('body')].q = [0, 0, Math.sin(0.35), Math.cos(0.35)];
     composeBones(m, local, out);
     for (let k = 0; k < out.length; k++) expect(out[k]).toBeCloseTo(viaAngles[k], 5);
+  }, SLOW);
+});
+
+describe('bonePoint', () => {
+  it('puts a rest point where skinVertex puts the vertex of the head and of the right hand, in a moved pose', () => {
+    const knight = buildFigure('knight', DESCS.knight), pose = restPose(knight, 0.4);
+    pose.root = { x: 1.5, y: 2, z: -1, roll: 0.3, sx: 1.2, sy: 0.9, sz: 0.8 };
+    for (const name of ['head', 'handR'] as const) {
+      const b = bone(name);
+      pose.bones[b * 12 + 3] += 1.5; pose.bones[b * 12 + 5] = 0.9; pose.bones[b * 12 + 7] -= 0.7; pose.bones[b * 12 + 10] = 1.1;
+    }
+    for (const name of ['head', 'handR'] as const) {
+      let tested = 0;
+      for (let i = 0; i < knight.position.length / 3 && tested < 5; i++) {
+        if (knight.skin[i * 4] !== bone(name) || knight.skin[i * 4 + 2] !== -1) continue;
+        const want: [number, number, number] = [0, 0, 0], got: [number, number, number] = [0, 0, 0];
+        skinVertex(knight, pose, i, want);
+        bonePoint(pose, knight.scale, bone(name), [knight.position[i * 3], knight.position[i * 3 + 1], knight.position[i * 3 + 2]], got);
+        want.forEach((v, k) => expect(got[k]).toBeCloseTo(v, 5));
+        tested++;
+      }
+      expect(tested, name).toBeGreaterThan(0);
+    }
   }, SLOW);
 });
