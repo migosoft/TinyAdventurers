@@ -406,7 +406,7 @@ function elbowArms(m: FigureModel, d: FigureDef, k: number, lift: number, stride
   }
 }
 
-function newPose(yaw: number): Pose3d {
+export function newPose(yaw: number): Pose3d {
   return { yaw, root: { x: 0, y: 0, z: 0, roll: 0, sx: 1, sy: 1, sz: 1 }, bones: new Float32Array(MAX_BONES * 12), bends: new Float32Array(MAX_BENDS * 4), robe: [0, 0, 0], air: 0, attack: null, asleep: false, channel: false };
 }
 
