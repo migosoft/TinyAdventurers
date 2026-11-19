@@ -60,7 +60,13 @@ export function modelKindOf(key: string): number | null {
   return null;
 }
 
-export interface LiquidsOpts { push: Push | null; start: number; pinned: boolean; slow: number; /** The kind that plays every role, drawn as a model; null for the ordinary cast. */ models: number | null }
+export interface LiquidsOpts {
+  push: Push | null; start: number; pinned: boolean; slow: number;
+  /** The kind that plays every role, drawn as a model; null for the ordinary cast. */
+  models: number | null;
+  /** `&models=barrel` (#317): the ordinary cast, but the page's barrel is drawn as its 3D model. */
+  barrelModel: boolean;
+}
 
 export function parseLiquids(search: string): LiquidsOpts {
   const q = new URLSearchParams(search);
@@ -72,6 +78,7 @@ export function parseLiquids(search: string): LiquidsOpts {
     start: Number.isFinite(t) && t > 0 ? t : 0, pinned: q.has('t') && Number.isFinite(t),
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
     models: modelKindOf(q.get('models') ?? ''),
+    barrelModel: q.get('models') === 'barrel',
   };
 }
 
@@ -84,7 +91,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
   if (opts.push) pushes[opts.push] = 1;
   // The kit of a `&models` page, kept across a rebuilt view and ended with the stage.
-  const kit: FigureKit | null = opts.models !== null ? createStageKit(assets) : null;
+  const kit: FigureKit | null = opts.models !== null || opts.barrelModel ? createStageKit(assets) : null;
   const readout = kit ? modelsReadouter(kit) : null;
   const pass = new FxPass(NONE_IDS);
   const fx = new Effects3d(map);
@@ -159,7 +166,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       }
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, ...(kit ? { models: { kit, is: () => true } } : {}) };
+      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, ...(kit ? { models: { kit, is: (e: EntState) => opts.models !== null || e.kind === KIND.Barrel } } : {}) };
       // A pinned page plays the seconds before its clock once, then holds still.
       let fdt = dt;
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);

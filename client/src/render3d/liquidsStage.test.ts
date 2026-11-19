@@ -215,6 +215,20 @@ describe('the models of the ?r3d=liquids stage (#357)', () => {
     made.splice(made.indexOf(r.stage), 1);
   });
 
+  it('reads &models=barrel as the barrel model option, not as a cast kind', () => {
+    expect(parseLiquids('?models=barrel')).toMatchObject({ barrelModel: true, models: null });
+    expect(parseLiquids('?models=stag')).toMatchObject({ barrelModel: false, models: KIND.Stag });
+    expect(parseLiquids('?r3d=liquids').barrelModel).toBe(false);
+  });
+
+  it('with &models=barrel makes a kit and draws only the barrel as a model', () => {
+    (window as unknown as { __r3d: object }).__r3d = {};
+    fake.made = 0;
+    const f = make('?r3d=liquids&models=barrel').step(2)[1];
+    expect(fake.made).toBe(1);
+    expect(f.models).toBeDefined();
+  });
+
   it('without &models makes no kit and hands the view no models', () => {
     (window as unknown as { __r3d: object }).__r3d = {};
     fake.made = 0;

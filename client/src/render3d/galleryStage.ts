@@ -16,12 +16,12 @@ import { Figures3d } from './figures';
 import { groundRing } from './fx/shapes';
 import { FxTris } from './fx/tris';
 import { newFxBuf } from './models/fx';
-import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
+import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, OBJECT_PLACES, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
 import type { FigureKit } from './models/kit';
-import { MODEL_OF_KIND, type ModelKey } from './models/table';
+import { MODEL_OF_KIND, OBJECT_MODEL, objectModelOf, type ModelKey } from './models/table';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
@@ -95,7 +95,7 @@ export interface GalleryOpts {
 
 /**
  * `&state=<name>` pins one state, `&slow=<n>` slows the clock, `&focus=` picks where the camera starts (`&at=x,z` in tiles, or
- * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>` / `lineup:<place>` / `variety:<row>` (the middle of the row), overrides it;
+ * `&at=model:<i>` / `effect:<row>,<col>` / `dying:<i>` / `crowd:<i>` / `lineup:<place>` / `object:<place>` / `variety:<row>` (the middle of the row), overrides it;
  * `&focus=lineup` is the size line-up of every model key, shortest left, whole row in one picture at `&zoom=1`),
  * `&t=<s>` starts the clock there (the hurt flash is on at 0), `&crowd=<n>` adds walking model figures (`&crowdAs=cards` as cards),
  * `&light=torch` lights it with the torches.
@@ -111,11 +111,12 @@ export function parseGallery(search: string): GalleryOpts {
   const crowdKinds = (q.get('crowdKinds') ?? '').split(',').flatMap((key) => MODEL_KINDS.filter((k) => MODEL_OF_KIND[k] === key));
   const atRaw = q.get('at') ?? '';
   // `at=x,z` in tiles, or the foot of a figure of the model block: `model:<kind>`, `effect:<row>,<col>`, `dying:<i>`, `crowd:<i>`.
-  const named = /^(model|effect|dying|crowd|variety|lineup):(\d+)(?:,(\d+))?$/.exec(atRaw);
+  const named = /^(model|effect|dying|crowd|variety|lineup|object):(\d+)(?:,(\d+))?$/.exec(atRaw);
   const at = named
     ? (() => {
       const [, what, a, b] = named;
       const n = Number(a);
+      if (what === 'object') return GALLERY.object(Math.min(n, OBJECT_PLACES - 1));
       if (what === 'lineup') return GALLERY.lineup(Math.min(n, LINEUP_MAX - 1));
       if (what === 'variety') return GALLERY.variety(n, b === undefined ? (VARIETY_COLS - 1) / 2 : Number(b));
       return what === 'model' ? GALLERY.model(n) : what === 'effect' ? GALLERY.modelEffect(n, Number(b ?? 0)) : what === 'dying' ? GALLERY.dying(n) : GALLERY.crowd(n);
@@ -137,9 +138,9 @@ export function parseGallery(search: string): GalleryOpts {
   };
 }
 
-/** Which entities the stage draws as 3D models: the model blocks (ids from `ID.model` up, the variety block included) and the crowd unless it is cards. */
+/** Which entities the stage draws as 3D models: the model blocks (ids from `ID.model` up, the variety block included), the crowd unless it is cards, and under `&focus=models` the object row's chests, barrels and Mimics (#317). */
 export function modelsOf(o: GalleryOpts): (e: EntState) => boolean {
-  return (e) => e.id >= ID.model && (e.id < ID.crowd || o.crowdAs === 'models');
+  return (e) => (e.id >= ID.object && e.id < ID.shot ? o.focus === 'models' && objectModelOf(e.kind) !== null : e.id >= ID.model && (e.id < ID.crowd || o.crowdAs === 'models'));
 }
 
 const ent = (id: number, kind: number, x: number, z: number, o: Partial<EntState> = {}): EntState => ({
@@ -164,11 +165,11 @@ const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny, KIND.GoblinA
  * checks the order). Each stands for the first kind that wears it; the line is one row at equal depth, idle, facing right.
  */
 export const LINEUP_KEYS: readonly ModelKey[] = [
-  'bunny', 'boar', 'imp', 'goblin', 'skelet', 'wolf', 'deer', 'wizard', 'dwarf', 'knight', 'ogre', 'stag', 'elf',
+  'bunny', 'boar', 'imp', 'chest', 'mimic', 'goblin', 'skelet', 'wolf', 'deer', 'wizard', 'dwarf', 'knight', 'barrel', 'ogre', 'stag', 'elf',
   'npcKnight', 'necromancer', 'summoner', 'disciple', 'chort', 'orc',
 ];
-/** The kind that stands for a model key in the line-up. */
-export const lineupKind = (key: ModelKey): number => Number(Object.keys(MODEL_OF_KIND).find((k) => MODEL_OF_KIND[Number(k)] === key));
+/** The kind that stands for a model key in the line-up (the objects' kinds from `OBJECT_MODEL`, #317). */
+export const lineupKind = (key: ModelKey): number => Number(Object.keys({ ...MODEL_OF_KIND, ...OBJECT_MODEL }).find((k) => (MODEL_OF_KIND[Number(k)] ?? OBJECT_MODEL[Number(k)]) === key));
 /** The server's hit circle of a kind in game px: a monster's exported radius; a hero's `PLAYER_RADIUS` (the Dire Wolf's `WOLF_RADIUS` on the server is the same 5). */
 export const circleOf = (kind: number): number => HITBOX[kind]?.r ?? CONST.PLAYER_RADIUS;
 const RING: readonly [number, number, number] = [1, 0.9, 0.2];
@@ -254,7 +255,9 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
   });
   LINEUP_KEYS.forEach((key, i) => {
     const p = GALLERY.lineup(i);
-    out.push(ent(ID.lineup + i, lineupKind(key), p.x, p.z, { anim: ANIM.Idle, animMs: 0, aim: 0 }));
+    const kind = lineupKind(key);
+    // A Mimic stands awake here (a hiding one is the chest beside it); the chest and the barrel are neutral objects.
+    out.push(ent(ID.lineup + i, kind, p.x, p.z, { anim: ANIM.Idle, animMs: 0, aim: 0, ...(kind === KIND.Chest || kind === KIND.Barrel ? { side: SIDE.Neutral } : {}) }));
   });
   GALLERY.pillarTorches.forEach((p, i) => out.push(ent(ID.pillarTorch + i, KIND.Torch, p.x, p.z, { side: SIDE.Neutral, anim: 1, extra: 0 })));
   for (let i = 0; i < crowd; i++) {
@@ -279,7 +282,7 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
   });
 
   // World objects: a chest, an opening chest, a barrel, the cycling explosive barrel, three mimics, a lit and an unlit torch.
-  const ox = (i: number): number => 4 + i * 3;
+  const ox = (i: number): number => GALLERY.object(i).x;
   out.push(ent(ID.object, KIND.Chest, ox(0), OBJECT_Z, { side: SIDE.Neutral }));
   out.push(ent(ID.object + 1, KIND.Chest, ox(1), OBJECT_Z, { side: SIDE.Neutral, anim: 1, animMs: (t % 3) * 1000 }));
   out.push(ent(ID.object + 2, KIND.Barrel, ox(2), OBJECT_Z, { side: SIDE.Neutral }));

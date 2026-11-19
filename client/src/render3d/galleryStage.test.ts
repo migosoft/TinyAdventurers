@@ -8,9 +8,9 @@ import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
 import { GALLERY, ID, LINEUP_KEYS, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery } from './galleryStage';
 import { FxTris } from './fx/tris';
-import { LINEUP_MAX } from './galleryMap';
+import { LINEUP_MAX, OBJECT_PLACES } from './galleryMap';
 import { buildJob } from './models/build';
-import { MODEL_OF_KIND, modelKeyOf } from './models/table';
+import { MODEL_OF_KIND, OBJECT_MODEL, modelKeyOf, objectModelOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 import type { Cam } from './camera';
 
@@ -142,7 +142,7 @@ describe('the gallery stage', () => {
   it('&circles=1 draws the hit circle of every line-up figure: a monster its server radius, a hero the player radius', () => {
     expect(parseGallery('?focus=lineup&circles=1').circles).toBe(true);
     expect(parseGallery('?focus=lineup&circles=0').circles).toBe(false);
-    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 4, 5, 5, 4, 5, 5, 5, 10, 5, 5, 4, 4, 4, 4, 4, 4]);
+    expect(LINEUP_KEYS.map((k) => circleOf(lineupKind(k)))).toEqual([4, 4, 4, 6, 6, 4, 5, 5, 4, 5, 5, 5, 6, 10, 5, 5, 4, 4, 4, 4, 4, 4]);
     const T = new FxTris(4096);
     lineupCircles(T);
     expect(T.n).toBe(LINEUP_KEYS.length * 64);
@@ -240,15 +240,41 @@ describe('the gallery stage', () => {
     expect(parseGallery('?at=variety:2').at).toEqual(GALLERY.variety(2, 2.5));
   });
 
+  describe('the object row as models (#317)', () => {
+    const row = (): ReturnType<typeof galleryEnts> => galleryEnts(1.7, null).filter((e) => e.id >= ID.object && e.id < ID.shot);
+
+    it('draws the chests, barrels and Mimics of the row as models under &focus=models, not its torches', () => {
+      const is = modelsOf(parseGallery('?focus=models'));
+      const objects = row().filter((e) => e.kind !== KIND.Torch);
+      expect(objects.map((e) => e.kind).sort()).toEqual([KIND.Mimic, KIND.Mimic, KIND.Mimic, KIND.Barrel, KIND.Barrel, KIND.Chest, KIND.Chest].sort());
+      expect(objects.every(is)).toBe(true);
+      expect(row().filter((e) => e.kind === KIND.Torch).some(is)).toBe(false);
+    });
+
+    it('keeps the row as cards with any other focus', () => {
+      for (const q of ['?focus=objects', '?focus=figures', '']) expect(row().some(modelsOf(parseGallery(q))), q).toBe(false);
+    });
+
+    it('aims &at=object:<i> at place i of the row, clamped to the row', () => {
+      expect(parseGallery('?at=object:4').at).toEqual(GALLERY.object(4));
+      const places = row().filter((e) => e.kind !== KIND.Torch).sort((a, b) => a.id - b.id);
+      expect(places).toHaveLength(OBJECT_PLACES);
+      places.forEach((e, i) => expect(GALLERY.object(i), String(e.id)).toEqual({ x: e.x / 16, z: e.y / 16 }));
+      expect(parseGallery('?at=object:99').at).toEqual(GALLERY.object(OBJECT_PLACES - 1));
+    });
+  });
+
   describe('the size line-up (#356)', () => {
     const line = (): ReturnType<typeof galleryEnts> => galleryEnts(1.7, null).filter((e) => inRange(e.id, ID.lineup, 100));
 
-    it('shows every distinct model key exactly once', () => {
-      const keys = new Set(Object.values(MODEL_OF_KIND));
-      expect(LINEUP_KEYS).toHaveLength(LINEUP_MAX);
+    it('shows every distinct model key, creatures and objects, exactly once', () => {
+      const keys = new Set([...Object.values(MODEL_OF_KIND), ...Object.values(OBJECT_MODEL)]);
+      const keyOf = (kind: number) => modelKeyOf(kind) ?? objectModelOf(kind);
+      expect(LINEUP_KEYS).toHaveLength(22);
+      expect(LINEUP_MAX).toBe(22);
       expect(new Set(LINEUP_KEYS)).toEqual(keys);
-      expect(line().map((e) => modelKeyOf(e.kind))).toEqual([...LINEUP_KEYS]);
-      for (const k of keys) expect(modelKeyOf(lineupKind(k!)), String(k)).toBe(k);
+      expect(line().map((e) => keyOf(e.kind))).toEqual([...LINEUP_KEYS]);
+      for (const k of keys) expect(keyOf(lineupKind(k!)), String(k)).toBe(k);
     });
 
     it('stands them idle, facing right, on one line at equal depth, on floor and inside the map', () => {

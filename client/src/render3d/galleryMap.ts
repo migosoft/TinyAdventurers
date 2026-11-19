@@ -50,9 +50,11 @@ export const VARIETY_ROWS = 8;
 export const VARIETY_COLS = 6;
 export const VARIETY_PITCH = 3;
 export const CROWD_MAX = CROWD_PER_ROW * CROWD_ROWS;
-/** The size line-up (#356), the last block: one row of every model key, `LINEUP_PITCH` tiles apart (the 19 model keys fit the 48 floor tiles). */
-export const LINEUP_PITCH = 2.4;
-export const LINEUP_MAX = 19;
+/** The size line-up (#356), the last block: one row of every model key, `LINEUP_PITCH` tiles apart (the 22 model keys, the chest, Mimic and barrel among them, fit the 48 floor tiles). */
+export const LINEUP_PITCH = 2.1;
+export const LINEUP_MAX = 22;
+/** The object row's places (chest, opening chest, barrel, cycling barrel, three Mimics), 3 tiles apart from x 4, feet at `OBJECT_Z`. */
+export const OBJECT_PLACES = 7;
 const LINEUP_DEPTH = 6;
 /** The pillars' columns (tiles) in the model block, over the kind cells 0, 3, 6 and 9 of a row (kinds stand at x 3.5 to 33.5): every kind is at most 3 tiles across from a torch of its row. */
 export const PILLAR_X = [3, 12, 21, 30] as const;
@@ -72,6 +74,8 @@ export interface Layout {
   variety(row: number, col: number): { x: number; z: number };
   /** Foot of place `i` of the size line-up, in tiles (all on one line, equal depth). */
   lineup(i: number): { x: number; z: number };
+  /** Foot of place `i` of the object row, in tiles. */
+  object(i: number): { x: number; z: number };
   /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
   pillarTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
@@ -121,6 +125,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
     crowd: (i) => ({ x: 2 + (i % CROWD_PER_ROW) * 2 + 1, z: crowdTop + Math.floor(i / CROWD_PER_ROW) * 2 + 1 }),
     variety: (row, col) => ({ x: 2 + col * VARIETY_PITCH + 1.5, z: varTop + row * VARIETY_PITCH + 2 }),
     lineup: (i) => ({ x: lineX(i), z: lineZ }),
+    object: (i) => ({ x: 4 + i * 3, z: OBJECT_Z }),
     pillarTorches: Array.from({ length: kindRows }, (_, r) => PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + r * MODEL_KIND_ROW_PITCH + 1 }))).flat(),
     focus: {
       models: { x: 2 + (Math.min(nModels, MODEL_PER_ROW) * MODEL_PITCH) / 2, z: mTop + 3.5 },
