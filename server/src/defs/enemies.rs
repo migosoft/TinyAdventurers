@@ -177,7 +177,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::OrcWarrior,
                 hp: 70.0,
                 speed: 52.0,
-                radius: 6.0,
+                radius: 4.0,
                 vision: 7.8125,
                 attr_mods,
                 weight: 13.0,
@@ -194,7 +194,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::OrcArcher,
                 hp: 50.0,
                 speed: 48.0,
-                radius: 6.0,
+                radius: 4.0,
                 vision: 8.75,
                 attr_mods,
                 weight: 13.0,
@@ -211,7 +211,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: if t == Summoner { EntityKind::Summoner } else { EntityKind::Necromancer },
                 hp: 60.0,
                 speed: 40.0,
-                radius: 5.0,
+                radius: 4.0,
                 vision: 9.375,
                 attr_mods,
                 weight: 10.0,
@@ -228,7 +228,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Disciple,
                 hp: 45.0,
                 speed: 0.0,
-                radius: 5.0,
+                radius: 4.0,
                 vision: 12.5,
                 attr_mods,
                 weight: 10.0,
@@ -263,7 +263,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Imp,
                 hp: if t == SummonedImp { 20.0 } else { 30.0 },
                 speed: 44.0,
-                radius: 5.0,
+                radius: 4.0,
                 vision: 8.75,
                 attr_mods,
                 weight: 4.0,
@@ -280,7 +280,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Chort,
                 hp: 40.0,
                 speed: 46.0,
-                radius: 5.0,
+                radius: 4.0,
                 vision: 7.5,
                 attr_mods,
                 weight: 10.0,
@@ -334,7 +334,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Knight,
                 hp: 60.0,
                 speed: 68.0,
-                radius: 5.0,
+                radius: 4.0,
                 vision: 8.0,
                 attr_mods,
                 weight: 12.0,
@@ -370,7 +370,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: if t == Stag { EntityKind::Stag } else { EntityKind::Deer },
                 hp: 40.0,
                 speed: 90.0,
-                radius: 5.0,
+                // The circle follows the model (#356): the stag's body is the larger.
+                radius: if t == Stag { 5.0 } else { 4.0 },
                 vision: 8.0,
                 attr_mods,
                 weight: 12.0,
@@ -387,7 +388,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Boar,
                 hp: 40.0,
                 speed: 64.0,
-                radius: 6.0,
+                radius: 4.0,
                 vision: 6.0,
                 attr_mods,
                 weight: 14.0,
@@ -670,7 +671,7 @@ mod tests {
         use EnemyType::Knight;
         let k = def(Knight);
         assert_eq!(attr_sources(Knight).total(), Attributes::new(14, 12, 14, 8, 10, 12));
-        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 5.0, 8.0, BaseAi::Melee));
+        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 4.0, 8.0, BaseAi::Melee));
         assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
         assert_eq!(races(Knight), &[Race::Human]);
         assert_eq!(crate::defs::progression::xp_for_kill(Some(Knight)), 0);
@@ -686,12 +687,13 @@ mod tests {
         for t in [Deer, Stag] {
             let d = def(t);
             assert_eq!(attr_sources(t).total(), Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
-            assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 5.0, 8.0, Some(Reaction::Flee)), "{t:?}");
+            assert_eq!((d.hp, d.speed, d.vision, d.wild), (40.0, 90.0, 8.0, Some(Reaction::Flee)), "{t:?}");
         }
+        assert_eq!((def(Deer).radius, def(Stag).radius), (4.0, 5.0));
         assert_eq!((def(Deer).kind, def(Stag).kind), (EntityKind::Deer, EntityKind::Stag));
         let boar = def(Boar);
         assert_eq!(attr_sources(Boar).total(), Attributes::new(14, 10, 14, 2, 8, 6));
-        assert_eq!((boar.hp, boar.speed, boar.radius, boar.vision, boar.wild), (40.0, 64.0, 6.0, 6.0, Some(Reaction::FightBack)));
+        assert_eq!((boar.hp, boar.speed, boar.radius, boar.vision, boar.wild), (40.0, 64.0, 4.0, 6.0, Some(Reaction::FightBack)));
         assert_eq!((boar.abilities, boar.weapons), (&[AbilityId::Strike][..], &[ItemId::BoarTusks][..]));
         for t in EnemyType::ALL {
             assert_eq!(def(t).wild.is_some(), matches!(t, Bunny | Deer | Stag | Boar), "{t:?}");
@@ -769,35 +771,35 @@ mod kit_pins {
             (SkeletonWarrior, Strike, Pin { damage: 9.0, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (SkeletonArcher, Shoot, Pin { damage: 7.0, cooldown: 1.0666666666666667, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SkeletonArcher, Strike, Pin { damage: 3.0, cooldown: 0.6666666666666666, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (OrcWarrior, Strike, Pin { damage: 14.0, cooldown: 1.0, range: 26.0, speed: 0.0, radius: 0.0, windup: 0.35, push: 20.0 }),
+            (OrcWarrior, Strike, Pin { damage: 14.0, cooldown: 1.0, range: 24.0, speed: 0.0, radius: 0.0, windup: 0.35, push: 20.0 }),
             (OrcArcher, Shoot, Pin { damage: 10.0, cooldown: 1.2142857142857142, range: 150.0, speed: 190.0, radius: 3.0, windup: 0.35, push: 0.0 }),
-            (OrcArcher, Strike, Pin { damage: 3.5999999999999996, cooldown: 0.7142857142857143, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (OrcArcher, Strike, Pin { damage: 3.5999999999999996, cooldown: 0.7142857142857143, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Necromancer, ShadowBolt, Pin { damage: 12.0, cooldown: 1.1764705882352942, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
-            (Necromancer, Strike, Pin { damage: 5.0, cooldown: 0.8571428571428571, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Necromancer, Strike, Pin { damage: 5.0, cooldown: 0.8571428571428571, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Necromancer, RaiseDead, Pin { damage: 0.0, cooldown: 7.0588235294117645, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.7, push: 0.0 }),
             (RaisedSkeleton, Strike, Pin { damage: 9.0, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (RaisedArcher, Shoot, Pin { damage: 7.0, cooldown: 1.0666666666666667, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (RaisedArcher, Strike, Pin { damage: 3.0, cooldown: 0.6666666666666666, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Disciple, ShadowBolt, Pin { damage: 10.222222222222221, cooldown: 1.5384615384615385, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
-            (Disciple, Strike, Pin { damage: 3.0, cooldown: 0.8333333333333334, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Disciple, Strike, Pin { damage: 3.0, cooldown: 0.8333333333333334, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Mimic, Bite, Pin { damage: 13.0, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Imp, FireBolt, Pin { damage: 7.0, cooldown: 1.4285714285714286, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
-            (Imp, Strike, Pin { damage: 6.0, cooldown: 0.5294117647058824, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (Chort, Strike, Pin { damage: 9.0, cooldown: 0.7692307692307693, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 14.0 }),
+            (Imp, Strike, Pin { damage: 6.0, cooldown: 0.5294117647058824, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Chort, Strike, Pin { damage: 9.0, cooldown: 0.7692307692307693, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 14.0 }),
             (Chort, FireBolt, Pin { damage: 5.541666666666666, cooldown: 2.2222222222222223, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (Summoner, FireBolt, Pin { damage: 7.583333333333334, cooldown: 1.25, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
-            (Summoner, Strike, Pin { damage: 5.0, cooldown: 0.8571428571428571, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Summoner, Strike, Pin { damage: 5.0, cooldown: 0.8571428571428571, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Summoner, SummonImps, Pin { damage: 0.0, cooldown: 8.0, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.7, push: 0.0 }),
             (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 1.4285714285714286, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
-            (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.5294117647058824, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.5294117647058824, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Ghost, Touch, Pin { damage: 7.2, cooldown: 0.7142857142857143, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Ghost, Vanish, Pin { damage: 0.0, cooldown: 14.285714285714286, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Shade, Touch, Pin { damage: 8.75, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Shade, Vanish, Pin { damage: 0.0, cooldown: 13.333333333333334, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 2.0, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 7.5, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
-            (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
-            (Boar, Strike, Pin { damage: 8.0, cooldown: 1.0, range: 24.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (Boar, Strike, Pin { damage: 8.0, cooldown: 1.0, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {

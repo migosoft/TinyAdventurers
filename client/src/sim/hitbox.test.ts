@@ -12,7 +12,8 @@ describe('shot hitboxes', () => {
   });
 
   it('keep small figures round', () => {
-    expect(shotHits(KIND.OrcWarrior, 0, 0, false, 8, 0, 3)).toBe(true);
+    expect(shotHits(KIND.OrcWarrior, 0, 0, false, 6, 0, 3)).toBe(true);
+    expect(shotHits(KIND.OrcWarrior, 0, 0, false, 8, 0, 3)).toBe(false);
     expect(shotHits(KIND.OrcWarrior, 0, 0, false, 0, -16, 3)).toBe(false);
   });
 

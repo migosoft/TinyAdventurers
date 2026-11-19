@@ -982,15 +982,15 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "13": {
     "h": 16.0,
-    "r": 6.0
+    "r": 4.0
   },
   "14": {
     "h": 16.0,
-    "r": 6.0
+    "r": 4.0
   },
   "15": {
     "h": 16.0,
-    "r": 5.0
+    "r": 4.0
   },
   "16": {
     "h": 13.0,
@@ -998,7 +998,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "17": {
     "h": 16.0,
-    "r": 5.0
+    "r": 4.0
   },
   "18": {
     "h": 0.0,
@@ -1006,15 +1006,15 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "19": {
     "h": 11.0,
-    "r": 5.0
+    "r": 4.0
   },
   "20": {
     "h": 18.0,
-    "r": 5.0
+    "r": 4.0
   },
   "21": {
     "h": 16.0,
-    "r": 5.0
+    "r": 4.0
   },
   "22": {
     "h": 26.0,
@@ -1030,7 +1030,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "26": {
     "h": 12.0,
-    "r": 5.0
+    "r": 4.0
   },
   "27": {
     "h": 8.0,
@@ -1038,7 +1038,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "28": {
     "h": 16.0,
-    "r": 5.0
+    "r": 4.0
   },
   "29": {
     "h": 16.0,
@@ -1058,7 +1058,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   },
   "33": {
     "h": 12.0,
-    "r": 6.0
+    "r": 4.0
   },
   "80": {
     "h": 0.0,

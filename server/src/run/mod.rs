@@ -1881,6 +1881,7 @@ pub mod tests {
     // 2026-11-04, the cooldown chain (#198): cooldowns scale with Attributes, so the ranger and wizard fights (the first two values) differ; the paladin's is unchanged. Re-recorded once, on purpose.
     // 2026-11-04, haunts out of the hash (#199): `fight` numbers its enemies from `FIGHT_IDS`, so the haunt tuning no longer moves these values. Re-recorded once, on purpose; the outcomes are unchanged.
     // 2026-11-07, dodging and keeping distance (#220): the ranger's and the paladin's fights changed on purpose (goblin archers dodge and no longer back away); the wizard's is unchanged.
+    // 2026-11-19, hit circles from the models (#356): the Orc Warrior's circle is 4 px (was 6), and its melee range with it (24, was 26), so the wizard's fight (the second value) differs; the other two are unchanged. Re-recorded once, on purpose.
     #[test]
     fn plan_3a_fight_is_pinned() {
         use crate::defs::enemies::EnemyType as E;
@@ -1893,7 +1894,7 @@ pub mod tests {
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [17891591712672026376, 7896150550252767994, 858296736700943210]);
+        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
     }
 
     #[test]
@@ -1903,7 +1904,7 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [17891591712672026376, 7896150550252767994, 858296736700943210]);
+        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
     }
 
     #[test]

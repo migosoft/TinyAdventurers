@@ -763,9 +763,11 @@ mod tests {
             let m = &run.monsters[mi];
             assert!(super::super::ai::can_rest(&run, mi, m.pos) || m.dodge.is_some(), "never rests in a wall");
         }
-        // Walls on both sides: no dodge.
+        // Walls on both sides, and a body too wide to clear the shot inside its own tile (a phaser rests wherever its
+        // centre is on open ground, so a slim one sidesteps within the tile): no dodge.
         let (mut run, mi) = row(100.0);
         run.monsters[mi].mover = Mover::Incorporeal;
+        run.monsters[mi].radius = 6.0;
         wall(&mut run, mi, -1);
         wall(&mut run, mi, 1);
         fire(&mut run, AbilityId::Shoot, 0.0, 100.0);

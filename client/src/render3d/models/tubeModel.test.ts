@@ -223,12 +223,19 @@ describe('buildTubeFigure', () => {
     expect(hitRadius(TUBE_DESCS.deer)).toBe(4);
   });
 
-  it("the stag's baseR is its model's hit radius; the resized animals' server circles are kept (#356 rework 1, part G)", () => {
-    const kinds = { stag: KIND.Stag, deer: KIND.Deer, boar: KIND.Boar, bunny: KIND.Bunny } as const;
-    expect(FIGURES[kinds.stag].baseR).toBe(hitRadius(TUBE_DESCS.stag));
-    // The models' own circles after the resize: the server's circles above are the larger.
-    expect(keys.map((k) => hitRadius(TUBE_DESCS[k]))).toEqual([5, 4, 4, 4]);
-    expect(keys.map((k) => FIGURES[kinds[k]].baseR)).toEqual([5, 5, 6, 4]);
+  it("every tube model's hit radius, as approved (#356 Task 12): the server's `radius` in enemies.rs is the same number", () => {
+    const all = Object.keys(TUBE_DESCS) as TubeKey[];
+    expect(Object.fromEntries(all.map((k) => [k, hitRadius(TUBE_DESCS[k])]))).toEqual({
+      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4,
+    });
+    // Necromancer and Summoner share one server block: one circle.
+    expect(hitRadius(TUBE_DESCS.necromancer)).toBe(hitRadius(TUBE_DESCS.summoner));
+  });
+
+  it("the baseR of every kind that wears a tube model is its model's hit radius", () => {
+    const worn = Object.entries(MODEL_OF_KIND).filter(([, key]) => key! in TUBE_DESCS);
+    expect(worn.length).toBeGreaterThanOrEqual(13);
+    for (const [kind, key] of worn) expect(FIGURES[Number(kind)].baseR, `kind ${kind} (${key})`).toBe(hitRadius(TUBE_DESCS[key as TubeKey]));
   });
 
   it('a bad description throws an error that names it', () => {
