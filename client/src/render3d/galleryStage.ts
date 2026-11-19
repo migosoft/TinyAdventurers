@@ -24,6 +24,7 @@ import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
 import type { FigureKit } from './models/kit';
+import { SMOKE_TONES } from './models/tubeDesc';
 import { MODEL_OF_KIND, OBJECT_MODEL, floats, objectModelOf, type ModelKey } from './models/table';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
@@ -100,6 +101,8 @@ export interface GalleryOpts {
   aim: number | null;
   /** `&circles=1`: a ring on the ground under every figure of the line-up, the server's hit circle of its kind. */
   circles: boolean;
+  /** `&tone=purple`: every smoke body is drawn in the purple tone (null: the description's own tone). */
+  smokeTone: readonly [number, number, number] | null;
 }
 
 /**
@@ -145,6 +148,7 @@ export function parseGallery(search: string): GalleryOpts {
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
     aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
     circles: q.get('circles') === '1',
+    smokeTone: q.get('tone') === 'purple' ? SMOKE_TONES.purple : null,
   };
 }
 
@@ -504,7 +508,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !torch, oval: 1, models: { kit, is } });
       spectrePassIn(fo.figs, ents, specFigs, specEnts);
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: specFigs, ents: specEnts, shots: [], hiddenShots: NO_IDS, snap: undefined, hidden: NO_IDS, you: -1, ownCast: null }, fo.glows);
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: specFigs, ents: specEnts, shots: [], hiddenShots: NO_IDS, snap: undefined, hidden: NO_IDS, you: -1, ownCast: null, smokeTone: opts.smokeTone }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];

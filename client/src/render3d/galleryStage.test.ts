@@ -5,6 +5,7 @@ import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
+import { SMOKE_TONES } from './models/tubeDesc';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
 import { GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectrePassIn, spectreAt, spectreDiedBetween } from './galleryStage';
@@ -161,15 +162,23 @@ describe('the gallery stage', () => {
   });
 
   it('reads the URL: state, slow and focus', () => {
-    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null, circles: false };
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null, circles: false, smokeTone: null };
     expect(parseGallery('?r3d=gallery')).toEqual(d);
     expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
   });
 
+  it('&tone=purple gives the Shades the purple smoke; absent or any other value leaves the description\'s tone', () => {
+    expect(parseGallery('?focus=models&tone=purple').smokeTone).toEqual(SMOKE_TONES.purple);
+    expect(parseGallery('?focus=models').smokeTone).toBeNull();
+    expect(parseGallery('?tone=grey').smokeTone).toBeNull();
+    expect(parseGallery('?tone=nope').smokeTone).toBeNull();
+    expect(parseGallery('?tone=').smokeTone).toBeNull();
+  });
+
   it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
     expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
-      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null, circles: false,
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null, circles: false, smokeTone: null,
     });
     expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
     expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));

@@ -97,16 +97,22 @@ for (let i = 0; i < 6; i++) shots.push({ name: `spectre-place-${i}`, q: `&at=spe
 // The life loop. The ambush warning is the first 0.5 s (`AMBUSH_WARNING`): the Ghost blinks in 0.06 s steps (on in 0.06-0.12, 0.18-0.24,
 // 0.30-0.36, 0.42-0.48), so it is shot at 0.21 and 0.45 (blinked on) and once at 0.4 (blinked off, named so); the Shade forms (fog pool,
 // fog risen with the body fading in, the eyes lighting last) at 0.15, 0.35 and 0.47. Then the blow (3.1) and the death (7.3).
-const LIFE = { ghost: ['0.21', '0.45', 'blinkoff-0.4', '3.1', '7.3'], shade: ['0.15', '0.35', '0.47', '3.1', '7.3'] };
+const LIFE = { ghost: ['0.21', '0.45', 'blinkoff-0.4', '3.1', '7.3'], shade: ['0.15', '0.3', '0.47', '2.9', '3.08', '3.18', '3.6', '7.1', '7.6'] };
 for (const [key, , life] of SPECTRES) {
   for (const label of LIFE[key]) shots.push({ name: `spectre-life-${key}-${label}`, q: `&at=spectre:${life}&zoom=8&slow=1000&t=${label.replace('blinkoff-', '')}`, need: [key] });
 }
 // The eyes from the front (aim 90 faces the camera) and from the side (aim 0), close; in the work light and in the torch light.
 for (const [key, stand] of SPECTRES) {
   for (const [light, extra] of [['work', ''], ['torch', '&light=torch']]) {
-    for (const [side, aim] of [['front', 90], ['side', 0]]) shots.push({ name: `spectre-close-${key}-${side}-${light}`, q: `&at=spectre:${stand}&zoom=16&aim=${aim}${extra}${SPOT}`, need: [key] });
+    // The Ghost from the front and the side; the Shade (a body of smoke with hard parts) also from behind and the other side.
+    const aims = key === 'shade' ? [['front', 90], ['side', 0], ['side2', 180], ['back', 270]] : [['front', 90], ['side', 0]];
+    for (const [side, aim] of aims) shots.push({ name: `spectre-close-${key}-${side}-${light}`, q: `&at=spectre:${stand}&zoom=16&aim=${aim}${extra}${SPOT}`, need: [key] });
   }
 }
+// The Shade at game size (the standing place at zoom 2), with the purple tone (&tone=purple), and the walker at two clock values 0.5 s apart.
+shots.push({ name: 'spectre-shade-gamesize', q: `&at=spectre:3&zoom=2${SPOT}`, need: ['shade'] });
+shots.push({ name: 'spectre-shade-purple', q: `&at=spectre:3&zoom=8&tone=purple${SPOT}`, need: ['shade'] });
+for (const t of ['1.7', '2.2']) shots.push({ name: `spectre-shade-walk-t${t}`, q: `&at=spectre:4&zoom=8&slow=1000&t=${t}`, need: ['shade'] });
 // The pillar torches hang over the walkers (places 1 and 4): the Shade as a hole in front of the lit wall, the Ghost's own floor light, and the block whole.
 for (const [name, place] of [['ghost', 1], ['shade', 4]]) shots.push({ name: `spectre-torch-${name}-walk`, q: `&at=spectre:${place}&zoom=8&light=torch${SPOT}`, need: [name] });
 // The effect rows at columns 12 (Ghost) and 13 (Shade): asleep, stone, frozen, poisoned, invisible.
@@ -296,6 +302,29 @@ if (!only || only.test('lose')) {
     await p.close();
   } catch (e) {
     errs.push(`lose-ghost: ${e.message}`);
+  }
+}
+
+// A lost device with a Shade in view (#359): its smoke is drawn again by the new view (lose-shade-before and lose-shade-after are the check by eye).
+if (!only || only.test('lose')) {
+  try {
+    const p = await open(`${base}?r3d=gallery&at=spectre:4&zoom=8&slow=1000&t=1.7`, 'lose-shade', true);
+    await built(p, ['shade']);
+    await p.waitForTimeout(800);
+    await snap(p, 'lose-shade-before');
+    const before = await p.evaluate(() => window.__r3d.models.draws);
+    console.log(`lose-shade: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
+    const f0 = await p.evaluate(() => window.__r3d.frames);
+    await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
+    await p.waitForTimeout(1500);
+    const after = await p.evaluate(() => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }));
+    await snap(p, 'lose-shade-after');
+    console.log(`lose-shade: draws ${before} before, ${after.draws} after; ${after.drawn} figures drawn after the loss`);
+    if (!(after.drawn >= 1)) errs.push('lose-shade: no figure drawn after the loss');
+    if (after.draws !== before) errs.push(`lose-shade: ${before} draws before the loss, ${after.draws} after`);
+    await p.close();
+  } catch (e) {
+    errs.push(`lose-shade: ${e.message}`);
   }
 }
 
