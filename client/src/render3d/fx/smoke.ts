@@ -151,11 +151,11 @@ export class Smoke {
       const k = 1 - Math.exp(-dt * c.rate);
       c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; c.z += (c.tz - c.z) * k;
     }
-    const W = SMOKE.wisp, leaving = Math.hypot(moved[0], moved[1]) / px / SMOKE.leave;
+    const W = SMOKE.wisp, travel = Math.hypot(moved[0], moved[1]) / px / SMOKE.leave, leaving = Number.isFinite(travel) ? travel : 0;
     for (const w of this.wisps) {
       // the body's travel ages a wisp as well as time: what it leaves behind runs through its life (fade-in, full, fade-out) within `SMOKE.leave` px
       w.age += dt / w.life + leaving;
-      if (w.age >= 1) this.birth(w, ax, px);
+      if (w.age >= 1) { const phase = w.age % 1; this.birth(w, ax, px); w.age = phase; }   // the part beyond 1 carries over, so a big step does not line the wisps up
       const wig = W.wig[0] * Math.sin(W.wig[1] * this.t + SHAPE.wigSeed * w.seed) * px;
       w.x += (w.vx + ax.right[0] * wig) * dt;
       w.y += (w.vy + ax.right[1] * wig) * dt;

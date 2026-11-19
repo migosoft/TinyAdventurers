@@ -235,6 +235,38 @@ describe('Smoke: standing and moving', () => {
     expect(share).toBeGreaterThan(0.5 * standShare);
   }, SLOW);
 
+  it('one big step (30 px, a hitch or a knockback) keeps the wisps\' phases: the ages stay spread and the next second of walking reborns no more than 20 % in a frame', () => {
+    const sm = make(5), p = body(), dx = 44 * PXW / 60;
+    sm.settle(p.place, ax, PXW, 1, 0);
+    still(sm, p, 5);
+    const sd = (): number => { const m = sm.wisps.reduce((s, w) => s + w.age, 0) / sm.wisps.length; return Math.sqrt(sm.wisps.reduce((s, w) => s + (w.age - m) ** 2, 0) / sm.wisps.length); };
+    const standing = sd();
+    p.s.x += 30 * PXW;
+    sm.step(1 / 60, p.place, ax, PXW, [30 * PXW, 0], 1, 1, 0);
+    expect(sd()).toBeGreaterThan(0.5 * standing);
+    const prev = sm.wisps.map((w) => w.age);
+    let worst = 0;
+    for (let i = 0; i < 60; i++) {
+      p.s.x += dx;
+      sm.step(1 / 60, p.place, ax, PXW, [dx, 0], 1, 1, 0);
+      let reborn = 0;
+      sm.wisps.forEach((w, k) => { if (w.age < prev[k]) reborn++; prev[k] = w.age; });
+      worst = Math.max(worst, reborn / sm.wisps.length);
+    }
+    expect(worst).toBeLessThan(0.2);
+  }, SLOW);
+
+  it('a `moved` that is not finite, or a `px` of 0, leaves every age and every written alpha finite', () => {
+    for (const [moved, px] of [[[NaN, 0], PXW], [[0.1, Infinity], PXW], [[0.1, 0], 0]] as const) {
+      const sm = make(5), p = body();
+      sm.settle(p.place, ax, PXW, 1, 0);
+      still(sm, p, 1);
+      sm.step(1 / 60, p.place, ax, px, moved, 1, 1, 0);
+      for (const w of sm.wisps) expect(Number.isFinite(w.age)).toBe(true);
+      expect(written(sm).rgba.every((v) => Number.isFinite(v))).toBe(true);
+    }
+  });
+
   it('overshoots nothing after a stop; the wisps left behind are gone within SMOKE.life[1] s (Review focus 1)', () => {
     let alive = -1;
     run(3.5, (sm, _p, moving, born) => {
