@@ -177,6 +177,20 @@ describe('the barrel', () => {
     for (const r of runs) expect(r.len).toBe(r.seam ? 2 : 6);
   });
 
+  it('the head is wood with three plank seams that stay inside its rim', () => {
+    const head = barrel.pieces.find((p) => p.stage === 'head')!;
+    expect(head.colour).toBe(0xee8e2e);
+    const seams = barrel.pieces.filter((p) => 'prism' in p.shape);
+    expect(seams).toHaveLength(3);
+    for (const s of seams) {
+      if (!('prism' in s.shape)) throw new Error('not a prism');
+      expect(s.colour).toBe(0x38262d);
+      expect(s.line).toBe(0);
+      const { outline, z } = s.shape.prism;
+      for (const [x] of outline) for (const zz of z) expect(Math.hypot(x, zz)).toBeLessThan(5.2);
+    }
+  });
+
   it('has no bends', () => {
     for (const p of barrel.pieces) expect(p.bend).toBeUndefined();
   });
