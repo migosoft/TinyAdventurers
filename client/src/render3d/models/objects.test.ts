@@ -67,6 +67,16 @@ describe('the chest and the Mimic', () => {
     }
   });
 
+  it('all trim (gold and seams, not the lining) is stage collar, on both bones', () => {
+    // With the lining colour 0 the only gold and seam-coloured pieces are the trim.
+    const shell = chestShell(0), trim = shell.filter((p) => p.colour === 0xfacb3e || p.colour === 0x38262d);
+    expect(trim.length).toBeGreaterThan(0);
+    expect(new Set(trim.map((p) => p.bone))).toEqual(new Set(['body', 'head']));
+    for (const p of trim) expect(p.stage).toBe('collar');
+    // The wood, the end walls and plates and the linings are not trim.
+    for (const p of shell.filter((q) => !trim.includes(q))) expect(p.stage).toBe(p.bone === 'body' ? 'body' : 'head');
+  });
+
   it('the chest has loot on the hat bone', () => {
     expect(chest.pieces.filter((p) => p.bone === 'hat').length).toBeGreaterThanOrEqual(4);
   });

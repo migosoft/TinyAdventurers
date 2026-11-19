@@ -33,6 +33,8 @@ export function chestShell(inside: number): TubePiece[] {
     out.push({ shape: { prism: { outline, z } }, ...rest });
   };
   const base = { stage: 'body', bone: 'body' } as const, lid = { stage: 'head', bone: 'head' } as const, trim = { stage: 'collar', bone: 'head' } as const;
+  // All trim, base and lid, is stage `collar`: the outline cut depends on the stage, so one rule keeps the gold looking alike above and below the lid line.
+  const baseTrim = { stage: 'collar', bone: 'body' } as const;
   const proud = 0.25, sunk = 0.05;
 
   // The base: the trough (a U), the end walls, the lining.
@@ -42,15 +44,15 @@ export function chestShell(inside: number): TubePiece[] {
   for (const [a, b] of [[5.9, 6], [-6, -5.9]] as const) add({ ...base, outline: rect(-3.4, 3.4, 1.1, 5.3), z: [a, b], colour: inside, line: 0 });
   // Seams, 0.3 high at y 2.8 on the four outer faces.
   for (const sd of [1, -1]) {
-    add({ ...base, outline: rect(sd * HX - sunk, sd * HX + sunk, 2.65, 2.95), z: [-HZ, HZ], colour: SEAM, line: 0 });
-    add({ ...base, outline: rect(-HX, HX, 2.65, 2.95), z: sd > 0 ? [HZ - sunk, HZ + sunk] : [-HZ - sunk, -HZ + sunk], colour: SEAM, line: 0 });
+    add({ ...baseTrim, outline: rect(sd * HX - sunk, sd * HX + sunk, 2.65, 2.95), z: [-HZ, HZ], colour: SEAM, line: 0 });
+    add({ ...baseTrim, outline: rect(-HX, HX, 2.65, 2.95), z: sd > 0 ? [HZ - sunk, HZ + sunk] : [-HZ - sunk, -HZ + sunk], colour: SEAM, line: 0 });
   }
   // Gold: two straps on the front and the back, the lock with its keyhole.
   for (const sd of [1, -1]) for (const zc of [4.5, -4.5]) {
-    add({ ...base, outline: sd > 0 ? rect(HX - sunk, HX + proud, 0, TOP) : rect(-HX - proud, -HX + sunk, 0, TOP), z: [zc - 0.8, zc + 0.8], colour: GOLD, line: 0.4 });
+    add({ ...baseTrim, outline: sd > 0 ? rect(HX - sunk, HX + proud, 0, TOP) : rect(-HX - proud, -HX + sunk, 0, TOP), z: [zc - 0.8, zc + 0.8], colour: GOLD, line: 0.4 });
   }
-  add({ ...base, outline: rect(HX, 5.3, 3.2, TOP), z: [-1.1, 1.1], colour: GOLD, line: 0.4 });
-  out.push({ shape: { ball: [0.35, 0.35, 0.35] }, at: [5.3, 4.3, 0], ...base, colour: SEAM, line: 0 });
+  add({ ...baseTrim, outline: rect(HX, 5.3, 3.2, TOP), z: [-1.1, 1.1], colour: GOLD, line: 0.4 });
+  out.push({ shape: { ball: [0.35, 0.35, 0.35] }, at: [5.3, 4.3, 0], ...baseTrim, colour: SEAM, line: 0 });
 
   // The lid: the arch, the end plates, the lining.
   add({ ...lid, outline: band([HX, CHEST.rise], [3.5, 2.7], 0, Math.PI, 8), z: [-HZ, HZ], colour: WOOD.top, line: 0.4 });
