@@ -222,6 +222,13 @@ describe('Smoke: forming and dying', () => {
     patchOrder.forEach((c, k) => { if (c.on) expect(quad(q, k).a).toBe(0); else expect(quad(q, k).a).toBeGreaterThan(0.5); });
   }, SLOW);
 
+  it('settle with parts 0 gives no wisp on an on point (a Shade that settles while forming)', () => {
+    const sm = make(11), p = body();
+    sm.settle(p.place, ax, PXW, 0.2, 0, 0);
+    expect(sm.wisps.length).toBeGreaterThan(0);
+    for (const w of sm.wisps) expect(sm.core[w.a].on).toBe(false);
+  });
+
   it('spreads every core point 6 px outward in a second and births nothing', () => {
     const sm = make(), p = body();
     sm.settle(p.place, ax, PXW, 1, 0);

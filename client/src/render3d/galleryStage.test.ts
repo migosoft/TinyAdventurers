@@ -13,6 +13,8 @@ import { registerFigureFx } from './fx/figureFx';
 import { clearVeils, registerStatus } from './fx/status';
 import { newGlowBuf } from './cards';
 import { shade } from './models/descs/shade';
+import { buildTubeFigure } from './models/tubeModel';
+import { restPose } from './models/pose3d';
 import type { DrawnFig, FxOut } from './fx/types';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
@@ -576,8 +578,9 @@ describe('the gallery stage', () => {
   describe('the effects pass over the spectre models (#359)', () => {
     const drawn = (id: number, kind: number, spectre: DrawnFig['spectre']): DrawnFig => ({
       id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects: 0, alpha: 1, dashing: false, model: true, side: 0, def: FIGURES[kind],
-      yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre, form: 1,
+      yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre, form: 1, rig: spectre?.smoke ? { pose: restPose(shadeModel, 0), scale: shadeModel.scale, lift: 0 } : null,
     });
+    const shadeModel = buildTubeFigure('shade', shade);
     const entOf = (id: number, kind: number): EntState => ({ id, kind, x: 80, y: 80, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 1, entangled: 0 });
     const triangles = (figs: DrawnFig[], ents: EntState[]): number => {
       clearFxRegistry(); registerFigureFx(); registerStatus(); clearVeils();
@@ -587,10 +590,10 @@ describe('the gallery stage', () => {
         ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0.3 }, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2, smokeTone: null },
         figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null,
       }, out);
-      return out.tris.n + out.lit.n;
+      return out.tris.n + out.lit.n + out.smoke.n;
     };
 
-    it('lets a model Shade of an effect row and of the kind rows through, wherever its id is, and gives it fog', () => {
+    it('lets a model Shade of an effect row and of the kind rows through, wherever its id is, and gives it smoke', () => {
       const ids = [ID.modelEffect + 7 * MODEL_EFFECT_STRIDE + 12, ID.model + 3, ID.dying + 1, ID.lineup + 2, ID.crowd];
       const figs = ids.map((id) => drawn(id, KIND.Shade, shade.spectre!));
       const ents = ids.map((id) => entOf(id, KIND.Shade));

@@ -45,8 +45,6 @@ export interface SpectreSpec {
   /** Drawn blended, nearest surface only. `peak`: the instance alpha that shows the approved look. */
   seeThrough?: { peak: number };
   eyes: EyeSpec;
-  /** Black fog clings to it (the effects). */
-  fog?: true;
   /** A soft glow quad and a floor light: `size` and `height` in px, `k` the glow's strength. */
   halo?: { size: number; height: number; glow: number; k: number; light: number; radius: number };
   /** The melee swoosh's colour on the model path, and the colour of its leading edge. */

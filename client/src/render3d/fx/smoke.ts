@@ -128,8 +128,9 @@ export class Smoke {
     w.tone = rnd() < W.black ? 0 : W.tone[0] + rnd() * (W.tone[1] - W.tone[0]);
   }
 
-  /** Every core point and wisp at its place at once (a first frame, a jump, a gap). */
-  settle(place: PlaceOf, ax: Axes, px: number, form: number, footY: number): void {
+  /** Every core point and wisp at its place at once (a first frame, a jump, a gap). `parts`: as in `step` (1 when the Shade is whole). */
+  settle(place: PlaceOf, ax: Axes, px: number, form: number, footY: number, parts = 1): void {
+    this.parts = parts;
     this.targets(place, px, form, footY);
     for (const c of this.core) { c.x = c.tx; c.y = c.ty; c.z = c.tz; }
     for (const w of this.wisps) {

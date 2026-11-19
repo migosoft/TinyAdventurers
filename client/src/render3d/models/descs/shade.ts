@@ -89,7 +89,6 @@ export const shade: TubeDesc = {
   spectre: {
     // Two very small, round, pale white beads; no ring ("dead", not glowing blue).
     eyes: { y: 14.82, z: 0.5, front: 3.6, half: [0.22, 0.22], slant: 0, core: 0xe6ecf2, ring: 0x000000, strength: 1 },
-    fog: true,   // goes in R5, when the smoke replaces it
     smoke: {
       line: [[1.0, 17.0, 0.4, 0.6], [0.9, 16.0, 1.5, 2.8], [0.5, 14.2, 2.0, 4.6], [0.3, 12.2, 1.6, 2.8], [0.0, 10.2, 1.25, 1.8], [-0.4, 8.2, 1.15, 1.45],
         [-0.8, 6.2, 0.95, 1.05], [-0.6, 4.4, 0.8, 0.85], [0.2, 2.9, 0.62, 0.65], [0.7, 1.7, 0.42, 0.42], [0.2, 0.8, 0.14, 0.14]],

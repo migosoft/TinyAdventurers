@@ -16,7 +16,7 @@ const room = (): TileMap => {
 };
 const fig = (id: number, x: number, z: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
   id, kind: KIND.Paladin, x, z, top: 1, foot: -0.2, hand: [x, 0.6, z], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0,
-  def: FIGURES[KIND.Paladin], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
+  def: FIGURES[KIND.Paladin], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, rig: null, ...o,
 });
 const NONE = new Set<number>();
 const inp = (now: number, dt: number, figs: DrawnFig[], o: Partial<WaterIn> = {}): WaterIn => ({ dt, now, figs, sinks: [], landed: null, hidden: NONE, ...o });

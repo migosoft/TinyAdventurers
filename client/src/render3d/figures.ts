@@ -4,7 +4,7 @@
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { ghostAlpha, ghostPhase, skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
-import { smooth } from './fx/shadeFog';
+import { smooth } from './fx/shapes';
 import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
@@ -55,12 +55,14 @@ const ACCEL_EVERY = 0.08;
 const ACCEL_SECS = 0.2;
 const ACCEL_ALPHA = 0.35;
 /** The dying Shade's body fades over this long (s). */
-const SHADE_FADE = 0.3;
+export const SHADE_FADE = 0.3;
 /**
- * How a fog spectre forms during its ambush warning (first values, #359): `form` is the fraction of the warning gone; the body's alpha
+ * How a smoke spectre forms during its ambush warning (first values, #359): `form` is the fraction of the warning gone; the body's alpha
  * is the smoothstep of `form` between `body`, the eyes open between `eyes`.
  */
 export const SPECTRE_FORM = { body: [0.45, 0.95], eyes: [0.8, 1] } as const;
+/** The hard parts of a dying smoke body sink this far (px) while their copy fades. */
+export const SPECTRE_SINK = 3;
 /** A melee swing flares the eyes: `sin(min(1, FLARE_RATE * animT / MELEE_T) * PI)`, so the flare peaks at the 0.3125th of the swing and is gone after 1 / FLARE_RATE of it. */
 const FLARE_RATE = 1.6;
 /** Skull tokens kept (the oldest go first). */
@@ -173,12 +175,14 @@ interface Fig {
   accelT?: number;
   model?: boolean;
   last?: FigureInst[] | null;
+  /** The last model frame's parts float apart (`FigureModel.apart`): its dying copy sinks. */
+  apart?: boolean;
 }
 
 /** An image left behind: a vanished figure fading out, or a dash afterimage. */
 interface Image { card: Card; alpha0: number; secs: number; left: number }
 /** The same for a model figure: instances with their own pose copy; each one's alpha is scaled by `left / secs`. */
-interface ModelImage { insts: FigureInst[]; secs: number; left: number }
+interface ModelImage { insts: FigureInst[]; secs: number; left: number; /** A lift (tiles) the instances have sunk by the time the image is gone. */ sink?: number }
 /** `model`: the model's scale when the figure that died was drawn as a model (its skull is an instance), else undefined. */
 /** `model`: the figure that died was drawn as a model, so its skull is an instance (one size for all: the fitted skeleton's scale), not a decal. */
 interface Skull { x: number; z: number; flip: boolean; model?: boolean }
@@ -336,7 +340,7 @@ export class Figures3d {
       // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart.
       const fig = this.figs.get(ev.id);
       // The model's body already wears its own alpha (1); the eyes shut as it goes.
-      if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, eye: 0 }))), secs: SHADE_FADE, left: SHADE_FADE });
+      if (fig?.model && fig.last) this.modelImages.push({ insts: this.copied(fig.last.map((i) => ({ ...i, eye: 0 }))), secs: SHADE_FADE, left: SHADE_FADE, sink: fig.apart ? SPECTRE_SINK / TILE : undefined });
       else if (fig?.body) this.images.push({ card: { ...fig.body }, alpha0: 0.75, secs: SHADE_FADE, left: SHADE_FADE });
       return false;
     }
@@ -851,8 +855,8 @@ export class Figures3d {
     const tint = modelTint(pose, s);
     tint[0] *= v.tone; tint[1] *= v.tone; tint[2] *= v.tone;
     const insts: FigureInst[] = [];
-    // A fog spectre forms out of its fog during the ambush warning: the body fades in late, the eyes later still (the fog itself draws from `form`).
-    const forming = !!sp?.fog && s.anim === ANIM.Ambush;
+    // A smoke spectre forms out of its pool during the ambush warning: the hard parts fade in late, the eyes later still (the smoke itself draws from `form`).
+    const forming = !!sp?.smoke && s.anim === ANIM.Ambush;
     const form = forming ? Math.min(1, Math.max(0, s.animT / CONST.AMBUSH_WARNING)) : 1;
     const bodyForm = forming ? smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], form) : 1;
     // A petrified see-through model is drawn solid in the stone paint by the ordinary piece draw (its pulse would only stipple it into a dot
@@ -906,6 +910,7 @@ export class Figures3d {
       if (c) out.casters.push(c);
     }
     fig.last = insts;
+    fig.apart = !!m.apart;
     if (pose.afterimage && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(d.base), stone: false, alpha: AFTER_ALPHA * k }]), secs: AFTER_SECS, left: AFTER_SECS });
     if (this.accelDue(fig, s, f.dt) && !falling) this.modelImages.push({ insts: this.copied([{ ...body, tint: rgbOf(ACCEL_TINT), stone: false, alpha: ACCEL_ALPHA * pose.alpha * k }]), secs: ACCEL_SECS, left: ACCEL_SECS });
     if (kept) {
@@ -935,7 +940,7 @@ export class Figures3d {
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
     const bite = m.armLength > 0 || m.butt || m.gait === 'float' || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form);
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form, { pose: p3, scale: ms, lift: body.lift / this.cp });
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
     this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
@@ -947,10 +952,10 @@ export class Figures3d {
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
    */
-  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number, dashing: boolean, spectre: SpectreSpec | null = null, form = 1): DrawnFig {
+  private listFig(out: FigureOut, cam: Cam, e: EntState, s: ViewState, d: FigureDef, x: number, z: number, y: number, height: number, alpha: number, model: boolean, yaw: number, handY: number, bite: number, dashing: boolean, spectre: SpectreSpec | null = null, form = 1, rig: DrawnFig['rig'] = null): DrawnFig {
     // The camera passes stretch the figure by 1 / cos(pitch) (nodes.ts): so is the top. `y` is the foot's world height; `handY` is a world height.
     const top = height / TILE / Math.cos(cam.pitch);
-    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1, spectre: null, form: 1 });
+    const f = (this.figPool[this.figUsed] ??= { id: 0, kind: 0, x: 0, z: 0, top: 0, foot: 0, hand: [0, 0, 0], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: d, yaw: 0, swingY: 0, arc: 0, bite: -1, spectre: null, form: 1, rig: null });
     this.figUsed++;
     f.id = e.id; f.kind = e.kind; f.x = x; f.z = z; f.top = top; f.foot = y;
     // The weapon hand (the model's shoulder, the card's hand height): a hand's reach in front of the body, along its facing.
@@ -958,7 +963,7 @@ export class Figures3d {
     h[0] = x + Math.cos(yaw) * reach; h[1] = handY; h[2] = z + Math.sin(yaw) * reach;
     f.aim = s.aim; f.anim = s.anim; f.animT = s.animT; f.effects = s.effects ?? 0; f.alpha = alpha; f.dashing = dashing; f.model = model; f.side = e.side; f.def = d;
     f.yaw = yaw; f.swingY = handY; f.arc = s.swingArc ?? d.swing?.arc ?? 0; f.bite = bite;
-    f.spectre = spectre; f.form = form;
+    f.spectre = spectre; f.form = form; f.rig = rig;
     f.mouth = undefined; f.nostril = undefined;
     out.figs.push(f);
     return f;
@@ -1113,8 +1118,8 @@ export class Figures3d {
     this.images = keep;
     const keepModels: ModelImage[] = [];
     for (const im of this.modelImages) {
-      const k = im.left / im.secs;
-      for (const i of im.insts) out.models.push({ ...i, alpha: i.alpha * k });
+      const k = im.left / im.secs, down = (im.sink ?? 0) * (1 - k);
+      for (const i of im.insts) out.models.push({ ...i, alpha: i.alpha * k, lift: i.lift - down });
       im.left -= dt;
       if (im.left > 0) keepModels.push(im);
     }

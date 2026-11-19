@@ -2,7 +2,7 @@
 // (Frozen's cool one, Poisoned's green) are the figures'. Every picture is a pure function of the clock and the figure's id. Figures in
 // `hidden` get no marks and add no light. The Shade's veil (`game/shadeHaze.ts`) is stateful (its strands trail the figure): the state
 // is kept per Shade id in `VEILS`, and a dead Shade's veil drifts apart for a second (`FX_KIND.ShadeVeil`). A figure whose model has
-// `spectre.fog` (#359) wears the clinging fog of `shadeFog.ts` instead of strands (kept per id in `FOGS`); a dead one's fog spreads and thins.
+// `spectre.smoke` (#359) wears the smoke body of `smoke.ts` instead of strands (kept per id in `SMOKES`, fed from the frame's pose); a dead one's smoke spreads and thins.
 import { has } from '../../game/effectBits';
 import { ENTANGLE_LOOKS, flameSpotAt, GLOOM, snowflakeAlpha } from '../../game/fxLooks';
 import { dissolveVeil, restingVeil, VeilStrands, VEIL_DEATH_LIFE, type VeilStrand } from '../../game/shadeHaze';
@@ -11,9 +11,13 @@ import { TILE } from '../../sim/map';
 import { addLight } from './booms';
 import { FX_KIND, registerFrameFx, registerFx, type Effects3d, type FxFrame, type FxRec } from './effects3d';
 import { hash3, rng } from './rand';
-import { BALL1, dot, fireBall, groundRing, PX, streak, type Axes, type MV3, type V3 } from './shapes';
+import { BALL1, dot, fireBall, groundRing, PX, smooth, streak, type Axes, type MV3, type V3 } from './shapes';
 import { stretchOf } from './figureFx';
-import { FOG, FOG_FRAME, fogTris, ShadeFog, smooth } from './shadeFog';
+import { Smoke, SMOKE, type PlaceOf } from './smoke';
+import { BONES } from '../models/bones';
+import { bonePoint } from '../models/rig';
+import type { SmokeSpec } from '../models/tubeDesc';
+import { SPECTRE_FORM } from '../figures';
 import type { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -155,16 +159,23 @@ interface VeilMem {
   t: number; sx: number; sy: number; wx: number; wz: number; face: 1 | -1;
 }
 const VEILS = new Map<number, VeilMem>();
+/** When a smoke is restarted at its place and how long it fades once its figure leaves the frame (seconds, seconds, tiles). */
+export const SMOKE_FRAME = { fade: 0.3, gap: 3, jump: 1 } as const;
+/** The longest step of a smoke (s), the faintest figure that wears one, and how far a clock may run back (s) before the smoke restarts. */
+const SMOKE_STEP = { max: 0.1, minAlpha: 0.05, rewind: 1 } as const;
+/** The bone whose matrix stands for the figure's root (`SmokeSpec`'s bone -1: hover, lean, twist and lunge, no part's own drift). */
+const HIPS = BONES.indexOf('hips');
+type Tone = readonly [number, number, number];
 /**
- * The clinging fog of the figures with `spectre.fog` (the Shade's model, #359), per id: its patches, the clock and spot of its last frame, its form,
- * the alpha it was drawn with (for the fade) and the clock of its last dying step (-1 while alive).
+ * The smoke of the figures with `spectre.smoke` (the Shade's model, #359), per id: its state, the clock of its last frame (`t`), the smoke's own clock,
+ * the spot, the alpha it was drawn with (for the fade), the tone and size it was written with, and the clock of its last dying step (-1 while alive).
  */
-interface FogMem { fog: ShadeFog; t: number; x: number; z: number; form: number; stretch: number; alpha: number; dying: number }
-export const FOGS = new Map<number, FogMem>();
-/** True once any fog was drawn since the last `clearVeils()`: a Shade then dies as fog even when its own was not seen. */
-let fogSeen = false;
-/** Forgets every veil and fog (tests). */
-export function clearVeils(): void { VEILS.clear(); FOGS.clear(); fogSeen = false; }
+interface SmokeMem { smoke: Smoke; t: number; clock: number; x: number; z: number; alpha: number; dying: number; tone: Tone; px: number }
+export const SMOKES = new Map<number, SmokeMem>();
+/** The look of the last smoke drawn since `clearVeils()`: a Shade then dies as smoke even when its own was not seen. */
+let smokeSeen: { spec: SmokeSpec; px: number; tone: Tone } | null = null;
+/** Forgets every veil and smoke (tests). */
+export function clearVeils(): void { VEILS.clear(); SMOKES.clear(); smokeSeen = null; }
 
 /** Draws strands in the plane of the screen round the world spot (`wx`, `wz`), whose screen position is (`sx`, `sy`) px. Alpha follows the dither steps: solid, then two see-through ones. */
 function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: number, wz: number, sx: number, sy: number, alpha: number): void {
@@ -181,45 +192,77 @@ function drawStrands(T: FxTris, ax: Axes, lines: readonly VeilStrand[], wx: numb
   }
 }
 
-const drawnFogs = new Set<number>();
+const drawnSmokes = new Set<number>();
+const smokeOrder: DrawnFig[] = [];
+const moved: [number, number] = [0, 0];
+const tmpP: [number, number, number] = [0, 0, 0];
+/** What `place` reads: the figure's rig, its place and yaw, and the stretch of the camera. */
+const here = { rig: null as DrawnFig['rig'], x: 0, z: 0, cos: 1, sin: 0, st: 1 };
 
-/** Steps (or restarts) and draws the fog of a figure with `spectre.fog`. */
-function drawFog(out: FxOut, frame: FxFrame, f: DrawnFig): void {
-  const ctx = frame.ctx, now = ctx.now, st = stretchOf(ctx);
-  let m = FOGS.get(f.id);
+/**
+ * The world place of a rest point of `bone` (model px, the figure's frame): the frame's pose, turned by the yaw as `skinVertex`'s comment says
+ * (world.x = x cos - z sin, world.z = x sin + z cos), in tiles, the height stretched by the camera and lifted to the figure's root. Bone -1 is the hips.
+ */
+const place: PlaceOf = (bone, p, out) => {
+  const r = here.rig!;
+  bonePoint(r.pose, r.scale, bone < 0 ? HIPS : bone, p, tmpP);
+  out[0] = here.x + (tmpP[0] * here.cos - tmpP[2] * here.sin) / TILE;
+  out[1] = (tmpP[1] / TILE) * here.st + r.lift;
+  out[2] = here.z + (tmpP[0] * here.sin + tmpP[2] * here.cos) / TILE;
+};
+
+/** A smoke that is not drawn is held by a figure's frozen or petrified body. */
+const held = (f: DrawnFig): boolean => has(f.effects, EFFECT.Petrified) || has(f.effects, EFFECT.Frozen);
+
+/** Steps (or restarts) the smoke of a figure with `spectre.smoke`; returns its entry. */
+function stepSmoke(frame: FxFrame, f: DrawnFig): SmokeMem {
+  const ctx = frame.ctx, now = ctx.now, spec = f.spectre!.smoke!, rig = f.rig!, px = rig.scale / TILE, tone = spec.tone;
+  here.rig = rig; here.x = f.x; here.z = f.z; here.cos = Math.cos(f.yaw); here.sin = Math.sin(f.yaw); here.st = stretchOf(ctx);
+  // the hard parts carry smoke as they fade in
+  const parts = smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], f.form);
+  let m = SMOKES.get(f.id);
   if (!m) {
-    m = { fog: new ShadeFog(rng(f.id * 7919 + 1), ctx.detail), t: now, x: f.x, z: f.z, form: f.form, stretch: st, alpha: 0, dying: -1 };
-    FOGS.set(f.id, m);
-    m.fog.settle(now, f.x, f.z, f.form, st);
-  } else if (now - m.t > FOG_FRAME.gap || now < m.t - FOG_FRAME.rewind || Math.hypot(f.x - m.x, f.z - m.z) > FOG_FRAME.jump) {
-    // out of sight for long, or moved far in one frame: the fog starts at the new spot, with no streak across the room
-    m.fog.settle(now, f.x, f.z, f.form, st);
-  } else {
-    // a frozen clock repeats the picture
-    m.fog.step(Math.max(0, Math.min(FOG_FRAME.maxStep, now - m.t)), now, f.x, f.z, f.form, st);
+    m = { smoke: new Smoke(spec, rng(f.id * 7919 + 1), ctx.detail), t: now, clock: 0, x: f.x, z: f.z, alpha: 1, dying: -1, tone, px };
+    SMOKES.set(f.id, m);
+    m.smoke.settle(place, ctx.ax, px, f.form, f.foot, parts);
+  } else if (now - m.t > SMOKE_FRAME.gap || now < m.t - SMOKE_STEP.rewind || Math.hypot(f.x - m.x, f.z - m.z) > SMOKE_FRAME.jump) {
+    // out of sight for long, a clock that ran back, or moved far in one frame: all of it starts at the new place, with no streak across the room
+    m.smoke.settle(place, ctx.ax, px, f.form, f.foot, parts);
+  } else if (!held(f)) {
+    // a frozen clock repeats the picture (`step` ignores a step of 0); stone and ice hold their smoke still
+    const dt = Math.max(0, Math.min(SMOKE_STEP.max, now - m.t));
+    moved[0] = f.x - m.x; moved[1] = f.z - m.z;
+    m.smoke.step(dt, place, ctx.ax, px, moved, f.form, parts, f.foot);
+    m.clock += has(f.effects, EFFECT.Sleep) ? dt / 2 : dt;
   }
-  m.t = now; m.x = f.x; m.z = f.z; m.form = f.form; m.stretch = st; m.dying = -1;
-  m.alpha = smooth(0, FOG_FRAME.formAlpha, f.form) * f.alpha;
-  fogSeen = true;
-  fogTris(out.tris, ctx.ax, m.fog, now, m.alpha, 1);
+  m.t = now; m.x = f.x; m.z = f.z; m.alpha = f.alpha; m.dying = -1; m.tone = tone; m.px = px;
+  smokeSeen = { spec, px, tone };
+  return m;
 }
 
-/** The fogs of the frame: those of the visible figures with fog, and the fading ones of figures that left the frame. */
-function fogs(out: FxOut, frame: FxFrame, fx: Effects3d): void {
-  const ctx = frame.ctx, now = ctx.now;
-  drawnFogs.clear();
+/** The smokes of the frame: those of the visible figures, written far to near, and the fading ones of figures that left the frame. */
+function smokes(out: FxOut, frame: FxFrame, fx: Effects3d): void {
+  const ctx = frame.ctx, now = ctx.now, sy = Math.sin(ctx.cam.yaw), cy = Math.cos(ctx.cam.yaw);
+  drawnSmokes.clear();
+  smokeOrder.length = 0;
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
-    if (!f.spectre?.fog || frame.hidden.has(f.id) || f.alpha < FOG_FRAME.minAlpha || fx.following(FX_KIND.ShadeVeil, f.id)) continue;
-    drawFog(out, frame, f);
-    drawnFogs.add(f.id);
+    if (!f.spectre?.smoke || !f.rig || frame.hidden.has(f.id) || f.alpha < SMOKE_STEP.minAlpha || fx.following(FX_KIND.ShadeVeil, f.id)) continue;
+    smokeOrder.push(f);
+    drawnSmokes.add(f.id);
   }
-  for (const [id, m] of FOGS) {
-    if (now - m.t > FOG_FRAME.gap || now < m.t - FOG_FRAME.rewind) { FOGS.delete(id); continue; }
+  const far = (f: DrawnFig): number => f.x * sy - f.z * cy;   // along the ground's far direction (up the screen): larger is further from the camera
+  smokeOrder.sort((a, b) => far(b) - far(a));
+  for (const [id, m] of SMOKES) {
+    if (now - m.t > SMOKE_FRAME.gap || now < m.t - SMOKE_STEP.rewind) { SMOKES.delete(id); continue; }
     // gone from the frame (out of view, faint): it fades where it was; a dying one belongs to its record, a hidden one shows nothing
-    if (drawnFogs.has(id) || frame.hidden.has(id) || fx.following(FX_KIND.ShadeVeil, id)) continue;
+    if (drawnSmokes.has(id) || frame.hidden.has(id) || fx.following(FX_KIND.ShadeVeil, id)) continue;
     const age = now - m.t;
-    if (age >= 0 && age < FOG.fade) fogTris(out.tris, ctx.ax, m.fog, now, m.alpha * (1 - age / FOG.fade), 1);
+    if (age >= 0 && age < SMOKE_FRAME.fade) m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, m.alpha * (1 - age / SMOKE_FRAME.fade), 1);
+  }
+  for (const f of smokeOrder) {
+    const m = stepSmoke(frame, f);
+    m.smoke.write(out.smoke, ctx.ax, m.px, ctx.smokeTone ?? m.tone, m.clock, f.alpha, 1);
   }
 }
 
@@ -227,7 +270,7 @@ function veils(out: FxOut, frame: FxFrame): void {
   const ctx = frame.ctx, now = ctx.now, ax = ctx.ax;
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
-    if (!f.def.veil || f.spectre?.fog || frame.hidden.has(f.id) || f.alpha < 0.05) continue;
+    if (!f.def.veil || f.spectre?.smoke || frame.hidden.has(f.id) || f.alpha < 0.05) continue;
     const sx = (f.x * ax.right[0] + f.z * ax.right[2]) * TILE, sy = -(f.x * ax.up[0] + f.z * ax.up[2]) * TILE;
     let m = VEILS.get(f.id);
     if (!m) { m = { veil: new VeilStrands(rng(f.id * 7919 + 1)), t: now, sx, sy, wx: f.x, wz: f.z, face: 1 }; VEILS.set(f.id, m); }
@@ -247,34 +290,39 @@ function veils(out: FxOut, frame: FxFrame): void {
 const FRESH = 0.15;
 const RESTING = new WeakMap<FxRec, VeilStrand[]>();
 
-/** A dying fog out of sight just before it died: the fog is made at the record's spot once and spreads from there. */
-const RESTING_FOG = new WeakMap<FxRec, { fog: ShadeFog; dying: number }>();
+/** A dying smoke out of sight just before it died: the smoke is made at the record's spot once and spreads from there. */
+interface RestingSmoke { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number }
+const RESTING_SMOKE = new WeakMap<FxRec, RestingSmoke>();
 
-/** A dying fog: it spreads outward from (x, z), thins over `VEIL_DEATH_LIFE` and swells. `s.dying` is the clock of its last step. */
-function dissolveFog(out: FxOut, frame: FxFrame, fog: ShadeFog, s: { dying: number }, rec: FxRec, age: number, x: number, z: number, alive: number): void {
-  const now = frame.ctx.now;
+/** A dying smoke: it spreads outward from (x, z), thins over `VEIL_DEATH_LIFE` and swells. `s.dying` is the clock of its last step. */
+function dissolveSmoke(out: FxOut, frame: FxFrame, s: { smoke: Smoke; dying: number; clock: number; tone: Tone; px: number }, rec: FxRec, age: number, x: number, z: number, alive: number): void {
+  const ctx = frame.ctx, now = ctx.now;
   if (s.dying < 0) s.dying = rec.start;
-  fog.spread(Math.max(0, Math.min(FOG_FRAME.maxStep, now - s.dying)), x, z);
+  s.smoke.spread(Math.max(0, Math.min(SMOKE_STEP.max, now - s.dying)), x, z);
   s.dying = now;
   // it thins from the alpha it had alive (`alive`), so a part-formed or faint Shade does not jump to full darkness
-  fogTris(out.tris, frame.ctx.ax, fog, now, alive * Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + FOG_FRAME.grow * age);
+  s.smoke.write(out.smoke, ctx.ax, s.px, ctx.smokeTone ?? s.tone, s.clock, alive * Math.max(0, 1 - age / VEIL_DEATH_LIFE), 1 + SMOKE.death.grow * age);
+}
+
+/** The rest point of the model at the record's spot, upright and unturned: the place of a smoke that was never seen alive. */
+function restingSmoke(frame: FxFrame, rec: FxRec): RestingSmoke {
+  const seen = smokeSeen!, st = stretchOf(frame.ctx);
+  const at: PlaceOf = (_b, p, out) => { out[0] = rec.x + p[0] * seen.px; out[1] = p[1] * seen.px * st; out[2] = rec.z + p[2] * seen.px; };
+  const smoke = new Smoke(seen.spec, rng(rec.seed), frame.ctx.detail);
+  smoke.settle(at, frame.ctx.ax, seen.px, 1, 0, 1);
+  return { smoke, dying: -1, clock: rec.start, tone: seen.tone, px: seen.px };
 }
 
 function drawVeilDeath(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
   if (frame.hidden.has(rec.follow)) return;
-  const ax = frame.ctx.ax, fogM = FOGS.get(rec.follow), m = VEILS.get(rec.follow);
-  // in order: the fog or the veil that was drawn just before it died; else, in a session that draws fog, a resting fog; else a resting veil
-  if (fogM && rec.start - fogM.t < FRESH) { dissolveFog(out, frame, fogM.fog, fogM, rec, age, fogM.x, fogM.z, fogM.alpha); return; }
-  if (fogSeen && !(m && rec.start - m.t < FRESH)) {
-    // a Shade of fog that died out of sight: a resting fog at the death spot (built once per record)
-    let r = RESTING_FOG.get(rec);
-    if (!r) {
-      const fog = new ShadeFog(rng(rec.seed), frame.ctx.detail);
-      fog.settle(rec.start, rec.x, rec.z, 1, stretchOf(frame.ctx));
-      r = { fog, dying: -1 };
-      RESTING_FOG.set(rec, r);
-    }
-    dissolveFog(out, frame, r.fog, r, rec, age, rec.x, rec.z, 1);
+  const ax = frame.ctx.ax, sm = SMOKES.get(rec.follow), m = VEILS.get(rec.follow);
+  // in order: the smoke or the veil that was drawn just before it died; else, in a session that draws smoke, a resting smoke; else a resting veil
+  if (sm && rec.start - sm.t < FRESH) { dissolveSmoke(out, frame, sm, rec, age, sm.x, sm.z, sm.alpha); return; }
+  if (smokeSeen && !(m && rec.start - m.t < FRESH)) {
+    // a Shade of smoke that died out of sight: a resting smoke at the death spot (built once per record)
+    let r = RESTING_SMOKE.get(rec);
+    if (!r) { r = restingSmoke(frame, rec); RESTING_SMOKE.set(rec, r); }
+    dissolveSmoke(out, frame, r, rec, age, rec.x, rec.z, 1);
     return;
   }
   let lines: readonly VeilStrand[], sx: number, sy: number, wx: number, wz: number;
@@ -305,7 +353,7 @@ export function drawStatus(out: FxOut, frame: FxFrame, fx: Effects3d): void {
     addLight(out, `bn${f.id}`, f.x, f.foot + f.top * 0.4, f.z, 2.5, 1.2 * I, 0.6 * I, 0.2 * I, LIGHT_KIND.Fire);
   }
   veils(out, frame);
-  fogs(out, frame, fx);
+  smokes(out, frame, fx);
 }
 
 /** Registers the status drawer and the drawer of the Shade's dying veil. */

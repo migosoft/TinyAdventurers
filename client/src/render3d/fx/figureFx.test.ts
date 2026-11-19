@@ -20,7 +20,7 @@ const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 
 const fig = (id: number, kind: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
   id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0, def: FIGURES[kind],
-  yaw: 0, swingY: 0.6, arc: FIGURES[kind]?.swing?.arc ?? 0, bite: -1, spectre: null, form: 1, ...o,
+  yaw: 0, swingY: 0.6, arc: FIGURES[kind]?.swing?.arc ?? 0, bite: -1, spectre: null, form: 1, rig: null, ...o,
 });
 
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 80, y: 80, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 1, entangled: 0, ...o });

@@ -25,7 +25,7 @@ const block = (x0: number, z0: number, w: number, h: number, id: number = T.Lava
 const poolRoom = (): TileMap => room(12, 8, block(3, 2, 5, 4));
 const fig = (id: number, x: number, z: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
   id, kind: KIND.Paladin, x, z, top: 1, foot: -1, hand: [x, 0.6, z], aim: 0, anim: 0, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: 0,
-  def: FIGURES[KIND.Paladin], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
+  def: FIGURES[KIND.Paladin], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, rig: null, ...o,
 });
 const NONE = new Set<number>();
 const ALL = { x0: -100, z0: -100, x1: 100, z1: 100 };

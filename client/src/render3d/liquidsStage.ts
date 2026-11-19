@@ -96,7 +96,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const readout = kit ? modelsReadouter(kit) : null;
   const pass = new FxPass(NONE_IDS);
   const fx = new Effects3d(map);
-  // A script event goes to the figures as a run sends it; the Died of a spectre (the Shade's death fog, the Ghost's death effect) also goes to the effects, at the time it was born.
+  // A script event goes to the figures as a run sends it; the Died of a spectre (the Shade's death smoke, the Ghost's death effect) also goes to the effects, at the time it was born.
   const send = (ev: PictureEv, at: number): void => {
     figures.event(ev);
     if (ev.t === 'Died' && (ev.kind === KIND.Ghost || ev.kind === KIND.Shade)) fx.event(ev, at, false);

@@ -1,14 +1,18 @@
-import { newSmokeBuf } from './smoke';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { newSmokeBuf, SMOKE, Smoke, type SmokeBuf } from './smoke';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANIM, EFFECT, KIND } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
-import { TileMap } from '../../sim/map';
+import { TILE, TileMap } from '../../sim/map';
 import { newGlowBuf } from '../cards';
 import { Effects3d, FX_KIND, clearFxRegistry, type FxFrame } from './effects3d';
 import { VEIL_DEATH_LIFE } from '../../game/shadeHaze';
-import type { SpectreSpec } from '../models/tubeDesc';
-import { FOG, FOG_MOVE } from './shadeFog';
-import { clearVeils, FOGS, registerStatus } from './status';
+import { SMOKE_TONES } from '../models/tubeDesc';
+import { shade } from '../models/descs/shade';
+import { buildTubeFigure } from '../models/tubeModel';
+import { restPose } from '../models/pose3d';
+import { SPECTRE_FORM } from '../figures';
+import { smooth } from './shapes';
+import { clearVeils, registerStatus, SMOKE_FRAME, SMOKES } from './status';
 import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
@@ -18,7 +22,7 @@ const cam = { x: 5, z: 5, pitch: 0.9, yaw: 0.3 };
 const bit = (...k: number[]): number => k.reduce((a, b) => a | (1 << b), 0);
 const fig = (id: number, kind: number, effects: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
   id, kind, x: 5, z: 5, top: 1, foot: 0, hand: [5.3, 0.6, 5], aim: 0, anim: ANIM.Idle, animT: 0, effects, alpha: 1, dashing: false, model: false, side: 0, def: FIGURES[kind],
-  yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
+  yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, rig: null, ...o,
 });
 const frameOf = (now: number, figs: DrawnFig[], hidden: number[] = []): FxFrame => ({
   ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
@@ -130,42 +134,101 @@ describe('status marks', () => {
   });
 });
 
-describe('the Shade model\'s fog', () => {
-  const SPEC: SpectreSpec = { eyes: { y: 15, z: 1, front: 1, half: [1, 0.5], slant: 0, core: 0xffffff, ring: 0xffffff, strength: 1 }, fog: true, swoosh: { colour: 0 } };
-  const model = (id: number, o: Partial<DrawnFig> = {}): DrawnFig => fig(id, KIND.Shade, 0, { model: true, spectre: SPEC, ...o });
-  const FULL = FOG.patches * FOG.segs * 3;
-  const pos = (T: FxTris): Float32Array => (T as unknown as { pos: Float32Array }).pos;
-  const col = (T: FxTris): Float32Array => (T as unknown as { col: Float32Array }).col;
-  /** The largest alpha of a drawn list. */
-  const peak = (T: FxTris): number => { let m = 0; for (let i = 0; i < T.n * 3; i++) m = Math.max(m, col(T)[i * 4 + 3]); return m; };
+describe('the Shade model\'s smoke (#359)', () => {
+  const SPEC = shade.spectre!;
+  const M = buildTubeFigure('shade', shade);
+  const RIG = { pose: restPose(M, 0), scale: M.scale, lift: 0 };
+  const PXW = M.scale / TILE;
+  const model = (id: number, o: Partial<DrawnFig> = {}): DrawnFig => fig(id, KIND.Shade, 0, { model: true, spectre: SPEC, rig: RIG, ...o });
+  afterEach(() => { vi.restoreAllMocks(); });
 
-  it('a model Shade draws fog and no strands; a card Shade draws strands', () => {
+  /** Quad `k` of a smoke buffer: its centre (corners 0 and 2) and its alpha. */
+  const centre = (o: SmokeBuf, k: number): number[] => [0, 1, 2].map((a) => (o.position[(k * 6) * 3 + a] + o.position[(k * 6 + 2) * 3 + a]) / 2);
+  const alphaOf = (o: SmokeBuf, k: number): number => o.rgba[k * 24 + 3];
+  const quads = (o: SmokeBuf): number => o.n / 2;
+  const peak = (o: SmokeBuf): number => { let m = 0; for (let k = 0; k < quads(o); k++) m = Math.max(m, alphaOf(o, k)); return m; };
+  const run = (fx: Effects3d, t0: number, n: number, figs: (t: number) => DrawnFig[], dt = 0.05): void => {
+    for (let i = 0; i < n; i++) fx.frame(frameOf(t0 + i * dt, figs(t0 + i * dt)), newOut());
+  };
+
+  it('a model Shade writes smoke and no strands; a card Shade writes strands and no smoke', () => {
     const fx = new Effects3d(map);
-    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    run(fx, 1, 5, () => [model(7)]);
     const out = newOut();
     fx.frame(frameOf(1.3, [model(7)]), out);
-    expect(out.tris.n).toBe(FULL);
+    expect(out.smoke.n).toBeGreaterThan(0);
+    expect(out.tris.n).toBe(0);
     clearVeils();
-    let card = newOut();
-    for (let i = 0; i < 5; i++) { card = newOut(); fx.frame(frameOf(5 + i * 0.05, [fig(8, KIND.Shade, 0)]), card); }
+    const card = newOut();
+    for (let i = 0; i < 5; i++) fx.frame(frameOf(5 + i * 0.05, [fig(8, KIND.Shade, 0)]), i === 4 ? card : newOut());
     expect(card.tris.n).toBeGreaterThan(0);
-    expect(card.tris.n).not.toBe(FULL);
+    expect(card.smoke.n).toBe(0);
   });
 
-  it('not seen for over 3 s, then drawn 5 tiles away: the fog starts at the new spot', () => {
-    const fx = new Effects3d(map);
-    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    fx.frame(frameOf(6, [model(7, { x: 10 })]), newOut());
-    const patches = FOGS.get(7)!.fog.patches;
-    expect(patches.length).toBe(FOG.patches);
-    for (const p of patches) expect(Math.hypot(p.x - 10, p.z - 5)).toBeLessThan(1);
+  it('every quad is finite and at the body, the spine included (bone -1 is the hips\' matrix), whatever the yaw', () => {
+    const fx = new Effects3d(map), out = newOut();
+    fx.frame(frameOf(1, [model(7, { yaw: 1.2 })]), newOut());
+    fx.frame(frameOf(1.05, [model(7, { yaw: 1.2 })]), out);
+    expect(out.smoke.n).toBeGreaterThan(0);
+    expect(out.smoke.position.every(Number.isFinite)).toBe(true);
+    for (let k = 0; k < quads(out.smoke); k++) {
+      const c = centre(out.smoke, k);
+      expect(Math.hypot(c[0] - 5, c[2] - 5), `quad ${k}`).toBeLessThan(1.5);
+      expect(c[1]).toBeGreaterThan(-0.2);
+      expect(c[1]).toBeLessThan(2);
+    }
   });
 
-  it('a jump of over a tile also starts the fog at the new spot', () => {
+  it('steps the smoke by the body\'s move between two frames 1/60 s apart', () => {
+    const spy = vi.spyOn(Smoke.prototype, 'step');
     const fx = new Effects3d(map);
-    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    fx.frame(frameOf(1.25, [model(7, { x: 8 })]), newOut());
-    for (const p of FOGS.get(7)!.fog.patches) expect(Math.hypot(p.x - 8, p.z - 5)).toBeLessThan(1);
+    fx.frame(frameOf(1, [model(7, { x: 5 })]), newOut());
+    fx.frame(frameOf(1 + 1 / 60, [model(7, { x: 5.04, z: 5.01 })]), newOut());
+    expect(spy).toHaveBeenCalledTimes(1);
+    const a = spy.mock.calls[0];
+    expect(a[0]).toBeCloseTo(1 / 60, 9);
+    expect(a[3]).toBeCloseTo(PXW, 9);
+    expect(a[4][0]).toBeCloseTo(0.04, 9);
+    expect(a[4][1]).toBeCloseTo(0.01, 9);
+  });
+
+  it('not seen for over 3 s, then drawn 5 tiles away: every quad of the first frame is at the new spot', () => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 5, () => [model(7)]);
+    const out = newOut();
+    fx.frame(frameOf(1.2 + SMOKE_FRAME.gap + 0.5, [model(7, { x: 10 })]), out);
+    expect(out.smoke.n).toBeGreaterThan(0);
+    for (let k = 0; k < quads(out.smoke); k++) expect(Math.hypot(centre(out.smoke, k)[0] - 10, centre(out.smoke, k)[2] - 5), `quad ${k}`).toBeLessThan(1.5);
+  });
+
+  it('a move of 2 tiles in one frame also puts every quad at the new spot in that frame', () => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 5, () => [model(7)]);
+    const out = newOut();
+    fx.frame(frameOf(1.25, [model(7, { x: 7 })]), out);
+    for (let k = 0; k < quads(out.smoke); k++) expect(Math.hypot(centre(out.smoke, k)[0] - 7, centre(out.smoke, k)[2] - 5), `quad ${k}`).toBeLessThan(1.5);
+  });
+
+  it('a clock that ran back also restarts the smoke at the place', () => {
+    const fx = new Effects3d(map);
+    run(fx, 5, 5, () => [model(7)]);
+    const spy = vi.spyOn(Smoke.prototype, 'settle');
+    fx.frame(frameOf(1, [model(7, { x: 9 })]), newOut());
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([EFFECT.Petrified, EFFECT.Frozen])('a figure with effect %i holds its smoke: the quads of two frames one second apart are identical', (e) => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 5, () => [model(7)]);
+    const f = (): DrawnFig => model(7, { effects: bit(e) });
+    fx.frame(frameOf(1.3, [f()]), newOut());
+    const a = newOut(), b = newOut();
+    fx.frame(frameOf(1.4, [f()]), a);
+    fx.frame(frameOf(2.4, [f()]), b);
+    expect(a.smoke.n).toBeGreaterThan(0);
+    expect(b.smoke.position).toEqual(a.smoke.position);
+    expect(b.smoke.rgba).toEqual(a.smoke.rgba);
+    expect(b.smoke.c).toEqual(a.smoke.c);
   });
 
   it('a pinned clock repeats the picture', () => {
@@ -174,104 +237,187 @@ describe('the Shade model\'s fog', () => {
     const a = newOut(), b = newOut();
     fx.frame(frameOf(1.2, [model(7)]), a);
     fx.frame(frameOf(1.2, [model(7)]), b);
-    expect(Array.from(pos(b.tris).slice(0, 90))).toEqual(Array.from(pos(a.tris).slice(0, 90)));
+    expect(b.smoke.position).toEqual(a.smoke.position);
+    expect(b.smoke.c).toEqual(a.smoke.c);
   });
 
-  it('fog whose Shade left the frame fades over FOG.fade s at its last place, and a hidden one shows none', () => {
+  it('the clock the quads carry advances by the frame time, and by half of it asleep', () => {
+    const clockAt = (effects: number): number => {
+      clearVeils();
+      const fx = new Effects3d(map), a = newOut(), b = newOut();
+      fx.frame(frameOf(1, [model(7, { effects })]), a);
+      fx.frame(frameOf(1.05, [model(7, { effects })]), b);
+      return b.smoke.c[3] - a.smoke.c[3];
+    };
+    expect(clockAt(0)).toBeCloseTo(0.05 * SMOKE.clock, 9);
+    expect(clockAt(bit(EFFECT.Sleep))).toBeCloseTo(0.025 * SMOKE.clock, 9);
+  });
+
+  it('a figure\'s alpha scales every quad, and a hidden id writes none', () => {
     const fx = new Effects3d(map);
-    for (let i = 0; i < 5; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
+    run(fx, 1, 5, () => [model(7)]);
+    const full = newOut(), half = newOut();
+    fx.frame(frameOf(1.3, [model(7)]), full);
+    fx.frame(frameOf(1.3, [model(7, { alpha: 0.5 })]), half);
+    expect(half.smoke.n).toBe(full.smoke.n);
+    for (let k = 0; k < quads(full.smoke); k++) expect(alphaOf(half.smoke, k)).toBeCloseTo(alphaOf(full.smoke, k) * 0.5, 6);
+    const fx2 = new Effects3d(map), hid = newOut();
+    run(fx2, 1, 5, () => [model(7)]);
+    fx2.frame(frameOf(1.3, [model(7)], [7]), hid);
+    expect(hid.smoke.n).toBe(0);
+  });
+
+  it('writes the Shades far to near', () => {
+    // along the screen's up axis on the ground (away from the camera): the one with the larger depth is the far one
+    const up: [number, number] = [Math.sin(cam.yaw), -Math.cos(cam.yaw)];
+    const far = model(1, { x: 5 + up[0] * 2, z: 5 + up[1] * 2 }), near = model(2, { x: 5 - up[0] * 2, z: 5 - up[1] * 2 });
+    for (const order of [[far, near], [near, far]]) {
+      clearVeils();
+      const fx = new Effects3d(map), out = newOut();
+      fx.frame(frameOf(1, order), newOut());
+      fx.frame(frameOf(1.05, order), out);
+      const per = quads(out.smoke) / 2, depth = (k: number): number => { const c = centre(out.smoke, k); return c[0] * up[0] + c[2] * up[1]; };
+      expect(depth(0)).toBeGreaterThan(depth(per));
+    }
+  });
+
+  it('ctx.smokeTone sets the second tone: purple wisps are purple, the black stays black', () => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 20, () => [model(7)]);
+    const fr = frameOf(2, [model(7)]);
+    fr.ctx.smokeTone = SMOKE_TONES.purple;
+    const out = newOut();
+    fx.frame(fr, out);
+    let purple = 0;
+    for (let k = 0; k < quads(out.smoke); k++) {
+      const r = out.smoke.rgba[k * 24], g = out.smoke.rgba[k * 24 + 1], b = out.smoke.rgba[k * 24 + 2];
+      if (r + g + b > 0.03) { purple++; expect(b, `quad ${k}`).toBeGreaterThan(g); }
+    }
+    expect(purple).toBeGreaterThan(0);
+  });
+
+  it('smoke whose Shade left the frame (no death) fades over SMOKE_FRAME.fade s at its place, and a hidden one shows none', () => {
+    const fx = new Effects3d(map);
+    run(fx, 1, 5, () => [model(7)]);
     const live = newOut();
     fx.frame(frameOf(1.2, [model(7)]), live);
     const early = newOut();
-    fx.frame(frameOf(1.2 + FOG.fade / 2, []), early);
-    expect(early.tris.n).toBe(FULL);
-    expect(peak(early.tris)).toBeLessThan(peak(live.tris));
-    expect(peak(early.tris)).toBeGreaterThan(0);
+    fx.frame(frameOf(1.2 + SMOKE_FRAME.fade / 2, []), early);
+    expect(early.smoke.n).toBe(live.smoke.n);
+    expect(peak(early.smoke)).toBeCloseTo(peak(live.smoke) * 0.5, 3);
+    for (let k = 0; k < quads(early.smoke); k++) expect(Math.hypot(centre(early.smoke, k)[0] - 5, centre(early.smoke, k)[2] - 5)).toBeLessThan(1.5);
     const late = newOut();
-    fx.frame(frameOf(1.2 + FOG.fade + 0.05, []), late);
-    expect(late.tris.n).toBe(0);
-    const fx2 = new Effects3d(map);
-    for (let i = 0; i < 5; i++) fx2.frame(frameOf(1 + i * 0.05, [model(7)], [7]), newOut());
-    const hid = newOut();
+    fx.frame(frameOf(1.2 + SMOKE_FRAME.fade + 0.05, []), late);
+    expect(late.smoke.n).toBe(0);
+    const fx2 = new Effects3d(map), hid = newOut();
+    run(fx2, 1, 5, () => [model(7)]);
     fx2.frame(frameOf(1.3, [model(7)], [7]), hid);
-    expect(hid.tris.n).toBe(0);
+    expect(hid.smoke.n).toBe(0);
   });
 
-  it('a dying model Shade\'s fog spreads and thins; one never seen falls back to a resting fog; no fog, strands', () => {
-    const fx = new Effects3d(map);
-    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    const live = newOut();
-    fx.frame(frameOf(1.95, [model(7)]), live);
-    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
-    const d1 = newOut(), d2 = newOut();
-    fx.frame(frameOf(2.2, []), d1);
-    fx.frame(frameOf(2.6, []), d2);
-    expect(d1.tris.n).toBe(FULL);
-    expect(peak(d1.tris)).toBeCloseTo(FOG.alpha[1] * (1 - 0.2 / VEIL_DEATH_LIFE), 3);
-    expect(peak(d2.tris)).toBeCloseTo(FOG.alpha[1] * (1 - 0.6 / VEIL_DEATH_LIFE), 3);
-    // a Shade of another id that died unseen: a resting fog at the record's spot
-    fx.event({ t: 'Died', id: 99, x: 12 * 16, y: 12 * 16, kind: KIND.Shade } as never, 3, false);
-    const rest = newOut();
-    fx.frame(frameOf(3.2, []), rest);
-    expect(rest.tris.n).toBe(FULL);
-    const p = pos(rest.tris);
-    for (let i = 0; i < rest.tris.n * 3; i++) expect(Math.abs(p[i * 3] - 12)).toBeLessThan(2.5);
-  });
-
-  it('a dying fog spreads and swells: after 0.5 s the patches are further out and drawn larger by the death grow', () => {
-    const fx = new Effects3d(map);
-    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7)]), newOut());
-    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
-    const mean = (): number => { const m = FOGS.get(7)!; return m.fog.patches.reduce((a, p) => a + Math.hypot(p.x - m.x, p.z - m.z), 0) / m.fog.patches.length; };
-    let out = newOut();
-    fx.frame(frameOf(2, []), out);
-    const d0 = mean();
-    for (let i = 1; i <= 5; i++) { out = newOut(); fx.frame(frameOf(2 + i * 0.1, []), out); }
-    // 0.5 s at FOG.spread px/s
-    expect(mean() - d0).toBeCloseTo(FOG.spread * 0.5 / 16, 4);
-    // the first patch's first triangle: centre vertex then the middle ring, `mid * size` apart
-    const P = pos(out.tris), p = FOGS.get(7)!.fog.patches[0];
-    const dist = Math.hypot(P[3] - P[0], P[4] - P[1], P[5] - P[2]);
-    const base = p.size * (FOG_MOVE.sizeBase + FOG_MOVE.breathe * Math.sin(FOG_MOVE.breatheRate * 2.5 + FOG_MOVE.breathePhase * p.ph)) / 16;
-    expect(dist / FOG.mid / base).toBeCloseTo(1 + 0.6 * 0.5, 3);
-  });
-
-  it('a Shade killed part-formed starts its death fog at the alpha it had alive', () => {
-    const fx = new Effects3d(map);
-    for (let i = 0; i < 10; i++) fx.frame(frameOf(1 + i * 0.05, [model(7, { form: 0.2 })]), newOut());
-    const alive = newOut();
-    fx.frame(frameOf(1.5, [model(7, { form: 0.2 })]), alive);
-    fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 1.55, false);
-    const dying = newOut();
-    fx.frame(frameOf(1.6, []), dying);
-    expect(peak(alive.tris)).toBeLessThan(FOG.alpha[1] * 0.9);
-    expect(peak(dying.tris)).toBeCloseTo(peak(alive.tris) * (1 - 0.05 / VEIL_DEATH_LIFE), 3);
-  });
-
-  it('a card Shade that dies after a model Shade drew fog keeps its strands', () => {
-    // the card Shade alone in a session without fogs: its dying strands
-    const alone = new Effects3d(map);
-    for (let i = 0; i < 20; i++) alone.frame(frameOf(1 + i * 0.05, [fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
-    alone.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
-    const strands = newOut();
-    alone.frame(frameOf(2.1, []), strands);
-    expect(strands.tris.n).toBeGreaterThan(0);
+  it('forms out of its pool: the first frame at form 0 is invisible and low; the parts\' alpha follows SPECTRE_FORM', () => {
+    const fx = new Effects3d(map), out = newOut();
+    fx.frame(frameOf(1, [model(7, { form: 0 })]), out);
+    expect(peak(out.smoke)).toBe(0);
+    const settled = new Effects3d(map);
     clearVeils();
-    // the same with a model Shade drawing fog beside it: the card's death adds the same strands, no fog
-    const fx = new Effects3d(map);
-    for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7), fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
-    fx.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
-    const out = newOut();
-    fx.frame(frameOf(2.1, [model(7)]), out);
-    expect(out.tris.n).toBe(FULL + strands.tris.n);
+    const spy = vi.spyOn(Smoke.prototype, 'settle');
+    settled.frame(frameOf(1, [model(7, { form: 0.3 })]), newOut());
+    expect(spy.mock.calls[0][5]).toBeCloseTo(smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], 0.3), 9);
+    spy.mockClear();
+    settled.frame(frameOf(1.05, [model(7, { form: 0.7 })]), newOut());
+    const step = vi.spyOn(Smoke.prototype, 'step');
+    settled.frame(frameOf(1.1, [model(7, { form: 0.7 })]), newOut());
+    expect(step.mock.calls[0][6]).toBeCloseTo(smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], 0.7), 9);
   });
 
-  it('a session without fogs keeps the strands for a dead card Shade', () => {
-    const fx = new Effects3d(map);
-    fx.event({ t: 'Died', id: 5, x: 80, y: 80, kind: KIND.Shade } as never, 1, false);
-    const out = newOut();
-    fx.frame(frameOf(1.2, []), out);
-    expect(out.tris.n).toBeGreaterThan(0);
-    expect(out.tris.n).not.toBe(FOG.patches * FOG.segs * 3);
+  describe('in death', () => {
+    const live = (fx: Effects3d, n = 20): SmokeBuf => {
+      let out = newOut();
+      for (let i = 0; i < n; i++) { out = newOut(); fx.frame(frameOf(1 + i * 0.05, [model(7)]), out); }
+      return out.smoke;
+    };
+
+    it('a dying Shade\'s smoke spreads, thins by VEIL_DEATH_LIFE and swells, with no strands', () => {
+      const fx = new Effects3d(map);
+      const alive = live(fx);
+      fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
+      const d1 = newOut(), d2 = newOut();
+      fx.frame(frameOf(2.2, []), d1);
+      fx.frame(frameOf(2.6, []), d2);
+      expect(d1.tris.n).toBe(0);
+      expect(d1.smoke.n).toBe(alive.n);
+      expect(peak(d1.smoke)).toBeCloseTo(peak(alive) * (1 - 0.2 / VEIL_DEATH_LIFE), 3);
+      expect(peak(d2.smoke)).toBeCloseTo(peak(alive) * (1 - 0.6 / VEIL_DEATH_LIFE), 3);
+      // the first core patch is `1 + 0.6 * age` times as wide as it was alive (the smoke's clock stands still in death)
+      const width = (o: SmokeBuf): number => Math.hypot(o.position[3] - o.position[0], o.position[4] - o.position[1], o.position[5] - o.position[2]);
+      expect(width(d1.smoke) / width(alive)).toBeCloseTo(1 + 0.6 * 0.2, 3);
+    });
+
+    it('spreads outward SMOKE.death.spread px a second', () => {
+      const fx = new Effects3d(map);
+      live(fx);
+      fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 2, false);
+      const m = SMOKES.get(7)!;
+      const mean = (): number => m.smoke.core.reduce((a, c) => a + Math.hypot(c.x - m.x, c.z - m.z), 0) / m.smoke.core.length;
+      fx.frame(frameOf(2, []), newOut());
+      const d0 = mean();
+      for (let i = 1; i <= 5; i++) fx.frame(frameOf(2 + i * 0.1, []), newOut());
+      expect(mean() - d0).toBeCloseTo(SMOKE.death.spread * 0.5 * PXW, 4);
+    });
+
+    it('a Shade of another id that died unseen: a settled smoke at the record\'s spot, spreading the same way', () => {
+      const fx = new Effects3d(map);
+      live(fx);
+      fx.event({ t: 'Died', id: 99, x: 12 * 16, y: 12 * 16, kind: KIND.Shade } as never, 3, false);
+      const r1 = newOut(), r2 = newOut();
+      fx.frame(frameOf(3.2, []), r1);
+      fx.frame(frameOf(3.5, []), r2);
+      expect(r1.smoke.n).toBeGreaterThan(0);
+      for (let k = 0; k < quads(r1.smoke); k++) {
+        const c = centre(r1.smoke, k);
+        expect(Math.hypot(c[0] - 12, c[2] - 12), `quad ${k}`).toBeLessThan(2);
+      }
+      expect(peak(r1.smoke)).toBeCloseTo(SMOKE.core.alpha * (1 - 0.2 / VEIL_DEATH_LIFE), 3);
+      expect(peak(r2.smoke)).toBeCloseTo(SMOKE.core.alpha * (1 - 0.5 / VEIL_DEATH_LIFE), 3);
+    });
+
+    it('a Shade killed part-formed starts its death smoke at the alpha it had alive', () => {
+      const fx = new Effects3d(map);
+      for (let i = 0; i < 10; i++) fx.frame(frameOf(1 + i * 0.05, [model(7, { form: 0.2 })]), newOut());
+      const alive = newOut();
+      fx.frame(frameOf(1.5, [model(7, { form: 0.2 })]), alive);
+      fx.event({ t: 'Died', id: 7, x: 80, y: 80, kind: KIND.Shade } as never, 1.55, false);
+      const dying = newOut();
+      fx.frame(frameOf(1.6, []), dying);
+      expect(peak(alive.smoke)).toBeLessThan(SMOKE.core.alpha * 0.9);
+      expect(peak(dying.smoke)).toBeCloseTo(peak(alive.smoke) * (1 - 0.05 / VEIL_DEATH_LIFE), 3);
+    });
+
+    it('a card Shade that dies beside a model Shade keeps its strands and adds no smoke', () => {
+      const alone = new Effects3d(map);
+      for (let i = 0; i < 20; i++) alone.frame(frameOf(1 + i * 0.05, [fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
+      alone.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
+      const strands = newOut();
+      alone.frame(frameOf(2.1, []), strands);
+      expect(strands.tris.n).toBeGreaterThan(0);
+      clearVeils();
+      const fx = new Effects3d(map);
+      for (let i = 0; i < 20; i++) fx.frame(frameOf(1 + i * 0.05, [model(7), fig(8, KIND.Shade, 0, { x: 7 })]), newOut());
+      fx.event({ t: 'Died', id: 8, x: 7 * 16, y: 80, kind: KIND.Shade } as never, 2, false);
+      const out = newOut();
+      fx.frame(frameOf(2.1, [model(7)]), out);
+      expect(out.tris.n).toBe(strands.tris.n);
+      expect(out.smoke.n).toBeGreaterThan(0);
+    });
+
+    it('a session without smoke keeps the strands for a dead card Shade', () => {
+      const fx = new Effects3d(map);
+      fx.event({ t: 'Died', id: 5, x: 80, y: 80, kind: KIND.Shade } as never, 1, false);
+      const out = newOut();
+      fx.frame(frameOf(1.2, []), out);
+      expect(out.tris.n).toBeGreaterThan(0);
+      expect(out.smoke.n).toBe(0);
+    });
   });
 });

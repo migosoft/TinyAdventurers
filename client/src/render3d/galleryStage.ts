@@ -487,13 +487,13 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       c.timer.lap('sim');
       if (!c.view) return 0;
       // The figures that died since the last frame leave their skulls; the event comes before the frame that no longer has them.
-      // The spectres of the dying row also send theirs to the effects (the Shade's death fog, the Ghost's death effect); no other kind has one here.
+      // The spectres of the dying row also send theirs to the effects (the Shade's death smoke, the Ghost's death effect); no other kind has one here.
       for (const ev of diedBetween(t0, t)) {
         figures.event(ev);
         if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade) fx.event(ev, t, false);
       }
       // The block's lives that ended since the last frame, to the figures and the effects (stamped with the moment they ended). The first
-      // frame looks back `CATCH_UP` s, so a page that starts just after a death shows the death's fog.
+      // frame looks back `CATCH_UP` s, so a page that starts just after a death shows the death's smoke.
       const from = first ? Math.max(0, t0 - CATCH_UP) : t0;
       first = false;
       const diedAt = spectreDeathIn(from, t);

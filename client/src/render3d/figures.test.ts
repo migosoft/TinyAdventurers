@@ -25,7 +25,7 @@ import { project, snapGround, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
-import { Figures3d, screenAim, SPECTRE_FORM, untinted, type FigureOut } from './figures';
+import { Figures3d, screenAim, SHADE_FADE, SPECTRE_FORM, SPECTRE_SINK, untinted, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
 
 const FIG = { w: 16, h: 28 };
@@ -761,16 +761,16 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(one(spec(7, kind, { anim: ANIM.Windup })).figs[0].bite).toBe(-1);
     });
 
-    it('draws a Shade whole when idle: alpha 1, eyes open, no flare, fog and form 1', () => {
+    it('draws a Shade whole when idle: alpha 1, eyes open, no flare, smoke and form 1', () => {
       const out = one(spec(7, KIND.Shade));
       const b = out.models[0];
       expect([b.alpha, b.eye ?? 1, b.flare ?? 0]).toEqual([1, 1, 0]);
-      expect(out.figs[0].spectre?.fog).toBe(true);
+      expect(out.figs[0].spectre?.smoke).toBeDefined();
       expect(out.figs[0].form).toBe(1);
       expect(out.figs[0].alpha).toBe(1);
     });
 
-    it('forms a Shade out of its fog during the ambush warning', () => {
+    it('forms a Shade out of its smoke during the ambush warning', () => {
       const at3 = (k: number) => one(spec(7, KIND.Shade, { anim: ANIM.Ambush, animMs: k * WARN * 1000 }));
       const a = at3(0.3);
       expect(a.models[0].alpha).toBe(0);
@@ -801,6 +801,32 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(out.models.length).toBe(1);
       expect(out.models[0].alpha).toBe(1);   // the copy starts at the body's alpha (the 0.75 of the card's veil is not applied)
       expect(out.models[0].eye).toBe(0);
+    });
+
+    it('gives a model figure its rig (the frame\'s pose, its drawn scale, its world y) and a card none', () => {
+      const out = one(spec(7, KIND.Shade));
+      const rig = out.figs[0].rig!;
+      expect(rig).not.toBeNull();
+      expect(rig.scale).toBe(out.models[0].scale);
+      expect(rig.pose).toBe(out.models[0].pose);
+      expect(rig.lift).toBeCloseTo(out.models[0].lift / Math.cos(cam().pitch), 9);
+      expect(make().frame(frame([spec(7, KIND.Shade)]), cam(), look()).figs[0].rig).toBeNull();
+    });
+
+    it('sinks a dead Shade\'s copy by SPECTRE_SINK px over the fade; a dead Ghost\'s copy does not sink', () => {
+      const fg = make();
+      const l0 = one(spec(7, KIND.Shade), fg).models[0].lift;
+      fg.event({ t: 'Died', id: 7, x: at(0), y: 8, kind: KIND.Shade } as never);
+      const a = fg.frame(frame([], { now: 10.0, dt: SHADE_FADE / 2 }), cam(), look({ kit, ...all }));
+      const b = fg.frame(frame([], { now: 10.15, dt: 0.01 }), cam(), look({ kit, ...all }));
+      expect(a.models[0].lift).toBeCloseTo(l0, 9);
+      expect((l0 - b.models[0].lift) * 16).toBeCloseTo(SPECTRE_SINK / 2, 1);
+      expect(b.models[0].eye).toBe(0);
+      // a Ghost leaves no dying copy that could sink
+      const gg = make();
+      one(spec(8, KIND.Ghost), gg);
+      gg.event({ t: 'Died', id: 8, x: at(0), y: 8, kind: KIND.Ghost } as never);
+      expect(gg.frame(frame([], { now: 10.0, dt: 0.01 }), cam(), look({ kit, ...all })).models.length).toBe(0);
     });
 
     it('pulses a Ghost, blinks it in the ambush and lists its halo', () => {

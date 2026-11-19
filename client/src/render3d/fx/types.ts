@@ -7,6 +7,7 @@ import type { FxTris } from './tris';
 import type { V3 } from './shapes';
 import type { SpectreSpec } from '../models/tubeDesc';
 import type { SmokeBuf } from './smoke';
+import type { Pose3d } from '../models/pose3d';
 
 /** What the effects write into each frame: blended triangles, lit triangles (stone, dust, smoke, floor marks), glow quads and client lights. */
 export interface FxOut { tris: FxTris; lit: FxTris; glows: GlowBuf; lights: Cand[]; /** The smoke quads of the smoke bodies (the pass's own buffer; the view draws it). */ smoke: SmokeBuf }
@@ -60,8 +61,10 @@ export interface DrawnFig {
   bite: number;
   /** The model's spectre look (#359), null for a card and for every other model. */
   spectre: SpectreSpec | null;
-  /** How far a fog model has formed out of its fog: 0..1 in the ambush warning (`animT / AMBUSH_WARNING`), else 1. */
+  /** How far a smoke model has formed out of its pool: 0..1 in the ambush warning (`animT / AMBUSH_WARNING`), else 1. */
   form: number;
+  /** A model's pose of this frame (valid for the frame only), its drawn scale and its world y (tiles) at the root; null for a card. */
+  rig: { pose: Pose3d; scale: number; lift: number } | null;
 }
 
 /** A mimic's one-shot cue from its pose: the reveal (gold motes) or the landing (a dust puff), at the foot (tiles). */
