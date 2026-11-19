@@ -7,7 +7,7 @@ import { splitIndex, type BendDef, type FigureModel, type ModelRange } from './m
 import type { Vec3 } from './desc';
 import type { Mesh3 } from './part';
 import type { Shape, TubeDesc, TubePiece } from './tubeDesc';
-import { ball, drop, tube } from './tubes';
+import { ball, drop, prism, tube, welded } from './tubes';
 
 /** The Dire Wolf model's fitted `scale` (card height 19 px x size 0.87 / full height 15.226 px): one page px in game px at size 1. */
 export const PAGE_TO_GAME = 1.0856;
@@ -19,6 +19,7 @@ const smooth = (x: number): number => { const t = Math.max(0, Math.min(1, x)); r
 function meshOf(s: Shape): Mesh3 {
   if ('tube' in s) return tube(s.tube, s.opts);
   if ('ball' in s) return ball(s.ball[0], s.ball[1], s.ball[2], s.pow, s.turnZ);
+  if ('prism' in s) return prism(s.prism.outline, s.prism.z[0], s.prism.z[1]);
   return drop(s.drop.r, s.drop.len, s.drop.sink, s.drop.wide, s.drop.dir);
 }
 
@@ -40,7 +41,7 @@ function swayAxis(name: string, s: Shape): { dir: [number, number, number]; len:
     const a = s.tube[0].p, b = s.tube[s.tube.length - 1].p, d = [b[0] - a[0], b[1] - a[1], (b[2] ?? 0) - (a[2] ?? 0)], l = Math.hypot(d[0], d[1], d[2]);
     return { dir: [d[0] / l, d[1] / l, d[2] / l], len: l };
   }
-  throw new Error(`${name}: a ball cannot sway`);
+  throw new Error(`${name}: a ${'prism' in s ? 'prism' : 'ball'} cannot sway`);
 }
 
 interface Built { piece: TubePiece; stage: number; line: boolean; mesh: Mesh3; uv: Float32Array | null; bend: number }
@@ -70,6 +71,7 @@ function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
     if (p.bone !== 'hips' && !pv[p.bone]) throw new Error(`${d.name}: the bone ${p.bone} of a piece has no pivot`);
     if (p.robe && d.robeTop === undefined) throw new Error(`${d.name}: a robe piece needs robeTop`);
     if (p.robe && p.bend) throw new Error(`${d.name}: a robe piece cannot also bend`);
+    if ('prism' in p.shape && typeof p.colour === 'function') throw new Error(`${d.name}: a prism cannot be painted`);
   }
   d.pieces.forEach((p, i) => {
     if (!p.bend || !('with' in p.bend)) return;
@@ -104,7 +106,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
       }
     }
     const stage = STAGES.indexOf(p.stage);
-    if (p.line > 0) built.push({ piece: p, stage, line: true, mesh: hull(src, p.line / d.size), uv: src.uv, bend });
+    if (p.line > 0) built.push({ piece: p, stage, line: true, mesh: hull('prism' in p.shape ? welded(src) : src, p.line / d.size), uv: src.uv, bend });
     built.push({ piece: p, stage, line: false, mesh: src, uv: src.uv, bend });
   }
   // Draw order: by stage, the hulls first (the sort is stable).

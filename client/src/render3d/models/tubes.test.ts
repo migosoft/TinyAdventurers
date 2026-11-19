@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ball, drop, tube } from './tubes';
+import { ball, drop, prism, tube, welded } from './tubes';
 import type { Mesh3 } from './part';
 
 const range = (m: Mesh3, axis: number): [number, number] => {
@@ -109,5 +109,72 @@ describe('drop', () => {
     clean(t);
     expect(range(t, 0)[0]).toBeCloseTo(lo, 1);
     expect(range(t, 0)[1]).toBeCloseTo(hi, 1);
+  });
+});
+
+describe('prism', () => {
+  const SQUARE: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const U: [number, number][] = [[-4.5, 0], [4.5, 0], [4.5, 5.5], [3.5, 5.5], [3.5, 1], [-3.5, 1], [-3.5, 5.5], [-4.5, 5.5]];
+  const P = (m: Mesh3, i: number): number[] => [m.position[i * 3], m.position[i * 3 + 1], m.position[i * 3 + 2]];
+  const N = (m: Mesh3, i: number): number[] => [m.normal[i * 3], m.normal[i * 3 + 1], m.normal[i * 3 + 2]];
+  const cross = (a: number[], b: number[]): number[] => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const sub = (a: number[], b: number[]): number[] => a.map((v, i) => v - b[i]);
+  const dot = (a: number[], b: number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  /** Each triangle: its normal (of the first point), the cross product of its edges. */
+  const tris = (m: Mesh3): { n: number[]; c: number[] }[] => {
+    const out: { n: number[]; c: number[] }[] = [];
+    for (let t = 0; t < m.index.length; t += 3) {
+      const [a, b, c] = [m.index[t], m.index[t + 1], m.index[t + 2]];
+      out.push({ n: N(m, a), c: cross(sub(P(m, b), P(m, a)), sub(P(m, c), P(m, a))) });
+    }
+    return out;
+  };
+  const capArea = (m: Mesh3, nz: number): number => tris(m).filter((t) => Math.abs(t.n[2] - nz) < 1e-6).reduce((s, t) => s + Math.hypot(...t.c) / 2, 0);
+
+  it('a unit square: 24 points, 12 triangles, every normal a unit axis vector', () => {
+    const m = prism(SQUARE, 0, 1);
+    clean(m);
+    expect(m.position.length / 3).toBe(24);
+    expect(m.index.length / 3).toBe(12);
+    expect(m.uv).toBeNull();
+    for (let i = 0; i < 24; i++) {
+      const n = N(m, i).map(Math.abs);
+      expect(n.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 5);
+      expect(Math.max(...n)).toBeCloseTo(1, 5);
+    }
+  });
+  for (const [name, outline, z0, z1, area] of [['the unit square', SQUARE, 0, 1, 1], ['the U', U, -7, 7, 18]] as const) {
+    it(`${name}: winding agrees with the normals and the caps have the polygon's area`, () => {
+      const m = prism(outline, z0, z1);
+      clean(m);
+      for (const t of tris(m)) expect(dot(t.c, t.n)).toBeGreaterThan(0);
+      expect(capArea(m, 1)).toBeCloseTo(area, 4);
+      expect(capArea(m, -1)).toBeCloseTo(area, 4);
+    });
+  }
+  it('the U: the first edge faces -y, the notch floor faces +y', () => {
+    const m = prism(U, -7, 7), n = m.position.length / 3;
+    const facing = (a: number[], b: number[]): number[] => {
+      for (let i = 0; i < n; i++) {
+        const p = P(m, i);
+        if (Math.abs(p[0] - a[0]) < 1e-6 && Math.abs(p[1] - a[1]) < 1e-6 && Math.abs(N(m, i)[2]) < 1e-6) {
+          const j = [...Array(n).keys()].find((k) => k !== i && Math.abs(P(m, k)[0] - b[0]) < 1e-6 && Math.abs(P(m, k)[1] - b[1]) < 1e-6 && Math.abs(P(m, k)[2] - p[2]) < 1e-6 && Math.abs(N(m, k)[2]) < 1e-6 && N(m, k).every((v, c) => Math.abs(v - N(m, i)[c]) < 1e-6));
+          if (j !== undefined) return N(m, i);
+        }
+      }
+      throw new Error('no side face');
+    };
+    const e0 = facing(U[0], U[1]), floor = facing(U[4], U[5]);
+    expect(e0[0]).toBeCloseTo(0, 5); expect(e0[1]).toBeCloseTo(-1, 5); expect(e0[2]).toBeCloseTo(0, 5);
+    expect(floor[0]).toBeCloseTo(0, 5); expect(floor[1]).toBeCloseTo(1, 5); expect(floor[2]).toBeCloseTo(0, 5);
+  });
+});
+
+describe('welded', () => {
+  it('gives the corners of a unit prism one normal of three components 1/sqrt(3), positions unchanged', () => {
+    const m = prism([[0, 0], [1, 0], [1, 1], [0, 1]], 0, 1), w = welded(m);
+    expect(w.position).toBe(m.position);
+    expect(w.index).toBe(m.index);
+    for (let i = 0; i < w.normal.length; i++) expect(Math.abs(w.normal[i])).toBeCloseTo(1 / Math.sqrt(3), 5);
   });
 });

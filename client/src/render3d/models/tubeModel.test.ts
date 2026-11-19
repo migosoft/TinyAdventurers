@@ -245,6 +245,20 @@ describe('buildTubeFigure', () => {
     const painted = base.pieces.find((p) => typeof p.colour === 'function')!;
     expect(() => require_build({ ...bad, pieces: [...base.pieces, painted] })).toThrow(/Bad Stag/);
     expect(() => require_build({ ...bad, parents: { ...base.parents, leg0: 'leg1' } })).toThrow(/Bad Stag/);
+    const painted2 = { shape: { prism: { outline: [[0, 0], [1, 0], [1, 1], [0, 1]], z: [0, 1] } }, stage: 'body', bone: 'hips', line: 0, colour: (): number => 0xffffff } as unknown as TubePiece;
+    expect(() => require_build({ ...bad, pieces: [...base.pieces, painted2] })).toThrow(/Bad Stag.*prism cannot be painted/);
+  });
+  it('builds a prism piece with a hull that lies off the piece', () => {
+    const base = TUBE_DESCS.stag;
+    const box = { shape: { prism: { outline: [[-4, 0], [4, 0], [4, 6], [-4, 6]], z: [-3, 3] } }, stage: 'body', bone: 'hips', line: 1, colour: 0x8f4029 } as unknown as TubePiece;
+    const plain = buildTubeFigure('stag', base), m = buildTubeFigure('boxed', { ...base, pieces: [...base.pieces, box] });
+    expect(m.position.every(Number.isFinite)).toBe(true);
+    expect(m.normal.every(Number.isFinite)).toBe(true);
+    expect(m.position.length / 3).toBe(plain.position.length / 3 + 24 * 2);
+    // The hull (the first 24 added points) is the prism's points moved out along their welded normals: none coincides with a piece point.
+    const n = plain.position.length / 3, pts = new Set<string>();
+    for (let i = n; i < m.position.length / 3; i++) pts.add([...m.position.subarray(i * 3, i * 3 + 3)].map((v) => v.toFixed(4)).join());
+    expect(pts.size).toBeGreaterThan(24);
   });
 });
 

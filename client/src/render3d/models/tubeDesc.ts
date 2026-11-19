@@ -22,7 +22,8 @@ export const fitSize = (factor: number, drawn: number): number => factor * HUMAN
 export type Shape =
   | { tube: readonly TubePoint[]; opts?: TubeOpts }
   | { ball: readonly [number, number, number]; pow?: number; turnZ?: number }
-  | { drop: { r: number; len: number; sink: number; wide: number; dir: Vec3 } };
+  | { drop: { r: number; len: number; sink: number; wide: number; dir: Vec3 } }
+  | { prism: { outline: readonly (readonly [number, number])[]; z: readonly [number, number] } };
 
 export interface TubePiece {
   shape: Shape; at?: Vec3; stage: Stage; bone: Bone;

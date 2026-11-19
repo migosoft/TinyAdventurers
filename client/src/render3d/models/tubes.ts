@@ -2,7 +2,7 @@
 // drop (an ear, a tail). Plain typed arrays (no scene objects), so it runs in a Web Worker and under node. Positions
 // are in model pixels.
 
-import { CatmullRomCurve3, Quaternion, Vector3 } from 'three/webgpu';
+import { CatmullRomCurve3, Quaternion, ShapeUtils, Vector2, Vector3 } from 'three/webgpu';
 import { vertexNormals, type Mesh3 } from './part';
 
 /** One point of a tube: its place, its radius and how much a ring is squeezed sideways (`wide`, 1 is round). */
@@ -136,4 +136,54 @@ export function drop(r: number, len: number, sink: number, wide: number, dir: re
     for (let i = 0; i < arr.length; i += 3) { p.set(arr[i], arr[i + 1], arr[i + 2]).applyQuaternion(q); arr[i] = p.x; arr[i + 1] = p.y; arr[i + 2] = p.z; }
   }
   return m;
+}
+
+/**
+ * A prism: a simple polygon in the x-y plane (counter-clockwise seen from +z, need not be convex) pushed from z0 to z1 (z0 < z1).
+ * Hard edges: every side face and both caps have their own points and one normal. uv: null.
+ */
+export function prism(outline: readonly (readonly [number, number])[], z0: number, z1: number): Mesh3 {
+  const n = outline.length;
+  const tri = ShapeUtils.triangulateShape(outline.map((q) => new Vector2(q[0], q[1])), []);
+  const position: number[] = [], normal: number[] = [], idx: number[] = [];
+  const push = (x: number, y: number, z: number, nx: number, ny: number, nz: number): number => {
+    position.push(x, y, z); normal.push(nx, ny, nz);
+    return position.length / 3 - 1;
+  };
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = outline[i], [bx, by] = outline[(i + 1) % n], dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1;
+    const nx = dy / l, ny = -dx / l;
+    const a0 = push(ax, ay, z0, nx, ny, 0), b0 = push(bx, by, z0, nx, ny, 0), b1 = push(bx, by, z1, nx, ny, 0), a1 = push(ax, ay, z1, nx, ny, 0);
+    idx.push(a0, b0, b1, a0, b1, a1);
+  }
+  const top = outline.map((q) => push(q[0], q[1], z1, 0, 0, 1)), bottom = outline.map((q) => push(q[0], q[1], z0, 0, 0, -1));
+  for (const [a, b, c] of tri) {
+    // Whatever order the triangulation gives, face +z at the top and -z at the bottom.
+    const ccw = (outline[b][0] - outline[a][0]) * (outline[c][1] - outline[a][1]) - (outline[b][1] - outline[a][1]) * (outline[c][0] - outline[a][0]) > 0;
+    if (ccw) idx.push(top[a], top[b], top[c], bottom[a], bottom[c], bottom[b]);
+    else idx.push(top[a], top[c], top[b], bottom[a], bottom[b], bottom[c]);
+  }
+  return { position: new Float32Array(position), normal: new Float32Array(normal), uv: null, index: Uint32Array.from(idx) };
+}
+
+/**
+ * The mesh with one normal per place: points at the same position (to 1e-4) share the normalised sum of their normals.
+ * For the hull of a hard-edged shape, which would tear open at its edges. Positions and index are the same arrays.
+ */
+export function welded(m: Mesh3): Mesh3 {
+  const count = m.position.length / 3, sums = new Map<string, number[]>(), keys: string[] = [];
+  const q = (v: number): number => Math.round(v * 1e4);
+  for (let i = 0; i < count; i++) {
+    const k = `${q(m.position[i * 3])},${q(m.position[i * 3 + 1])},${q(m.position[i * 3 + 2])}`;
+    keys.push(k);
+    const s = sums.get(k) ?? [0, 0, 0];
+    s[0] += m.normal[i * 3]; s[1] += m.normal[i * 3 + 1]; s[2] += m.normal[i * 3 + 2];
+    sums.set(k, s);
+  }
+  const normal = new Float32Array(m.normal.length);
+  for (let i = 0; i < count; i++) {
+    const s = sums.get(keys[i])!, l = Math.hypot(s[0], s[1], s[2]) || 1;
+    normal[i * 3] = s[0] / l; normal[i * 3 + 1] = s[1] / l; normal[i * 3 + 2] = s[2] / l;
+  }
+  return { position: m.position, normal, uv: m.uv, index: m.index };
 }
