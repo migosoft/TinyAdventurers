@@ -1,6 +1,7 @@
 // The per-vertex sight attributes of the dynamic meshes (#305): one `footSight` read per quad, copied to its six vertices.
 // The caller owns `out` (reused every frame, so nothing is allocated per quad); it must hold `count * 6` vertices.
 import type { Glows, Quads, Shadows } from './cards';
+import type { SmokeBuf } from './fx/smoke';
 import type { FxBuf } from './models/fx';
 import type { FigureInst } from './models/instances';
 import { footSight, thingHard, type SightMask } from './sightmask';
@@ -85,4 +86,23 @@ export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen:
       if (thingHard(mask, footSight(mask, q.foot[f], q.foot[f + 1], q.foot[f + 2]).hard) > 0.5) out.add(id);
     }
   }
+}
+
+/** The upload arrays of the smoke mesh (#359), owned by the view and reused every frame: `position` 3, `rgba` 4, `c` 4 and `sight` 2 floats per corner. */
+export interface SmokeArrays { pos: Float32Array; rgba: Float32Array; c: Float32Array; sight: Float32Array }
+
+/**
+ * Copies a smoke buffer into `a` (growing the arrays when it is longer than they are) with its sight data (`fxSightData`, read at each
+ * triangle's first corner) and returns the corner count; 0 for no buffer or no triangle, so the mesh then draws nothing.
+ */
+export function smokeUpload(buf: SmokeBuf | undefined, mask: SightMask | null, a: SmokeArrays): number {
+  const corners = (buf?.n ?? 0) * 3;
+  if (!buf || corners === 0) return 0;
+  if (a.pos.length < corners * 3) {
+    const room = corners * 2;
+    a.pos = new Float32Array(room * 3); a.rgba = new Float32Array(room * 4); a.c = new Float32Array(room * 4); a.sight = new Float32Array(room * 2);
+  }
+  a.pos.set(buf.position); a.rgba.set(buf.rgba); a.c.set(buf.c);
+  fxSightData(buf, mask, a.sight);
+  return corners;
 }

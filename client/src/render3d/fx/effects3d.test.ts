@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
@@ -7,9 +8,9 @@ import { FX_KIND_CAP, type FxOut } from './types';
 
 const boom = (k: number, x = 160) => ({ t: 'Boom' as const, x, y: 160, r: 24, k });
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(100), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(100), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [], smoke: newSmokeBuf() });
 const frameAt = (now: number): FxFrame => ({
-  ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0 }, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0 }, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null,
 });
 

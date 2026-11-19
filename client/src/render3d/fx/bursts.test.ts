@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { describe, expect, it } from 'vitest';
 import { newFxBuf } from '../models/fx';
 import { fireBurst, frostBurst, frostShards } from './bursts';
@@ -5,8 +6,8 @@ import { FxTris } from './tris';
 import type { FxCtx, FxOut } from './types';
 
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
-const ctx: FxCtx = { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2 };
-const newOut = (): FxOut => ({ tris: new FxTris(8000), lit: new FxTris(500), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
+const ctx: FxCtx = { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2, smokeTone: null };
+const newOut = (): FxOut => ({ tris: new FxTris(8000), lit: new FxTris(500), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [], smoke: newSmokeBuf() });
 const dump = (T: FxTris): number[] => { const o = newFxBuf(); T.flush(o, cam, false); return o.position; };
 const X = 10, Z = 12, R = 2;
 

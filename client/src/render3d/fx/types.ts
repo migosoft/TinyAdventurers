@@ -6,9 +6,10 @@ import type { FigureDef } from '../../game/anim/defs';
 import type { FxTris } from './tris';
 import type { V3 } from './shapes';
 import type { SpectreSpec } from '../models/tubeDesc';
+import type { SmokeBuf } from './smoke';
 
 /** What the effects write into each frame: blended triangles, lit triangles (stone, dust, smoke, floor marks), glow quads and client lights. */
-export interface FxOut { tris: FxTris; lit: FxTris; glows: GlowBuf; lights: Cand[] }
+export interface FxOut { tris: FxTris; lit: FxTris; glows: GlowBuf; lights: Cand[]; /** The smoke quads of the smoke bodies (the pass's own buffer; the view draws it). */ smoke: SmokeBuf }
 
 export interface FxCtx {
   cam: Cam;
@@ -19,6 +20,8 @@ export interface FxCtx {
   detail: number;
   /** The icosphere of fire balls: 1 on Fast. */
   ballDetail: 1 | 2;
+  /** An override of every smoke's tone (r, g, b), or null for each body's own (the gallery's switch). */
+  smokeTone: readonly [number, number, number] | null;
 }
 
 /** A figure as drawn this frame, for the effects tied to one. */

@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
@@ -13,10 +14,10 @@ const mapOf = (): TileMap => {
   for (const [x, z] of cells) t[z * 8 + x] = TILE_ID.DoorClosed;
   return new TileMap(8, 6, t);
 };
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() });
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 const frameOf = (now: number): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null,
 });
 const ax = { right: [1, 0, 0] as const, up: [0, 1, 0] as const };

@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ANIM, KIND } from '../../generated/defs';
 import { HAZARD_LOOKS } from '../../game/fxLooks';
@@ -11,11 +12,11 @@ import { FxTris } from './tris';
 import type { FxOut } from './types';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() });
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 5 * TILE, y: 5 * TILE, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 500, effects: 0, side: 1, entangled: 0, ...o });
 const frameOf = (now: number, ents: EntState[], o: { hidden?: number[]; fp?: FxFrame['fp'] } = {}): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs: [], ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(o.hidden ?? []), you: 0, ownCast: null, fp: o.fp,
 });
 

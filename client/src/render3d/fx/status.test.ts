@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ANIM, EFFECT, KIND } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
@@ -12,7 +13,7 @@ import { FxTris } from './tris';
 import type { DrawnFig, FxOut } from './types';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() });
 const cam = { x: 5, z: 5, pitch: 0.9, yaw: 0.3 };
 const bit = (...k: number[]): number => k.reduce((a, b) => a | (1 << b), 0);
 const fig = (id: number, kind: number, effects: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
@@ -20,7 +21,7 @@ const fig = (id: number, kind: number, effects: number, o: Partial<DrawnFig> = {
   yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
 });
 const frameOf = (now: number, figs: DrawnFig[], hidden: number[] = []): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs, ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(hidden), you: 0, ownCast: null,
 });
 

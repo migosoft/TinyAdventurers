@@ -1,7 +1,7 @@
 // Node materials of the 3D view (TSL).
 import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, clamp, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, mx_noise_float, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
 import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
@@ -353,6 +353,40 @@ export function fxMaterial(sight: Sight): MeshBasicNodeMaterial {
   m.colorNode = vec4(c.xyz, c.w.mul(sight.shown(attribute('sight', 'vec2').x, 0)));
   m.transparent = true;
   m.depthWrite = false;
+  m.forceSinglePass = true;
+  m.side = DoubleSide;
+  return m;
+}
+
+/** The smoke mesh's render order: after the glows (4), before the effect triangles (5), so swooshes and status marks draw over the smoke. */
+export const SMOKE_ORDER = 4.9;
+
+/** The shape of one smoke quad (#359): the outline's bend, the streaks of the torn alpha. Per axis scales, seed offsets and clock rates of the two noises. */
+const SMOKE_SHAPE = {
+  warp: { scale: [1.3, 0.7], seed: 31, clock: 0.35, clockSeed: 9, bend: 0.55 },
+  streak: { scale: [2.6, 0.9], seed: 17, clock: 0.5, clockSeed: 5, body: 0.6, base: 0.85 },
+  edge: [0.05, 0.6],
+} as const;
+
+/**
+ * The smoke quads of a body of smoke (#359): camera-facing quads with a corner coordinate. Per corner `rgba` (colour, alpha) and `c`
+ * (cx, cy, seed, clock), and the picture's `sight`. The alpha is the quad's outline (a falloff bent by slow noise, so it is never a
+ * disc) torn into upright streaks by a second noise. Unlit, translucent, depth tested but not written; the colour is `rgba.rgb`.
+ */
+export function smokeMaterial(sight: Sight): MeshBasicNodeMaterial {
+  const c: N = attribute('rgba', 'vec4'), k: N = attribute('c', 'vec4');
+  const q = k.xy, seed = k.z, t = k.w, W = SMOKE_SHAPE.warp, S = SMOKE_SHAPE.streak;
+  const warp: N = mx_noise_float(vec3(q.mul(vec2(W.scale[0], W.scale[1])).add(seed.mul(W.seed)), t.mul(W.clock).add(seed.mul(W.clockSeed))));
+  const edge: N = clamp(length(q).add(warp.mul(W.bend)), 0, 1);
+  const inv: N = float(1).sub(edge.mul(edge));
+  const g: N = inv.mul(inv);
+  const n: N = mx_noise_float(vec3(q.mul(vec2(S.scale[0], S.scale[1])).add(seed.mul(S.seed)), t.mul(S.clock).add(seed.mul(S.clockSeed))));
+  const alpha: N = smoothstep(SMOKE_SHAPE.edge[0], SMOKE_SHAPE.edge[1], g.mul(n.mul(S.body).add(S.base)));
+  const m = new MeshBasicNodeMaterial();
+  m.colorNode = vec4(c.xyz, alpha.mul(c.w).mul(sight.shown(attribute('sight', 'vec2').x, 0)));
+  m.transparent = true;
+  m.depthWrite = false;
+  m.depthTest = true;
   m.forceSinglePass = true;
   m.side = DoubleSide;
   return m;

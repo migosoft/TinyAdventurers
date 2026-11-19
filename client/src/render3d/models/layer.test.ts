@@ -374,6 +374,21 @@ describe('FigureLayer', () => {
       layer.dispose();
     }, SLOW);
 
+    it('a smoke body\'s piece mesh is on the see layer only, its id mesh is as before; a model without smoke stays on the default layer (R4)', () => {
+      expect(kit.get('shade')!.spectre?.smoke).toBeTruthy();
+      expect(kit.get('elf')!.spectre?.smoke).toBeUndefined();
+      const { layer, scene, idScene } = layerOf(true);
+      layer.frame(frame([inst('shade'), inst('elf', { owner: 2, x: 5 })]), slot);
+      const piece = only(scene).filter((m) => m.renderOrder === FIGURE_ORDER);
+      expect(piece).toHaveLength(2);
+      const masks = piece.map((m) => m.layers.mask).sort((a, b) => a - b);
+      expect(masks).toEqual([1, 1 << SEE_LAYER]);   // the elf: the default layer 0; the Shade: the see layer only
+      for (const m of only(idScene)) expect(m.layers.mask).toBe(1);
+      // the elf's hull stays on the default layer (the Shade has none: the test above)
+      for (const m of only(scene).filter((x) => x.renderOrder === HULL_ORDER)) expect(m.layers.mask).toBe(1);
+      layer.dispose();
+    }, SLOW);
+
     it('dispose takes the see meshes out of the scene and frees both see materials', () => {
       const { layer, scene } = layerOf(false);
       layer.frame(frame([inst('ghost')]), slot);

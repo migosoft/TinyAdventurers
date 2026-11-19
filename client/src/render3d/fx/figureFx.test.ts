@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ANIM, EFFECT, KIND } from '../../generated/defs';
 import type { Snapshot } from '../../generated/Snapshot';
@@ -14,7 +15,7 @@ import type { SpectreSpec } from '../models/tubeDesc';
 import type { DrawnFig, FxOut, MimicCue } from './types';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() });
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 
 const fig = (id: number, kind: number, o: Partial<DrawnFig> = {}): DrawnFig => ({
@@ -25,7 +26,7 @@ const fig = (id: number, kind: number, o: Partial<DrawnFig> = {}): DrawnFig => (
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: 80, y: 80, hp: 1, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 1, entangled: 0, ...o });
 
 const frameOf = (now: number, figs: DrawnFig[], o: { ents?: EntState[]; hidden?: number[]; snap?: Partial<Snapshot>; cues?: MimicCue[]; falls?: Array<{ id: number; x: number; z: number }> } = {}): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs, ents: new Map((o.ents ?? []).map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: o.snap as Snapshot | undefined,
   hidden: new Set(o.hidden ?? []), you: 0, ownCast: null, cues: o.cues, falls: o.falls,
 });

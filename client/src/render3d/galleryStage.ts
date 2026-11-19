@@ -540,7 +540,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, kit },
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
-          fx: { tris: pass.blend, lit: pass.lit },
+          fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },
         },
         c.timer,
       );

@@ -233,7 +233,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           ...(kit ? { models: { insts: fo.models, kit } } : {}),
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit },
+          lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
           // The water (#345): the page's own clock, so a pinned page holds the waves still.
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },

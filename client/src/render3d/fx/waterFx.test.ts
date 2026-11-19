@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TileMap } from '../../sim/map';
 import { newGlowBuf } from '../cards';
@@ -11,11 +12,11 @@ import { WATER_Y } from '../air/drips';
 import { PX } from './shapes';
 
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() });
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 const cues = (o: Partial<WaterCues> = {}): WaterCues => ({ enters: [], plunges: [], spray: [], bubbles: [], ...o });
 const frameOf = (now: number, water?: WaterCues, hidden: number[] = []): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(hidden), you: 0, ownCast: null, water,
 });
 

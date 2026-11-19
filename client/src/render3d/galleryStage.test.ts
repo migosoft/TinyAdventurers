@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './fx/smoke';
 import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
@@ -581,9 +582,9 @@ describe('the gallery stage', () => {
     const triangles = (figs: DrawnFig[], ents: EntState[]): number => {
       clearFxRegistry(); registerFigureFx(); registerStatus(); clearVeils();
       const fx = new Effects3d(new TileMap(4, 4, new Uint8Array(16)));
-      const out: FxOut = { tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [] };
+      const out: FxOut = { tris: new FxTris(20000), lit: new FxTris(5000), glows: newGlowBuf(), lights: [], smoke: newSmokeBuf() };
       fx.frame({
-        ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0.3 }, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2 },
+        ctx: { cam: { x: 0, z: 0, pitch: 0.9, yaw: 0.3 }, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2, smokeTone: null },
         figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null,
       }, out);
       return out.tris.n + out.lit.n;

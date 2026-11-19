@@ -43,8 +43,9 @@ import { makeShaftPass, type ShaftPass } from './air/shaftNodes';
 import { shaftPlan, type ShaftPlan } from './air/shafts';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, footprint, type ShadowCaster } from './lights';
-import { cardSightData, figureSight, fxSightData, glowSightData, shadowSightData } from './sightAttrs';
+import { cardSightData, figureSight, fxSightData, glowSightData, shadowSightData, smokeUpload, type SmokeArrays } from './sightAttrs';
 import type { FxBuf } from './models/fx';
+import type { SmokeBuf } from './fx/smoke';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { makeCoverShared } from './cover/coverRead';
 import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
@@ -54,7 +55,7 @@ import { GroundTooLargeError } from './groundError';
 import { AIR_ORDER, airMaterials } from './air/airNodes';
 import { airQuads, hazeQuads, newAirBuffers } from './air/airQuads';
 import type { AirParts } from './air/airParts';
-import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
@@ -132,7 +133,7 @@ export interface FrameInput {
   /** The 3D figures (#338); absent: none. */
   models?: FigureFrame;
   /** The effects (#308): blended triangles (unlit) and lit triangles; absent: none. */
-  fx?: { tris: FxBuf; lit: FxBuf };
+  fx?: { tris: FxBuf; lit: FxBuf; /** The smoke quads of the smoke bodies (#359); absent: none. */ smoke?: SmokeBuf };
   /** The force field's life (#308): `age` seconds since it appeared (absent: an old one, no fade-in), `t` the clock. */
   field?: { age: number; t: number };
   /** The ground cover (#330); absent: off (the ground shows the cover flat, or none). */
@@ -613,6 +614,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const fxAttrs: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
   const fxDyn = new DynMesh(fxAttrs, fxMat);
   const fxLitDyn = new DynMesh(fxAttrs, fxLitMat);
+  // The smoke of the smoke bodies (#359): quads with a corner coordinate, drawn after the glows and before the effect triangles.
+  const smokeMat = smokeMaterial(sight);
+  const smokeDyn = new DynMesh([['position', 3], ['rgba', 4], ['c', 4], ['sight', 2]], smokeMat);
+  const smokeArrays: SmokeArrays = { pos: new Float32Array(0), rgba: new Float32Array(0), c: new Float32Array(0), sight: new Float32Array(0) };
+  const smokeData: Record<string, Float32Array> = {};   // `smokeArrays` under the attribute names, for `DynMesh.set`
   const fxArrays = new Map<DynMesh, { pos: Float32Array; rgba: Float32Array; sight: Float32Array }>();
   const fxUpload = (dyn: DynMesh, buf: FxBuf | undefined, mask: SightMask | null): void => {
     let a = fxArrays.get(dyn);
@@ -628,6 +634,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   glows.mesh.renderOrder = 4;
   fxDyn.mesh.renderOrder = 5;
   fxLitDyn.mesh.renderOrder = 5;
+  smokeDyn.mesh.renderOrder = SMOKE_ORDER;
   // The air (#307): specks and embers (additive), smoke and drops (blended) as camera-facing quads, and the haze sheets.
   const air = airMaterials(lighting, sight, { sun: world.painted, toward });
   const airBuf = newAirBuffers();
@@ -692,8 +699,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return target;
   }
 
-  for (const d of [shadows, decals, ghosts, glows, fxDyn, fxLitDyn]) skipInAirPrepass(d.mesh);
-  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, fxDyn.mesh, fxLitDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
+  for (const d of [shadows, decals, ghosts, glows, smokeDyn, fxDyn, fxLitDyn]) skipInAirPrepass(d.mesh);
+  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, smokeDyn.mesh, fxDyn.mesh, fxLitDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
@@ -951,6 +958,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
       fxUpload(fxDyn, f.fx?.tris, frameMask);   // the effects (#308): blended, then lit
       fxUpload(fxLitDyn, f.fx?.lit, frameMask);
+      const smokeCorners = smokeUpload(f.fx?.smoke, frameMask, smokeArrays);   // the smoke (#359): a count of 0 draws nothing
+      smokeData.position = smokeArrays.pos; smokeData.rgba = smokeArrays.rgba; smokeData.c = smokeArrays.c; smokeData.sight = smokeArrays.sight;
+      smokeDyn.set(smokeData, smokeCorners);
       // The air (#307): the camera's right and up spread the quads; no air frame hides the meshes.
       const ca = Math.cos(f.cam.yaw), sa = Math.sin(f.cam.yaw), spa = Math.sin(f.cam.pitch);
       air.right.value.set(ca, 0, sa);
@@ -1163,8 +1173,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         material.dispose();
         dm.material.dispose();
         sight.dispose();
-        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
-        for (const dm of [cards, ghosts, decals, shadows, flames, glows, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
+        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, smokeMat, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
+        for (const dm of [cards, ghosts, decals, shadows, flames, glows, smokeDyn, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
         target?.dispose();
         if (shafts) {
           freeShaftTargets(shafts);

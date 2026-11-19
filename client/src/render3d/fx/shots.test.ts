@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
@@ -8,8 +9,8 @@ import { FxTris } from './tris';
 import type { FxCtx, FxOut } from './types';
 
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
-const ctx: FxCtx = { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2 };
-const newOut = (): FxOut => ({ tris: new FxTris(5000), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
+const ctx: FxCtx = { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now: 1, detail: 1, ballDetail: 2, smokeTone: null };
+const newOut = (): FxOut => ({ tris: new FxTris(5000), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [], smoke: newSmokeBuf() });
 const dump = (T: FxTris): number[] => { const o = newFxBuf(); T.flush(o, cam, false); return o.position; };
 const map = new TileMap(4, 4, new Uint8Array(16));
 const frame = (now: number, o: Partial<FxFrame> = {}): FxFrame => ({

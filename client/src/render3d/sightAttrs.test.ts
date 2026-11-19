@@ -4,8 +4,9 @@ import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushGlow, pushShadow, pushWall, quadsOf, type Card } from './cards';
 import type { FigureInst } from './models/instances';
-import { cardSightData, figureSight, glowSightData, hiddenByPicture, shadowSightData } from './sightAttrs';
-import { footSight, SightMask } from './sightmask';
+import { newSmokeBuf, type SmokeBuf } from './fx/smoke';
+import { cardSightData, figureSight, glowSightData, hiddenByPicture, shadowSightData, smokeUpload, type SmokeArrays } from './sightAttrs';
+import { footSight, SightMask, thingHard } from './sightmask';
 import type { Cam } from './camera';
 import type { FrameRects } from './worldMesh';
 
@@ -203,5 +204,55 @@ describe('the sight of model figures (#338)', () => {
     const none = new Set<number>();
     hiddenByPicture([], m, seen, none);
     expect(none.size).toBe(0);
+  });
+});
+
+describe('the smoke upload (#359)', () => {
+  /** `tris` triangles whose corner k of triangle t has x = t * 10 + k and the tag `t + 1` in every `rgba`, `c` slot. */
+  const smoke = (tris: number): SmokeBuf => {
+    const b = newSmokeBuf();
+    for (let t = 0; t < tris; t++) for (let k = 0; k < 3; k++) {
+      b.position.push(t * 10 + k, 1, 2);
+      b.rgba.push(t + 1, 0, 0, 0.5);
+      b.c.push(t + 1, 0.25, 0.5, 0.75);
+    }
+    b.n = tris;
+    return b;
+  };
+  const arrays = (): SmokeArrays => ({ pos: new Float32Array(0), rgba: new Float32Array(0), c: new Float32Array(0), sight: new Float32Array(0) });
+
+  it('4 triangles give 12 corners, with position, rgba, c and sight filled', () => {
+    const a = arrays(), m = mask();
+    const b = smoke(4);
+    b.position[0] = 20.5; b.position[2] = 20.5;   // triangle 0 at the viewer: seen
+    b.position[9] = 38; b.position[11] = 38;      // triangle 1 far away: unseen
+    expect(smokeUpload(b, m, a)).toBe(12);
+    expect(Array.from(a.pos.subarray(0, 36))).toEqual(b.position);
+    expect(Array.from(a.rgba.subarray(0, 48))).toEqual(b.rgba);
+    expect(Array.from(a.c.subarray(0, 48))).toEqual(b.c);
+    const near = footSight(m, 20.5, 20.5, 0), far = footSight(m, 38, 38, 0);
+    expect(a.sight[0]).toBeCloseTo(thingHard(m, near.hard), 5);
+    expect(a.sight[1]).toBeCloseTo(near.soft, 5);
+    expect(a.sight[6]).toBeCloseTo(thingHard(m, far.hard), 5);
+    expect(a.sight.length).toBeGreaterThanOrEqual(24);
+  });
+  it('undefined and an empty buffer give 0 (the mesh then draws nothing)', () => {
+    const a = arrays();
+    expect(smokeUpload(undefined, null, a)).toBe(0);
+    const b = smoke(2);
+    expect(smokeUpload(b, null, a)).toBe(6);
+    b.n = 0;
+    expect(smokeUpload(b, null, a)).toBe(0);
+  });
+  it('the arrays grow and are then reused', () => {
+    const a = arrays();
+    smokeUpload(smoke(2), null, a);
+    const small = a.pos;
+    smokeUpload(smoke(50), null, a);
+    expect(a.pos).not.toBe(small);
+    expect(a.pos.length).toBeGreaterThanOrEqual(50 * 9);
+    const big = { pos: a.pos, rgba: a.rgba, c: a.c, sight: a.sight };
+    smokeUpload(smoke(10), null, a);
+    expect(a.pos).toBe(big.pos); expect(a.rgba).toBe(big.rgba); expect(a.c).toBe(big.c); expect(a.sight).toBe(big.sight);
   });
 });

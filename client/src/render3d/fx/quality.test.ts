@@ -8,7 +8,7 @@ import type { BurstSpec } from './shapes';
 import type { FxCtx } from './types';
 
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
-const ctxAt = (detail: number): FxCtx => ({ cam, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now: 1, detail, ballDetail: 2 });
+const ctxAt = (detail: number): FxCtx => ({ cam, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now: 1, detail, ballDetail: 2, smokeTone: null });
 const spec = (): BurstSpec => ({ x: 0, y: 0, z: 0, n: 0, speed: [1, 1], up: [0, 0], life: [5, 5], g: 0, drag: 0, size: 0.1, colours: [0xffffff], streak: false });
 
 describe('quality scales the effects', () => {

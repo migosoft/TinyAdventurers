@@ -23,6 +23,7 @@ import type { LavaCues } from '../lava/lava';
 import { registerRunes } from './runes';
 import { registerShots } from './shots';
 import type { MV3 } from './shapes';
+import { newSmokeBuf, type SmokeBuf } from './smoke';
 import { FxTris } from './tris';
 import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
 
@@ -49,14 +50,18 @@ export interface FxPassIn {
   lava?: LavaCues;
   /** The ground the screen shows (tiles). */
   fp?: Footprint;
+  /** An override of every smoke's tone (the gallery's switch). */
+  smokeTone?: readonly [number, number, number] | null;
 }
 
 export class FxPass {
-  readonly out: FxOut = { tris: new FxTris(FX_TRI_CAP), lit: new FxTris(FX_LIT_CAP), glows: newGlowBuf(), lights: [] };
+  /** The frame's smoke quads (cleared in `run`; the same buffer as `out.smoke`), for `FrameInput.fx`. */
+  readonly smoke: SmokeBuf = newSmokeBuf();
+  readonly out: FxOut = { tris: new FxTris(FX_TRI_CAP), lit: new FxTris(FX_LIT_CAP), glows: newGlowBuf(), lights: [], smoke: this.smoke };
   /** The sorted triangles, for `FrameInput.fx`. */
   readonly blend: FxBuf = newFxBuf();
   readonly lit: FxBuf = newFxBuf();
-  private readonly ctx: FxCtx = { cam: { x: 0, z: 0, pitch: 0, yaw: 0 }, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now: 0, detail: 1, ballDetail: 2 };
+  private readonly ctx: FxCtx = { cam: { x: 0, z: 0, pitch: 0, yaw: 0 }, ax: { right: [1, 0, 0], up: [0, 1, 0] }, now: 0, detail: 1, ballDetail: 2, smokeTone: null };
   private readonly input: FxFrame;
 
   constructor(hidden: ReadonlySet<number>) {
@@ -82,7 +87,7 @@ export class FxPass {
   noteFrame(): void {
     const o = this.out;
     this.triCount = o.tris.n + o.lit.n;
-    this.droppedTotal += o.tris.dropped + o.lit.dropped;
+    this.droppedTotal += o.tris.dropped + o.lit.dropped + o.smoke.dropped;
   }
 
   /** Draws the effects of the frame; the effect glows are appended to `glows` (the figures'), before the caller copies it. */
@@ -96,6 +101,7 @@ export class FxPass {
     ctx.now = p.now;
     ctx.detail = p.quality === 'high' ? 1 : p.quality === 'balanced' ? 0.7 : 0.5;
     ctx.ballDetail = p.quality === 'fast' ? 1 : 2;
+    ctx.smokeTone = p.smokeTone ?? null;
     const fin = this.input;
     fin.figs = p.figs; fin.ents = p.ents; fin.shots = p.shots; fin.hiddenShots = p.hiddenShots; fin.snap = p.snap; fin.you = p.you; fin.ownCast = p.ownCast;
     fin.hidden = p.hidden;
@@ -104,7 +110,8 @@ export class FxPass {
     fin.water = p.water;
     fin.lava = p.lava;
     fin.fp = p.fp;
-    const out = this.out;
+    const out = this.out, sm = this.smoke;
+    sm.position.length = 0; sm.rgba.length = 0; sm.c.length = 0; sm.n = 0; sm.dropped = 0;
     fx.frame(fin, out);
     this.noteFrame();
     const g = out.glows;

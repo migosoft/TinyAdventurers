@@ -278,6 +278,9 @@ export class FigureLayer {
       if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row), res.mats.line, this.scene, HULL_ORDER, true);
       // A spectre casts no sun shadow.
       if (this.sunScene && res.mats.sun && !model.spectre) add(figureGeometry(b, b.pieceIndex, row), res.mats.sun, this.sunScene, 0, false);
+      // The hard parts of a smoke body go on the translucent layer (the id draw does not): the mirror camera, the shafts' pre-pass and a
+      // pool's scene copy skip them, so no head and claws without their smoke show in a pool.
+      if (model.spectre?.smoke) for (const { mesh, scene } of e.meshes) if (scene === this.scene && mesh.material === res.mats.piece) mesh.layers.set(this.see.layer);
     }
     this.entries.set(key, e);
     return e;

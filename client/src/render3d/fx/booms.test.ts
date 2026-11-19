@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
@@ -12,9 +13,9 @@ registerBooms();
 registerBursts();
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 const map = new TileMap(4, 4, new Uint8Array(16));
-const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(20000), lit: new FxTris(5000), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [], smoke: newSmokeBuf() });
 const frameAt = (now: number, hidden: number[] = []): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs: [], ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(hidden), you: 0, ownCast: null,
 });
 const X = 160, Y = 160, R = 32;

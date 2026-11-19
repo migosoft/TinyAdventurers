@@ -1,3 +1,4 @@
+import { newSmokeBuf } from './smoke';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FIGURES } from '../../game/anim/defs';
 import type { EntState } from '../../game/world';
@@ -13,7 +14,7 @@ import type { DrawnFig, FxOut } from './types';
 const map = new TileMap(4, 4, new Uint8Array(16));
 const cam = { x: 0, z: 0, pitch: 0.9, yaw: 0.3 };
 const ID = 7, X = 5, Z = 6;
-const newOut = (): FxOut => ({ tris: new FxTris(5000), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [] });
+const newOut = (): FxOut => ({ tris: new FxTris(5000), lit: new FxTris(100), glows: { position: [], uv: [], color: [], foot: [], n: 0 }, lights: [], smoke: newSmokeBuf() });
 const fig = (o: Partial<DrawnFig> = {}): DrawnFig => ({
   id: ID, kind: KIND.Wizard, x: X, z: Z, top: 1, foot: 0, hand: [X, 0.6, Z], aim: 0, anim: ANIM.Windup, animT: 0, effects: 0, alpha: 1, dashing: false, model: false, side: SIDE.Friendly,
   def: FIGURES[KIND.Wizard], yaw: 0, swingY: 0.6, arc: 0, bite: -1, spectre: null, form: 1, ...o,
@@ -22,7 +23,7 @@ const ent = (o: Partial<EntState> = {}): EntState => ({
   id: ID, kind: KIND.Wizard, x: X * 16, y: Z * 16, hp: 10, anim: ANIM.Windup, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Friendly, entangled: 0, ...o,
 });
 const frame = (now: number, figs: DrawnFig[], o: Partial<FxFrame> = {}): FxFrame => ({
-  ctx: { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2 },
+  ctx: { cam, ax: { right: [Math.cos(0.3), 0, Math.sin(0.3)], up: [0, 1, 0] }, now, detail: 1, ballDetail: 2, smokeTone: null },
   figs, ents: new Map(), shots: [], hiddenShots: new Set(), snap: undefined, hidden: new Set(), you: 0, ownCast: null, ...o,
 });
 const cast = (fx: Effects3d, windupMs: number, primary = false, at = 1, look: number = RUNE_LOOK.Fire): void =>

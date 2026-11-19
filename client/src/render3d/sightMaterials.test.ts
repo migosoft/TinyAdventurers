@@ -1,7 +1,7 @@
 // Every 3D material ends with the sight step (#305): the generated code of each carries the sight uniforms. #307 and #308 extend the list.
 import { describe, expect, it } from 'vitest';
-import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
-import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { BufferAttribute, BufferGeometry, DataTexture, DoubleSide, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
+import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { fieldMaterial, fieldUniforms } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
@@ -141,4 +141,28 @@ describe('the uniform buffers of the WebGPU shaders', () => {
     expect((fragment(WGSLNodeBuilder, pass.composite).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);
     pass.dispose();
   });
+});
+
+// The smoke of a body of smoke (#359): the fragment makes its shape from noise, so it carries a noise call; the blended effect triangles carry none.
+describe('the smoke material', () => {
+  const SMOKE_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['c', 4], ['sight', 2]];
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: compiles, reads rgba and c, calls a noise; fxMaterial has none`, () => {
+      const sight = makeSight();
+      const m = smokeMaterial(sight);
+      expect(m.transparent).toBe(true);
+      expect(m.depthWrite).toBe(false);
+      expect(m.depthTest).toBe(true);
+      expect(m.forceSinglePass).toBe(true);
+      expect(m.side).toBe(DoubleSide);
+      const code = fragment(B, m, { geometry: geometryOf(SMOKE_ATTRS) });
+      expect(code).toContain('sightMode');
+      // The attributes are mangled into varyings: rgba and c are the two vec4, sight the vec2 (the generated names carry no attribute name).
+      expect(code.match(/nodeVarying\d+\s*:\s*vec4|in vec4 nodeVarying\d+/g)).toHaveLength(2);
+      expect(code).toMatch(/vec2(<f32>)?\( 1\.3, 0\.7 \)/);   // the warp noise's scale
+      expect(code).toMatch(/vec2(<f32>)?\( 2\.6, 0\.9 \)/);   // the streak noise's scale
+      expect((code.match(/\bfn\d+ \(/g) ?? []).length).toBeGreaterThanOrEqual(3);   // the noise function: its definition and two calls
+      expect(fragment(B, fxMaterial(sight), { geometry: geometryOf(FX_ATTRS) })).not.toMatch(/1\.3, 0\.7|2\.6, 0\.9/);
+    });
+  }
 });

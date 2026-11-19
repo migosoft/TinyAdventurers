@@ -497,7 +497,7 @@ export class RunView3d implements RunView {
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li,
       },
       c.timer,
