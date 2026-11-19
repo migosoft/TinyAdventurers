@@ -122,7 +122,7 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(vertex(B, make(false, eyes).mats.piece, { compare: true, geometry: g })).toMatch(/figExtra/);
       for (const none of [undefined, null]) {
         const plain = fragment(B, make(false, none).mats.piece, { compare: true, geometry: g });
-        expect(plain).not.toMatch(/figExtra/);
+        expect(plain).not.toMatch(/figExtra|figRest|figBone/);
         expect(plain).toBe(fragment(B, make(false).mats.piece, { compare: true, geometry: g }));
       }
       // The other materials of a figure with eyes pay nothing.

@@ -30,6 +30,17 @@ export const HULL_ORDER = FIGURE_ORDER + 0.5;
 export const OUTLINE = 0x222222;
 /** How much the polished steel takes of the sky it mirrors, and how bright that sky is shown (the brief's values). */
 const STEEL = { mix: 0.8, gain: 1.3 } as const;
+/** The painted eyes' tuning numbers (#359), first values for the user's eye. */
+export const EYE = {
+  /** How much a full flare widens an eye: across (z) and in height. */
+  grow: [0.6, 0.9],
+  /** The core's edge in eye radii: full inside the first, none outside the second. */
+  core: [0.75, 1.05],
+  /** The halo's edge in eye radii. */
+  halo: [0.9, 2.6],
+  /** The halo's brightness (times halo squared): at flare 0, and what a full flare adds. */
+  glow: [0.55, 0.8],
+} as const;
 
 /**
  * The uniforms every figure material of a view shares (the layer holds them). The view sets `cosP` each frame, and `idOn`: 1 while the
@@ -116,11 +127,11 @@ export function eyeMask(spec: EyeSpec, extra: N): { core: N; halo: N } {
   const flare: N = extra.x, eye: N = extra.y;
   const px = abs(q.z).sub(spec.z), py = q.y.sub(spec.y);
   const c = Math.cos(spec.slant), s = Math.sin(spec.slant);
-  const xr = px.mul(c).add(py.mul(s)).div(flare.mul(0.6).add(1).mul(spec.half[0]));
-  const yr = py.mul(c).sub(px.mul(s)).div(flare.mul(0.9).add(1).mul(spec.half[1]));
+  const xr = px.mul(c).add(py.mul(s)).div(flare.mul(EYE.grow[0]).add(1).mul(spec.half[0]));
+  const yr = py.mul(c).sub(px.mul(s)).div(flare.mul(EYE.grow[1]).add(1).mul(spec.half[1]));
   const d = length(vec2(xr, yr));
   const on = step(float(spec.front), q.x).mul(headBone).mul(spec.strength).mul(eye);
-  return { core: float(1).sub(smoothstep(0.75, 1.05, d)).mul(on), halo: float(1).sub(smoothstep(0.9, 2.6, d)).mul(on) };
+  return { core: float(1).sub(smoothstep(EYE.core[0], EYE.core[1], d)).mul(on), halo: float(1).sub(smoothstep(EYE.halo[0], EYE.halo[1], d)).mul(on) };
 }
 
 /** The stipple of a draw: kept where the Bayer threshold is below what is shown (sight and see-through in one: `alpha` times how much the hero sees), and above the ground when the figure is cut. */
@@ -194,7 +205,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       const { core, halo } = eyeMask(o.eyes, p.extra);
       const ring = vec3(...rgbOf(o.eyes.ring)), coreColour = vec3(...rgbOf(o.eyes.core));
       const flare: N = p.extra.x;
-      const eyed = mix(colour0.add(ring.mul(halo.mul(halo)).mul(flare.mul(0.8).add(0.55))), coreColour, core);
+      const eyed = mix(colour0.add(ring.mul(halo.mul(halo)).mul(flare.mul(EYE.glow[1]).add(EYE.glow[0]))), coreColour, core);
       colour = select(isStone, colour0, eyed);
     }
     return vec4(sight.apply(colour, p.P, seenXY), gate(keepOf(p, sight, { bySight: true })));
