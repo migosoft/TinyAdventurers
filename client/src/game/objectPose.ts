@@ -15,6 +15,22 @@ export function chestFrame(opened: number): string {
   return 'chest_full_open_anim_f0';
 }
 
+/** Smoothstep of `x` clamped to 0..1. */
+function sm(x: number): number {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
+
+/** How far the chest's lid is open, 0 shut to 1 open, eased over the 0.3 s of the opening. `opened` as in `chestFrame`. */
+export function chestLid(opened: number): number {
+  return opened < 0 ? 0 : sm(opened / OPEN_T);
+}
+
+/** Whether the chest still holds its loot: closed, or opened less than EMPTY_AFTER ago. */
+export function chestLoot(opened: number): boolean {
+  return opened < EMPTY_AFTER;
+}
+
 // ---- barrel ----
 
 /** The barrel's pose: `fill` a flash colour (or null), `dx` the fuse's shake, `dy` how far the body sank (px), body scale and alpha, and whether the ground shadow shows. */
@@ -142,6 +158,12 @@ export interface MimicPose {
   bx: number;
   by: number;
   angle: number;
+  /** For the 3D model (the card path ignores these three): the lid, 0 shut to 1 jaws wide. */
+  lid: number;
+  /** Px along the aim (the bite). */
+  lunge: number;
+  /** Degrees, the front up. */
+  pitch: number;
   hurtFill: boolean;
   shadowScale: number;
   shadowAlpha: number;
@@ -162,6 +184,9 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
   let bx = 0;
   let by = 0;
   let angle = 0;
+  let lid = 0;
+  let biteLunge = 0;
+  let pitch = 0;
   let wakeCue = false;
   let landCue = false;
 
@@ -172,6 +197,8 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
       bx = Math.random() < 0.5 ? -1 : 1;
       angle = (Math.random() * 2 - 1) * 6 * r;
       if (r > 0.6) frame = 1;
+      lid = 0.25 * r;
+      pitch = angle;
     }
     mem.wakeFx = false;
   } else if ((s.wakeT ?? -1) >= 0 && s.wakeT! < WAKE_T) {
@@ -181,6 +208,7 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
     lift = Math.sin(Math.min(k / 0.7, 1) * Math.PI) * HOP_H * 1.4;
     sy = k < 0.15 ? 0.8 : 1.15 - k * 0.15;
     sx = 2 - sy;
+    lid = sm(k / 0.25);
     if (!mem.wakeFx && k >= 0.15) {
       mem.wakeFx = true;
       wakeCue = true;
@@ -194,6 +222,9 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
     by = Math.sin(s.aim) * lunge * 0.5;
     lift = k > 0.2 && k < 0.6 ? 2 : 0;
     angle = (left ? -1 : 1) * 10 * Math.sin(k * Math.PI);
+    lid = k < 0.6 ? sm(k / 0.2) : 1 - sm((k - 0.6) / 0.15);
+    pitch = 10 * Math.sin(k * Math.PI);
+    biteLunge = lunge;
   } else if ((s.hop ?? -1) >= 0) {
     const h = s.hop!;
     if (h < HOP.crouch) {
@@ -202,6 +233,7 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
       frame = 1;
       sy = 1 - 0.2 * k;
       sx = 1 + 0.15 * k;
+      lid = 0.3 * k;
     } else if (h < HOP.air) {
       // Airborne: jaws open, stretched on the way up.
       const k = (h - HOP.crouch) / (HOP.air - HOP.crouch);
@@ -210,21 +242,26 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
       sy = 1.15 - 0.15 * k;
       sx = 2 - sy;
       angle = (left ? -1 : 1) * (8 - 16 * k);
+      lid = 0.3 + 0.7 * sm(k / 0.25);
+      pitch = 8 - 16 * k;
     } else if (h < HOP.land) {
       // Landing: squash and slam the lid.
       const k = (h - HOP.air) / (HOP.land - HOP.air);
       frame = k < 0.5 ? 1 : 0;
       sy = 0.78 + 0.22 * k;
       sx = 1.2 - 0.2 * k;
+      lid = 1 - sm(k / 0.5);
       if (mem.lastHop < HOP.air) landCue = true;
     } else {
       // Rest: lid ajar, panting.
       frame = Math.floor(clock * 8) % 2 ? 1 : 0;
+      lid = 0.1 + 0.08 * Math.sin(clock * 8 * Math.PI);
     }
     mem.lastHop = h;
   } else {
     // Awake and standing: slow chomping.
     frame = Math.floor(clock * 3) % 3 === 2 ? 2 : 1;
+    lid = 0.35 + 0.25 * Math.sin(clock * 2 * Math.PI);
   }
 
   const air = Math.min(lift / HOP_H, 1.4);
@@ -236,6 +273,9 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
     bx,
     by,
     angle,
+    lid,
+    lunge: biteLunge,
+    pitch,
     hurtFill: !!s.hurt && Math.floor(clock * 30) % 2 === 0,
     shadowScale: 1 - 0.35 * air,
     shadowAlpha: 0.4 - 0.15 * air,

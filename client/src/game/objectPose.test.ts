@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, FLAG } from '../generated/defs';
-import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, mimicPose, torchFrame } from './objectPose';
+import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, chestLid, chestLoot, mimicPose, torchFrame } from './objectPose';
 
 const fresh = () => ({ lastHop: -1, wakeFx: false });
 
@@ -70,6 +70,57 @@ describe('mimicPose', () => {
   });
   it('bites open wide mid-lunge', () => {
     expect(mimicPose({ x: 0, y: 0, hiding: false, biteT: BITE_T * 0.4, aim: 0 }, 0, fresh()).frame).toBe(2);
+  });
+});
+
+describe('chestLid and chestLoot', () => {
+  it('the lid eases open over the opening', () => {
+    expect(chestLid(-1)).toBe(0);
+    expect(chestLid(0)).toBe(0);
+    expect(chestLid(0.15)).toBeCloseTo(0.5);
+    expect(chestLid(0.3)).toBe(1);
+    expect(chestLid(1e9)).toBe(1);
+  });
+  it('the loot is there until the chest has been open a while', () => {
+    expect(chestLoot(-1)).toBe(true);
+    expect(chestLoot(0.49)).toBe(true);
+    expect(chestLoot(0.5)).toBe(false);
+    expect(chestLoot(1e9)).toBe(false);
+  });
+});
+
+describe('mimicPose lid, lunge and pitch', () => {
+  const awake = { x: 0, y: 0, hiding: false, aim: 0 };
+  it('a hiding mimic without a rattle is shut and still', () => {
+    const p = mimicPose({ x: 0, y: 0, hiding: true, rattle: 0, aim: 0 }, 0, fresh());
+    expect(p).toMatchObject({ lid: 0, pitch: 0, lunge: 0 });
+  });
+  it('a rattle lifts the lid a crack on a shiver frame', () => {
+    const p = mimicPose({ x: 0, y: 0, hiding: true, rattle: 0.5, aim: 0 }, 0, fresh());
+    expect(p.lid).toBeCloseTo(0.125);
+  });
+  it('the reveal throws the jaws wide', () => {
+    expect(mimicPose({ ...awake, wakeT: WAKE_T * 0.25 }, 0, fresh()).lid).toBe(1);
+  });
+  it('a bite opens wide while lunging, then clamps shut', () => {
+    const open = mimicPose({ ...awake, biteT: BITE_T * 0.3 }, 0, fresh());
+    expect(open.lid).toBe(1);
+    expect(open.lunge).toBeGreaterThan(0);
+    expect(mimicPose({ ...awake, biteT: BITE_T * 0.9 }, 0, fresh()).lid).toBe(0);
+  });
+  it('a hop is open in the air, level at the top, and shut at the end of the landing', () => {
+    const mid = mimicPose({ ...awake, hop: HOP.crouch + (HOP.air - HOP.crouch) / 2 }, 0, fresh());
+    expect(mid.lid).toBe(1);
+    expect(mid.pitch).toBeCloseTo(0);
+    expect(mimicPose({ ...awake, hop: HOP.land - 1e-4 }, 0, fresh()).lid).toBeLessThan(0.01);
+  });
+  it('standing awake it chomps slowly', () => {
+    for (const clock of [0, 0.25, 0.5, 0.75]) {
+      const { lid } = mimicPose(awake, clock, fresh());
+      // The swing is 0.35 +- 0.25, so the ends of the range are reached exactly.
+      expect(lid).toBeGreaterThanOrEqual(0.1 - 1e-9);
+      expect(lid).toBeLessThanOrEqual(0.6 + 1e-9);
+    }
   });
 });
 
