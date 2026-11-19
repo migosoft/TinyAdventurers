@@ -255,10 +255,19 @@ describe('buildTubeFigure', () => {
     expect(m.position.every(Number.isFinite)).toBe(true);
     expect(m.normal.every(Number.isFinite)).toBe(true);
     expect(m.position.length / 3).toBe(plain.position.length / 3 + 24 * 2);
-    // The hull (the first 24 added points) is the prism's points moved out along their welded normals: none coincides with a piece point.
-    const n = plain.position.length / 3, pts = new Set<string>();
-    for (let i = n; i < m.position.length / 3; i++) pts.add([...m.position.subarray(i * 3, i * 3 + 3)].map((v) => v.toFixed(4)).join());
-    expect(pts.size).toBeGreaterThan(24);
+    // Each of the box's 8 corners is a piece point (24 points, 3 per corner), and the hull holds a point
+    // moved out by w along the corner's welded normal (1/sqrt(3) per axis), on the outer side of every axis.
+    const w = box.line / base.size, k = w / Math.sqrt(3), seen = (x: number, y: number, z: number): number => {
+      let c = 0;
+      for (let i = 0; i < m.position.length / 3; i++) {
+        if (Math.abs(m.position[i * 3] - x) < 1e-3 && Math.abs(m.position[i * 3 + 1] - y) < 1e-3 && Math.abs(m.position[i * 3 + 2] - z) < 1e-3) c++;
+      }
+      return c;
+    };
+    for (const x of [-4, 4]) for (const y of [0, 6]) for (const z of [-3, 3]) {
+      expect(seen(x, y, z)).toBeGreaterThanOrEqual(3);
+      expect(seen(x + Math.sign(x) * k, y + (y > 0 ? 1 : -1) * k, z + Math.sign(z) * k)).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 
