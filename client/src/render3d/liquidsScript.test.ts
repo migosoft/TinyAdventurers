@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIM, CONST, KIND, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
 import { TILE } from '../sim/map';
 import { liquidsMap } from './liquidsMap';
 import { liquidsScript, type Push } from './liquidsScript';
@@ -99,6 +99,19 @@ describe('liquidsScript', () => {
     }
     const ev = liquidsScript(1.35 + CONST.FALL_TIME, 0.05, { ...none, chasm: 1 }, KIND.Boar).events.find((e) => e.t === 'Died') as { kind: number; id: number };
     expect([ev.id, ev.kind]).toEqual([IMP_CHASM, KIND.Boar]);
+  });
+
+  it('marks every role INCORPOREAL when the kind floats (the Ghost, the Shade), and no other kind', () => {
+    const pushes: Record<Push, number | null> = { chasm: 1, water: 2, barrel: 3 };
+    for (const kind of [KIND.Ghost, KIND.Shade]) {
+      const roles = liquidsScript(0, 0.016, pushes, kind).ents.filter((e) => e.id !== BARREL);
+      expect(roles).toHaveLength(4);
+      expect(roles.every((e) => (e.flags & FLAG.INCORPOREAL) !== 0), String(kind)).toBe(true);
+      expect(liquidsScript(0, 0.016, pushes, kind).ents.find((e) => e.id === BARREL)!.flags & FLAG.INCORPOREAL).toBe(0);
+    }
+    for (const kind of [undefined, KIND.Stag, KIND.Imp]) {
+      expect(liquidsScript(0, 0.016, pushes, kind).ents.some((e) => e.flags & FLAG.INCORPOREAL), String(kind)).toBe(false);
+    }
   });
 
   it('without `as` plays the same script as before (imps, the elf and the knight)', () => {

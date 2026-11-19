@@ -808,6 +808,16 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(one(spec(7, KIND.Ghost, { anim: ANIM.Ambush, animMs: 70 })).figs[0].form).toBe(1);
     });
 
+    it('draws a petrified Ghost solid (alpha 1, stone), whatever the pulse, and a frozen one still pulses', () => {
+      const stone = one(spec(7, KIND.Ghost, { effects: 1 << EFFECT.Petrified })).models[0];
+      expect(stone.stone).toBe(true);
+      expect(stone.alpha).toBe(1);
+      const fg = make();
+      const frozen = one(spec(7, KIND.Ghost, { effects: 1 << EFFECT.Frozen }), fg).models[0];
+      expect(frozen.alpha).toBeCloseTo(ghostPulse(clockOf(fg, 7), ghostPhase(7)), 9);
+      expect(frozen.alpha).toBeLessThan(1);
+    });
+
     it('leaves a card Shade as it was', () => {
       const out = make().frame(frame([spec(7, KIND.Shade)]), cam(), look());
       expect(out.figs[0].spectre).toBeNull();

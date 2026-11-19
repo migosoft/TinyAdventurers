@@ -860,9 +860,11 @@ export class Figures3d {
     const forming = !!sp?.fog && s.anim === ANIM.Ambush;
     const form = forming ? Math.min(1, Math.max(0, s.animT / CONST.AMBUSH_WARNING)) : 1;
     const bodyForm = forming ? smooth(SPECTRE_FORM.body[0], SPECTRE_FORM.body[1], form) : 1;
+    // A petrified see-through model is drawn solid in the stone paint by the ordinary piece draw (its pulse would only stipple it into a dot pattern).
+    const bodyAlpha = sp?.seeThrough && pose.grey ? 1 : pose.alpha;
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: pose.alpha * k * bodyForm, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: bodyAlpha * k * bodyForm, dark,
       cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     };
     if (sp) {

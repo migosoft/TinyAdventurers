@@ -85,6 +85,34 @@ for (const name of ANIMALS) {
 }
 // Facing the camera (aim 90: south): the front of the paint (eyes, visor, belt) at its rows.
 for (const i of ['wizard', 'paladin', 'barbarian', 'ranger', 'skelwarrior', 'ogre', 'wolf'].map(row)) shots.push({ name: `face-${KINDS[i][0]}`, q: `&focus=models&at=model:${i}&zoom=8&state=idle&aim=90${STILL}`, need: [KINDS[i][1]] });
+// The Ghost and the Shade (#359). The spectre block is the gallery's last: places 0 to 2 the Ghost (standing, walking, the life loop), 3 to 5 the
+// Shade; the life figure (2, 5) forms for the 0.5 s ambush warning, stands, winds up at 2.75 s and 4.75 s, strikes at 3.0 s and 5.0 s, and dies at 7.0 s.
+const SPECTRES = [['ghost', 0, 2], ['shade', 3, 5]]; // [model key, standing place, life place]
+const SPOT = '&slow=1000&t=1.7';
+shots.push({ name: 'spectre-block', q: `&at=spectre:2&zoom=1.7&state=idle${SPOT}`, need: ['ghost', 'shade'] });
+for (let i = 0; i < 6; i++) shots.push({ name: `spectre-place-${i}`, q: `&at=spectre:${i}&zoom=8${SPOT}`, need: [SPECTRES[i < 3 ? 0 : 1][0]] });
+for (const [key, , life] of SPECTRES) {
+  for (const t of ['0.4', '1.2', '3.1', '7.3']) shots.push({ name: `spectre-life-${key}-${t}`, q: `&at=spectre:${life}&zoom=8&slow=1000&t=${t}`, need: [key] });
+}
+// The eyes from the front (aim 90 faces the camera) and from the side (aim 0), close; in the work light and in the torch light.
+for (const [key, stand] of SPECTRES) {
+  for (const [light, extra] of [['work', ''], ['torch', '&light=torch']]) {
+    for (const [side, aim] of [['front', 90], ['side', 0]]) shots.push({ name: `spectre-close-${key}-${side}-${light}`, q: `&at=spectre:${stand}&zoom=16&aim=${aim}${extra}${SPOT}`, need: [key] });
+  }
+}
+// The pillar torches hang over the walkers (places 1 and 4): the Shade as a hole in front of the lit wall, the Ghost's own floor light, and the block whole.
+for (const [name, place] of [['ghost', 1], ['shade', 4]]) shots.push({ name: `spectre-torch-${name}-walk`, q: `&at=spectre:${place}&zoom=8&light=torch${SPOT}`, need: [name] });
+shots.push({ name: 'spectre-torch-block', q: `&at=spectre:2&zoom=1.7&light=torch${SPOT}`, need: ['ghost', 'shade'] });
+// The effect rows at columns 12 (Ghost) and 13 (Shade): asleep, stone, frozen, poisoned, invisible.
+for (const [name, effRow] of [['asleep', 0], ['stone', 1], ['frozen', 2], ['poisoned', 4], ['invisible', 8]]) shots.push({ name: `spectre-effects-${name}`, q: `&at=effect:${effRow},12&zoom=6${STILL}`, need: ['ghost', 'shade'] });
+// The liquids page with the spectre playing every role: wading, the chasm, the lava.
+for (const key of ['ghost', 'shade']) {
+  shots.push({ name: `spectre-liquids-${key}-wade`, page: 'liquids', q: `&models=${key}&t=4&zoom=3`, need: [key] });
+  shots.push({ name: `spectre-liquids-${key}-chasm`, page: 'liquids', q: `&models=${key}&push=chasm&t=1.6&zoom=3`, need: [key] });
+  shots.push({ name: `spectre-liquids-${key}-lava`, page: 'liquids', q: `&models=${key}&t=4.5&zoom=3`, need: [key] });
+}
+// The size line-up (#356): both halves, and the two spectres side by side (the Shade at place 16, the Ghost at 18).
+for (const place of [4, 14, 17]) shots.push({ name: `spectre-lineup-${place}`, q: `&focus=lineup&at=lineup:${place}&zoom=3&state=idle${STILL}`, need: ['ghost', 'shade'] });
 // Column 10 is the Imp, between the Necromancer (9) and the Knight (11) (#356): the three new kinds in view.
 for (const [name, effRow] of [['asleep', 0], ['top', 1], ['frozen', 2], ['middle', 4], ['bottom', 7]]) shots.push({ name: `effects-${name}`, q: `&at=effect:${effRow},10&zoom=3${STILL}`, need: ALL });
 // The pinned states above never reach the end of the unpinned state cycle (take-off and landing, which only the dragon has frames for):

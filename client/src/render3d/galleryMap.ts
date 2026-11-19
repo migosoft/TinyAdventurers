@@ -7,6 +7,7 @@
 //   z 12..     one cell per figure kind, 8 to a row, 3 x 3 tiles each
 //   below      the effect groups: 4 cells each, 5 groups to a row (the wading group stands on shallow water)
 //   below      the model block (#338): the kinds, the effect rows, the dying row and the crowd (see MODEL_PITCH)
+//   last       the spectre block (#359): the Ghost and the Shade, six places behind their own wall row (see SPECTRE_PITCH)
 import { TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 
@@ -42,7 +43,7 @@ export const MODEL_EFFECT_STRIDE = 20;
 /** The effect rows are 4 tiles apart: the ogre stands taller than 3 tiles on the screen. */
 export const MODEL_ROW_PITCH = 4;
 export const MODEL_EFFECT_ROWS = 9;
-export const MODEL_EFFECT_COLS = 12;
+export const MODEL_EFFECT_COLS = 14;
 export const CROWD_PER_ROW = 23;
 export const CROWD_ROWS = 8;
 /** The variety block (#357), below the crowd: one row per animal kind, `VARIETY_COLS` animals each, `VARIETY_PITCH` tiles apart. */
@@ -56,6 +57,14 @@ export const LINEUP_MAX = 24;
 /** The object row's places (chest, opening chest, barrel, cycling barrel, three Mimics), 3 tiles apart from x 4, feet at `OBJECT_Z`. */
 export const OBJECT_PLACES = 7;
 const LINEUP_DEPTH = 6;
+/** The spectre block (#359), the last one, behind its own wall row: the Ghost in places 0 to 2, the Shade in 3 to 5 (idle, walking, the life loop), `SPECTRE_PITCH` tiles apart. */
+export const SPECTRE_PLACES = 6;
+export const SPECTRE_PITCH = 6;
+/** Tiles from the block's wall row to the places' feet, and the floor rows below the feet. */
+const SPECTRE_FOOT = 3.5;
+const SPECTRE_DEPTH = 6;
+/** The block's two pillar torches hang on the wall row over the middle place of each trio (places 1 and 4). */
+const SPECTRE_TORCH_PLACES = [1, 4] as const;
 /** The pillars' columns (tiles) in the model block, over the kind cells 0, 3, 6 and 9 of a row (kinds stand at x 3.5 to 33.5): every kind is at most 3 tiles across from a torch of its row. */
 export const PILLAR_X = [3, 12, 21, 30] as const;
 
@@ -76,8 +85,12 @@ export interface Layout {
   lineup(i: number): { x: number; z: number };
   /** Foot of place `i` of the object row, in tiles. */
   object(i: number): { x: number; z: number };
+  /** Foot of place `i` of the spectre block (#359), in tiles. */
+  spectre(i: number): { x: number; z: number };
   /** The torches on the pillars' south faces: where the flame stands (tiles; z is the wall line). */
   pillarTorches: { x: number; z: number }[];
+  /** The spectre block's two torches, on its wall row. */
+  spectreTorches: { x: number; z: number }[];
   /** Where the camera starts for `&focus=`. */
   focus: Record<'figures' | 'corridor' | 'effects' | 'objects' | 'models' | 'lineup', { x: number; z: number }>;
 }
@@ -96,7 +109,10 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
   const crowdTop = dyingZ + kindRows * MODEL_PITCH;
   const varTop = crowdTop + CROWD_ROWS * 2 + 1;
   const lineTop = varTop + VARIETY_ROWS * VARIETY_PITCH + 1;
-  const h = Math.ceil(lineTop + LINEUP_DEPTH) + 2;
+  // The spectre block: a wall row below the line-up's floor, the places `SPECTRE_FOOT` tiles in front of it.
+  const specWall = Math.ceil(lineTop + LINEUP_DEPTH) + 1;
+  const h = specWall + Math.ceil(SPECTRE_FOOT) + SPECTRE_DEPTH;
+  const specX = (i: number): number => 2 + i * SPECTRE_PITCH + SPECTRE_PITCH / 2;
   const lineX = (i: number): number => 1 + (i + 0.5) * LINEUP_PITCH;
   const lineZ = lineTop + LINEUP_DEPTH / 2;
   const tiles = new Uint8Array(GALLERY_W * h).fill(TILE_ID.Wall);
@@ -111,6 +127,7 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
   });
   // A wall row behind the line-up, so no other block shows between the figures' heads.
   floor(1, GALLERY_W - 2, Math.floor(lineTop), Math.floor(lineTop), TILE_ID.Wall);
+  floor(1, GALLERY_W - 2, specWall, specWall, TILE_ID.Wall);
   for (let r = 0; r < kindRows; r++) for (const x of PILLAR_X) tiles[(mTop + r * MODEL_KIND_ROW_PITCH) * GALLERY_W + x] = TILE_ID.Wall;
   // Group 8 wades: shallow water under its four cells.
   const w = effect(8, 0);
@@ -126,6 +143,8 @@ export function layoutOf(nFigures: number, nModels: number): Layout {
     variety: (row, col) => ({ x: 2 + col * VARIETY_PITCH + 1.5, z: varTop + row * VARIETY_PITCH + 2 }),
     lineup: (i) => ({ x: lineX(i), z: lineZ }),
     object: (i) => ({ x: 4 + i * 3, z: OBJECT_Z }),
+    spectre: (i) => ({ x: specX(i), z: specWall + SPECTRE_FOOT }),
+    spectreTorches: SPECTRE_TORCH_PLACES.map((i) => ({ x: Math.floor(specX(i)) + 0.5, z: specWall + 1 })),
     pillarTorches: Array.from({ length: kindRows }, (_, r) => PILLAR_X.map((x) => ({ x: x + 0.5, z: mTop + r * MODEL_KIND_ROW_PITCH + 1 }))).flat(),
     focus: {
       models: { x: 2 + (Math.min(nModels, MODEL_PER_ROW) * MODEL_PITCH) / 2, z: mTop + 3.5 },

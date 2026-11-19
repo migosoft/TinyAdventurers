@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { seenOpeners } from './openers';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
-import { GALLERY, ID, LINEUP_KEYS, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery } from './galleryStage';
+import { GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectreAt, spectreDiedBetween } from './galleryStage';
 import { FxTris } from './fx/tris';
-import { LINEUP_MAX, OBJECT_PLACES } from './galleryMap';
+import { LINEUP_MAX, OBJECT_PLACES, SPECTRE_PITCH, SPECTRE_PLACES } from './galleryMap';
 import { buildJob } from './models/build';
-import { MODEL_OF_KIND, OBJECT_MODEL, modelKeyOf, objectModelOf } from './models/table';
+import { MODEL_OF_KIND, OBJECT_MODEL, floats, modelKeyOf, objectModelOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 import type { Cam } from './camera';
 
@@ -197,16 +197,17 @@ describe('the gallery stage', () => {
     for (const e of rows) expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
   });
 
-  it('has the effect block: 9 effect rows of 12 columns: the four heroes, a skeleton, the ogre, the wolf, the stag, the boar, the Necromancer, the Imp and the Knight', () => {
+  it('has the effect block: 9 effect rows of 14 columns: the four heroes, a skeleton, the ogre, the wolf, the stag, the boar, the Necromancer, the Imp, the Knight, the Ghost and the Shade', () => {
     const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, 200));
-    expect(MODEL_EFFECT_COLS).toBe(12);
-    expect(ents).toHaveLength(9 * 12);
-    const kinds = ents.slice(0, 12).map((e) => e.kind);
-    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar, KIND.Necromancer, KIND.Imp, KIND.Knight]);
+    expect(MODEL_EFFECT_COLS).toBe(14);
+    expect(ents).toHaveLength(9 * 14);
+    const kinds = ents.slice(0, 14).map((e) => e.kind);
+    expect(kinds).toEqual([KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.Ogre, KIND.DireWolf, KIND.Stag, KIND.Boar, KIND.Necromancer, KIND.Imp, KIND.Knight, KIND.Ghost, KIND.Shade]);
     for (const eff of ['Sleep', 'Petrified', 'Frozen', 'Slowed', 'Poisoned', 'Chilled', 'Tainted', 'Invisible'] as const) {
-      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(12);
+      expect(ents.filter((e) => e.effects & (1 << EFFECT[eff])), eff).toHaveLength(14);
     }
-    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(12);
+    // the incorporeal row (all 14), and the Ghost and the Shade of the other eight rows, which float by themselves
+    expect(ents.filter((e) => e.flags & FLAG.INCORPOREAL)).toHaveLength(14 + 2 * 8);
     for (const e of ents) {
       expect(GALLERY.map.tileAt(e.x, e.y)).toBe(TILE_ID.Floor);
       expect(e.x / 16).toBeLessThan(GALLERY.map.w - 1);
@@ -357,9 +358,10 @@ describe('the gallery stage', () => {
   it('gives the model effect ids room: ID.modelEffect + row * MODEL_EFFECT_STRIDE + col, all distinct, all below ID.dying', () => {
     expect(MODEL_EFFECT_STRIDE).toBe(20);
     const ents = galleryEnts(0, null).filter((e) => inRange(e.id, ID.modelEffect, ID.dying - ID.modelEffect));
-    expect(ents).toHaveLength(108);
-    expect(new Set(ents.map((e) => e.id)).size).toBe(108);
-    ents.forEach((e, i) => expect(e.id).toBe(ID.modelEffect + Math.floor(i / 12) * MODEL_EFFECT_STRIDE + (i % 12)));
+    expect(ents).toHaveLength(126);
+    expect(new Set(ents.map((e) => e.id)).size).toBe(126);
+    ents.forEach((e, i) => expect(e.id).toBe(ID.modelEffect + Math.floor(i / 14) * MODEL_EFFECT_STRIDE + (i % 14)));
+    expect(MODEL_EFFECT_COLS).toBeLessThanOrEqual(MODEL_EFFECT_STRIDE);
     expect(Math.max(...ents.map((e) => e.id))).toBeLessThan(ID.dying);
   });
 
@@ -409,7 +411,7 @@ describe('the gallery stage', () => {
     const yes = ents.filter(is).map((e) => e.id);
     expect(yes.every((id) => id >= ID.model)).toBe(true);
     expect(yes.filter((id) => inRange(id, ID.model, KINDS))).toHaveLength(KINDS);
-    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(108);
+    expect(yes.filter((id) => inRange(id, ID.modelEffect, 200))).toHaveLength(126);
     expect(yes.filter((id) => id >= ID.crowd)).toHaveLength(5);
     expect(ents.filter((e) => e.id < ID.model).some(is)).toBe(false);
     const cards = modelsOf(parseGallery('?crowd=5&crowdAs=cards'));
@@ -422,6 +424,142 @@ describe('the gallery stage', () => {
     // Three rows of kinds (24 kinds, 11 to a row), four pillars each.
     expect(t.map((e) => [e.kind, e.anim, e.extra])).toEqual(Array.from({ length: 12 }, () => [KIND.Torch, 1, 0]));
     for (const e of t) expect(GALLERY.map.get(Math.floor(e.x / 16), Math.floor(e.y / 16) - 1)).toBe(TILE_ID.Wall);
+  });
+
+  describe('the spectre block (#359)', () => {
+    const W = CONST.AMBUSH_WARNING;
+    const block = (t: number): ReturnType<typeof spectreAt> => spectreAt(t);
+    const place = (t: number, i: number): ReturnType<typeof spectreAt>[number] | undefined => block(t).find((e) => e.id === ID.spectre + i);
+
+    it('is the last block, below the line-up, behind its own wall row, on floor', () => {
+      expect(ID.spectre).toBe(4800);
+      expect([SPECTRE_PLACES, SPECTRE_PITCH, SPECTRE_LIFE]).toEqual([6, 6, 9]);
+      expect(ID.spectre + SPECTRE_PLACES).toBeLessThanOrEqual(ID.pillarTorch);
+      for (let i = 0; i < SPECTRE_PLACES; i++) {
+        const p = GALLERY.spectre(i);
+        expect(p.z, `place ${i} below the line-up`).toBeGreaterThan(GALLERY.lineup(0).z + 3);
+        expect(GALLERY.map.get(Math.floor(p.x), Math.floor(p.z)), `place ${i} on floor`).toBe(TILE_ID.Floor);
+        expect(GALLERY.map.get(Math.floor(p.x), Math.floor(p.z) - 3), `place ${i} wall row behind`).toBe(TILE_ID.Wall);
+        expect(p.z).toBeLessThan(GALLERY.map.h - 1);
+        if (i) expect(p.x - GALLERY.spectre(i - 1).x).toBe(SPECTRE_PITCH);
+      }
+      expect(GALLERY.spectre(SPECTRE_PLACES - 1).x).toBeLessThan(GALLERY.map.w - 2);
+      // the wall row is clear of the line-up: nothing of the line-up stands in it
+      for (let i = 0; i < LINEUP_MAX; i++) expect(GALLERY.lineup(i).z).toBeLessThan(GALLERY.spectre(0).z - 3);
+    });
+
+    it('has two lit pillar torches on the wall row, ids clear of the kind rows', () => {
+      expect(GALLERY.spectreTorches).toHaveLength(2);
+      for (const p of GALLERY.spectreTorches) expect(GALLERY.map.get(Math.floor(p.x), Math.floor(p.z) - 1)).toBe(TILE_ID.Wall);
+      const torches = galleryEnts(0, null).filter((e) => e.kind === KIND.Torch && e.y / 16 > GALLERY.spectre(0).z - 4);
+      expect(torches).toHaveLength(2);
+      expect(torches.every((e) => e.anim === 1 && e.id >= ID.pillarTorch && e.id < ID.crowd)).toBe(true);
+      // the kind rows keep their own twelve
+      expect(galleryEnts(0, null).filter((e) => inRange(e.id, ID.pillarTorch, 20))).toHaveLength(12);
+    });
+
+    it('puts the Ghost in places 0 to 2 and the Shade in 3 to 5; idle, walking, the life loop', () => {
+      const e = block(0.4);
+      expect(e.map((x) => x.id)).toEqual([0, 1, 2, 3, 4, 5].map((i) => ID.spectre + i));
+      expect(e.map((x) => x.kind)).toEqual([KIND.Ghost, KIND.Ghost, KIND.Ghost, KIND.Shade, KIND.Shade, KIND.Shade]);
+      for (const k of [0, 3]) {
+        const idle = place(1.7, k)!;
+        expect([idle.anim, idle.aim]).toEqual([ANIM.Idle, 0]);
+        expect(idle.x / 16).toBe(GALLERY.spectre(k).x);
+      }
+    });
+
+    it('lets the idle and the life figures take the pinned aim; the walker goes by its motion', () => {
+      for (const k of [0, 2, 3, 5]) expect(spectreAt(1.7, 1.2).find((e) => e.id === ID.spectre + k)!.aim).toBe(1.2);
+      for (const k of [1, 4]) {
+        const a = spectreAt(0.2, 1.2).find((e) => e.id === ID.spectre + k)!.aim;
+        expect(a).toBe(0);
+        expect(spectreAt(2.0, 1.2).find((e) => e.id === ID.spectre + k)!.aim).toBe(Math.PI);
+      }
+    });
+
+    it('walks x = base + 1.5 sin(2 t) tiles in ANIM.Move, aimed along the motion', () => {
+      for (const k of [1, 4]) {
+        const base = GALLERY.spectre(k).x;
+        for (const t of [0.2, 0.9, 1.4, 2.0, 3.3]) {
+          const w = place(t, k)!;
+          expect(w.x / 16).toBeCloseTo(base + 1.5 * Math.sin(2 * t), 9);
+          expect(w.anim).toBe(ANIM.Move);
+          expect(w.aim).toBe(Math.cos(2 * t) >= 0 ? 0 : Math.PI);
+          expect(w.animMs).toBeCloseTo(t * 1000, 6);
+        }
+      }
+    });
+
+    it('runs the life loop: ambush for the warning, idle, a blow at 3.0 s and 5.0 s after a wind-up, gone from 7.0 s, back at 9 s', () => {
+      for (const k of [2, 5]) {
+        const at = (t: number) => place(t, k);
+        expect(at(0)!.anim).toBe(ANIM.Ambush);
+        expect(at(0.25)!.anim).toBe(ANIM.Ambush);
+        expect(at(0.25)!.animMs).toBeCloseTo(250, 6);
+        expect(at(W - 0.01)!.animMs).toBeLessThan(W * 1000);
+        expect(at(W + 0.01)!.anim).toBe(ANIM.Idle);
+        expect(at(1.2)!.anim).toBe(ANIM.Idle);
+        expect(at(2.74)!.anim).toBe(ANIM.Idle);
+        expect(at(2.75)!.anim).toBe(ANIM.Windup);
+        expect(at(2.9)!.anim).toBe(ANIM.Windup);
+        expect(at(3.0)!.anim).toBe(ANIM.Melee);
+        expect(at(3.1)!.anim).toBe(ANIM.Melee);
+        expect(at(3.1)!.animMs).toBeCloseTo(100, 6);
+        expect(at(4.0)!.anim).toBe(ANIM.Idle);
+        expect(at(4.75)!.anim).toBe(ANIM.Windup);
+        expect(at(5.0)!.anim).toBe(ANIM.Melee);
+        expect(at(6.5)!.anim).toBe(ANIM.Idle);
+        expect(at(6.99)).toBeDefined();
+        expect(at(7.0)).toBeUndefined();
+        expect(at(8.99)).toBeUndefined();
+        expect(at(9.0)!.anim).toBe(ANIM.Ambush);
+        expect(at(9 + 3.1)!.anim).toBe(ANIM.Melee);
+      }
+      // the walkers and the idle figures never leave
+      for (const k of [0, 1, 3, 4]) expect(place(8, k)).toBeDefined();
+      expect(block(8)).toHaveLength(4);
+    });
+
+    it('sends one Died per life figure when 7.0 s falls in (t0, t1], once per life', () => {
+      const ev = spectreDiedBetween(6.9, 7.1);
+      expect(ev.map((x) => [x.t, x.id, x.kind])).toEqual([['Died', ID.spectre + 2, KIND.Ghost], ['Died', ID.spectre + 5, KIND.Shade]]);
+      expect(ev.map((x) => [x.x, x.y])).toEqual([2, 5].map((i) => [GALLERY.spectre(i).x * 16, GALLERY.spectre(i).z * 16]));
+      expect(spectreDiedBetween(6.9, 7.0)).toHaveLength(2);
+      expect(spectreDiedBetween(7.0, 7.1)).toHaveLength(0);
+      expect(spectreDiedBetween(7.1, 8.9)).toHaveLength(0);
+      expect(spectreDiedBetween(15.9, 16.1)).toHaveLength(2);
+      expect(spectreDiedBetween(0, 6.9)).toHaveLength(0);
+    });
+
+    it('draws its figures as models, and no other id is the block\'s', () => {
+      const is = modelsOf(parseGallery(''));
+      expect(block(1).every(is)).toBe(true);
+      expect(galleryEnts(1, null).filter((e) => inRange(e.id, ID.spectre, SPECTRE_PLACES))).toHaveLength(6);
+    });
+
+    it('gives every Ghost and Shade of the model stage FLAG.INCORPOREAL, and no other kind gains it', () => {
+      const all = galleryEnts(1.3, null, 10);
+      const models = all.filter((e) => e.id >= ID.model);
+      const sp = models.filter((e) => e.kind === KIND.Ghost || e.kind === KIND.Shade);
+      // kind row, 9 effect rows, dying row, line-up, the block (6), the crowd's share
+      expect(sp.length).toBeGreaterThanOrEqual(2 + 18 + 2 + 2 + 6);
+      for (const e of sp) expect(e.flags & FLAG.INCORPOREAL, `${e.id}`).toBeTruthy();
+      expect(floats(KIND.Ghost) && floats(KIND.Shade)).toBe(true);
+      const incorporealRow = (e: { id: number }): boolean => inRange(e.id, ID.modelEffect, 200) && Math.floor((e.id - ID.modelEffect) / MODEL_EFFECT_STRIDE) === 7;
+      for (const e of models) {
+        if (e.kind === KIND.Ghost || e.kind === KIND.Shade) continue;
+        if (incorporealRow(e)) continue;
+        expect(e.flags & FLAG.INCORPOREAL, `${e.id} kind ${e.kind}`).toBe(0);
+      }
+      // the card rows are as before
+      for (const e of all.filter((e) => e.id < ID.model && e.id >= ID.figure && e.id < ID.effect)) expect(e.flags & FLAG.INCORPOREAL).toBe(0);
+    });
+
+    it('reads &at=spectre:<i> as the place\'s foot, clamped to the block', () => {
+      expect(parseGallery('?at=spectre:4').at).toEqual(GALLERY.spectre(4));
+      expect(parseGallery('?at=spectre:99').at).toEqual(GALLERY.spectre(SPECTRE_PLACES - 1));
+    });
   });
 
   it('is its own ?r3d page, a server-free one like the demo', () => {

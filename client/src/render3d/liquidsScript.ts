@@ -1,5 +1,6 @@
 // The script of the ?r3d=liquids page (#324), pure: the actors at time `t` and the events born in (t - dt, t]. Positions are in px (feet).
-import { ANIM, CONST, KIND, SIDE } from '../generated/defs';
+import { ANIM, CONST, FLAG, KIND, SIDE } from '../generated/defs';
+import { floats } from './models/table';
 import type { EntState } from '../game/world';
 import type { PictureEv } from '../run/view';
 import { TILE } from '../sim/map';
@@ -31,8 +32,9 @@ const PUSHERS: readonly Pusher[] = [
   { push: 'barrel', id: 104, kind: KIND.Barrel, from: [9.5, 5.5], to: [10.5, 5.5], how: 0, dur: CONST.FALL_TIME, side: SIDE.Neutral },
 ];
 
+/** A kind that floats (the Ghost, the Shade) is incorporeal in a run, so on this page too. */
 const ent = (id: number, kind: number, x: number, y: number, side: number, o: Partial<EntState> = {}): EntState => ({
-  id, kind, x: x * TILE, y: y * TILE, hp: 10, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side, entangled: 0, ...o,
+  id, kind, x: x * TILE, y: y * TILE, hp: 10, anim: ANIM.Idle, aim: 0, animMs: 0, flags: floats(kind) ? FLAG.INCORPOREAL : 0, extra: 0, effects: 0, side, entangled: 0, ...o,
 });
 
 /** The elf on its U, going there and back. */
