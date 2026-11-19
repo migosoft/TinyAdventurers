@@ -198,7 +198,7 @@ describe('buildTubeFigure', () => {
   it("every tube model's hit radius, as approved (#356 Task 12): the server's `radius` in enemies.rs is the same number", () => {
     const all = Object.keys(TUBE_DESCS) as TubeKey[];
     expect(Object.fromEntries(all.map((k) => [k, hitRadius(TUBE_DESCS[k])]))).toEqual({
-      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4, chest: 6, mimic: 6,
+      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4, chest: 6, mimic: 6, barrel: 6,
     });
     // Necromancer and Summoner share one server block: one circle.
     expect(hitRadius(TUBE_DESCS.necromancer)).toBe(hitRadius(TUBE_DESCS.summoner));

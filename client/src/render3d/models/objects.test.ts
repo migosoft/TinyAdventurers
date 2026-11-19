@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { HITBOX } from '../../generated/defs';
 import { buildJob } from './build';
+import { barrel } from './descs/barrel';
 import { chest, chestShell } from './descs/chest';
 import { mimic } from './descs/mimic';
 import { expectFinite, expectStreams } from './modelChecks.testutil';
@@ -107,5 +108,46 @@ describe('the chest and the Mimic', () => {
     expect(MODEL_OF_KIND[KIND.Mimic]).toBeUndefined();
     expect(TUBE_DESCS.chest).toBe(chest);
     expect(TUBE_DESCS.mimic).toBe(mimic);
+  });
+});
+
+describe('the barrel', () => {
+  it('the server circle is 6', () => {
+    expect(hitRadius(barrel)).toBe(6);
+    expect(HITBOX[KIND.Barrel].r).toBe(6);
+  });
+
+  it('has consistent, finite streams', () => {
+    const m = buildJob('barrel', null);
+    expectStreams(m); expectFinite(m);
+  });
+
+  it('reaches 6.4 in x and z and is 15 high', () => {
+    const { lo, hi } = boxOf(barrel.pieces);
+    expect(Math.max(-lo[0], hi[0])).toBeCloseTo(6.4, 1);
+    expect(Math.max(-lo[2], hi[2])).toBeCloseTo(6.4, 1);
+    expect(Math.abs(hi[1] - lo[1] - 15), `y ${lo[1]}..${hi[1]}`).toBeLessThanOrEqual(0.4);
+  });
+
+  it('has one painted piece, holding the hoop, band, seam and stave colours', () => {
+    const painted = barrel.pieces.filter((p) => typeof p.colour === 'function');
+    expect(painted).toHaveLength(1);
+    const paint = painted[0].colour as (u: number, d: number) => number, seen = new Set<number>();
+    for (let u = 0; u <= 1; u += 0.01) for (let d = 0; d < 1; d += 0.01) seen.add(paint(u, d));
+    expect(seen).toEqual(new Set([0x7b8994, 0xda4e38, 0x38262d, 0xc56025]));
+    expect(paint(0.23, 0.5)).toBe(0x7b8994);
+    expect(paint(0.5, 0.5)).toBe(0xda4e38);
+    expect(paint(0.1, 0.02)).toBe(0x38262d);
+    expect(paint(0.1, 0.5)).toBe(0xc56025);
+  });
+
+  it('has no bends', () => {
+    for (const p of barrel.pieces) expect(p.bend).toBeUndefined();
+  });
+
+  it('the object table maps the barrel, and the creature table does not', () => {
+    expect(objectModelOf(KIND.Barrel)).toBe('barrel');
+    expect(MODEL_OF_KIND[KIND.Barrel]).toBeUndefined();
+    expect(TUBE_DESCS.barrel).toBe(barrel);
   });
 });
