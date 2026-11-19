@@ -8,7 +8,7 @@ import {
 } from 'three/webgpu';
 import { growRows, OWNER_MAX, packInstance, ROW_TEXELS, type FigureInst } from './instances';
 import type { FigureFrame } from '../view';
-import { FIGURE_ORDER, HULL_ORDER, makeFigureShared, type FigureMaterials, type FigureShared } from './nodes';
+import { FIGURE_ORDER, HULL_ORDER, SEE_DEPTH_ORDER, SEE_ORDER, makeFigureShared, type FigureMaterials, type FigureShared, type SeeMaterials } from './nodes';
 import type { FigureModel } from './model';
 import { skyPaint, stonePaint, type PaintImage } from './paint';
 
@@ -96,9 +96,9 @@ export function figureGeometry(b: ModelBuffers, index: BufferAttribute, row: Ins
 }
 
 /** Everything of one model its draws share. */
-interface ModelRes { model: FigureModel; buffers: ModelBuffers; paint: DataTexture; mats: FigureMaterials }
+interface ModelRes { model: FigureModel; buffers: ModelBuffers; paint: DataTexture; mats: FigureMaterials; /** Made when the first see-through instance of the model comes. */ see?: SeeMaterials }
 
-/** The draws of one model: id, piece, hull (none without hull triangles) and the sun's. */
+/** The draws of one model: id, piece, hull (none without hull triangles) and the sun's; or, for a see-through model's see-through instances, the depth and the colour draw. */
 interface Entry {
   res: ModelRes;
   row: InstancedBufferAttribute;
@@ -120,7 +120,7 @@ export class FigureLayer {
   private readonly models = new Map<string, ModelRes>();
   private readonly entries = new Map<string, Entry>();
   /** Per-frame scratch: the maps are cleared and reused at the top of `frame`; the per-model group object and its list are made new each frame. */
-  private readonly groups = new Map<string, { key: string; model: FigureModel; list: number[] }>();
+  private readonly groups = new Map<string, { key: string; modelKey: string; model: FigureModel; see: boolean; list: number[] }>();
   private readonly live = new Set<Entry>();
   /** The frame's owner numbers: an entity id to its index in order of first appearance. */
   private readonly ownerNos = new Map<number, number>();
@@ -128,9 +128,14 @@ export class FigureLayer {
   /**
    * `sunScene`: the sun's pass, or null without a sun. `idScene`: the id pass (the view draws it into the id target before the picture).
    * `make` builds the materials of a model from the rows texture, the model's paint texture and the model itself (once per model; the view adds the
-   * lighting, the sight, the shared pictures and the id target).
+   * lighting, the sight, the shared pictures and the id target). `see`: the materials of a see-through model's instances (a model whose
+   * `spectre.seeThrough` is set, not petrified) and the camera layer their meshes go on.
    */
-  constructor(private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly idScene: Scene, private readonly make: (rows: Texture, paint: Texture, model: FigureModel) => FigureMaterials) {
+  constructor(
+    private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly idScene: Scene,
+    private readonly make: (rows: Texture, paint: Texture, model: FigureModel) => FigureMaterials,
+    private readonly see: { make: (rows: Texture, model: FigureModel) => SeeMaterials; layer: number },
+  ) {
     this.rowsTex = new DataTexture(this.rows, ROW_TEXELS, START_ROWS, RGBAFormat, FloatType);
     // Floats need exact texels (a bone matrix in sprite px, a root in tiles: half floats would not hold them), read by integer coordinates.
     this.rowsTex.magFilter = NearestFilter;
@@ -165,15 +170,18 @@ export class FigureLayer {
       if (!m) continue;
       ready++;
       if (!ownerNos.has(insts[i].owner)) ownerNos.set(insts[i].owner, ownerNos.size % OWNER_MAX);
-      let g = groups.get(insts[i].model);
-      if (!g) groups.set(insts[i].model, g = { key: insts[i].model, model: m, list: [] });
+      // A see-through model's instances (not the petrified ones) are drawn by their own entry: the depth and the colour draw.
+      const see = !!m.spectre?.seeThrough && !insts[i].stone;
+      const key = see ? `${insts[i].model}/see` : insts[i].model;
+      let g = groups.get(key);
+      if (!g) groups.set(key, g = { key, modelKey: insts[i].model, model: m, see, list: [] });
       g.list.push(i);
     }
     this.fit(ready);
     let row = 0;
     let draws = 0;
     for (const g of groups.values()) {
-      const e = this.entry(g.key, g.model, g.list.length);
+      const e = this.entry(g.key, g.modelKey, g.model, g.list.length, g.see);
       const first = row;
       for (const i of g.list) { packInstance(this.rows, row, insts[i], slotOf(insts[i].owner), ownerNos.get(insts[i].owner)!); row++; }
       const ids = e.row.array as Float32Array;
@@ -202,7 +210,7 @@ export class FigureLayer {
     }
     this.entries.clear();
     for (const r of this.models.values()) {
-      for (const m of [r.mats.piece, r.mats.line, r.mats.id, r.mats.sun]) m?.dispose();
+      for (const m of [r.mats.piece, r.mats.line, r.mats.id, r.mats.sun, r.see?.depth, r.see?.colour]) m?.dispose();
       r.paint.dispose();
     }
     this.models.clear();
@@ -229,8 +237,8 @@ export class FigureLayer {
     return r;
   }
 
-  /** The draws of `model`, made on first use and given room for `n` instances. */
-  private entry(key: string, model: FigureModel, n: number): Entry {
+  /** The draws of `model` under the entry `key` (the model's key, or `<key>/see` for its see-through instances), made on first use and given room for `n` instances. */
+  private entry(key: string, modelKey: string, model: FigureModel, n: number, see: boolean): Entry {
     let e = this.entries.get(key);
     if (e && n > (e.row.array as Float32Array).length) {
       // A longer row list: a new attribute (an attribute cannot grow in place) for all the entry's geometries.
@@ -238,7 +246,7 @@ export class FigureLayer {
       for (const g of e.geoms) g.setAttribute('row', e.row);
     }
     if (e) return e;
-    const res = this.model(key, model), b = res.buffers;
+    const res = this.model(modelKey, model), b = res.buffers;
     const row = new InstancedBufferAttribute(new Float32Array(Math.max(n, 8)), 1);
     e = { res, row, geoms: [], meshes: [], draws: 0 };
     const add = (geom: InstancedBufferGeometry, material: Mesh['material'], into: Scene, order: number, counted: boolean): void => {
@@ -250,10 +258,19 @@ export class FigureLayer {
       e!.meshes.push({ mesh, scene: into });
       if (counted) e!.draws++;
     };
-    add(figureGeometry(b, b.pieceIndex, row), res.mats.id, this.idScene, 0, true);
-    add(figureGeometry(b, b.pieceIndex, row), res.mats.piece, this.scene, FIGURE_ORDER, true);
-    if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row), res.mats.line, this.scene, HULL_ORDER, true);
-    if (this.sunScene && res.mats.sun) add(figureGeometry(b, b.pieceIndex, row), res.mats.sun, this.sunScene, 0, false);
+    if (see) {
+      // The depth draw, then the colour draw, on the see layer: no id, hull or sun draw.
+      const mats = res.see ??= this.see.make(this.rowsTex, model);
+      add(figureGeometry(b, b.pieceIndex, row), mats.depth, this.scene, SEE_DEPTH_ORDER, true);
+      add(figureGeometry(b, b.pieceIndex, row), mats.colour, this.scene, SEE_ORDER, true);
+      for (const { mesh } of e.meshes) mesh.layers.set(this.see.layer);
+    } else {
+      add(figureGeometry(b, b.pieceIndex, row), res.mats.id, this.idScene, 0, true);
+      add(figureGeometry(b, b.pieceIndex, row), res.mats.piece, this.scene, FIGURE_ORDER, true);
+      if (model.lineIndex.length > 0) add(figureGeometry(b, b.lineIndex, row), res.mats.line, this.scene, HULL_ORDER, true);
+      // A spectre casts no sun shadow.
+      if (this.sunScene && res.mats.sun && !model.spectre) add(figureGeometry(b, b.pieceIndex, row), res.mats.sun, this.sunScene, 0, false);
+    }
     this.entries.set(key, e);
     return e;
   }

@@ -5,7 +5,7 @@ import { DataTexture, Mesh, Scene, Texture, type InstancedBufferGeometry } from 
 import { decodePng } from '../../../scripts/png';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
-import { FIGURE_ORDER, HULL_ORDER, figureMaterials } from './nodes';
+import { FIGURE_ORDER, HULL_ORDER, SEE_DEPTH_ORDER, SEE_ORDER, figureMaterials, seeMaterials } from './nodes';
 import { FigureLayer, figureLooks, modelBuffers, stageSkin } from './layer';
 import { STAGES } from './bones';
 import { ROW, ROW_TEXELS, type FigureInst } from './instances';
@@ -31,13 +31,15 @@ const sprite = (name: string): SpritePixels | null => {
   return { w, h, data };
 };
 
-const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+/** The layer the see-through meshes go on in these tests (the view passes its AIR_SKIP_LAYER). */
+const SEE_LAYER = 1;
+const settle =(): Promise<void> => new Promise((r) => setTimeout(r, 0));
 const SLOW = 120000;
 
 let kit: FigureKit;
 beforeAll(async () => {
   kit = createKit(sprite, directRunner);
-  const keys = ['elf', 'skelet', 'weapon_bow', 'stag'];
+  const keys = ['elf', 'skelet', 'weapon_bow', 'stag', 'ghost', 'shade'];
   for (const k of keys) kit.get(k);
   while (keys.some((k) => !kit.get(k))) await settle();
 }, SLOW);
@@ -62,7 +64,10 @@ function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; 
   out.layer = new FigureLayer(scene, sunScene, idScene, (rows, paint, model) => {
     out.made++;
     out.models.push(model);
-    return figureMaterials({ lighting, sight, hasSun, rows, paint, stone: looks.stone, sky: looks.sky, shared: out.layer.shared, idTex: new Texture() });
+    return figureMaterials({ lighting, sight, hasSun, rows, paint, stone: looks.stone, sky: looks.sky, shared: out.layer.shared, idTex: new Texture(), eyes: model.spectre?.seeThrough ? null : model.spectre?.eyes });
+  }, {
+    make: (rows, model) => seeMaterials({ sight, rows, shared: out.layer.shared, stands: model.stands!, peak: model.spectre!.seeThrough!.peak, eyes: model.spectre!.eyes }),
+    layer: SEE_LAYER,
   });
   return out;
 }
@@ -279,6 +284,90 @@ describe('FigureLayer', () => {
     expect(meshes(second.scene).filter((m) => m.visible).length + meshes(second.idScene).filter((m) => m.visible).length).toBe(second.layer.drawn.draws);
     second.layer.dispose();
   }, SLOW);
+
+  describe('the see-through Ghost (#359)', () => {
+    const only = (s: Scene): Mesh[] => meshes(s).filter((m) => m.visible);
+
+    it('one Ghost: an id-free, hull-free pair of draws (depth, then colour), on the piece list and the see layer only', () => {
+      const { layer, scene, sunScene, idScene } = layerOf(true);
+      layer.frame(frame([inst('ghost')]), slot);
+      expect(layer.drawn).toEqual({ figures: 1, draws: 2 });
+      expect(only(idScene)).toHaveLength(0);
+      expect(only(sunScene!)).toHaveLength(0);
+      const seen = only(scene);
+      expect(seen).toHaveLength(2);
+      expect(seen.map((m) => m.renderOrder).sort((a, b) => a - b)).toEqual([SEE_DEPTH_ORDER, SEE_ORDER]);
+      const b = modelBuffers(kit.get('ghost')!);
+      for (const m of seen) {
+        expect((m.geometry.index as { array: ArrayLike<number> }).array).toEqual(b.pieceIndex.array);
+        expect(m.layers.mask).toBe(1 << SEE_LAYER);
+        expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(1);
+      }
+      layer.dispose();
+    }, SLOW);
+
+    it('a stone Ghost is an ordinary figure: an id and a piece draw, no see draw', () => {
+      const { layer, scene, idScene } = layerOf(false);
+      layer.frame(frame([inst('ghost', { stone: true })]), slot);
+      expect(layer.drawn).toEqual({ figures: 1, draws: 2 });
+      expect(only(idScene)).toHaveLength(1);
+      const picture = only(scene);
+      expect(picture).toHaveLength(1);
+      expect(picture[0].renderOrder).toBe(FIGURE_ORDER);
+      expect(picture[0].layers.mask).toBe(1);
+      layer.dispose();
+    }, SLOW);
+
+    it('a stone Ghost and a Ghost in one frame: both entries, one instance each', () => {
+      const { layer, scene, idScene } = layerOf(false);
+      layer.frame(frame([inst('ghost', { owner: 1, stone: true }), inst('ghost', { owner: 2, x: 4 })]), slot);
+      expect(layer.drawn).toEqual({ figures: 2, draws: 4 });
+      for (const m of [...only(scene), ...only(idScene)]) expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(1);
+      expect(only(scene)).toHaveLength(3);
+      // The rows: the stone one is first (its group came first), the see one second, each with its own place.
+      const rows = layer.rowsData();
+      const xs = [0, 1].map((r) => rows[(r * ROW_TEXELS + ROW.root) * 4 + 3]).sort((a, b) => a - b);
+      expect(xs).toEqual([0, 4]);
+      layer.dispose();
+    }, SLOW);
+
+    it('a frame without figures after one with a Ghost hides both see meshes and counts no instances', () => {
+      const { layer, scene } = layerOf(false);
+      layer.frame(frame([inst('ghost')]), slot);
+      layer.frame(frame([]), slot);
+      expect(only(scene)).toHaveLength(0);
+      for (const m of meshes(scene)) expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(0);
+      expect(layer.drawn).toEqual({ figures: 0, draws: 0 });
+      layer.frame(frame([inst('ghost')]), slot);
+      expect(only(scene)).toHaveLength(2);
+      layer.dispose();
+    }, SLOW);
+
+    it('twelve Ghosts: still two draws', () => {
+      const { layer, scene } = layerOf(false);
+      layer.frame(frame(Array.from({ length: 12 }, (_, i) => inst('ghost', { owner: i + 1, x: i * 2 }))), slot);
+      expect(layer.drawn).toEqual({ figures: 12, draws: 2 });
+      for (const m of only(scene)) expect((m.geometry as InstancedBufferGeometry).instanceCount).toBe(12);
+      layer.dispose();
+    }, SLOW);
+
+    it('the Shade: an id and a piece draw, no hull, and no sun mesh though the layer has a sun scene', () => {
+      const { layer, scene, sunScene, idScene } = layerOf(true);
+      layer.frame(frame([inst('shade')]), slot);
+      expect(layer.drawn).toEqual({ figures: 1, draws: 2 });
+      expect(only(idScene)).toHaveLength(1);
+      expect(only(scene).map((m) => m.renderOrder)).toEqual([FIGURE_ORDER]);
+      expect(meshes(sunScene!)).toHaveLength(0);
+      layer.dispose();
+    }, SLOW);
+
+    it('dispose takes the see meshes out of the scene', () => {
+      const { layer, scene } = layerOf(false);
+      layer.frame(frame([inst('ghost')]), slot);
+      layer.dispose();
+      expect(meshes(scene)).toHaveLength(0);
+    }, SLOW);
+  });
 
   it('every geometry stays within 8 vertex buffers and the materials are made once per model', () => {
     const l = layerOf(true);

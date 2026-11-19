@@ -42,6 +42,39 @@ export const EYE = {
   glow: [0.55, 0.8],
 } as const;
 
+/** The render orders of the see-through draws (#359): after the translucent cards (3), before the glows (4) and the effects (5). The depth-only draw comes first. */
+export const SEE_DEPTH_ORDER = 3.1, SEE_ORDER = 3.2;
+/** The see-through look's tuning numbers (#359), first values for the user's eye. */
+export const SEE = {
+  /** The alpha of the body's middle (before the rim, the foot fade and the instance alpha). */
+  solid: 0.34,
+  /** What the rim (a surface turned away from the camera) adds to the alpha: times `f^rimPow`, `f` = 1 - |N . ray|. */
+  rim: 0.45,
+  rimPow: 2.2,
+  /** The alpha kept at the very foot: the body fades from `foot` at the ground to full over `footEdge` (rest height / standing height). */
+  foot: 0.3,
+  footEdge: [-0.05, 0.3],
+  /** The body's tones (linear 0..1): the dark one and the light one, mixed by the paint's luminance and the height. */
+  dark: [0.5, 0.57, 0.76],
+  light: [0.92, 0.94, 0.98],
+  /** How much of the tone mix comes from the paint's luminance, and how much from the height (`toneEdge`: rest height over standing height). */
+  toneLum: 0.75,
+  toneHeight: 0.25,
+  toneEdge: [0.05, 0.5],
+  /** The luminance used for a vertex that is painted from the texture (its flat colour is not there), and the luminance weights of r, g, b. */
+  paintedLum: 0.7,
+  lumWeights: [0.3, 0.55, 0.15],
+  /** How much the rim whitens the body (times `f`). */
+  rimWhite: 0.5,
+  /** How much of the eye ring colour the halo mixes into the body (times the halo). */
+  haloMix: 0.5,
+  /** The alpha the halo adds (times the halo), and the alpha of the eye's core (times the core). */
+  haloAlpha: 0.22,
+  coreAlpha: 0.95,
+  /** Below this the figure is not drawn (the instance alpha for the eyes, the figure's own alpha for the surface). */
+  gate: 0.02,
+} as const;
+
 /**
  * The uniforms every figure material of a view shares (the layer holds them). The view sets `cosP` each frame, and `idOn`: 1 while the
  * id target holds this frame's id pass (the picture), 0 for every other camera (the mirror, the shafts' depth), where the hull is a
@@ -140,6 +173,70 @@ function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: 
   const above = p.flags.y.lessThan(0.5).or(p.P.y.greaterThanEqual(0));
   const stipple = o.bySight ? bayerAt().lessThan(shown.mul(p.seen.x)) : bayerAt().lessThan(shown).and(p.seen.x.greaterThanEqual(o.alphaMin ?? 0.5));
   return stipple.and(above);
+}
+
+export interface SeeMaterials {
+  /** Depth only: the nearest surface of the figure, so the colour draw blends once per pixel. */
+  depth: MeshBasicNodeMaterial;
+  /** The blended colour of the surface whose depth equals the depth draw's. */
+  colour: MeshBasicNodeMaterial;
+}
+
+/**
+ * The two materials of a see-through model (#359, the Ghost): a depth-only draw, then a blended colour draw that passes only where its
+ * depth equals the first one's (the nearest surface; the figure's inside and far side do not show through each other). Both take the
+ * same position node, so their depths can be equal. `A`, how much of the figure shows, is the instance alpha over `peak`, times what the
+ * hero sees. No lamp and no ambient: the body is its own light (the sight step still applies). Drawn with the eyes painted on, in this
+ * material. A stone figure is never drawn here.
+ */
+export function seeMaterials(o: { sight: Sight; rows: Texture; shared: FigureShared; stands: number; peak: number; eyes: EyeSpec }): SeeMaterials {
+  const { sight } = o;
+  const p = figurePoint(o.rows, o.shared);
+  const look = attribute('look', 'vec4');
+  const seenXY = vec2(p.seen.y, p.seen.z);
+  const shown = sight.shown(p.seen.y, float(0));
+  const A: N = clamp(p.seen.x.div(o.peak), 0, 1).mul(shown);
+  const above = p.flags.y.lessThan(0.5).or(p.P.y.greaterThanEqual(0));
+  const make = (): MeshBasicNodeMaterial => {
+    const m = new MeshBasicNodeMaterial();
+    m.positionNode = p.screen;
+    m.side = FrontSide;
+    return m;
+  };
+
+  // The depth draw: a fragment stays where the figure shows at all and is not cut.
+  const depth = make();
+  depth.colorNode = vec4(0, 0, 0, select(above.and(A.greaterThan(SEE.gate)), float(1), float(0)));
+  depth.alphaTest = 0.5;
+  depth.colorWrite = false;
+  depth.depthWrite = true;
+  depth.transparent = false;
+
+  // The colour draw.
+  const restY: N = varying(attribute('position', 'vec3').y, 'figRestY');
+  const h: N = restY.div(o.stands);
+  const Nn: N = normalize(p.N);
+  const ray = cameraWorldMatrix.mul(vec4(0, 0, -1, 0)).xyz;
+  const f: N = float(1).sub(abs(dot(Nn, ray)));
+  const lum: N = select(look.x.lessThan(-0.5), float(SEE.paintedLum), look.x.mul(SEE.lumWeights[0]).add(look.y.mul(SEE.lumWeights[1])).add(look.z.mul(SEE.lumWeights[2])));
+  const a: N = float(SEE.solid).add(f.pow(SEE.rimPow).mul(SEE.rim))
+    .mul(float(SEE.foot).add(smoothstep(SEE.footEdge[0], SEE.footEdge[1], h).mul(1 - SEE.foot))).mul(A);
+  const tone: N = lum.mul(SEE.toneLum).add(smoothstep(SEE.toneEdge[0], SEE.toneEdge[1], h).mul(SEE.toneHeight));
+  const dark = vec3(...SEE.dark), light = vec3(...SEE.light);
+  const body: N = mix(mix(dark, light, tone), vec3(1, 1, 1), f.mul(SEE.rimWhite)).mul(p.tint.xyz);
+  // The eyes, 0 when the instance is (all but) gone.
+  const live: N = step(float(SEE.gate), p.seen.x);
+  const { core, halo } = eyeMask(o.eyes, p.extra);
+  const coreV: N = core.mul(live), haloV: N = halo.mul(live);
+  const mixed: N = mix(mix(body, vec3(...rgbOf(o.eyes.ring)), haloV.mul(SEE.haloMix)), vec3(...rgbOf(o.eyes.core)), coreV);
+  const alpha: N = max(a.add(haloV.mul(SEE.haloAlpha).mul(shown)), coreV.mul(SEE.coreAlpha).mul(shown));
+  const colour = make();
+  colour.colorNode = vec4(sight.apply(mixed, p.P, seenXY), alpha.mul(select(above, float(1), float(0))));
+  colour.alphaTest = SEE.gate;
+  colour.transparent = true;
+  colour.depthWrite = false;
+  colour.forceSinglePass = true;
+  return { depth, colour };
 }
 
 /**

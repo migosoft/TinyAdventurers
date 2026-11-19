@@ -63,7 +63,7 @@ import { treeMaterials } from './trees/treeNodes';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { FigureLayer, figureLooks } from './models/layer';
-import { figureMaterials } from './models/nodes';
+import { figureMaterials, seeMaterials } from './models/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -595,7 +595,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   idTarget.texture.colorSpace = NoColorSpace;
   const idSize = new Vector2();
   // `eyes: null` for a see-through model: its see-through material draws its eyes, and a petrified one shows none.
-  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, idScene, (rows, paint, model) => figureMaterials({ lighting, sight, hasSun, rows, paint, eyes: model.spectre?.seeThrough ? null : model.spectre?.eyes, idTex: idTarget.texture, ...(figureTex ??= figureLooks()), shared: figures.shared }));
+  const figures: FigureLayer = new FigureLayer(scene, hasSun ? sunScene : null, idScene, (rows, paint, model) => figureMaterials({ lighting, sight, hasSun, rows, paint, eyes: model.spectre?.seeThrough ? null : model.spectre?.eyes, idTex: idTarget.texture, ...(figureTex ??= figureLooks()), shared: figures.shared }), {
+    // The see-through draws (the Ghost): on the layer of the translucent things, so the mirror and the shafts' depth pre-pass skip them and a pool's scene copy is taken without them.
+    make: (rows, model) => seeMaterials({ sight, rows, shared: figures.shared, stands: model.stands!, peak: model.spectre!.seeThrough!.peak, eyes: model.spectre!.eyes }),
+    layer: AIR_SKIP_LAYER,
+  });
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
   const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);

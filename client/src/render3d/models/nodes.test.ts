@@ -3,7 +3,7 @@ import { DataTexture, FloatType, GLSLNodeBuilder, InstancedBufferAttribute, Near
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
-import { FIGURE_ORDER, FIGURE_SHADE, HULL_ORDER, OUTLINE, figureMaterials, makeFigureShared } from './nodes';
+import { FIGURE_ORDER, FIGURE_SHADE, HULL_ORDER, OUTLINE, SEE, SEE_DEPTH_ORDER, SEE_ORDER, figureMaterials, makeFigureShared, seeMaterials } from './nodes';
 import { figureGeometry, modelBuffers } from './layer';
 import { buildFigure, type FigureModel } from './model';
 import { ROW_TEXELS } from './instances';
@@ -12,6 +12,12 @@ import { buildTubeFigure } from './tubeModel';
 import type { EyeSpec } from './tubeDesc';
 
 const shade: FigureModel = buildTubeFigure('shade', TUBE_DESCS.shade);
+const ghost: FigureModel = buildTubeFigure('ghost', TUBE_DESCS.ghost);
+
+function seeOf() {
+  const spec = ghost.spectre!;
+  return seeMaterials({ sight: makeSight(), rows: rowsTexture(), shared: makeFigureShared(), stands: ghost.stands!, peak: spec.seeThrough!.peak, eyes: spec.eyes });
+}
 
 // The cheapest figure with bends is the elf (a quiff or a plume); the skeleton is the cheapest without. Built once.
 const elf: FigureModel = buildFigure('elf', DESCS.elf);
@@ -44,6 +50,33 @@ describe('constants', () => {
     expect(FIGURE_ORDER).toBe(10);
     expect(HULL_ORDER).toBe(FIGURE_ORDER + 0.5);
     expect(OUTLINE).toBe(0x222222);
+  });
+});
+
+describe('the see-through draw', () => {
+  it('draws after the translucent cards (3) and before the glows (4): depth first, then colour', () => {
+    expect(SEE_DEPTH_ORDER).toBe(3.1);
+    expect(SEE_ORDER).toBe(3.2);
+    expect(SEE.solid).toBe(0.34);
+    expect(SEE.rim).toBe(0.45);
+    expect(SEE.rimPow).toBe(2.2);
+    expect(SEE.foot).toBe(0.3);
+    expect(SEE.dark).toEqual([0.5, 0.57, 0.76]);
+    expect(SEE.light).toEqual([0.92, 0.94, 0.98]);
+  });
+
+  it('the render states: the depth draw writes depth only, opaque; the colour draw blends, writes no depth, one pass', () => {
+    const { depth, colour } = seeOf();
+    expect(depth.colorWrite).toBe(false);
+    expect(depth.depthWrite).toBe(true);
+    expect(depth.transparent).toBe(false);
+    expect(depth.side).toBe(FrontSide);
+    expect(colour.transparent).toBe(true);
+    expect(colour.depthWrite).toBe(false);
+    expect(colour.forceSinglePass).toBe(true);
+    expect(colour.side).toBe(FrontSide);
+    // Both are built from one position node (so their depths can be equal).
+    expect(depth.positionNode).toBe(colour.positionNode);
   });
 });
 
@@ -253,6 +286,24 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(pieceV.length).toBeGreaterThan(0);
       expect(sunV).not.toMatch(/cosP|figCosP/);
       expect(pieceV).toMatch(/figCosP/);
+    });
+
+    it('the see-through pair compiles; the colour draw is not stippled and not lit, the depth draw writes no colour', () => {
+      const { depth, colour } = seeOf();
+      const g = geometryOf(ghost, 'piece');
+      for (const m of [depth, colour]) {
+        expect(fragment(B, m, { compare: true, geometry: g }).length).toBeGreaterThan(0);
+        expect(vertex(B, m, { compare: true, geometry: g }).length).toBeGreaterThan(0);
+      }
+      const c = fragment(B, colour, { compare: true, geometry: g });
+      const piece = fragment(B, make(true, ghost.spectre!.eyes).mats.piece, { compare: true, geometry: g });
+      // The piece has the Bayer stipple (the sum of bits over 16: `bayerAt`) and the lamps; the colour draw has neither.
+      const bayer = /\/ 16\.0 \)/;
+      expect(piece).toMatch(bayer);
+      expect(c).not.toMatch(bayer);
+      expect(c).not.toMatch(/lightAmbient|lightPos|lightCol|lava/i);
+      expect(c).toMatch(/figExtra/);
+      expect(fragment(B, depth, { compare: true, geometry: g })).not.toMatch(/figExtra/);
     });
 
     it('builds for a figure without bends too', () => {
