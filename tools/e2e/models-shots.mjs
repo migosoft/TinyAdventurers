@@ -275,6 +275,30 @@ if (!only || only.test('lose')) {
   }
 }
 
+// A lost device with a Ghost in view (#359): its see-through draws are made again by the new view's layer, and the Ghost is drawn after the loss
+// with the same number of draws as before (the pictures lose-ghost-before and lose-ghost-after are the check by eye).
+if (!only || only.test('lose')) {
+  try {
+    const p = await open(`${base}?r3d=gallery&at=spectre:1&zoom=8&slow=1000&t=1.7`, 'lose-ghost', true);
+    await built(p, ['ghost']);
+    await p.waitForTimeout(800);
+    await snap(p, 'lose-ghost-before');
+    const before = await p.evaluate(() => window.__r3d.models.draws);
+    console.log(`lose-ghost: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
+    const f0 = await p.evaluate(() => window.__r3d.frames);
+    await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
+    await p.waitForTimeout(1500);
+    const after = await p.evaluate(() => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }));
+    await snap(p, 'lose-ghost-after');
+    console.log(`lose-ghost: draws ${before} before, ${after.draws} after; ${after.drawn} figures drawn after the loss`);
+    if (!(after.drawn >= 1)) errs.push('lose-ghost: no figure drawn after the loss');
+    if (after.draws !== before) errs.push(`lose-ghost: ${before} draws before the loss, ${after.draws} after`);
+    await p.close();
+  } catch (e) {
+    errs.push(`lose-ghost: ${e.message}`);
+  }
+}
+
 console.log(errs.join('\n') || 'no browser errors');
 await b.close();
 if (errs.length) process.exit(1);
