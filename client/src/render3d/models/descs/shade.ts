@@ -51,8 +51,8 @@ export const shade: TubeDesc = {
   footprint: [1.8, 2.0],
   float: true,
   spectre: {
-    // half[0] is 0.72 * 0.68 / 0.95: the spike's width-to-distance proportion, carried into this lean body's narrower z.
-    eyes: { y: 14.9, z: 0.72, front: 1.35, half: [0.52, 0.28], slant: 0.42, core: 0xe0f5ff, ring: 0x4d8cff, strength: 1 },
+    // Two very small round glowing dots (the user, 2026-11-19); their glow ring (2.6 half widths) ends before the middle.
+    eyes: { y: 14.9, z: 0.64, front: 1.35, half: [0.24, 0.24], slant: 0, core: 0xe0f5ff, ring: 0x4d8cff, strength: 1 },
     fog: true,
     swoosh: { colour: 0x000003, head: 0xb3e6ff },
   },
