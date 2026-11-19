@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { KIND } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
-import { BONES, MAX_BENDS, STAGES, weaponBoneOf } from './bones';
+import { BONES, MAX_BENDS, weaponBoneOf } from './bones';
 import { buildJob, transferList } from './build';
+import { expectFinite, expectStreams } from './modelChecks.testutil';
 import { buildFigure, type FigureModel } from './model';
 import { PAGE_TO_GAME, hitRadius } from './tubeModel';
 import { tube, type TubePoint } from './tubes';
@@ -22,35 +23,6 @@ const earBasePx = (m: FigureModel): number => Math.max(...m.bends.map((b) => b.o
 const deers = (key: string): boolean => key === 'stag' || key === 'deer';
 const bone = (n: (typeof BONES)[number]): number => BONES.indexOf(n);
 const rgb = (hex: number): number[] => [(hex >> 16) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
-
-/** The streams are as long as the vertex count says, the index stays inside it, and the ranges tile the index by stage, hulls first. */
-function expectStreams(m: FigureModel): void {
-  const n = m.position.length / 3;
-  expect(m.normal.length).toBe(n * 3);
-  expect(m.uv.length).toBe(n * 2);
-  expect(m.skin.length).toBe(n * 4);
-  expect(m.look.length).toBe(n * 4);
-  for (const i of m.index) expect(i).toBeLessThan(n);
-  expect(m.pieceIndex.length + m.lineIndex.length).toBe(m.index.length);
-  let at = 0, lastStage = -1, hullSeen = false;
-  for (const r of m.ranges) {
-    expect(r.start).toBe(at); at += r.count;
-    expect(r.stage).toBeGreaterThanOrEqual(lastStage);
-    if (r.stage !== lastStage) hullSeen = false;
-    if (r.line) { expect(hullSeen, 'hull after a piece').toBe(false); } else hullSeen = true;
-    lastStage = r.stage;
-  }
-  expect(at).toBe(m.index.length);
-  expect(lastStage).toBeLessThan(STAGES.length);
-}
-
-function expectFinite(m: FigureModel): void {
-  for (const arr of [m.position, m.normal, m.pivots]) expect(arr.every(Number.isFinite)).toBe(true);
-  for (const bd of m.bends) {
-    const nums = [bd.bone, ...bd.origin, ...bd.dir, bd.len, bd.k, bd.up, bd.wag, ...(bd.flutter ? [bd.flutter.rate, bd.flutter.angle] : [])];
-    expect(nums.every(Number.isFinite), JSON.stringify(bd)).toBe(true);
-  }
-}
 
 /** Every colour a model shows: the flat colours of its pieces (not the hulls) and the pixels of its paint. */
 function coloursOf(m: FigureModel): Set<number> {
@@ -226,7 +198,7 @@ describe('buildTubeFigure', () => {
   it("every tube model's hit radius, as approved (#356 Task 12): the server's `radius` in enemies.rs is the same number", () => {
     const all = Object.keys(TUBE_DESCS) as TubeKey[];
     expect(Object.fromEntries(all.map((k) => [k, hitRadius(TUBE_DESCS[k])]))).toEqual({
-      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4,
+      stag: 5, deer: 4, boar: 4, bunny: 4, goblin: 4, orc: 4, npcKnight: 4, necromancer: 4, summoner: 4, disciple: 4, imp: 4, chort: 4, chest: 6, mimic: 6,
     });
     // Necromancer and Summoner share one server block: one circle.
     expect(hitRadius(TUBE_DESCS.necromancer)).toBe(hitRadius(TUBE_DESCS.summoner));

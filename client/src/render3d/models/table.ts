@@ -8,10 +8,12 @@ import { skelet } from './descs/skelet';
 import { wizard } from './descs/wizard';
 import { boar } from './descs/boar';
 import { bunny } from './descs/bunny';
+import { chest } from './descs/chest';
 import { chort } from './descs/chort';
 import { deer, stag } from './descs/deer';
 import { goblin } from './descs/goblin';
 import { imp } from './descs/imp';
+import { mimic } from './descs/mimic';
 import { npcKnight } from './descs/npcKnight';
 import { orc } from './descs/orc';
 import { disciple, necromancer, summoner } from './descs/robed';
@@ -20,11 +22,11 @@ import type { TubeDesc } from './tubeDesc';
 
 export type DescKey = 'elf' | 'knight' | 'wizard' | 'dwarf' | 'skelet' | 'ogre' | 'wolf';
 
-export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort';
+export type TubeKey = 'stag' | 'deer' | 'boar' | 'bunny' | 'goblin' | 'orc' | 'npcKnight' | 'necromancer' | 'summoner' | 'disciple' | 'imp' | 'chort' | 'chest' | 'mimic';
 export type ModelKey = DescKey | TubeKey;
 
 /** The models built from tubes and balls: the woodland animals (#357) and the two-legged creatures (#356). */
-export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort };
+export const TUBE_DESCS: Record<TubeKey, TubeDesc> = { stag, deer, boar, bunny, goblin, orc, npcKnight, necromancer, summoner, disciple, imp, chort, chest, mimic };
 
 export const DESCS: Record<DescKey, FigureDesc> = { elf, knight, wizard, dwarf, skelet, ogre, wolf };
 
@@ -55,6 +57,13 @@ export const MODEL_OF_KIND: Partial<Record<number, ModelKey>> = {
   [KIND.Imp]: 'imp',
   [KIND.Chort]: 'chort',
 };
+
+/** The game objects that have a 3D model (not creatures: `MODEL_OF_KIND` lists those), and the description each one wears. */
+export const OBJECT_MODEL: Partial<Record<number, TubeKey>> = {
+  [KIND.Chest]: 'chest',
+  [KIND.Mimic]: 'mimic',
+};
+export const objectModelOf = (kind: number): TubeKey | null => OBJECT_MODEL[kind] ?? null;
 
 /**
  * The kind whose card a description is fitted to (its model is exactly as tall as that kind's standing idle card). A description worn by
