@@ -216,6 +216,81 @@ describe('figure effects', () => {
   });
 });
 
+describe('a built figure\'s anchor points and lights (#358)', () => {
+  type V3 = [number, number, number];
+  const GEM: V3 = [6.5, 1.4, 4.2], EYES: V3 = [4.2, 0.9, 6.1], CHEST: V3 = [10.6, 2.2, 10.6];
+  const raw = (T: FxTris): { pos: Float32Array } => T as unknown as { pos: Float32Array };
+  const near = (T: FxTris, p: V3): number => {
+    let best = Infinity;
+    for (let i = 0; i < T.n * 3; i++) best = Math.min(best, Math.hypot(raw(T).pos[i * 3] - p[0], raw(T).pos[i * 3 + 1] - p[1], raw(T).pos[i * 3 + 2] - p[2]));
+    return best;
+  };
+  const lich = (o: Partial<DrawnFig> = {}): DrawnFig => fig(5, KIND.Lich, o);
+
+  it('the nova wind-up glow sits at the gem when it is set, at the staff tip otherwise', () => {
+    const fx = new Effects3d(map), a = newOut(), b = newOut();
+    fx.frame(frameOf(1, [lich({ anim: ANIM.Slam, animT: 0.1, gem: GEM })]), a);
+    fx.frame(frameOf(1, [lich({ anim: ANIM.Slam, animT: 0.1 })]), b);
+    expect(a.glows.n).toBe(1);
+    expect(a.glows.foot.slice(0, 2)).toEqual([GEM[0], GEM[2]]);
+    expect(b.glows.n).toBe(1);
+    expect(b.glows.foot.slice(0, 2)).toEqual([5.3, 5]);
+  });
+
+  it('the gaze beam starts at the eyes when they are set', () => {
+    const fx = new Effects3d(map), a = newOut(), b = newOut();
+    const ents = [ent(5, KIND.Lich, { anim: ANIM.Gaze, extra: 6 })], target = fig(6, KIND.Paladin, { x: 8, z: 6 });
+    fx.frame(frameOf(1, [lich({ anim: ANIM.Gaze, eyes: EYES }), target], { ents }), a);
+    fx.frame(frameOf(1, [lich({ anim: ANIM.Gaze }), target], { ents }), b);
+    expect(near(a.tris, EYES)).toBeLessThan(0.1);
+    expect(near(b.tris, EYES)).toBeGreaterThan(0.5);
+  });
+
+  it('the drain line ends at the lich\'s chest when it is set', () => {
+    const fx = new Effects3d(map), a = newOut(), b = newOut();
+    const snap = { drain: [[160, 160], [100, 100]] } as unknown as Partial<Snapshot>;
+    fx.frame(frameOf(1, [lich({ x: 10, z: 10, chest: CHEST })], { snap }), a);
+    fx.frame(frameOf(1, [lich({ x: 10, z: 10 })], { snap }), b);
+    expect(near(a.tris, CHEST)).toBeLessThan(0.3);
+    expect(near(b.tris, CHEST)).toBeGreaterThan(1);
+  });
+
+  describe('the gem\'s and the skull\'s light', () => {
+    const magic = { gem: 1, flare: 0 };
+    const lights = (f: DrawnFig, o: { hidden?: number[] } = {}): FxOut['lights'] => {
+      const out = newOut();
+      new Effects3d(map).frame(frameOf(1, [f], o), out);
+      return out.lights;
+    };
+
+    it('one light at the gem, a second at the eyes with a flare', () => {
+      const one = lights(lich({ gem: GEM, eyes: EYES, magic }));
+      expect(one.map((l) => l.id)).toEqual(['lg5']);
+      expect([one[0].x, one[0].y, one[0].z]).toEqual(GEM);
+      expect(one[0].radius).toBe(2.5);
+      expect(one[0].b).toBeCloseTo(0.6);
+      const two = lights(lich({ gem: GEM, eyes: EYES, magic: { gem: 1, flare: 0.5 }, alpha: 0.5 }));
+      expect(two.map((l) => l.id)).toEqual(['lg5', 'lf5']);
+      expect([two[1].x, two[1].y, two[1].z]).toEqual(EYES);
+      expect(two[1].radius).toBe(3);
+      expect(two[1].b).toBeCloseTo(0.8 * 0.5 * 0.5);
+      expect(two[0].b).toBeCloseTo(0.6 * 0.5);
+    });
+
+    it('none for a hidden, a petrified or a faint figure, or one without magic', () => {
+      const base = { gem: GEM, eyes: EYES };
+      expect(lights(lich({ ...base, magic }), { hidden: [5] })).toHaveLength(0);
+      expect(lights(lich({ ...base, magic, effects: 1 << EFFECT.Petrified }))).toHaveLength(0);
+      expect(lights(lich({ ...base, magic, alpha: 0.02 }))).toHaveLength(0);
+      expect(lights(lich(base))).toHaveLength(0);
+    });
+
+    it('a frozen figure\'s gem still shines', () => {
+      expect(lights(lich({ gem: GEM, eyes: EYES, magic, effects: 1 << EFFECT.Frozen })).map((l) => l.id)).toEqual(['lg5']);
+    });
+  });
+});
+
 describe('spectre effects (#359)', () => {
   const SWOOSH = { colour: 0x2040a0, head: 0xf0e0d0 };
   const spec = (): SpectreSpec => ({ ...ghost.spectre!, swoosh: SWOOSH });
