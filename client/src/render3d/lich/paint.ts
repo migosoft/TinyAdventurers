@@ -1,9 +1,9 @@
 // The lich's painted picture (#358): one 512 x 512 RGBA image the built figure's uvs read (skull with runes, staff, robe, tome).
 // Plain bytes, no canvas and no three.js, the same bytes on every call. A port of the approved spike's atlas.
 //
-// Row convention (the spike's, kept): row 0 is v = 0, the BOTTOM of the texture in three's uv space (a DataTexture is not flipped).
-// So a uv (u, v) reads pixel x = u * 512, row y = v * 512, and the regions below count y from v = 0 upwards. This differs from
-// `PaintImage`'s usual "row 0 on top".
+// Orientation: the picture is painted in the spike's coordinates (y counted from v = 0, the bottom of the uv space) and its rows are
+// reversed once before it is returned, so the `PaintImage` contract holds: row 0 is on top. A uv (u, v) reads the pixel at
+// x = u * 512, image row h - 1 - floor(v * 512). `imageTexture` flips it back, which restores the spike's exact texture.
 //
 // Alpha classes the material distinguishes: plain (100, and anything up to it), staff glow (up to 170, the staff's runes), rune glow
 // (above 170, up to 255: the skull's, the robe clasp's and the tome's runes). Alpha 0 is cut away (the robe's ragged hem and slits).
@@ -14,7 +14,7 @@ import type { PaintImage } from '../models/paint';
 export const LICH_PAINT = { w: 512, h: 512, plain: 100, staffGlow: 170, runeGlow: 255 } as const;
 
 type Rect = { x: number; y: number; w: number; h: number };
-/** The pixel rectangles of the picture (y counts from the bottom, see above). */
+/** The pixel rectangles of the picture in uv * 512 units: y counts from the bottom (v), not from image row 0. Image row = 511 - y. */
 export const REGION = {
   white: { x: 0, y: 0, w: 16, h: 16 },
   skull: { x: 16, y: 0, w: 256, h: 128 },
@@ -246,12 +246,14 @@ function paintTome(A: Atlas): void {
   A.ring(PXo + 28, 128, 10, 12, 1.5, [130, 130, 146]); A.ring(PXo + 84, 128, 10, 12, 1.5, [130, 130, 146]);
 }
 
-/** The picture, RGBA bytes, `LICH_PAINT.w * LICH_PAINT.h` pixels. Row 0 is v = 0 (the bottom), see the top of the file. */
+/** The picture, RGBA bytes, `LICH_PAINT.w * LICH_PAINT.h` pixels, row 0 on top (see the top of the file). */
 export function paintLich(): PaintImage {
   const A = new Atlas();
   paintSkull(A);
   paintStaff(A);
   paintRobe(A);
   paintTome(A);
-  return { w: AW, h: AH, data: A.d };
+  const data = new Uint8Array(A.d.length), stride = AW * 4;
+  for (let y = 0; y < AH; y++) data.set(A.d.subarray(y * stride, (y + 1) * stride), (AH - 1 - y) * stride);
+  return { w: AW, h: AH, data };
 }
