@@ -14,7 +14,7 @@ const OPT: string = (import.meta as unknown as { env?: Record<string, string | u
 const WINGS = !OPT.includes('wings');
 const HUMANS = Number(/h([\d.]+)/.exec(OPT)?.[1] ?? 3);
 
-const BACK = 0x2c2022, PLATE = 0x261b1d, HORN = 0x5e4036, CLAW = 0x6b6068, FUR = 0x35241f, TOOTH = 0x1c1213;
+const BACK = 0x2c2022, PLATE = 0x261b1d, CLAW = 0x6b6068, FUR = 0x35241f, TOOTH = 0x1c1213;
 const WEB_RED = 0x8a1f2a;
 const OUTLINE_C = 0x121013, LINE = 0.55;
 
@@ -29,29 +29,51 @@ const mixC = (a: number, b: number, k: number): number => {
   const t = Math.max(0, Math.min(1, k)), ch = (sh: number): number => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 };
-const vnoise = (x: number, y: number, k: number): number => {
+/** Value noise; `wrap`: the period in y (whole cells), so it joins up round a piece. */
+const vnoise = (x: number, y: number, k: number, wrap = 1e9): number => {
   const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
-  const a = hash(ix, iy, k), b = hash(ix + 1, iy, k), c = hash(ix, iy + 1, k), e = hash(ix + 1, iy + 1, k);
+  const w = (j: number): number => ((j % wrap) + wrap) % wrap;
+  const a = hash(ix, w(iy), k), b = hash(ix + 1, w(iy), k), c = hash(ix, w(iy + 1), k), e = hash(ix + 1, w(iy + 1), k);
   return a + (b - a) * sx + (c - a) * sy + (a - b - c + e) * sx * sy;
 };
-const NU = 5, ND = 2.5, PAINT: readonly [number, number] = [256, 128];
+// The paint has three bands along u: 0 the trunk and the head (strong cracks), 1 the limbs and the tail (few, faint cracks), 2 the horns.
+// Round a piece the pattern is not mirrored: it joins up at the seam.
+const NU = 5, NR = 5, BANDS = 3, PAINT: readonly [number, number] = [768, 128];
 const ROCKS = [0x3a2a2a, 0x4a3330, 0x2f2325, 0x54382f] as const;
-const SKIN = (u: number, d: number): number => {
-  const x = u * NU, y = d * ND, ix = Math.floor(x), iy = Math.floor(y);
+const hornPaint = (u: number, v: number): number => {
+  // Dark red at the base, black along the length, then quickly dark red and a glowing tip, yellow to nearly white.
+  const ridge = 0.5 + 0.5 * Math.sin(u * Math.PI * 2 * 15 + 2.5 * vnoise(u * 6, v * 8, 21, 8)), groove = vnoise(u * 3, v * 24, 23, 24);
+  let c = u < 0.42 ? mixC(0x7a1712, 0x0d0a0b, u / 0.42) : 0x0d0a0b;
+  c = mixC(c, u < 0.42 ? 0x2a0b0a : 0x241d1f, 0.55 * ridge * (0.5 + 0.5 * groove));
+  if (u > 0.955) return mixC(0xffd24a, 0xfff6cf, (u - 0.955) / 0.03) | GLOWS;
+  if (u > 0.92) return mixC(0xc3200c, 0xffd24a, (u - 0.92) / 0.035) | GLOWS;
+  if (u > 0.86) return mixC(c, 0xa3180c, (u - 0.86) / 0.06);
+  return c;
+};
+const SKIN = (uAll: number, v: number): number => {
+  const band = Math.min(BANDS - 1, Math.floor(uAll * BANDS)), u = uAll * BANDS - band;
+  if (band === 2) return hornPaint(u, v);
+  const faint = band === 1, seed = band * 40;
+  const x = u * NU, y = v * NR, ix = Math.floor(x), iy = Math.floor(y), wrapR = (j: number): number => ((j % NR) + NR) % NR;
   let f1 = 9, f2 = 9, id = 0;
   for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-    const cx = ix + i, cy = iy + j, dist = Math.hypot(x - (cx + 0.15 + 0.7 * hash(cx, cy, 1)), y - (cy + 0.15 + 0.7 * hash(cx, cy, 2)));
-    if (dist < f1) { f2 = f1; f1 = dist; id = hash(cx, cy, 3); } else if (dist < f2) f2 = dist;
+    const cx = ix + i, cy = iy + j, wy = wrapR(cy), dist = Math.hypot(x - (cx + 0.15 + 0.7 * hash(cx, wy, seed + 1)), y - (cy + 0.15 + 0.7 * hash(cx, wy, seed + 2)));
+    if (dist < f1) { f2 = f1; f1 = dist; id = hash(cx, wy, seed + 3); } else if (dist < f2) f2 = dist;
   }
-  const edge = f2 - f1, hot = vnoise(x * 0.7 + 3.1, y * 0.7 + 1.7, 7) - 0.52;
+  const edge = f2 - f1, hot = vnoise(x * 0.7 + 3.1, v * 4, seed + 7, 4) - (faint ? 0.64 : 0.5);
   if (hot > 0) {
-    if (edge < 0.035) return 0xffc83a | GLOWS;
-    if (edge < 0.08) return 0xff5a14 | GLOWS;
-    if (edge < 0.12) return 0xc3200c | GLOWS;
-  } else if (edge < 0.07) return 0x140e0f;
-  const grain = hash(Math.floor(u * PAINT[0]), Math.floor(d * PAINT[1] / 2), 5), fine = vnoise(x * 5, y * 5, 9);
+    if (faint) {
+      if (edge < 0.03) return 0xf04a10 | GLOWS;
+      if (edge < 0.06) return 0x9a1a0a | GLOWS;
+    } else {
+      if (edge < 0.035) return 0xffc83a | GLOWS;
+      if (edge < 0.08) return 0xff5a14 | GLOWS;
+      if (edge < 0.12) return 0xc3200c | GLOWS;
+    }
+  } else if (edge < (faint ? 0.05 : 0.07)) return 0x140e0f;
+  const grain = hash(Math.floor(uAll * PAINT[0]), Math.floor(v * PAINT[1]), 5), fine = vnoise(x * 5, y * 5, 9, NR * 5);
   let c = mixC(ROCKS[Math.floor(id * ROCKS.length) % ROCKS.length], 0x1d1516, 0.55 * Math.max(0, 1 - edge / 0.5) + 0.25 * fine + 0.12 * grain);
-  if (hot > 0) c = mixC(c, 0x8a1c10, 0.75 * Math.max(0, 1 - (edge - 0.12) / 0.2));
+  if (hot > 0 && !faint) c = mixC(c, 0x8a1c10, 0.6 * Math.max(0, 1 - (edge - 0.12) / 0.2));
   return c;
 };
 
@@ -226,7 +248,7 @@ for (const sd of [1, -1]) {
     const u = i / n, r = (1.7 * Math.pow(1 - u, 1.1) + 0.2) * (1 + (i > 0 && i < n ? 0.1 * (i % 2 === 0 ? 1 : -1) : 0));
     horn.push({ p: [-0.8 * u + 5.5 * Math.pow(u, 2), 1.2 * u - 1.3 * Math.sin(Math.PI * u) + 6.0 * Math.pow(u, 3), sd * 8.0 * Math.sin(Math.min(1, u * 1.3) * Math.PI / 2)], r });
   }
-  add({ shape: { tube: horn, opts: { K: 14, N: 80, cap: 0.7 } }, at: head(-0.4, 1.3, sd * 1.5), stage: 'spikes', bone: 'hat', line: 0.45, colour: HORN });
+  add({ shape: { tube: horn, opts: { K: 14, N: 80, cap: 0.7 } }, at: head(-0.4, 1.3, sd * 1.5), stage: 'spikes', bone: 'hat', line: 0.45, colour: SKIN, band: 2 });
   // The eyes: glowing slits without pupils, slanted, sunk into the head; a heavy dark brow ridge over each, low over the nose.
   const eye = [onHead(0.22, 0.25, sd, -0.1), onHead(0.6, 0.8, sd, -0.1), onHead(1.0, 1.35, sd, -0.1)];
   add({ shape: { tube: eye.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.75 : 0.45 })), opts: { K: 10, N: 14, cap: 0.8 } }, stage: 'spikes', bone: 'head', line: 0, colour: 0xffb02e, glow: true });
@@ -234,9 +256,12 @@ for (const sd of [1, -1]) {
   add({ shape: { tube: brow.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.75 : 0.55 })), opts: { K: 8, N: 12, cap: 0.7 } }, stage: 'spikes', bone: 'head', line: 0, colour: PLATE });
 }
 
+// The limbs and the tail read the faint band.
+for (const p of pieces) if (p.colour === SKIN && p.band === undefined && (p.stage === 'legs' || p.stage === 'arms' || p === tail)) p.band = 1;
+
 export const demon: TubeDesc = {
   // The head's top is at y 31.7 (34.42 game px at size 1).
-  name: 'Demon', size: fitSize(HUMANS, 34.42), outline: OUTLINE_C, pieces, pivots, paintSize: PAINT,
+  name: 'Demon', size: fitSize(HUMANS, 34.42), outline: OUTLINE_C, pieces, pivots, paintSize: PAINT, paintBands: BANDS, paintRound: true,
   parents: { head: 'body', hat: 'head', leg1: 'leg0', leg3: 'leg2' },
   stance: 'two', arms: { length: elbow + fore, radius: R, elbow, free: 0.5 },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false, knee: -1 }, { upper: 'leg2', lower: 'leg3', front: false, knee: -1 }],

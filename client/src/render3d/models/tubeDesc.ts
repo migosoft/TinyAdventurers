@@ -87,6 +87,8 @@ export interface TubePiece {
   metal?: true;
   /** The piece glows (look value 3): it shows its own colour whatever light falls on it (eyes in the dark). Give it `line` 0. */
   glow?: true;
+  /** SPIKE (#379): the band of the paint this painted piece reads (default 0). */
+  band?: number;
   /** The body tube the hit circle and the lying thickness are measured from. */
   torso?: boolean;
 }
@@ -124,6 +126,10 @@ export interface TubeDesc {
   };
   /** SPIKE (#379): the paint's size in texels (default 128 x 64). */
   paintSize?: readonly [number, number];
+  /** SPIKE (#379): the paint is split along u into this many bands; a painted piece reads its `band`. */
+  paintBands?: number;
+  /** SPIKE (#379): the paint function gets the place round the piece as it is (0..1, the seam at 0 and 1), not mirrored. */
+  paintRound?: true;
   /** The height (page px) below which `robe` pieces swing. */
   robeTop?: number;
   /** A factor on the size of the held weapon (default 1). */

@@ -145,7 +145,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
       const swings = p.robe && d.robeTop !== undefined && y < d.robeTop;
       skin.set([boneIdx, b.line ? 1 : 0, swings ? -2 : b.bend, swings ? smooth((d.robeTop! - y) / d.robeTop!) : along], o * 4);
       const steel = b.line ? 0 : p.glow ? 3 : p.metal ? 1 : 0;
-      if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = b.uv![i * 2]; uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, steel], o * 4);
+      if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = ((p.band ?? 0) + Math.max(0.004, Math.min(0.996, b.uv![i * 2]))) / (d.paintBands ?? 1); uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, steel], o * 4);
       if (!b.line) {
         stands = Math.max(stands, y);
         if (b.stage === STAGES.indexOf('head')) headTop = Math.max(headTop, y);
@@ -162,7 +162,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
   const [PW, PH] = d.paintSize ?? [PAINT_W, PAINT_H];
   const paint = new Uint8Array(PW * PH * 4), pick = d.pieces.map((p) => p.colour).find((c) => typeof c === 'function');
   for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
-    const dd = 1 - Math.abs(1 - 2 * ((y + 0.5) / PH)), k = pick ? pick((x + 0.5) / PW, dd) : 0, i = (y * PW + x) * 4;
+    const dd = d.paintRound ? (y + 0.5) / PH : 1 - Math.abs(1 - 2 * ((y + 0.5) / PH)), k = pick ? pick((x + 0.5) / PW, dd) : 0, i = (y * PW + x) * 4;
     paint.set([(k >> 16) & 255, (k >> 8) & 255, k & 255, (k >>> 24) & 1 ? 0 : 255], i);
   }
 

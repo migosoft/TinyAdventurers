@@ -8,7 +8,7 @@
 // The page `figures.html` is the reference for the look; `layer.ts` owns the meshes and the textures, `view.ts` the id target.
 import { DoubleSide, FrontSide, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { Fn, abs, asin, screenCoordinate, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, length, max, mix, normalize, reflect, select, sin, smoothstep, step, texture, textureLoad, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, abs, asin, screenCoordinate, atan, attribute, cameraWorldMatrix, clamp, cos, cross, dot, float, int, ivec2, length, max, mix, normalize, reflect, select, sin, smoothstep, step, texture, textureLoad, time, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import { CARD_SUN_NUDGE, bayerAt } from '../materials';
 import type { Sight } from '../sightNodes';
@@ -307,7 +307,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), mix(lighting.finish(albedo, lit), base, select(isStone, float(0), paintGlow))));
+    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), mix(lighting.finish(albedo, lit), base.mul(select(uvIn.x.greaterThan(0.6667), float(1), sin(time.mul(1.5).sub(p.P.y.mul(0.06))).mul(0.5).add(0.5).pow(1.6).mul(0.94).add(0.06))), select(isStone, float(0), paintGlow))));
     // Painted eyes (only a material built with `eyes` has this code): a glow round them and the bright oval, before the sight; a stone figure shows none.
     let colour = colour0;
     if (o.eyes) {
