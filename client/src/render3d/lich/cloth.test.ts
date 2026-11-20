@@ -62,6 +62,32 @@ describe('the lich cloth', () => {
     expect(f.glide).toBe(0);
   });
 
+  /** A cloth that has been dragged along, with its last position at x = 45. */
+  const warm = (l: Float32Array): Cloth => { const c = newCloth(); for (let n = 0; n < 31; n++) step(c, n * 1.5, 0, 0.3, 1 / 60, l); return c; };
+  const hemOff = (c: Cloth, l: Float32Array): number => { const [px, pz] = place(l, NR - 1, 0.3); return Math.hypot(c.rx[NR - 1] - px, c.rz[NR - 1] - pz); };
+
+  it('pins the reset: a long frame resets even for a small move, 17 units reset, 15 do not', () => {
+    const l = lean();
+    let c = warm(l);
+    expect(hemOff(c, l)).toBeGreaterThan(0.5);
+    step(c, 46, 0, 0.3, 0.2, l);
+    atRest(c, 0.3, l, 1e-5); expect(c.glide).toBe(0);
+    c = warm(l); step(c, 45 + 17, 0, 0.3, 1 / 60, l);
+    atRest(c, 0.3, l, 1e-5); expect(c.glide).toBe(0);
+    c = warm(l); step(c, 45 + 15, 0, 0.3, 1 / 60, l);
+    expect(c.glide).toBeGreaterThan(0.01); expect(hemOff(c, l)).toBeGreaterThan(0.5);
+  });
+
+  it('recovers from a NaN position at the next finite one', () => {
+    const c = warm(lean()), l = lean();
+    step(c, NaN, 0, 0.3, 1 / 60, l);
+    step(c, 0, NaN, 0.3, 1 / 60, l);
+    for (const v of snapshot(c)) expect(Number.isNaN(v)).toBe(false);
+    step(c, 10, 5, 0.3, 1 / 60, l);
+    step(c, 10.5, 5, 0.3, 1 / 60, l);
+    for (const v of snapshot(c)) expect(Number.isFinite(v)).toBe(true);
+  });
+
   it('settles when standing still', () => {
     const c = newCloth(), l = lean();
     for (let n = 0; n < 30; n++) step(c, n * 1.5, n, 0.4, 1 / 60, l);
@@ -80,7 +106,11 @@ describe('the lich cloth', () => {
 
   it('is deterministic', () => {
     const a = newCloth(), b = newCloth(), l = lean(), ra = rng(3), rb = rng(3);
-    for (let n = 0; n < 100; n++) { step(a, ra() * 40, ra() * 40, ra(), 1 / 60, l); step(b, rb() * 40, rb() * 40, rb(), 1 / 60, l); }
+    let xa = 0, za = 0, xb = 0, zb = 0;
+    for (let n = 0; n < 100; n++) {
+      xa += (ra() - 0.5) * 3; za += (ra() - 0.5) * 3; step(a, xa, za, ra(), 1 / 60, l);
+      xb += (rb() - 0.5) * 3; zb += (rb() - 0.5) * 3; step(b, xb, zb, rb(), 1 / 60, l);
+    }
     expect(snapshot(a)).toEqual(snapshot(b));
   });
 

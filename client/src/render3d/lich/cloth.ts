@@ -17,9 +17,10 @@ const mixn = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** Step 1, before the pose: the move since the last frame (`x`, `z` in builder units, world directions), the eased speed and `glide` (0..1). The first call, a move of more than `CLOTH.jump` units or a `dt` above `CLOTH.maxDt` marks the cloth for a reset. */
 export function clothMove(c: Cloth, x: number, z: number, dt: number): void {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) { c.started = false; c.mx = 0; c.mz = 0; c.vx = 0; c.vz = 0; c.glide = 0; return; } // a reset; `lastX` stays finite, the next finite call recovers
   if (c.started && dt <= 0) return; // nothing passes: nothing changes (`clothFollow` returns too)
   let mx = c.started ? x - c.lastX : 0, mz = c.started ? z - c.lastZ : 0;
-  if (c.started && (Math.hypot(mx, mz) > CLOTH.jump || dt > CLOTH.maxDt)) { c.started = false; mx = 0; mz = 0; }
+  if (c.started && (!(Math.hypot(mx, mz) <= CLOTH.jump) || dt > CLOTH.maxDt)) { c.started = false; mx = 0; mz = 0; }
   c.lastX = x; c.lastZ = z; c.mx = mx; c.mz = mz;
   const e = c.started ? 1 : 0, inv = 1 / Math.max(dt, 1e-4);
   // a cloth for a reset takes its target at once (the spike's `ease` with `started` false)
