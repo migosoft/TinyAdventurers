@@ -266,12 +266,18 @@ describe('a built figure\'s anchor points and lights (#358)', () => {
     it('one light at the gem, a second at the eyes with a flare', () => {
       const one = lights(lich({ gem: GEM, eyes: EYES, magic }));
       expect(one.map((l) => l.id)).toEqual(['lg5']);
-      expect([one[0].x, one[0].y, one[0].z]).toEqual(GEM);
+      // the lights sit at the true height: the anchors' stretched height (foot 0.2 here) is undone
+      const st = 1 / Math.cos(cam.pitch);
+      expect(st).toBeGreaterThan(1.5);
+      const raised = lights(lich({ gem: GEM, eyes: EYES, magic: { gem: 1, flare: 1 }, foot: 0.2 }));
+      expect([raised[0].x, raised[0].y, raised[0].z]).toEqual([GEM[0], 0.2 + (GEM[1] - 0.2) / st, GEM[2]]);
+      expect([raised[1].x, raised[1].y, raised[1].z]).toEqual([EYES[0], 0.2 + (EYES[1] - 0.2) / st, EYES[2]]);
+      expect([one[0].x, one[0].y, one[0].z]).toEqual([GEM[0], GEM[1] / st, GEM[2]]);
       expect(one[0].radius).toBe(2.5);
       expect(one[0].b).toBeCloseTo(0.6);
       const two = lights(lich({ gem: GEM, eyes: EYES, magic: { gem: 1, flare: 0.5 }, alpha: 0.5 }));
       expect(two.map((l) => l.id)).toEqual(['lg5', 'lf5']);
-      expect([two[1].x, two[1].y, two[1].z]).toEqual(EYES);
+      expect([two[1].x, two[1].y, two[1].z]).toEqual([EYES[0], EYES[1] / st, EYES[2]]);
       expect(two[1].radius).toBe(3);
       expect(two[1].b).toBeCloseTo(0.8 * 0.5 * 0.5);
       expect(two[0].b).toBeCloseTo(0.6 * 0.5);

@@ -19,7 +19,7 @@ import type { DrawnFig, FxCtx, FxOut } from './types';
 
 const rgbIn = (c: number, out: MV3): MV3 => { out[0] = ((c >> 16) & 255) / 255; out[1] = ((c >> 8) & 255) / 255; out[2] = (c & 255) / 255; return out; };
 const c0: MV3 = [0, 0, 0], c1: MV3 = [0, 0, 0], gl: MV3 = [0, 0, 0];
-const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0];
+const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0], tipAt: MV3 = [0, 0, 0];
 
 /** The camera passes stretch the figure by 1 / cos(pitch): so are the heights of the effects that sit on it. */
 export const stretchOf = (ctx: FxCtx): number => 1 / Math.cos(ctx.cam.pitch);
@@ -109,7 +109,8 @@ function drawSpark(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
 function novaWindup(out: FxOut, frame: FxFrame, f: DrawnFig, tipUp: number): void {
   const ctx = frame.ctx, T = out.tris, n = Math.max(3, Math.round(9 * ctx.detail));
   // a built figure names its own gem; a card's sparks gather at the staff tip
-  const g = f.gem ?? ([f.hand[0], f.hand[1] + tipUp, f.hand[2]] as const);
+  let g = f.gem;
+  if (!g) { tipAt[0] = f.hand[0]; tipAt[1] = f.hand[1] + tipUp; tipAt[2] = f.hand[2]; g = tipAt; }
   const ty = g[1];
   for (let i = 0; i < n; i++) {
     const t = f.animT / 0.3 + i / n, cyc = Math.floor(t), ph = t - cyc, sd = f.id * 31 + i;
@@ -279,16 +280,17 @@ function dust(o: FxOut, f: FxFrame, r: FxRec, age: number, spec: BurstSpec, y: n
 
 // ---- a built figure's lights ----
 /** The glow of a built figure's gem (and of its skull's flare) as small magic lights; only a figure with `magic` (the lich today) has them. */
-function builtLights(out: FxOut, f: DrawnFig): void {
+function builtLights(out: FxOut, f: DrawnFig, st: number): void {
   const m = f.magic;
   if (!m) return;
+  // the anchors are at the stretched height; lights work in true space (as the halo's does)
   if (f.gem) {
     const k = 0.6 * m.gem * f.alpha;
-    addLight(out, 'lg' + f.id, f.gem[0], f.gem[1], f.gem[2], 2.5, 0.45 * k, 0.72 * k, 1.0 * k, LIGHT_KIND.Magic);
+    addLight(out, 'lg' + f.id, f.gem[0], f.foot + (f.gem[1] - f.foot) / st, f.gem[2], 2.5, 0.45 * k, 0.72 * k, 1.0 * k, LIGHT_KIND.Magic);
   }
   if (f.eyes && m.flare > 0.02) {
     const k = 0.8 * m.flare * f.alpha;
-    addLight(out, 'lf' + f.id, f.eyes[0], f.eyes[1], f.eyes[2], 3, 0.69 * k, 0.37 * k, 1.0 * k, LIGHT_KIND.Magic);
+    addLight(out, 'lf' + f.id, f.eyes[0], f.foot + (f.eyes[1] - f.foot) / st, f.eyes[2], 3, 0.69 * k, 0.37 * k, 1.0 * k, LIGHT_KIND.Magic);
   }
 }
 
@@ -305,7 +307,7 @@ export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
     const f = frame.figs[i];
     if (frame.hidden.has(f.id) || f.alpha < 0.05) continue;
     // a frozen figure's gem still shines; a petrified one's does not
-    if (f.magic && !has(f.effects, EFFECT.Petrified)) builtLights(out, f);
+    if (f.magic && !has(f.effects, EFFECT.Petrified)) builtLights(out, f, st);
     if (still(f)) continue;
     swoosh(T, f);
     if (f.bite >= 0 && f.mouth) fangTris(T, f.mouth, ctx.cam, f.bite);
