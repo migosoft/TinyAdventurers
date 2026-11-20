@@ -3,7 +3,7 @@
 //! wind-up, cooldown) are the kit's. Each attack's animation starts with its wind-up and runs on through a
 //! short recovery, so the client plays wind-up, strike and recovery frames.
 
-use super::{ahead, boss_idx, use_in_pose, set_anim, target, BossBehaviour};
+use super::{ahead, boss_idx, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::bosses::{DEMON_CLEAVE_RECOVER, DEMON_RING_RECOVER, DEMON_SWOOP_RECOVER};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -46,17 +46,7 @@ const SWOOP_FROM: f64 = 50.0;
 /// The cleave starts this far (px) inside its reach, like the enemies' swings.
 const CLEAVE_SLACK: f64 = 6.0;
 
-/// Its kit's ability `id`.
-fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
-    run.monsters[bi].kit.get(id).expect("the demon's kit has it").clone()
-}
-
 impl Demon {
-    /// Is `id` off its opening delay and off cooldown?
-    fn ready(&self, run: &Run, bi: usize, id: AbilityId) -> bool {
-        run.monsters[bi].cds.ready(id) && self.opening.iter().all(|&(i, left)| i != id || left <= 0.0)
-    }
-
     fn start(&mut self, run: &mut Run, bi: usize, action: Action, id: AbilityId, anim: Anim) {
         let windup = kit(run, bi, id).windup;
         self.action = Some((action, windup));
@@ -118,12 +108,12 @@ impl BossBehaviour for Demon {
         run.monsters[bi].aim = pos.angle_to(ppos);
         // A kit range is measured to the target's edge: the centre distance adds the hero's radius.
         let cleave_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLEAVE_SLACK;
-        if self.ready(run, bi, AbilityId::RingOfFire) {
+        if ready(run, bi, &self.opening, AbilityId::RingOfFire) {
             self.start(run, bi, Action::Ring, AbilityId::RingOfFire, Anim::Cast);
-        } else if self.ready(run, bi, AbilityId::Swoop) && dist > SWOOP_FROM {
+        } else if ready(run, bi, &self.opening, AbilityId::Swoop) && dist > SWOOP_FROM {
             self.swoop_dir = (ppos - pos).norm();
             self.start(run, bi, Action::SwoopWindup, AbilityId::Swoop, Anim::Dash);
-        } else if self.ready(run, bi, AbilityId::Strike) && dist <= cleave_from {
+        } else if ready(run, bi, &self.opening, AbilityId::Strike) && dist <= cleave_from {
             self.start(run, bi, Action::Cleave, AbilityId::Strike, Anim::Melee);
         } else if dist > cleave_from * 0.8 {
             let speed = run.monsters[bi].speed;

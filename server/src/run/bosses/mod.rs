@@ -3,12 +3,15 @@
 
 mod demon;
 mod dragon;
+pub(crate) mod flight;
 pub(crate) mod lich;
 
 use super::ai::find_visible_hero;
 use super::Run;
 use crate::defs::kinds::Anim;
-use crate::math::Vec2;
+use crate::defs::abilities::AbilityId;
+use crate::math::{angle_diff, Vec2};
+use crate::sheet::ResolvedAbility;
 use crate::protocol::BossId;
 
 pub trait BossBehaviour: Send {
@@ -73,4 +76,20 @@ pub(crate) fn use_in_pose(run: &mut Run, bi: usize, id: crate::defs::abilities::
     super::abilities::monster_use(run, bi, id, at);
     run.monsters[bi].anim = anim;
     run.monsters[bi].anim_start = since;
+}
+
+/// The boss's kit ability `id` (panics if the kit lacks it).
+pub(crate) fn kit(run: &Run, bi: usize, id: AbilityId) -> ResolvedAbility {
+    run.monsters[bi].kit.get(id).expect("the boss's kit has it").clone()
+}
+
+/// Off its opening delay (`opening`) and off cooldown.
+pub(crate) fn ready(run: &Run, bi: usize, opening: &[(AbilityId, f64)], id: AbilityId) -> bool {
+    run.monsters[bi].cds.ready(id) && opening.iter().all(|&(i, left)| i != id || left <= 0.0)
+}
+
+/// A living foe within `reach` px (centre distance) whose direction differs from the boss's aim by more than 2.0 rad.
+pub(crate) fn foe_behind(run: &Run, bi: usize, reach: f64) -> bool {
+    let (pos, aim, side) = (run.monsters[bi].pos, run.monsters[bi].aim, run.monsters[bi].side);
+    run.players.iter().any(|p| crate::run::targets::foes(side, p.side) && p.alive && p.pos().dist(pos) < reach && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0)
 }

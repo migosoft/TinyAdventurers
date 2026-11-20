@@ -6,17 +6,16 @@
 //! An attack's animation starts with its wind-up (the client shows the wind-up pose, then the strike); the
 //! script waits the ability's own wind-up (`kit.get(id).windup`) and uses it when that ends.
 
-use super::{ahead, boss_idx, use_in_pose, set_anim, target, BossBehaviour};
+use super::flight::{Flight, FlightTimes};
+use super::{ahead, boss_idx, foe_behind, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
 use crate::defs::kinds::Anim;
-use crate::math::angle_diff;
 use crate::run::abilities::{announce_cast, monster_use};
 use crate::run::effects::Creature;
 use crate::run::ai::path_toward;
 use crate::run::Run;
-use rand::Rng;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
@@ -30,17 +29,7 @@ enum Action {
     Recover,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-enum Flight {
-    Ground,
-    TakeOff,
-    Air,
-    Land,
-}
-
 pub struct Dragon {
-    /// Seconds until the next flight (on the ground) or of the current flight phase.
-    flight_t: f64,
     flight: Flight,
     action: Option<(Action, f64)>,
     /// Seconds before the script may first choose each ability: when it opens, not how an ability works. It
@@ -50,7 +39,11 @@ pub struct Dragon {
 
 impl Default for Dragon {
     fn default() -> Self {
-        Dragon { flight_t: DRAGON_FLIGHT_EVERY.0, flight: Flight::Ground, action: None, opening: OPENING.to_vec() }
+        Dragon {
+            flight: Flight::new(FlightTimes { takeoff: DRAGON_TAKEOFF, air: DRAGON_FLIGHT, land: DRAGON_LAND, every: DRAGON_FLIGHT_EVERY }, DRAGON_FLIGHT_EVERY.0),
+            action: None,
+            opening: OPENING.to_vec(),
+        }
     }
 }
 
@@ -69,75 +62,18 @@ const TAIL_SLACK: f64 = 2.0;
 /// Hovering, it does not chase heroes closer than this.
 const HOVER_KEEP: f64 = 30.0;
 
-/// Its kit's ability `id`.
-fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
-    run.monsters[bi].kit.get(id).expect("the dragon's kit has it").clone()
-}
-
-
 impl Dragon {
-    /// Is `id` off its opening delay and off cooldown?
-    fn ready(&self, run: &Run, bi: usize, id: AbilityId) -> bool {
-        run.monsters[bi].cds.ready(id) && self.opening.iter().all(|&(i, left)| i != id || left <= 0.0)
-    }
-
     /// Starts an action whose animation (wind-up first) is `anim`.
     fn start(&mut self, run: &mut Run, bi: usize, action: Action, t: f64, anim: Anim) {
         self.action = Some((action, t));
         set_anim(run, bi, anim);
-    }
-
-    /// Take-off, flight and landing; true while they take over the turn.
-    fn fly(&mut self, run: &mut Run, bi: usize, dt: f64) -> bool {
-        self.flight_t -= dt;
-        match self.flight {
-            Flight::Ground => {
-                if self.flight_t > 0.0 || self.action.is_some() {
-                    return false;
-                }
-                self.flight = Flight::TakeOff;
-                self.flight_t = DRAGON_TAKEOFF;
-                set_anim(run, bi, Anim::TakeOff);
-                true
-            }
-            Flight::TakeOff => {
-                if self.flight_t <= 0.0 {
-                    self.flight = Flight::Air;
-                    self.flight_t = DRAGON_FLIGHT;
-                    run.monsters[bi].airborne = true;
-                    set_anim(run, bi, Anim::Idle);
-                }
-                true
-            }
-            Flight::Air => {
-                // Lands once the flight is over and a breath under way has ended.
-                if self.flight_t > 0.0 || self.action.is_some() {
-                    return false;
-                }
-                self.flight = Flight::Land;
-                self.flight_t = DRAGON_LAND;
-                set_anim(run, bi, Anim::Land);
-                true
-            }
-            Flight::Land => {
-                if self.flight_t <= 0.0 {
-                    let at = ahead(run, bi);
-                    monster_use(run, bi, AbilityId::Smash, at);
-                    run.monsters[bi].airborne = false;
-                    self.flight = Flight::Ground;
-                    self.flight_t = run.rng.gen_range(DRAGON_FLIGHT_EVERY.0..DRAGON_FLIGHT_EVERY.1);
-                    set_anim(run, bi, Anim::Idle);
-                }
-                true
-            }
-        }
     }
 }
 
 impl BossBehaviour for Dragon {
     /// A wind-up or strike, or any part of the flight (take-off, flying, landing).
     fn busy(&self) -> bool {
-        self.action.is_some() || self.flight != Flight::Ground
+        self.action.is_some() || !self.flight.grounded()
     }
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
@@ -145,12 +81,11 @@ impl BossBehaviour for Dragon {
         for (_, left) in &mut self.opening {
             *left -= cdt;
         }
-        if self.fly(run, bi, dt) {
+        if self.flight.tick(run, bi, dt, self.action.is_some()) {
             return;
         }
         let pos = run.monsters[bi].pos;
-        let aim = run.monsters[bi].aim;
-        let air = self.flight == Flight::Air;
+        let air = self.flight.in_air();
 
         if let Some((action, t)) = self.action {
             let mut t = t - dt;
@@ -200,17 +135,14 @@ impl BossBehaviour for Dragon {
         // Tail whip when someone sneaks behind (not in the air).
         let tail = kit(run, bi, AbilityId::TailWhip);
         // A kit range is measured to the target's edge: the centre distance adds the hero's radius.
-        let someone_behind = run
-            .players
-            .iter()
-            .any(|p| crate::run::targets::foes(run.monsters[bi].side, p.side) && p.alive && p.pos().dist(pos) < tail.range + PLAYER_RADIUS - TAIL_SLACK && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
-        if !air && someone_behind && self.ready(run, bi, AbilityId::TailWhip) {
+        let someone_behind = foe_behind(run, bi, tail.range + PLAYER_RADIUS - TAIL_SLACK);
+        if !air && someone_behind && ready(run, bi, &self.opening, AbilityId::TailWhip) {
             self.start(run, bi, Action::Tail, tail.windup, Anim::Tail);
             return;
         }
         run.monsters[bi].aim = to_target;
         let (breath, bite, claw) = (kit(run, bi, AbilityId::FireBreath), kit(run, bi, AbilityId::Bite), kit(run, bi, AbilityId::Strike));
-        if self.ready(run, bi, AbilityId::FireBreath) && dist < breath.range {
+        if ready(run, bi, &self.opening, AbilityId::FireBreath) && dist < breath.range {
             self.start(run, bi, Action::BreathWindup, breath.windup, Anim::Breath);
             announce_cast(run, Creature::Monster(bi), AbilityId::FireBreath, breath.windup, to_target);
         } else if air {
@@ -222,11 +154,11 @@ impl BossBehaviour for Dragon {
             } else {
                 set_anim(run, bi, Anim::Idle);
             }
-        } else if self.ready(run, bi, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if ready(run, bi, &self.opening, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Bite, bite.windup, Anim::Bite);
-        } else if self.ready(run, bi, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if ready(run, bi, &self.opening, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Claw, claw.windup, Anim::Melee);
-        } else if self.ready(run, bi, AbilityId::Fireball) {
+        } else if ready(run, bi, &self.opening, AbilityId::Fireball) {
             self.start(run, bi, Action::Fireball, FIREBALL_POSE, Anim::Windup);
             announce_cast(run, Creature::Monster(bi), AbilityId::Fireball, FIREBALL_POSE, to_target);
         } else if dist > 60.0 {
@@ -268,7 +200,9 @@ mod tests {
                 run.monsters[bi].cds.start(id, 99.0);
             }
         }
-        let d = Dragon { flight_t: 99.0, opening: Vec::new(), ..Dragon::default() };
+        let mut d = Dragon::default();
+        d.flight.t = 99.0;
+        d.opening = Vec::new();
         (run, d, bi)
     }
 
@@ -348,7 +282,8 @@ mod tests {
             run.monsters[bi].cds.tick(100.0);
             assert!(run.monsters[bi].cds.ready(id), "{id:?}: the kit's cooldowns start empty");
         }
-        let mut d = Dragon { flight_t: 99.0, ..Dragon::default() };
+        let mut d = Dragon::default();
+        d.flight.t = 99.0;
         ticks(&mut run, &mut d, 1.4);
         assert!(d.action.is_none(), "nothing before the first opening delay");
         assert!(all.iter().all(|&id| run.monsters[bi].cds.ready(id)), "the script left the cooldowns alone");
@@ -395,7 +330,7 @@ mod tests {
     #[test]
     fn takes_off_hovers_without_melee_and_lands_with_a_smash() {
         let (mut run, mut d, bi) = dragon_with(&[Vec2::new(20.0, 0.0)]);
-        d.flight_t = 0.0;
+        d.flight.t = 0.0;
         d.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::TakeOff);
         ticks(&mut run, &mut d, DRAGON_TAKEOFF + DT);
@@ -416,7 +351,7 @@ mod tests {
         assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Smash));
         assert!(run.players[0].mv.knock_vx > 0.0, "and pushes away");
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 5, .. })), "shockwave event");
-        assert!(d.flight_t >= DRAGON_FLIGHT_EVERY.0, "next flight in 10-12 s");
+        assert!(d.flight.t >= DRAGON_FLIGHT_EVERY.0, "next flight in 10-12 s");
     }
 
     #[test]
