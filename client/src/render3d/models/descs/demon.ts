@@ -174,7 +174,7 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
 // tips. Folded, the webbing has more cloth than room: every panel hangs in a fold behind the wing, like a curtain pushed together.
 // Each wing is laid out flat in its own plane (`s` out along the span from the root, `h` up) and stood on the back. ----
 if (WINGS) {
-  const WING = 6.0, THICK = 0.1, FOLD = 0.42, NT = 14, NW = 12;
+  const WING = 6.0, THICK = 0.1, FOLD = 0.42, NT = 30, NW = 24;
   type P2 = readonly [number, number];
   const WRIST: P2 = [1.0, 2.3], ELBOW: P2 = [0.42, 1.2], BACK_END: P2 = [0.1, -2.4];
   /** The four fingers from the wrist: a point each bows through, and its tip. */
@@ -187,7 +187,7 @@ if (WINGS) {
   const inner = (t: number): [number, number] => (t < 0.45 ? [WRIST[0] * (1 - t / 0.45), WRIST[1] * (1 - t / 0.45)] : [BACK_END[0] * (t - 0.45) / 0.55, BACK_END[1] * (t - 0.45) / 0.55]);
   const ray = (i: number, t: number): [number, number] => (i < 4 ? finger(i, t) : inner(t));
   /** How deep the edge of each panel hangs in between its two bones, as a share of the bones' length. */
-  const ARC = [0.3, 0.3, 0.28, 0.2];
+  const ARC = [0.13, 0.12, 0.1, 0.06];
   for (const sd of [1, -1]) {
     const S = unit([-0.62, -0.1, 0.78 * sd]);
     const lean: Vec3 = [-0.2, 0.97, 0], k = lean[0] * S[0] + lean[1] * S[1] + lean[2] * S[2];
@@ -205,6 +205,22 @@ if (WINGS) {
       const te = t * (1 - ARC[i] * 4 * w * (1 - w)), a = ray(i, te), b = ray(i + 1, te);
       return on(a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, FOLD * te * (Math.sin(Math.PI * w) + 0.3 * Math.sin(3 * Math.PI * w)));
     };
+    // The outer parts are torn: two rips into each panel from its edge (a notch that widens to the edge) and a hole or two.
+    // Above 0 inside a tear, falling to below 0 away from it. The two wings are torn differently.
+    const torn = (i: number, t: number, w: number): number => {
+      let best = -9;
+      const seed = i * 10 + (sd > 0 ? 0 : 100);
+      for (let r = 0; r < 2; r++) {
+        const w0 = 0.18 + 0.3 * r + 0.34 * hash(seed, r, 41), t0 = 0.5 + 0.3 * hash(seed, r, 42), hw = 0.05 + 0.05 * hash(seed, r, 43);
+        if (t > t0) best = Math.max(best, 1 - Math.abs(w - w0 - 0.06 * Math.sin((t - t0) * 20)) / (hw * (t - t0) / (1 - t0) + 1e-6));
+      }
+      for (let r = 0; r < 2; r++) {
+        if (hash(seed, r, 44) < 0.25) continue;
+        const tc = 0.5 + 0.32 * hash(seed, r, 45), wc = 0.2 + 0.6 * hash(seed, r, 46), rt = 0.03 + 0.035 * hash(seed, r, 47), rw = 0.05 + 0.05 * hash(seed, r, 48);
+        best = Math.max(best, 1 - Math.hypot((t - tc) / rt, (w - wc) / rw));
+      }
+      return best;
+    };
     for (let i = 0; i < 4; i++) for (const side of [1, -1]) {
       const v0 = pos.length / 3;
       for (let a = 0; a <= NT; a++) for (let b = 0; b <= NW; b++) {
@@ -218,6 +234,7 @@ if (WINGS) {
         what.set(keyOf(q[0], q[1], q[2]), [i, t, w]);
       }
       for (let a = 0; a < NT; a++) for (let b = 0; b < NW; b++) {
+        if (torn(i, (a + 0.5) / NT, (b + 0.5) / NW) > 0) continue;
         const c0 = v0 + a * (NW + 1) + b, c1 = c0 + 1, c2 = c0 + NW + 1, c3 = c2 + 1;
         for (const tri of [[c0, c1, c2], [c1, c3, c2]]) {
           const [A, B, C] = tri.map((v) => [pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]]);
@@ -238,7 +255,7 @@ if (WINGS) {
       let c = mixC(WEB_RED, WEB_ROOT, Math.pow(Math.max(0, Math.min(1, held)), 0.8));
       c = mixC(c, 0x5a1218, 0.3 * vnoise((i + w) * 5, t * 6, 33));
       const burnt = (t - (0.9 - 0.07 * vnoise((i + w) * 9, 0.5, 31))) / 0.06;
-      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, burnt)));
+      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, Math.max(burnt, (torn(i, t, w) + 0.9) / 0.6))));
     };
     const web = add({
       shape: { mesh: { position: Float32Array.from(pos), normal: Float32Array.from(nor), uv: null, index: Uint32Array.from(idx) }, axis: { dir: [S[0], S[1], S[2]], len: 6.2 * WING } },
