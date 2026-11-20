@@ -42,31 +42,17 @@ function geometryOf(b: BuiltBuf, lit: boolean): BufferGeometry {
   return g;
 }
 
-/** What a geometry last uploaded of the fixed streams; a geometry not in the map has uploaded nothing. */
-const uploaded = new WeakMap<BufferGeometry, { fixed: number; verts: number; indices: number }>();
-/** The streams that move every frame. */
-const MOVING = new Set(['position', 'normal', 'colour']);
-
-/**
- * Marks the used part of the buffer's attributes for upload and sets the draw range. The moving streams (position, normal, colour) go up
- * every frame; the fixed ones (uv, look, index) only for a new geometry or when `fixed`, `verts` or `indices` changed.
- */
+/** Marks the used part of the buffer's attributes for upload and sets the draw range. */
 function upload(g: BufferGeometry, b: BuiltBuf): void {
-  const last = uploaded.get(g);
-  const same = last !== undefined && last.fixed === b.fixed && last.verts === b.verts && last.indices === b.indices;
-  for (const [name, at] of Object.entries(g.attributes) as [string, BufferAttribute][]) {
-    if (same && !MOVING.has(name)) continue;
+  for (const at of Object.values(g.attributes) as BufferAttribute[]) {
     at.clearUpdateRanges();
     at.addUpdateRange(0, b.verts * at.itemSize);
     at.needsUpdate = true;
   }
-  if (!same) {
-    const index = g.index!;
-    index.clearUpdateRanges();
-    index.addUpdateRange(0, b.indices);
-    index.needsUpdate = true;
-    uploaded.set(g, { fixed: b.fixed, verts: b.verts, indices: b.indices });
-  }
+  const index = g.index!;
+  index.clearUpdateRanges();
+  index.addUpdateRange(0, b.indices);
+  index.needsUpdate = true;
   g.setDrawRange(0, b.indices);
 }
 

@@ -16,8 +16,6 @@ export interface BuiltBuf {
   index: Uint32Array;
   verts: number;
   indices: number;
-  /** A version of the streams that do not change from frame to frame (`uv`, `look`, `index`): the builder raises it whenever it wrote different uvs, look values or indices than the frame before; a layer uploads those three streams only when it changes or when `verts`/`indices` change. */
-  fixed: number;
 }
 
 export function newBuiltBuf(maxVerts: number, maxIndices: number): BuiltBuf {
@@ -30,7 +28,6 @@ export function newBuiltBuf(maxVerts: number, maxIndices: number): BuiltBuf {
     index: new Uint32Array(maxIndices),
     verts: 0,
     indices: 0,
-    fixed: 0,
   };
 }
 
