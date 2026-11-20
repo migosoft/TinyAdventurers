@@ -44,16 +44,25 @@ function rng(seed: number): () => number {
 // ---------------------------------------------------------------- colours (display values)
 const BONE: V = [0.8, 0.8, 0.72], BONE_DARK: V = [0.5, 0.5, 0.44];
 const CLOTH: V = [0.15, 0.15, 0.18], CLOTH_IN: V = [0.2, 0.12, 0.27], TRIM: V = [0.42, 0.38, 0.52];
-const WOOD: V = [0.24, 0.17, 0.13], IRON: V = [0.33, 0.33, 0.4];
+const METAL: V = [0.19, 0.11, 0.3];
 const GEM: V = [0.72, 0.9, 1.0], EYE: V = [0.93, 0.9, 1.0], GHOST: V = [0.3, 0.42, 0.62];
 const RUNE = [175, 95, 255];
 
 // ---------------------------------------------------------------- the painted atlas
 // 512 x 256. Alpha: 0 cut away, 100 plain, 255 glowing (runes). Regions (px): white 0..16; skull x 16..272, y 0..128 (longitude, latitude);
 // robe x 272..400, y 0..256 (round the body, hem to neck); pages x 400..512, y 0..96; cover x 400..512, y 96..160.
-const AW = 512, AH = 256, PLAIN = 100;
+const AW = 512, AH = 512, PLAIN = 100, STAFF_GLOW = 170;
 const WU = 8 / AW, WV = 8 / AH;
 const SOCKET = { lon: 30, lat: -5, rho: 19.5 }, NOSE_LAT = -25;
+// the second head (the long mask): slanted sockets with a flat top, a narrow nose slit, a stitched mouth
+const SOCKET2 = { lon: 28, lat: -3 };
+const sock2 = (al: number, lat: number): number => {
+  const du = al - SOCKET2.lon, dv = lat - SOCKET2.lat, c = Math.cos(18 * (Math.PI / 180)), sn = Math.sin(18 * (Math.PI / 180));
+  const u = du * c + dv * sn, v = -du * sn + dv * c;
+  return (Math.abs(u / 22) ** 2.6 + Math.abs(v / (v > 0 ? 10 : 14)) ** 2.6) ** (1 / 2.6);
+};
+const nose2 = (lon: number, lat: number): number => Math.hypot(lon / (2.4 + 3.2 * S(-13, -33, lat)), Math.max(0, Math.abs(lat + 23) - 9) / 3.5);
+const STAFF_LEN = 19.7, STAFF_R = 0.26;
 
 class Atlas {
   d = new Uint8Array(AW * AH * 4);
@@ -100,7 +109,9 @@ const angDist = (lon: number, lat: number, lon0: number, lat0: number): number =
 
 function paintAtlas(): DataTexture {
   const A = new Atlas();
-  // ---- the skull
+  // ---- the skull, twice: the round one (y 0..128) and the long mask (y 256..384)
+  for (const hv of [0, 1]) {
+  const oy = hv * 256;
   for (let py = 0; py < 128; py++) for (let px = 0; px < 256; px++) {
     const lon = ((px + 0.5) / 256) * 360 - 180, lat = ((py + 0.5) / 128) * 180 - 90, al = Math.abs(lon);
     const mott = 0.8 + 0.2 * vnoise(px * 0.11, py * 0.11) - 0.1 * vnoise(px * 0.4 + 9, py * 0.4);
@@ -109,6 +120,19 @@ function paintAtlas(): DataTexture {
     // the lower face is greyer, the cheeks hollow
     dark(0.28 * S(-10, -60, lat));
     dark(0.3 * Math.exp(-((al - 60) ** 2 + (lat + 40) ** 2) / 120), [70, 66, 60]);
+    if (hv === 1) {
+      dark(0.75 * S(50, 72, al) * S(-14, -30, lat), [26, 22, 28]);
+      dark(1 - S(0.75, 1.05, nose2(lon, lat)));
+      const d2 = sock2(al, lat);
+      dark(0.2 * (1 - S(1, 1.3, d2)), [60, 54, 60]);
+      dark(1 - S(0.84, 1, d2));
+      if (al < 27) {
+        dark(0.95 * (1 - S(0.9, 1.9, Math.abs(lat + 44))) * S(27, 22, al), [20, 15, 20]);
+        for (const [l0, off, hh] of [[-19, 0.5, 4.4], [-11.5, -0.8, 6], [-4, 0.6, 4.8], [3.5, -0.6, 6.2], [10.5, 0.9, 4.6], [18, -0.4, 5.4]]) dark(0.95 * (1 - S(1.0, 2.1, Math.abs(lon - l0))) * (1 - S(hh - 1, hh, Math.abs(lat + 44 - off))), [26, 20, 24]);
+      }
+      A.put(16 + px, oy + py, c);
+      continue;
+    }
     // teeth: a row above and a row below one dark line
     if (lat < -38 && lat > -54 && al < 42) {
       const f = lon / 7.5 + 0.5, gap = Math.abs(f - Math.floor(f) - 0.5) > 0.39;
@@ -124,10 +148,10 @@ function paintAtlas(): DataTexture {
     dark(1 - S(SOCKET.rho * 0.84, SOCKET.rho * 1.0, sd));
     if (lat < -54) dark(S(-54, -58, lat), [22, 18, 20]);
     if (al > 62 && lat < -22) dark(0.6 * S(62, 80, al) * S(-22, -36, lat), [40, 36, 36]);
-    A.put(16 + px, py, c);
+    A.put(16 + px, oy + py, c);
   }
-  const SX = (lon: number): number => 16 + ((lon + 180) / 360) * 256, SY = (lat: number): number => ((lat + 90) / 180) * 128;
-  const r = rng(7);
+  const SX = (lon: number): number => 16 + ((lon + 180) / 360) * 256, SY = (lat: number): number => oy + ((lat + 90) / 180) * 128;
+  const r = rng(7 + hv * 4);
   // a few fine cracks
   for (let i = 0; i < 7; i++) {
     let lon = -150 + r() * 300, lat = 5 + r() * 70;
@@ -156,6 +180,33 @@ function paintAtlas(): DataTexture {
   for (const s of [-1, 1]) {
     for (const lon of [62, 75, 88]) glyph(r, 6, 9, (x0, y0, x1, y1) => rune(s * (lon + x0), 8 + y0, s * (lon + x1), 8 + y1, 1.5));
     for (let i = 0; i < 3; i++) rune(s * (56 + i * 5), -8, s * (58 + i * 5), -17, 1.4);
+  }
+  }
+
+  // ---- the staff: dark purple metal, and a band of runes that winds down it (x 16..272: along, two rows of 48 at y 128 and 176: round)
+  {
+    const SC = 2 * Math.PI * STAFF_R, PITCH = 4.6, LL = Math.hypot(PITCH, SC), CELL = 0.6;
+    const rs = rng(23), cells: number[][][] = [];
+    for (let i = 0; i < 60; i++) { const segs: number[][] = []; glyph(rs, 0.3, 0.44, (x0, y0, x1, y1) => segs.push([x0, y0, x1, y1])); cells.push(segs); }
+    for (let py = 0; py < 96; py++) for (let px = 0; px < 256; px++) {
+      const row = py < 48 ? 0 : 1, sA = (((px + 0.5) / 256 + row) * STAFF_LEN) / 2, cA = (((py % 48) + 0.5) / 48) * SC;
+      const m = 0.82 + 0.3 * vnoise(px * 0.45, (py % 48) * 0.1 + row * 7);
+      let c = [44 * m, 26 * m, 70 * m], al = PLAIN;
+      let w = (((cA - (SC * sA) / PITCH) % SC) + SC) % SC;
+      if (w > SC / 2) w -= SC;
+      const d = (w * PITCH) / LL, a = (sA * LL) / PITCH + (w * SC) / LL, ci = Math.floor(a / CELL), la = a - (ci + 0.5) * CELL;
+      let dist = Math.abs(Math.abs(d) - 0.36);
+      for (const g of cells[Math.max(0, Math.min(59, ci))]) {
+        const dx = g[2] - g[0], dy = g[3] - g[1], t = Math.min(1, Math.max(0, ((la - g[0]) * dx + (d - g[1]) * dy) / (dx * dx + dy * dy || 1e-6)));
+        dist = Math.min(dist, Math.hypot(la - g[0] - dx * t, d - g[1] - dy * t));
+      }
+      const ends = S(1.5, 2.3, sA) * S(STAFF_LEN - 0.8, STAFF_LEN - 1.6, sA);
+      const cut = (1 - S(0.06, 0.13, dist)) * ends, cov = (1 - S(0.03, 0.065, dist)) * ends;
+      c = c.map((v) => v * (1 - 0.6 * cut));
+      c = c.map((v, i) => v + ([165, 215, 255][i] - v) * cov);
+      al = PLAIN + (STAFF_GLOW - PLAIN) * cov;
+      A.put(16 + px, 128 + py, c, al);
+    }
   }
 
   // ---- the robe: charcoal cloth, worn; a purple and grey band above the hem, a panel down the front, lapels and a clasp
@@ -357,10 +408,18 @@ function hand(b: Buf, wrist: V, f0: V, pn0: V, o: { s?: number; spread: number; 
 interface Part { pos: Float32Array; nor: Float32Array; uv: Float32Array; idx: Uint32Array }
 const SKULL_R = 1.9;
 /** The surface's distance from the skull's centre in the direction (lon, lat), in skull radii. */
-function skullR(lonD: number, latD: number): number {
+function skullR(lonD: number, latD: number, hv = 0): number {
   const lon = lonD * DEG, lat = latD * DEG, al = Math.abs(lonD);
   const dx = Math.cos(lat) * Math.cos(lon), dy = Math.sin(lat), dz = Math.cos(lat) * Math.sin(lon);
   let r = 1 / Math.sqrt((dx / 1.04) ** 2 + (dy / 1.04) ** 2 + (dz / 0.94) ** 2);
+  if (hv === 1) {
+    r *= 1 + 0.1 * Math.exp(-((al - 52) ** 2 + (latD + 22) ** 2) / 170);
+    r *= 1 + 0.08 * Math.exp(-((latD - 12) ** 2) / 40) * S(66, 40, al);
+    r *= 1 - 0.09 * Math.exp(-((al - 80) ** 2 + (latD + 2) ** 2) / 250);
+    r *= 1 - 0.16 * (1 - S(0.6, 1.05, nose2(lonD, latD)));
+    r *= 1 - 0.42 * (1 - S(0.62, 1, sock2(al, latD)));
+    return r;
+  }
   // the face narrows below the eyes; the back of the head is undercut
   const low = S(-14, -42, latD);
   r *= 1 - low * (0.5 - 0.36 * Math.max(0, dx) ** 1.5);
@@ -373,12 +432,28 @@ function skullR(lonD: number, latD: number): number {
   r *= 1 - 0.62 * S(-55, -64, latD);
   return r;
 }
-function buildSkull(): Part {
+/** A point of the skull in skull space. The long mask is the ball pulled down below the eyes, drawn in to a chin and pressed flat in front. */
+function skullXYZ(lonD: number, latD: number, hv: number, depth = 1): V {
+  const r = skullR(lonD, latD, hv) * depth, lon = lonD * DEG, lat = latD * DEG;
+  let x = r * Math.cos(lat) * Math.cos(lon), y = r * Math.sin(lat), z = r * Math.cos(lat) * Math.sin(lon);
+  if (hv === 1) {
+    const y0 = -0.15;
+    if (y < y0) {
+      const t = y0 - y, s = S(0, 0.9, t);
+      y = y0 - t * 1.6;
+      x = x * mixn(1, 0.55, s) + 0.5 * S(0, 0.55, t);
+      z *= mixn(1, 0.72, s);
+    }
+    const xf = 0.96 - 0.34 * Math.min(1, Math.max(0, (0.1 - y) / 1.67));
+    if (x > xf) x = xf + (x - xf) * mixn(1, 0.3, S(0.5, 0.05, y));
+  }
+  return [x * SKULL_R, y * SKULL_R, z * SKULL_R];
+}
+function buildSkull(hv: number): Part {
   const NLON = 72, NLAT = 44, b = new Buf((NLON + 1) * (NLAT + 1), NLON * NLAT * 6);
   for (let i = 0; i <= NLAT; i++) for (let j = 0; j <= NLON; j++) {
-    const lonD = -180 + (360 * j) / NLON, latD = -90 + (180 * i) / NLAT, lon = lonD * DEG, lat = latD * DEG;
-    const r = skullR(lonD, latD) * SKULL_R;
-    b.vert([r * Math.cos(lat) * Math.cos(lon), r * Math.sin(lat), r * Math.cos(lat) * Math.sin(lon)], [0, 1, 0], (16.5 + (j / NLON) * 255) / AW, (0.5 + (i / NLAT) * 127) / AH, 0, 1, [1, 1, 1]);
+    const lonD = -180 + (360 * j) / NLON, latD = -90 + (180 * i) / NLAT;
+    b.vert(skullXYZ(lonD, latD, hv), [0, 1, 0], (16.5 + (j / NLON) * 255) / AW, (hv * 256 + 0.5 + (i / NLAT) * 127) / AH, 0, 1, [1, 1, 1]);
   }
   b.grid(0, NLAT + 1, NLON + 1);
   b.normals(0, 0);
@@ -392,10 +467,7 @@ function buildSkull(): Part {
   return { pos: b.pos.slice(0, b.nv * 3), nor: b.nor.slice(0, b.nv * 3), uv: b.uv.slice(0, b.nv * 2), idx: b.idx.slice(0, b.ni) };
 }
 /** Where a point of the skull's surface is, in skull space. */
-const skullPoint = (lonD: number, latD: number, depth = 1): V => {
-  const r = skullR(lonD, latD) * SKULL_R * depth, lon = lonD * DEG, lat = latD * DEG;
-  return [r * Math.cos(lat) * Math.cos(lon), r * Math.sin(lat), r * Math.cos(lat) * Math.sin(lon)];
-};
+const skullPoint = (lonD: number, latD: number, depth = 1, hv = 0): V => skullXYZ(lonD, latD, hv, depth);
 function place(b: Buf, part: Part, o: V, X: V, Y: V, Z: V): void {
   const first = b.nv, n = part.pos.length / 3;
   for (let i = 0; i < n; i++) {
@@ -433,9 +505,9 @@ const RING_V: number[] = (() => {
 })();
 
 // ---------------------------------------------------------------- materials
-interface Mats { body: MeshBasicNodeMaterial; glow: MeshBasicNodeMaterial; shadow: MeshBasicNodeMaterial; light: { value: Vector3 }; view: { value: Vector3 }; rune: { value: number } }
+interface Mats { body: MeshBasicNodeMaterial; glow: MeshBasicNodeMaterial; shadow: MeshBasicNodeMaterial; light: { value: Vector3 }; view: { value: Vector3 }; rune: { value: number }; gem: { value: number } }
 function materials(): Mats {
-  const L: N = uniform(new Vector3(0, 1, 0)), viewU: N = uniform(new Vector3(0, 0.75, 0.66)), runeU: N = uniform(0.5);
+  const L: N = uniform(new Vector3(0, 1, 0)), viewU: N = uniform(new Vector3(0, 0.75, 0.66)), runeU: N = uniform(0.5), gemU: N = uniform(0.5);
   const n: N = normalize(attribute('normal', 'vec3')), uvA: N = attribute('uv', 'vec2'), aux: N = attribute('aux', 'vec2'), col: N = attribute('color', 'vec3');
   const tex: N = texture(paintAtlas(), uvA);
   const lam: N = clamp(dot(n, L), 0, 1);
@@ -443,8 +515,9 @@ function materials(): Mats {
   const rim: N = pow(float(1).sub((dot(n, viewU) as N).abs()).clamp(0, 1), 2.5).mul(0.1);
   const albedo: N = col.mul(tex.rgb);
   const shaded: N = albedo.mul(lit).mul(aux.y).add(vec3(0.62, 0.56, 0.85).mul(rim));
-  const glowing: N = smoothstep(0.55, 0.9, tex.a);
-  const withRunes: N = mix(shaded, albedo.mul(runeU), glowing);
+  // alpha 255: the skull's runes (their own pulse); alpha 170: the staff's runes, which pulse with the gem
+  const glowing: N = smoothstep(0.45, 0.62, tex.a), onHead: N = smoothstep(0.75, 0.9, tex.a);
+  const withRunes: N = mix(shaded, albedo.mul(mix(gemU, runeU, onHead)), glowing);
   const body = new MeshBasicNodeMaterial();
   body.colorNode = vec4(mix(withRunes, col, aux.x), tex.a);
   body.alphaTest = 0.2;
@@ -460,7 +533,7 @@ function materials(): Mats {
   const fade: N = float(1).sub(smoothstep(0.3, 1, (length(uv().sub(0.5)) as N).mul(2))).mul(0.5);
   shadow.colorNode = vec4(vec3(0, 0, 0), fade);
   shadow.transparent = true; shadow.depthWrite = false;
-  return { body, glow, shadow, light: L, view: viewU, rune: runeU };
+  return { body, glow, shadow, light: L, view: viewU, rune: runeU, gem: gemU };
 }
 function geometry(b: Buf): BufferGeometry {
   const g = new BufferGeometry();
@@ -483,6 +556,8 @@ export interface LichPose {
   action: LichAction;
   /** Seconds since the action began. */
   at: number;
+  /** 0: the round skull, 1: the long mask. */
+  head: number;
   /** The ghostly claws under the tome. */
   claws: boolean;
   /** What the head looks at (tiles), or null. */
@@ -499,7 +574,7 @@ export interface LichSpike {
 }
 
 export function createLichSpike(): LichSpike {
-  const mats = materials(), skull = buildSkull();
+  const mats = materials(), skulls = [buildSkull(0), buildSkull(1)];
   const b = new Buf(20000, 110000), g = new Buf(5000, 26000);
   const group = new Group();
   const bGeo = geometry(b), gGeo = geometry(g);
@@ -603,16 +678,17 @@ export function createLichSpike(): LichSpike {
       const pitch = -0.46 + 0.16 * gaze + 0.05 * Math.sin(t * 0.7) - 0.22 * novaUp - 0.1 * flingOut;
       head[0] += 0.5 * gaze;
       const HX: V = [Math.cos(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.sin(yaw) * Math.cos(pitch)], HZ: V = [-Math.sin(yaw), 0, Math.cos(yaw)], HY = cross(HZ, HX);
-      place(b, skull, head, HX, HY, HZ);
+      const hv = p.head === 1 ? 1 : 0;
+      place(b, skulls[hv], head, HX, HY, HZ);
       const inHead = (q: V): V => mad(mad(mad(head, HX, q[0]), HY, q[1]), HZ, q[2]);
       // the lower jaw: its own bone, hinged below the ears; it drops open when a spell is spoken
       const jawA = 0.02 + 0.03 * Math.sin(t * 0.8) + 0.3 * flingOut + 0.4 * novaHit + 0.22 * raiseLift + 0.16 * gaze, cj = Math.cos(jawA), sj = Math.sin(jawA);
       const jaw = (q: V): V => { const x = q[0] + 0.35, y = q[1] + 0.95; return inHead([-0.35 + x * cj + y * sj, -0.95 - x * sj + y * cj, q[2]]); };
       const JAW: V[] = [[-0.35, -0.95, 0.86], [-0.3, -1.48, 0.78], [0.42, -1.74, 0.62], [0.98, -1.78, 0.35], [1.17, -1.78, 0]];
       const jawLine = [...JAW, ...JAW.slice(0, -1).reverse().map((q): V => [q[0], q[1], -q[2]])];
-      tube(b, jawLine.map(jaw), jawLine.map((_, i) => { const m = 1 - Math.abs(i - 4) / 4; return [0.2 + 0.06 * m, 0.13 + 0.04 * m] as [number, number]; }), { seg: 7, col: (i) => mul(BONE, 0.8 + 0.1 * (1 - Math.abs(i - 4) / 4)), side: [0, 0, 1], caps: [true, true] });
+      if (hv === 0) tube(b, jawLine.map(jaw), jawLine.map((_, i) => { const m = 1 - Math.abs(i - 4) / 4; return [0.2 + 0.06 * m, 0.13 + 0.04 * m] as [number, number]; }), { seg: 7, col: (i) => mul(BONE, 0.8 + 0.1 * (1 - Math.abs(i - 4) / 4)), side: [0, 0, 1], caps: [true, true] });
       // the lower teeth: broad and flat, side by side along the jaw's front
-      for (let q = -3; q <= 3; q++) {
+      for (let q = -3; q <= 3 && hv === 0; q++) {
         const a2 = (q / 3.6) * 1.2, tx = 0.56 + 0.58 * Math.cos(a2), tz = 0.44 * Math.sin(a2);
         const along = norm(mad(mul(HX, -0.58 * Math.sin(a2)), HZ, 0.44 * Math.cos(a2))), wide = q === 0 ? 0.085 : 0.1;
         tube(b, [jaw([tx + 0.05, -1.62, tz]), jaw([tx + 0.06, -1.4, tz]), jaw([tx + 0.07, -1.2, tz])], [[0.055, wide], [0.055, wide], [0.045, wide * 0.88]], { seg: 6, col: [0.86, 0.84, 0.72], side: along, caps: [false, true] });
@@ -620,7 +696,7 @@ export function createLichSpike(): LichSpike {
       // the eyes: two small lights that float in the middle of the hollow sockets
       const eyeGlow = 0.85 + 0.15 * Math.sin(t * 5.1) * Math.sin(t * 1.3) + 1.6 * gaze + 0.5 * flare;
       for (const s of [-1, 1]) {
-        const e = inHead(skullPoint(s * SOCKET.lon, SOCKET.lat, 1.42));
+        const e = inHead(hv === 1 ? skullPoint(s * SOCKET2.lon, SOCKET2.lat - 1, 1.38, 1) : skullPoint(s * SOCKET.lon, SOCKET.lat, 1.42));
         const r = 0.16 + 0.05 * gaze, pts: V[] = [mad(e, HX, -r), e, mad(e, HX, r)];
         tube(b, pts, [r * 0.55, r, r * 0.55], { seg: 6, col: mul(EYE, Math.min(1.3, eyeGlow)), unlit: 1, caps: [true, true] });
         halo(e, 0.5 + 0.35 * gaze, mul([0.75, 0.66, 1.0], 0.5 * eyeGlow));
@@ -642,21 +718,30 @@ export function createLichSpike(): LichSpike {
 
       // ---- the staff: planted at rest, lifted and tilted back in motion, raised for the Nova, struck down for Nova and Raise Dead
       const strike = raiseHit > 0 || novaHit > 0 ? 0.25 * Math.max(raiseHit, novaHit) * Math.abs(Math.sin((raiseHit > 0 ? a - 0.5 : a - 1.33) * 30)) : 0;
-      const sBase: V = [2.3 - 0.7 * mv + 0.7 * novaUp + 0.3 * raiseUp, 0.9 * mv * (1 - novaUp) + 7.2 * novaUp + 2.8 * raiseUp + strike, 5.4 - 1.9 * novaUp];
+      const sBase: V = [3.6 - 0.7 * mv + 0.7 * novaUp + 0.3 * raiseUp, 0.9 * mv * (1 - novaUp) + 7.2 * novaUp + 2.8 * raiseUp + strike, 5.4 - 1.9 * novaUp];
       const sAxis = norm([-0.03 + 0.17 * mv - 0.05 * novaUp, 1, -0.1 + 0.09 * novaUp + 0.02 * Math.sin(t * 0.8) * (1 - mv)]);
-      const sSide = norm(cross(sAxis, [0, 0, 1])), sUp = cross(sSide, sAxis), SL = LICH_DIMS.staff - 1.5;
+      const sSide = norm(cross(sAxis, [0, 0, 1])), sUp = cross(sSide, sAxis), SL = STAFF_LEN;
       const onStaff = (h: number, sx = 0, sz = 0): V => mad(mad(mad(sBase, sAxis, h), sSide, sx), sUp, sz);
-      const shaft: V[] = [], shaftR: number[] = [];
-      for (let i = 0; i <= 12; i++) { const h = (i / 12) * SL; shaft.push(onStaff(h, 0.14 * Math.sin(h * 0.7 + 1), 0.1 * Math.sin(h * 1.1))); shaftR.push(i === 0 ? 0.2 : mixn(0.3, 0.24, i / 12) + 0.04 * Math.sin(h * 2.3)); }
-      tube(b, shaft, shaftR, { seg: 7, col: (i) => (i < 2 ? IRON : mul(WOOD, 0.85 + 0.3 * hash(i))), caps: [true, false] });
+      // straight, of very dark purple metal; its band of runes is painted (they pulse with the gem)
+      for (const half of [0, 1]) {
+        const s0 = b.nv, NS = 12, SEG = 10;
+        for (let i = 0; i <= NS; i++) for (let j = 0; j <= SEG; j++) {
+          const an = (j / SEG) * Math.PI * 2, ca = Math.cos(an), sa = Math.sin(an);
+          b.vert(onStaff(((half + i / NS) * SL) / 2, STAFF_R * ca, STAFF_R * sa), norm(mad(mul(sSide, ca), sUp, sa)), (16.5 + (i / NS) * 255) / AW, (128.5 + half * 48 + (j / SEG) * 47) / AH, 0, 1, [1, 1, 1]);
+        }
+        b.grid(s0, NS + 1, SEG + 1);
+      }
+      tube(b, [onStaff(-0.12), onStaff(0.1), onStaff(0.7), onStaff(0.85)], [0.16, 0.33, 0.33, 0.27], { seg: 8, col: METAL, caps: [true, false] });
+      tube(b, [onStaff(SL - 0.75), onStaff(SL - 0.6), onStaff(SL - 0.15), onStaff(SL)], [0.27, 0.37, 0.37, 0.27], { seg: 8, col: METAL });
       // three claws at the top hold the gem
       const gemPulse = 0.72 + 0.28 * Math.sin(t * 2.3) + 1.1 * Math.max(novaUp * S(0, 1.25, a), novaHit, raiseHit);
       const gemC = onStaff(SL + 0.85);
       for (let q = 0; q < 3; q++) {
         const an = (q / 3) * Math.PI * 2 + 0.4, cx = Math.cos(an), cz = Math.sin(an);
-        tube(b, [onStaff(SL - 0.2, 0.1 * cx, 0.1 * cz), onStaff(SL + 0.3, 0.52 * cx, 0.52 * cz), onStaff(SL + 0.9, 0.6 * cx, 0.6 * cz), onStaff(SL + 1.4, 0.3 * cx, 0.3 * cz)], [0.17, 0.13, 0.1, 0.04], { seg: 5, col: BONE_DARK, caps: [false, true] });
+        tube(b, [onStaff(SL - 0.2, 0.1 * cx, 0.1 * cz), onStaff(SL + 0.3, 0.52 * cx, 0.52 * cz), onStaff(SL + 0.9, 0.6 * cx, 0.6 * cz), onStaff(SL + 1.4, 0.3 * cx, 0.3 * cz)], [0.17, 0.13, 0.1, 0.04], { seg: 5, col: mul(METAL, 1.15), caps: [false, true] });
       }
       tube(b, [mad(gemC, sAxis, -0.55), mad(gemC, sAxis, -0.2), gemC, mad(gemC, sAxis, 0.25), mad(gemC, sAxis, 0.6)], [0.03, 0.3, 0.4, 0.28, 0.03], { seg: 6, col: mul(GEM, Math.min(1.25, 0.65 + 0.4 * gemPulse)), unlit: 1 });
+      mats.gem.value = 0.3 + 0.75 * gemPulse;
       halo(gemC, 1.1 + 0.7 * gemPulse, mul([0.45, 0.72, 1.0], 0.34 * gemPulse));
 
       // ---- the arms: a sleeve to the wrist, the bones of the forearm, a hand

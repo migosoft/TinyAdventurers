@@ -1,6 +1,6 @@
 // SPIKE (#358), throwaway: the stage of `?r3d=lich`. A boss hall of 26 x 20 tiles, the knight (WASD) as the measure of a human, and the
 // lich try-out of `lichSpike.ts`. The panel's buttons play each action in a loop. For check shots: `&act=nova|raise|fling|gaze`,
-// `&at=<s>` (pins the action's clock), `&glide=1`, `&claws=0`, `&size=<humans>`, `&face=<deg>`, `&t=<s>` (pins the clock), `&px=`/`&pz=`.
+// `&at=<s>` (pins the action's clock), `&glide=1`, `&head=2`, `&claws=0`, `&size=<humans>`, `&face=<deg>`, `&t=<s>` (pins the clock), `&px=`/`&pz=`.
 
 import { closeCam, keysToWorld, viewRay } from './camera';
 import { buildDynamic } from './cards';
@@ -32,7 +32,7 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
   const lich = { x: centre.x, z: centre.z, face: (num('face', 30) * Math.PI) / 180 };
   const cam = { x: lich.x, z: lich.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };
   const pinned = q.has('t') ? num('t', 0) : null, pinnedAt = q.has('at') ? num('at', 0) : null, fixedFace = q.has('face');
-  const state = { size: num('size', 1.2), claws: q.get('claws') !== '0', glide: q.get('glide') === '1', action: (q.get('act') ?? 'idle') as LichAction, at: 0 };
+  const state = { head: q.get('head') === '2' ? 1 : 0, size: num('size', 1.2), claws: q.get('claws') !== '0', glide: q.get('glide') === '1', action: (q.get('act') ?? 'idle') as LichAction, at: 0 };
   const path = [[-6, -3], [6, -3], [6, 4], [-6, 4]].map(([x, z]) => ({ x: centre.x + x, z: centre.z + z }));
   let leg = 0, wait = 0;
   const spike = createLichSpike();
@@ -53,6 +53,7 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
     act('Stand', 'idle'),
     { name: 'Glide', pressed: () => state.glide, press: () => { state.glide = !state.glide; state.action = 'idle'; } },
     act('Nova', 'nova'), act('Raise Dead', 'raise'), act('Bolts / curse', 'fling'), act('Stone Gaze', 'gaze'),
+    { name: 'Head 2', pressed: () => state.head === 1, press: () => { state.head = 1 - state.head; } },
     { name: 'Claws', pressed: () => state.claws, press: () => { state.claws = !state.claws; } },
     size(1.1), size(1.2), size(1.3),
   ]);
@@ -71,7 +72,7 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
     if (pinnedAt !== null) state.at = pinnedAt;
     else if (state.action !== 'idle') { state.at += dt; if (state.at > ACTION_SECS[state.action] + 0.9) state.at = 0; }
     spike.step(dt, clock, {
-      x: lich.x, z: lich.z, face: lich.face, size: state.size, action: state.action, at: state.at, claws: state.claws,
+      x: lich.x, z: lich.z, face: lich.face, size: state.size, action: state.action, at: state.at, claws: state.claws, head: state.head,
       look: { x: scene.player.x, z: scene.player.z }, stretch: 1 / Math.cos(cam.pitch), view: viewRay(cam.pitch, cam.yaw),
     });
     void c;
