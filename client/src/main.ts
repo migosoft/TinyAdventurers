@@ -25,9 +25,9 @@ async function main(): Promise<void> {
   if (isR3dDemo(location.search)) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
-    const { bootCove, bootDemo, bootFx, bootGallery, bootLights, bootLiquids, bootMood, bootSunlight, bootWoodland } = await import('./render3d/boot');
+    const { bootCove, bootDemo, bootFx, bootGallery, bootLights, bootLiquids, bootMood, bootStone, bootSunlight, bootWoodland } = await import('./render3d/boot');
     const page = r3dPage(location.search);
-    const boot = ({ gallery: bootGallery, lights: bootLights, woodland: bootWoodland, cove: bootCove, mood: bootMood, sunlight: bootSunlight, fx: bootFx, liquids: bootLiquids } as Record<string, typeof bootDemo>)[page ?? ''] ?? bootDemo;
+    const boot = ({ gallery: bootGallery, lights: bootLights, woodland: bootWoodland, cove: bootCove, mood: bootMood, sunlight: bootSunlight, fx: bootFx, liquids: bootLiquids, stone: bootStone } as Record<string, typeof bootDemo>)[page ?? ''] ?? bootDemo;
     return boot(host, location.search);
   }
   const ui = document.getElementById('ui')!;

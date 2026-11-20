@@ -9,6 +9,7 @@ import type { SunLight } from './sunNodes';
 import { CARD_GAIN } from './sun';
 import { GRASS_FLAT, STONE } from './light';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
+import { STONE_SPIKE, stoneSurface } from './stone/stoneNodes';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -136,8 +137,12 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
  */
 export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared): WorldMaterial {
   const kind = attribute('kind', 'float');
-  const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
-  const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
+  // SPIKE (#380): kind 4 is a rock patch; its top, face and floor parts are told apart by height and slope.
+  const isRockPatch = kind.greaterThan(3.5).and(kind.lessThan(4.5));
+  const isCrystal = kind.greaterThan(4.5);
+  const rockTop = isRockPatch.and(positionWorld.y.greaterThan(1.9));
+  const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5)).or(rockTop);
+  const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5)).or(isRockPatch.and(rockTop.not()).and(positionWorld.y.greaterThan(0.02)));
   const { texel, smooth, setGround } = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
 
   const wp = positionWorld;
@@ -154,7 +159,18 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
 
   const top = select(rim, vec3(...RIM), vec3(...STONE));
   // The texel comes first, by a weight (exactly 0 or 1): a `select` here could hold its first use in a branch.
-  const base = mix(texel.rgb, top, weight(isTop));
+  // SPIKE (#380): on the stone page the floor, faces and tops take the generated stonework (colour, bent normal, light per art pixel).
+  const stone = STONE_SPIKE.enabled ? stoneSurface(wp, isTop) : null;
+  const topN: N = top;
+  const stoneW = weight(kind.lessThan(2.5).or(isRockPatch));
+  // Contact shade: a floor pixel within 3 px of a wall, and the lowest 2 px of a face, are darker.
+  const hi = (dx: number, dz: number) => lighting.cellH(ivec2(int(cx.add(dx)), int(cz.add(dz)))).greaterThan(wp.y.add(0.1));
+  const nearWall = fz.greaterThan(1 - 3 * PX).and(hi(0, 1)).or(fz.lessThan(3 * PX).and(hi(0, -1))).or(fx.lessThan(3 * PX).and(hi(-1, 0))).or(fx.greaterThan(1 - 3 * PX).and(hi(1, 0)));
+  const contact = select(isFace, select(wp.y.lessThan(3 * PX), float(0.6), float(1)), select(isTop, float(1), select(nearWall, float(0.66), float(1))));
+  const stoneTop = stone ? select(rim, stone.albedo.mul(1.5), stone.albedo) : topN;
+  const base = stone
+    ? mix(texel.rgb, select(isTop, stoneTop, stone.albedo.mul(select(stone.rock, float(1), contact))), stoneW)
+    : mix(texel.rgb, topN, weight(isTop));
   // Ground cover (#330): floor and ground darken where cover stands (the sheets and bushels show on it); with the layer off they show the cover's colour flat.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
@@ -169,7 +185,14 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const normal = attribute('normal', 'vec3');
   // The sun (#306): the shadow map is read a hair off the surface, and the cosine term wraps like the point lights'.
   const sun = lighting.sun;
-  const lit = lighting.lightAt(wp, normal, wrap, { open: isTop, sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
+  const litN = stone ? mix(normal, stone.normal, stoneW) : normal;
+  // SPIKE (#380): a rock slope lies inside its wall cell, where the light's wall walk would hit the neighbouring wall cells:
+  // its light is read at the point pushed out to the open side.
+  const nh = normal.xz.div(max(length(normal.xz), 1e-3));
+  const outW = weight(isRockPatch.and(isFace));
+  const litP0 = stone ? mix(wp, stone.P, stoneW) : wp;
+  const litP = litP0.add(vec3(nh.x, 0, nh.y).mul(outW.mul(0.42)));
+  const lit = lighting.lightAt(litP, litN, wrap, { open: isTop, sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
   // Sight (#305): a wall face is seen where the floor at its foot is: its point pushed out along the normal. Floors, ground and tops have an upright normal and read their own point.
   const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 
@@ -179,7 +202,13 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const open = onWall.and(seeOpenNode(maskTex, wp, see));
 
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
+  const shaded: N = stone ? lighting.finish(albedo, lit).add(stone.glow.mul(stoneW)) : lighting.finish(albedo, lit);
+  // SPIKE (#380): a crystal is a glowing gem: its own colour (in `rect`), brighter toward the tip, each facet its own brightness, a white glint on the facets that face the light most.
+  const cn: N = attribute('normal', 'vec3');
+  const facet = max(cn.dot(vec3(0.35, 0.66, 0.66)), 0);
+  const gem = attribute('rect', 'vec4').rgb.mul(float(0.35).add(facet.mul(0.75))).mul(mix(float(0.7), float(1.35), uv().y)).add(vec3(1, 1, 1).mul(facet.mul(facet).mul(facet).mul(facet).mul(0.55)));
+  const shaded2: N = mix(shaded, gem, weight(isCrystal));
+  m.colorNode = vec4(sight.apply(shaded2, wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
     material: m,

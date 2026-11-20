@@ -2,6 +2,8 @@ import { WALL_H, heightAt } from './heights';
 import { isTerrain, type TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
+import { isRockCell, pushCrystals, pushFloorCell, pushRockCell } from './stone/rockMesh';
+import { STONE_SPIKE } from './stone/stoneNodes';
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
@@ -142,8 +144,18 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
     const h = heightAt(m, x, z);
     if (h === 0) {
       if (inDipMesh(m, x, z)) continue;
+      // SPIKE (#380): on the stone page the floor is an uneven patch with crevices.
+      if (STONE_SPIKE.enabled && !painted) {
+        pushFloorCell({ position, uv, normal, kind, rect }, m, x, z);
+        continue;
+      }
       const f = flatSurface(m, painted, x, z, frames), r = f.rect;
       quad([[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind, r);
+      continue;
+    }
+    // SPIKE (#380): a rock wall cell beside open ground is a height-field patch, not a block.
+    if (isRockCell(m, x, z)) {
+      pushRockCell({ position, uv, normal, kind, rect }, m, x, z);
       continue;
     }
     quad([[x, h, z, 0, 0], [x + 1, h, z, 0, 0], [x + 1, h, z + 1, 0, 0], [x, h, z + 1, 0, 0]], [0, 1, 0], KIND.top, NO_RECT);
@@ -158,6 +170,9 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
     }
   }
 
+  // SPIKE (#380): the crystal clusters standing in this chunk.
+  if (STONE_SPIKE.enabled && !painted) pushCrystals({ position, uv, normal, kind, rect }, x0, z0, x1, z1);
+
   return {
     cx, cz,
     world: {
@@ -168,7 +183,7 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
       rect: new Float32Array(rect),
       count: kind.length,
     },
-    min: [x0, 0, z0],
+    min: [x0, -0.5, z0],
     max: [x1, WALL_H, z1],
   };
 }

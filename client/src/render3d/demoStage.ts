@@ -10,6 +10,7 @@ import { seeLook } from './seeThrough';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import type { Assets, View, WorldInput } from './view';
+import { STONE_SPIKE } from './stone/stoneNodes';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
@@ -22,6 +23,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
   return {
     world,
     built(view: View): void {
+      if (STONE_SPIKE.enabled) return; // SPIKE (#380): bare stone, no moss
       if (!job) {
         job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [] }, { everywhere: true }), tilesSeed(map));
         job.step(Infinity);

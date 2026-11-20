@@ -17,6 +17,8 @@ import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
 import { createWoodlandStage } from './woodlandStage';
+import { STONE_SPIKE } from './stone/stoneNodes';
+import { createStoneStage } from './stoneStage';
 
 export async function bootDemo(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
@@ -78,6 +80,24 @@ export async function bootLiquids(el: HTMLElement, search: string): Promise<void
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createLiquidsStage(assets, p, s, host));
+}
+
+/**
+ * `?r3d=stone` (SPIKE #380): the dev scene with generated stonework on floor and walls. `&depth=` the relief (default 1),
+ * `&block=` the block size factor (default 1), `&stone=mix|laid|rock` (default mix: rock on the left, laid stone on the right).
+ */
+export async function bootStone(el: HTMLElement, search: string): Promise<void> {
+  const q = new URLSearchParams(search);
+  let s = q.has('zoom') ? search : `${search}&zoom=3`;
+  if (!q.has('cover')) s += '&cover=0';
+  const num = (k: string, d: number): number => (Number.isFinite(Number(q.get(k))) && q.get(k) !== null ? Number(q.get(k)) : d);
+  STONE_SPIKE.enabled = true;
+  STONE_SPIKE.depth.value = num('depth', 1);
+  STONE_SPIKE.block.value = num('block', 1);
+  STONE_SPIKE.res.value = num('res', 32);
+  if (q.get('circle') === '0') STONE_SPIKE.circleR.value = 0.001;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createStoneStage(assets, p, s));
 }
 
 export interface Run3d {
