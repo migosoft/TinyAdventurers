@@ -31,7 +31,7 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string }> = {
 export const className = (c: ClassId): string => CLASS_TEXT[c].title;
 
 export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: string }> = {
-  Demon: { name: 'Azgaroth, the Red Demon', short: 'Red Demon', blurb: 'Cleaves, charges across the hall and throws rings of fire.' },
+  Demon: { name: 'Azgaroth, the Red Demon', short: 'Red Demon', blurb: 'Claws, a tail swipe for whoever stands behind it, a Swoop across the hall, Fireball, rings of fire and Fire Breath. Takes to the air, where blades cannot reach it, and lands with a Smash.' },
   Lich: { name: 'Vael, the Undying Lich', short: 'Lich', blurb: 'Immune while its disciples live. Gloom Bolts, skeleton hordes and a Nova.' },
   Dragon: { name: 'Ignathrax, the Red Dragon', short: 'Red Dragon', blurb: 'Fire Breath that burns the ground, bites, claws, tail whips and Fireball. Takes to the air, where blades cannot reach it, and lands with a Smash.' },
 };
