@@ -669,11 +669,11 @@ export function createLichSpike(): LichSpike {
       };
       // the right hand grips the staff
       const grip = onStaff(SL * 0.6 - 4.2 * novaUp - 1.2 * raiseUp), shR = at([0.3, 15.9, 2.25]);
-      const inward = norm([shR[0] - grip[0], 0, shR[2] - grip[2]]), wristR = mad(mad(grip, inward, 0.55), sAxis, -0.1);
-      sleeve(shR, wristR, [-0.7, -0.4, 0.6]);
+      const inward = norm([shR[0] - grip[0], 0, shR[2] - grip[2]]), wristR = mad(mad(grip, inward, -0.55), sAxis, -0.1);
+      sleeve(shR, wristR, [-1, -0.7, -0.15]);
       let fR = cross(sAxis, mul(inward, -1));
       if (fR[0] < 0) fR = mul(fR, -1);
-      hand(b, mad(wristR, fR, -0.75), fR, mul(inward, -1), { spread: 0.08, curl: 1.15, thumb: -1, col: BONE });
+      hand(b, mad(wristR, fR, -0.75), fR, inward, { spread: 0.08, curl: 1.15, thumb: 1, col: BONE });
       // the left hand is the one that casts
       const shL = at([0.3, 15.9, -2.25]);
       let hp: V = [3.3, 12.3 + 0.15 * Math.sin(t * 1.1), -1.9], hf: V = [0.9, -0.3, 0.2], hn: V = [-0.2, -1, 0], spread = 0.24, curl = 0.3;
