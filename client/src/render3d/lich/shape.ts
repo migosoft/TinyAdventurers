@@ -263,18 +263,33 @@ const STAFF = ((): BuiltBuf => {
   onStaff(0, SL - 0.75); onStaff(1, SL - 0.6); onStaff(2, SL - 0.15); onStaff(3, SL);
   [0.27, 0.37, 0.37, 0.27].forEach((r, i) => rad(i, r, r)); colAll(4, METAL);
   tube(b, 4, 8, 0, 0, 1, 0, false, false, false, false);
-  for (let q = 0; q < 3; q++) { // three claws at the top hold the gem
-    const an = (q / 3) * TAU + 0.4, cx = Math.cos(an), cz = Math.sin(an);
-    onStaff(0, SL - 0.2, 0.1 * cx, 0.1 * cz); onStaff(1, SL + 0.3, 0.52 * cx, 0.52 * cz); onStaff(2, SL + 0.9, 0.6 * cx, 0.6 * cz); onStaff(3, SL + 1.4, 0.3 * cx, 0.3 * cz);
-    [0.17, 0.13, 0.1, 0.04].forEach((r, i) => rad(i, r, r)); colAll(4, METAL, 1.15);
-    tube(b, 4, 5, 0, 0, 1, 0, false, true, false, false);
-  }
-  const gemC = SL + 0.85;
-  [-0.55, -0.2, 0, 0.25, 0.6].forEach((d, i) => onStaff(i, gemC + d));
-  [0.03, 0.3, 0.4, 0.28, 0.03].forEach((r, i) => rad(i, r, r)); colAll(5, GEM);
-  tube(b, 5, 6, 0, 0, 1, 1, false, false, false, false); // the gem is the last 35 vertices; its colour is written at placement
   return b;
 })();
+/** The gem, in the same canonical frame; its colour is written at placement. */
+const STAFF_GEM = ((): BuiltBuf => {
+  const b = newBuiltBuf(GEM_VERTS, 200);
+  const gemC = SL + 0.85;
+  [-0.55, -0.2, 0, 0.25, 0.6].forEach((d, i) => pt(i, 0, gemC + d, 0));
+  [0.03, 0.3, 0.4, 0.28, 0.03].forEach((r, i) => rad(i, r, r)); colAll(5, GEM);
+  tube(b, 5, 6, 0, 0, 1, 1, false, false, false, false);
+  return b;
+})();
+const ST = frame(); // the staff's frame: base, side, axis, up
+/** The three claws at the top that hold the gem. Built every frame: the spike seeds each tube's frame with the model's z axis, which is
+ * not a fixed direction in the staff's own frame, so a placed template would differ in the vertices' phase round the thin tubes. */
+function staffClaws(b: BuiltBuf): void {
+  for (let q = 0; q < 3; q++) {
+    const an = (q / 3) * TAU + 0.4, cx = Math.cos(an), cz = Math.sin(an);
+    for (let i = 0; i < 4; i++) {
+      const h = i === 0 ? SL - 0.2 : i === 1 ? SL + 0.3 : i === 2 ? SL + 0.9 : SL + 1.4, k = i === 0 ? 0.1 : i === 1 ? 0.52 : i === 2 ? 0.6 : 0.3, sx = k * cx, sz = k * cz;
+      pt(i, ST[0] + ST[3] * sx + ST[6] * h + ST[9] * sz, ST[1] + ST[4] * sx + ST[7] * h + ST[10] * sz, ST[2] + ST[5] * sx + ST[8] * h + ST[11] * sz);
+      rad(i, CLAW_R[i], CLAW_R[i]);
+    }
+    colAll(4, METAL, 1.15);
+    tube(b, 4, 5, 0, 0, 1, 0, false, true, false, false);
+  }
+}
+const CLAW_R = [0.17, 0.13, 0.1, 0.04];
 
 // ---------------------------------------------------------------- the robe
 const RINGS = ROBE_RINGS, NR = RINGS.length, RSEG = 48;
@@ -296,16 +311,17 @@ for (let j = 0; j <= RSEG; j++) {
 }
 
 // ---------------------------------------------------------------- the body's line: a slight stoop, leaning on the staff
-let GZ = 0, MV = 0, BOB = 0; // the gaze and the glide of this frame, the bob of the body
-const stoopOf = (y: number, gaze: number, mv: number): number => (y > 11 ? 0.04 * (y - 11) ** 1.5 * (1 + 0.5 * gaze + 0.3 * mv) : 0);
+let GZ = 0, MV = 0, HU = 0, BOB = 0; // the gaze, the glide and the hurt of this frame, the bob of the body
+/** A flinch (`hurt`) straightens the body: the stoop shrinks by up to 60 %. One function for the builder and `ringLean`. */
+const stoopOf = (y: number, gaze: number, mv: number, hurt: number): number => (y > 11 ? 0.04 * (y - 11) ** 1.5 * (1 + 0.5 * gaze + 0.3 * mv) * (1 - 0.6 * hurt) : 0);
 const sideOf = (y: number, mv: number): number => (y > 8 ? 0.022 * (y - 8) * (1 - mv * 0.6) : 0);
 const lift = (y: number): number => (y > 4 ? BOB * S(4, 12, y) : 0);
 const AT = new Float64Array(3);
-function at(x: number, y: number, z: number): void { AT[0] = x + stoopOf(y, GZ, MV); AT[1] = y + lift(y); AT[2] = z + sideOf(y, MV); }
+function at(x: number, y: number, z: number): void { AT[0] = x + stoopOf(y, GZ, MV, HU); AT[1] = y + lift(y); AT[2] = z + sideOf(y, MV); }
 
 /** The body's line at each ring (x forward, z sideways) for the cloth: the spike's `stoop` and `side`. Writes 2 floats per ring. */
 export function ringLean(pose: LichPose, out: Float32Array): Float32Array {
-  for (let i = 0; i < NR; i++) { out[i * 2] = stoopOf(RF[i * 5], pose.gaze, pose.glide); out[i * 2 + 1] = sideOf(RF[i * 5], pose.glide); }
+  for (let i = 0; i < NR; i++) { out[i * 2] = stoopOf(RF[i * 5], pose.gaze, pose.glide, pose.hurt); out[i * 2 + 1] = sideOf(RF[i * 5], pose.glide); }
   return out;
 }
 
@@ -352,7 +368,7 @@ function head(b: BuiltBuf, pose: LichPose, an: LichAnchors): void {
   const t = pose.t, gaze = pose.gaze;
   at(1.05, 19.6, 0);
   HD[0] = AT[0] + 0.5 * gaze; HD[1] = AT[1]; HD[2] = AT[2];
-  const yaw = pose.headYaw, pitch = -0.46 + 0.16 * gaze + 0.05 * Math.sin(t * 0.7) - 0.22 * pose.novaUp - 0.1 * pose.flingOut;
+  const yaw = pose.headYaw, pitch = -0.46 + 0.16 * gaze + 0.05 * Math.sin(t * 0.7) - 0.22 * pose.novaUp - 0.1 * pose.flingOut - 0.25 * pose.hurt; // a more negative pitch tips the face up and back (as for the Nova)
   const cp = Math.cos(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
   HD[3] = cy * cp; HD[4] = -Math.sin(pitch); HD[5] = sy * cp; // HX
   HD[9] = -sy; HD[10] = 0; HD[11] = cy; // HZ
@@ -409,7 +425,6 @@ function collar(b: BuiltBuf): void {
 }
 
 // ---------------------------------------------------------------- the staff in place, the arms
-const ST = frame(); // the staff's frame: base, side, axis, up
 const EL = new Float64Array(3);
 /** The middle joint of a two-bone limb from `a` to `c`, bent toward `pole`, into `EL`. */
 function ik(ax: number, ay: number, az: number, cx: number, cy: number, cz: number, l1: number, l2: number, px: number, py: number, pz: number): void {
@@ -419,6 +434,7 @@ function ik(ax: number, ay: number, az: number, cx: number, cy: number, cz: numb
   const ql = Math.hypot(qx, qy, qz) || 1; qx /= ql; qy /= ql; qz /= ql;
   EL[0] = ax + dx * x + qx * h; EL[1] = ay + dy * x + qy * h; EL[2] = az + dz * x + qz * h;
 }
+const SLEEVE_RY = [0.95, 0.85, 0.8, 0.95, 1.2, 1.3], SLEEVE_RZ = [0.9, 0.8, 0.75, 0.85, 1.0, 1.1], SLEEVE_DROOP = [1, 1, 1.15, 1.6, 2.3, 2.6];
 /** A sleeve to the wrist and the bones of the forearm. */
 function sleeve(b: BuiltBuf, sx: number, sy: number, sz: number, wx: number, wy: number, wz: number, px: number, py: number, pz: number): void {
   ik(sx, sy, sz, wx, wy, wz, 3.7, 3.7, px, py, pz);
@@ -426,8 +442,7 @@ function sleeve(b: BuiltBuf, sx: number, sy: number, sz: number, wx: number, wy:
   const dl = Math.hypot(wx - ex, wy - ey, wz - ez) || 1, nx = (wx - ex) / dl, ny = (wy - ey) / dl, nz = (wz - ez) / dl;
   pt(0, sx, sy, sz); pt(1, (sx + ex) / 2, (sy + ey) / 2, (sz + ez) / 2); pt(2, ex, ey, ez);
   pt(3, ex + (cx - ex) * 0.55, ey + (cy - ey) * 0.55, ez + (cz - ez) * 0.55); pt(4, cx, cy, cz); pt(5, cx + nx * 0.5, cy - 0.25 + ny * 0.5, cz + nz * 0.5);
-  const RA = [0.95, 0.85, 0.8, 0.95, 1.2, 1.3], RB = [0.9, 0.8, 0.75, 0.85, 1.0, 1.1], DR = [1, 1, 1.15, 1.6, 2.3, 2.6];
-  for (let i = 0; i < 6; i++) { rad(i, RA[i], RB[i]); TDR[i] = DR[i]; const c = i === 5 ? TRIM : CLOTH; col(i, c[0], c[1], c[2]); }
+  for (let i = 0; i < 6; i++) { rad(i, SLEEVE_RY[i], SLEEVE_RZ[i]); TDR[i] = SLEEVE_DROOP[i]; const c = i === 5 ? TRIM : CLOTH; col(i, c[0], c[1], c[2]); }
   const kx = -(wz - sz), kz = wx - sx, kl = Math.hypot(kx, kz) || 1; // cross(wrist - shoulder, up)
   tube(b, 6, 12, kx / kl, 0, kz / kl, 0, false, false, true, true);
   pt(0, ex, ey, ez); pt(1, wx, wy, wz); rad(0, 0.2, 0.2); rad(1, 0.15, 0.15); colAll(2, BONE_DARK);
@@ -454,7 +469,9 @@ function staffAndArms(b: BuiltBuf, pose: LichPose, an: LichAnchors): void {
   const ux = sy * az - sz * ay, uy = sz * ax - sx * az, uz = sx * ay - sy * ax; // cross(side, axis)
   ST[0] = bx; ST[1] = by; ST[2] = bz; ST[3] = sx; ST[4] = sy; ST[5] = sz; ST[6] = ax; ST[7] = ay; ST[8] = az; ST[9] = ux; ST[10] = uy; ST[11] = uz;
   place(b, STAFF, ST);
-  paint(b, b.verts - GEM_VERTS, GEM[0] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[1] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[2] * Math.min(1.25, 0.65 + 0.4 * pose.gem)); // the gem is unlit: its own colour carries the pulse
+  staffClaws(b);
+  place(b, STAFF_GEM, ST);
+  paint(b, b.verts - GEM_VERTS,GEM[0] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[1] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[2] * Math.min(1.25, 0.65 + 0.4 * pose.gem)); // the gem is unlit: its own colour carries the pulse
   const gh = SL + 0.85;
   an.gem[0] = bx + ax * gh; an.gem[1] = by + ay * gh; an.gem[2] = bz + az * gh;
 
@@ -556,7 +573,7 @@ function claws(g: BuiltBuf, pose: LichPose): void {
 export function buildLich(pose: LichPose, cloth: Cloth, out: LichOut, parts: 'all' | 'caster' = 'all'): void {
   const b = out.body, g = out.claws, an = out.anchors;
   b.verts = 0; b.indices = 0; g.verts = 0; g.indices = 0;
-  GZ = pose.gaze; MV = pose.glide; BOB = 0.1 * Math.sin(pose.t * 1.4);
+  GZ = pose.gaze; MV = pose.glide; HU = pose.hurt; BOB = 0.1 * Math.sin(pose.t * 1.4);
   const cf = Math.cos(pose.face), sf = Math.sin(pose.face);
   robe(b, pose, cloth, cf, sf);
   head(b, pose, an);
@@ -568,7 +585,7 @@ export function buildLich(pose: LichPose, cloth: Cloth, out: LichOut, parts: 'al
 }
 
 const REST: { all?: LichOut; caster?: LichOut } = {};
-/** The rest pose built once (clock 0, cloth at its places, nothing cast) and kept; the same object on every call. */
+/** The rest pose built once (clock 0, cloth at its places, nothing cast) and kept: the same object on every call, so callers must not write into it. */
 export function lichRest(parts: 'all' | 'caster' = 'all'): LichOut {
   let o = REST[parts];
   if (!o) {

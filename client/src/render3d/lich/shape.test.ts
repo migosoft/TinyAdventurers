@@ -75,6 +75,10 @@ describe('the lich builder', () => {
     let low = Infinity;
     for (let i = 0; i < robeVerts; i++) low = Math.min(low, o.body.position[i * 3 + 1]);
     expect(low).toBeGreaterThanOrEqual(0.05 - 1e-6);
+    // the whole body: only the staff's foot, planted into the floor as in the spike (-0.2), goes lower
+    let lowest = Infinity;
+    for (let i = 0; i < o.body.verts; i++) lowest = Math.min(lowest, o.body.position[i * 3 + 1]);
+    expect(lowest).toBeGreaterThanOrEqual(-0.25);
     // the hem ring is the last one; the fold and the short train (x1.3 at the back) make the whole ring wider than its nominal
     // radius, so the front half's mean radius is what is compared
     const hem = (ROBE_RINGS.length - 1) * 49;
@@ -120,6 +124,41 @@ describe('the lich builder', () => {
     for (let i = 0; i < rest.body.verts; i++) top = Math.max(top, rest.body.position[i * 3 + 1]);
     expect(LICH_TOP).toBeCloseTo(top, 5);
     expect(lichRest('all').claws.indices).toBeGreaterThan(0);
+  });
+
+  // Pins the port of the spike's step (checked vertex by vertex against it under node: equal to float precision). Re-record only when
+  // a shape is changed on purpose.
+  const sums = (o: LichOut): number[] => {
+    let s = 0, a = 0;
+    for (let i = 0; i < o.body.verts * 3; i++) { s += o.body.position[i]; a += Math.abs(o.body.position[i]); }
+    return [s, a, o.body.verts, o.body.indices];
+  };
+  it.each([
+    ['rest', restPose(), [120712.50018, 130635.73818, 6890, 37287]],
+    ['nova', poseOf({ novaUp: 1, novaChest: 1 }), [125122.61581, 134055.41628, 6890, 37287]],
+    ['fling', poseOf({ flingOut: 1, casting: 1 }), [125113.45245, 134626.92551, 6890, 37287]],
+  ] as [string, LichPose, number[]][])('keeps the spike\'s shape: %s', (_n, pose, want) => {
+    const got = sums(build(pose));
+    expect(got[0]).toBeCloseTo(want[0], 3);
+    expect(got[1]).toBeCloseTo(want[1], 3);
+    expect(got[2]).toBe(want[2]);
+    expect(got[3]).toBe(want[3]);
+  });
+
+  it('a hurt flinch throws the head back and straightens the stoop; hurt 0 changes nothing', () => {
+    const rest = build(restPose()), hurt = build(poseOf({ hurt: 1 })), zero = build(poseOf({ hurt: 0 }));
+    expect(used(zero.body.position, zero.body.verts * 3)).toEqual(used(rest.body.position, rest.body.verts * 3));
+    const skullTopX = (o: LichOut): number => {
+      let top = -Infinity, x = 0;
+      for (let i = 0; i < o.body.verts; i++) {
+        const u = o.body.uv[i * 2] * 512, v = o.body.uv[i * 2 + 1] * 512;
+        if (u >= REGION.skull.x && u <= REGION.skull.x + REGION.skull.w && v >= REGION.skull.y && v <= REGION.skull.y + REGION.skull.h && o.body.position[i * 3 + 1] > top) { top = o.body.position[i * 3 + 1]; x = o.body.position[i * 3]; }
+      }
+      return x;
+    };
+    expect(skullTopX(hurt)).toBeLessThan(skullTopX(rest));
+    const a = ringLean(restPose(), new Float32Array(ROBE_RINGS.length * 2)), h = ringLean(poseOf({ hurt: 1 }), new Float32Array(ROBE_RINGS.length * 2));
+    ROBE_RINGS.forEach((r, i) => { if (r[0] > 11) expect(h[i * 2]).toBeCloseTo(0.4 * a[i * 2], 6); });
   });
 
   it('ringLean: nothing at rest, nothing for the rings at or below y 8, a lean when it stoops', () => {
