@@ -38,6 +38,9 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
   const spike = createLichSpike();
   let view: View | null = null;
   let clock = 0;
+  // cost readout (#358, Task 1): the running mean of `spike.step` in ms as `window.__r3d.lichMs`; `&lich=0` leaves the lich out
+  const lichOn = q.get('lich') !== '0';
+  let lichMs = 0;
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);color:#dfe6f2;background:rgba(10,10,16,.72);padding:5px 12px;border-radius:6px;font:13px sans-serif;z-index:5;pointer-events:none;text-align:center;white-space:nowrap';
@@ -70,10 +73,15 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
     if (!fixedFace) lich.face += Math.atan2(Math.sin(faceTo - lich.face), Math.cos(faceTo - lich.face)) * (1 - Math.exp(-dt * 4));
     if (pinnedAt !== null) state.at = pinnedAt;
     else if (state.action !== 'idle') { state.at += dt; if (state.at > ACTION_SECS[state.action] + 0.9) state.at = 0; }
+    if (!lichOn) return;
+    const t0 = performance.now();
     spike.step(dt, clock, {
       x: lich.x, z: lich.z, face: lich.face, size: state.size, action: state.action, at: state.at, claws: state.claws,
       look: { x: scene.player.x, z: scene.player.z }, stretch: 1 / Math.cos(cam.pitch), view: viewRay(cam.pitch, cam.yaw),
     });
+    lichMs += (performance.now() - t0 - lichMs) * 0.02;
+    const r = window.__r3d as unknown as Record<string, unknown> | undefined;
+    if (r) r.lichMs = lichMs;
     void c;
   };
 
@@ -81,7 +89,7 @@ export function createLichStage(assets: Assets, initialParams: { pitch: number; 
     world,
     built(v: View): void {
       view = v;
-      spike.attach(v.spike!.scene);
+      if (lichOn) spike.attach(v.spike!.scene);
     },
     frame(c: StageCtx): number {
       let ix = 0;
