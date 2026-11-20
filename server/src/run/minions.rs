@@ -6,7 +6,6 @@ use super::charm;
 use super::effects::Creature;
 use super::Run;
 use crate::defs::abilities::{self as ab, Module};
-use crate::defs::kinds::Anim;
 use crate::defs::enemies::EnemyType;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
@@ -99,7 +98,7 @@ pub fn raise(run: &mut Run, mi: usize, a: &ResolvedAbility) {
 mod tests {
     use super::*;
     use crate::defs::abilities::AbilityId;
-    use crate::defs::kinds::EntityKind;
+    use crate::defs::kinds::{Anim, EntityKind};
     use crate::protocol::{BossId, ClassId};
     use crate::run::abilities::monster_use;
     use crate::run::tests::test_run;
