@@ -608,14 +608,15 @@ export function createLichSpike(): LichSpike {
       // the lower jaw: its own bone, hinged below the ears; it drops open when a spell is spoken
       const jawA = 0.02 + 0.03 * Math.sin(t * 0.8) + 0.3 * flingOut + 0.4 * novaHit + 0.22 * raiseLift + 0.16 * gaze, cj = Math.cos(jawA), sj = Math.sin(jawA);
       const jaw = (q: V): V => { const x = q[0] + 0.35, y = q[1] + 0.95; return inHead([-0.35 + x * cj + y * sj, -0.95 - x * sj + y * cj, q[2]]); };
-      const JAW: V[] = [[-0.35, -0.95, 1.08], [-0.3, -1.5, 0.98], [0.4, -1.76, 0.78], [0.98, -1.8, 0.44], [1.2, -1.8, 0]];
+      const JAW: V[] = [[-0.35, -0.95, 0.86], [-0.3, -1.48, 0.78], [0.42, -1.74, 0.62], [0.98, -1.78, 0.35], [1.17, -1.78, 0]];
       const jawLine = [...JAW, ...JAW.slice(0, -1).reverse().map((q): V => [q[0], q[1], -q[2]])];
       tube(b, jawLine.map(jaw), jawLine.map((_, i) => { const m = 1 - Math.abs(i - 4) / 4; return [0.2 + 0.06 * m, 0.13 + 0.04 * m] as [number, number]; }), { seg: 7, col: (i) => mul(BONE, 0.8 + 0.1 * (1 - Math.abs(i - 4) / 4)), side: [0, 0, 1], caps: [true, true] });
-      for (let q = -4; q <= 4; q++) {
-        const a2 = (q / 4.6) * 1.15, tx = 0.5 + 0.66 * Math.cos(a2), tz = 0.56 * Math.sin(a2);
-        tube(b, [jaw([tx, -1.66, tz]), jaw([tx + 0.02, -1.3, tz])], [0.07, 0.06], { seg: 4, col: [0.86, 0.84, 0.72], caps: [false, true] });
+      // the lower teeth: broad and flat, side by side along the jaw's front
+      for (let q = -3; q <= 3; q++) {
+        const a2 = (q / 3.6) * 1.2, tx = 0.56 + 0.58 * Math.cos(a2), tz = 0.44 * Math.sin(a2);
+        const along = norm(mad(mul(HX, -0.58 * Math.sin(a2)), HZ, 0.44 * Math.cos(a2))), wide = q === 0 ? 0.085 : 0.1;
+        tube(b, [jaw([tx + 0.05, -1.62, tz]), jaw([tx + 0.06, -1.4, tz]), jaw([tx + 0.07, -1.2, tz])], [[0.055, wide], [0.055, wide], [0.045, wide * 0.88]], { seg: 6, col: [0.86, 0.84, 0.72], side: along, caps: [false, true] });
       }
-      tube(b, [at([0.5, 16.3, 0]), inHead([-0.35, -1.5, 0])], [0.42, 0.36], { seg: 6, col: BONE_DARK });
       // the eyes: two small lights that float in the middle of the hollow sockets
       const eyeGlow = 0.85 + 0.15 * Math.sin(t * 5.1) * Math.sin(t * 1.3) + 1.6 * gaze + 0.5 * flare;
       for (const s of [-1, 1]) {
