@@ -143,6 +143,12 @@ impl Flight {
             }
             Phase::Land => {
                 if self.t <= 0.0 {
+                    if !holds(run, bi, run.monsters[bi].pos) {
+                        // Moved over a hole during the landing: do not touch down, fly on to ground.
+                        self.phase = Phase::Air;
+                        self.t = 0.0;
+                        return true;
+                    }
                     let at = ahead(run, bi);
                     monster_use(run, bi, AbilityId::Smash, at);
                     run.monsters[bi].airborne = false;
@@ -304,6 +310,31 @@ mod tests {
         assert!(f.tick(&mut run, bi, DT, false));
         assert_eq!(f.phase, Phase::Land, "the landing starts on the first tick after the time is up");
         assert_eq!(run.monsters[bi].anim, Anim::Land);
+    }
+
+    #[test]
+    fn a_landing_that_ends_over_a_hole_goes_back_up() {
+        // Something other than the flight moved the boss over a chasm during the landing.
+        let (mut run, bi, mut f) = over_a_hole(true);
+        f.phase = Phase::Land;
+        f.t = 0.3;
+        run.events.clear();
+        assert!(!holds(&run, bi, run.monsters[bi].pos), "it starts the landing over the hole");
+        let mut smashes = 0;
+        let mut grounded_at = None;
+        for _ in 0..(20.0 / DT) as usize {
+            f.tick(&mut run, bi, DT, false);
+            let pos = run.monsters[bi].pos;
+            assert!(run.monsters[bi].airborne || holds(&run, bi, pos), "never on the ground over a hole");
+            smashes = run.events.iter().filter(|e| matches!(e.0, crate::protocol::Ev::Boom { .. })).count();
+            if f.grounded() {
+                grounded_at = Some(pos);
+                break;
+            }
+        }
+        let at = grounded_at.expect("it lands within 20 s");
+        assert!(holds(&run, bi, at) && !run.monsters[bi].airborne);
+        assert_eq!(smashes, 1, "one Smash, at the real touchdown");
     }
 
     #[test]
