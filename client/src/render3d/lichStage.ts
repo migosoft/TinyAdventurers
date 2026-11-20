@@ -152,7 +152,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
     let faceTo = Math.atan2(knight.z - lich.z, knight.x - lich.x);
     lich.moving = false;
     const casting = lichAct(state.act === 'glide' ? 'stand' : state.act, actClock(t), KNIGHT_ID).anim !== ANIM.Idle;
-    if (state.glide && !casting) {
+    if (state.glide && !casting && !state.frozen && !state.stone) { // a frozen or stone lich stands, as in a run
       if (wait > 0) wait -= dt;
       else {
         const to = path[leg], dx = to.x - lich.x, dz = to.z - lich.z, d = Math.hypot(dx, dz), go = SPEED * dt;

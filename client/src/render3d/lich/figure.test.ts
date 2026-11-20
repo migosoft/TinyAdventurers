@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIM } from '../../generated/defs';
+import { ANIM, EFFECT } from '../../generated/defs';
 import { BUILT_OF_KIND, builtOf, builtPoint, type BuiltIn } from '../built';
 import { LICH_FIGURE } from './figure';
 import { LICH, LICH_TOP } from './shape';
@@ -59,4 +59,21 @@ describe('builtPoint', () => {
     builtPoint([2, 3, 1], 10, 20, 0.5, Math.PI / 2, 0.1, 1, out);
     expect(out[0]).toBeCloseTo(10 - 0.1, 9); expect(out[2]).toBeCloseTo(20.2, 9);
   });
+});
+
+describe('a held lich', () => {
+  const pos = (d: ReturnType<typeof LICH_FIGURE.draw>): number[] => Array.from(d.body.position.subarray(0, d.body.verts * 3));
+  for (const [name, fx] of [['frozen', EFFECT.Frozen], ['petrified', EFFECT.Petrified]] as const) {
+    it(`${name}: the robe and the tome stand still, and move again after the thaw`, () => {
+      const m = LICH_FIGURE.newMem();
+      let x = 3;
+      for (let i = 0; i < 60; i++) { x += 0.05; LICH_FIGURE.draw(idle({ x }), 1 / 60, m); } // gliding
+      const eff = 2 ** fx;
+      const a = pos(LICH_FIGURE.draw(idle({ x, effects: eff }), 1 / 60, m));
+      for (let i = 0; i < 30; i++) expect(pos(LICH_FIGURE.draw(idle({ x, effects: eff }), 1 / 60, m))).toEqual(a);
+      let moved = false;
+      for (let i = 0; i < 10; i++) { const p = pos(LICH_FIGURE.draw(idle({ x }), 1 / 60, m)); if (p.some((v, j) => v !== a[j])) moved = true; }
+      expect(moved).toBe(true);
+    });
+  }
 });

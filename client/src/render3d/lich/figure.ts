@@ -3,6 +3,8 @@
 // Only `built.ts` imports this file. Its imports of `../built` are type-only (the registry there imports this file).
 
 import type { BuiltDrawn, BuiltFigure, BuiltIn, V3 } from '../built';
+import { EFFECT } from '../../generated/defs';
+import { has } from '../../game/effectBits';
 import { clothFollow, clothMove, newCloth, type Cloth } from './cloth';
 import { lichPose, newLichMem, type LichIn, type LichMem } from './pose';
 import { ROBE_RINGS } from './rings';
@@ -34,12 +36,15 @@ function newMem(): LichFigMem {
 
 function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
   const m = memory as LichFigMem, d = m.drawn;
-  clothMove(m.cloth, (s.x * TILE) / LICH.unit, (s.z * TILE) / LICH.unit, dt);
+  // frozen or stone: every clock of the figure stands still, the cloth's too (dt 0 changes nothing); a first sight still gets its one call
+  const held = m.mem.started && (has(s.effects, EFFECT.Frozen) || has(s.effects, EFFECT.Petrified));
+  const cdt = held ? 0 : dt;
+  clothMove(m.cloth, (s.x * TILE) / LICH.unit, (s.z * TILE) / LICH.unit, cdt);
   const i = m.inp;
   i.anim = s.anim; i.animT = s.animT; i.effects = s.effects; i.flags = s.flags; i.aim = s.aim; i.look = s.look; i.glide = m.cloth.glide;
   const pose = lichPose(i, dt, m.mem);
   ringLean(pose, m.lean);
-  clothFollow(m.cloth, pose.face, dt, m.lean);
+  clothFollow(m.cloth, pose.face, cdt, m.lean);
   buildLich(pose, m.cloth, m.out);
 
   d.yaw = pose.face;

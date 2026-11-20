@@ -90,13 +90,110 @@ describe('release', () => {
     expect(ps[0].flingBack).toBeGreaterThan(0.5);
     expect(ps[Math.round(0.25 / DT) + 1].flingBack).toBeLessThan(0.01);
   });
-  it('releases across a gap but not when broken off early', () => {
-    const a = newLichMem();
-    lichPose(base({ anim: ANIM.Slam, animT: W.slam - 3 * DT }), DT, a);
-    expect(lichPose(base(), 2 * DT, a).novaHit).toBeGreaterThan(0.8);
+  // 60 fps frames of `dt` = DT; the server's animT arrives in snapshots only, so it steps every `every`th frame
+  /** Feeds frames of `anim` whose animT runs `from`, `from + DT`, ... up to `last`; only every `every`th frame brings a new value. Returns the last value seen. */
+  const feed = (m: LichMem, anim: number, from: number, last: number, every = 2): number => {
+    let seen = from;
+    for (let k = 0; from + k * DT <= last + 1e-9; k++) { if (k % every === 0) seen = from + k * DT; lichPose(base({ anim, animT: seen }), DT, m); }
+    return seen;
+  };
+  /** `n` more frames of the same anim with no new snapshot. */
+  const holdFrames = (m: LichMem, anim: number, seen: number, n: number): void => { for (let i = 0; i < n; i++) lichPose(base({ anim, animT: seen }), DT, m); };
+  it('a normal release: snapshots every 2 ticks, the last one at W - 2 DT', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, W.slam - 20 * DT, W.slam - 2 * DT);
+    expect(seen).toBeCloseTo(W.slam - 2 * DT, 9);
+    holdFrames(m, ANIM.Slam, seen, 1);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
+  it('one lost snapshot at the end: the last animT seen is W - 4 DT and the cast still releases', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, W.slam - 20 * DT, W.slam - 4 * DT);
+    expect(seen).toBeCloseTo(W.slam - 4 * DT, 9);
+    holdFrames(m, ANIM.Slam, seen, 3);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
+  it('two lost snapshots are the same elapsed time: it releases, as the server\'s clock really got there', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, W.slam - 24 * DT, W.slam - 6 * DT);
+    holdFrames(m, ANIM.Slam, seen, 5);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
+  it('a cast broken off early after a lost snapshot is still broken: no hit, no fling', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, 0.2 - 10 * DT, 0.2);
+    holdFrames(m, ANIM.Slam, seen, 3);
+    const ps = [snap(lichPose(base(), DT, m)), ...idle(m, 0.4)];
+    expect(ps.every((p) => p.novaHit === 0 && p.novaOut === 0)).toBe(true);
+    expect(ps[0].novaChest).toBeGreaterThan(0.1);
     const b = newLichMem();
-    lichPose(base({ anim: ANIM.Slam, animT: W.slam - 6 * DT }), DT, b);
+    const seenB = feed(b, ANIM.Slam, W.slam - 24 * DT, W.slam - 8 * DT);
+    holdFrames(b, ANIM.Slam, seenB, 3);
     expect(lichPose(base(), DT, b).novaHit).toBe(0);
+  });
+  it('a cast broken off early without a lost snapshot is broken', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, 0.2 - 10 * DT, 0.2);
+    holdFrames(m, ANIM.Slam, seen, 1);
+    expect(lichPose(base(), DT, m).novaHit).toBe(0);
+  });
+  it('the same wind-up restarting: the first releases, the second runs on its own animT', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, W.slam - 20 * DT, W.slam - 2 * DT);
+    holdFrames(m, ANIM.Slam, seen, 1);
+    const fresh = newLichMem();
+    const p = lichPose(base({ anim: ANIM.Slam, animT: 0.5 }), DT, m);
+    expect(p.novaUp).toBeCloseTo(lichPose(base({ anim: ANIM.Slam, animT: 0.5 }), DT, fresh).novaUp, 9);
+    // the new one goes on to its own release, from its own clock
+    const seen2 = feed(m, ANIM.Slam, 0.5, W.slam - 2 * DT);
+    holdFrames(m, ANIM.Slam, seen2, 1);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
+  it('a restart does not carry a frozen wind-up\'s heldFor into the new one', () => {
+    const m = newLichMem();
+    lichPose(base({ anim: ANIM.Slam, animT: 0.6 }), DT, m);
+    for (let i = 1; i <= 60; i++) lichPose(base({ anim: ANIM.Slam, animT: 0.6 + i * DT, effects: bit(EFFECT.Frozen) }), DT, m);
+    lichPose(base({ anim: ANIM.Slam, animT: 0.6 + 61 * DT }), DT, m); // thawed, the same wind-up
+    const fresh = newLichMem();
+    const p = lichPose(base({ anim: ANIM.Slam, animT: 0.3 }), DT, m); // the animT fell: a new wind-up
+    expect(p.novaUp).toBeCloseTo(lichPose(base({ anim: ANIM.Slam, animT: 0.3 }), DT, fresh).novaUp, 9);
+    expect(m.heldFor).toBe(0);
+  });
+  it('a first sight in mid wind-up starts from its animT and releases when it ends', () => {
+    const m = newLichMem();
+    expect(lichPose(base({ anim: ANIM.Slam, animT: 0.6 }), DT, m).novaUp).toBeGreaterThan(0.9);
+    const seen = feed(m, ANIM.Slam, W.slam - 20 * DT, W.slam - 2 * DT);
+    holdFrames(m, ANIM.Slam, seen, 1);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
+  it('dt 0 and a huge dt change nothing wrong', () => {
+    const m = newLichMem();
+    const seen = feed(m, ANIM.Slam, W.slam - 20 * DT, W.slam - 2 * DT);
+    for (let i = 0; i < 5; i++) lichPose(base({ anim: ANIM.Slam, animT: seen }), 0, m); // dt 0 adds no time: still a release below
+    holdFrames(m, ANIM.Slam, seen, 1);
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+    // a long frame on the same anim does not turn a broken-off cast into a release
+    const b = newLichMem();
+    const sb = feed(b, ANIM.Slam, 0.2 - 10 * DT, 0.2);
+    lichPose(base({ anim: ANIM.Slam, animT: sb }), 5, b);
+    const p = lichPose(base(), DT, b);
+    expect(p.novaHit).toBe(0);
+    expect(Object.values(p).every((v) => !Number.isNaN(v))).toBe(true);
+  });
+  it('a dt over 0.1 s ends a running second half at once, at 0.15 s too', () => {
+    const m = newLichMem();
+    run(m, ANIM.Slam, W.slam);
+    lichPose(base(), DT, m);
+    for (let i = 0; i < 20; i++) lichPose(base(), DT, m);
+    expect(lichPose(base(), DT, m).novaOut).toBeGreaterThan(0.5);
+    const p = lichPose(base(), 0.15, m);
+    expect(weights(p).every((w) => w === 0)).toBe(true);
+    expect(Object.values(p).every((v) => !Number.isNaN(v))).toBe(true);
+    // a broken-off ease ends the same way
+    const e = newLichMem();
+    run(e, ANIM.Windup, 0.2);
+    lichPose(base(), DT, e);
+    expect(weights(lichPose(base(), 0.15, e)).every((w) => w === 0)).toBe(true);
   });
   it('a second wind-up replaces a second half at once', () => {
     const m = newLichMem();

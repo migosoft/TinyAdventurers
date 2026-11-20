@@ -144,6 +144,20 @@ describe('the ?r3d=lich stage', () => {
     expect(alone.pos).not.toEqual((await body('?r3d=lich&act=stand&t=3')).pos);
   });
 
+  it('a frozen or stone lich does not glide, as in a run; thawed it glides again', async () => {
+    for (const toggle of ['Frozen', 'Stone']) {
+      const r = make('?r3d=lich&glide=1');
+      let last: FrameInput | undefined;
+      await r.wait(() => { last = r.step(1)[0]; return built(last) === 1; });
+      r.buttons.find((b) => b.name === toggle)!.press();
+      const x0 = r.step(1)[0].models!.built![0].x;
+      for (let i = 0; i < 30; i++) expect(r.step(1)[0].models!.built![0].x).toBe(x0);
+      r.buttons.find((b) => b.name === toggle)!.press();
+      r.step(30);
+      expect(r.step(1)[0].models!.built![0].x).not.toBe(x0);
+    }
+  });
+
   it('has a button per act and the toggles', () => {
     const r = make('?r3d=lich');
     expect(r.buttons.map((b) => b.name)).toEqual(['Stand', 'Nova', 'Raise Dead', 'Bolts', 'Curse', 'Mist', 'Stone Gaze', 'Hurt', 'Broken wind-up', 'Glide', 'Frozen', 'Chilled', 'Stone', 'Immune', 'Work light']);

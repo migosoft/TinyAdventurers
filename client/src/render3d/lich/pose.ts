@@ -7,6 +7,7 @@
 
 import { ANIM, CONST, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
+import { CLOTH } from './cloth';
 
 export interface LichIn { anim: number; animT: number; effects: number; flags: number; /** World rad. */ aim: number; /** World rad toward what the head looks at, or null. */ look: number | null; /** 0..1, the cloth's. */ glide: number }
 
@@ -36,6 +37,7 @@ export interface LichMem {
   lastAnimT: number;
   /** 0 none, 1 the second half runs, 2 a broken-off wind-up eases back. */ mode: 0 | 1 | 2;
   /** Seconds the current wind-up spent frozen (the server's animT keeps growing meanwhile). */ heldFor: number;
+  /** Client seconds since `lastAnimT` last changed (0 on a frame that brought a new animT; does not grow while held). */ seenFor: number;
   act: Act;
   /** The action clock where the wind-up ended or was broken off. */ a: number;
   /** Seconds since the release (mode 1) or since the break (mode 2). */ r: number;
@@ -68,7 +70,7 @@ export function restPose(): LichPose {
 }
 
 export function newLichMem(): LichMem {
-  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, mode: 0, heldFor: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
+  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, mode: 0, heldFor: 0, seenFor: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
 }
 
 /** Which action a wind-up anim belongs to, 0 for any other anim. */
@@ -111,7 +113,12 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
   }
   const p = mem.pose;
   const cur = actOf(s.anim), prev = first ? 0 : actOf(mem.lastAnim);
-  if (first || cur !== prev) mem.heldFor = 0;
+  // the same wind-up anim whose animT fell (beyond rounding) is the previous wind-up ending and a new one starting
+  const restart = !first && cur !== 0 && cur === prev && s.anim === mem.lastAnim && s.animT - mem.heldFor < mem.lastAnimT - 1e-4;
+  const ended = prev !== 0 && (cur !== prev || restart);
+  // the server's animT at the switch, estimated: what the last snapshot said plus the client time since it changed, plus this frame
+  const estimate = mem.lastAnimT + mem.seenFor + dt;
+  if (first || cur !== prev || restart) { mem.heldFor = 0; mem.seenFor = 0; }
   const animT = s.animT - mem.heldFor;
 
   // the clock and the facing
@@ -124,8 +131,9 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
 
   // the cast: a wind-up, its second half after the release, or a broken-off wind-up easing back
   let act: Act = 0, a = 0, k = 1;
-  if (prev !== 0 && cur !== prev) {
-    if (mem.lastAnimT + dt >= windupLen(prev) - LICH_TIMES.slack * CONST.DT) { mem.mode = SECOND; mem.act = prev; mem.a = releaseAt(prev); mem.r = 0; }
+  if (dt > CLOTH.maxDt) mem.mode = 0; // a long frame ends a running second half or ease back, as it resets the cloth
+  if (ended && dt <= CLOTH.maxDt) {
+    if (estimate >= windupLen(prev) - LICH_TIMES.slack * CONST.DT) { mem.mode = SECOND; mem.act = prev; mem.a = releaseAt(prev); mem.r = 0; }
     else { mem.mode = EASE; mem.act = prev; mem.a = windupClock(prev, mem.lastAnimT); mem.r = 0; }
   } else if (mem.mode !== 0 && !first) mem.r += dt;
   if (cur !== 0) {
@@ -170,6 +178,8 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
 
   p.t = t; p.face = mem.face; p.headYaw = mem.headYaw; p.glide = s.glide;
 
+  // snapshots bring a new animT every 2 ticks (or fewer when lost): the client time since it last changed
+  mem.seenFor = first || animT !== mem.lastAnimT ? 0 : mem.seenFor + Math.min(dt, CLOTH.maxDt);
   mem.lastAnim = s.anim; mem.lastAnimT = animT; mem.started = true;
   return p;
 }
