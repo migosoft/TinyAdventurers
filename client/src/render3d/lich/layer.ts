@@ -19,7 +19,7 @@ export interface BuiltLayer {
 interface Res {
   mats: LichMaterials;
   bodyBuf: BuiltBuf; bodyGeom: BufferGeometry; body: Mesh;
-  glowBuf: BuiltBuf | null; clawGeom: BufferGeometry; claws: Mesh;
+  glowBuf: BuiltBuf | null; clawGeom: BufferGeometry | null; claws: Mesh | null;
   /** Frames since the owner was last in a frame. */
   gone: number;
 }
@@ -85,14 +85,17 @@ export class LichLayer implements BuiltLayer {
       upload(r.bodyGeom, i.body);
       r.body.visible = true;
       // A stone lich draws no claws.
-      const claws = i.glow !== null && !i.stone;
-      if (claws) upload(r.clawGeom, i.glow!);
-      r.claws.visible = claws;
+      if (r.claws) {
+        const claws = !i.stone;
+        if (claws) upload(r.clawGeom!, i.glow!);
+        r.claws.visible = claws;
+      }
       drawn++;
     }
     for (const [owner, r] of this.owners) {
       if (seen.has(owner)) continue;
-      r.body.visible = r.claws.visible = false;
+      r.body.visible = false;
+      if (r.claws) r.claws.visible = false;
       if (++r.gone >= GONE_FRAMES) { this.free(r); this.owners.delete(owner); }
     }
     this.drawn = drawn;
@@ -104,28 +107,42 @@ export class LichLayer implements BuiltLayer {
     this.drawn = 0;
   }
 
+  /** The owner's resources; a changed buffer object makes its geometry again (the materials stay). A figure without claws has no claw mesh. */
   private res(i: BuiltInst): Res {
     let r = this.owners.get(i.owner);
-    if (r && (r.bodyBuf !== i.body || r.glowBuf !== i.glow)) { this.free(r); this.owners.delete(i.owner); r = undefined; }
-    if (r) return r;
-    const mats = this.make();
-    // A figure without claws still gets a claw mesh (hidden), so the shape of an owner is always the same; its buffer is the body's, never drawn.
-    const bodyGeom = geometryOf(i.body, true), clawGeom = geometryOf(i.glow ?? i.body, false);
-    const body = new Mesh(bodyGeom, mats.body), claws = new Mesh(clawGeom, mats.claws);
-    body.frustumCulled = claws.frustumCulled = false;
-    body.renderOrder = FIGURE_ORDER;
-    claws.renderOrder = CLAW_ORDER;
-    claws.layers.set(this.clawLayer);
-    this.scene.add(body, claws);
-    r = { mats, bodyBuf: i.body, bodyGeom, body, glowBuf: i.glow, clawGeom, claws, gone: 0 };
-    this.owners.set(i.owner, r);
+    if (!r) {
+      const mats = this.make();
+      r = { mats, bodyBuf: i.body, bodyGeom: geometryOf(i.body, true), body: null as unknown as Mesh, glowBuf: null, clawGeom: null, claws: null, gone: 0 };
+      r.body = new Mesh(r.bodyGeom, mats.body);
+      r.body.frustumCulled = false;
+      r.body.renderOrder = FIGURE_ORDER;
+      this.scene.add(r.body);
+      this.owners.set(i.owner, r);
+    } else if (r.bodyBuf !== i.body) {
+      r.bodyGeom.dispose();
+      r.bodyBuf = i.body;
+      r.bodyGeom = r.body.geometry = geometryOf(i.body, true);
+    }
+    if (r.glowBuf !== i.glow) {
+      if (r.claws) { this.scene.remove(r.claws); r.clawGeom!.dispose(); r.claws = null; r.clawGeom = null; }
+      r.glowBuf = i.glow;
+      if (i.glow) {
+        r.clawGeom = geometryOf(i.glow, false);
+        r.claws = new Mesh(r.clawGeom, r.mats.claws);
+        r.claws.frustumCulled = false;
+        r.claws.renderOrder = CLAW_ORDER;
+        r.claws.layers.set(this.clawLayer);
+        this.scene.add(r.claws);
+      }
+    }
     return r;
   }
 
   private free(r: Res): void {
-    this.scene.remove(r.body, r.claws);
+    this.scene.remove(r.body);
+    if (r.claws) this.scene.remove(r.claws);
     r.bodyGeom.dispose();
-    r.clawGeom.dispose();
+    r.clawGeom?.dispose();
     r.mats.dispose();
   }
 }

@@ -69,6 +69,14 @@ describe('LichLayer', () => {
     layer.dispose();
   });
 
+  it('a figure without claws has no claw mesh', () => {
+    const scene = new Scene(), layer = new LichLayer(scene, make, CLAW_LAYER);
+    layer.frame([inst(1, { glow: null })], slotOf);
+    expect(meshes(scene).length).toBe(1);
+    expect(meshes(scene)[0].renderOrder).toBe(FIGURE_ORDER);
+    layer.dispose();
+  });
+
   it('the uniforms hold the instance\'s place, yaw, scale, levels and look; seen carries the caster slot', () => {
     const mats: LichMaterials[] = [];
     const layer = new LichLayer(new Scene(), () => { const m = make(); mats.push(m); return m; }, CLAW_LAYER);
@@ -97,8 +105,10 @@ describe('LichLayer', () => {
     const a = inst(1);
     layer.frame([a], slotOf);
     const g0 = meshes(scene)[0].geometry;
+    const material = meshes(scene)[0].material;
     layer.frame([{ ...a, body: { ...a.body, indices: 7 } }], slotOf);
     expect(meshes(scene)[0].geometry).not.toBe(g0);
+    expect(meshes(scene)[0].material).toBe(material);
     expect(meshes(scene)[0].geometry.drawRange.count).toBe(7);
     for (let i = 0; i < 300; i++) layer.frame([], slotOf);
     expect(meshes(scene).length).toBe(0);

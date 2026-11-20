@@ -4,7 +4,7 @@
 // colours are the spike's (`lichSpike.ts` at dd751c0), except that its own light is replaced by the view's lighting.
 import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector4 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { abs, attribute, clamp, cos, dot, float, mix, normalize, select, sin, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, abs, attribute, clamp, cos, dot, float, mix, normalize, select, sin, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { FIGURE_SHADE, SEE_ORDER, keepOf, type FigurePoint, type FigureShared } from '../models/nodes';
@@ -62,27 +62,34 @@ export function lichMaterials(o: { lighting: Lighting; sight: Sight; shared: Fig
   const body = new MeshBasicNodeMaterial();
   const p = vertexOf(o.shared, un, body, true);
   const col: N = attribute('colour', 'vec3'), look: N = attribute('look', 'vec2'), uvA: N = uv();
-  const tex: N = texture(o.paint, uvA).toVar('lichPaint');
-  const albedo: N = col.mul(tex.rgb);
   const isStone: N = tint.w.greaterThan(0.5);
   const unlit: N = look.x.greaterThan(0.5);
-  // The picture's alpha classes (antialiased, so thresholds): the staff's runes (170), the skull's (255).
-  const glowing: N = smoothstep(0.45, 0.62, tex.a), onHead: N = smoothstep(0.75, 0.9, tex.a);
-  // How far up the staff a texel is (0 foot, 1 under the gem): a wave of light climbs it.
   const AW = LICH_PAINT.w, AH = LICH_PAINT.h;
-  const upStaff: N = uvA.x.mul(AW).sub(16).div(256).add(smoothstep(175.5 / AH, 176.5 / AH, uvA.y)).mul(0.5);
-  const crest: N = float(1).sub(smoothstep(0, 0.22, abs(upStaff.sub(levels.z))));
-  const glowColour: N = albedo.mul(mix(levels.y.add(crest.mul(crest).mul(1.1)), levels.x, onHead));
-
-  const Nn: N = normalize(p.N);
-  const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: seen.w.add(0.5).floor(), darkOnly: flags.x });
-  const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-  const stoneA: N = vec3(lum(albedo));
-  const shaded: N = select(isStone, lighting.finish(stoneA.mul(look.y), lit), mix(lighting.finish(albedo.mul(look.y), lit), glowColour, glowing));
-  const flat: N = select(isStone, lighting.finish(vec3(lum(col)), lit), col);
-  const colour: N = select(unlit, flat, shaded).mul(tint.xyz);
-  const keep: N = keepOf(p, sight, { bySight: true }).and(tex.a.greaterThan(0.2));
-  body.colorNode = vec4(sight.apply(colour, p.P, seenXY), select(keep, float(1), float(0)));
+  body.colorNode = Fn(() => {
+    // The picture and the light are computed once, at the top level (a sample needs uniform control flow, and `lightAt` is big); the
+    // selects below only pick between plain values.
+    const tex: N = texture(o.paint, uvA).toVar('lichPaint');
+    const Nn: N = normalize(p.N);
+    const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: seen.w.add(0.5).floor(), darkOnly: flags.x });
+    const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
+    // As the models: the tint multiplies the albedo (and so the glow's base), a stone albedo is its luminance and untinted, an unlit
+    // vertex shows its own colour untinted (a stone lich's is lit grey).
+    const painted: N = col.mul(tex.rgb);
+    const albedo: N = select(isStone, vec3(lum(painted)), painted.mul(tint.xyz));
+    // The picture's alpha classes (antialiased, so thresholds): the staff's runes (170), the skull's (255).
+    const glowing: N = smoothstep(0.45, 0.62, tex.a), onHead: N = smoothstep(0.75, 0.9, tex.a);
+    // How far up the staff a texel is (0 foot, 1 under the gem): a wave of light climbs it.
+    const upStaff: N = uvA.x.mul(AW).sub(16).div(256).add(smoothstep(175.5 / AH, 176.5 / AH, uvA.y)).mul(0.5);
+    const crest: N = float(1).sub(smoothstep(0, 0.22, abs(upStaff.sub(levels.z))));
+    const glowColour: N = albedo.mul(mix(levels.y.add(crest.mul(crest).mul(1.1)), levels.x, onHead));
+    const ownUnlit: N = unlit.and(isStone.not());
+    const toLight: N = select(unlit, select(isStone, vec3(lum(col)), col), albedo.mul(look.y));
+    const finished: N = lighting.finish(toLight, lit);
+    const glows: N = select(unlit.or(isStone), float(0), glowing);
+    const colour: N = select(ownUnlit, col, mix(finished, glowColour, glows));
+    const keep: N = keepOf(p, sight, { bySight: true }).and(tex.a.greaterThan(0.2));
+    return vec4(sight.apply(colour, p.P, seenXY), select(keep, float(1), float(0)));
+  })();
   body.alphaTest = 0.5;
   body.side = DoubleSide;
 

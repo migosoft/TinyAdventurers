@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { AdditiveBlending, BufferAttribute, BufferGeometry, DataTexture, DoubleSide, GLSLNodeBuilder, RGBAFormat, Texture, UnsignedByteType, WGSLNodeBuilder } from 'three/webgpu';
+import { AdditiveBlending, BufferAttribute, BufferGeometry, DataTexture, DoubleSide, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
-import { fragment, vertex, type Builder } from '../shaderCode.testutil';
+import { imageTexture } from '../models/layer';
+import { fragment, readsInBranches, vertex, type Builder } from '../shaderCode.testutil';
 import { FIGURE_ORDER, SEE_ORDER, makeFigureShared } from '../models/nodes';
 import { builtPoint, newBuiltBuf, type V3 } from '../built';
 import { CLAW_ORDER, YAW_TURN, lichMaterials } from './nodes';
 
 function make() {
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: false });
-  const paint = new DataTexture(new Uint8Array(16), 2, 2, RGBAFormat, UnsignedByteType);
+  // The real picture's kind of texture: filtered with mips (WGSL then samples with derivatives, which must not sit in a branch).
+  const paint = imageTexture({ w: 2, h: 2, data: new Uint8Array(16) }, { mips: true });
   return lichMaterials({ lighting, sight: makeSight(), shared: makeFigureShared(), paint });
 }
 
@@ -39,13 +41,11 @@ describe('the lich materials', () => {
     expect(m.body.depthWrite).toBe(true);
     expect(m.body.side).toBe(DoubleSide);
     expect(m.body.alphaTest).toBe(0.5);
-    expect((m.body as { renderOrder?: number }).renderOrder).toBeUndefined();
     expect(m.claws.blending).toBe(AdditiveBlending);
     expect(m.claws.transparent).toBe(true);
     expect(m.claws.depthWrite).toBe(false);
     expect(m.claws.depthTest).toBe(true);
     expect(m.claws.side).toBe(DoubleSide);
-    expect((m.claws as { renderOrder?: number }).renderOrder).toBeUndefined();
     m.dispose();
   });
 
@@ -74,6 +74,10 @@ describe('the lich materials', () => {
         expect(vertex(B, m.claws, { compare: true, geometry: cg }).length).toBeGreaterThan(0);
         expect(bf).toMatch(/lichPaint/);
         expect(bf).toMatch(/lightAmbient/);
+        // No texture read or derivative in a data-dependent branch, and the lighting's body is emitted once (it was three times, about 85000 characters).
+        expect(readsInBranches(bf)).toEqual([]);
+        expect(readsInBranches(cf)).toEqual([]);
+        expect(bf.length).toBeLessThan(45000);
         expect(cf).not.toMatch(/lichPaint/);
         expect(cf).not.toMatch(/lightAmbient/);
         expect(cf).not.toMatch(wgslOr(B, /textureSample|textureLoad/, /texture\(|texelFetch/));
