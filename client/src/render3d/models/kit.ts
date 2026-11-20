@@ -18,12 +18,12 @@ export interface FigureKit {
   picture(key: string): PaintImage | null;
   /** Build times in ms by key, for the F3 panel and the docs. */
   readonly times: ReadonlyMap<string, number>;
-  /** Bumped when a model arrives. Only the dev readout reads it (the layer asks `get` every frame). */
+  /** Bumped when a model or a picture arrives. Only the dev readout reads it (the layer asks `get` every frame). */
   readonly version: number;
   dispose(): void;
 }
 
-/** Builds one model; resolves with it and the build's own duration (not the queue wait). */
+/** Builds one model, or paints one picture when `job.picture` is set (#358); resolves with it, the duration being the job's own (not the queue wait). */
 export type BuildJob = {
   key: string;
   px: SpritePixels | null;

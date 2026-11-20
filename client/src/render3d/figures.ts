@@ -45,6 +45,8 @@ const BITE_SECS = 0.3;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
 /** The ground shadow: an ellipse 0.45 as deep as it is wide, 0.45 strong at the centre. */
 const SHADOW_DEPTH = 0.45;
+/** A built figure's halo is lifted toward the camera by this many builder units (the approved spike's offset, lichSpike.ts:585). */
+const HALO_LIFT = 0.45;
 /** No variation: a model without `varies`. */
 const NO_VARIATION = { size: 1, tone: 1, crest: 1 };
 const SHADOW_ALPHA = 0.45;
@@ -708,7 +710,8 @@ export class Figures3d {
     if (key && m) return this.drawModel(e, f, cam, out, key, m, this.models!.kit);
     const drawn = this.drawFigure(e, f, cam, out);
     const fig = this.figs.get(e.id);
-    if (fig) { fig.last = null; fig.model = false; }
+    // A built figure's memory (cloth, pose clock) is stale after frames drawn as cards: its next built frame is a first sight.
+    if (fig) { fig.last = null; fig.model = false; if (built) fig.built = undefined; }
     return drawn;
   }
 
@@ -985,6 +988,7 @@ export class Figures3d {
     const foot = this.figFoot(e, s, f, { skims, start }, top / TILE);
     fig.body = null;
     fig.last = null;
+    // `fig.model` is true as for a model figure: a lich that dies after being drawn built leaves the 3D skull model, as every model figure does.
     fig.model = true;
     this.parts.delete(e.id);
     if (!pose.visible || foot.gone) return false;
@@ -1018,7 +1022,7 @@ export class Figures3d {
 
     // The shadow caster: the figure's side outline at the foot (the rest pose's, baked into the atlas); a faller casts none.
     if (pose.alpha >= 1 && this.shadowed(e.id) && !falling) {
-      const card: Card = { frame: outlineFrame(b.key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: b.unit * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
+      const card: Card = { frame: outlineFrame(b.key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: sc, tint: [1, 1, 1], mode: 0, alpha: 1 };   // the outline is baked in game px (the builder's unit is in it): only the pose's scale
       const c = casterOf(card, e.id, this.frames, cam);
       if (c) out.casters.push(c);
     }
@@ -1029,14 +1033,15 @@ export class Figures3d {
       pushShadow(out.shadows, cam, gf.x, gf.z, r, r * SHADOW_DEPTH, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, r));
     }
 
-    // The halos (eyes, gem, tome) as glow quads at their points; a stone figure shows none.
+    // The halos (eyes, gem, tome) as glow quads at their points; a stone or dark figure shows none (as every other figure's glow). Each
+    // is lifted toward the camera by 0.45 builder units, as the approved spike offsets its halos (lichSpike.ts:585), a faller's colour is dimmed by the depth.
     const stretch = 1 / this.cp;
-    if (!pose.grey) {
-      const at = this.haloAt, rgb = this.haloRgb, a = pose.alpha * k;
+    if (!pose.grey && !dark) {
+      const at = this.haloAt, rgb = this.haloRgb, a = pose.alpha * k * (falling ? depthFade(y) : 1);
       for (const h of dr.halos) {
         builtPoint(h.at, x, z, y, dr.yaw, scale, stretch, at);
         rgb[0] = h.rgb[0] * a; rgb[1] = h.rgb[1] * a; rgb[2] = h.rgb[2] * a;
-        pushGlow(out.glows, at[0], at[1], at[2], h.r * scale, rgb, cam);
+        pushGlow(out.glows, at[0], at[1], at[2], h.r * scale, rgb, cam, undefined, HALO_LIFT * scale);
       }
     }
 

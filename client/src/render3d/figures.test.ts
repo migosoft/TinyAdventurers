@@ -6,7 +6,7 @@ import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
 import { LICH, LICH_TOP } from './lich/shape';
-import { builtPoint } from './built';
+import { BUILT_OF_KIND, builtPoint } from './built';
 import { SOUTH } from './models/objectPose3d';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
@@ -23,7 +23,7 @@ import type { EntState } from '../game/world';
 import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
-import { project, snapGround, type Cam } from './camera';
+import { project, snapGround, viewRay, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
@@ -717,8 +717,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
     for (const k of [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)]) frames[outlineFrame(k)] = { ...atlasFrames[outlineFrame(k)].frame };
-    // The lich's lamp outline is not in the atlas yet (Task 8 puts the real one there): a stand-in rect of its height.
-    frames[outlineFrame('lich')] = { x: 0, y: 0, w: 12, h: Math.ceil(LICH_TOP * LICH.unit) };
+    // The built figures' outlines are the atlas's rects too.
+    for (const b of Object.values(BUILT_OF_KIND)) frames[outlineFrame(b!.key)] = { ...atlasFrames[outlineFrame(b!.key)].frame };
     for (const k of BUILT) kit.get(k);
     while (kit.version < BUILT.length) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
@@ -968,7 +968,6 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(owned(out.cards, 11) + owned(out.ghosts, 11) + owned(out.decals, 11)).toBe(0);
       expect(out.models.length).toBe(0);
       expect(out.casters.length).toBe(1);
-      expect(frames[outlineFrame('lich')]).toBeDefined();
       expect(out.shadows.n).toBe(1);
       expect(out.glows.n).toBe(plain.glows.n + 4);
       // the oval's radius: the hem in tiles (half its first quad's width, across the camera's right)
@@ -1002,6 +1001,36 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       const fg = make();
       expect(built([lich()], withPicture(), fg).built.length).toBe(1);
       expect(built([ranger()], withPicture(), fg).built).toEqual([]);
+    });
+
+    it('lifts each halo toward the camera by 0.45 builder units (the spike\'s offset), as the glow quads say', () => {
+      const out = built([lich()]), c = cam(), lf = out.figs[0], b = out.built[0];
+      const n = out.glows.n, ray = viewRay(c.pitch, c.yaw), lift = 0.45 * b.scale;
+      // the gem is the third halo: its quad's centre (the mean of its six corners) is the gem point moved along the view ray
+      const q = n - 2, p = out.glows.position;
+      const centre = [0, 1, 2].map((a) => { let t = 0; for (let v = 0; v < 6; v++) t += p[(q * 6 + v) * 3 + a]; return t / 6; });
+      for (let a = 0; a < 3; a++) expect(centre[a]).toBeCloseTo(lf.gem![a] + ray[a] * lift, 5);
+    });
+
+    it('a dark lich has no halos and its instance is dark', () => {
+      const fg = make(), dark = { dark: new Set([11]) };
+      const out = fg.frame(frame([lich()], dark), cam(), look({ kit: withPicture(), ...all }));
+      const plain = make().frame(frame([lich()], dark), cam(), look());
+      expect(out.built[0].dark).toBe(true);
+      expect(out.glows.n).toBe(plain.glows.n);
+    });
+
+    it('the lamp caster is as tall as the outline frame in tiles times the pose scale (the outline is baked in game px)', () => {
+      const out = built([lich()]), c = out.casters[0], fr = frames[outlineFrame('lich')];
+      expect(c).toBeDefined();
+      expect(c.y1 - c.y0).toBeCloseTo((fr.h * (FIGURES[KIND.Lich].scale ?? 1)) / TILE, 5);
+    });
+
+    it('forgets the built memory while the lich is drawn as cards: the next built frame is a first sight', () => {
+      const fg = make(), face = (k: FigureKit, aim: number) => fg.frame(frame([lich({ aim })]), cam(), look({ kit: k, ...all }));
+      face(withPicture(), 0);
+      for (let i = 0; i < 3; i++) expect(face(noPicture(), 2).built).toEqual([]);
+      expect(face(withPicture(), 2).built[0].yaw).toBeCloseTo(2, 9);   // not eased from the old facing 0
     });
 
     it('a petrified lich is stone and has no glow quads of its own', () => {

@@ -285,6 +285,8 @@ describe('workerRunner', () => {
 });
 
 describe('pictures (#358)', () => {
+  // The console.warn spies are restored by the file-level afterEach (`vi.restoreAllMocks`; there is no `restoreMocks` in the vite config).
+  afterEach(() => { vi.unstubAllGlobals(); FakeWorker.all = []; });
   it('picture is null until the runner resolves, then a 512 x 512 image; the runner ran once for five calls', async () => {
     const jobs: { key: string; picture?: boolean }[] = [];
     const kit = createKit(noPixels, async (job) => { jobs.push(job); return directRunner(job); });
@@ -329,6 +331,5 @@ describe('pictures (#358)', () => {
     await settle();
     expect(kit.picture('lich')?.w).toBe(2);
     expect(kit.times.get('lich')).toBe(5);
-    vi.unstubAllGlobals(); FakeWorker.all = [];
   });
 });

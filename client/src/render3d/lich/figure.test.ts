@@ -51,10 +51,12 @@ describe('LICH_FIGURE', () => {
 
 describe('builtPoint', () => {
   it('turns by the yaw as the instance row does (+x to (cos, sin)), scales, lifts and stretches the height', () => {
-    const out: [number, number, number] = [0, 0, 0];
-    builtPoint([2, 3, 1], 10, 20, 0.5, 0, 0.1, 1.5, out);
-    expect(out[0]).toBeCloseTo(10.2, 6); expect(out[1]).toBeCloseTo(0.5 + 3 * 0.1 * 1.5, 6); expect(out[2]).toBeCloseTo(20.1, 6);
+    const out: [number, number, number] = [0, 0, 0], yaw = 0.5, c = Math.cos(yaw), s = Math.sin(yaw);
+    builtPoint([2, 3, 1], 10, 20, 0.5, yaw, 0.1, 1.5, out);
+    expect(out[0]).toBeCloseTo(10 + (c * 2 - s * 1) * 0.1, 9);
+    expect(out[1]).toBeCloseTo(0.5 + 3 * 0.1 * 1.5, 9);
+    expect(out[2]).toBeCloseTo(20 + (s * 2 + c * 1) * 0.1, 9);
     builtPoint([2, 3, 1], 10, 20, 0.5, Math.PI / 2, 0.1, 1, out);
-    expect(out[0]).toBeCloseTo(10 - 0.1, 6); expect(out[2]).toBeCloseTo(20.2, 6);
+    expect(out[0]).toBeCloseTo(10 - 0.1, 9); expect(out[2]).toBeCloseTo(20.2, 9);
   });
 });
