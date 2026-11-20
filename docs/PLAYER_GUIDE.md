@@ -231,6 +231,7 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 | Ogre: club / ground slam | almost 2 tiles (28 px) for both; the slam hits everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
 | Red Demon: cleave / swoop | a long way (about 3.5 / 4 tiles) |
+| Red Demon: tail swipe / landing slam / Fireball | 2.5 tiles (40 px) / over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
 | Red Dragon: landing smash / Fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 | Lich: Nova | only the Wizard, 16 px (the lich's STR is only 10) |
@@ -320,13 +321,19 @@ The boss sleeps in a large hall at the far end of the dungeon. Each run has one 
 **The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its cleave and swoop can knock you in.
 
 ### The Red Demon
+Every attack shows its pose first, while the demon flashes red: that is your moment to step away. It does not follow a fixed order: whenever it is free, it picks one of the attacks it can use at that moment, at random.
 - **Cleave:** a wide claw sweep in front of it.
+- **Tail swipe:** anyone who sneaks up behind it gets lashed and flung away (2.5 tiles). The demon swipes at once, without turning, and never from the air. The tail is physical damage.
 - **Swoop:** lowers its horns and charges across the hall at a hero.
 - Both the cleave (**Strike** with its demon claws) and the **Swoop** hurl you back a long way.
 - **Ring of Fire:** fireballs fly out in every direction.
+- **Fireball:** the Wizard's spell, which the demon casts too: it points a hand at a hero and an exploding ball flies. It pushes you a little.
+- **Fire Breath:** it flings its arms wide and breathes a cone of fire that **leaves burning ground** behind. The breath does not push.
+- **Flight:** every 10 to 14 seconds it takes off, rising over its shadow, and hovers after the party for a few seconds. **Swords, axes, the dagger, the dash and pushes can't reach it in the air**; bolts, missiles and spells still hit. In the air it casts Fireballs and breathes fire from above, and it **flies over chasms, deep water and lava**; only walls stop it. It never lands in a hole: it comes down on the nearest ground that holds it.
+- **Landing slam:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
 - It never gets angrier: the demon fights the same from the first hit to the last.
 
-Tip: stay mobile, and don't stand between the demon and a chasm.
+Tip: stay mobile, and don't stand between the demon and a chasm, or right behind it. When it takes off, ranged heroes do the work; get out of the red circle before it lands.
 
 ### The Lich
 - **Cannot be harmed** while its **disciples** live. The bar shows **IMMUNE**. There are at least five red-robed disciples around the hall.
@@ -350,7 +357,7 @@ Every attack shows its pose first, while the dragon flashes red: that is your mo
 - **Front claw** (**Strike**): raises a paw and swipes at heroes in front of its face, pushing them back (32 px).
 - **Tail Whip:** curls its tail, then whips anyone standing behind it and flings them away (44 px). The tail is physical damage.
 - **Fireball:** the Wizard's spell, which the dragon casts too: an exploding ball that pushes you a little (20 px).
-- **Flight:** every 10 to 12 seconds it takes off and hovers after the party for a few seconds. **Swords, axes, the dagger and the dash can't reach it in the air**; bolts, missiles and spells still hit. In the air its only attack is the Fire Breath, also from above.
+- **Flight:** every 10 to 12 seconds it takes off and hovers after the party for a few seconds. **Swords, axes, the dagger and the dash can't reach it in the air**; bolts, missiles and spells still hit. It **flies over chasms, deep water and lava**, and comes down only on ground that holds it. In the air its only attack is the Fire Breath, also from above.
 - **Smash (landing):** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
 
 Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either, least of all with a chasm at your back. When it takes off, ranged heroes do the work; get out of the red circle before it lands.
