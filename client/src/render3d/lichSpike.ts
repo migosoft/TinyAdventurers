@@ -460,9 +460,9 @@ const RING_V: number[] = (() => {
 })();
 
 // ---------------------------------------------------------------- materials
-interface Mats { body: MeshBasicNodeMaterial; glow: MeshBasicNodeMaterial; shadow: MeshBasicNodeMaterial; light: { value: Vector3 }; view: { value: Vector3 }; rune: { value: number }; gem: { value: number } }
+interface Mats { body: MeshBasicNodeMaterial; glow: MeshBasicNodeMaterial; shadow: MeshBasicNodeMaterial; light: { value: Vector3 }; view: { value: Vector3 }; rune: { value: number }; gem: { value: number }; wave: { value: number } }
 function materials(): Mats {
-  const L: N = uniform(new Vector3(0, 1, 0)), viewU: N = uniform(new Vector3(0, 0.75, 0.66)), runeU: N = uniform(0.5), gemU: N = uniform(0.5);
+  const L: N = uniform(new Vector3(0, 1, 0)), viewU: N = uniform(new Vector3(0, 0.75, 0.66)), runeU: N = uniform(0.5), gemU: N = uniform(0.5), waveU: N = uniform(0);
   const n: N = normalize(attribute('normal', 'vec3')), uvA: N = attribute('uv', 'vec2'), aux: N = attribute('aux', 'vec2'), col: N = attribute('color', 'vec3');
   const tex: N = texture(paintAtlas(), uvA);
   const lam: N = clamp(dot(n, L), 0, 1);
@@ -472,7 +472,10 @@ function materials(): Mats {
   const shaded: N = albedo.mul(lit).mul(aux.y).add(vec3(0.62, 0.56, 0.85).mul(rim));
   // alpha 255: the skull's runes (their own pulse); alpha 170: the staff's runes, which pulse with the gem
   const glowing: N = smoothstep(0.45, 0.62, tex.a), onHead: N = smoothstep(0.75, 0.9, tex.a);
-  const withRunes: N = mix(shaded, albedo.mul(mix(gemU, runeU, onHead)), glowing);
+  // how far up the staff a texel is (0 foot, 1 under the gem): a wave of light climbs it
+  const upStaff: N = uvA.x.mul(AW).sub(16).div(256).add(smoothstep(175.5 / AH, 176.5 / AH, uvA.y)).mul(0.5);
+  const crest: N = float(1).sub(smoothstep(0, 0.22, (upStaff.sub(waveU) as N).abs()));
+  const withRunes: N = mix(shaded, albedo.mul(mix(gemU.add(crest.mul(crest).mul(1.1)), runeU, onHead)), glowing);
   const body = new MeshBasicNodeMaterial();
   body.colorNode = vec4(mix(withRunes, col, aux.x), tex.a);
   body.alphaTest = 0.2;
@@ -488,7 +491,7 @@ function materials(): Mats {
   const fade: N = float(1).sub(smoothstep(0.3, 1, (length(uv().sub(0.5)) as N).mul(2))).mul(0.5);
   shadow.colorNode = vec4(vec3(0, 0, 0), fade);
   shadow.transparent = true; shadow.depthWrite = false;
-  return { body, glow, shadow, light: L, view: viewU, rune: runeU, gem: gemU };
+  return { body, glow, shadow, light: L, view: viewU, rune: runeU, gem: gemU, wave: waveU };
 }
 function geometry(b: Buf): BufferGeometry {
   const g = new BufferGeometry();
@@ -688,14 +691,17 @@ export function createLichSpike(): LichSpike {
       tube(b, [onStaff(-0.12), onStaff(0.1), onStaff(0.7), onStaff(0.85)], [0.16, 0.33, 0.33, 0.27], { seg: 8, col: METAL, caps: [true, false] });
       tube(b, [onStaff(SL - 0.75), onStaff(SL - 0.6), onStaff(SL - 0.15), onStaff(SL)], [0.27, 0.37, 0.37, 0.27], { seg: 8, col: METAL });
       // three claws at the top hold the gem
-      const gemPulse = 0.72 + 0.28 * Math.sin(t * 2.3) + 1.1 * Math.max(novaUp * S(0, 1.25, a), novaHit, raiseHit);
+      // a wave of light climbs the staff's runes; the gem lights up as it arrives and fades until the next
+      const beat = (t / 2.6) % 1, since = (beat - 0.78 + 1) % 1;
+      mats.wave.value = beat * 1.3 - 0.02;
+      const gemPulse = 0.5 + 0.55 * Math.exp(-since * 3.2) * S(0, 0.04, since) + 1.1 * Math.max(novaUp * S(0, 1.25, a), novaHit, raiseHit);
       const gemC = onStaff(SL + 0.85);
       for (let q = 0; q < 3; q++) {
         const an = (q / 3) * Math.PI * 2 + 0.4, cx = Math.cos(an), cz = Math.sin(an);
         tube(b, [onStaff(SL - 0.2, 0.1 * cx, 0.1 * cz), onStaff(SL + 0.3, 0.52 * cx, 0.52 * cz), onStaff(SL + 0.9, 0.6 * cx, 0.6 * cz), onStaff(SL + 1.4, 0.3 * cx, 0.3 * cz)], [0.17, 0.13, 0.1, 0.04], { seg: 5, col: mul(METAL, 1.15), caps: [false, true] });
       }
       tube(b, [mad(gemC, sAxis, -0.55), mad(gemC, sAxis, -0.2), gemC, mad(gemC, sAxis, 0.25), mad(gemC, sAxis, 0.6)], [0.03, 0.3, 0.4, 0.28, 0.03], { seg: 6, col: mul(GEM, Math.min(1.25, 0.65 + 0.4 * gemPulse)), unlit: 1 });
-      mats.gem.value = 0.3 + 0.75 * gemPulse;
+      mats.gem.value = 0.28 + 0.9 * Math.max(novaUp * S(0, 1.25, a), novaHit, raiseHit);
       halo(gemC, 1.1 + 0.7 * gemPulse, mul([0.45, 0.72, 1.0], 0.34 * gemPulse));
 
       // ---- the arms: a sleeve to the wrist, the bones of the forearm, a hand
