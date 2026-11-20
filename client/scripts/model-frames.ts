@@ -4,6 +4,7 @@
 import type { Image } from './png';
 import { buildFigure } from '../src/render3d/models/model';
 import { buildTubeFigure } from '../src/render3d/models/tubeModel';
+import { BUILT_OF_KIND } from '../src/render3d/built';
 import { DESCS, outlineFrame, TUBE_DESCS, type DescKey, type TubeKey } from '../src/render3d/models/table';
 
 interface Frame { x: number; y: number; w: number; h: number }
@@ -42,13 +43,24 @@ function fill(position: Float32Array, index: Uint32Array, w: number, h: number):
 
 /** The outline frames of every model in one strip `width` px wide, packed in rows. */
 export function buildModelOutlines(width: number): { img: Image; frames: Record<string, Frame> } {
-  const keys = [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)];
-  const cells = keys.map((key) => {
+  type Source = { key: string; position: Float32Array; index: Uint32Array };
+  const sources: Source[] = [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)].map((key) => {
     const m = key in DESCS ? buildFigure(key, DESCS[key as DescKey]) : buildTubeFigure(key, TUBE_DESCS[key as TubeKey]);
+    return { key, position: m.position, index: m.index };
+  });
+  // The built figures (#358): the rest pose's body in game px (builder units times the figure's unit); the buffer is the figure's own, read only.
+  for (const f of new Set(Object.values(BUILT_OF_KIND))) {
+    if (!f) continue;
+    const b = f.rest();
+    const position = new Float32Array(b.verts * 3);
+    for (let i = 0; i < position.length; i++) position[i] = b.position[i] * f.unit;
+    sources.push({ key: f.key, position, index: b.index.subarray(0, b.indices) });
+  }
+  const cells = sources.map(({ key, position, index }) => {
     let maxX = 0, maxY = 0;
-    for (let i = 0; i < m.position.length; i += 3) (maxX = Math.max(maxX, Math.abs(m.position[i])), maxY = Math.max(maxY, m.position[i + 1]));
+    for (let i = 0; i < position.length; i += 3) (maxX = Math.max(maxX, Math.abs(position[i])), maxY = Math.max(maxY, position[i + 1]));
     const w = 2 * Math.max(1, Math.ceil(maxX)), h = Math.max(1, Math.ceil(maxY));
-    return { key, w, h, mask: fill(m.position, m.index, w, h) };
+    return { key, w, h, mask: fill(position, index, w, h) };
   });
   const frames: Record<string, Frame> = {};
   let x = 0, y = 0, rowH = 0;
