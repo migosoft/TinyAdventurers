@@ -142,10 +142,11 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
         const nb = (p.bend as { neck: { from: number; to: number } }).neck;
         along = smooth((b.uv![i * 2] - nb.from) / (nb.to - nb.from));
       } else if (B) along = Math.max(0, Math.min(1, ((lx + off[0]) * B.dir[0] + (ly + off[1]) * B.dir[1] + (lz + off[2]) * B.dir[2]) / over));
+      if (B && !B.neck && p.bulge) along *= p.bulge([lx + off[0], ly + off[1], lz + off[2]]);
       const swings = p.robe && d.robeTop !== undefined && y < d.robeTop;
       skin.set([boneIdx, b.line ? 1 : 0, swings ? -2 : b.bend, swings ? smooth((d.robeTop! - y) / d.robeTop!) : along], o * 4);
       const steel = b.line ? 0 : p.glow ? 3 : p.metal ? 1 : 0;
-      if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = ((p.band ?? 0) + Math.max(0.004, Math.min(0.996, b.uv![i * 2]))) / (d.paintBands ?? 1); uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...flat, steel], o * 4);
+      if (painted && !b.line) { look.set([-1, -1, -1, steel], o * 4); uv[o * 2] = ((p.band ?? 0) + Math.max(0.004, Math.min(0.996, b.uv![i * 2]))) / (d.paintBands ?? 1); uv[o * 2 + 1] = b.uv![i * 2 + 1]; } else look.set([...(!b.line && p.tint ? rgb(p.tint([lx, ly, lz])) : flat), steel], o * 4);
       if (!b.line) {
         stands = Math.max(stands, y);
         if (b.stage === STAGES.indexOf('head')) headTop = Math.max(headTop, y);

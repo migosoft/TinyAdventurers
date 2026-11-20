@@ -87,6 +87,10 @@ export interface TubePiece {
   metal?: true;
   /** The piece glows (look value 3): it shows its own colour whatever light falls on it (eyes in the dark). Give it `line` 0. */
   glow?: true;
+  /** SPIKE (#379): a factor on how far a vertex of a bending piece goes with the bend, from its place relative to the bend's foot: a wing's webbing bulges between its finger bones. */
+  bulge?: (p: Vec3) => number;
+  /** SPIKE (#379): the colour of each vertex from its place in the piece (instead of the flat colour): a gradient. */
+  tint?: (p: Vec3) => number;
   /** SPIKE (#379): the band of the paint this painted piece reads (default 0). */
   band?: number;
   /** The body tube the hit circle and the lying thickness are measured from. */

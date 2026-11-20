@@ -15,7 +15,7 @@ const WINGS = !OPT.includes('wings');
 const HUMANS = Number(/h([\d.]+)/.exec(OPT)?.[1] ?? 3);
 
 const BACK = 0x2c2022, PLATE = 0x261b1d, FUR = 0x35241f, TOOTH = 0x1c1213, BLACK = 0x070506;
-const WEB_RED = 0x8a1f2a;
+const WEB_RED = 0xb3202b, WEB_ROOT = 0x2e070c, CHARCOAL = 0x1c181a;
 const OUTLINE_C = 0x121013, LINE = 0.55;
 
 const pieces: TubePiece[] = [];
@@ -188,16 +188,42 @@ if (WINGS) {
     [WRIST, [2.35, 0.2], [2.15, -3.0]],
   ];
   for (const sd of [1, -1]) {
-    const S = unit([-0.4, 0.3, 0.87 * sd]);
+    const S = unit([-0.45, -0.16, 0.88 * sd]);
     const lean: Vec3 = [-0.2, 0.97, 0], k = lean[0] * S[0] + lean[1] * S[1] + lean[2] * S[2];
     const U = unit([lean[0] - k * S[0], lean[1] - k * S[1], lean[2] - k * S[2]]);
     const face: Vec3 = [S[1] * U[2] - S[2] * U[1], S[2] * U[0] - S[0] * U[2], S[0] * U[1] - S[1] * U[0]];
     const on = (s: number, h: number): [number, number, number] => [(S[0] * s * SPAN + U[0] * h) * WING, (S[1] * s * SPAN + U[1] * h) * WING, (S[2] * s * SPAN + U[2] * h) * WING];
     const root: Vec3 = [shoulder[0] - 3.8, shoulder[1] - 0.6, sd * 2.8];
+    // A point's place in the wing (relative to the root): `s` along the span, `h` up.
+    const inWing = (q: Vec3): [number, number] => [(q[0] * S[0] + q[1] * S[1] + q[2] * S[2]) / (WING * SPAN), (q[0] * U[0] + q[1] * U[1] + q[2] * U[2]) / WING];
+    const edgeAt = (sv: number, k: 1 | 2): number => { let i = 0; while (i < OUTLINE.length - 2 && OUTLINE[i + 1][0] < sv) i++; const a = OUTLINE[i], b = OUTLINE[i + 1], t = Math.max(0, Math.min(1, (sv - a[0]) / (b[0] - a[0]))); return a[k] + (b[k] - a[k]) * t; };
+    /** How far a point is from the nearest finger bone, 0 on a bone to 1 in the middle of a panel. */
+    const offBones = (sv: number, h: number): number => {
+      let best = 9;
+      for (const line of BONES_2D) for (let i = 0; i < line.length - 1; i++) {
+        const ax = line[i][0] * SPAN, ay = line[i][1], bx = line[i + 1][0] * SPAN, by = line[i + 1][1], dx = bx - ax, dy = by - ay;
+        const t = Math.max(0, Math.min(1, ((sv * SPAN - ax) * dx + (h - ay) * dy) / (dx * dx + dy * dy)));
+        best = Math.min(best, Math.hypot(sv * SPAN - ax - dx * t, h - ay - dy * t));
+      }
+      const w = Math.min(1, best / 0.7);
+      return w * w * (3 - 2 * w);
+    };
+    // The webbing is elastic: between the finger bones it goes further with every bend than the bones do, so it bulges.
+    const bulge = (q: Vec3): number => { const [sv, h] = inWing(q); return 1 + 0.7 * offBones(sv, h); };
+    // Its colour: a very dark red where it is attached (at the root and under the arm bone), soon a bright red over most of it, and
+    // charcoal along the lower edge and at the tip, as if burnt there.
+    const webTint = (q: Vec3): number => {
+      const [sv, h] = inWing(q), top = edgeAt(sv, 1), bottom = edgeAt(sv, 2);
+      const held = Math.max(1 - sv / 0.55, sv < WRIST[0] ? 1 - (top - h) / 0.45 : 0), ragged = 0.3 * vnoise(sv * 7, h * 7, 31);
+      const burnt = 1 - Math.min(h - bottom, (5.0 - sv) * 1.2) / (0.5 + ragged);
+      let c = mixC(WEB_RED, WEB_ROOT, Math.pow(Math.max(0, held), 0.8));
+      c = mixC(c, 0x5a1218, 0.25 * vnoise(sv * 4, h * 4, 33));
+      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, burnt * 1.6)));
+    };
     const web = add({
-      shape: { tube: OUTLINE.map(([s, top, bottom]): TubePoint => { const r = (top - bottom) / 2 * WING; return { p: on(s, (top + bottom) / 2), r, wide: Math.min(1, WEB / r) }; }), opts: { K: 12, N: 120, ref: face, cap: 0.5, pow: 0.4 } },
-      at: root, stage: 'hair', bone: 'body', line: 0.4, colour: WEB_RED,
-      bend: { sway: 0.3, hinge: 0.3, flutter: { rate: 0.4, angle: 0.14, axis: [sd * U[0], sd * U[1], sd * U[2]] } },
+      shape: { tube: OUTLINE.map(([s, top, bottom]): TubePoint => { const r = (top - bottom) / 2 * WING; return { p: on(s, (top + bottom) / 2), r, wide: Math.min(1, WEB / r) }; }), opts: { K: 28, N: 120, ref: face, cap: 0.5, pow: 0.4 } },
+      at: root, stage: 'hair', bone: 'body', line: 0.4, colour: WEB_RED, tint: webTint, bulge,
+      bend: { sway: 0.2, hinge: 0.65, flutter: { rate: 0.4, angle: 0.12, axis: [sd * U[0], sd * U[1], sd * U[2]] } },
     });
     BONES_2D.forEach((line, i) => {
       const r = i === 0 ? 1.15 : 0.7;
@@ -207,7 +233,7 @@ if (WINGS) {
     const bottomAt = (sv: number): number => { let i = 0; while (i < OUTLINE.length - 2 && OUTLINE[i + 1][0] < sv) i++; const a = OUTLINE[i], b = OUTLINE[i + 1], k = (sv - a[0]) / (b[0] - a[0]); return a[2] + (b[2] - a[2]) * k; };
     [[0.45, 5], [0.95, 8], [1.5, 6], [1.85, 9], [2.15, 11], [2.6, 7], [3.05, 9], [3.55, 6], [3.9, 10], [4.35, 5]].forEach(([sv, len], i) => {
       const q = on(sv, bottomAt(sv) + 0.25), tilt = (i % 2 ? 0.25 : -0.2);
-      add({ shape: { drop: { r: 1.0 + (i % 3) * 0.25, len, sink: 0.3, wide: 0.3, dir: [-U[0] + tilt * S[0], -U[1] + tilt * S[1], -U[2] + tilt * S[2]] } }, at: [root[0] + q[0], root[1] + q[1], root[2] + q[2]], stage: 'hair', bone: 'body', line: 0.3, colour: WEB_RED, bend: { with: web } });
+      add({ shape: { drop: { r: 1.0 + (i % 3) * 0.25, len, sink: 0.3, wide: 0.3, dir: [-U[0] + tilt * S[0], -U[1] + tilt * S[1], -U[2] + tilt * S[2]] } }, at: [root[0] + q[0], root[1] + q[1], root[2] + q[2]], stage: 'hair', bone: 'body', line: 0.3, colour: CHARCOAL, bulge, bend: { with: web } });
     });
     const claw = on(WRIST[0], WRIST[1]);
     add({ shape: { drop: { r: 0.9, len: 4.4, sink: 0.4, wide: 0.9, dir: [U[0] + 0.5 * S[0], U[1] + 0.5 * S[1], U[2] + 0.5 * S[2]] } }, at: [root[0] + claw[0], root[1] + claw[1], root[2] + claw[2]], stage: 'hair', bone: 'body', line: 0.3, colour: PLATE, bend: { with: web } });
