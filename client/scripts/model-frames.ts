@@ -1,5 +1,5 @@
 // The lamp's shadow casters of the 3D models (#357): each model's side outline (every triangle of the rest pose, seen along z)
-// as one opaque silhouette frame `model_<key>`, one px per model px, centred on x 0, the feet on the bottom row. A lamp casts
+// as one opaque silhouette frame `model_<key>` (a built figure's: its rest body, in game px), one px per model px, centred on x 0, the feet on the bottom row. A lamp casts
 // this instead of a card, so every model's shadow is its own shape (antlers, tail, legs).
 import type { Image } from './png';
 import { buildFigure } from '../src/render3d/models/model';

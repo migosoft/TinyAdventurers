@@ -58,7 +58,7 @@ export interface BuiltFigure {
   key: string; picture: string; /** Game px per builder unit. */ unit: number; /** Game px. */ top: number; hem: number;
   newMem(): unknown;
   draw(s: BuiltIn, dt: number, mem: unknown): BuiltDrawn;
-  /** The rest pose's body without loose parts, for the lamp outline (Task 8). */
+  /** The rest pose's body without loose parts, for the lamp outline. */
   rest(): BuiltBuf;
 }
 

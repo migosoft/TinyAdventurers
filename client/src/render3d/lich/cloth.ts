@@ -1,4 +1,4 @@
-// The lich's cloth (#358). Task 4 adds only the constants, the state and a new cloth; the logic (`clothMove`, `clothFollow`) comes with Task 5.
+// The lich's cloth (#358): the constants, the state of a cloth and its two steps, `clothMove` (before the pose) and `clothFollow` (after it).
 import { ROBE_RINGS } from './rings';
 
 export const CLOTH = { ringRate: [30, 3.4], maxLag: 4.4, lagPow: 1.3, turnRate: [30, 2.6], maxTurn: 0.75, speedRate: 8, glideRate: 5, glideSpeed: 22, tome: { at: [5.6, -0.35], rate: 7, max: 1.6 }, jump: 16, maxDt: 0.1 } as const;

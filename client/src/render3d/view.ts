@@ -109,7 +109,7 @@ export interface SunFrame {
   wind: [number, number]; t: number;
 }
 /** The 3D figures of a frame (#338): what to draw and the kit that holds their models. */
-export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit; /** The built figures (#358), drawn by their own layers. */ built?: readonly BuiltInst[] }
+export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit; /** The built figures (#358), drawn by their own layers: required, so a stage that passes models cannot drop them. */ built: readonly BuiltInst[] }
 
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
@@ -611,10 +611,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
   const builtByKey = new Map<string, BuiltInst[]>();
+  const noLayer = new Set<string>();
   const builtFrame = (f: FigureFrame | undefined): void => {
     for (const l of builtByKey.values()) l.length = 0;
-    if (f?.built) for (const i of f.built) { let l = builtByKey.get(i.key); if (!l) builtByKey.set(i.key, l = []); l.push(i); }
+    if (f) for (const i of f.built) { let l = builtByKey.get(i.key); if (!l) builtByKey.set(i.key, l = []); l.push(i); }
     for (const [key, list] of builtByKey) {
+      if (list.length > 0 && !builtFactories[key] && !noLayer.has(key)) { noLayer.add(key); console.warn(`built figure ${key}: no layer factory in view.ts, nothing is drawn`); }
       let e = builtLayers.get(key);
       if (!e && list.length > 0 && f && builtFactories[key]) {
         const img = f.kit.picture(key);

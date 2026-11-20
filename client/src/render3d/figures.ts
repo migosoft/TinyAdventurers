@@ -707,11 +707,11 @@ export class Figures3d {
     if (built && this.models!.kit.picture(built.picture)) return this.drawBuilt(e, f, cam, out, built);
     const key = this.models && FIGURES[e.kind] && this.models.is(e) ? modelKeyOf(e.kind) : null;
     const m = key ? this.models!.kit.get(key) : null;
-    if (key && m) return this.drawModel(e, f, cam, out, key, m, this.models!.kit);
+    // A built figure's memory (cloth, pose clock) is stale after frames drawn another way (cards or a model): its next built frame is a first sight.
+    if (key && m) { const drawn = this.drawModel(e, f, cam, out, key, m, this.models!.kit); const fg = this.figs.get(e.id); if (fg) fg.built = undefined; return drawn; }
     const drawn = this.drawFigure(e, f, cam, out);
     const fig = this.figs.get(e.id);
-    // A built figure's memory (cloth, pose clock) is stale after frames drawn as cards: its next built frame is a first sight.
-    if (fig) { fig.last = null; fig.model = false; if (built) fig.built = undefined; }
+    if (fig) { fig.last = null; fig.model = false; fig.built = undefined; }
     return drawn;
   }
 

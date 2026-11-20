@@ -52,7 +52,7 @@ const inst = (model: string, o: Partial<FigureInst> = {}): FigureInst => {
     tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, groundY: 0, sight: { hard: 0, soft: 0 }, ...o,
   };
 };
-const frame = (insts: FigureInst[]): FigureFrame => ({ insts, kit });
+const frame = (insts: FigureInst[]): FigureFrame => ({ insts, kit, built: [] });
 
 /** `hasSun`: the materials carry a sun material; `sunScene`: the layer is given a scene for it. */
 function layerOf(hasSun: boolean, withSunScene = hasSun): { layer: FigureLayer; scene: Scene; sunScene: Scene | null; idScene: Scene; made: number; models: FigureModel[] } {
@@ -240,7 +240,7 @@ describe('FigureLayer', () => {
   it('skips an instance whose model has not arrived, and draws it when it has', async () => {
     const { layer, idScene } = layerOf(false);
     const late = createKit(sprite, directRunner);
-    const f: FigureFrame = { insts: [inst('elf')], kit: late };
+    const f: FigureFrame = { insts: [inst('elf')], kit: late, built: [] };
     layer.frame(f, slot);
     expect(layer.drawn.figures).toBe(0);
     expect(meshes(idScene).filter((m) => m.visible)).toHaveLength(0);

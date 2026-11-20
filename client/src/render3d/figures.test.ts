@@ -1033,6 +1033,13 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(face(withPicture(), 2).built[0].yaw).toBeCloseTo(2, 9);   // not eased from the old facing 0
     });
 
+    it('forgets the built memory in a frame without models too: the next built frame is a first sight', () => {
+      const fg = make(), face = (aim: number, models: boolean) => fg.frame(frame([lich({ aim })]), cam(), models ? look({ kit: withPicture(), ...all }) : look());
+      face(0, true);
+      for (let i = 0; i < 3; i++) expect(face(2, false).built).toEqual([]);
+      expect(face(2, true).built[0].yaw).toBeCloseTo(2, 9);
+    });
+
     it('a petrified lich is stone and has no glow quads of its own', () => {
       const plain = make().frame(frame([lich({ effects: 1 << EFFECT.Petrified })]), cam(), look());
       const out = built([lich({ effects: 1 << EFFECT.Petrified })]);

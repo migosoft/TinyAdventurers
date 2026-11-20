@@ -471,7 +471,7 @@ function staffAndArms(b: BuiltBuf, pose: LichPose, an: LichAnchors): void {
   place(b, STAFF, ST);
   staffClaws(b);
   place(b, STAFF_GEM, ST);
-  paint(b, b.verts - GEM_VERTS,GEM[0] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[1] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[2] * Math.min(1.25, 0.65 + 0.4 * pose.gem)); // the gem is unlit: its own colour carries the pulse
+  paint(b, b.verts - GEM_VERTS, GEM[0] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[1] * Math.min(1.25, 0.65 + 0.4 * pose.gem), GEM[2] * Math.min(1.25, 0.65 + 0.4 * pose.gem)); // the gem is unlit: its own colour carries the pulse
   const gh = SL + 0.85;
   an.gem[0] = bx + ax * gh; an.gem[1] = by + ay * gh; an.gem[2] = bz + az * gh;
 
