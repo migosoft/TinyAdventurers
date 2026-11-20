@@ -207,10 +207,8 @@ describe('buildTubeFigure', () => {
   });
 
   it("the baseR of every kind that wears a tube model is its model's hit radius", () => {
-    // The Ghost's and the Shade's server circles are not yet the models' (Task 9 of #359 removes this list).
-    const PENDING_CIRCLE: number[] = [KIND.Ghost, KIND.Shade];
-    const worn = Object.entries(MODEL_OF_KIND).filter(([kind, key]) => key! in TUBE_DESCS && !PENDING_CIRCLE.includes(Number(kind)));
-    expect(worn.length).toBeGreaterThanOrEqual(13);
+    const worn = Object.entries(MODEL_OF_KIND).filter(([, key]) => key! in TUBE_DESCS);
+    expect(worn.length).toBeGreaterThanOrEqual(15);
     for (const [kind, key] of worn) expect(FIGURES[Number(kind)].baseR, `kind ${kind} (${key})`).toBe(hitRadius(TUBE_DESCS[key as TubeKey]));
   });
 

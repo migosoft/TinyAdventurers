@@ -298,7 +298,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Ghost,
                 hp: 32.0,
                 speed: 50.0,
-                radius: 6.0,
+                radius: 4.0,
                 vision: 8.75,
                 attr_mods,
                 weight: 3.0,
@@ -316,7 +316,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 kind: EntityKind::Shade,
                 hp: 40.0,
                 speed: 44.0,
-                radius: 6.0,
+                radius: 4.0,
                 vision: 8.75,
                 attr_mods,
                 weight: 3.0,
@@ -536,10 +536,10 @@ mod tests {
         assert_eq!(attr_sources(Ghost).total(), Attributes::new(6, 14, 10, 10, 12, 14));
         assert_eq!(attr_sources(Shade).total(), Attributes::new(8, 12, 12, 10, 14, 15));
         let shade = def(Shade);
-        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 6.0, 8.75, BaseAi::Melee));
+        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 4.0, 8.75, BaseAi::Melee));
         assert_eq!((shade.abilities, shade.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::ShadeTouch][..]));
         let ghost = def(Ghost);
-        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.base_ai), (32.0, 50.0, 6.0, 8.75, BaseAi::Melee));
+        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.base_ai), (32.0, 50.0, 4.0, 8.75, BaseAi::Melee));
         assert_eq!((ghost.abilities, ghost.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::GhostTouch][..]));
         let weights = [
             (GoblinArcher, 6.0), (SkeletonWarrior, 9.0), (SkeletonArcher, 9.0), (RaisedSkeleton, 9.0), (RaisedArcher, 9.0),
@@ -792,9 +792,9 @@ mod kit_pins {
             (Summoner, SummonImps, Pin { damage: 0.0, cooldown: 8.0, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.7, push: 0.0 }),
             (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 1.4285714285714286, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.5294117647058824, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (Ghost, Touch, Pin { damage: 7.2, cooldown: 0.7142857142857143, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Ghost, Touch, Pin { damage: 7.2, cooldown: 0.7142857142857143, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Ghost, Vanish, Pin { damage: 0.0, cooldown: 14.285714285714286, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
-            (Shade, Touch, Pin { damage: 8.75, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Shade, Touch, Pin { damage: 8.75, cooldown: 0.8333333333333334, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Shade, Vanish, Pin { damage: 0.0, cooldown: 13.333333333333334, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 2.0, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 7.5, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
