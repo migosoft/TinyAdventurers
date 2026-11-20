@@ -21,11 +21,11 @@ export interface LichPose {
 }
 
 /** Seconds on the spike's action clock: `at` the release, `after` it the action is done (nova: seconds since the release). */
-export const LICH_TIMES = { nova: { at: 1.33, after: 0.97 }, raise: { at: 0.6, after: 1.3 }, fling: { back: 0.29, at: 0.3, after: 0.9 }, gaze: { in: 0.3, out: 0.4 }, broken: 0.25, hurt: 0.15, slack: 2 } as const;
+export const LICH_TIMES = { nova: { at: 1.33, after: 1.87 }, raise: { at: 0.6, after: 1.3 }, fling: { back: 0.29, at: 0.3, after: 0.9 }, gaze: { in: 0.3, out: 0.4 }, broken: 0.25, hurt: 0.15, slack: 2 } as const;
 
 const NOVA = 1, RAISE = 2, FLING = 3;
 type Act = 0 | 1 | 2 | 3;
-const SECOND = 1, EASE = 2;
+const SECOND = 1 as const, EASE = 2 as const;
 
 export interface LichMem {
   started: boolean;
@@ -34,7 +34,8 @@ export interface LichMem {
   headYaw: number;
   lastAnim: number;
   lastAnimT: number;
-  /** 0 none, 1 the second half runs, 2 a broken-off wind-up eases back. */ mode: number;
+  /** 0 none, 1 the second half runs, 2 a broken-off wind-up eases back. */ mode: 0 | 1 | 2;
+  /** Seconds the current wind-up spent frozen (the server's animT keeps growing meanwhile). */ heldFor: number;
   act: Act;
   /** The action clock where the wind-up ended or was broken off. */ a: number;
   /** Seconds since the release (mode 1) or since the break (mode 2). */ r: number;
@@ -67,7 +68,7 @@ export function restPose(): LichPose {
 }
 
 export function newLichMem(): LichMem {
-  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, mode: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
+  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, mode: 0, heldFor: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
 }
 
 /** Which action a wind-up anim belongs to, 0 for any other anim. */
@@ -103,14 +104,20 @@ function setWeights(p: LichPose, act: Act, a: number, k: number): void {
 export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
   const held = has(s.effects, EFFECT.Frozen) || has(s.effects, EFFECT.Petrified);
   const first = !mem.started;
-  if (held && !first) return mem.pose;
+  if (held && !first) {
+    // the server's wind-up does not end while the lich cannot act: its animT keeps growing, and the cast resumes where it stopped
+    if (actOf(mem.lastAnim) !== 0) mem.heldFor += dt;
+    return mem.pose;
+  }
   const p = mem.pose;
   const cur = actOf(s.anim), prev = first ? 0 : actOf(mem.lastAnim);
+  if (first || cur !== prev) mem.heldFor = 0;
+  const animT = s.animT - mem.heldFor;
 
   // the clock and the facing
   if (!first) mem.t += dt;
   const fe = first ? 1 : 1 - Math.exp(-dt * 4);
-  mem.face = first ? s.aim : mem.face + wrap(s.aim - mem.face) * fe;
+  mem.face = first ? wrap(s.aim) : wrap(mem.face + wrap(s.aim - mem.face) * fe);
   const want = s.look === null ? 0 : Math.min(0.45, Math.max(-0.45, 0.6 * wrap(s.look - mem.face)));
   mem.headYaw = first ? want : mem.headYaw + (want - mem.headYaw) * (1 - Math.exp(-dt * 3.5));
   const t = mem.t;
@@ -123,7 +130,7 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
   } else if (mem.mode !== 0 && !first) mem.r += dt;
   if (cur !== 0) {
     mem.mode = 0;
-    act = cur; a = windupClock(cur, s.animT);
+    act = cur; a = windupClock(cur, animT);
   } else if (mem.mode === SECOND) {
     if (mem.r >= doneAfter(mem.act)) mem.mode = 0;
     else { act = mem.act; a = mem.a + mem.r; }
@@ -163,6 +170,6 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
 
   p.t = t; p.face = mem.face; p.headYaw = mem.headYaw; p.glide = s.glide;
 
-  mem.lastAnim = s.anim; mem.lastAnimT = s.animT; mem.started = true;
+  mem.lastAnim = s.anim; mem.lastAnimT = animT; mem.started = true;
   return p;
 }

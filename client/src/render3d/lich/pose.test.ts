@@ -51,8 +51,23 @@ describe('release', () => {
     let p = hit;
     for (let t = DT; t < 0.12; t += DT) p = lichPose(base(), DT, m);
     expect(p.novaOut).toBeGreaterThan(0.9);
-    for (let t = 0.12; t < 1.0; t += DT) p = lichPose(base(), DT, m);
+    for (let t = 0.12; t < 1.9; t += DT) p = lichPose(base(), DT, m);
     expect(weights(p).every((w) => w === 0)).toBe(true);
+  });
+  it('the Nova ends without a step: from 0.9 s on no level moves by more than 0.01 a frame', () => {
+    const m = newLichMem(), rest = newLichMem();
+    run(m, ANIM.Slam, W.slam);
+    run(rest, ANIM.Idle, W.slam);
+    // the weights follow the spike's own smoothsteps (novaOut falls 0.04 a frame until 0.97 s); the shared levels must not step at the end
+    const levels = ['rune', 'staffRune', 'gem', 'eye', 'flare', 'casting'] as const;
+    let prev: number[] | null = null;
+    for (let i = 0; i < 130; i++) {
+      const p = lichPose(base(), DT, m), q = lichPose(base(), DT, rest); // the clock-driven part is the same in both
+      const r = (i + 1) * DT;
+      const now = levels.map((k) => p[k] - q[k]);
+      if (r > 0.9 && prev) now.forEach((v, j) => expect(Math.abs(v - prev![j]), `${levels[j]} at ${r}`).toBeLessThan(0.01));
+      prev = now;
+    }
   });
   it('Summon then Idle lifts the hand', () => {
     const m = newLichMem();
@@ -108,16 +123,33 @@ describe('held', () => {
       const m = newLichMem();
       run(m, ANIM.Slam, W.slam / 2);
       const last = snap(lichPose(base({ anim: ANIM.Slam, animT: W.slam / 2 }), DT, m));
-      for (let i = 0; i < 60; i++) {
-        const p = lichPose(base({ anim: ANIM.Idle, effects: bit(fx), aim: 2 }), DT, m);
+      // the server's wind-up goes on counting animT while frozen (anim stays Slam)
+      const FROZEN = 120;
+      for (let i = 1; i <= FROZEN; i++) {
+        const p = lichPose(base({ anim: ANIM.Slam, animT: W.slam / 2 + i * DT, effects: bit(fx), aim: 2 }), DT, m);
         expect(p).toEqual(last);
       }
-      // thawed: the wind-up was broken off, it eases back from where it stood
-      const thawed = lichPose(base({ anim: ANIM.Idle }), DT, m);
+      // thawed: the wind-up resumes where it stopped, no jump
+      const thawed = lichPose(base({ anim: ANIM.Slam, animT: W.slam / 2 + (FROZEN + 1) * DT }), DT, m);
+      for (const k of WEIGHTS) expect(thawed[k], k).toBeCloseTo(last[k], 1);
+      expect(thawed.flare).toBeCloseTo(last.flare, 1);
       expect(thawed.novaUp).toBeGreaterThan(0.9);
-      expect(thawed.novaHit).toBe(0);
+      // it goes on and the release fires after the wind-up's own length, frozen seconds not counted
+      for (let e = W.slam / 2 + 2 * DT; e < W.slam - 1e-9; e += DT) {
+        const p = lichPose(base({ anim: ANIM.Slam, animT: e + FROZEN * DT }), DT, m);
+        expect(p.novaHit).toBe(0);
+      }
+      expect(lichPose(base({ anim: ANIM.Idle, animT: W.slam + (FROZEN + 1) * DT }), DT, m).novaHit).toBeGreaterThan(0.8);
     });
   }
+  it('a wind-up that really ends early eases back', () => {
+    const m = newLichMem();
+    run(m, ANIM.Slam, 0.5);
+    const ps = idle(m, 0.4);
+    expect(ps.every((p) => p.novaHit === 0 && p.novaOut === 0)).toBe(true);
+    expect(ps[0].novaUp).toBeGreaterThan(0.9);
+    expect(ps[ps.length - 1].novaUp).toBeLessThan(0.01);
+  });
   it('holds a second half', () => {
     const m = newLichMem();
     run(m, ANIM.Slam, W.slam);
@@ -150,9 +182,14 @@ describe('gaze and hurt', () => {
     expect(p.hurt).toBeGreaterThan(0.9);
     for (let t = 0.075; t < 0.2; t += DT) p = lichPose(base({ flags: FLAG.HURT }), DT, m);
     expect(p.hurt).toBe(0);
-    for (let i = 0; i < 30; i++) expect(lichPose(base({ flags: FLAG.HURT }), DT, m).hurt).toBe(0);
+    // still set at 0.3 s: it did not start again
+    for (let t = 0.2; t < 0.3; t += DT) p = lichPose(base({ flags: FLAG.HURT }), DT, m);
+    expect(p.hurt).toBe(0);
     lichPose(base(), DT, m);
-    expect(lichPose(base({ flags: FLAG.HURT }), DT, m).hurt).toBeGreaterThanOrEqual(0);
+    // a second rise after the flag cleared flinches again
+    p = lichPose(base({ flags: FLAG.HURT }), DT, m);
+    for (let t = DT; t < 0.075 - 1e-9; t += DT) p = lichPose(base({ flags: FLAG.HURT }), DT, m);
+    expect(p.hurt).toBeGreaterThan(0.9);
   });
 });
 
@@ -179,7 +216,23 @@ describe('memory', () => {
     const q = lichPose(base({ aim: 1 }), 0, m);
     expect(q).toBe(p);
     expect(q).toEqual(a);
-    lichPose(base({ anim: ANIM.Slam, animT: 0.3 }), 0, m);
+    expect(Object.values(q).every((v) => !Number.isNaN(v))).toBe(true);
+    const c = newLichMem();
+    const z = lichPose(base({ anim: ANIM.Slam, animT: 0.3 }), 0, c);
+    expect(Object.values(z).every((v) => !Number.isNaN(v))).toBe(true);
+  });
+  it('face stays within PI and turns the short way across the wrap', () => {
+    const m = newLichMem();
+    let p = lichPose(base({ aim: 3.1 }), DT, m);
+    expect(p.face).toBeCloseTo(3.1, 9);
+    for (let i = 0; i < 120; i++) {
+      const before = p.face;
+      p = lichPose(base({ aim: -3.1 }), DT, m);
+      const d = Math.atan2(Math.sin(p.face - before), Math.cos(p.face - before));
+      expect(Math.abs(d)).toBeLessThan(0.1);
+      expect(Math.abs(p.face)).toBeLessThanOrEqual(Math.PI + 1e-9);
+    }
+    expect(Math.abs(Math.atan2(Math.sin(p.face + 3.1), Math.cos(p.face + 3.1)))).toBeLessThan(0.01);
   });
   it('face eases toward aim, the head toward look, glide is passed on', () => {
     const m = newLichMem();
