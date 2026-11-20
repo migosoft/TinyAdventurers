@@ -176,7 +176,7 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
 if (WINGS) {
   const WING = 6.0, THICK = 0.1, FOLD = 0.42, NT = 30, NW = 24;
   type P2 = readonly [number, number];
-  const WRIST: P2 = [1.0, 2.3], ELBOW: P2 = [0.42, 1.2], BACK_END: P2 = [0.1, -2.4];
+  const WRIST: P2 = [1.0, 2.3], ELBOW: P2 = [0.95, 0.9], BACK_END: P2 = [0.1, -2.4];
   /** The four fingers from the wrist: a point each bows through, and its tip. */
   const FINGERS: readonly (readonly [P2, P2])[] = [[[3.5, 2.95], [6.2, 1.3]], [[3.1, 1.0], [4.7, -1.5]], [[2.3, -0.1], [3.1, -3.2]], [[1.45, -0.5], [1.5, -3.8]]];
   const finger = (i: number, t: number): [number, number] => {
@@ -211,12 +211,12 @@ if (WINGS) {
       let best = -9;
       const seed = i * 10 + (sd > 0 ? 0 : 100);
       for (let r = 0; r < 2; r++) {
-        const w0 = 0.18 + 0.3 * r + 0.34 * hash(seed, r, 41), t0 = 0.5 + 0.3 * hash(seed, r, 42), hw = 0.05 + 0.05 * hash(seed, r, 43);
-        if (t > t0) best = Math.max(best, 1 - Math.abs(w - w0 - 0.06 * Math.sin((t - t0) * 20)) / (hw * (t - t0) / (1 - t0) + 1e-6));
+        const w0 = 0.18 + 0.3 * r + 0.34 * hash(seed, r, 41), t0 = 0.68 + 0.22 * hash(seed, r, 42), hw = 0.022 + 0.03 * hash(seed, r, 43);
+        if (t > t0) best = Math.max(best, 1 - Math.abs(w - w0 - 0.03 * Math.sin((t - t0) * 24)) / (hw * (t - t0) / (1 - t0) + 1e-6));
       }
       for (let r = 0; r < 2; r++) {
         if (hash(seed, r, 44) < 0.25) continue;
-        const tc = 0.5 + 0.32 * hash(seed, r, 45), wc = 0.2 + 0.6 * hash(seed, r, 46), rt = 0.03 + 0.035 * hash(seed, r, 47), rw = 0.05 + 0.05 * hash(seed, r, 48);
+        const tc = 0.55 + 0.3 * hash(seed, r, 45), wc = 0.2 + 0.6 * hash(seed, r, 46), rt = 0.02 + 0.02 * hash(seed, r, 47), rw = 0.035 + 0.03 * hash(seed, r, 48);
         best = Math.max(best, 1 - Math.hypot((t - tc) / rt, (w - wc) / rw));
       }
       return best;
@@ -255,7 +255,7 @@ if (WINGS) {
       let c = mixC(WEB_RED, WEB_ROOT, Math.pow(Math.max(0, Math.min(1, held)), 0.8));
       c = mixC(c, 0x5a1218, 0.3 * vnoise((i + w) * 5, t * 6, 33));
       const burnt = (t - (0.9 - 0.07 * vnoise((i + w) * 9, 0.5, 31))) / 0.06;
-      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, Math.max(burnt, (torn(i, t, w) + 0.9) / 0.6))));
+      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, Math.max(burnt, (torn(i, t, w) + 0.6) / 0.5))));
     };
     const web = add({
       shape: { mesh: { position: Float32Array.from(pos), normal: Float32Array.from(nor), uv: null, index: Uint32Array.from(idx) }, axis: { dir: [S[0], S[1], S[2]], len: 6.2 * WING } },
