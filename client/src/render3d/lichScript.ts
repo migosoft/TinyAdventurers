@@ -43,6 +43,6 @@ export function lichAct(act: LichAct, at: number, targetId: number): Pick<EntSta
     anim,
     animMs: (winding ? a : a - l.wind) * 1000,
     flags: act === 'hurt' && a < HURT_SECS ? FLAG.HURT : 0,
-    extra: act === 'gaze' ? targetId : 0,
+    extra: act === 'gaze' && anim === ANIM.Gaze ? targetId : 0, // a run sends the target only while the anim is Gaze
   };
 }

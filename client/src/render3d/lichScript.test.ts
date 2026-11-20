@@ -36,8 +36,9 @@ describe('the lich\'s acts (?r3d=lich)', () => {
     });
   }
 
-  it('the gaze carries its target, no other act does', () => {
+  it('the gaze carries its target while it gazes, nothing else does', () => {
     expect(lichAct('gaze', 0.5, 42).extra).toBe(42);
+    expect(lichAct('gaze', CONST.LICH_GAZE_WINDUP + 0.2, 42).extra).toBe(0);
     for (const act of LICH_ACTS) if (act !== 'gaze') expect(lichAct(act, 0.5, 42).extra).toBe(0);
   });
 

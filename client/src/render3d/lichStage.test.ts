@@ -120,18 +120,28 @@ describe('the ?r3d=lich stage', () => {
     expect(built(last!)).toBe(1);
   });
 
-  it('a pinned page is the same picture every time', async () => {
-    const shot = async (): Promise<{ pos: number[]; yaw: number }> => {
-      const r = make('?r3d=lich&t=2&act=nova&at=1.3');
-      let last: FrameInput | undefined;
-      await r.wait(() => { last = r.step(1)[0]; return built(last) === 1 && last.models!.built![0].body.verts > 0; });
-      const b = last!.models!.built![0];
-      return { pos: [...b.body.position.slice(0, b.body.verts * 3)], yaw: b.yaw };
-    };
-    const a = await shot(), b = await shot();
+  /** The built lich's body vertices of a page, once its picture is painted and the page has replayed. */
+  const body = async (search: string): Promise<{ pos: number[]; yaw: number }> => {
+    const r = make(search);
+    let last: FrameInput | undefined;
+    await r.wait(() => { last = r.step(1)[0]; return built(last) === 1 && last.models!.built![0].body.verts > 0; });
+    const b = last!.models!.built![0];
+    return { pos: [...b.body.position.slice(0, b.body.verts * 3)], yaw: b.yaw };
+  };
+
+  it('a pinned page is the same picture every time, and not the rest pose', async () => {
+    const a = await body('?r3d=lich&t=2&act=nova&at=1.3'), b = await body('?r3d=lich&t=2&act=nova&at=1.3');
     expect(a.pos.length).toBeGreaterThan(300);
     expect(b.pos).toEqual(a.pos);
     expect(b.yaw).toBe(a.yaw);
+    const stand = await body('?r3d=lich&act=stand&t=2');
+    expect(stand.pos).not.toEqual(a.pos);
+  });
+
+  it('&at without &t pins the page at 3 s: the replay passes the release', async () => {
+    const alone = await body('?r3d=lich&act=nova&at=1.3'), pinned = await body('?r3d=lich&t=3&act=nova&at=1.3');
+    expect(alone.pos).toEqual(pinned.pos);
+    expect(alone.pos).not.toEqual((await body('?r3d=lich&act=stand&t=3')).pos);
   });
 
   it('has a button per act and the toggles', () => {

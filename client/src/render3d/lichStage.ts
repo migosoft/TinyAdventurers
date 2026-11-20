@@ -5,8 +5,8 @@
 // Query: `&act=` (stand, glide, nova, raise, bolts, curse, mist, gaze, hurt, broken), `&at=<s>` (pins the act's clock, game seconds of
 // its loop), `&glide=1`, `&face=<deg>` (a fixed aim), `&t=<s>` (pins the page's clock: the stage steps to it from rest in steps of 1/30 s,
 // then holds still), `&zoom=`, `&light=work`, `&fx=frozen|chilled|stone|immune`, `&px=&pz=` (the lich's place, tiles), `&lich=0` (no lich,
-// for the cost). Readouts: `window.__r3d.built` (built instances of the last frame) and `window.__r3d.lichMs` (the running mean of
-// `Figures3d.frame`, ms).
+// for the cost). Readouts: `window.__r3d.built` (built instances of the last frame) and `window.__r3d.lichMs` (the mean of
+// `Figures3d.frame` in ms: seeded with the first sample after 30 frames of warm-up, exponential afterwards). `&at=` without `&t=` pins the page at 3 s.
 import { ANIM, EFFECT, FLAG, KIND, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { LightField } from '../game/light';
@@ -140,16 +140,19 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
   ]);
 
   let clock = 0;
-  let warmed = opts.pinned === null;
-  /** Seconds of the act's loop at page time `t`: `&at=` pins it (a pinned page reaches it at its end, so the replay passes the release), else it runs from the act's start. */
-  const actClock = (t: number): number => (opts.at !== null ? (opts.pinned !== null ? opts.at - (opts.pinned - t) : opts.at) : t - state.origin);
-  let lastMs = 0, meanMs = 0;
+  // `&at=` without `&t=` pins the page too (at 3 s), so the replay passes the release and then holds.
+  const pin = opts.pinned ?? (opts.at !== null ? 3 : null);
+  let warmed = pin === null;
+  /** Seconds of the act's loop at page time `t`: `&at=` pins it to the pinned time's end (the replay passes the release), else it runs from the act's start. */
+  const actClock = (t: number): number => (opts.at !== null ? opts.at - (pin! - t) : t - state.origin);
+  let lastMs = 0, meanMs = 0, samples = 0;
 
-  /** Moves the lich and the knight by `dt` (the lich glides its rectangle). Keys move the knight only when `keys` is given. */
-  const sim = (dt: number, keys: { x: number; z: number } | null): void => {
+  /** Moves the lich and the knight by `dt` to page time `t` (the lich glides its rectangle, but stands while it casts). Keys move the knight only when `keys` is given. */
+  const sim = (dt: number, keys: { x: number; z: number } | null, t: number): void => {
     let faceTo = Math.atan2(knight.z - lich.z, knight.x - lich.x);
     lich.moving = false;
-    if (state.glide) {
+    const casting = lichAct(state.act === 'glide' ? 'stand' : state.act, actClock(t), KNIGHT_ID).anim !== ANIM.Idle;
+    if (state.glide && !casting) {
       if (wait > 0) wait -= dt;
       else {
         const to = path[leg], dx = to.x - lich.x, dz = to.z - lich.z, d = Math.hypot(dx, dz), go = SPEED * dt;
@@ -211,28 +214,29 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
       const follow = (k: number): void => { cam.x += (lich.x + 0.4 - cam.x) * k; cam.z += (lich.z - 0.5 - cam.z) * k; };
 
       let dt = c.dt;
-      if (opts.pinned !== null) {
+      if (pin !== null) {
         // The picture of the built figure arrives off the frame: the replay waits for it, else the lich would be a card for the steps it needs.
         if (!warmed && c.view && kit.picture(pictureKey)) {
           warmed = true;
           cam.x = lich.x + 0.4; cam.z = lich.z - 0.5;
-          while (clock < opts.pinned - 1e-9) {
-            const s = Math.min(STEP, opts.pinned - clock);
-            sim(s, null); clock += s;
+          while (clock < pin - 1e-9) {
+            const s = Math.min(STEP, pin - clock);
+            sim(s, null, clock + s); clock += s;
             advance(c, clock, s);
           }
         }
         dt = 0;
         follow(1);
       } else {
-        sim(c.dt, keys); clock += c.dt;
+        sim(c.dt, keys, clock + c.dt); clock += c.dt;
         follow(1 - Math.exp(-c.dt * 6));
       }
       c.timer.lap('sim');
       if (!c.view) return 0;
 
       const { fo, wo, fp, ambient, game } = advance(c, clock, dt);
-      meanMs += (lastMs - meanMs) * 0.02;
+      // the first 30 frames (shader and picture start-up) are not counted; the mean is seeded with the 31st sample, then exponential
+      if (++samples > 30) meanMs = samples === 31 ? lastMs : meanMs + (lastMs - meanMs) * 0.02;
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: Cand[] = [];
