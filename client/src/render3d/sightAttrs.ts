@@ -3,7 +3,6 @@
 import type { Glows, Quads, Shadows } from './cards';
 import type { SmokeBuf } from './fx/smoke';
 import type { FxBuf } from './models/fx';
-import type { FigureInst } from './models/instances';
 import { footSight, thingHard, type SightMask } from './sightmask';
 
 /** `sight` (hard, soft, scenery) per vertex of a card pass; zeros when `mask` is null (sight off). Returns `out`. */
@@ -24,8 +23,11 @@ export function cardSightData(q: Quads, mask: SightMask | null, out: Float32Arra
   return out;
 }
 
+/** What the sight rules read of a figure instance: a model instance (`FigureInst`) or a built figure's (`BuiltInst`, #358) fits. */
+export interface SightThing { owner: number; x: number; z: number; reach?: number; scenery?: boolean; sight: { hard: number; soft: number } }
+
 /** The sight of each model instance (#338), read once at its foot with its `reach` like a card; zeros when `mask` is null (sight off). */
-export function figureSight(insts: readonly FigureInst[], mask: SightMask | null): void {
+export function figureSight(insts: readonly SightThing[], mask: SightMask | null): void {
   for (const i of insts) {
     if (!mask) { i.sight.hard = 0; i.sight.soft = 0; continue; }
     const s = footSight(mask, i.x, i.z, i.reach ?? 0);
@@ -67,15 +69,19 @@ export const glowSightData = (g: Glows, mask: SightMask | null, out: Float32Arra
  * owner's first card (its body; the weapon is pushed after it). Scenery on a daylight map is never hidden (as `cardShown`).
  * `seen` is the caller's scratch set (cleared here), so nothing is allocated per frame.
  */
-export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen: Set<number>, out: Set<number>, models: readonly FigureInst[] = []): void {
+export function hiddenByPicture(passes: readonly Quads[], mask: SightMask, seen: Set<number>, out: Set<number>, models: readonly SightThing[] = [], built: readonly SightThing[] = []): void {
   seen.clear();
-  // A model figure owns no card: its first instance (the body; a weapon or a copy comes after) is read at its foot like a card's.
-  for (const i of models) {
-    if (i.owner < 0 || seen.has(i.owner)) continue;
-    seen.add(i.owner);
-    if (i.scenery && mask.daylight) continue;
-    if (thingHard(mask, footSight(mask, i.x, i.z, i.reach ?? 0).hard) > 0.5) out.add(i.owner);
-  }
+  // A model or built figure owns no card: its first instance (the body; a weapon or a copy comes after) is read at its foot like a card's.
+  const things = (list: readonly SightThing[]): void => {
+    for (const i of list) {
+      if (i.owner < 0 || seen.has(i.owner)) continue;
+      seen.add(i.owner);
+      if (i.scenery && mask.daylight) continue;
+      if (thingHard(mask, footSight(mask, i.x, i.z, i.reach ?? 0).hard) > 0.5) out.add(i.owner);
+    }
+  };
+  things(models);
+  things(built);
   for (const q of passes) {
     for (let k = 0; k < q.count; k++) {
       const id = q.owner[k * 6];

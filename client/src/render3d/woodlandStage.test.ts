@@ -206,7 +206,7 @@ describe('the ?r3d=woodland stage', () => {
 
   it('hands seven model figures to Figures3d with models=1: the walking paladin, three heroes, a skeleton, the ogre and the wolf (#338)', () => {
     const asked: string[] = [];
-    const kit = { get: (k: string) => (asked.push(k), null), known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
+    const kit = { get: (k: string) => (asked.push(k), null), picture: () => null, known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
     const { run } = setup('?r3d=woodland&models=1', 0, kit);
     const f = run(2, 0.016);
     expect(new Set(asked)).toEqual(new Set(['knight', 'wizard', 'dwarf', 'elf', 'skelet', 'ogre', 'wolf']));
@@ -216,7 +216,7 @@ describe('the ?r3d=woodland stage', () => {
 
   it('keeps cards for every figure without models=1, and makes no kit', () => {
     const asked: string[] = [];
-    const kit = { get: (k: string) => (asked.push(k), null), known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
+    const kit = { get: (k: string) => (asked.push(k), null), picture: () => null, known: () => true, times: new Map(), version: 0, dispose: vi.fn() };
     const { run } = setup('?r3d=woodland', 0, kit);
     expect(run(2, 0.016).models).toBeUndefined();
     expect(asked).toEqual([]);

@@ -51,6 +51,8 @@ export interface DrawnFig {
   /** The dragon's mouth and nostril, or the muzzle a biter's fangs hang before (world, stretched); `undefined` when the figure has none. */
   mouth?: V3;
   nostril?: V3;
+  /** A built figure's points (the lich's staff gem, eyes and chest) and its levels (#358); world, tiles, the height stretched. `undefined` for every other figure. */
+  gem?: V3; eyes?: V3; chest?: V3; magic?: { gem: number; flare: number };
   /** Facing, world rad: a model's drawn yaw, else the aim. */
   yaw: number;
   /** World y the swoosh lies at: the model's shoulder, the card's hand. */

@@ -26,6 +26,7 @@ import { bedAt, depthFade, hidingHeightAt, surfaceAt, walkBedAt } from './dips/s
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
+import { builtOf, builtPoint, type BuiltFigure, type BuiltInst } from './built';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { BONES, weaponBoneOf } from './models/bones';
@@ -141,6 +142,8 @@ export interface FigureOut {
   floats: Array<{ x: number; y: number; text: string; color: string; kind: WorldTextKind; up: number }>;
   /** The figures drawn as 3D models this frame (the model layer's input; empty without `FigureLook.models`). */
   models: FigureInst[];
+  /** The figures drawn as built figures this frame (#358; the lich): buffers in the figure's own frame, placed by the view. Their buffers belong to the figure's memory: valid until its next frame. */
+  built: BuiltInst[];
   /** Every figure drawn this frame, card or model, for the effects tied to one (#308). The objects are reused: valid until the next frame. */
   figs: DrawnFig[];
   /** The mimics' one-shot cues of this frame (the reveal and the landing), for the effects. */
@@ -177,6 +180,8 @@ interface Fig {
   last?: FigureInst[] | null;
   /** The last model frame's parts float apart (`FigureModel.apart`): its dying copy sinks. */
   apart?: boolean;
+  /** The built figure's memory (`BuiltFigure.newMem`, #358), made on its first built frame. */
+  built?: unknown;
 }
 
 /** An image left behind: a vanished figure fading out, or a dash afterimage. */
@@ -270,6 +275,13 @@ export class Figures3d {
   /** The rig objects of the smoke bodies, by figure slot (`figUsed`), reused every frame. */
   private readonly rigPool: NonNullable<DrawnFig['rig']>[] = [];
   private figUsed = 0;
+  /** The gem, eyes, chest and magic of the listed built figures, by slot (reused), and the scratch of their glows. */
+  private readonly gemPool: MV3[] = [];
+  private readonly eyesPool: MV3[] = [];
+  private readonly chestPool: MV3[] = [];
+  private readonly magicPool: Array<{ gem: number; flare: number }> = [];
+  private readonly haloAt: MV3 = [0, 0, 0];
+  private readonly haloRgb: MV3 = [0, 0, 0];
   /** The mouth and nostril vectors of the listed figures, by slot (reused). */
   private readonly mouthPool: MV3[] = [];
   private readonly nostrilPool: MV3[] = [];
@@ -368,7 +380,7 @@ export class Figures3d {
     const cover = look.ground ?? (() => 0);
     this.ground = (x, z, r) => cover(x, z, r) + this.bedAt(x, z);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], figs: [], cues: [], falls: [], sinks: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], built: [], figs: [], cues: [], falls: [], sinks: [] };
     this.falls = out.falls;
     this.sinks = out.sinks;
     this.figUsed = 0;
@@ -688,6 +700,9 @@ export class Figures3d {
    * cards. A figure that is drawn as cards forgets the model path's last instances (a vanish image would copy stale ones).
    */
   private figure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
+    // A built figure (#358): drawn once its picture is painted; until then (and without models) it falls through to its card.
+    const built = this.models && FIGURES[e.kind] && this.models.is(e) ? builtOf(e.kind) : null;
+    if (built && this.models!.kit.picture(built.picture)) return this.drawBuilt(e, f, cam, out, built);
     const key = this.models && FIGURES[e.kind] && this.models.is(e) ? modelKeyOf(e.kind) : null;
     const m = key ? this.models!.kit.get(key) : null;
     if (key && m) return this.drawModel(e, f, cam, out, key, m, this.models!.kit);
@@ -956,6 +971,94 @@ export class Figures3d {
   }
 
   /**
+   * Draws one figure as a built figure (#358): the third way beside cards and models. It follows `drawModel`: `figurePose` gives the
+   * alpha, visibility, tint and the sight reach, the foot is `figFoot`; the figure itself comes from `b.draw` (buffers in its own
+   * frame, kept in its memory) and goes to `out.built` as one `BuiltInst`. Its yaw is the figure's own eased facing (`BuiltDrawn.yaw`;
+   * the snapshot's aim in world rad, the same angle a model's yaw is, `packInstance` turns +x to (cos, sin)). No weapon, afterimage,
+   * lying pose or fall parts. False when it is not drawn (dead).
+   */
+  private drawBuilt(e: EntState, f: RunFrame, cam: Cam, out: FigureOut, b: BuiltFigure): boolean {
+    const { s, fig, dashing, skims, start } = this.figOf(e, f, FIGURES[e.kind]);
+    const d = fig.def;
+    const pose = figurePose(untinted(d), { ...s, screenAim: screenAim(cam.yaw, s.aim) }, f.dt, fig.mem, this.bounds);
+    const top = b.top;
+    const foot = this.figFoot(e, s, f, { skims, start }, top / TILE);
+    fig.body = null;
+    fig.last = null;
+    fig.model = true;
+    this.parts.delete(e.id);
+    if (!pose.visible || foot.gone) return false;
+
+    const { x, z, y } = foot;
+    const falling = foot.d?.kind === 'fall';
+    const sc = pose.scale;
+    const dark = this.dark.has(e.id);
+    const k = dark && this.darkFade ? this.fadeAlpha : 1;
+    const fb = this.bounds(pose.frame);
+    const reach = ((fb.r - fb.l + 1) * sc) / 2 / TILE;
+    const tint = modelTint(pose, s);
+    if (falling) { const t = depthFade(y); tint[0] *= t; tint[1] *= t; tint[2] *= t; }
+
+    // The head follows what the gaze looks at: the entity named in `extra` (the stone gaze's target), else the aim.
+    let look: number | null = s.aim;
+    if (s.anim === ANIM.Gaze) {
+      const t = f.ents.get(e.extra);
+      if (t) look = Math.atan2(t.y - e.y, t.x - e.x);
+    }
+    const mem = (fig.built ??= b.newMem());
+    const bin = this.builtIn;
+    bin.anim = s.anim; bin.animT = s.animT; bin.effects = s.effects ?? 0; bin.flags = s.flags ?? 0; bin.aim = s.aim; bin.look = look; bin.x = x; bin.z = z;
+    const dr = b.draw(bin, f.dt, mem);
+
+    const scale = (b.unit * sc) / TILE;
+    out.built.push({
+      owner: e.id, key: b.key, x, z, lift: this.lifted(y), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
+      dark, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
+    });
+
+    // The shadow caster: the figure's side outline at the foot (the rest pose's, baked into the atlas); a faller casts none.
+    if (pose.alpha >= 1 && this.shadowed(e.id) && !falling) {
+      const card: Card = { frame: outlineFrame(b.key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: b.unit * sc, tint: [1, 1, 1], mode: 0, alpha: 1 };
+      const c = casterOf(card, e.id, this.frames, cam);
+      if (c) out.casters.push(c);
+    }
+    // The ground oval: the hem's radius, no hop.
+    if (pose.shadow.visible && this.shadowed(e.id) && !foot.d && this.ovalOk(x, z, y)) {
+      const gf = snapGround(cam.pitch, cam.yaw, x, z);
+      const r = (b.hem * sc) / TILE;
+      pushShadow(out.shadows, cam, gf.x, gf.z, r, r * SHADOW_DEPTH, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, r));
+    }
+
+    // The halos (eyes, gem, tome) as glow quads at their points; a stone figure shows none.
+    const stretch = 1 / this.cp;
+    if (!pose.grey) {
+      const at = this.haloAt, rgb = this.haloRgb, a = pose.alpha * k;
+      for (const h of dr.halos) {
+        builtPoint(h.at, x, z, y, dr.yaw, scale, stretch, at);
+        rgb[0] = h.rgb[0] * a; rgb[1] = h.rgb[1] * a; rgb[2] = h.rgb[2] * a;
+        pushGlow(out.glows, at[0], at[1], at[2], h.r * scale, rgb, cam);
+      }
+    }
+
+    this.anchors.set(e.id, { x, z, y, height: top, tag: top + 3, head: top, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
+    const hand = dr.anchors.hand;
+    const lf = this.listFig(out, cam, e, s, d, x, z, y, top, pose.alpha * k, true, dr.yaw, builtPoint(hand, x, z, y, dr.yaw, scale, stretch, this.haloAt)[1], -1, dashing);
+    builtPoint(hand, x, z, y, dr.yaw, scale, stretch, lf.hand as MV3);
+    const slot = this.figUsed - 1;
+    if (dr.anchors.gem) lf.gem = builtPoint(dr.anchors.gem, x, z, y, dr.yaw, scale, stretch, (this.gemPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.eyes) lf.eyes = builtPoint(dr.anchors.eyes, x, z, y, dr.yaw, scale, stretch, (this.eyesPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.chest) lf.chest = builtPoint(dr.anchors.chest, x, z, y, dr.yaw, scale, stretch, (this.chestPool[slot] ??= [0, 0, 0]));
+    const mg = (this.magicPool[slot] ??= { gem: 0, flare: 0 });
+    mg.gem = dr.magic.gem; mg.flare = dr.magic.flare;
+    lf.magic = mg;
+    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + top / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    return true;
+  }
+
+  /** The scratch input of a built figure's draw (reused: the figure reads it before the next figure is drawn). */
+  private readonly builtIn = { anim: 0, animT: 0, effects: 0, flags: 0, aim: 0, look: null as number | null, x: 0, z: 0 };
+
+  /**
    * What an attack or a channel adds round a model figure (#338): the swoosh of a melee swing at the shoulder, the wolf's fangs in front
    * of its muzzle, the channel's swirl. A stone or frozen figure holds its pose and shows none. The sleeper's Z is the overlay's
    * (`overlayLayout`), from the anchor's effects.
@@ -973,6 +1076,7 @@ export class Figures3d {
     f.yaw = yaw; f.swingY = handY; f.arc = s.swingArc ?? d.swing?.arc ?? 0; f.bite = bite;
     f.spectre = spectre; f.form = form; f.rig = rig;
     f.mouth = undefined; f.nostril = undefined;
+    f.gem = undefined; f.eyes = undefined; f.chest = undefined; f.magic = undefined;
     out.figs.push(f);
     return f;
   }

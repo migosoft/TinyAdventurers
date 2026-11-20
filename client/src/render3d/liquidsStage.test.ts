@@ -15,7 +15,7 @@ vi.mock('./stageKit', async (orig) => ({
   ...(await orig<typeof import('./stageKit')>()),
   createStageKit: () => {
     fake.made++;
-    return { get: () => null, known: () => true, times: new Map<string, number>(), version: 0, dispose: () => { fake.disposed++; } } satisfies FigureKit;
+    return { get: () => null, picture: () => null, known: () => true, times: new Map<string, number>(), version: 0, dispose: () => { fake.disposed++; } } satisfies FigureKit;
   },
 }));
 
