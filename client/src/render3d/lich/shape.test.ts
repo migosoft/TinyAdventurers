@@ -45,6 +45,25 @@ describe('the lich builder', () => {
     }
   });
 
+  it('writes the same uv, look and index in every pose, so `fixed` depends on `parts` only', () => {
+    for (const parts of ['all', 'caster'] as const) {
+      const ref = build(restPose(), parts);
+      expect(ref.body.fixed).toBe(parts === 'all' ? 1 : 2);
+      expect(ref.claws.fixed).toBe(ref.body.fixed);
+      for (const [name, pose] of cases) {
+        const o = build(pose, parts);
+        for (const [x, r] of [[o.body, ref.body], [o.claws, ref.claws]] as const) {
+          expect(x.fixed, name).toBe(r.fixed);
+          expect(x.verts, name).toBe(r.verts);
+          expect(x.indices, name).toBe(r.indices);
+          expect(used(x.uv, x.verts * 2), name).toEqual(used(r.uv, r.verts * 2));
+          expect(used(x.look, x.verts * 2), name).toEqual(used(r.look, r.verts * 2));
+          expect(used(x.index, x.indices), name).toEqual(used(r.index, r.indices));
+        }
+      }
+    }
+  });
+
   it('puts every body uv inside one of the painted regions', () => {
     const o = build(restPose());
     const rects = Object.values(REGION);

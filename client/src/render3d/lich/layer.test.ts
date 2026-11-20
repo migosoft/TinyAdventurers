@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DataTexture, Mesh, RGBAFormat, Scene, Texture, UnsignedByteType } from 'three/webgpu';
+import { BufferAttribute, DataTexture, Mesh, RGBAFormat, Scene, Texture, UnsignedByteType } from 'three/webgpu';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { FIGURE_ORDER, makeFigureShared } from '../models/nodes';
@@ -66,6 +66,40 @@ describe('LichLayer', () => {
     const ms = meshes(scene);
     expect(ms.find((m) => m.renderOrder === FIGURE_ORDER)!.visible).toBe(true);
     expect(ms.find((m) => m.renderOrder === CLAW_ORDER)!.visible).toBe(false);
+    layer.dispose();
+  });
+
+  it('uploads uv, look and the index only when new, or when fixed, verts or indices change; position, normal and colour every frame', () => {
+    const scene = new Scene(), layer = new LichLayer(scene, make, CLAW_LAYER);
+    const a = inst(1);
+    const versions = (): Record<string, number> => {
+      const g = meshes(scene).find((m) => m.renderOrder === FIGURE_ORDER)!.geometry;
+      const v = (n: string): number => (g.attributes[n] as BufferAttribute).version;
+      return { position: v('position'), normal: v('normal'), colour: v('colour'), uv: v('uv'), look: v('look'), index: g.index!.version };
+    };
+    layer.frame([a], slotOf);
+    const v1 = versions();
+    expect(Object.values(v1).every((v) => v > 0)).toBe(true);
+    layer.frame([a], slotOf);
+    const v2 = versions();
+    for (const k of ['position', 'normal', 'colour']) expect(v2[k]).toBeGreaterThan(v1[k]);
+    for (const k of ['uv', 'look', 'index']) expect(v2[k]).toBe(v1[k]);
+    a.body.fixed = 1;
+    layer.frame([a], slotOf);
+    const v3 = versions();
+    for (const k of ['uv', 'look', 'index']) expect(v3[k]).toBeGreaterThan(v2[k]);
+    a.body.indices = 6;
+    layer.frame([a], slotOf);
+    const v4 = versions();
+    for (const k of ['uv', 'look', 'index']) expect(v4[k]).toBeGreaterThan(v3[k]);
+    layer.frame([a], slotOf);
+    expect(versions().uv).toBe(v4.uv);
+    // A geometry made again uploads everything.
+    const g0 = meshes(scene)[0].geometry;
+    layer.frame([{ ...a, body: { ...a.body } }], slotOf);
+    expect(meshes(scene)[0].geometry).not.toBe(g0);
+    const v5 = versions();
+    expect(Object.values(v5).every((v) => v > 0)).toBe(true);
     layer.dispose();
   });
 

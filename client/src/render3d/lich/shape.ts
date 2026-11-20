@@ -573,6 +573,8 @@ function claws(g: BuiltBuf, pose: LichPose): void {
 export function buildLich(pose: LichPose, cloth: Cloth, out: LichOut, parts: 'all' | 'caster' = 'all'): void {
   const b = out.body, g = out.claws, an = out.anchors;
   b.verts = 0; b.indices = 0; g.verts = 0; g.indices = 0;
+  // The uvs, look values and indices depend only on `parts` (the topology is fixed; poses move positions, normals and colours).
+  b.fixed = g.fixed = parts === 'all' ? 1 : 2;
   GZ = pose.gaze; MV = pose.glide; HU = pose.hurt; BOB = 0.1 * Math.sin(pose.t * 1.4);
   const cf = Math.cos(pose.face), sf = Math.sin(pose.face);
   robe(b, pose, cloth, cf, sf);
