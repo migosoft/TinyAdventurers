@@ -159,6 +159,20 @@ describe('release', () => {
     expect(p.novaUp).toBeCloseTo(lichPose(base({ anim: ANIM.Slam, animT: 0.3 }), DT, fresh).novaUp, 9);
     expect(m.heldFor).toBe(0);
   });
+  it('a thaw whose held time overshoots the server\'s frozen time by a frame is not a restart', () => {
+    const m = newLichMem();
+    const before = snap(lichPose(base({ anim: ANIM.Slam, animT: 0.5 }), DT, m));
+    const jitter = [0.7, 1.3, 1.0, 0.8, 1.2, 1.1, 0.9]; // frame times, as a real client has them
+    let sum = 0;
+    for (let i = 0; sum < 2; i++) { const d = DT * jitter[i % jitter.length]; sum += d; lichPose(base({ anim: ANIM.Slam, animT: 0.5 + sum - d, effects: bit(EFFECT.Frozen) }), d, m); }
+    // the thaw snapshot is late: the server's frozen time is a frame less than the client's held sum
+    let raw = 0.5 + sum - DT;
+    const first = lichPose(base({ anim: ANIM.Slam, animT: raw }), DT, m);
+    expect(first.novaUp).toBeCloseTo(before.novaUp, 1);
+    expect(first.novaChest).toBeCloseTo(before.novaChest, 1);
+    for (let adj = 0.5; adj < W.slam; adj += DT) { raw += DT; lichPose(base({ anim: ANIM.Slam, animT: raw }), DT, m); }
+    expect(lichPose(base(), DT, m).novaHit).toBeGreaterThan(0.8);
+  });
   it('a first sight in mid wind-up starts from its animT and releases when it ends', () => {
     const m = newLichMem();
     expect(lichPose(base({ anim: ANIM.Slam, animT: 0.6 }), DT, m).novaUp).toBeGreaterThan(0.9);

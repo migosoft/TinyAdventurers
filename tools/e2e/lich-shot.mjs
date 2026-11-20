@@ -1,7 +1,7 @@
 // Check shots of the built lich (#358) in the ?r3d=lich page: standing, gliding, every act in the middle of its wind-up and 0.1 s and 0.5 s
 // after its release, the broken wind-up and the hurt flash, the four effects (frozen, chilled, stone, immune), the work light, the front
 // and the back close up, the lich wading, and a lost device (the draws before and after equal). Every page is pinned (`&t=3`: the page steps
-// to it from rest), so a shot is the same picture every time. Fails on a console error, a "3D model" warning, a device-lost warning (but in
+// to it from rest), so a shot is the same picture every time. Fails on a console error, a "3D model <key>: ..." warning, a "built figure <key>: ..." warning (a built key without a layer in view.ts), a device-lost warning (but in
 // the `lose` run) and a page whose `window.__r3d.built` stays below 1.
 // Usage: node lich-shot.mjs [baseUrl] [outDir] [mode]     mode: webgl (default) or webgpu
 // Env: BROWSER (the executable), GPU=1 (a visible window on the real GPU with the notebook's start line, gpu.mjs), HEADED=1,
@@ -63,7 +63,7 @@ async function open(q, tag, zoomOf = zoom, lose = false) {
   watchPage(p, tag, mine, () => lose);
   p.on('console', (m) => {
     const t = m.text();
-    if (m.type() === 'warning' && /^3D model /.test(t)) mine.push(`${tag}: ${t}`);
+    if (m.type() === 'warning' && /^(3D model |built figure )/.test(t)) mine.push(`${tag}: ${t}`);
     if (m.type() === 'warning' && /shader|uniform|validation|WGSL/i.test(t)) mine.push(`${tag}: ${t}`);
     if (lose) for (let i = mine.length - 1; i >= 0; i--) if (/Device Lost/i.test(mine[i])) mine.splice(i, 1);
   });

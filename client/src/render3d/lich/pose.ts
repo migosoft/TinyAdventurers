@@ -35,6 +35,7 @@ export interface LichMem {
   headYaw: number;
   lastAnim: number;
   lastAnimT: number;
+  /** The last snapshot's own animT (not adjusted by `heldFor`). */ lastRaw: number;
   /** 0 none, 1 the second half runs, 2 a broken-off wind-up eases back. */ mode: 0 | 1 | 2;
   /** Seconds the current wind-up spent frozen (the server's animT keeps growing meanwhile). */ heldFor: number;
   /** Client seconds since `lastAnimT` last changed (0 on a frame that brought a new animT; does not grow while held). */ seenFor: number;
@@ -70,7 +71,7 @@ export function restPose(): LichPose {
 }
 
 export function newLichMem(): LichMem {
-  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, mode: 0, heldFor: 0, seenFor: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
+  return { started: false, t: 0, face: 0, headYaw: 0, lastAnim: ANIM.Idle, lastAnimT: 0, lastRaw: 0, mode: 0, heldFor: 0, seenFor: 0, act: 0, a: 0, r: 0, gazeFrom: 0, gazeE: -1, hurtT: -1, lastHurt: false, pose: restPose() };
 }
 
 /** Which action a wind-up anim belongs to, 0 for any other anim. */
@@ -114,7 +115,7 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
   const p = mem.pose;
   const cur = actOf(s.anim), prev = first ? 0 : actOf(mem.lastAnim);
   // the same wind-up anim whose animT fell (beyond rounding) is the previous wind-up ending and a new one starting
-  const restart = !first && cur !== 0 && cur === prev && s.anim === mem.lastAnim && s.animT - mem.heldFor < mem.lastAnimT - 1e-4;
+  const restart = !first && cur !== 0 && cur === prev && s.anim === mem.lastAnim && s.animT < mem.lastRaw - 1e-4; // the raw animT never falls within one server anim (the adjusted one can dip after a thaw)
   const ended = prev !== 0 && (cur !== prev || restart);
   // the server's animT at the switch, estimated: what the last snapshot said plus the client time since it changed, plus this frame
   const estimate = mem.lastAnimT + mem.seenFor + dt;
@@ -180,6 +181,6 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
 
   // snapshots bring a new animT every 2 ticks (or fewer when lost): the client time since it last changed
   mem.seenFor = first || animT !== mem.lastAnimT ? 0 : mem.seenFor + Math.min(dt, CLOTH.maxDt);
-  mem.lastAnim = s.anim; mem.lastAnimT = animT; mem.started = true;
+  mem.lastAnim = s.anim; mem.lastAnimT = animT; mem.lastRaw = s.animT; mem.started = true;
   return p;
 }
