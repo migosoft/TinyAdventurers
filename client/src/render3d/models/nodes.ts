@@ -171,7 +171,7 @@ export function eyeMask(spec: EyeSpec, extra: N): { core: N; halo: N } {
 }
 
 /** The stipple of a draw: kept where the Bayer threshold is below what is shown (sight and see-through in one: `alpha` times how much the hero sees), and above the ground when the figure is cut. */
-function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: number }): N {
+export function keepOf(p: FigurePoint, sight: Sight, o: { bySight: boolean; alphaMin?: number }): N {
   const shown = sight.shown(p.seen.y, float(0));
   const above = p.flags.y.lessThan(0.5).or(p.P.y.greaterThanEqual(0));
   const stipple = o.bySight ? bayerAt().lessThan(shown.mul(p.seen.x)) : bayerAt().lessThan(shown).and(p.seen.x.greaterThanEqual(o.alphaMin ?? 0.5));
