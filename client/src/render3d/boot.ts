@@ -7,6 +7,7 @@ import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
+import { createLichStage } from './lichStage';
 import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
 import { createLightsStage } from './lightsStage';
@@ -120,4 +121,10 @@ export function startRun3d(
       deps.hud.setToggles([]); // the log is gone with the session
     },
   };
+}
+
+/** SPIKE (#358): `?r3d=lich`, the new red lich as a 3D try-out in a boss hall. */
+export async function bootLich(el: HTMLElement, search: string): Promise<void> {
+  const p = parseParams(search);
+  await startHost(el, search, 'demo', (assets, host) => createLichStage(assets, p, search, host));
 }

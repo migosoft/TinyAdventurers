@@ -211,6 +211,8 @@ class DynMesh {
   }
 }
 export interface View {
+  /** SPIKE (#358): the scene and the picture's camera, for the lich try-out page only. */
+  readonly spike?: { scene: Scene; camera: OrthographicCamera };
   readonly backend: 'WebGPU' | 'WebGL2 fallback';
   /** Device px. */
   setSize(w: number, h: number): void;
@@ -801,6 +803,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
 
   return {
+    spike: { scene, camera },
     chunks,
     get meshes() {
       return scene.children.length;
