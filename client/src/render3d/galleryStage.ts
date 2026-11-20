@@ -185,7 +185,7 @@ const VARIETY_KINDS = [KIND.Stag, KIND.Deer, KIND.Boar, KIND.Bunny, KIND.GoblinA
  */
 export const LINEUP_KEYS: readonly ModelKey[] = [
   'bunny', 'boar', 'imp', 'chest', 'mimic', 'goblin', 'skelet', 'wolf', 'deer', 'wizard', 'dwarf', 'shade', 'knight', 'barrel', 'ogre', 'stag', 'elf',
-  'npcKnight', 'ghost', 'necromancer', 'summoner', 'disciple', 'chort', 'orc',
+  'npcKnight', 'ghost', 'necromancer', 'summoner', 'disciple', 'chort', 'demon',
 ];
 /** The kind that stands for a model key in the line-up (the objects' kinds from `OBJECT_MODEL`, #317). */
 export const lineupKind = (key: ModelKey): number => Number(Object.keys({ ...MODEL_OF_KIND, ...OBJECT_MODEL }).find((k) => (MODEL_OF_KIND[Number(k)] ?? OBJECT_MODEL[Number(k)]) === key));
