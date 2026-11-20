@@ -70,6 +70,7 @@ export const ANIM = {
   "Move": 1,
   "Shoot": 3,
   "Slam": 10,
+  "Summon": 16,
   "Tail": 9,
   "TakeOff": 11,
   "Windup": 6
@@ -149,6 +150,7 @@ export const CONST = {
   "LAVA_SPEED": 0.4,
   "LICH_BLIND_WINDUP": 0.6,
   "LICH_GAZE_WINDUP": 1.0,
+  "LICH_GLOOM_WINDUP": 0.5,
   "LICH_NOVA_KNOCK": 64.0,
   "LICH_NOVA_RADIUS": 56.0,
   "LICH_NOVA_STR": 10,
@@ -159,6 +161,7 @@ export const CONST = {
   "MIMIC_HOP_AIR_START": 0.2,
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
+  "MINION_WINDUP": 0.7,
   "MIN_COOLDOWN": 0.05,
   "OGRE_SLAM_KNOCK": 28.0,
   "OGRE_SLAM_RADIUS": 34.0,

@@ -55,7 +55,7 @@ pub fn act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
             run.monsters[mi].ai.cast = Some((a.id, a.windup));
             let aim = run.monsters[mi].aim;
             announce_cast(run, Creature::Monster(mi), a.id, a.windup, aim);
-            set_anim(run, mi, Anim::Windup);
+            set_anim(run, mi, ab::windup_anim(a.id));
             return true;
         }
     }
@@ -137,6 +137,7 @@ mod tests {
         assert_eq!(c.len(), 1, "announced at the wind-up start: {c:?}");
         assert_eq!((c[0].1, c[0].2), (crate::defs::looks::RuneLook::Gloom as u8, (windup * 1000.0).round() as u16));
         assert_eq!(run.monsters[ni].announced, Some(AbilityId::RaiseDead));
+        assert_eq!(run.monsters[ni].anim, Anim::Summon, "a summoning wind-up has its own anim");
         // The wind-up runs on without another announcement, and the landing adds none.
         for _ in 0..((windup / crate::run::DT).ceil() as usize + 2) {
             act(&mut run, ni, crate::run::DT, seen);

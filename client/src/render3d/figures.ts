@@ -9,7 +9,7 @@ import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
 import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
-import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
+import { FIGURES, heroWeapons, isHazardKind, isWindup, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { MELEE_T, figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import { FigureStates } from '../game/anim/figureState';
 import type { EntState } from '../game/world';
@@ -250,7 +250,7 @@ function modelTint(pose: Pose, s: ViewState): [number, number, number] {
   let rgb = chosen.mode === 'mul' ? chosen.rgb : 0xffffff;
   const fx = s.effects ?? 0, iced = has(fx, EFFECT.Frozen);
   // The red flash is only shown by `figurePose` when the figure is neither stone nor ice (pose.ts), so only then is there something to undo.
-  if ((s.anim === ANIM.Windup || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = 0xffffff;
+  if ((isWindup(s.anim) || s.anim === ANIM.Slam) && !s.fall && !s.drown && !has(fx, EFFECT.Petrified) && !iced) rgb = 0xffffff;
   const t = rgbOf(rgb);
   if (iced) { const f = rgbOf(FROZEN_TINT); t[0] *= f[0]; t[1] *= f[1]; t[2] *= f[2]; }
   return t;
@@ -941,7 +941,7 @@ export class Figures3d {
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
-    const bite = m.armLength > 0 || m.butt || m.gait === 'float' || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : s.anim === ANIM.Windup ? BITE_HELD : -1;
+    const bite = m.armLength > 0 || m.butt || m.gait === 'float' || !d.swing ? -1 : p3.attack?.style === 'bite' ? p3.attack.u : isWindup(s.anim) ? BITE_HELD : -1;
     // A smoke body's rig (the pose, its drawn scale and world lift, for the effects); one object per figure slot, reused, and none for the rest.
     let rig: DrawnFig['rig'] = null;
     if (sp?.smoke) {
@@ -1100,7 +1100,7 @@ export class Figures3d {
 
     // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.
     const stretch = 1 / Math.cos(cam.pitch), wolf = e.kind === KIND.DireWolf;
-    const bite = !wolf ? -1 : s.anim === ANIM.Windup ? BITE_HELD : s.anim === ANIM.Melee ? BITE_HELD + (1 - BITE_HELD) * (s.animT / BITE_SECS) : -1;
+    const bite = !wolf ? -1 : isWindup(s.anim) ? BITE_HELD : s.anim === ANIM.Melee ? BITE_HELD + (1 - BITE_HELD) * (s.animT / BITE_SECS) : -1;
     const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha, false, s.aim, y + (d.handY * ds * stretch) / TILE, bite, dashing);
     if (bite >= 0) this.muzzle(lf, cam, s.aim, y + lf.top * 0.55, 0.4);
     if (d.mouth && !pose.lie) {

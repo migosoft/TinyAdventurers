@@ -414,7 +414,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     } else {
                         run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None, id: None });
                         announce_cast(run, Creature::Monster(mi), alt_id, alt.windup, aim);
-                        set_anim(run, mi, Anim::Windup);
+                        set_anim(run, mi, ab::windup_anim(alt_id));
                     }
                     return;
                 }
@@ -430,7 +430,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 };
                 run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
                 announce_cast(run, Creature::Monster(mi), main.id, main.windup, aim);
-                set_anim(run, mi, Anim::Windup);
+                set_anim(run, mi, ab::windup_anim(main.id));
                 return;
             }
             if base_ai == BaseAi::Stationary {
@@ -991,7 +991,7 @@ pub(crate) mod tests {
         let (mut run, id, mi) = necro_in_sight();
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert!(matches!(run.monsters[mi].ai.cast, Some((AbilityId::RaiseDead, _))));
-        assert_eq!(run.monsters[mi].anim, Anim::Windup);
+        assert_eq!(run.monsters[mi].anim, Anim::Summon);
         assert_eq!(raised(&run, id), 0);
         let mut ticks = 0;
         while run.monsters[mi].ai.cast.is_some() {

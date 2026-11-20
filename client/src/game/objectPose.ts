@@ -1,5 +1,6 @@
 // Poses of the board's objects (chests, barrels, mimics, torches) as pure functions; the 3D view draws from them.
 import { ANIM, CONST, FLAG } from '../generated/defs';
+import { isWindup } from './anim/defs';
 
 // ---- chest ----
 
@@ -141,7 +142,7 @@ export class MimicTracker {
       hiding,
       rattle,
       wakeT: this.wakeClock,
-      hop: e.anim === ANIM.Move ? (e.animT / HOP_CYCLE) % 1 : e.anim === ANIM.Windup ? HOP.crouch * 0.8 : -1,
+      hop: e.anim === ANIM.Move ? (e.animT / HOP_CYCLE) % 1 : isWindup(e.anim) ? HOP.crouch * 0.8 : -1,
       biteT: e.anim === ANIM.Melee ? e.animT : -1,
       aim: e.aim,
       hurt: (e.flags & FLAG.HURT) !== 0,

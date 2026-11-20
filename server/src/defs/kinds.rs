@@ -169,55 +169,36 @@ impl EntityKind {
     }
 }
 
-/// Animation state of an entity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Anim {
-    Idle = 0,
-    Move = 1,
-    Melee = 2,
-    Shoot = 3,
-    Cast = 4,
-    Dash = 5,
-    Windup = 6,
-    Channel = 7,
-    Breath = 8,
-    /// Dragon tail swipe: a melee hit behind the figure.
-    Tail = 9,
-    /// Ogre ground slam wind-up (the telegraph ring grows over it).
-    Slam = 10,
-    /// Dragon lifting off (it stands still meanwhile).
-    TakeOff = 11,
-    /// Dragon coming down; the landing smash hits at the end.
-    Land = 12,
-    /// Dragon bite: the wind-up starts it, the jaws snap at the end.
-    Bite = 13,
-    /// The lich's stone gaze: a beam locked on a hero (EntSnap.extra = its id).
-    Gaze = 14,
-    /// The wind-up of a strike out of invisibility (Ghost, Shade): the client draws the warning.
-    Ambush = 15,
-}
-
-impl Anim {
-    #[cfg(test)]
-    pub const ALL: [Anim; 16] = [
-        Anim::Idle,
-        Anim::Move,
-        Anim::Melee,
-        Anim::Shoot,
-        Anim::Cast,
-        Anim::Dash,
-        Anim::Windup,
-        Anim::Channel,
-        Anim::Breath,
-        Anim::Tail,
-        Anim::Slam,
-        Anim::TakeOff,
-        Anim::Land,
-        Anim::Bite,
-        Anim::Gaze,
-        Anim::Ambush,
-    ];
+super::enum_list::listed_enum! {
+    /// Animation state of an entity.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Anim: u8 {
+        Idle = 0,
+        Move = 1,
+        Melee = 2,
+        Shoot = 3,
+        Cast = 4,
+        Dash = 5,
+        Windup = 6,
+        Channel = 7,
+        Breath = 8,
+        /// Dragon tail swipe: a melee hit behind the figure.
+        Tail = 9,
+        /// Ogre ground slam wind-up (the telegraph ring grows over it).
+        Slam = 10,
+        /// Dragon lifting off (it stands still meanwhile).
+        TakeOff = 11,
+        /// Dragon coming down; the landing smash hits at the end.
+        Land = 12,
+        /// Dragon bite: the wind-up starts it, the jaws snap at the end.
+        Bite = 13,
+        /// The lich's stone gaze: a beam locked on a hero (EntSnap.extra = its id).
+        Gaze = 14,
+        /// The wind-up of a strike out of invisibility (Ghost, Shade): the client draws the warning.
+        Ambush = 15,
+        /// The wind-up of a summoning (Raise Dead, Summon Imps).
+        Summon = 16,
+    }
 }
 
 pub mod flags {
@@ -237,7 +218,13 @@ pub mod flags {
 
 #[cfg(test)]
 mod tests {
-    use super::EntityKind;
+    use super::{Anim, EntityKind};
+
+    #[test]
+    fn the_summon_wind_up_has_its_own_anim() {
+        assert_eq!(Anim::COUNT, 17);
+        assert_eq!(Anim::Summon as u8, 16);
+    }
 
     /// A shot flies SHOT_HEIGHT up: the floating spectres need their drawn height (12 rows plus the bob
     /// of the 16x16 frames) or shots pass over their feet-sized hitbox and miss the body.

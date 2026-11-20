@@ -5,7 +5,7 @@ use super::attributes::{Attr, CHA_DMG, INT_DMG};
 use super::damage::{DamageSplit, DamageType};
 use super::effects::{EffectKind, EffectLook};
 use super::enemies::EnemyType;
-use super::kinds::EntityKind;
+use super::kinds::{Anim, EntityKind};
 use super::requirements::Requirement;
 use super::weapons::WeaponKind;
 use crate::protocol::ClassId;
@@ -327,6 +327,15 @@ pub const MINION_ALIVE: f64 = 2.4;
 pub const MINION_COOLDOWN: f64 = 12.0;
 pub const MINION_WINDUP: f64 = 0.7;
 
+/// The anim of the wind-up of ability `id`: a summoning has its own, every other wind-up the plain one.
+pub fn windup_anim(id: AbilityId) -> Anim {
+    if def(id).shape == Shape::Summon {
+        Anim::Summon
+    } else {
+        Anim::Windup
+    }
+}
+
 /// The angles (rad), relative to the aim, of the shots of one use of `count` (0 means 1) over
 /// `spread`: a single shot flies straight ahead; a `spread` of a full circle or more spaces them
 /// evenly all around (`TAU / count`); otherwise they fan out symmetrically, the outer two `spread` apart.
@@ -635,6 +644,14 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windup_anim_is_summon_for_summonings_only() {
+        assert_eq!(windup_anim(AbilityId::RaiseDead), Anim::Summon);
+        assert_eq!(windup_anim(AbilityId::SummonImps), Anim::Summon);
+        assert_eq!(windup_anim(AbilityId::GloomBolts), Anim::Windup);
+        assert_eq!(windup_anim(AbilityId::BlindingCurse), Anim::Windup);
+    }
 
     #[test]
     fn modules_come_with_their_ability() {

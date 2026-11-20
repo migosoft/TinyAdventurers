@@ -7,6 +7,7 @@ import { addLight } from './booms';
 import { has } from '../../game/effectBits';
 import { GLOOM, gazePulse } from '../../game/fxLooks';
 import { MELEE_T } from '../../game/anim/pose';
+import { isWindup } from '../../game/anim/defs';
 import { TILE } from '../../sim/map';
 import { pushGlow } from '../cards';
 import { fangTris, FX_WHITE, swirlTris, swooshTris } from '../models/fx';
@@ -168,7 +169,7 @@ function breath(out: FxOut, frame: FxFrame, f: DrawnFig): void {
     }
     return;
   }
-  if (f.anim !== ANIM.Windup && f.anim !== ANIM.Breath) return;
+  if (!isWindup(f.anim) && f.anim !== ANIM.Breath) return;
   const nos = f.nostril, k = Math.max(3, Math.round(8 * ctx.detail));
   rgbIn(0x706060, c1);
   if (nos) {
