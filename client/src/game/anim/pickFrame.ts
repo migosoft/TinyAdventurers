@@ -42,16 +42,21 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
   const windup = t < (d.windups?.[s.anim] ?? 0);
   const ground = (frame: string, w = false): Picked => ({ frame, lift: 0, windup: w });
 
-  // A figure without the flight frames (the demon) shows its ground frames in these anims, as the gallery cycles every figure through every state.
-  if (s.anim === ANIM.TakeOff && F.takeoff) {
+  const flight = d.flight;
+  // The lift curves are the dragon's; a figure without flight frames (the demon) shows its idle loop while it rises and falls.
+  if (s.anim === ANIM.TakeOff && flight) {
     // Crouch and beat the wings first; the feet leave the ground halfway.
-    const k = t / CONST.DRAGON_TAKEOFF;
-    return { frame: at('takeoff', k * F.takeoff!.n), lift: smooth((k - 0.45) / 0.55), windup: false };
+    const k = t / flight.takeoff;
+    const rise = smooth((k - 0.45) / 0.55);
+    if (F.takeoff) return { frame: at('takeoff', k * F.takeoff.n), lift: rise, windup: false };
+    return { frame: loop('idle', clock), lift: rise, windup: false };
   }
-  if (s.anim === ANIM.Land && F.land) {
+  if (s.anim === ANIM.Land && flight) {
     // Glide down with the wings up, touch down in a crouch, settle as the smash hits.
-    const k = t / CONST.DRAGON_LAND;
-    return { frame: at('land', k < 0.7 ? 0 : k < 0.88 ? 1 : 2), lift: 1 - smooth(k / 0.7), windup: false };
+    const k = t / flight.land;
+    const fall = 1 - smooth(k / 0.7);
+    if (F.land) return { frame: at('land', k < 0.7 ? 0 : k < 0.88 ? 1 : 2), lift: fall, windup: false };
+    return { frame: loop('idle', clock), lift: fall, windup: false };
   }
   if (s.flags & FLAG.AIRBORNE && F.hover && F.hoverbreath) {
     const fire = s.anim === ANIM.Breath && !windup;
@@ -59,11 +64,20 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
   }
   if (F.cleave) {
     const w = d.windups![s.anim] ?? 0;
+    // In the air (no hover frames) the ground frames are drawn lifted, in every anim.
+    const air = s.flags & FLAG.AIRBORNE ? 1 : 0;
+    const ground = (frame: string, wu = false): Picked => ({ frame, lift: air, windup: wu });
     switch (s.anim) {
       case ANIM.Melee: {
         // Wind-up, the arm coming through just before the hit, then impact, follow-through, recovery.
         if (t < w) return ground(at('cleave', t < w - SWING_T ? 0 : 1), t < w - SWING_T);
         const k = (t - w) / CONST.DEMON_CLEAVE_RECOVER;
+        return ground(at('cleave', k < 0.4 ? 2 : k < 0.75 ? 3 : 4));
+      }
+      case ANIM.Tail: {
+        // The tail swipe: the cleave's frames and timing.
+        if (t < w) return ground(at('cleave', t < w - SWING_T ? 0 : 1), t < w - SWING_T);
+        const k = (t - w) / CONST.DEMON_TAIL_RECOVER;
         return ground(at('cleave', k < 0.4 ? 2 : k < 0.75 ? 3 : 4));
       }
       case ANIM.Dash:
@@ -74,7 +88,11 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
       case ANIM.Cast:
         // Gathering power, rising as the wind-up ends, the burst with the ring of fire, recovery.
         if (windup) return ground(at('cast', t < w * 0.6 ? 0 : 1), true);
-        return ground(at('cast', t < w + CONST.DEMON_RING_RECOVER * 0.7 ? 2 : 3));
+        return ground(at('cast', t < w + CONST.DEMON_CAST_RECOVER * 0.7 ? 2 : 3));
+      case ANIM.Breath:
+        // Gathering power as for the cast, then the arms flung wide while the breath lasts, then the recovery.
+        if (windup) return ground(at('cast', t < w * 0.6 ? 0 : 1), true);
+        return ground(at('cast', t < w + CONST.DEMON_BREATH_TIME ? 2 : 3));
     }
     return ground(moving ? loop('walk', runClock) : loop('idle', clock));
   }

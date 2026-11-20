@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, FLAG, KIND } from '../../generated/defs';
 import { FIGURES } from './defs';
 import { dragonPoints, DRAGON_ANIMS, dragonFrameName } from './dragonRig';
+import { DEMON_ANIMS, demonFrameName, type DemonAnim } from './demonFrames';
 import { pickFrame } from './pickFrame';
 
 const D = FIGURES[KIND.Dragon];
@@ -83,10 +84,66 @@ describe('demon frames', () => {
     expect(at(ANIM.Dash, w + CONST.DEMON_SWOOP_TIME + 0.05).frame).toBe('demon_charge_anim_f3');
   });
 
-  it('has no take-off or landing frames, so those anims show it idling (the gallery cycles every figure through every state) (#338)', () => {
-    expect(at(ANIM.TakeOff, 0.1).frame).toBe('demon_idle_anim_f0');
-    expect(at(ANIM.Land, 0.1).frame).toBe('demon_idle_anim_f0');
-    expect(at(ANIM.TakeOff, 0.1, 0, true).frame).toBe('demon_walk_anim_f0');
+  it('lifts off and lands on its idle frames', () => {
+    expect(at(ANIM.TakeOff, 0)).toEqual({ frame: 'demon_idle_anim_f0', lift: 0, windup: false });
+    expect(at(ANIM.TakeOff, CONST.DEMON_TAKEOFF).lift).toBe(1);
+    expect(at(ANIM.TakeOff, CONST.DEMON_TAKEOFF / 2).lift).toBeGreaterThan(0);
+    expect(at(ANIM.TakeOff, CONST.DEMON_TAKEOFF / 2).lift).toBeLessThan(1);
+    expect(at(ANIM.Land, 0)).toEqual({ frame: 'demon_idle_anim_f0', lift: 1, windup: false });
+    expect(at(ANIM.Land, CONST.DEMON_LAND).lift).toBe(0);
+    expect(at(ANIM.Land, CONST.DEMON_LAND / 2).lift).toBeGreaterThan(0);
+    expect(at(ANIM.Land, CONST.DEMON_LAND / 2).lift).toBeLessThan(1);
+  });
+
+  it('swipes its tail on the cleave frames', () => {
+    const w = CONST.DEMON_TAIL_WINDUP;
+    expect(at(ANIM.Tail, w / 2)).toEqual({ frame: 'demon_cleave_anim_f0', lift: 0, windup: true });
+    expect(at(ANIM.Tail, w + 0.01)).toEqual({ frame: 'demon_cleave_anim_f2', lift: 0, windup: false });
+    expect(at(ANIM.Tail, w + CONST.DEMON_TAIL_RECOVER).frame).toBe('demon_cleave_anim_f4');
+  });
+
+  it('breathes on the cast frames', () => {
+    const w = CONST.DEMON_BREATH_WINDUP;
+    expect(at(ANIM.Breath, 0.05)).toEqual({ frame: 'demon_cast_anim_f0', lift: 0, windup: true });
+    expect(at(ANIM.Breath, w - 0.05)).toEqual({ frame: 'demon_cast_anim_f1', lift: 0, windup: true });
+    expect(at(ANIM.Breath, w + 0.1)).toEqual({ frame: 'demon_cast_anim_f2', lift: 0, windup: false });
+    expect(at(ANIM.Breath, w + CONST.DEMON_BREATH_TIME - 0.05).frame).toBe('demon_cast_anim_f2');
+    expect(at(ANIM.Breath, w + CONST.DEMON_BREATH_TIME + 0.05).frame).toBe('demon_cast_anim_f3');
+  });
+
+  it('in the air every anim keeps lift 1', () => {
+    for (const anim of [ANIM.Idle, ANIM.Move, ANIM.Cast, ANIM.Breath]) {
+      for (const t of [0, 0.3, 1, 2.5]) expect(at(anim, t, FLAG.AIRBORNE, anim === ANIM.Move).lift).toBe(1);
+    }
+    expect(at(ANIM.Idle, 0, FLAG.AIRBORNE).frame).toBe('demon_idle_anim_f0');
+    expect(at(ANIM.Move, 0, FLAG.AIRBORNE, true).frame).toBe('demon_walk_anim_f0');
+    expect(at(ANIM.Land, 0, FLAG.AIRBORNE).lift).toBe(1);
+    expect(at(ANIM.Land, CONST.DEMON_LAND, FLAG.AIRBORNE).lift).toBe(0);
+  });
+
+  it('gives a frame the atlas has for every anim the script sends', () => {
+    const count: Record<string, number> = DEMON_ANIMS;
+    for (const anim of [ANIM.Idle, ANIM.Move, ANIM.Melee, ANIM.Tail, ANIM.Dash, ANIM.Cast, ANIM.Breath, ANIM.TakeOff, ANIM.Land]) {
+      for (const flags of [0, FLAG.AIRBORNE]) for (const t of [0, 0.3, 2]) for (const moving of [false, true]) {
+        const m = /^demon_(idle|walk|cleave|charge|cast)_anim_f(\d)$/.exec(at(anim, t, flags, moving).frame);
+        expect(m).not.toBeNull();
+        expect(Number(m![2])).toBeLessThan(count[m![1]]);
+      }
+    }
+  });
+
+  it('has a mouth point for every frame name and for none else', () => {
+    const names = Object.entries(DEMON_ANIMS).flatMap(([a, n]) => [...Array(n).keys()].map((i) => demonFrameName(a as DemonAnim, i)));
+    expect(Object.keys(M.mouth!).sort()).toEqual([...names].sort());
+    expect(Object.keys(M.nostrils!).sort()).toEqual([...names].sort());
+  });
+
+  it('flies, slams and swishes its tail like the dragon', () => {
+    expect(M.flight).toEqual({ takeoff: CONST.DEMON_TAKEOFF, land: CONST.DEMON_LAND });
+    expect(D.flight).toEqual({ takeoff: CONST.DRAGON_TAKEOFF, land: CONST.DRAGON_LAND });
+    expect(M.lift).toBe(14);
+    expect(M.slam).toEqual({ r: CONST.DEMON_SMASH_RADIUS, anim: ANIM.Land, t: CONST.DEMON_LAND });
+    expect(M.tail).toEqual({ reach: CONST.DEMON_TAIL_RANGE, arc: 2.4, color: 0xffa080 });
   });
 
   it('never throws, for any figure with own frames in any anim, grounded or airborne', () => {
@@ -99,10 +156,10 @@ describe('demon frames', () => {
   });
 
   it('bursts with the ring of fire at the end of the cast wind-up', () => {
-    const w = CONST.DEMON_RING_WINDUP;
+    const w = CONST.DEMON_CAST_WINDUP;
     expect(at(ANIM.Cast, 0.05).frame).toBe('demon_cast_anim_f0');
     expect(at(ANIM.Cast, w - 0.05).frame).toBe('demon_cast_anim_f1');
     expect(at(ANIM.Cast, w + 0.05)).toEqual({ frame: 'demon_cast_anim_f2', lift: 0, windup: false });
-    expect(at(ANIM.Cast, w + CONST.DEMON_RING_RECOVER).frame).toBe('demon_cast_anim_f3');
+    expect(at(ANIM.Cast, w + CONST.DEMON_CAST_RECOVER).frame).toBe('demon_cast_anim_f3');
   });
 });

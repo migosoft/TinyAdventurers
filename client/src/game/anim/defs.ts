@@ -78,13 +78,15 @@ export interface FigureDef {
   windups?: Partial<Record<number, number>>;
   /** Hover height while airborne (px, unscaled). */
   lift?: number;
+  /** Take-off and landing times (s) of a figure that flies (`pickFrame` raises and lowers it over them). */
+  flight?: { takeoff: number; land: number };
   /** Row of the feet in the body frames (the origin), when space is left below them (the dragon's hanging legs in flight). */
   footY?: number;
   /** Column of the hips in the body frames, when the figure is not centred in them (the demon's tail and reach). */
   hipX?: number;
   /** Bite (the dragon): sparks where the jaws snap, `reach` px straight ahead. */
   bite?: { reach: number; color: number };
-  /** Tail swipe behind the figure (the dragon), shown for the Tail animation. */
+  /** Tail swipe behind the figure (the dragon, the demon), shown for the Tail animation. */
   tail?: { reach: number; arc: number; color?: number };
   /** Where breath attacks come out (dragon mouth / nostrils), per body frame. */
   mouth?: FramePoints;
@@ -108,6 +110,12 @@ const dragonFrames = Object.fromEntries(
 const demonFrames = Object.fromEntries(
   (Object.keys(DEMON_ANIMS) as DemonAnim[]).map((a) => [a, { prefix: demonFrameName(a, 0).slice(0, -1), n: DEMON_ANIMS[a], fps: a === 'idle' ? 4 : a === 'walk' ? 9 : 10 }]),
 ) as Record<DemonAnim, { prefix: string; n: number; fps: number }>;
+
+// The demon's breath starts at its mouth, the same pixel in every frame (the end of the dark line of the mouth in `demon_idle_anim_f0`, column 46, row 25).
+const DEMON_MOUTH: [number, number] = [46, 25];
+const demonPoints = Object.fromEntries(
+  (Object.keys(DEMON_ANIMS) as DemonAnim[]).flatMap((a) => [...Array(DEMON_ANIMS[a]).keys()].map((i) => [demonFrameName(a, i), DEMON_MOUTH])),
+) as FramePoints;
 
 const hero = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f`, hit: `${n}_hit_anim_f0` });
 const mob = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f` });
@@ -142,10 +150,16 @@ export const FIGURES: Record<number, FigureDef> = {
     idle: demonFrames.idle.prefix,
     run: demonFrames.walk.prefix,
     frames: demonFrames,
-    windups: { [ANIM.Melee]: CONST.DEMON_CLEAVE_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Cast]: CONST.DEMON_RING_WINDUP },
+    windups: { [ANIM.Melee]: CONST.DEMON_CLEAVE_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Tail]: CONST.DEMON_TAIL_WINDUP, [ANIM.Breath]: CONST.DEMON_BREATH_WINDUP, [ANIM.Cast]: CONST.DEMON_CAST_WINDUP },
+    flight: { takeoff: CONST.DEMON_TAKEOFF, land: CONST.DEMON_LAND },
+    slam: { r: CONST.DEMON_SMASH_RADIUS, anim: ANIM.Land, t: CONST.DEMON_LAND },
+    lift: 14,
     footY: DEMON_FRAME.footY,
     hipX: DEMON_FRAME.hipX,
+    mouth: demonPoints,
+    nostrils: demonPoints,
     swing: { reach: 40, arc: 2.1, color: 0xffa080 },
+    tail: { reach: CONST.DEMON_TAIL_RANGE, arc: 2.4, color: 0xffa080 },
     handY: 30,
     attack: 'melee',
     base: 0x7a1010,
@@ -160,6 +174,7 @@ export const FIGURES: Record<number, FigureDef> = {
     frames: dragonFrames,
     windups: { [ANIM.Melee]: CONST.DRAGON_CLAW_WINDUP, [ANIM.Bite]: CONST.DRAGON_BITE_WINDUP, [ANIM.Tail]: CONST.DRAGON_TAIL_WINDUP, [ANIM.Breath]: CONST.DRAGON_BREATH_WINDUP },
     slam: { r: CONST.DRAGON_SMASH_RADIUS, anim: ANIM.Land, t: CONST.DRAGON_LAND },
+    flight: { takeoff: CONST.DRAGON_TAKEOFF, land: CONST.DRAGON_LAND },
     lift: 14,
     footY: DRAGON_FRAME.footY,
     mouth: DRAGON_POINTS.mouth,

@@ -1319,6 +1319,19 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": ""
   },
+  "DemonTail": {
+    "base": "20 damage · every 3 s · arc 2.4 · push 40 · wind-up 0.4 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Tail",
+    "name": "Demon Tail",
+    "prof": "Tail",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "DragonBite": {
     "base": "28 damage · every 3 s · arc 0.7 · push 24 · wind-up 0.45 s",
     "classes": [],
