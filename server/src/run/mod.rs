@@ -1841,8 +1841,10 @@ pub mod tests {
         assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
-    /// The dragon's behaviour over a whole flight (#379): the first flight starts at 10 s and lands at
-    /// 14.6 s, and the second interval is under way at 18.3 s. The heroes are kept alive so the fight lasts.
+    /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
+    /// and lands at 14.6 s, and the second interval is under way at 18.3 s. The heroes are kept alive so the
+    /// fight lasts. The hash runs over every step (the run's fingerprint, the boss's anim and airborne flag),
+    /// so a shift of a few ticks shows even when the end state is the same.
     #[test]
     fn dragon_flight_is_pinned() {
         let mut got = Vec::new();
@@ -1855,6 +1857,7 @@ pub mod tests {
                 p.mv.y = hall.y + 40.0;
             }
             let (mut saw_air, mut saw_land) = (false, false);
+            let mut h: u64 = 0xcbf29ce484222325;
             for _ in 0..1100 {
                 for p in &mut run.players {
                     p.hp = p.max_hp;
@@ -1863,13 +1866,19 @@ pub mod tests {
                 let boss = run.monsters.iter().find(|m| m.is_boss).expect("the boss");
                 saw_air |= boss.airborne;
                 saw_land |= boss.anim == Anim::Land;
+                for v in [fingerprint(&run), boss.anim as u64, boss.airborne as u64] {
+                    for b in v.to_le_bytes() {
+                        h ^= b as u64;
+                        h = h.wrapping_mul(0x100000001b3);
+                    }
+                }
             }
             let boss = run.monsters.iter().find(|m| m.is_boss).expect("the boss");
             assert!(saw_air && saw_land, "a whole flight is inside the pin");
             assert!(!boss.airborne, "it ends on the ground");
-            got.push(fingerprint(&run));
+            got.push(h);
         }
-        assert_eq!(got, [14791746112829186453, 14791746112829186453]); // log off, log on: the same value
+        assert_eq!(got, [2575310725276619299, 2575310725276619299]); // log off, log on: the same value
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
