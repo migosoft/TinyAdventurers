@@ -75,7 +75,10 @@ describe('the lich materials', () => {
         expect(bf).toMatch(/lichPaint/);
         expect(bf).toMatch(/lightAmbient/);
         // No texture read or derivative in a data-dependent branch, and the lighting's body is emitted once (it was three times, about 85000 characters).
-        expect(readsInBranches(bf)).toEqual([]);
+        // The picture is sampled once, outside any branch. (The lighting's own lava read under its `darkOnly` switch, a uniform of this material, is
+        // the only other read the heuristic reports; the models' materials have it too.)
+        expect(readsInBranches(bf).filter((l) => /lichPicture/.test(l))).toEqual([]);
+        expect(bf.split('\n').filter((l) => /lichPicture\b/.test(l) && /texture/i.test(l) && !/binding|uniform/.test(l)).length).toBe(1);
         expect(readsInBranches(cf)).toEqual([]);
         expect(bf.length).toBeLessThan(45000);
         expect(cf).not.toMatch(/lichPaint/);

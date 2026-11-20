@@ -68,7 +68,7 @@ export function lichMaterials(o: { lighting: Lighting; sight: Sight; shared: Fig
   body.colorNode = Fn(() => {
     // The picture and the light are computed once, at the top level (a sample needs uniform control flow, and `lightAt` is big); the
     // selects below only pick between plain values.
-    const tex: N = texture(o.paint, uvA).toVar('lichPaint');
+    const tex: N = texture(o.paint, uvA).setName('lichPicture').toVar('lichPaint');
     const Nn: N = normalize(p.N);
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: seen.w.add(0.5).floor(), darkOnly: flags.x });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
