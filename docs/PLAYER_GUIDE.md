@@ -231,7 +231,7 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 | Ogre: club / ground slam | almost 2 tiles (28 px) for both; the slam hits everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
 | Red Demon: cleave / swoop | a long way (about 3.5 / 4 tiles) |
-| Red Demon: tail swipe / landing slam / Fireball | 2.5 tiles (40 px) / over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
+| Red Demon: tail swipe / landing slam / Fireball | 2.5 tiles (40 px) / about 3.5 tiles (56 px), everyone in the circle / about a tile (20 px) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
 | Red Dragon: landing smash / Fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 | Lich: Nova | only the Wizard, 16 px (the lich's STR is only 10) |
@@ -318,7 +318,7 @@ The boss sleeps in a large hall at the far end of the dungeon. Each run has one 
 
 **Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon, the dragon and the lich can **knock you in** (see Knockback).
 
-**The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its cleave and swoop can knock you in.
+**The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its cleave, swoop, tail swipe and landing slam can knock you in.
 
 ### The Red Demon
 Every attack shows its pose first, while the demon flashes red: that is your moment to step away. It does not follow a fixed order: whenever it is free, it picks one of the attacks it can use at that moment, at random.
@@ -329,8 +329,8 @@ Every attack shows its pose first, while the demon flashes red: that is your mom
 - **Ring of Fire:** fireballs fly out in every direction.
 - **Fireball:** the Wizard's spell, which the demon casts too: it points a hand at a hero and an exploding ball flies. It pushes you a little.
 - **Fire Breath:** it flings its arms wide and breathes a cone of fire that **leaves burning ground** behind. The breath does not push.
-- **Flight:** every 10 to 14 seconds it takes off, rising over its shadow, and hovers after the party for a few seconds. **Swords, axes, the dagger, the dash and pushes can't reach it in the air**; bolts, missiles and spells still hit. In the air it casts Fireballs and breathes fire from above, and it **flies over chasms, deep water and lava**; only walls stop it. It never lands in a hole: it comes down on the nearest ground that holds it.
-- **Landing slam:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
+- **Flight:** every 10 to 14 seconds it takes off, rising over its shadow, and hovers after the party for a few seconds. **Swords, axes, the dagger, the dash and pushes can't reach it in the air**; bolts, missiles and spells still hit. In the air it casts Fireballs and breathes fire from above, and it **flies over chasms, deep water and lava**; only walls and the force field of the boss hall stop it. It never lands in a hole: it comes down on the nearest ground that holds it.
+- **Landing slam:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away a long way (56 px, as far as its claws).
 - It never gets angrier: the demon fights the same from the first hit to the last.
 
 Tip: stay mobile, and don't stand between the demon and a chasm, or right behind it. When it takes off, ranged heroes do the work; get out of the red circle before it lands.
