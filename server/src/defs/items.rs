@@ -132,6 +132,8 @@ super::enum_list::listed_enum! {
         SoldierSword = 57,
         // The boar's tusks (#227): a claw's reach, physical.
         BoarTusks = 58,
+        // The demon's tail (#379): the dragon's tail, a little weaker.
+        DemonTail = 59,
     }
 }
 
@@ -400,6 +402,7 @@ pub fn def(id: ItemId) -> ItemDef {
         I::DragonBite => item("Dragon Bite", "", winding(melee(K::Bite, 28.0, 3.0, 0.70, 24.0, heat(), at(24, 10)), 24.0, 0.45), NONE, &[], &[]),
         I::DragonClaws => item("Dragon Claws", "", winding(melee(K::Claws, 20.0, 2.5, 1.60, 32.0, heat(), at(24, 10)), 18.0, 0.40), NONE, &[], &[]),
         I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
+        I::DemonTail => item("Demon Tail", "", winding(melee(K::Tail, 20.0, 3.0, 2.40, 40.0, phys(), at(22, 14)), 22.0, 0.40), NONE, &[], &[]),
         I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
         // Drains STR (Weakened) for as long as its wielder's CHA gives; no hero holds it (natural weapons never equip).
         I::GhostTouch => item("Ghost Touch", "", winding(melee(K::Touch, 6.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),

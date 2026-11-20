@@ -1819,7 +1819,8 @@ pub mod tests {
         // 2026-11-04, the cooldown chain (#198): every ability cooldown now scales with its Attribute and effects change how fast cooldowns count down, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster, and the chests' ids after it shift by one, so all three halls differ. Re-recorded once, on purpose.
         // 2026-11-06, the cove's animals (#227): every dungeon has 15 wild animals, extra monsters in the hash and in the next id, so all three halls differ. Proved before re-recording: with the wild monsters left out of the hash, the old values come back. Re-recorded once, on purpose.
-        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
+        // 2026-11-20, the demon's new fight (#379): its kit and script changed (tail, Fireball, breath, flight, a random pick), so the demon's value (the first) differs; lich and dragon unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
     }
 
     #[test]
@@ -1838,7 +1839,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
+        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s

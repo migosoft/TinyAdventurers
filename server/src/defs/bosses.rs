@@ -29,7 +29,7 @@ pub fn def(id: BossId) -> BossDef {
     use AbilityId::*;
     use ItemId::*;
     match id {
-        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire], weapons: &[DemonClaws] },
+        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire, TailWhip, Fireball, FireBreath, Smash], weapons: &[DemonClaws, DemonTail] },
         BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attr_mods: Attributes::new(0, 4, 4, 12, 8, 6), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
         BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attr_mods: Attributes::new(14, 0, 12, 6, 4, 10), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
@@ -39,7 +39,16 @@ pub fn def(id: BossId) -> BossDef {
 /// wind-up (from its kit) and the strike frames play out in this short recovery. The abilities' own numbers are the kit's.
 pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
-pub const DEMON_RING_RECOVER: f64 = 0.35;
+pub const DEMON_TAIL_RECOVER: f64 = 0.5;
+/// After Fireball or Ring of Fire.
+pub const DEMON_CAST_RECOVER: f64 = 0.35;
+/// Flight (s), shared with the client: lifting off, hovering after the party, landing (the landing uses Smash).
+pub const DEMON_TAKEOFF: f64 = 0.5;
+pub const DEMON_FLIGHT: f64 = 3.5;
+pub const DEMON_LAND: f64 = 0.6;
+/// The first flight comes this many seconds into the fight; then every so many seconds (random in the range).
+pub const DEMON_FLIGHT_FIRST: f64 = 10.0;
+pub const DEMON_FLIGHT_EVERY: (f64, f64) = (10.0, 14.0);
 
 pub const LICH_DISCIPLES: usize = 6;
 /// After a nova the lich waits up to this many seconds (random) on top of the Nova's cooldown, so the
