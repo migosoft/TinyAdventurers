@@ -122,6 +122,8 @@ export interface TubeDesc {
      */
     bowAhead?: true;
   };
+  /** SPIKE (#379): the paint's size in texels (default 128 x 64). */
+  paintSize?: readonly [number, number];
   /** The height (page px) below which `robe` pieces swing. */
   robeTop?: number;
   /** A factor on the size of the held weapon (default 1). */

@@ -85,7 +85,8 @@ function check(d: TubeDesc, pv: Partial<Record<Bone, Vec3>>): void {
   });
   const bending = d.pieces.filter((p) => p.bend && !('with' in p.bend)).length;
   if (bending > MAX_BENDS) throw new Error(`${d.name}: ${bending} bending pieces, at most ${MAX_BENDS} fit the GPU's bend array`);
-  if (d.pieces.filter((p) => typeof p.colour === 'function').length > 1) throw new Error(`${d.name}: more than one painted piece`);
+  // SPIKE (#379): several pieces may share one paint function (the demon's rock skin).
+  if (new Set(d.pieces.map((p) => p.colour).filter((c) => typeof c === 'function')).size > 1) throw new Error(`${d.name}: more than one paint`);
   for (const [child, parent] of Object.entries(d.parents) as [Bone, Bone][]) {
     if (BONES.indexOf(parent) >= BONES.indexOf(child)) throw new Error(`${d.name}: the parent ${parent} of ${child} must come before it in BONES`);
   }
@@ -157,10 +158,12 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
   for (const q of d.spectre?.smoke?.line ?? []) headTop = Math.max(headTop, q[1]);
   const index = Uint32Array.from(all), { pieceIndex, lineIndex } = splitIndex(index, ranges);
 
-  const paint = new Uint8Array(PAINT_W * PAINT_H * 4), pick = d.pieces.map((p) => p.colour).find((c) => typeof c === 'function');
-  for (let y = 0; y < PAINT_H; y++) for (let x = 0; x < PAINT_W; x++) {
-    const dd = 1 - Math.abs(1 - 2 * ((y + 0.5) / PAINT_H)), k = pick ? pick((x + 0.5) / PAINT_W, dd) : 0, i = (y * PAINT_W + x) * 4;
-    paint.set([k >> 16, (k >> 8) & 255, k & 255, 255], i);
+  // SPIKE (#379): a description may ask for a finer paint; bit 24 of a painted colour marks a glowing texel (alpha 0).
+  const [PW, PH] = d.paintSize ?? [PAINT_W, PAINT_H];
+  const paint = new Uint8Array(PW * PH * 4), pick = d.pieces.map((p) => p.colour).find((c) => typeof c === 'function');
+  for (let y = 0; y < PH; y++) for (let x = 0; x < PW; x++) {
+    const dd = 1 - Math.abs(1 - 2 * ((y + 0.5) / PH)), k = pick ? pick((x + 0.5) / PW, dd) : 0, i = (y * PW + x) * 4;
+    paint.set([(k >> 16) & 255, (k >> 8) & 255, k & 255, (k >>> 24) & 1 ? 0 : 255], i);
   }
 
   const pivots = new Float32Array(MAX_BONES * 3), parents = new Int8Array(MAX_BONES);
@@ -170,7 +173,7 @@ export function buildTubeFigure(key: string, d: TubeDesc): FigureModel {
   const head = d.pivots.head ?? [0, 0, 0], body = d.pivots.body ?? [0, 0, 0];
   return {
     key, position, normal, uv, skin, look, index, ranges, pieceIndex, lineIndex, pivots, parents,
-    bends, robeTop: d.robeTop ?? null, paint: { w: PAINT_W, h: PAINT_H, data: paint },
+    bends, robeTop: d.robeTop ?? null, paint: { w: PW, h: PH, data: paint },
     baseHeight: headTop * scale, radius: reach / 16 * scale, hatSway: 0, size: 1,
     shoulderY: armed || d.apart ? pv.armR![1] : head[1] + 1, handY: armed ? -d.arms!.length : 0,
     armLength: armed ? d.arms!.length : 0, armRadius: armed ? d.arms!.radius : 0, quad: !two, scale, hipY: body[1], neck: [head[0], head[1]],

@@ -278,9 +278,12 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
     const uvIn = uv();
     // A model that brings two paints (the head's above the body's) has twice the stone's height: its stone reads each half whole.
     const heightOf = (t: Texture): number => (t.image as { height?: number } | null)?.height ?? 0;
-    const doubled = heightOf(paint) > heightOf(stone) && heightOf(stone) > 0;
+    const doubled = heightOf(paint) === 2 * heightOf(stone) && heightOf(stone) > 0;
     const stoneUv = doubled ? vec2(uvIn.x, uvIn.y.mul(2).sub(step(0.5, uvIn.y))) : uvIn;
-    const painted = texture(paint, uvIn).rgb.toVar('figPaint');
+    const paintTexel = texture(paint, uvIn).toVar('figPaintTexel');
+    const painted = paintTexel.rgb.toVar('figPaint');
+    // SPIKE (#379): a painted texel with alpha 0 glows (the demon's cracks).
+    const paintGlow: N = select(look.x.lessThan(PAINTED_BELOW), float(1).sub(paintTexel.a), float(0));
     const stoned = texture(stone, stoneUv).rgb.toVar('figStone');
     const Nn: N = normalize(p.N);
     // Steel mirrors the sky along the camera's ray reflected at the surface (an equirectangular lookup).
@@ -304,7 +307,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), lighting.finish(albedo, lit)));
+    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), mix(lighting.finish(albedo, lit), base, select(isStone, float(0), paintGlow))));
     // Painted eyes (only a material built with `eyes` has this code): a glow round them and the bright oval, before the sight; a stone figure shows none.
     let colour = colour0;
     if (o.eyes) {

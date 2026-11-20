@@ -92,7 +92,7 @@ export function tube(pts: readonly TubePoint[], o: TubeOpts = {}): Mesh3 {
 /** A ball with three radii; `pow` below 1 makes it squarish seen from above; `turnZ` turns it about z (radians). */
 export function ball(rx: number, ry: number, rz: number, pow?: number, turnZ?: number): Mesh3 {
   const WS = 26, HS = 18, count = (WS + 1) * (HS + 1);
-  const position = new Float32Array(count * 3), normal = new Float32Array(count * 3);
+  const position = new Float32Array(count * 3), normal = new Float32Array(count * 3), uv = new Float32Array(count * 2);   // SPIKE (#379): a ball has uv, so it can be painted
   const idx: number[] = [];
   const cz = Math.cos(turnZ || 0), sz = Math.sin(turnZ || 0);
   let v = 0;
@@ -100,6 +100,7 @@ export function ball(rx: number, ry: number, rz: number, pow?: number, turnZ?: n
     const th = iy / HS * Math.PI;
     for (let ix = 0; ix <= WS; ix++, v++) {
       const ph = ix / WS * Math.PI * 2;
+      uv[v * 2] = iy / HS; uv[v * 2 + 1] = ix / WS;
       let x = -Math.cos(ph) * Math.sin(th), y = Math.cos(th), z = Math.sin(ph) * Math.sin(th);
       const nx = x / rx, ny = y / ry, nz = z / rz, l = Math.hypot(nx, ny, nz) || 1;
       if (pow && pow !== 1) {
@@ -119,7 +120,7 @@ export function ball(rx: number, ry: number, rz: number, pow?: number, turnZ?: n
       if (iy !== HS - 1) idx.push(b, c, d);
     }
   }
-  return { position, normal, uv: null, index: Uint32Array.from(idx) };
+  return { position, normal, uv, index: Uint32Array.from(idx) };
 }
 
 /** A drop (an ear, a tail): thin where it is fixed, widest a third along, a rounded tip. Its foot is at the origin, sunk by `sink`, and it points along `dir`. */

@@ -11,20 +11,48 @@ import type { TubePoint } from '../tubes';
 
 /** The spike's switches: `VITE_DEMON` holds the parts to leave out ("wings", "fire", "cracks"), and `h<factor>` for the height in humans. */
 const OPT: string = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_DEMON ?? '';
-const WINGS = !OPT.includes('wings'), FIRE_ON = !OPT.includes('fire'), CRACKS = !OPT.includes('cracks');
+const WINGS = !OPT.includes('wings');
 const HUMANS = Number(/h([\d.]+)/.exec(OPT)?.[1] ?? 3);
 
-const CHAR = 0x3b3538, BACK = 0x29252a, WARM = 0x50302c, PLATE = 0x1b1920, HORN = 0x48424a, CLAW = 0x6b6068, FUR = 0x35241f, BONE = 0xfdf7ed;
-const WEB_RED = 0x8a1f2a, MAGMA = 0xff5a1a, MAGMA_CORE = 0xffb02e;
+const BACK = 0x2c2022, PLATE = 0x261b1d, HORN = 0x5e4036, CLAW = 0x6b6068, FUR = 0x35241f, TOOTH = 0x1c1213;
+const WEB_RED = 0x8a1f2a;
 const OUTLINE_C = 0x121013, LINE = 0.55;
 
 const pieces: TubePiece[] = [];
 const add = (p: TubePiece): TubePiece => { pieces.push(p); return p; };
 const unit = (v: Vec3): Vec3 => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
-/** A glowing crack: a thin tube lying in the surface it is given points of. */
-const crack = (pts: readonly Vec3[], bone: TubePiece['bone'], r = 0.5, at?: Vec3, turn?: number): void => {
-  if (!CRACKS) return;
-  add({ shape: { tube: pts.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 0 || i === pts.length - 1 ? r * 0.6 : r })), opts: { K: 8, N: pts.length * 5, cap: 0.6 } }, ...(at ? { at } : {}), ...(turn !== undefined ? { turn } : {}), stage: 'spikes', bone, line: 0, colour: MAGMA, glow: true });
+// ---- the skin: rock. Plates of dark red-brown stone (a cell pattern) with cracks between them; in the hot stretches the cracks glow,
+// yellow in the middle and red at the rims. The paint is mirrored round every piece, so the cracks are the same left and right. ----
+const GLOWS = 0x1000000;
+const hash = (i: number, j: number, k: number): number => { const v = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453; return v - Math.floor(v); };
+const mixC = (a: number, b: number, k: number): number => {
+  const t = Math.max(0, Math.min(1, k)), ch = (sh: number): number => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+};
+const vnoise = (x: number, y: number, k: number): number => {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = hash(ix, iy, k), b = hash(ix + 1, iy, k), c = hash(ix, iy + 1, k), e = hash(ix + 1, iy + 1, k);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + e) * sx * sy;
+};
+const NU = 5, ND = 2.5, PAINT: readonly [number, number] = [256, 128];
+const ROCKS = [0x3a2a2a, 0x4a3330, 0x2f2325, 0x54382f] as const;
+const SKIN = (u: number, d: number): number => {
+  const x = u * NU, y = d * ND, ix = Math.floor(x), iy = Math.floor(y);
+  let f1 = 9, f2 = 9, id = 0;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+    const cx = ix + i, cy = iy + j, dist = Math.hypot(x - (cx + 0.15 + 0.7 * hash(cx, cy, 1)), y - (cy + 0.15 + 0.7 * hash(cx, cy, 2)));
+    if (dist < f1) { f2 = f1; f1 = dist; id = hash(cx, cy, 3); } else if (dist < f2) f2 = dist;
+  }
+  const edge = f2 - f1, hot = vnoise(x * 0.7 + 3.1, y * 0.7 + 1.7, 7) - 0.52;
+  if (hot > 0) {
+    if (edge < 0.035) return 0xffc83a | GLOWS;
+    if (edge < 0.08) return 0xff5a14 | GLOWS;
+    if (edge < 0.12) return 0xc3200c | GLOWS;
+  } else if (edge < 0.07) return 0x140e0f;
+  const grain = hash(Math.floor(u * PAINT[0]), Math.floor(d * PAINT[1] / 2), 5), fine = vnoise(x * 5, y * 5, 9);
+  let c = mixC(ROCKS[Math.floor(id * ROCKS.length) % ROCKS.length], 0x1d1516, 0.55 * Math.max(0, 1 - edge / 0.5) + 0.25 * fine + 0.12 * grain);
+  if (hot > 0) c = mixC(c, 0x8a1c10, 0.75 * Math.max(0, 1 - (edge - 0.12) / 0.2));
+  return c;
 };
 
 // ---- the legs: thick and bent like a beast's. A heavy thigh forward to the knee, the shin back to the hock, a short thick foot bone
@@ -36,15 +64,14 @@ const thigh = down([hipX, hipY], stifle), shin = down(stifle, hock), cannon = do
 const pivots: TubeDesc['pivots'] = { body: [hipX, hipY, 0] };
 for (const [upper, lower, sd] of [['leg0', 'leg1', 1], ['leg2', 'leg3', -1]] as const) {
   const z = sd * legZ;
-  add({ shape: { tube: [{ p: [0, 1.2, 0], r: 3.5 }, { p: [0.4, -thigh.len * 0.45, 0], r: 3.5 }, { p: [0, -thigh.len, 0], r: 2.3 }], opts: { K: 16, N: 14 } }, at: [hipX, hipY, z], turn: thigh.turn, stage: 'legs', bone: upper, line: LINE, colour: CHAR });
-  crack([[3.2, -1.2, 0.9 * sd], [3.55, -2.8, 0.2 * sd], [3.3, -4.2, 1.1 * sd], [2.7, -5.4, 0.5 * sd]], upper, 0.42, [hipX, hipY, z], thigh.turn);
-  add({ shape: { tube: [{ p: [0, 0.6, 0], r: 2.2 }, { p: [0.5, -shin.len * 0.4, 0], r: 2.3 }, { p: [0, -shin.len, 0], r: 1.6 }], opts: { K: 14, N: 12 } }, at: [stifle[0], stifle[1], z], turn: shin.turn, stage: 'legs', bone: upper, line: LINE, colour: CHAR });
+  add({ shape: { tube: [{ p: [0, 1.2, 0], r: 3.5 }, { p: [0.4, -thigh.len * 0.45, 0], r: 3.5 }, { p: [0, -thigh.len, 0], r: 2.3 }], opts: { K: 16, N: 14 } }, at: [hipX, hipY, z], turn: thigh.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, 0.6, 0], r: 2.2 }, { p: [0.5, -shin.len * 0.4, 0], r: 2.3 }, { p: [0, -shin.len, 0], r: 1.6 }], opts: { K: 14, N: 12 } }, at: [stifle[0], stifle[1], z], turn: shin.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN });
   // A plate over the knee.
   add({ shape: { drop: { r: 1.3, len: 3.2, sink: 0.8, wide: 0.9, dir: [1, 0.5, 0] } }, at: [stifle[0] + 0.6, stifle[1] + 0.2, z], stage: 'hair', bone: upper, line: 0.35, colour: PLATE });
-  add({ shape: { tube: [{ p: [0, 0, 0], r: 1.6 }, { p: [0, -cannon.len * 0.6, 0], r: 1.35 }, { p: [0, -cannon.len, 0], r: 1.5 }], opts: { K: 12, N: 10 } }, at: [hock[0], hock[1], z], turn: cannon.turn, stage: 'legs', bone: lower, line: LINE, colour: CHAR });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: 1.6 }, { p: [0, -cannon.len * 0.6, 0], r: 1.35 }, { p: [0, -cannon.len, 0], r: 1.5 }], opts: { K: 12, N: 10 } }, at: [hock[0], hock[1], z], turn: cannon.turn, stage: 'legs', bone: lower, line: LINE, colour: SKIN });
   // A spur behind the hock, the foot and its three claws.
   add({ shape: { drop: { r: 0.9, len: 2.8, sink: 0.5, wide: 0.8, dir: [-1, 0.3, 0] } }, at: [hock[0] - 1.0, hock[1], z], stage: 'legs', bone: lower, line: 0.35, colour: PLATE });
-  add({ shape: { ball: [2.7, 1.4, 2.3] }, at: [ankle[0] + 1.3, 1.35, z], stage: 'legs', bone: lower, line: LINE, colour: CHAR });
+  add({ shape: { ball: [2.7, 1.4, 2.3] }, at: [ankle[0] + 1.3, 1.35, z], stage: 'legs', bone: lower, line: LINE, colour: SKIN });
   for (const dz of [-1.4, 0, 1.4]) {
     add({ shape: { drop: { r: 0.75, len: 3.0, sink: 0.6, wide: 0.85, dir: [1, -0.22, dz * 0.25] } }, at: [ankle[0] + 3.2, 0.95, z + dz], stage: 'legs', bone: lower, line: 0.3, colour: CLAW });
   }
@@ -63,27 +90,13 @@ const shoulder: Vec3 = [1.8, 26.0, 0], chestR = RINGS[2][2], chestWide = RINGS[2
 add({
   shape: { tube: RINGS.map(([x, y, r, wide]): TubePoint => ({ p: [x, y], r, wide })), opts: { K: 32, N: 28, ref: [0, 0, 1], cap: 0.75 } },
   stage: 'body', bone: 'body', line: LINE, torso: true,
-  colour: (_u, d) => (d < 0.4 ? BACK : d < 0.62 ? CHAR : WARM),
+  colour: SKIN,
 });
 // The chest muscles: two slabs on the front of the chest.
 const PEC: Vec3 = [2.0, 2.4, 3.3], pecAt = (sd: number): Vec3 => [shoulder[0] + chestR * 0.7, shoulder[1] - 1.0, sd * 2.9];
-/** A point of a chest slab's surface: `up` and `side` shares of its radii (the side away from the middle). */
-const onPec = (up: number, side: number, sd: number): Vec3 => {
-  const c = pecAt(sd), f = Math.sqrt(Math.max(0, 1 - up * up - side * side));
-  return [c[0] + PEC[0] * f + 0.1, c[1] + PEC[1] * up, c[2] + sd * PEC[2] * side];
-};
-for (const sd of [1, -1]) add({ shape: { ball: [PEC[0], PEC[1], PEC[2]] }, at: pecAt(sd), stage: 'body', bone: 'body', line: 0.35, colour: WARM });
+for (const sd of [1, -1]) add({ shape: { ball: [PEC[0], PEC[1], PEC[2]] }, at: pecAt(sd), stage: 'body', bone: 'body', line: 0.35, colour: SKIN });
 // The hump of muscle from the neck out to both shoulders.
-add({ shape: { ball: [3.0, 2.3, 6.0] }, at: [shoulder[0] - 1.0, shoulder[1] + 1.4, 0], stage: 'body', bone: 'body', line: LINE, colour: BACK });
-// The magma: a crack down the breastbone to the belly, branches over each chest slab and along two ribs.
-crack([[shoulder[0] + chestR * 0.78, shoulder[1] + 1.6, 0], [onPec(0.1, -0.86, 1)[0] + 0.2, 25.2, 0], onTorso(22.8, 0, 1, 0.2), onTorso(20.4, 0, 1), onTorso(18.4, 0, 1), onTorso(16.8, 0, 1)], 'body', 0.6);
-if (CRACKS) add({ shape: { tube: [onTorso(24.6, 0, 1, 0.75), onTorso(22.8, 0, 1, 0.5), onTorso(21.0, 0, 1, 0.35)].map((p): TubePoint => ({ p: [p[0], p[1], p[2]], r: 0.3 })), opts: { K: 8, N: 10, cap: 0.6 } }, stage: 'spikes', bone: 'body', line: 0, colour: MAGMA_CORE, glow: true });
-for (const sd of [1, -1]) {
-  crack([onPec(0.25, -0.8, sd), onPec(0.45, -0.35, sd), onPec(0.4, 0.15, sd), onPec(0.6, 0.5, sd)], 'body', 0.45);
-  crack([onPec(0.4, 0.15, sd), onPec(0.05, 0.4, sd), onPec(-0.25, 0.75, sd)], 'body', 0.4);
-  crack([onTorso(22.4, 0.05, sd), onTorso(22.0, 0.45, sd), onTorso(21.0, 0.85, sd), onTorso(20.6, 1.2, sd)], 'body', 0.42);
-  crack([onTorso(20.0, 0.05, sd), onTorso(19.5, 0.5, sd), onTorso(18.6, 0.95, sd)], 'body', 0.4);
-}
+add({ shape: { ball: [3.0, 2.3, 6.0] }, at: [shoulder[0] - 1.0, shoulder[1] + 1.4, 0], stage: 'body', bone: 'body', line: LINE, colour: SKIN });
 // A row of spines down the back.
 for (let i = 0; i < 5; i++) {
   const u = i / 4, y = shoulder[1] + 1.2 - u * 9, p = onTorso(Math.min(y, 25.4), Math.PI, 1, -0.3);
@@ -101,13 +114,12 @@ for (const [turn, sd] of [[0.75, 1], [0.75, -1], [1.6, 1], [1.6, -1], [2.5, 1], 
 const R = 2.05, elbow = 6.3, fore = 6.5, shoulderZ = chestR * chestWide + 1.1;
 for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   const at: Vec3 = [shoulder[0], shoulder[1], sd * shoulderZ];
-  add({ shape: { ball: [R * 1.7, R * 1.6, R * 1.65] }, at: [at[0], at[1] + 0.5, at[2]], stage: 'arms', bone: `arm${s}`, line: LINE, colour: CHAR });
+  add({ shape: { ball: [R * 1.7, R * 1.6, R * 1.65] }, at: [at[0], at[1] + 0.5, at[2]], stage: 'arms', bone: `arm${s}`, line: LINE, colour: SKIN });
   for (const [dx, dz, len] of [[-0.6, 0.6, 4.0], [1.0, 1.4, 3.0], [-1.8, 1.6, 3.0]] as const) {
     add({ shape: { drop: { r: 1.0, len, sink: 0.6, wide: 0.7, dir: [dx * 0.25, 1, 0.5 * sd] } }, at: [at[0] + dx, at[1] + 2.6, at[2] + dz * sd], stage: 'hair', bone: `arm${s}`, line: 0.35, colour: PLATE });
   }
-  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 1.15 }, { p: [0.3, -elbow * 0.45, 0], r: R * 1.4 }, { p: [0, -elbow, 0], r: R * 1.0 }], opts: { K: 16, N: 12 } }, at, stage: 'arms', bone: `arm${s}`, line: LINE, colour: CHAR });
-  crack([[R * 1.25, -1.4, 0.4 * sd], [R * 1.42, -2.8, -0.2 * sd], [R * 1.2, -4.2, 0.5 * sd]], `arm${s}`, 0.38, at);
-  add({ shape: { tube: [{ p: [0, -elbow, 0], r: R * 1.0 }, { p: [0, -elbow - fore * 0.35, 0], r: R * 1.25 }, { p: [0, -elbow - fore, 0], r: R * 0.85 }], opts: { K: 16, N: 12 } }, at, stage: 'arms', bone: `hand${s}`, line: LINE, colour: CHAR });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: R * 1.15 }, { p: [0.3, -elbow * 0.45, 0], r: R * 1.4 }, { p: [0, -elbow, 0], r: R * 1.0 }], opts: { K: 16, N: 12 } }, at, stage: 'arms', bone: `arm${s}`, line: LINE, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, -elbow, 0], r: R * 1.0 }, { p: [0, -elbow - fore * 0.35, 0], r: R * 1.25 }, { p: [0, -elbow - fore, 0], r: R * 0.85 }], opts: { K: 16, N: 12 } }, at, stage: 'arms', bone: `hand${s}`, line: LINE, colour: SKIN });
   // The right forearm: a crest of jagged plates down its outer side. The left: one spike on the elbow.
   if (s === 'R') {
     for (let i = 0; i < 5; i++) {
@@ -115,17 +127,9 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
     }
   } else add({ shape: { drop: { r: 0.8, len: 2.8, sink: 0.5, wide: 0.85, dir: [-1, 0.2, 0] } }, at: [at[0] - R * 0.7, at[1] - elbow, at[2]], stage: 'hair', bone: `hand${s}`, line: 0.35, colour: PLATE });
   const hand: Vec3 = [at[0], at[1] - elbow - fore, at[2]];
-  add({ shape: { ball: [R * 1.3, R * 1.2, R * 1.25] }, at: hand, stage: 'arms', bone: `hand${s}`, line: LINE, colour: CHAR });
+  add({ shape: { ball: [R * 1.3, R * 1.2, R * 1.25] }, at: hand, stage: 'arms', bone: `hand${s}`, line: LINE, colour: SKIN });
   for (const [dx, dz] of [[1.1, 0], [0.6, 1.4], [0.6, -1.4], [-0.5, 0.8 * sd]] as const) {
     add({ shape: { drop: { r: 0.7, len: 4.2, sink: 0.6, wide: 0.85, dir: [dx * 0.6, -1, dz * 0.5] } }, at: [hand[0] + dx, hand[1] - 0.9, hand[2] + dz], stage: 'hair', bone: `hand${s}`, line: 0.35, colour: PLATE });
-  }
-  // The fire in the left palm: glowing tongues. At rest they lean forward, so they stand upright once the pose holds the forearm forward.
-  if (FIRE_ON && s === 'L') {
-    const f: Vec3 = [hand[0] + 2.4, hand[1] + 0.4, hand[2]], up: Vec3 = [0.5, 0.87, 0];
-    add({ shape: { drop: { r: 1.5, len: 6.0, sink: 0.8, wide: 0.9, dir: up } }, at: f, stage: 'weapon', bone: `hand${s}`, line: 0, colour: MAGMA, glow: true });
-    add({ shape: { drop: { r: 1.0, len: 4.0, sink: 0.6, wide: 0.9, dir: [0.75, 0.66, 0.3] } }, at: [f[0] + 0.5, f[1] - 0.2, f[2] + 0.9], stage: 'weapon', bone: `hand${s}`, line: 0, colour: MAGMA, glow: true });
-    add({ shape: { drop: { r: 0.9, len: 3.4, sink: 0.6, wide: 0.9, dir: [0.2, 0.95, -0.3] } }, at: [f[0] - 0.4, f[1], f[2] - 0.9], stage: 'weapon', bone: `hand${s}`, line: 0, colour: MAGMA, glow: true });
-    add({ shape: { drop: { r: 0.95, len: 3.6, sink: 0.5, wide: 1, dir: up } }, at: [f[0] + 0.25, f[1] + 0.3, f[2]], stage: 'weapon', bone: `hand${s}`, line: 0, colour: MAGMA_CORE, glow: true });
   }
   pivots[`arm${s}`] = at;
 }
@@ -134,7 +138,7 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
 // on the shoulder blade, `h` up in the plane) and stood on the back: out to the side and up, nearly upright, swept back. The lower edge
 // is torn: long ragged points between the finger tips. A slow beat. ----
 if (WINGS) {
-  const WEB = 0.38, WING = 5.6;
+  const WEB = 0.38, WING = 6.0, SPAN = 1.6;
   /** [s, top, bottom] of the wing's outline. */
   const OUTLINE: readonly (readonly [number, number, number])[] = [
     [0, 0.2, -0.9], [0.35, 0.4, -1.5], [0.6, 0.55, -0.8], [0.95, 0.75, -1.9], [1.2, 0.95, -1.05], [1.5, 1.15, -2.2], [1.75, 1.3, -1.5],
@@ -149,11 +153,11 @@ if (WINGS) {
     [WRIST, [2.35, 0.2], [2.15, -3.0]],
   ];
   for (const sd of [1, -1]) {
-    const S = unit([-0.5, 0.42, 0.76 * sd]);
+    const S = unit([-0.4, 0.3, 0.87 * sd]);
     const lean: Vec3 = [-0.2, 0.97, 0], k = lean[0] * S[0] + lean[1] * S[1] + lean[2] * S[2];
     const U = unit([lean[0] - k * S[0], lean[1] - k * S[1], lean[2] - k * S[2]]);
     const face: Vec3 = [S[1] * U[2] - S[2] * U[1], S[2] * U[0] - S[0] * U[2], S[0] * U[1] - S[1] * U[0]];
-    const on = (s: number, h: number): [number, number, number] => [(S[0] * s + U[0] * h) * WING, (S[1] * s + U[1] * h) * WING, (S[2] * s + U[2] * h) * WING];
+    const on = (s: number, h: number): [number, number, number] => [(S[0] * s * SPAN + U[0] * h) * WING, (S[1] * s * SPAN + U[1] * h) * WING, (S[2] * s * SPAN + U[2] * h) * WING];
     const root: Vec3 = [shoulder[0] - 3.8, shoulder[1] - 0.6, sd * 2.8];
     const web = add({
       shape: { tube: OUTLINE.map(([s, top, bottom]): TubePoint => { const r = (top - bottom) / 2 * WING; return { p: on(s, (top + bottom) / 2), r, wide: Math.min(1, WEB / r) }; }), opts: { K: 12, N: 120, ref: face, cap: 0.5, pow: 0.4 } },
@@ -183,7 +187,7 @@ const TAIL: readonly (readonly [number, number, number, number])[] = [
 const tailAt: Vec3 = [hipX - 2.8, hipY + 0.4, 0];
 const tail = add({
   shape: { tube: TAIL.map(([x, y, z, r]): TubePoint => ({ p: [x, y, z], r })), opts: { K: 14, N: 64, cap: 0.5 } },
-  at: tailAt, stage: 'hair', bone: 'body', line: 0.45, colour: CHAR, bend: { sway: 0.6, wag: 0.35 },
+  at: tailAt, stage: 'hair', bone: 'body', line: 0.45, colour: SKIN, bend: { sway: 0.6, wag: 0.35 },
 });
 for (let i = 1; i < 6; i++) {
   const [x, y, z, r] = TAIL[i];
@@ -191,7 +195,7 @@ for (let i = 1; i < 6; i++) {
 }
 
 // ---- the head: small against the body, set between the shoulders; a heavy jaw; the eyes and the mouth glow ----
-const HEAD: Vec3 = [2.4, 2.5, 2.3], HEAD_POW = 0.85;
+const HEAD: Vec3 = [2.7, 2.8, 2.6], HEAD_POW = 0.85;
 const head = (x: number, y: number, z = 0): Vec3 => [4.4 + x, 28.9 + y, z];
 /** A point of the head's surface: `turn` rad round from the front towards the side `sd`, `y` above the head's middle, moved out by the share `out` (negative: sunk). */
 const onHead = (turn: number, y: number, sd: number, out = 0): Vec3 => {
@@ -199,39 +203,40 @@ const onHead = (turn: number, y: number, sd: number, out = 0): Vec3 => {
   return head(HEAD[0] * h * pw(Math.cos(turn)), y * (1 + out), sd * HEAD[2] * h * pw(Math.sin(turn)));
 };
 pivots.head = [2.8, 27.2, 0];
-add({ shape: { ball: [HEAD[0], HEAD[1], HEAD[2]], pow: HEAD_POW }, at: head(0, 0), stage: 'head', bone: 'head', line: LINE, colour: CHAR });
-const jaw = { x: 1.2, y: -1.7, rx: 2.0, rz: 1.9 };
-add({ shape: { ball: [jaw.rx, 1.3, jaw.rz], pow: 0.85 }, at: head(jaw.x, jaw.y), stage: 'hair', bone: 'head', line: 0.45, colour: CHAR });
-// The mouth: a glowing line round the front of the jaw, fangs over it.
-const mouth = (a: number, out: number): Vec3 => head(jaw.x + (jaw.rx + out) * Math.cos(a), jaw.y + 0.45 - 0.3 * (a * a), (jaw.rz + out) * Math.sin(a));
+add({ shape: { ball: [HEAD[0], HEAD[1], HEAD[2]], pow: HEAD_POW }, at: head(0, 0), stage: 'head', bone: 'head', line: LINE, colour: SKIN });
+const jaw = { x: 1.3, y: -1.9, rx: 2.3, rz: 2.3 };
+add({ shape: { ball: [jaw.rx, 1.4, jaw.rz], pow: 0.85 }, at: head(jaw.x, jaw.y), stage: 'hair', bone: 'head', line: 0.45, colour: SKIN });
+// A pointed chin.
+add({ shape: { drop: { r: 1.0, len: 2.4, sink: 0.6, wide: 0.9, dir: [0.35, -1, 0] } }, at: head(jaw.x + 1.0, jaw.y - 0.8), stage: 'hair', bone: 'head', line: 0.35, colour: PLATE });
+// The mouth: a wide glowing grin round the front of the jaw, its corners drawn up, jagged dark teeth across it from above and below.
+const mouth = (a: number, out: number, dy = 0): Vec3 => head(jaw.x + (jaw.rx + out) * Math.cos(a), jaw.y + 0.35 + 0.42 * (a * a) + dy, (jaw.rz + out) * Math.sin(a));
 add({
-  shape: { tube: [-1.2, -0.6, 0, 0.6, 1.2].map((a): TubePoint => { const q = mouth(a, -0.25); return { p: [q[0], q[1], q[2]], r: 0.5 }; }), opts: { K: 8, N: 20, ref: [0, 1, 0], cap: 0.5 } },
-  stage: 'spikes', bone: 'head', line: 0, colour: MAGMA, glow: true,
+  shape: { tube: [-1.35, -0.9, -0.45, 0, 0.45, 0.9, 1.35].map((a): TubePoint => { const q = mouth(a, -0.3); return { p: [q[0], q[1], q[2]], r: 0.2 + 0.2 * Math.cos(a * 0.9) }; }), opts: { K: 8, N: 28, ref: [0, 1, 0], cap: 0.5 } },
+  stage: 'spikes', bone: 'head', line: 0, colour: 0xff7a1a, glow: true,
 });
+for (let i = -5; i <= 5; i++) {
+  const a = i * 0.24, upper = (i & 1) === 0, q = mouth(a, 0.02, upper ? 0.6 : -0.6);
+  add({ shape: { drop: { r: 0.3, len: 1.05, sink: 0.3, wide: 0.8, dir: [0, upper ? -1 : 1, 0] } }, at: q, stage: 'spikes', bone: 'head', line: 0, colour: TOOTH });
+}
 pivots.hat = head(-0.6, 1.4);
 for (const sd of [1, -1]) {
-  // The ram's horns: thick and ridged, out of the temples, up and back in a wide curl, down behind the head and forward again to a
-  // point beside the jaw, spreading outward all the way.
-  const T = 1.55 * Math.PI, n = 18, rho0 = 3.6;
-  const horn: TubePoint[] = [];
+  // The horns: massive and ridged, out of the sides of the head, sweeping wide outward, then bent forward, the tips turning up.
+  const n = 16, horn: TubePoint[] = [];
   for (let i = 0; i <= n; i++) {
-    const u = i / n, t = u * T, rho = rho0 * (1 - 0.22 * u);
-    const r = (1.3 * (1 - u) + 0.22) * (1 + (i > 0 && i < n ? 0.1 * (i % 2 === 0 ? 1 : -1) : 0));
-    horn.push({ p: [-rho0 + rho * Math.cos(t) - 0.6 * u, rho * Math.sin(t), sd * (0.8 + 7.2 * Math.pow(u, 0.75))], r });
+    const u = i / n, r = (1.7 * Math.pow(1 - u, 1.1) + 0.2) * (1 + (i > 0 && i < n ? 0.1 * (i % 2 === 0 ? 1 : -1) : 0));
+    horn.push({ p: [-0.8 * u + 5.5 * Math.pow(u, 2), 1.2 * u - 1.3 * Math.sin(Math.PI * u) + 6.0 * Math.pow(u, 3), sd * 8.0 * Math.sin(Math.min(1, u * 1.3) * Math.PI / 2)], r });
   }
-  add({ shape: { tube: horn, opts: { K: 14, N: 90, cap: 0.7 } }, at: head(-0.5, 1.5, sd * 1.7), stage: 'spikes', bone: 'hat', line: 0.45, colour: HORN });
-  // Fangs: a long lower one at each corner.
-  add({ shape: { drop: { r: 0.5, len: 1.9, sink: 0.4, wide: 0.9, dir: [0.1, 1, -0.1 * sd] } }, at: mouth(sd * 0.8, -0.05), stage: 'spikes', bone: 'head', line: 0.2, colour: BONE });
-  // The eyes: glowing slits without pupils, slanted, sunk into the head; a dark brow ridge over each.
-  const eye = [onHead(0.25, 0.3, sd, -0.13), onHead(0.62, 0.75, sd, -0.13), onHead(1.0, 1.25, sd, -0.13)];
-  add({ shape: { tube: eye.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.7 : 0.5 })), opts: { K: 10, N: 14, cap: 0.8 } }, stage: 'spikes', bone: 'head', line: 0, colour: MAGMA, glow: true });
-  const brow = [onHead(0.12, 1.0, sd, -0.04), onHead(0.6, 1.5, sd, -0.04), onHead(1.05, 1.9, sd, -0.04)];
-  add({ shape: { tube: brow.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.6 : 0.5 })), opts: { K: 8, N: 12, cap: 0.7 } }, stage: 'spikes', bone: 'head', line: 0, colour: PLATE });
+  add({ shape: { tube: horn, opts: { K: 14, N: 80, cap: 0.7 } }, at: head(-0.4, 1.3, sd * 1.5), stage: 'spikes', bone: 'hat', line: 0.45, colour: HORN });
+  // The eyes: glowing slits without pupils, slanted, sunk into the head; a heavy dark brow ridge over each, low over the nose.
+  const eye = [onHead(0.22, 0.25, sd, -0.1), onHead(0.6, 0.8, sd, -0.1), onHead(1.0, 1.35, sd, -0.1)];
+  add({ shape: { tube: eye.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.75 : 0.45 })), opts: { K: 10, N: 14, cap: 0.8 } }, stage: 'spikes', bone: 'head', line: 0, colour: 0xffb02e, glow: true });
+  const brow = [onHead(0.08, 0.85, sd, 0.02), onHead(0.6, 1.6, sd, 0.02), onHead(1.1, 2.1, sd, 0.02)];
+  add({ shape: { tube: brow.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.75 : 0.55 })), opts: { K: 8, N: 12, cap: 0.7 } }, stage: 'spikes', bone: 'head', line: 0, colour: PLATE });
 }
 
 export const demon: TubeDesc = {
-  // The head's top is at y 31.4 (34.09 game px at size 1).
-  name: 'Demon', size: fitSize(HUMANS, 34.09), outline: OUTLINE_C, pieces, pivots,
+  // The head's top is at y 31.7 (34.42 game px at size 1).
+  name: 'Demon', size: fitSize(HUMANS, 34.42), outline: OUTLINE_C, pieces, pivots, paintSize: PAINT,
   parents: { head: 'body', hat: 'head', leg1: 'leg0', leg3: 'leg2' },
   stance: 'two', arms: { length: elbow + fore, radius: R, elbow, free: 0.5 },
   legs: [{ upper: 'leg0', lower: 'leg1', front: false, knee: -1 }, { upper: 'leg2', lower: 'leg3', front: false, knee: -1 }],
