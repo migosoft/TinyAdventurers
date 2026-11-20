@@ -169,74 +169,97 @@ for (const [s, sd] of [['R', 1], ['L', -1]] as const) {
   pivots[`arm${s}`] = at;
 }
 
-// ---- the wings: a bat's (the Imp's construction, much larger). Each is drawn flat in its own plane (`s` along the span from the root
-// on the shoulder blade, `h` up in the plane) and stood on the back: out to the side and up, nearly upright, swept back. The lower edge
-// is torn: long ragged points between the finger tips. A slow beat. ----
+// ---- the wings: a bat's, half folded. An arm from the shoulder blade up to the wrist, four long fingers fanning out and down from
+// the wrist, and the webbing between them, between the last finger and the back. The webbing's edge hangs in an arc between the finger
+// tips. Folded, the webbing has more cloth than room: every panel hangs in a fold behind the wing, like a curtain pushed together.
+// Each wing is laid out flat in its own plane (`s` out along the span from the root, `h` up) and stood on the back. ----
 if (WINGS) {
-  const WEB = 0.38, WING = 6.0, SPAN = 1.6;
-  /** [s, top, bottom] of the wing's outline. */
-  const OUTLINE: readonly (readonly [number, number, number])[] = [
-    [0, 0.2, -0.9], [0.35, 0.4, -1.5], [0.6, 0.55, -0.8], [0.95, 0.75, -1.9], [1.2, 0.95, -1.05], [1.5, 1.15, -2.2], [1.75, 1.3, -1.5],
-    [2.0, 1.45, -2.6], [2.15, 1.55, -2.9], [2.35, 1.65, -1.6], [2.6, 1.7, -2.3], [2.8, 1.68, -1.0], [3.05, 1.63, -1.9], [3.3, 1.56, -0.9],
-    [3.55, 1.48, -1.7], [3.9, 1.35, -2.1], [4.1, 1.3, -0.8], [4.35, 1.22, -1.2], [4.6, 1.15, 0.0], [5.0, 1.36, 0.64],
-  ];
-  const WRIST: readonly [number, number] = [2.4, 1.6];
-  const BONES_2D: readonly (readonly (readonly [number, number])[])[] = [
-    [[0, -0.05], [1.2, 0.75], WRIST],
-    [WRIST, [3.8, 1.3], [5.25, 1.0]],
-    [WRIST, [3.3, 0.5], [3.95, -2.2]],
-    [WRIST, [2.35, 0.2], [2.15, -3.0]],
-  ];
+  const WING = 6.0, THICK = 0.1, FOLD = 0.42, NT = 14, NW = 12;
+  type P2 = readonly [number, number];
+  const WRIST: P2 = [1.0, 2.3], ELBOW: P2 = [0.42, 1.2], BACK_END: P2 = [0.1, -2.4];
+  /** The four fingers from the wrist: a point each bows through, and its tip. */
+  const FINGERS: readonly (readonly [P2, P2])[] = [[[3.5, 2.95], [6.2, 1.3]], [[3.1, 1.0], [4.7, -1.5]], [[2.3, -0.1], [3.1, -3.2]], [[1.45, -0.5], [1.5, -3.8]]];
+  const finger = (i: number, t: number): [number, number] => {
+    const [mid, tip] = FINGERS[i], cx = 2 * mid[0] - (WRIST[0] + tip[0]) / 2, cy = 2 * mid[1] - (WRIST[1] + tip[1]) / 2, k = 1 - t;
+    return [k * k * WRIST[0] + 2 * k * t * cx + t * t * tip[0], k * k * WRIST[1] + 2 * k * t * cy + t * t * tip[1]];
+  };
+  /** The webbing's inner edge: from the wrist down the arm to the root, then down the back. */
+  const inner = (t: number): [number, number] => (t < 0.45 ? [WRIST[0] * (1 - t / 0.45), WRIST[1] * (1 - t / 0.45)] : [BACK_END[0] * (t - 0.45) / 0.55, BACK_END[1] * (t - 0.45) / 0.55]);
+  const ray = (i: number, t: number): [number, number] => (i < 4 ? finger(i, t) : inner(t));
+  /** How deep the edge of each panel hangs in between its two bones, as a share of the bones' length. */
+  const ARC = [0.3, 0.3, 0.28, 0.2];
   for (const sd of [1, -1]) {
-    const S = unit([-0.45, -0.16, 0.88 * sd]);
+    const S = unit([-0.62, -0.1, 0.78 * sd]);
     const lean: Vec3 = [-0.2, 0.97, 0], k = lean[0] * S[0] + lean[1] * S[1] + lean[2] * S[2];
     const U = unit([lean[0] - k * S[0], lean[1] - k * S[1], lean[2] - k * S[2]]);
-    const face: Vec3 = [S[1] * U[2] - S[2] * U[1], S[2] * U[0] - S[0] * U[2], S[0] * U[1] - S[1] * U[0]];
-    const on = (s: number, h: number): [number, number, number] => [(S[0] * s * SPAN + U[0] * h) * WING, (S[1] * s * SPAN + U[1] * h) * WING, (S[2] * s * SPAN + U[2] * h) * WING];
+    // Behind the wing.
+    const back: Vec3 = [(S[1] * U[2] - S[2] * U[1]) * sd, (S[2] * U[0] - S[0] * U[2]) * sd, (S[0] * U[1] - S[1] * U[0]) * sd];
+    const on = (s: number, h: number, off = 0): [number, number, number] => [(S[0] * s + U[0] * h + back[0] * off) * WING, (S[1] * s + U[1] * h + back[1] * off) * WING, (S[2] * s + U[2] * h + back[2] * off) * WING];
     const root: Vec3 = [shoulder[0] - 3.8, shoulder[1] - 0.6, sd * 2.8];
-    // A point's place in the wing (relative to the root): `s` along the span, `h` up.
-    const inWing = (q: Vec3): [number, number] => [(q[0] * S[0] + q[1] * S[1] + q[2] * S[2]) / (WING * SPAN), (q[0] * U[0] + q[1] * U[1] + q[2] * U[2]) / WING];
-    const edgeAt = (sv: number, k: 1 | 2): number => { let i = 0; while (i < OUTLINE.length - 2 && OUTLINE[i + 1][0] < sv) i++; const a = OUTLINE[i], b = OUTLINE[i + 1], t = Math.max(0, Math.min(1, (sv - a[0]) / (b[0] - a[0]))); return a[k] + (b[k] - a[k]) * t; };
-    /** How far a point is from the nearest finger bone, 0 on a bone to 1 in the middle of a panel. */
-    const offBones = (sv: number, h: number): number => {
-      let best = 9;
-      for (const line of BONES_2D) for (let i = 0; i < line.length - 1; i++) {
-        const ax = line[i][0] * SPAN, ay = line[i][1], bx = line[i + 1][0] * SPAN, by = line[i + 1][1], dx = bx - ax, dy = by - ay;
-        const t = Math.max(0, Math.min(1, ((sv * SPAN - ax) * dx + (h - ay) * dy) / (dx * dx + dy * dy)));
-        best = Math.min(best, Math.hypot(sv * SPAN - ax - dx * t, h - ay - dy * t));
-      }
-      const w = Math.min(1, best / 0.7);
-      return w * w * (3 - 2 * w);
+
+    // The webbing: four panels, each a grid from the wrist (`t` 0) to the edge (1) and from one bone (`w` 0) to the next (1), two
+    // sheets back to back. What each vertex is (panel, t, w) is kept by its place, for the colour and the bulge.
+    const pos: number[] = [], nor: number[] = [], idx: number[] = [], what = new Map<string, readonly [number, number, number]>();
+    const keyOf = (x: number, y: number, z: number): string => `${Math.fround(x)},${Math.fround(y)},${Math.fround(z)}`;
+    const at3 = (i: number, t: number, w: number): [number, number, number] => {
+      const te = t * (1 - ARC[i] * 4 * w * (1 - w)), a = ray(i, te), b = ray(i + 1, te);
+      return on(a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, FOLD * te * (Math.sin(Math.PI * w) + 0.3 * Math.sin(3 * Math.PI * w)));
     };
-    // The webbing is elastic: between the finger bones it goes further with every bend than the bones do, so it bulges.
-    const bulge = (q: Vec3): number => { const [sv, h] = inWing(q); return 1 + 0.7 * offBones(sv, h); };
-    // Its colour: a very dark red where it is attached (at the root and under the arm bone), soon a bright red over most of it, and
-    // charcoal along the lower edge and at the tip, as if burnt there.
+    for (let i = 0; i < 4; i++) for (const side of [1, -1]) {
+      const v0 = pos.length / 3;
+      for (let a = 0; a <= NT; a++) for (let b = 0; b <= NW; b++) {
+        const t = a / NT, w = b / NW, e = 0.01, p = at3(i, t, w);
+        const ta = at3(i, Math.min(1, t + e), w), tb = at3(i, Math.max(0, t - e), w), wa = at3(i, t, Math.min(1, w + e)), wb = at3(i, t, Math.max(0, w - e));
+        const dt = [ta[0] - tb[0], ta[1] - tb[1], ta[2] - tb[2]], dw = [wa[0] - wb[0], wa[1] - wb[1], wa[2] - wb[2]];
+        let n = unit([dt[1] * dw[2] - dt[2] * dw[1] || 0, dt[2] * dw[0] - dt[0] * dw[2] || 0, dt[0] * dw[1] - dt[1] * dw[0] || 1e-6]);
+        if (n[0] * back[0] + n[1] * back[1] + n[2] * back[2] < 0) n = [-n[0], -n[1], -n[2]];
+        const q: Vec3 = side > 0 ? p : [p[0] - n[0] * THICK, p[1] - n[1] * THICK, p[2] - n[2] * THICK];
+        pos.push(q[0], q[1], q[2]); nor.push(n[0] * side, n[1] * side, n[2] * side);
+        what.set(keyOf(q[0], q[1], q[2]), [i, t, w]);
+      }
+      for (let a = 0; a < NT; a++) for (let b = 0; b < NW; b++) {
+        const c0 = v0 + a * (NW + 1) + b, c1 = c0 + 1, c2 = c0 + NW + 1, c3 = c2 + 1;
+        for (const tri of [[c0, c1, c2], [c1, c3, c2]]) {
+          const [A, B, C] = tri.map((v) => [pos[v * 3], pos[v * 3 + 1], pos[v * 3 + 2]]);
+          const g = [(B[1] - A[1]) * (C[2] - A[2]) - (B[2] - A[2]) * (C[1] - A[1]), (B[2] - A[2]) * (C[0] - A[0]) - (B[0] - A[0]) * (C[2] - A[2]), (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0])];
+          const facing = g[0] * nor[tri[0] * 3] + g[1] * nor[tri[0] * 3 + 1] + g[2] * nor[tri[0] * 3 + 2];
+          if (facing >= 0) idx.push(tri[0], tri[1], tri[2]); else idx.push(tri[0], tri[2], tri[1]);
+        }
+      }
+    }
+    const whatAt = (q: Vec3): readonly [number, number, number] => what.get(keyOf(q[0], q[1], q[2])) ?? [0, 0, 0];
+    // Elastic: between its bones the webbing goes further with every bend than the bones do.
+    const bulge = (q: Vec3): number => { const [, t, w] = whatAt(q); return 1 + 0.7 * t * Math.sin(Math.PI * w); };
+    // The colour: a very dark red where the webbing is attached (round the wrist, along the bones, down the back), soon a bright red
+    // over most of it, and a thin ragged rim of charcoal along the hanging edge, as if burnt.
     const webTint = (q: Vec3): number => {
-      const [sv, h] = inWing(q), top = edgeAt(sv, 1), bottom = edgeAt(sv, 2);
-      const held = Math.max(1 - sv / 0.55, sv < WRIST[0] ? 1 - (top - h) / 0.45 : 0), ragged = 0.3 * vnoise(sv * 7, h * 7, 31);
-      const burnt = 1 - Math.min(h - bottom, (5.0 - sv) * 1.2) / (0.5 + ragged);
-      let c = mixC(WEB_RED, WEB_ROOT, Math.pow(Math.max(0, held), 0.8));
-      c = mixC(c, 0x5a1218, 0.25 * vnoise(sv * 4, h * 4, 33));
-      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, burnt * 1.6)));
+      const [i, t, w] = whatAt(q);
+      const held = Math.max(1 - t / 0.22, 0.75 * (1 - Math.min(w, 1 - w) / 0.1), i === 3 ? 1 - (1 - w) / 0.3 : 0);
+      let c = mixC(WEB_RED, WEB_ROOT, Math.pow(Math.max(0, Math.min(1, held)), 0.8));
+      c = mixC(c, 0x5a1218, 0.3 * vnoise((i + w) * 5, t * 6, 33));
+      const burnt = (t - (0.9 - 0.07 * vnoise((i + w) * 9, 0.5, 31))) / 0.06;
+      return mixC(c, CHARCOAL, Math.max(0, Math.min(1, burnt)));
     };
     const web = add({
-      shape: { tube: OUTLINE.map(([s, top, bottom]): TubePoint => { const r = (top - bottom) / 2 * WING; return { p: on(s, (top + bottom) / 2), r, wide: Math.min(1, WEB / r) }; }), opts: { K: 28, N: 120, ref: face, cap: 0.5, pow: 0.4 } },
-      at: root, stage: 'hair', bone: 'body', line: 0.4, colour: WEB_RED, tint: webTint, bulge,
+      shape: { mesh: { position: Float32Array.from(pos), normal: Float32Array.from(nor), uv: null, index: Uint32Array.from(idx) }, axis: { dir: [S[0], S[1], S[2]], len: 6.2 * WING } },
+      at: root, stage: 'hair', bone: 'body', line: 0, colour: WEB_RED, tint: webTint, bulge,
       bend: { sway: 0.2, hinge: 0.65, flutter: { rate: 0.4, angle: 0.12, axis: [sd * U[0], sd * U[1], sd * U[2]] } },
     });
-    BONES_2D.forEach((line, i) => {
-      const r = i === 0 ? 1.15 : 0.7;
-      add({ shape: { tube: line.map(([s, h], j): TubePoint => ({ p: on(s, h), r: j === 2 && i > 0 ? 0.4 : r })), opts: { K: 8, N: 12, cap: 0.6 } }, at: root, stage: 'hair', bone: 'body', line: 0.35, colour: BACK, bend: { with: web } });
-    });
-    // The torn edge: ragged strips of webbing hanging from the lower edge.
-    const bottomAt = (sv: number): number => { let i = 0; while (i < OUTLINE.length - 2 && OUTLINE[i + 1][0] < sv) i++; const a = OUTLINE[i], b = OUTLINE[i + 1], k = (sv - a[0]) / (b[0] - a[0]); return a[2] + (b[2] - a[2]) * k; };
-    [[0.45, 5], [0.95, 8], [1.5, 6], [1.85, 9], [2.15, 11], [2.6, 7], [3.05, 9], [3.55, 6], [3.9, 10], [4.35, 5]].forEach(([sv, len], i) => {
-      const q = on(sv, bottomAt(sv) + 0.25), tilt = (i % 2 ? 0.25 : -0.2);
-      add({ shape: { drop: { r: 1.0 + (i % 3) * 0.25, len, sink: 0.3, wide: 0.3, dir: [-U[0] + tilt * S[0], -U[1] + tilt * S[1], -U[2] + tilt * S[2]] } }, at: [root[0] + q[0], root[1] + q[1], root[2] + q[2]], stage: 'hair', bone: 'body', line: 0.3, colour: CHARCOAL, bulge, bend: { with: web } });
-    });
-    const claw = on(WRIST[0], WRIST[1]);
-    add({ shape: { drop: { r: 0.9, len: 4.4, sink: 0.4, wide: 0.9, dir: [U[0] + 0.5 * S[0], U[1] + 0.5 * S[1], U[2] + 0.5 * S[2]] } }, at: [root[0] + claw[0], root[1] + claw[1], root[2] + claw[2]], stage: 'hair', bone: 'body', line: 0.3, colour: PLATE, bend: { with: web } });
+    // The bones: the arm, and the four fingers, thinning to their tips; a claw on each tip and the thumb's on the wrist, in the horns' colours.
+    const bone = (pts: readonly P2[], r0: number, r1: number): void => {
+      add({ shape: { tube: pts.map(([s, h], j): TubePoint => ({ p: on(s, h), r: r0 + (r1 - r0) * j / (pts.length - 1) })), opts: { K: 8, N: pts.length * 5, cap: 0.6 } }, at: root, stage: 'hair', bone: 'body', line: 0.35, colour: BACK, bend: { with: web } });
+    };
+    const claw = (from: P2, dir: P2, len: number, r: number): void => {
+      const l = Math.hypot(dir[0], dir[1]);
+      add({ shape: { tube: [0, 0.4, 0.75, 1].map((u): TubePoint => ({ p: on(from[0] + dir[0] / l * len * u, from[1] + dir[1] / l * len * u), r: r * (1 - u * u * u) + 0.03 })), opts: { K: 8, N: 14, cap: 1 } }, at: root, stage: 'hair', bone: 'body', line: 0.3, colour: SKIN, band: HORN_BAND, bend: { with: web } });
+    };
+    bone([[0, 0], ELBOW, WRIST], 1.15, 0.8);
+    for (let i = 0; i < 4; i++) {
+      bone([0, 0.25, 0.5, 0.75, 1].map((t) => finger(i, t)), 0.7, 0.3);
+      const tip = finger(i, 1), before = finger(i, 0.92);
+      claw(tip, [tip[0] - before[0], tip[1] - before[1]], 0.55, 0.36);
+    }
+    claw(WRIST, [0.25, 1], 0.6, 0.42);
   }
 }
 

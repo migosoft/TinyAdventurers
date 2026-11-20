@@ -3,6 +3,7 @@
 
 import type { Bone, Stage } from './bones';
 import type { Vec3 } from './desc';
+import type { Mesh3 } from './part';
 import type { TubeOpts, TubePoint } from './tubes';
 
 /** One human's height in game px (a tile is 16): the default the two-legged tube models are sized by (#356). */
@@ -55,7 +56,9 @@ export type Shape =
   | { tube: readonly TubePoint[]; opts?: TubeOpts }
   | { ball: readonly [number, number, number]; pow?: number; turnZ?: number }
   | { drop: { r: number; len: number; sink: number; wide: number; dir: Vec3 } }
-  | { prism: { outline: readonly (readonly [number, number])[]; z: readonly [number, number] } };
+  | { prism: { outline: readonly (readonly [number, number])[]; z: readonly [number, number] } }
+  /** SPIKE (#379): a mesh the description builds itself (the demon's wing webbing); `axis` is what it sways along. */
+  | { mesh: Mesh3; axis: { dir: [number, number, number]; len: number } };
 
 export interface TubePiece {
   shape: Shape; at?: Vec3; stage: Stage; bone: Bone;

@@ -17,6 +17,7 @@ const rgb = (hex: number): [number, number, number] => [(hex >> 16) / 255, ((hex
 const smooth = (x: number): number => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 
 function meshOf(s: Shape): Mesh3 {
+  if ('mesh' in s) return s.mesh;
   if ('tube' in s) return tube(s.tube, s.opts);
   if ('ball' in s) return ball(s.ball[0], s.ball[1], s.ball[2], s.pow, s.turnZ);
   if ('prism' in s) return prism(s.prism.outline, s.prism.z[0], s.prism.z[1]);
@@ -33,6 +34,7 @@ function turned(m: Mesh3, a: number | undefined): Mesh3 {
 
 /** The direction and length a loose piece sways along: a drop's own, or a tube's first point to its last. */
 function swayAxis(name: string, s: Shape): { dir: [number, number, number]; len: number } {
+  if ('mesh' in s) return s.axis;
   if ('drop' in s) {
     const [x, y, z] = s.drop.dir, l = Math.hypot(x, y, z);
     return { dir: [x / l, y / l, z / l], len: s.drop.len - s.drop.sink };
