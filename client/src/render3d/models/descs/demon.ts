@@ -14,7 +14,7 @@ const OPT: string = (import.meta as unknown as { env?: Record<string, string | u
 const WINGS = !OPT.includes('wings');
 const HUMANS = Number(/h([\d.]+)/.exec(OPT)?.[1] ?? 3);
 
-const BACK = 0x2c2022, PLATE = 0x261b1d, CLAW = 0x6b6068, FUR = 0x35241f, TOOTH = 0x1c1213;
+const BACK = 0x2c2022, PLATE = 0x261b1d, FUR = 0x35241f, TOOTH = 0x1c1213, BLACK = 0x070506;
 const WEB_RED = 0x8a1f2a;
 const OUTLINE_C = 0x121013, LINE = 0.55;
 
@@ -36,9 +36,10 @@ const vnoise = (x: number, y: number, k: number, wrap = 1e9): number => {
   const a = hash(ix, w(iy), k), b = hash(ix + 1, w(iy), k), c = hash(ix, w(iy + 1), k), e = hash(ix + 1, w(iy + 1), k);
   return a + (b - a) * sx + (c - a) * sy + (a - b - c + e) * sx * sy;
 };
-// The paint has three bands along u: 0 the trunk and the head (strong cracks), 1 the limbs and the tail (few, faint cracks), 2 the horns.
+// The paint has six bands along u: 0 the trunk and the head (strong cracks), 1 the arms and the tail (few, faint cracks), 2 to 4 the thigh,
+// the shin and the foot bone (faint cracks, darkening to black at the foot), 5 the horns and the foot claws.
 // Round a piece the pattern is not mirrored: it joins up at the seam.
-const NU = 5, NR = 5, BANDS = 3, PAINT: readonly [number, number] = [768, 128];
+const NU = 5, NR = 5, BANDS = 6, HORN_BAND = 5, PAINT: readonly [number, number] = [1536, 128];
 const ROCKS = [0x3a2a2a, 0x4a3330, 0x2f2325, 0x54382f] as const;
 const hornPaint = (u: number, v: number): number => {
   // Dark red at the base, black along the length, then quickly dark red and a glowing tip, yellow to nearly white.
@@ -52,8 +53,9 @@ const hornPaint = (u: number, v: number): number => {
 };
 const SKIN = (uAll: number, v: number): number => {
   const band = Math.min(BANDS - 1, Math.floor(uAll * BANDS)), u = uAll * BANDS - band;
-  if (band === 2) return hornPaint(u, v);
-  const faint = band === 1, seed = band * 40;
+  if (band === HORN_BAND) return hornPaint(u, v);
+  const faint = band >= 1, seed = band * 40;
+  const dark = band === 2 ? 0.35 * u : band === 3 ? 0.35 + 0.4 * u : band === 4 ? 0.75 + 0.25 * u : 0;
   const x = u * NU, y = v * NR, ix = Math.floor(x), iy = Math.floor(y), wrapR = (j: number): number => ((j % NR) + NR) % NR;
   let f1 = 9, f2 = 9, id = 0;
   for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
@@ -61,7 +63,7 @@ const SKIN = (uAll: number, v: number): number => {
     if (dist < f1) { f2 = f1; f1 = dist; id = hash(cx, wy, seed + 3); } else if (dist < f2) f2 = dist;
   }
   const edge = f2 - f1, hot = vnoise(x * 0.7 + 3.1, v * 4, seed + 7, 4) - (faint ? 0.64 : 0.5);
-  if (hot > 0) {
+  if (hot > 0 && dark < 0.45) {
     if (faint) {
       if (edge < 0.03) return 0xf04a10 | GLOWS;
       if (edge < 0.06) return 0x9a1a0a | GLOWS;
@@ -70,11 +72,11 @@ const SKIN = (uAll: number, v: number): number => {
       if (edge < 0.08) return 0xff5a14 | GLOWS;
       if (edge < 0.12) return 0xc3200c | GLOWS;
     }
-  } else if (edge < (faint ? 0.05 : 0.07)) return 0x140e0f;
+  } else if (edge < (faint ? 0.05 : 0.07)) return mixC(0x140e0f, BLACK, dark);
   const grain = hash(Math.floor(uAll * PAINT[0]), Math.floor(v * PAINT[1]), 5), fine = vnoise(x * 5, y * 5, 9, NR * 5);
   let c = mixC(ROCKS[Math.floor(id * ROCKS.length) % ROCKS.length], 0x1d1516, 0.55 * Math.max(0, 1 - edge / 0.5) + 0.25 * fine + 0.12 * grain);
   if (hot > 0 && !faint) c = mixC(c, 0x8a1c10, 0.6 * Math.max(0, 1 - (edge - 0.12) / 0.2));
-  return c;
+  return mixC(c, BLACK, dark);
 };
 
 // ---- the legs: thick and bent like a beast's. A heavy thigh forward to the knee, the shin back to the hock, a short thick foot bone
@@ -86,16 +88,18 @@ const thigh = down([hipX, hipY], stifle), shin = down(stifle, hock), cannon = do
 const pivots: TubeDesc['pivots'] = { body: [hipX, hipY, 0] };
 for (const [upper, lower, sd] of [['leg0', 'leg1', 1], ['leg2', 'leg3', -1]] as const) {
   const z = sd * legZ;
-  add({ shape: { tube: [{ p: [0, 1.2, 0], r: 3.5 }, { p: [0.4, -thigh.len * 0.45, 0], r: 3.5 }, { p: [0, -thigh.len, 0], r: 2.3 }], opts: { K: 16, N: 14 } }, at: [hipX, hipY, z], turn: thigh.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN });
-  add({ shape: { tube: [{ p: [0, 0.6, 0], r: 2.2 }, { p: [0.5, -shin.len * 0.4, 0], r: 2.3 }, { p: [0, -shin.len, 0], r: 1.6 }], opts: { K: 14, N: 12 } }, at: [stifle[0], stifle[1], z], turn: shin.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, 1.2, 0], r: 3.5 }, { p: [0.4, -thigh.len * 0.45, 0], r: 3.5 }, { p: [0, -thigh.len, 0], r: 2.3 }], opts: { K: 16, N: 14 } }, at: [hipX, hipY, z], turn: thigh.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN, band: 2 });
+  add({ shape: { tube: [{ p: [0, 0.6, 0], r: 2.2 }, { p: [0.5, -shin.len * 0.4, 0], r: 2.3 }, { p: [0, -shin.len, 0], r: 1.6 }], opts: { K: 14, N: 12 } }, at: [stifle[0], stifle[1], z], turn: shin.turn, stage: 'legs', bone: upper, line: LINE, colour: SKIN, band: 3 });
   // A plate over the knee.
   add({ shape: { drop: { r: 1.3, len: 3.2, sink: 0.8, wide: 0.9, dir: [1, 0.5, 0] } }, at: [stifle[0] + 0.6, stifle[1] + 0.2, z], stage: 'hair', bone: upper, line: 0.35, colour: PLATE });
-  add({ shape: { tube: [{ p: [0, 0, 0], r: 1.6 }, { p: [0, -cannon.len * 0.6, 0], r: 1.35 }, { p: [0, -cannon.len, 0], r: 1.5 }], opts: { K: 12, N: 10 } }, at: [hock[0], hock[1], z], turn: cannon.turn, stage: 'legs', bone: lower, line: LINE, colour: SKIN });
+  add({ shape: { tube: [{ p: [0, 0, 0], r: 1.6 }, { p: [0, -cannon.len * 0.6, 0], r: 1.35 }, { p: [0, -cannon.len, 0], r: 1.5 }], opts: { K: 12, N: 10 } }, at: [hock[0], hock[1], z], turn: cannon.turn, stage: 'legs', bone: lower, line: LINE, colour: SKIN, band: 4 });
   // A spur behind the hock, the foot and its three claws.
   add({ shape: { drop: { r: 0.9, len: 2.8, sink: 0.5, wide: 0.8, dir: [-1, 0.3, 0] } }, at: [hock[0] - 1.0, hock[1], z], stage: 'legs', bone: lower, line: 0.35, colour: PLATE });
-  add({ shape: { ball: [2.7, 1.4, 2.3] }, at: [ankle[0] + 1.3, 1.35, z], stage: 'legs', bone: lower, line: LINE, colour: SKIN });
+  add({ shape: { ball: [2.7, 1.4, 2.3] }, at: [ankle[0] + 1.3, 1.35, z], stage: 'legs', bone: lower, line: LINE, colour: BLACK });
   for (const dz of [-1.4, 0, 1.4]) {
-    add({ shape: { drop: { r: 0.75, len: 3.0, sink: 0.6, wide: 0.85, dir: [1, -0.22, dz * 0.25] } }, at: [ankle[0] + 3.2, 0.95, z + dz], stage: 'legs', bone: lower, line: 0.3, colour: CLAW });
+    // The claws: painted like the horns (dark red, black, a glowing tip), with a real point.
+    const dir: Vec3 = [1, -0.22, dz * 0.25], L = 3.4;
+    add({ shape: { tube: [0, 0.35, 0.7, 1].map((k): TubePoint => ({ p: [dir[0] * L * k, dir[1] * L * k - 0.25 * k * k, dir[2] * L * k], r: 0.75 * (1 - k * k * k) + 0.03 })), opts: { K: 10, N: 16, cap: 1 } }, at: [ankle[0] + 2.9, 1.0, z + dz], stage: 'legs', bone: lower, line: 0.3, colour: SKIN, band: 5 });
   }
   pivots[upper] = [hipX, hipY, z]; pivots[lower] = [hock[0], hock[1], z];
 }
@@ -254,10 +258,10 @@ for (const sd of [1, -1]) {
   // The horns: massive and ridged, out of the sides of the head, sweeping wide outward, then bent forward, the tips turning up.
   const n = 16, horn: TubePoint[] = [];
   for (let i = 0; i <= n; i++) {
-    const u = i / n, r = 1.7 * (1 - u * u * u) + 0.03;
+    const u = i / n, r = 1.15 * (1 - u * u * u) + 0.03;
     horn.push({ p: [-0.6 * u + 9.5 * Math.pow(u, 1.7), 0.8 * u - 1.2 * Math.sin(Math.PI * u) + 4.0 * Math.pow(u, 3), sd * 6.5 * Math.sin(Math.min(1, u * 1.5) * Math.PI / 2)], r });
   }
-  add({ shape: { tube: horn, opts: { K: 14, N: 80, cap: 1 } }, at: head(-0.4, 1.3, sd * 1.5), stage: 'spikes', bone: 'hat', line: 0.45, colour: SKIN, band: 2 });
+  add({ shape: { tube: horn, opts: { K: 14, N: 80, cap: 1 } }, at: head(-0.4, 1.3, sd * 1.5), stage: 'spikes', bone: 'hat', line: 0.45, colour: SKIN, band: HORN_BAND });
   // The eyes: glowing slits without pupils, slanted, sunk into the head; a heavy dark brow ridge over each, low over the nose.
   const eye = [onHead(0.22, 0.25, sd, -0.1), onHead(0.6, 0.8, sd, -0.1), onHead(1.0, 1.35, sd, -0.1)];
   add({ shape: { tube: eye.map((p, i): TubePoint => ({ p: [p[0], p[1], p[2]], r: i === 1 ? 0.75 : 0.45 })), opts: { K: 10, N: 14, cap: 0.8 } }, stage: 'spikes', bone: 'head', line: 0, colour: 0xffb02e, glow: true });

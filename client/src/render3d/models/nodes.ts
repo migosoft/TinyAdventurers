@@ -307,7 +307,7 @@ export function figureMaterials(o: { lighting: Lighting; sight: Sight; hasSun: b
       : undefined;
     const lit0 = lighting.lightAt(p.P, Nn, 1 - FIGURE_SHADE, { self: p.seen.w.add(0.5).floor(), darkOnly: p.flags.x, sun: sunAt });
     const lit = { rgb: lit0.rgb.toVar('figLit'), dv: lit0.dv.toVar('figDv') };
-    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), mix(lighting.finish(albedo, lit), base.mul(select(uvIn.x.greaterThan(0.6667), float(1), sin(time.mul(1.5).sub(p.P.y.mul(0.06))).mul(0.5).add(0.5).pow(1.6).mul(0.94).add(0.06))), select(isStone, float(0), paintGlow))));
+    const colour0 = select(isGlow, base, select(isUnlit, lighting.finish(flatColour, ambientOnly), mix(lighting.finish(albedo, lit), base.mul(select(uvIn.x.greaterThan(0.8333), float(1), sin(time.mul(1.5).sub(p.P.y.mul(0.06))).mul(0.5).add(0.5).pow(1.6).mul(0.94).add(0.06))), select(isStone, float(0), paintGlow))));
     // Painted eyes (only a material built with `eyes` has this code): a glow round them and the bright oval, before the sight; a stone figure shows none.
     let colour = colour0;
     if (o.eyes) {
