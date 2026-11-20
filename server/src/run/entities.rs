@@ -383,6 +383,16 @@ impl Monster {
         self.history[i]
     }
 
+    /// The terrain rule it moves by now: `Mover::Dash` while airborne (chasms, deep water and lava do not block;
+    /// walls and barriers do), else `mover`. An Incorporeal monster keeps its own.
+    pub fn mover_now(&self) -> Mover {
+        if self.airborne && self.mover != Mover::Incorporeal {
+            Mover::Dash
+        } else {
+            self.mover
+        }
+    }
+
     /// Distance from a flying shot at ground point `p` to this monster's body,
     /// to compare with `radius` plus the shot's radius (mirrored in
     /// `client/src/sim/hitbox.ts` for the shot the client draws). Shots are drawn

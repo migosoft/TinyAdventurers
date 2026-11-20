@@ -153,8 +153,9 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
     // A phantom drifts through solid objects too.
-    let solids = run.solids_for(m.mover, None);
-    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover, &solids);
+    let mover = m.mover_now();
+    let solids = run.solids_for(mover, None);
+    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, mover, &solids);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
     false
@@ -203,7 +204,7 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
     if pos.dist(goal) < 4.0 {
         return true;
     }
-    let (mover, radius, is_boss) = (run.monsters[mi].mover, run.monsters[mi].radius, run.monsters[mi].is_boss);
+    let (mover, radius, is_boss) = (run.monsters[mi].mover_now(), run.monsters[mi].radius, run.monsters[mi].is_boss);
     let wide = radius > TILE / 2.0;
     let side = (goal - pos).norm().perp() * radius;
     let map = &run.layout.map;
@@ -675,6 +676,40 @@ pub(crate) mod tests {
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId, Ev};
     use crate::defs::smarts::Smart;
+
+    #[test]
+    fn an_airborne_monster_crosses_a_chasm_and_stops_at_a_wall() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.objects.clear();
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        let (tx, ty) = Map::tile_of(run.level.boss().unwrap().arena.center_px());
+        // A strip of floor, five tiles long, with the tile two from the west end painted over.
+        let strip = |run: &mut Run, middle: Tile| {
+            for dy in -1..=1 {
+                for dx in 0..5 {
+                    run.layout.map.set(tx + dx, ty + dy, if dx == 2 { middle } else { Tile::Floor });
+                }
+            }
+        };
+        let walk = |run: &mut Run, airborne: bool| -> f64 {
+            let m = &mut run.monsters[bi];
+            m.mover = Mover::Enemy;
+            m.radius = 6.0;
+            m.airborne = airborne;
+            m.pos = Map::center_of(tx, ty);
+            for _ in 0..200 {
+                move_toward(run, bi, Map::center_of(tx + 4, ty), 120.0, crate::run::DT);
+            }
+            run.monsters[bi].pos.x
+        };
+        let across = Map::center_of(tx + 3, ty).x;
+        strip(&mut run, Tile::Chasm);
+        assert!(walk(&mut run, false) < Map::center_of(tx + 2, ty).x - TILE / 2.0, "grounded, the chasm stops it");
+        assert!(walk(&mut run, true) > across, "airborne, it crosses the chasm");
+        strip(&mut run, Tile::Wall);
+        assert!(walk(&mut run, false) < Map::center_of(tx + 2, ty).x - TILE / 2.0, "grounded, the wall stops it");
+        assert!(walk(&mut run, true) < Map::center_of(tx + 2, ty).x - TILE / 2.0, "airborne, the wall stops it too");
+    }
 
     #[test]
     fn wide_bosses_reach_every_spot_of_their_hall_around_the_chasms() {

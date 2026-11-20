@@ -1,7 +1,10 @@
 //! A boss's flight: take-off, hovering, landing with a Smash, then a wait until the next flight. The
 //! script owns what the boss does in the air; this owns the phases and their timers.
 
-use super::{ahead, set_anim};
+use super::{ahead, set_anim, target};
+use crate::dungeon::Map;
+use crate::math::Vec2;
+use crate::run::ai::move_toward;
 use crate::defs::abilities::AbilityId;
 use crate::defs::kinds::Anim;
 use crate::run::abilities::monster_use;
@@ -24,6 +27,40 @@ pub enum Phase {
     TakeOff,
     Air,
     Land,
+}
+
+/// Whether a circle of the boss's radius at `p` stands wholly on ground its own `mover` can stand on, clear of
+/// solid objects.
+pub(crate) fn holds(run: &Run, bi: usize, p: Vec2) -> bool {
+    let m = &run.monsters[bi];
+    let r = m.radius;
+    let (x0, y0) = Map::tile_of(Vec2::new(p.x - r, p.y - r));
+    let (x1, y1) = Map::tile_of(Vec2::new(p.x + r - 1e-6, p.y + r - 1e-6));
+    (y0..=y1).all(|y| (x0..=x1).all(|x| !run.layout.map.blocks(x, y, m.mover)))
+        && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius + r && (p.y - o.pos.y).abs() < o.radius + r)
+}
+
+/// The spot to land on from the boss's position: the target's, if it holds, else the nearest tile centre
+/// within 12 tiles that does (ties by scan order, y then x).
+fn landing_spot(run: &Run, bi: usize) -> Option<Vec2> {
+    if let Some((_, at, _)) = target(run, bi) {
+        if holds(run, bi, at) {
+            return Some(at);
+        }
+    }
+    let pos = run.monsters[bi].pos;
+    let (tx, ty) = Map::tile_of(pos);
+    let mut best: Option<(f64, Vec2)> = None;
+    for dy in -12..=12 {
+        for dx in -12..=12 {
+            let c = Map::center_of(tx + dx, ty + dy);
+            let d = c.dist(pos);
+            if best.map_or(true, |(bd, _)| d < bd) && holds(run, bi, c) {
+                best = Some((d, c));
+            }
+        }
+    }
+    best.map(|(_, c)| c)
 }
 
 pub struct Flight {
@@ -75,6 +112,19 @@ impl Flight {
                 if self.t > 0.0 || acting {
                     return false;
                 }
+                let pos = run.monsters[bi].pos;
+                if !holds(run, bi, pos) {
+                    // Over a hole: fly to ground that holds the whole body, then land.
+                    match landing_spot(run, bi) {
+                        Some(goal) => {
+                            let speed = run.monsters[bi].speed;
+                            move_toward(run, bi, goal, speed, dt);
+                            set_anim(run, bi, Anim::Move);
+                        }
+                        None => set_anim(run, bi, Anim::Idle),
+                    }
+                    return true;
+                }
                 self.phase = Phase::Land;
                 self.t = self.times.land;
                 set_anim(run, bi, Anim::Land);
@@ -98,7 +148,9 @@ impl Flight {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::target;
     use crate::defs::damage::What;
+    use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
     use crate::run::bosses::boss_idx;
     use crate::run::tests::test_run;
@@ -162,5 +214,80 @@ mod tests {
         assert!(f.in_air(), "no landing while acting");
         f.tick(&mut run, bi, DT, false);
         assert_eq!(f.phase, Phase::Land);
+    }
+
+    /// A dragon in the air with its time up, over a 5 x 5 block of chasm, and a hero on floor beyond.
+    fn over_a_hole(hero_alive: bool) -> (Run, usize, Flight) {
+        let (mut run, bi) = dragon_run();
+        run.objects.clear();
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        for dy in -2..=2 {
+            for dx in -2..=2 {
+                run.layout.map.set(tx + dx, ty + dy, Tile::Chasm);
+            }
+        }
+        for dy in -2..=2 {
+            for dx in 3..=8 {
+                run.layout.map.set(tx + dx, ty + dy, Tile::Floor);
+            }
+        }
+        let far = crate::dungeon::Map::center_of(tx + 6, ty);
+        run.players[0].mv.x = far.x;
+        run.players[0].mv.y = far.y;
+        if !hero_alive {
+            run.players[0].hp = 0.0;
+            run.players[0].alive = false;
+        }
+        run.monsters[bi].airborne = true;
+        let mut f = Flight::new(TIMES, 100.0);
+        f.phase = Phase::Air;
+        f.t = 0.0;
+        (run, bi, f)
+    }
+
+    fn lands_on_ground(mut run: Run, bi: usize, mut f: Flight) {
+        let mut landing = false;
+        for _ in 0..(20.0 / DT) as usize {
+            f.tick(&mut run, bi, DT, false);
+            let pos = run.monsters[bi].pos;
+            if run.monsters[bi].anim == Anim::Land {
+                landing = true;
+                assert!(holds(&run, bi, pos), "it begins to land over ground that holds it");
+            }
+            if f.grounded() {
+                break;
+            }
+        }
+        assert!(landing && f.grounded(), "it lands within 20 s");
+        assert!(!run.monsters[bi].airborne);
+        assert!(holds(&run, bi, run.monsters[bi].pos));
+    }
+
+    #[test]
+    fn it_does_not_land_over_a_hole() {
+        let (run, bi, f) = over_a_hole(true);
+        assert!(!holds(&run, bi, run.monsters[bi].pos), "it starts over the hole");
+        lands_on_ground(run, bi, f);
+    }
+
+    #[test]
+    fn it_lands_without_a_target() {
+        let (run, bi, f) = over_a_hole(false);
+        assert!(target(&run, bi).is_none(), "nobody to aim for");
+        lands_on_ground(run, bi, f);
+    }
+
+    #[test]
+    fn it_lands_at_once_on_ground() {
+        let (mut run, bi) = dragon_run();
+        run.objects.clear();
+        assert!(holds(&run, bi, run.monsters[bi].pos));
+        run.monsters[bi].airborne = true;
+        let mut f = Flight::new(TIMES, 100.0);
+        f.phase = Phase::Air;
+        f.t = 0.0;
+        assert!(f.tick(&mut run, bi, DT, false));
+        assert_eq!(f.phase, Phase::Land, "the landing starts on the first tick after the time is up");
+        assert_eq!(run.monsters[bi].anim, Anim::Land);
     }
 }
