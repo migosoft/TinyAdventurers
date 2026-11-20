@@ -1841,6 +1841,37 @@ pub mod tests {
         assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
+    /// The dragon's behaviour over a whole flight (#379): the first flight starts at 10 s and lands at
+    /// 14.6 s, and the second interval is under way at 18.3 s. The heroes are kept alive so the fight lasts.
+    #[test]
+    fn dragon_flight_is_pinned() {
+        let mut got = Vec::new();
+        for log in [false, true] {
+            let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Dragon);
+            run.log.forced = log;
+            let hall = run.level.boss().unwrap().arena.center_px();
+            for p in &mut run.players {
+                p.mv.x = hall.x;
+                p.mv.y = hall.y + 40.0;
+            }
+            let (mut saw_air, mut saw_land) = (false, false);
+            for _ in 0..1100 {
+                for p in &mut run.players {
+                    p.hp = p.max_hp;
+                }
+                run.step();
+                let boss = run.monsters.iter().find(|m| m.is_boss).expect("the boss");
+                saw_air |= boss.airborne;
+                saw_land |= boss.anim == Anim::Land;
+            }
+            let boss = run.monsters.iter().find(|m| m.is_boss).expect("the boss");
+            assert!(saw_air && saw_land, "a whole flight is inside the pin");
+            assert!(!boss.airborne, "it ends on the ground");
+            got.push(fingerprint(&run));
+        }
+        assert_eq!(got, [14791746112829186453, 14791746112829186453]); // log off, log on: the same value
+    }
+
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
     /// of type `t` placed `dists` px east of it with `hps`; the run after 2 s.
     fn fight(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool) -> Run {
