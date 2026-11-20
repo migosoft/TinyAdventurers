@@ -53,7 +53,7 @@ const RUNE = [175, 95, 255];
 // robe x 272..400, y 0..256 (round the body, hem to neck); pages x 400..512, y 0..96; cover x 400..512, y 96..160.
 const AW = 512, AH = 256, PLAIN = 100;
 const WU = 8 / AW, WV = 8 / AH;
-const SOCKET = { lon: 30, lat: -2, rho: 17 }, NOSE_LAT = -24;
+const SOCKET = { lon: 30, lat: -5, rho: 19.5 }, NOSE_LAT = -25;
 
 class Atlas {
   d = new Uint8Array(AW * AH * 4);
@@ -110,19 +110,20 @@ function paintAtlas(): DataTexture {
     dark(0.28 * S(-10, -60, lat));
     dark(0.3 * Math.exp(-((al - 60) ** 2 + (lat + 40) ** 2) / 120), [70, 66, 60]);
     // teeth: a row above and a row below one dark line
-    if (lat < -36 && lat > -57 && al < 44) {
+    if (lat < -38 && lat > -54 && al < 42) {
       const f = lon / 7.5 + 0.5, gap = Math.abs(f - Math.floor(f) - 0.5) > 0.39;
       c = gap ? [44, 38, 34] : [218, 212, 184].map((v) => v * (0.82 + 0.18 * Math.cos((f - Math.floor(f) - 0.5) * 3)));
-      if (lat > -37.5 || lat < -55.5 || Math.abs(lat + 46.5) < 0.9) c = [34, 28, 30];
+      if (lat > -39.2) c = [34, 28, 30];
     }
     // the nose: a dark hollow, wider at the bottom
-    const nd = Math.hypot(lon / (lat < NOSE_LAT ? 5.5 : 3.6), (lat - NOSE_LAT) / 7);
+    const nd = Math.hypot(lon / (lat < NOSE_LAT ? 6.5 : 6.5 - 0.5 * (lat - NOSE_LAT)), (lat - NOSE_LAT) / 6.5);
     dark(1 - S(0.7, 1.05, nd));
     // the eye sockets: black from their depth, a shaded rim
     const sd = angDist(al, lat, SOCKET.lon, SOCKET.lat);
     dark(0.14 * (1 - S(SOCKET.rho, SOCKET.rho * 1.3, sd)), [60, 54, 60]);
-    dark(1 - S(SOCKET.rho * 0.8, SOCKET.rho * 1.0, sd));
-    if (lat < -62) dark(S(-62, -72, lat), [30, 28, 28]);
+    dark(1 - S(SOCKET.rho * 0.84, SOCKET.rho * 1.0, sd));
+    if (lat < -54) dark(S(-54, -58, lat), [22, 18, 20]);
+    if (al > 62 && lat < -22) dark(0.6 * S(62, 80, al) * S(-22, -36, lat), [40, 36, 36]);
     A.put(16 + px, py, c);
   }
   const SX = (lon: number): number => 16 + ((lon + 180) / 360) * 256, SY = (lat: number): number => ((lat + 90) / 180) * 128;
@@ -154,7 +155,7 @@ function paintAtlas(): DataTexture {
   // marks on the temples and under the eyes
   for (const s of [-1, 1]) {
     for (const lon of [62, 75, 88]) glyph(r, 6, 9, (x0, y0, x1, y1) => rune(s * (lon + x0), 8 + y0, s * (lon + x1), 8 + y1, 1.5));
-    for (let i = 0; i < 3; i++) rune(s * (50 + i * 6), -22, s * (52 + i * 6), -31, 1.4);
+    for (let i = 0; i < 3; i++) rune(s * (56 + i * 5), -8, s * (58 + i * 5), -17, 1.4);
   }
 
   // ---- the robe: charcoal cloth, worn; a purple and grey band above the hem, a panel down the front, lapels and a clasp
@@ -359,17 +360,17 @@ const SKULL_R = 1.9;
 function skullR(lonD: number, latD: number): number {
   const lon = lonD * DEG, lat = latD * DEG, al = Math.abs(lonD);
   const dx = Math.cos(lat) * Math.cos(lon), dy = Math.sin(lat), dz = Math.cos(lat) * Math.sin(lon);
-  let r = 1 / Math.sqrt((dx / 1.0) ** 2 + (dy / 1.12) ** 2 + (dz / 0.86) ** 2);
+  let r = 1 / Math.sqrt((dx / 1.04) ** 2 + (dy / 1.04) ** 2 + (dz / 0.94) ** 2);
   // the face narrows below the eyes; the back of the head is undercut
-  const low = S(-8, -70, latD);
-  r *= 1 - low * (0.3 - 0.2 * Math.max(0, dx));
-  r *= 1 + 0.07 * Math.exp(-((al - 58) ** 2 + (latD + 22) ** 2) / 300); // cheekbones
-  r *= 1 + 0.05 * Math.exp(-((latD - 9) ** 2) / 40) * S(62, 40, al); // the brow
-  r *= 1 - 0.05 * Math.exp(-((al - 78) ** 2 + (latD + 4) ** 2) / 250); // the temples
-  r *= 1 + 0.035 * Math.exp(-((latD + 45) ** 2) / 60) * S(46, 34, al); // the teeth
-  r *= 1 - 0.2 * (1 - S(0.5, 1.05, Math.hypot(lonD / 5.5, (latD - NOSE_LAT) / 7.5))); // the nose
+  const low = S(-14, -42, latD);
+  r *= 1 - low * (0.5 - 0.36 * Math.max(0, dx) ** 1.5);
+  r *= 1 + 0.13 * Math.exp(-((al - 56) ** 2 + (latD + 20) ** 2) / 170); // cheekbones
+  r *= 1 + 0.07 * Math.exp(-((latD - 13) ** 2) / 40) * S(62, 40, al); // the brow
+  r *= 1 - 0.09 * Math.exp(-((al - 80) ** 2 + (latD + 2) ** 2) / 250); // the temples
+  r *= 1 + 0.2 * Math.exp(-((latD + 47) ** 2) / 110) * S(48, 28, al); // the upper jaw stands forward
+  r *= 1 - 0.2 * (1 - S(0.5, 1.05, Math.hypot(lonD / 6.5, (latD - NOSE_LAT) / 7))); // the nose
   r *= 1 - 0.44 * (1 - S(SOCKET.rho * 0.68, SOCKET.rho, angDist(al, latD, SOCKET.lon, SOCKET.lat))); // the eye sockets
-  r *= 1 - 0.55 * S(-66, -90, latD);
+  r *= 1 - 0.62 * S(-55, -64, latD);
   return r;
 }
 function buildSkull(): Part {
@@ -604,6 +605,16 @@ export function createLichSpike(): LichSpike {
       const HX: V = [Math.cos(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.sin(yaw) * Math.cos(pitch)], HZ: V = [-Math.sin(yaw), 0, Math.cos(yaw)], HY = cross(HZ, HX);
       place(b, skull, head, HX, HY, HZ);
       const inHead = (q: V): V => mad(mad(mad(head, HX, q[0]), HY, q[1]), HZ, q[2]);
+      // the lower jaw: its own bone, hinged below the ears; it drops open when a spell is spoken
+      const jawA = 0.02 + 0.03 * Math.sin(t * 0.8) + 0.3 * flingOut + 0.4 * novaHit + 0.22 * raiseLift + 0.16 * gaze, cj = Math.cos(jawA), sj = Math.sin(jawA);
+      const jaw = (q: V): V => { const x = q[0] + 0.35, y = q[1] + 0.95; return inHead([-0.35 + x * cj + y * sj, -0.95 - x * sj + y * cj, q[2]]); };
+      const JAW: V[] = [[-0.35, -0.95, 1.38], [-0.3, -1.55, 1.26], [0.38, -1.8, 1.04], [0.98, -1.84, 0.58], [1.22, -1.84, 0]];
+      const jawLine = [...JAW, ...JAW.slice(0, -1).reverse().map((q): V => [q[0], q[1], -q[2]])];
+      tube(b, jawLine.map(jaw), jawLine.map((_, i) => { const m = 1 - Math.abs(i - 4) / 4; return [0.24 + 0.07 * m, 0.15 + 0.05 * m] as [number, number]; }), { seg: 7, col: (i) => mul(BONE, 0.8 + 0.1 * (1 - Math.abs(i - 4) / 4)), side: [0, 0, 1], caps: [true, true] });
+      for (let q = -4; q <= 4; q++) {
+        const a2 = (q / 4.6) * 1.15, tx = 0.46 + 0.7 * Math.cos(a2), tz = 0.74 * Math.sin(a2);
+        tube(b, [jaw([tx, -1.7, tz]), jaw([tx + 0.02, -1.3, tz])], [0.085, 0.07], { seg: 4, col: [0.86, 0.84, 0.72], caps: [false, true] });
+      }
       tube(b, [at([0.5, 16.3, 0]), inHead([-0.35, -1.5, 0])], [0.42, 0.36], { seg: 6, col: BONE_DARK });
       // the eyes: two small lights that float in the middle of the hollow sockets
       const eyeGlow = 0.85 + 0.15 * Math.sin(t * 5.1) * Math.sin(t * 1.3) + 1.6 * gaze + 0.5 * flare;
@@ -630,8 +641,8 @@ export function createLichSpike(): LichSpike {
 
       // ---- the staff: planted at rest, lifted and tilted back in motion, raised for the Nova, struck down for Nova and Raise Dead
       const strike = raiseHit > 0 || novaHit > 0 ? 0.25 * Math.max(raiseHit, novaHit) * Math.abs(Math.sin((raiseHit > 0 ? a - 0.5 : a - 1.33) * 30)) : 0;
-      const sBase: V = [1.7 - 0.7 * mv + 0.9 * novaUp + 0.3 * raiseUp, 0.9 * mv * (1 - novaUp) + 7.2 * novaUp + 2.8 * raiseUp + strike, 3.75 - 0.9 * novaUp];
-      const sAxis = norm([-0.03 + 0.17 * mv - 0.05 * novaUp, 1, -0.06 + 0.05 * novaUp + 0.02 * Math.sin(t * 0.8) * (1 - mv)]);
+      const sBase: V = [2.3 - 0.7 * mv + 0.7 * novaUp + 0.3 * raiseUp, 0.9 * mv * (1 - novaUp) + 7.2 * novaUp + 2.8 * raiseUp + strike, 5.4 - 1.9 * novaUp];
+      const sAxis = norm([-0.03 + 0.17 * mv - 0.05 * novaUp, 1, -0.1 + 0.09 * novaUp + 0.02 * Math.sin(t * 0.8) * (1 - mv)]);
       const sSide = norm(cross(sAxis, [0, 0, 1])), sUp = cross(sSide, sAxis), SL = LICH_DIMS.staff - 1.5;
       const onStaff = (h: number, sx = 0, sz = 0): V => mad(mad(mad(sBase, sAxis, h), sSide, sx), sUp, sz);
       const shaft: V[] = [], shaftR: number[] = [];
