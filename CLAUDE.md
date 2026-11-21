@@ -5,28 +5,35 @@ Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.m
 ## Which work to do
 
 1. If the user names an issue ("implement #42"), work on that one.
-2. Otherwise resume the top card in **In progress** (unfinished work comes first; its latest comment says where it stopped). Cards in **In Review** wait for the user (a play-test, a look to judge, a decision): don't resume them on your own; pick them up when the user reports back.
+2. Otherwise resume the top card in **In progress** (unfinished work comes first; its latest comment says where it stopped). Cards in **In Review** wait for the user (a play-test, a look to judge, a decision): don't resume them on your own; pick them up when the user reports back. Cards in **Waiting** are blocked by another issue (see "Blocked work" below): never take them.
+
+**Fable work** (the user, 2026-11-21): creative work (shapes, paint, glow, poses, motion: a look judged by eye) is done only by a session running on Fable, wherever the issue is on the board. Such issues carry the label `fable`. A session on another model skips `fable` cards in every step of this list, unless the issue's comments name a part as not creative (that part any model may do). A session on Fable takes the top `fable` card first (In progress, then Next) and follows the normal order only when there is none. A new issue that is mainly look work gets the label when it is created.
 3. Otherwise take the top card in **Next**. The order of the cards in a column is the priority; the user sets it by dragging.
 4. If Next is empty, ask the user. Never pick from the Backlog on your own.
 
-`gh project item-list` does not keep the board order. Read the columns in order with:
+`gh project item-list` does not keep the board order. Read the columns in order with (it marks `fable` cards):
 
 ```sh
-gh api graphql --paginate -f query='query($endCursor:String){user(login:"migosoft"){projectV2(number:1){items(first:100,after:$endCursor,orderBy:{field:POSITION,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{content{... on Issue{number title}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}' --jq '.data.user.projectV2.items.nodes[] | select(.fieldValueByName.name=="In progress" or .fieldValueByName.name=="Next") | "\(.fieldValueByName.name)\t#\(.content.number) \(.content.title)"'
+gh api graphql --paginate -f query='query($endCursor:String){user(login:"migosoft"){projectV2(number:1){items(first:100,after:$endCursor,orderBy:{field:POSITION,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{content{... on Issue{number title labels(first:20){nodes{name}}}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}' --jq '.data.user.projectV2.items.nodes[] | select(.fieldValueByName.name=="In progress" or .fieldValueByName.name=="Next") | "\(.fieldValueByName.name)\t#\(.content.number) \(.content.title)\(if any(.content.labels.nodes[]; .name=="fable") then "  [fable]" else "" end)"'
 ```
 
 Read the issue, its comments and any spec or plan it links before starting. Move the card to In progress when you begin, and to In Review when the work waits on the user (a play-test, a comparison, a decision); its latest comment says what the user is asked to check.
 
 **Stopping before an issue is done:** leave a comment on the issue: the branch, what is done (commits), what is next, open questions, and links to the spec and plan. The next session starts from that comment.
 
-**Finishing:** before an issue is closed, always update the technical documentation ([docs/TECHNICAL.md](docs/TECHNICAL.md)) and the player documentation ([docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md)) to match the finished work, and commit the update with it. If one of them needs no change, say so in the closing comment. The closing comment names the commits, the verification run, and whether it is merged, pushed and deployed. Leftovers become new issues ("Follow-up of #N").
+**Finishing:** before an issue is closed, always update the technical documentation ([docs/TECHNICAL.md](docs/TECHNICAL.md)) and the player documentation ([docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md)) to match the finished work, and commit the update with it. If one of them needs no change, say so in the closing comment. The closing comment names the commits, the verification run, and whether it is merged, pushed and deployed. Leftovers become new issues ("Follow-up of #N"). Then release what it blocked (below).
+
+**Blocked work** (the user, 2026-11-21): a card that cannot start until another issue is closed goes to **Waiting**, and the dependency is recorded with GitHub's issue dependencies, so the blocker knows what it blocks:
+- Record: `gh api -X POST repos/migosoft/TinyAdventurers/issues/<blocked>/dependencies/blocked_by -F issue_id=$(gh api repos/migosoft/TinyAdventurers/issues/<blocker> --jq .id)` (the blocker's database id, not its number). Add a comment on the blocked issue naming what it waits for. Needing Fable is not a block: that is the `fable` label.
+- Release: when you close an issue, run `gh api repos/migosoft/TinyAdventurers/issues/<N>/dependencies/blocking --jq '.[].number'`. For each issue listed, check `gh api repos/migosoft/TinyAdventurers/issues/<M> --jq .issue_dependencies_summary.blocked_by` (open blockers left). None left: move its card from Waiting back to Next, at the place its comment names (otherwise ask the user), and say in a comment and in your reply where it went.
+- Use a dependency only when the blocked work really waits for the blocker to be **closed**. If it waits for part of a larger issue (e.g. one of two merges), say so in a comment and keep the card in Next after the blocker instead.
 
 ## Work tracking: GitHub issues and the project board
 
 Open work lives in GitHub issues on `migosoft/TinyAdventurers`, shown on the project board **"Tiny Adventurers"** (https://github.com/users/migosoft/projects/1, project number 1, private; the issues themselves are public).
 
-- **Board columns** (the project's Status field): Backlog, Next, In progress, In Review, Done.
-- **Labels:** an area (`progression`, `ui`, `effects`, `lighting`, `combat`, `enemies`, `classes`, `items`, `world-objects`, `terrain`, `levels`, `content`, `infra`, `art`) plus kinds: `balancing` (tune in the balancing pass), `review-finding`, `play-test` (the user checks it in the browser), `idea`, `design-question`, `bug` (something is wrong in play or in the code; not a tuning number). Priority is the board order only; there are no priority labels.
+- **Board columns** (the project's Status field): Backlog, Next, In progress, Waiting (blocked by another issue), In Review (waits for the user), Done.
+- **Labels:** an area (`progression`, `ui`, `effects`, `lighting`, `combat`, `enemies`, `classes`, `items`, `world-objects`, `terrain`, `levels`, `content`, `infra`, `art`) plus kinds: `balancing` (tune in the balancing pass), `review-finding`, `play-test` (the user checks it in the browser), `idea`, `design-question`, `bug` (something is wrong in play or in the code; not a tuning number), `fable` (creative work: only a session on Fable does it, see "Fable work"). Priority is the board order only; there are no priority labels.
 - **New follow-up:** `gh issue create --repo migosoft/TinyAdventurers --title ... --label ... --body ...`, then `gh project item-add 1 --owner migosoft --url <issue url>` and set its Status (a card added this way has none). One issue per piece of work; put file names, numbers and decisions in the body so it stands alone.
 - **Moving a card:** `gh project item-edit --project-id <id> --id <item id> --field-id <Status id> --single-select-option-id <option id>` (ids from `gh project view 1 --owner migosoft --format json`, `gh project field-list 1 --owner migosoft --format json`, `gh project item-list 1 --owner migosoft --format json`).
 - **Decisions** made while working on an issue go into the issue as a comment (and into TECHNICAL.md when they shape the code).
