@@ -3,7 +3,7 @@
 // It is a debug account, so the debug keys run here too: F4 (darkvision), F9 (immortality) and, with LOG=1, the rules log (L, F8).
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
 // Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
-// ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376).
+// ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376). It prints the glide's frame times; ZOOM_PASSES=3 zooms there, back and there again (a hitch only in pass 1 is a first-use cost).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
@@ -153,14 +153,27 @@ try {
     const start = Math.min(8, Math.max(2, Math.floor(Math.min(cw / 240, ch / 152))));
     const lim = { min: Math.min(Math.max(cw / (16 * 28), ch / (16 * 17.7)), start), max: Math.max(Math.min(cw / (16 * 6), ch / (16 * 3.8)), start) };
     const expected = want === 'far' ? lim.min : want === 'near' ? lim.max : start;
-    if (want !== 'start') {
+    // ZOOM_PASSES=3: zoom to the limit, back to the other limit, and to the limit again, measuring each glide (a hitch only in the first pass is a first-use cost).
+    const passes = want === 'start' ? 0 : Number(process.env.ZOOM_PASSES || 1);
+    for (let pass = 0; pass < passes; pass++) {
+      const out = (want === 'far') === (pass % 2 === 0);
+      const target = out ? lim.min : lim.max;
+      const g0 = await page.evaluate(() => performance.now());
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
       for (let i = 0; i < 40; i++) {
-        await page.mouse.wheel(0, want === 'far' ? 100 : -100);
+        await page.mouse.wheel(0, out ? 100 : -100);
         await page.waitForTimeout(50);
       }
       // The glide follows the notches; wait until it has arrived (the check below reports a miss).
-      await page.waitForFunction((e) => Math.abs(window.__r3d.zoom - e) <= 0.01 * e, expected, { timeout: 30000 }).catch(() => {});
+      await page.waitForFunction((e) => Math.abs(window.__r3d.zoom - e) <= 0.01 * e, target, { timeout: 30000 }).catch(() => {});
+      if (passes > 1) process.stdout.write(`pass ${pass + 1} (${out ? 'out' : 'in'}) `);
+      // The frames of the glide (the render target is rebuilt while the zoom changes): median and longest.
+      const g = await page.evaluate((g0) => {
+        const p = window.__perf, dts = p.dt.filter((_, i) => p.t[i] >= g0).sort((x, y) => x - y);
+        const slow = p.dt.map((d, i) => [d, p.t[i] - g0]).filter(([d, t]) => t >= 0 && d > 33).map(([d, t]) => `${d.toFixed(0)} ms at +${(t / 1000).toFixed(2)} s`);
+        return { n: dts.length, median: dts[Math.floor(dts.length / 2)] ?? 0, p99: dts[Math.floor(dts.length * 0.99)] ?? 0, max: dts[dts.length - 1] ?? 0, slow };
+      }, g0);
+      console.log(`glide: ${g.n} frames, median ${g.median.toFixed(1)} ms, 99th ${g.p99.toFixed(1)} ms, longest ${g.max.toFixed(1)} ms; over 33 ms: ${g.slow.join(', ') || 'none'}`);
     }
     const zoom = await page.evaluate(() => window.__r3d.zoom);
     console.log(`zoom ${zoom.toFixed(3)} (expected ${expected.toFixed(3)}, start ${start}, canvas ${cw}x${ch})`);
