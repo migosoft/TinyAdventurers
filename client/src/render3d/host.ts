@@ -9,6 +9,8 @@ import { R3D_SYSTEMS, fxLine, lightLines, statsText3d, type R3dSystem } from './
 import { isQuality, pickZoom, renderPlan, type RenderPlan } from './quality';
 import { browserStore, loadQuality, saveQuality, type QualityStore } from './qualityPref';
 import { frameDt } from './scene';
+import { onCanvas } from './input';
+import { WheelZoom, labelZoom } from './zoom';
 import { createRecovery, type Recovery } from './recover';
 import { trailingWriter } from './urlWriter';
 import { createView, RendererInitError, type Assets, type View, type WorldInput } from './view';
@@ -51,7 +53,10 @@ export interface StageCtx {
   frameMs: number;
   /** KeyboardEvent.code of the held movement keys. */
   held: ReadonlySet<string>;
-  canvas: { w: number; h: number }; zoom: number; plan: RenderPlan;
+  canvas: { w: number; h: number }; zoom: number;
+  /** The zoom the overlay labels are sized for: follows the zoom more slowly, within limits (#376). */
+  labelZoom: number;
+  plan: RenderPlan;
   /** The current canvas element (a rebuild after a lost device replaces it). */
   canvasEl: HTMLCanvasElement;
   /** Null while the device is being restored. */
@@ -284,6 +289,14 @@ export async function startHost(
     held.delete(e.code);
   };
   const onBlur = (): void => held.clear();
+  // The wheel zoom of a run (not the demo pages); a zoom from the URL or the panel wins over it.
+  const wheelZoom = mode === 'demo' ? null : new WheelZoom();
+  const onWheel = (e: WheelEvent): void => {
+    if (!wheelZoom || !onCanvas(e.target) || e.ctrlKey) return;
+    e.preventDefault();
+    wheelZoom.wheel(e.deltaY, e.deltaMode);
+  };
+  if (wheelZoom) el.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
@@ -310,6 +323,7 @@ export async function startHost(
     if (stopped) return;
     stopped = true;
     cancelAnimationFrame(raf);
+    el.removeEventListener('wheel', onWheel);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
     window.removeEventListener('blur', onBlur);
@@ -397,7 +411,9 @@ export async function startHost(
       ch = h;
       view.setSize(w, h);
     }
-    const zoom = params.zoom ?? pickZoom(w, h);
+    const start = pickZoom(w, h);
+    const zoom = params.zoom ?? (wheelZoom ? wheelZoom.frame(dt, w, h) : start);
+    const labels = labelZoom(zoom, start);
     const plan = renderPlan(params.quality, zoom, w, h);
     state.renderSize = [plan.targetW, plan.targetH];
     state.zoom = zoom;
@@ -410,7 +426,7 @@ export async function startHost(
     }
     let drawCalls = 0;
     try {
-      drawCalls = stage!.frame({ now, dt, frameMs, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, backend: backendName, timer });
+      drawCalls = stage!.frame({ now, dt, frameMs, params, held, canvas: { w, h }, canvasEl: canvas, zoom, labelZoom: labels, plan, view: restoring ? null : view, backend: backendName, timer });
     } finally {
       if (!restoring) timer.renderEnd(drawCalls); // also when the stage threw, so the timer stays consistent
     }

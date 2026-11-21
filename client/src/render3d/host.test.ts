@@ -326,3 +326,98 @@ describe('startHost modes and the stored quality', () => {
     host.stop();
   });
 });
+
+describe('startHost: the mouse wheel zoom', () => {
+  let loop: FrameRequestCallback | null = null;
+  let t = 0;
+  beforeEach(() => {
+    loop = null;
+    t = 1000;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((cb: FrameRequestCallback) => ((loop = cb), 1)));
+    vi.spyOn(HTMLCanvasElement.prototype, 'clientWidth', 'get').mockReturnValue(1920);
+    vi.spyOn(HTMLCanvasElement.prototype, 'clientHeight', 'get').mockReturnValue(1080);
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const frames = (n: number) => {
+    for (let i = 0; i < n; i++) loop!((t += 16));
+  };
+  const begin = async (mode: 'demo' | 'run' | 'play') => {
+    const { deps, stage } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const hud = document.createElement('div');
+    el.appendChild(hud);
+    const host = (await startHost(el, '', mode, () => stage, deps))!;
+    frames(2);
+    return { host, stage, el, hud, canvas: el.querySelector('canvas.r3d')! as HTMLCanvasElement };
+  };
+  const wheel = (target: Element, init: WheelEventInit = {}) => {
+    const e = new WheelEvent('wheel', { deltaY: -100, cancelable: true, bubbles: true, ...init });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  it('play: a wheel on the canvas zooms in and is prevented', async () => {
+    const { host, canvas } = await begin('play');
+    const start = window.__r3d!.zoom;
+    expect(start).toBe(7);
+    expect(wheel(canvas).defaultPrevented).toBe(true);
+    frames(30);
+    expect(window.__r3d!.zoom).toBeGreaterThan(start);
+    host.stop();
+  });
+
+  it('run: the wheel works too', async () => {
+    const { host, canvas } = await begin('run');
+    const start = window.__r3d!.zoom;
+    wheel(canvas);
+    frames(30);
+    expect(window.__r3d!.zoom).toBeGreaterThan(start);
+    host.stop();
+  });
+
+  it('a wheel on the HUD changes nothing and is not prevented', async () => {
+    const { host, hud } = await begin('play');
+    const start = window.__r3d!.zoom;
+    expect(wheel(hud).defaultPrevented).toBe(false);
+    frames(30);
+    expect(window.__r3d!.zoom).toBe(start);
+    host.stop();
+  });
+
+  it('ctrl+wheel changes nothing and is not prevented', async () => {
+    const { host, canvas } = await begin('play');
+    const start = window.__r3d!.zoom;
+    expect(wheel(canvas, { ctrlKey: true }).defaultPrevented).toBe(false);
+    frames(30);
+    expect(window.__r3d!.zoom).toBe(start);
+    host.stop();
+  });
+
+  it('demo: the wheel does nothing', async () => {
+    const { host, canvas } = await begin('demo');
+    const start = window.__r3d!.zoom;
+    expect(wheel(canvas).defaultPrevented).toBe(false);
+    frames(30);
+    expect(window.__r3d!.zoom).toBe(start);
+    host.stop();
+  });
+
+  it('stop removes the listener', async () => {
+    const { host, el, canvas } = await begin('play');
+    host.stop();
+    el.appendChild(canvas);
+    expect(wheel(canvas).defaultPrevented).toBe(false);
+  });
+
+  it('the stage gets labelZoom: the zoom at the start, start x 1.3 at the near limit', async () => {
+    const { host, stage, canvas } = await begin('play');
+    const last = () => (stage.frame.mock.calls as unknown as { zoom: number; labelZoom: number }[][]).at(-1)![0];
+    expect(last().labelZoom).toBe(last().zoom);
+    wheel(canvas, { deltaY: -100000 });
+    frames(200);
+    expect(last().zoom).toBeGreaterThan(7);
+    expect(last().labelZoom).toBeCloseTo(7 * 1.3, 6);
+    host.stop();
+  });
+});
