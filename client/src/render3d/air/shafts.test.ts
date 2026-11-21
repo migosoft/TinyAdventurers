@@ -95,8 +95,10 @@ describe('shaftPlan', () => {
     const plan = renderPlan('high', 4, 1283, 721);
     expect(plan.direct).toBe(true);
     const direct = shaftPlan({ plan, shafts: true, cracks: [crack(3)] })!;
-    expect(direct.uvScale[0]).toBeCloseTo(1283 / 4 / 321, 12);
-    expect(direct.uvScale[1]).toBeCloseTo(721 / 4 / 181, 12);
+    // The art grid is even: 2 * ceil(1283 / 8) = 322 and 2 * ceil(721 / 8) = 182.
+    expect([direct.artW, direct.artH]).toEqual([322, 182]);
+    expect(direct.uvScale[0]).toBeCloseTo(1283 / 4 / 322, 12);
+    expect(direct.uvScale[1]).toBeCloseTo(721 / 4 / 182, 12);
     expect(direct.uvScale[0]).toBeLessThan(1);
   });
 });

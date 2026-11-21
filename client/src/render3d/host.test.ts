@@ -367,8 +367,8 @@ describe('startHost: the mouse wheel zoom', () => {
     host.stop();
   });
 
-  it('a zoom from the URL wins over the wheel', async () => {
-    const { host, canvas } = await begin('play', '?zoom=4');
+  it('run: a zoom from the URL wins over the wheel (a play run ignores the URL)', async () => {
+    const { host, canvas } = await begin('run', '?zoom=4');
     expect(window.__r3d!.zoom).toBe(4);
     wheel(canvas);
     frames(30);
