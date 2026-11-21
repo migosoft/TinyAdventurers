@@ -3,6 +3,7 @@
 // It is a debug account, so the debug keys run here too: F4 (darkvision), F9 (immortality) and, with LOG=1, the rules log (L, F8).
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
 // Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
+// ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before everything else, so the pictures and FPS_S use it (#376).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { chromium } from 'playwright-core';
 import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
@@ -143,6 +144,33 @@ try {
     }, [t0, t1]);
     console.log(`forest build: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, ${build.frames} frames, longest frame ${build.longest.toFixed(1)} ms`);
     await page.keyboard.press('F3');
+  }
+  // ZOOM=far|near|start (#376): wheel over the canvas until the zoom stops changing, then check it against the limit.
+  if (process.env.ZOOM) {
+    const want = process.env.ZOOM;
+    const [cw, ch] = await page.evaluate(() => { const c = document.querySelector('#game canvas.r3d'), d = window.devicePixelRatio || 1; return [Math.max(1, Math.round(c.clientWidth * d)), Math.max(1, Math.round(c.clientHeight * d))]; }); // the host's w, h
+    // The formulas of client/src/render3d/zoom.ts (zoomLimits, FAR_TILES, NEAR_TILES) and quality.ts (pickZoom).
+    const start = Math.min(8, Math.max(2, Math.floor(Math.min(cw / 240, ch / 152))));
+    const lim = { min: Math.min(Math.max(cw / (16 * 28), ch / (16 * 17.7)), start), max: Math.max(Math.min(cw / (16 * 6), ch / (16 * 3.8)), start) };
+    const expected = want === 'far' ? lim.min : want === 'near' ? lim.max : start;
+    if (want !== 'start') {
+      await page.mouse.move(viewport.width / 2, viewport.height / 2);
+      const zoomNow = () => page.evaluate(() => window.__r3d.zoom);
+      let last = await zoomNow();
+      for (let i = 0; i < 40; i++) {
+        await page.mouse.wheel(0, want === 'far' ? 100 : -100);
+        await page.waitForTimeout(50);
+        const z = await zoomNow();
+        if (Math.abs(z - last) < 1e-6 && i > 0) break;
+        last = z;
+      }
+      await page.waitForTimeout(500);
+    }
+    const zoom = await page.evaluate(() => window.__r3d.zoom);
+    console.log(`zoom ${zoom.toFixed(3)} (expected ${expected.toFixed(3)}, start ${start}, canvas ${cw}x${ch})`);
+    if (Math.abs(zoom - expected) > 0.01 * expected) errors.push(`zoom ${zoom} is not within 1 % of ${expected} (${want})`);
+    const scroll = await page.evaluate(() => [window.scrollY, document.scrollingElement.scrollTop]);
+    if (scroll[0] !== 0 || scroll[1] !== 0) errors.push(`the page scrolled: ${scroll}`);
   }
   // FPS_S=10: sample requestAnimationFrame for that many seconds (F3 off), then print the mean, the 1 % low, the draw calls and triangles per frame
   // (all passes) and the F3 block. With FPS_ONLY=1 the run ends after this and the picture r3d-run-<level>-fps.png.
