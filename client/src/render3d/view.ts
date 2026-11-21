@@ -31,7 +31,7 @@ import {
   WebGPURenderer,
   DepthTexture,
 } from 'three/webgpu';
-import { texture } from 'three/tsl';
+import { sharpCopyNode } from './sharpCopy';
 import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
@@ -707,18 +707,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   copyMaterial.depthWrite = false;
   const quad = new QuadMesh(copyMaterial);
   const fullViewport = new Vector4();
-  function targetFor(w: number, h: number, linear: boolean): RenderTarget {
-    const filter = linear ? LinearFilter : NearestFilter;
+  // The copy samples the target linearly at sharpened positions (sharpCopy.ts), so the target is always LinearFilter.
+  let copy: ReturnType<typeof sharpCopyNode> | null = null;
+  function targetFor(w: number, h: number): RenderTarget {
     if (!target || target.width !== w || target.height !== h) {
       target?.dispose();
-      target = new RenderTarget(w, h, { depthBuffer: true, magFilter: filter, minFilter: filter, generateMipmaps: false });
+      target = new RenderTarget(w, h, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
       target.texture.colorSpace = NoColorSpace;
-      copyMaterial.fragmentNode = texture(target.texture);
+      copy = sharpCopyNode(target.texture);
+      copyMaterial.fragmentNode = copy.node;
       copyMaterial.needsUpdate = true;
-    } else if (target.texture.magFilter !== filter) {
-      target.texture.magFilter = filter;
-      target.texture.minFilter = filter;
-      target.texture.needsUpdate = true;
     }
     return target;
   }
@@ -1152,7 +1150,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         return renderer.info.render.drawCalls;
       }
       // Into the picture's target; with a pool in view also on High, where the target has the canvas's size.
-      const rt = targetFor(p.targetW, p.targetH, p.scaleX !== Math.round(p.scaleX));
+      const rt = targetFor(p.targetW, p.targetH);
+      copy!.size.value.set(p.targetW, p.targetH);
+      copy!.scale.value.set(p.scaleX, p.scaleY);
       if (wp.copy) splitPicture(rt);
       else {
         renderer.setRenderTarget(rt);
