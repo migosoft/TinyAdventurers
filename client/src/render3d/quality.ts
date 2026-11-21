@@ -29,15 +29,16 @@ export interface RenderPlan {
   halfW: number; halfH: number;
   /** The picture's size in art px (one per 1/zoom of the canvas), the same in both modes: the shaft pass works at this size. */
   artW: number; artH: number;
-  /** Canvas px per target texel of the copy (1 when direct); a whole number filters nearest, a fraction linear. */
+  /** Canvas px per target texel of the copy (1 when direct); the copy is always sharp-bilinear (sharpCopy.ts), whole scales sample texel centres only. */
   scaleX: number; scaleY: number;
   dstX: number; dstY: number; dstW: number; dstH: number;
 }
 
 export function renderPlan(q: Quality, zoom: number, canvasW: number, canvasH: number): RenderPlan {
   const ze = effZoom(q, zoom);
-  const artW = Math.ceil(canvasW / zoom);
-  const artH = Math.ceil(canvasH / zoom);
+  // Even, so the camera's snapped centre lands on a texel edge and art px edges never fall on texel centres (no crawl while moving).
+  const artW = 2 * Math.ceil(canvasW / (2 * zoom));
+  const artH = 2 * Math.ceil(canvasH / (2 * zoom));
   const direct = ze === zoom;
   const dstW = Math.round(artW * zoom);
   const dstH = Math.round(artH * zoom);

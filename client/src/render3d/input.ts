@@ -16,7 +16,7 @@ export async function turnKeyLabels(): Promise<[z: string, x: string, c: string]
 }
 
 /** Only a press on the 3D canvas counts: not the dev panel, the HUD or a menu over it. */
-export const onCanvas =(t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
+export const onCanvas = (t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
 
 export class RunMouse {
   private primaryHeld = false;

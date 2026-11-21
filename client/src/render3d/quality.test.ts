@@ -38,17 +38,31 @@ describe('renderPlan', () => {
     expect([h.artW, h.artH]).toEqual([334, 234]);
     const hi = renderPlan('high', 4, 1921, 1081), ba = renderPlan('balanced', 4, 1921, 1081);
     expect([ba.artW, ba.artH]).toEqual([hi.artW, hi.artH]);
-    expect([ba.artW, ba.artH]).toEqual([481, 271]);
+    expect([ba.artW, ba.artH]).toEqual([482, 272]);
+  });
+
+  it('rounds the art size up to even, so art px edges never land on texel centres', () => {
+    for (const q of ['high', 'balanced', 'fast'] as const) {
+      for (const z of [1, 2, 2.857, 3, 3.01, 4.37, 4.5, 5, 7.7, 12.63]) {
+        for (const [w, h] of [[1281, 767], [1, 1], [1920, 1080], [1280, 768]]) {
+          const p = renderPlan(q, z, w, h);
+          expect(p.artW % 2, `${q} ${z} ${w}x${h}`).toBe(0);
+          expect(p.artH % 2, `${q} ${z} ${w}x${h}`).toBe(0);
+          expect(p.artW * z).toBeGreaterThanOrEqual(w);
+          expect(p.artH * z).toBeGreaterThanOrEqual(h);
+        }
+      }
+    }
   });
 
   it('copies at the effective zoom when it is lower', () => {
     const p = renderPlan('balanced', 4, 1921, 1081);
     expect(p.direct).toBe(false);
     expect(p.ze).toBe(2);
-    expect(p.targetW).toBe(962);
-    expect(p.targetH).toBe(542);
+    expect(p.targetW).toBe(964);
+    expect(p.targetH).toBe(544);
     expect(p.scaleX).toBe(2);
-    expect(p.dstX).toBe(Math.floor((1921 - 1924) / 2));
+    expect(p.dstX).toBe(Math.floor((1921 - 1928) / 2));
   });
 
   it('scales by a whole ratio when the zoom is a multiple, by a fraction otherwise', () => {
@@ -62,9 +76,9 @@ describe('renderPlan', () => {
   it('plans a fractional zoom that is shrunk to a whole target', () => {
     const p = renderPlan('high', 4.5, 1280, 768);
     expect(p.ze).toBe(5);
-    expect(p.targetW).toBe(285 * 5);
+    expect(p.targetW).toBe(286 * 5);
     expect(p.scaleX).toBeLessThan(1);
-    expect(p.dstW).toBe(Math.round(285 * 4.5));
+    expect(p.dstW).toBe(Math.round(286 * 4.5));
     expect(p.dstW).toBeGreaterThanOrEqual(1280);
   });
 

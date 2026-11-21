@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pickZoom } from './quality';
 import { WheelZoom, labelZoom, wheelFactor, zoomLimits } from './zoom';
 
 function settle(z: WheelZoom, w: number, h: number, frames = 600): number {
@@ -74,6 +75,12 @@ describe('WheelZoom', () => {
     const b = new WheelZoom();
     b.wheel(-100, 0);
     expect(settle(a, 1280, 768)).toBeCloseTo(settle(b, 1280, 768), 4);
+  });
+  it('n notches in and n out return exactly to the start zoom', () => {
+    const z = new WheelZoom();
+    for (let i = 0; i < 7; i++) z.wheel(-100, 0);
+    for (let i = 0; i < 7; i++) z.wheel(100, 0);
+    expect(settle(z, 1280, 768)).toBe(pickZoom(1280, 768));
   });
   it('keeps the ratio on resize', () => {
     const z = new WheelZoom();

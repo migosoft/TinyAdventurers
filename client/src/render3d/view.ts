@@ -714,9 +714,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       target?.dispose();
       target = new RenderTarget(w, h, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
       target.texture.colorSpace = NoColorSpace;
-      copy = sharpCopyNode(target.texture);
-      copyMaterial.fragmentNode = copy.node;
-      copyMaterial.needsUpdate = true;
+      if (!copy) {
+        // Built once: the shader stays, a new target only swaps the sampled texture.
+        copy = sharpCopyNode(target.texture);
+        copyMaterial.fragmentNode = copy.node;
+        copyMaterial.needsUpdate = true;
+      } else copy.node.value = target.texture;
     }
     return target;
   }

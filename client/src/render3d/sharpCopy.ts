@@ -1,6 +1,6 @@
 // The sharp-bilinear copy of the off-screen picture to the canvas (#376): texels stay crisp, and only a band about one canvas pixel wide
 // at each texel edge is blended, so any scale looks sharp without shimmer.
-import { Vector2, type Node, type Texture, type UniformNode } from 'three/webgpu';
+import { Vector2, type Texture, type TextureNode, type UniformNode } from 'three/webgpu';
 import { clamp, float, floor, fract, max, texture, uniform, uv, vec2 } from 'three/tsl';
 
 /** Per axis: the texel coordinate to sample linearly, for texel coordinate `t` and copy scale `s` (canvas px per texel). */
@@ -12,8 +12,8 @@ export function sharpTexel(t: number, s: number): number {
   return Math.floor(t) + f;
 }
 
-/** The copy's fragment node: `tex` sampled with the same formula; the uniforms are set per frame. */
-export function sharpCopyNode(tex: Texture): { node: Node; size: UniformNode<'vec2', Vector2>; scale: UniformNode<'vec2', Vector2> } {
+/** The copy's fragment node: `tex` sampled with the same formula; the uniforms are set per frame. Build it once: a new target only needs `node.value = newTexture`. */
+export function sharpCopyNode(tex: Texture): { node: TextureNode; size: UniformNode<'vec2', Vector2>; scale: UniformNode<'vec2', Vector2> } {
   const size = uniform(new Vector2(1, 1));
   const scale = uniform(new Vector2(1, 1));
   const t = uv().mul(size);

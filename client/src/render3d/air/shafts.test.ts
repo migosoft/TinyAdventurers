@@ -81,8 +81,8 @@ describe('shaftPlan', () => {
     const a = shaftPlan({ plan: renderPlan('balanced', 4, 1280, 720), shafts: true, cracks: [crack(3)] })!;
     expect([a.artW, a.artH]).toEqual([320, 180]);
     const b = shaftPlan({ plan: renderPlan('balanced', 3, 1280, 720), shafts: true, cracks: [crack(3)] })!;
-    expect([b.artW, b.artH]).toEqual([427, 240]);
-    expect(b.texel).toEqual([1 / 427, 1 / 240]);
+    expect([b.artW, b.artH]).toEqual([428, 240]);
+    expect(b.texel).toEqual([1 / 428, 1 / 240]);
   });
 
   it('top is the highest ceiling of the frame', () => {

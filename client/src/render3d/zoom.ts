@@ -40,6 +40,8 @@ export class WheelZoom {
 
   wheel(deltaY: number, deltaMode: number): void {
     this.target *= wheelFactor(deltaY, deltaMode);
+    // Notches in and out multiply to 1 only up to rounding: snap, so the start zoom (a whole one) comes back exactly.
+    if (Math.abs(Math.log(this.target)) < 1e-9) this.target = 1;
   }
 
   /** Advances the glide by dt (s) and returns this frame's zoom for a w x h canvas. */

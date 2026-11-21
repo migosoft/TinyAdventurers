@@ -341,13 +341,13 @@ describe('startHost: the mouse wheel zoom', () => {
   const frames = (n: number) => {
     for (let i = 0; i < n; i++) loop!((t += 16));
   };
-  const begin = async (mode: 'demo' | 'run' | 'play') => {
+  const begin = async (mode: 'demo' | 'run' | 'play', search = '') => {
     const { deps, stage } = setup();
     const el = document.createElement('div');
     document.body.appendChild(el);
     const hud = document.createElement('div');
     el.appendChild(hud);
-    const host = (await startHost(el, '', mode, () => stage, deps))!;
+    const host = (await startHost(el, search, mode, () => stage, deps))!;
     frames(2);
     return { host, stage, el, hud, canvas: el.querySelector('canvas.r3d')! as HTMLCanvasElement };
   };
@@ -364,6 +364,15 @@ describe('startHost: the mouse wheel zoom', () => {
     expect(wheel(canvas).defaultPrevented).toBe(true);
     frames(30);
     expect(window.__r3d!.zoom).toBeGreaterThan(start);
+    host.stop();
+  });
+
+  it('a zoom from the URL wins over the wheel', async () => {
+    const { host, canvas } = await begin('play', '?zoom=4');
+    expect(window.__r3d!.zoom).toBe(4);
+    wheel(canvas);
+    frames(30);
+    expect(window.__r3d!.zoom).toBe(4);
     host.stop();
   });
 
