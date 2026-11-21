@@ -56,8 +56,8 @@ pub fn def(k: LightKind) -> LightDef {
         LightKind::Blast => LightDef { radius: 4, colour: 0xffb060, intensity: 1.0, flicker: 0.3 },
         LightKind::Holy => LightDef { radius: 4, colour: 0xffe890, intensity: 0.9, flicker: 0.1 },
         LightKind::Radiant => LightDef { radius: 2, colour: 0xffe890, intensity: 0.6, flicker: 0.05 },
+        LightKind::Daylight => LightDef { radius: 7, colour: 0xdce8ff, intensity: 0.9, flicker: 0.0 },
         LightKind::Crystal => LightDef { radius: 7, colour: 0x7fe0d0, intensity: 1.0, flicker: 0.02 },
-        LightKind::Daylight =>LightDef { radius: 7, colour: 0xdce8ff, intensity: 0.9, flicker: 0.0 },
     }
 }
 

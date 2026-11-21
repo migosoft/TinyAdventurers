@@ -55,6 +55,7 @@ export function startInfo(rows: string[], over: Partial<RunStartInfo> = {}): Run
     width,
     height,
     tiles,
+    stone: new Uint8Array(0),
     tile_size: 16,
     you: 1,
     players: [{ ent: 1, name: 'Hero', class: 'Wizard', melee: 'KnightSword', ranged: null }],

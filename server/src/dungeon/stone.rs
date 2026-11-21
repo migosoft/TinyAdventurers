@@ -1,5 +1,5 @@
-//! The stone layout of a level (#380): one stone kind per map cell. Nothing reads the kinds yet;
-//! crystals (instead of torches in rock) and the client's stonework come from them later.
+//! The stone layout of a level (#380): one stone kind per map cell. Crystals (instead of
+//! torches in rock) read the kinds, and the client gets them in `RunStartInfo.stone` for its stonework.
 
 use super::generate::bfs;
 use super::{Dungeon, Map, Rect, Tile, WallLight};

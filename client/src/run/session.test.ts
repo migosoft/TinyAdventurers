@@ -1,3 +1,4 @@
+import { decode, encode } from '@msgpack/msgpack';
 import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, EFFECT, KIND, RUNE_LOOK, TILE_ID } from '../generated/defs';
 import type { ClientMsg } from '../generated/ClientMsg';
@@ -20,6 +21,24 @@ function make(over: Partial<RunStartInfo> = {}, input: () => StepInput = () => N
 const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
 
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
+
+describe('RunStarted stone kinds (#380)', () => {
+  it('a RunStarted with stone round-trips as the same bytes', () => {
+    const stone = Uint8Array.from([0, 1, 1, 0, 1]);
+    const back = decode(encode({ ...startInfo(ROWS), stone })) as RunStartInfo;
+    expect(back.stone).toBeInstanceOf(Uint8Array);
+    expect([...back.stone]).toEqual([0, 1, 1, 0, 1]);
+    const { session } = make({ stone: back.stone });
+    expect([...session.info.stone]).toEqual([0, 1, 1, 0, 1]);
+  });
+
+  it('a RunStarted without the field does not throw', () => {
+    const { stone: _stone, ...old } = startInfo(ROWS);
+    const back = decode(encode(old)) as RunStartInfo;
+    expect(back.stone ?? new Uint8Array(0)).toHaveLength(0);
+    expect(() => make({ stone: back.stone })).not.toThrow();
+  });
+});
 
 describe('RunSession messages', () => {
   it('a Tile event changes the map, then reaches the view', () => {

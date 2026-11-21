@@ -183,6 +183,11 @@ pub struct RunStartInfo {
     #[serde(with = "serde_bytes")]
     #[ts(type = "Uint8Array")]
     pub tiles: Vec<u8>,
+    /// The stone kind of every tile (#380): one byte per tile, row-major, 0 laid, 1 rock.
+    /// Empty when the level has no stonework (the woodland).
+    #[serde(with = "serde_bytes")]
+    #[ts(type = "Uint8Array")]
+    pub stone: Vec<u8>,
     pub tile_size: u16,
     /// Entity id of the receiving player.
     pub you: u32,

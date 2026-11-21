@@ -14,6 +14,7 @@ export const KIND = {
   "CharmOrb": 66,
   "Chest": 80,
   "Chort": 20,
+  "Crystal": 83,
   "Deer": 28,
   "Demon": 30,
   "DireWolf": 23,
@@ -115,6 +116,7 @@ export const CONST = {
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
   "CHEST_RADIUS": 6.0,
+  "CRYSTAL_RADIUS": 5.0,
   "DASH_SPEED": 300.0,
   "DEMON_BREATH_TIME": 1.4,
   "DEMON_BREATH_WINDUP": 0.8,
@@ -1111,6 +1113,7 @@ export const DMG_TYPE = {
 
 export const LIGHT_KIND = {
   "Blast": 4,
+  "Crystal": 8,
   "Daylight": 7,
   "Fire": 2,
   "Holy": 5,
@@ -1167,6 +1170,12 @@ export const LIGHT: Record<number, { radius: number; colour: number; intensity: 
     "colour": 14477567,
     "flicker": 0.0,
     "intensity": 0.9,
+    "radius": 7
+  },
+  "8": {
+    "colour": 8380624,
+    "flicker": 0.02,
+    "intensity": 1.0,
     "radius": 7
   }
 };

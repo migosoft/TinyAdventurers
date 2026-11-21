@@ -387,6 +387,7 @@ impl Run {
             width: self.layout.map.w as u16,
             height: self.layout.map.h as u16,
             tiles: self.layout.map.tiles.clone(),
+            stone: self.layout.stone.clone(),
             tile_size: crate::dungeon::TILE as u16,
             you: p.id,
             players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class, melee: q.weapons.0, ranged: q.weapons.1 }).collect(),
@@ -1719,6 +1720,18 @@ pub mod tests {
         let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
         assert_eq!((info.players[0].melee, info.players[0].ranged), (ItemId::WarHammer, None));
         assert_eq!((info.players[1].melee, info.players[1].ranged), (ItemId::Rapier, Some(ItemId::ElvenBow)));
+    }
+
+    #[test]
+    fn start_info_carries_the_stone_kinds() {
+        let run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        assert_eq!(info.stone.len(), info.tiles.len());
+        assert_eq!(info.stone, run.layout.stone);
+        let (members, seed) = (vec![], 7);
+        let wood = Run::new(1, members, seed, LevelChoice::Woodland {});
+        assert!(wood.layout.stone.is_empty(), "a woodland has no stonework");
+        assert!(wood.layout.woodland.is_some());
     }
 
     #[test]

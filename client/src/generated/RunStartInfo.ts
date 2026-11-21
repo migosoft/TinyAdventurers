@@ -14,7 +14,12 @@ level: LevelId, width: number, height: number,
 /**
  * One byte per tile, row-major. See `Tile` in dungeon/mod.rs.
  */
-tiles: Uint8Array, tile_size: number, 
+tiles: Uint8Array, 
+/**
+ * The stone kind of every tile (#380): one byte per tile, row-major, 0 laid, 1 rock.
+ * Empty when the level has no stonework (the woodland).
+ */
+stone: Uint8Array, tile_size: number, 
 /**
  * Entity id of the receiving player.
  */
