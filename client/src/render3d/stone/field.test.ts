@@ -56,13 +56,22 @@ describe('stone field', () => {
     }
   });
 
-  it('rockAmount is strictly between within one tile of a straight border', () => {
+  it('rockAmount is strictly between within half a tile of a straight border (the wobble moves it up to 0.4)', () => {
     const m = room();
     const f = stoneField(m, halves());
-    for (let z = 2; z < 10; z += 0.37) for (const x of [11.05, 11.5, 12, 12.5, 12.95]) {
+    for (let z = 2; z < 10; z += 0.37) for (const x of [11.55, 11.8, 12, 12.2, 12.45]) {
       const a = rockAmount(f, m, x, z);
       expect(a).toBeGreaterThan(0);
       expect(a).toBeLessThan(1);
+    }
+  });
+
+  it('rockAmount strictly increases across a straight border', () => {
+    const m = room();
+    const f = stoneField(m, halves());
+    for (let z = 2; z < 10; z += 0.37) {
+      const xs = [11.2, 11.6, 12.0, 12.4, 12.8].map((x) => rockAmount(f, m, x, z));
+      for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThan(xs[i - 1]);
     }
   });
 
@@ -80,5 +89,8 @@ describe('stone field', () => {
     expect(rockAmount(f, m, 19.9, 6.5)).toBe(0);
     expect(rockAmount(f, m, 18.5, 5.2)).toBe(0);
     expect(rockAmount(f, m, 18.5, 10.5)).toBe(1);
+    const fade = rockAmount(f, m, 18.5, 4.5); // 2 tiles from the door: in the fade band
+    expect(fade).toBeGreaterThan(0);
+    expect(fade).toBeLessThan(1);
   });
 });

@@ -14,7 +14,8 @@ function fakeView(): View {
   };
 }
 
-const world: WorldInput = { map: parseMap(MAP_ROWS), painted: false, clear: 'stone', stone: stoneField(parseMap(MAP_ROWS)) };
+const worldMap = parseMap(MAP_ROWS);
+const world: WorldInput = { map: worldMap, painted: false, clear: 'stone', stone: stoneField(worldMap) };
 
 function setup() {
   const views: View[] = [];
