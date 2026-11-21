@@ -148,6 +148,10 @@ mod tests {
         }
     }
 
+    fn seeds_and_themes() -> impl Iterator<Item = (u64, Theme)> {
+        (0..SEEDS).flat_map(|seed| [Theme::WATER, Theme::LAVA].map(|theme| (seed, theme)))
+    }
+
     fn zones(seed: u64, theme: Theme) -> Dungeon {
         generate(seed, Theme { stone: StoneLayout::Zones, ..theme })
     }
@@ -172,8 +176,8 @@ mod tests {
 
     #[test]
     fn zones_keep_rooms_whole() {
-        for seed in 0..SEEDS {
-            let d = zones(seed, Theme::WATER);
+        for (seed, theme) in seeds_and_themes() {
+            let d = zones(seed, theme);
             for r in d.rooms.iter().map(|r| &r.rect) {
                 let kind = d.stone[(r.y * d.map.w + r.x) as usize];
                 for y in r.y..r.y + r.h {
@@ -201,8 +205,8 @@ mod tests {
 
     #[test]
     fn zone_borders_lie_in_corridors() {
-        for seed in 0..SEEDS {
-            let d = zones(seed, Theme::WATER);
+        for (seed, theme) in seeds_and_themes() {
+            let d = zones(seed, theme);
             let in_room = |x: i32, y: i32| d.rooms.iter().any(|r| r.rect.contains_tile(x, y));
             for y in 0..d.map.h {
                 for x in 0..d.map.w {
@@ -222,8 +226,8 @@ mod tests {
     #[test]
     fn walls_take_the_kind_of_the_ground_they_border() {
         let mut checked = 0;
-        for seed in 0..SEEDS {
-            let d = zones(seed, Theme::WATER);
+        for (seed, theme) in seeds_and_themes() {
+            let d = zones(seed, theme);
             for y in 0..d.map.h {
                 for x in 0..d.map.w {
                     if d.map.get(x, y) != Tile::Wall as u8 {
@@ -291,6 +295,26 @@ mod tests {
             assert_eq!(s, lay(seed, StoneLayout::Zones, &d), "deterministic");
             // The two side rooms share a depth, so they share a kind.
             assert_eq!(s[(3 * 25 + 3) as usize], s[(3 * 25 + 19) as usize]);
+        }
+    }
+
+    /// Only the start room: no other depth at all (`max == 0`).
+    #[test]
+    fn a_dungeon_with_only_the_start_room_still_gets_kinds() {
+        let mut map = Map::new(9, 9);
+        let r = Rect { x: 2, y: 2, w: 5, h: 5 };
+        for y in r.y..r.y + r.h {
+            for x in r.x..r.x + r.w {
+                map.set(x, y, Tile::Floor);
+            }
+        }
+        let d = Dungeon { map, rooms: vec![Room { rect: r, kind: RoomKind::Start }], start: 0, boss: 0, door: vec![], spawns: vec![], chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns: vec![], haunts: vec![], cove: None, stone: vec![] };
+        for seed in 0..SEEDS {
+            let s = lay(seed, StoneLayout::Zones, &d);
+            assert_eq!(s.len(), 81);
+            assert!(s.iter().all(|&k| k == LAID || k == ROCK));
+            assert!(s.iter().all(|&k| k == s[40]), "one room, one kind, walls included");
+            assert_eq!(s, lay(seed, StoneLayout::Zones, &d), "deterministic");
         }
     }
 }
