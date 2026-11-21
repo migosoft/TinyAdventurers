@@ -13,7 +13,7 @@
 
 import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
-import type { FigureDef } from '../../game/anim/defs';
+import { isWindup, type FigureDef } from '../../game/anim/defs';
 import { MELEE_T, type ViewState } from '../../game/anim/pose';
 import { AMBUSH_WARNING } from '../../game/shadeHaze';
 import { BONES, MAX_BENDS, MAX_BONES, weaponBoneOf } from './bones';
@@ -335,7 +335,7 @@ function legsOf(m: FigureModel): { upper: number; lower: number; front: boolean 
 }
 
 const ATTACK_ANIMS = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Bite]);
-const FACE_AIM = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Channel, ANIM.Windup, ANIM.Slam, ANIM.Bite]);
+const FACE_AIM = new Set<number>([ANIM.Melee, ANIM.Shoot, ANIM.Cast, ANIM.Channel, ANIM.Windup, ANIM.Summon, ANIM.Slam, ANIM.Bite]);
 
 function styleOf(m: FigureModel, d: FigureDef, anim: number): AttackStyle {
   if (m.apart) return 'swing';
@@ -472,8 +472,8 @@ const reachOf = (tau: number): number => (tau < 0 ? 0 : Math.sin(Math.pow(Math.m
  * took the carry and the melee goes on from there.
  */
 function blowClock(mem: Pose3dMemory, anim: number, animT: number, dt: number): void {
-  const K = APART.time, melee = anim === ANIM.Melee, windup = anim === ANIM.Windup;
-  const wasWind = mem.prevAnim === ANIM.Windup;
+  const K = APART.time, melee = anim === ANIM.Melee, windup = isWindup(anim);
+  const wasWind = isWindup(mem.prevAnim);
   const meleeStarts = melee && (mem.prevAnim !== ANIM.Melee || animT < mem.prevAnimT);   // its time began (again)
   // A wind-up begins (the frame before was not one: a melee included) or a melee begins out of anything but a wind-up (which holds the carry): the swing and the reach are carried on.
   if ((windup && !wasWind) || (meleeStarts && !wasWind)) {
@@ -649,12 +649,12 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (!asleep) {
     const T = TIMING[style];
     if (ATTACK_ANIMS.has(anim)) { u = uOf(style, animT); struck = u < 1; if (!struck) u = -1; }
-    else if (anim === ANIM.Windup) { u = T.hold; windup = true; }
+    else if (isWindup(anim)) { u = T.hold; windup = true; }
     else if (anim === ANIM.Channel) u = T.hold;
     else if (anim === ANIM.Slam) { slam = true; windup = true; }
   }
   // Remember a wind-up for the strike after it: the pose is held already, so the strike needs no blend-in.
-  if (anim === ANIM.Windup) mem.woundUp = true;
+  if (isWindup(anim)) mem.woundUp = true;
   else if (!ATTACK_ANIMS.has(anim)) mem.woundUp = false;
   const weight = struck && !mem.woundUp ? Math.min(1, animT / ATTACK_IN_SECS) : 1;
   if (slam) slamPose(d, animT); else attackPose(style, u, arc);

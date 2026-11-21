@@ -9,6 +9,7 @@ import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
 import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
+import { createLichStage } from './lichStage';
 import { createLightsStage } from './lightsStage';
 import { createLiquidsStage } from './liquidsStage';
 import { createMoodStage } from './moodStage';
@@ -78,6 +79,12 @@ export async function bootLiquids(el: HTMLElement, search: string): Promise<void
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createLiquidsStage(assets, p, s, host));
+}
+
+/** `?r3d=lich` (#358): the built lich in a boss hall on the game's own figure pass, kit and effects, no server needed. */
+export async function bootLich(el: HTMLElement, search: string): Promise<void> {
+  const p = parseParams(search);
+  await startHost(el, search, 'demo', (assets, host) => createLichStage(assets, p, search, host));
 }
 
 export interface Run3d {

@@ -63,8 +63,11 @@ import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
-import { FigureLayer, figureLooks } from './models/layer';
+import { FigureLayer, figureLooks, imageTexture } from './models/layer';
 import { figureMaterials, seeMaterials } from './models/nodes';
+import type { BuiltInst } from './built';
+import { LichLayer, type BuiltLayer } from './lich/layer';
+import { lichMaterials } from './lich/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -106,7 +109,7 @@ export interface SunFrame {
   wind: [number, number]; t: number;
 }
 /** The 3D figures of a frame (#338): what to draw and the kit that holds their models. */
-export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit }
+export interface FigureFrame { insts: readonly FigureInst[]; kit: FigureKit; /** The built figures (#358), drawn by their own layers: required, so a stage that passes models cannot drop them. */ built: readonly BuiltInst[] }
 
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
@@ -601,6 +604,27 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     make: (rows, model) => seeMaterials({ sight, rows, shared: figures.shared, stands: model.stands!, peak: model.spectre!.seeThrough!.peak, eyes: model.spectre!.eyes }),
     layer: AIR_SKIP_LAYER,
   });
+  // The built figures (#358): one layer per built key, made when the first instance of the key arrives (and its picture is ready). A new
+  // key (#377, #379) is one more entry here. A view built after a lost device makes its own layers and pictures from the kit.
+  const builtFactories: Record<string, (paint: Texture) => BuiltLayer> = {
+    lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER),
+  };
+  const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
+  const builtByKey = new Map<string, BuiltInst[]>();
+  const noLayer = new Set<string>();
+  const builtFrame = (f: FigureFrame | undefined): void => {
+    for (const l of builtByKey.values()) l.length = 0;
+    if (f) for (const i of f.built) { let l = builtByKey.get(i.key); if (!l) builtByKey.set(i.key, l = []); l.push(i); }
+    for (const [key, list] of builtByKey) {
+      if (list.length > 0 && !builtFactories[key] && !noLayer.has(key)) { noLayer.add(key); console.warn(`built figure ${key}: no layer factory in view.ts, nothing is drawn`); }
+      let e = builtLayers.get(key);
+      if (!e && list.length > 0 && f && builtFactories[key]) {
+        const img = f.kit.picture(key);
+        if (img) { const paint = imageTexture(img, { mips: true }); builtLayers.set(key, e = { layer: builtFactories[key](paint), paint }); }
+      }
+      e?.layer.frame(list, (id) => slotOf.get(id) ?? -1);
+    }
+  };
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
   const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
@@ -983,7 +1007,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       else if (trees.meshCount > 0) trees.clear();
       timer?.lap('upload');
       if (f.models) figureSight(f.models.insts, frameMask);
+      if (f.models?.built) figureSight(f.models.built, frameMask);
       figures.frame(f.models, (id) => slotOf.get(id) ?? -1);
+      builtFrame(f.models);
       timer?.lap('models');
       lighting.setLights(f.lights);
       lighting.cracks.set(f.cracks ?? []);
@@ -1189,6 +1215,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         casterMaterial?.dispose();
         trees.dispose();
         figures.dispose();
+        for (const e of builtLayers.values()) { e.layer.dispose(); e.paint.dispose(); }
+        builtLayers.clear();
         figureTex?.dispose();
         coverLayer.dispose();
         mm.material.dispose();

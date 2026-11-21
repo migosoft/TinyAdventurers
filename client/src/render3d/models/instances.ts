@@ -92,14 +92,16 @@ export function packInstance(out: Float32Array, row: number, inst: FigureInst, s
     out[o] = out[o + 1] = out[o + 2] = out[o + 3] = 0;
   }
 
-  o = base + ROW.tint * 4;
-  out[o] = inst.tint[0]; out[o + 1] = inst.tint[1]; out[o + 2] = inst.tint[2]; out[o + 3] = inst.stone ? 1 : 0;
-  o = base + ROW.seen * 4;
-  out[o] = inst.alpha; out[o + 1] = inst.sight.hard; out[o + 2] = inst.sight.soft; out[o + 3] = slot;
-  o = base + ROW.flags * 4;
-  out[o] = inst.dark ? 1 : 0; out[o + 1] = inst.cut ? 1 : 0; out[o + 2] = ownerNo; out[o + 3] = inst.groundY;
+  packLook(out, base + ROW.tint * 4, inst, slot, ownerNo);
   o = base + ROW.extra * 4;
   out[o] = inst.flare ?? 0; out[o + 1] = inst.eye ?? 1; out[o + 2] = 0; out[o + 3] = 0;
+}
+
+/** The tint, seen and flags texels of a row (12 floats at `out[at..]`), as `packInstance` writes them; it calls this. */
+export function packLook(out: Float32Array, at: number, i: Pick<FigureInst, 'tint' | 'stone' | 'alpha' | 'dark' | 'cut' | 'groundY' | 'sight'>, slot: number, ownerNo: number): void {
+  out[at] = i.tint[0]; out[at + 1] = i.tint[1]; out[at + 2] = i.tint[2]; out[at + 3] = i.stone ? 1 : 0;
+  out[at + 4] = i.alpha; out[at + 5] = i.sight.hard; out[at + 6] = i.sight.soft; out[at + 7] = slot;
+  out[at + 8] = i.dark ? 1 : 0; out[at + 9] = i.cut ? 1 : 0; out[at + 10] = ownerNo; out[at + 11] = i.groundY;
 }
 
 /** A float array that keeps its content and at least doubles when `rows` (a count of floats) exceeds it. */

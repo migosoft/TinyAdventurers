@@ -5,6 +5,8 @@ import { decodePng } from '../../scripts/png';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
+import { LICH, LICH_TOP } from './lich/shape';
+import { BUILT_OF_KIND, builtPoint } from './built';
 import { SOUTH } from './models/objectPose3d';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
@@ -21,7 +23,7 @@ import type { EntState } from '../game/world';
 import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
-import { project, snapGround, type Cam } from './camera';
+import { project, snapGround, viewRay, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SHARE } from './dips/descent';
 import { AMBIENT } from './light';
@@ -715,6 +717,8 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     kit = createKit(sprite, directRunner);
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
     for (const k of [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)]) frames[outlineFrame(k)] = { ...atlasFrames[outlineFrame(k)].frame };
+    // The built figures' outlines are the atlas's rects too.
+    for (const b of Object.values(BUILT_OF_KIND)) frames[outlineFrame(b!.key)] = { ...atlasFrames[outlineFrame(b!.key)].frame };
     for (const k of BUILT) kit.get(k);
     while (kit.version < BUILT.length) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
@@ -724,7 +728,10 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   const all = { is: () => true };
   const ranger = (o: Partial<EntState> = {}) => ent(10, KIND.ElvenRanger, o);
   const owned = (b: CardBuf, id: number): number => b.owner.filter((v) => v === id).length;
-  const unbuilt: FigureKit = { get: () => null, known: () => true, times: new Map(), version: 0, dispose: () => {} };
+  /** The kit with the lich's picture not ready, and with it ready (a stand-in image: `drawBuilt` only asks whether it exists). */
+  const noPicture = (): FigureKit => ({ ...kit, picture: () => null });
+  const withPicture = (): FigureKit => ({ ...kit, picture: (k) => (k === 'lich' ? { w: 512, h: 512, data: new Uint8Array(4) } : null) });
+  const unbuilt: FigureKit = { get: () => null, picture: () => null, known: () => true, times: new Map(), version: 0, dispose: () => {} };
 
   it('gives a built figure one body and one bow instance, no card, one caster, one shadow and the model height as anchor', () => {
     const fg = make();
@@ -925,11 +932,150 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     const a = make().frame(frame([ranger(), ent(11, KIND.Lich, { x: at(1) })]), cam(), look({ kit: unbuilt, ...all }));
     expect(a).toEqual(plain);
     expect(a.models).toEqual([]);
-    const b = make().frame(frame([ent(11, KIND.Lich)]), cam(), look({ kit, ...all }));
+    // the lich has no model key, and its built figure waits for its picture: the cards, as without models
+    const b = make().frame(frame([ent(11, KIND.Lich)]), cam(), look({ kit: noPicture(), ...all }));
     expect(b).toEqual(make().frame(frame([ent(11, KIND.Lich)]), cam(), look()));
     // not chosen: cards, and the kit is not asked
     const c = make().frame(frame([ranger()]), cam(), look({ kit, is: () => false }));
     expect(c).toEqual(make().frame(frame([ranger()]), cam(), look()));
+  });
+
+  describe('the lich as a built figure (#358)', () => {
+    const lich = (o: Partial<EntState> = {}) => ent(11, KIND.Lich, o);
+    const built = (ents: EntState[], k: FigureKit = withPicture(), fg = make(), c = cam()) => fg.frame(frame(ents), c, look({ kit: k, ...all }));
+
+    it('without models the lich is cards and nothing is built', () => {
+      const out = make().frame(frame([lich()]), cam(), look());
+      expect(out.built).toEqual([]);
+      expect(owned(out.cards, 11) + owned(out.ghosts, 11)).toBeGreaterThan(0);
+    });
+
+    it('with a picture not ready it is the same cards as without models', () => {
+      const out = built([lich()], noPicture());
+      expect(out).toEqual(make().frame(frame([lich()]), cam(), look()));
+      expect(out.built).toEqual([]);
+    });
+
+    it('with the picture ready: one built instance, no card, one caster, one oval, four glows, the listed figure and the anchor', () => {
+      const plain = make().frame(frame([lich()]), cam(), look());
+      const out = built([lich()]);
+      expect(out.built.length).toBe(1);
+      const b = out.built[0];
+      expect(b).toMatchObject({ key: 'lich', owner: 11, stone: false, cut: false });
+      expect(b.scale).toBeCloseTo(LICH.unit / TILE, 9);
+      expect(b.body.verts).toBeGreaterThan(0);
+      expect(b.glow).not.toBeNull();
+      expect(owned(out.cards, 11) + owned(out.ghosts, 11) + owned(out.decals, 11)).toBe(0);
+      expect(out.models.length).toBe(0);
+      expect(out.casters.length).toBe(1);
+      expect(out.shadows.n).toBe(1);
+      expect(out.glows.n).toBe(plain.glows.n + 4);
+      // the oval's radius: the hem in tiles (half its first quad's width, across the camera's right)
+      const xsh = xs(out.shadows as unknown as { position: number[] });
+      expect((Math.max(...xsh) - Math.min(...xsh)) / 2).toBeCloseTo(LICH.hem / TILE, 5);
+      const lf = out.figs[0];
+      expect(lf.model).toBe(true);
+      expect(lf.gem && lf.eyes && lf.chest && lf.magic).toBeTruthy();
+      expect(lf.magic!.gem).toBeGreaterThan(0);
+      const fg = make();
+      fg.frame(frame([lich()]), cam(), look({ kit: withPicture(), ...all }));
+      expect(fg.anchors.get(11)!.height).toBeCloseTo(LICH_TOP * LICH.unit, 9);
+    });
+
+    it('a Knight in the same frame has none of the four fields', () => {
+      const out = built([lich(), ent(12, KIND.Knight, { x: at(2) })]);
+      const knight = out.figs.find((g) => g.id === 12)!, wiz = out.figs.find((g) => g.id === 11)!;
+      expect(knight.gem).toBeUndefined(); expect(knight.eyes).toBeUndefined(); expect(knight.chest).toBeUndefined(); expect(knight.magic).toBeUndefined();
+      expect(wiz.gem).toBeDefined();
+    });
+
+    it('two liches give two instances with different buffers', () => {
+      const out = built([lich(), ent(13, KIND.Lich, { x: at(2) })]);
+      expect(out.built.length).toBe(2);
+      expect(out.built[0].body).not.toBe(out.built[1].body);
+      expect(out.built[0].body.position).not.toBe(out.built[1].body.position);
+      expect(out.figs.find((g) => g.id === 11)!.gem).not.toBe(out.figs.find((g) => g.id === 13)!.gem);
+    });
+
+    it('a lich that is gone the next frame leaves nothing built', () => {
+      const fg = make();
+      expect(built([lich()], withPicture(), fg).built.length).toBe(1);
+      expect(built([ranger()], withPicture(), fg).built).toEqual([]);
+    });
+
+    it('lifts each halo toward the camera by 0.45 builder units (the spike\'s offset), as the glow quads say', () => {
+      const out = built([lich()]), c = cam(), lf = out.figs[0], b = out.built[0];
+      const n = out.glows.n, ray = viewRay(c.pitch, c.yaw), lift = 0.45 * b.scale;
+      // the gem is the third halo: its quad's centre (the mean of its six corners) is the gem point moved along the view ray
+      const q = n - 2, p = out.glows.position;
+      const centre = [0, 1, 2].map((a) => { let t = 0; for (let v = 0; v < 6; v++) t += p[(q * 6 + v) * 3 + a]; return t / 6; });
+      for (let a = 0; a < 3; a++) expect(centre[a]).toBeCloseTo(lf.gem![a] + ray[a] * lift, 5);
+    });
+
+    it('a dark lich has no halos and its instance is dark', () => {
+      const fg = make(), dark = { dark: new Set([11]) };
+      const out = fg.frame(frame([lich()], dark), cam(), look({ kit: withPicture(), ...all }));
+      const plain = make().frame(frame([lich()], dark), cam(), look());
+      expect(out.built[0].dark).toBe(true);
+      expect(out.glows.n).toBe(plain.glows.n);
+    });
+
+    it('the lamp caster is as tall as the outline frame in tiles times the pose scale (the outline is baked in game px)', () => {
+      const out = built([lich()]), c = out.casters[0], fr = frames[outlineFrame('lich')];
+      expect(c).toBeDefined();
+      expect(c.y1 - c.y0).toBeCloseTo((fr.h * (FIGURES[KIND.Lich].scale ?? 1)) / TILE, 5);
+    });
+
+    it('forgets the built memory while the lich is drawn as cards: the next built frame is a first sight', () => {
+      const fg = make(), face = (k: FigureKit, aim: number) => fg.frame(frame([lich({ aim })]), cam(), look({ kit: k, ...all }));
+      face(withPicture(), 0);
+      for (let i = 0; i < 3; i++) expect(face(noPicture(), 2).built).toEqual([]);
+      expect(face(withPicture(), 2).built[0].yaw).toBeCloseTo(2, 9);   // not eased from the old facing 0
+    });
+
+    it('forgets the built memory in a frame without models too: the next built frame is a first sight', () => {
+      const fg = make(), face = (aim: number, models: boolean) => fg.frame(frame([lich({ aim })]), cam(), models ? look({ kit: withPicture(), ...all }) : look());
+      face(0, true);
+      for (let i = 0; i < 3; i++) expect(face(2, false).built).toEqual([]);
+      expect(face(2, true).built[0].yaw).toBeCloseTo(2, 9);
+    });
+
+    it('a petrified lich is stone and has no glow quads of its own', () => {
+      const plain = make().frame(frame([lich({ effects: 1 << EFFECT.Petrified })]), cam(), look());
+      const out = built([lich({ effects: 1 << EFFECT.Petrified })]);
+      expect(out.built[0].stone).toBe(true);
+      expect(out.glows.n).toBe(plain.glows.n);
+    });
+
+    it('a lich first seen in a Slam wind-up is drawn on its first frame', () => {
+      const out = built([lich({ anim: ANIM.Slam, animMs: 900 })]);
+      expect(out.built.length).toBe(1);
+      expect(out.built[0].body.verts).toBeGreaterThan(0);
+    });
+
+    it('has no model entry for the lich in any case', () => {
+      expect(built([lich()]).models).toEqual([]);
+      expect(make().frame(frame([lich()]), cam(), look({ kit: noPicture(), ...all })).models).toEqual([]);
+    });
+
+    it('faces where a model would: the instance yaw is the aim, and the gem lies at builtPoint of the anchor for aims 0 and 90 degrees', () => {
+      // A model's yaw is the snapshot's aim (+x of the model to (cos, sin) in the world, `packInstance`); the lich's first frame faces the aim.
+      const at0 = built([lich({ aim: 0 })]), at90 = built([lich({ aim: Math.PI / 2 })]);
+      expect(at0.built[0].yaw).toBeCloseTo(0, 9);
+      expect(at90.built[0].yaw).toBeCloseTo(Math.PI / 2, 9);
+      expect(at90.figs[0].yaw).toBeCloseTo(Math.PI / 2, 9);
+      const g0 = at0.figs[0].gem!, g90 = at90.figs[0].gem!, foot = at0.figs[0];
+      // the gem is the builder's anchor turned by the yaw: with aim 90 it is the aim-0 offset from the foot turned 90 degrees ((dx, dz) -> (-dz, dx))
+      const dx = g0[0] - foot.x, dz = g0[2] - foot.z;
+      expect(Math.abs(dx)).toBeGreaterThan(0.05);   // the staff is held out to the side or front: a real offset
+      expect(g90[0] - foot.x).toBeCloseTo(-dz, 5);
+      expect(g90[2] - foot.z).toBeCloseTo(dx, 5);
+      expect(g90[1]).toBeCloseTo(g0[1], 6);
+      // and it is builtPoint's point of the same anchor: the gem's height above the foot is scaled by the stretch
+      const stretch = 1 / Math.cos(Math.PI / 4), b = at0.built[0];
+      expect(builtPoint([dx / b.scale, 0, 0], foot.x, foot.z, 0, 0, b.scale, stretch, [0, 0, 0])[0]).toBeCloseTo(g0[0], 6);
+      expect(g0[1] - foot.foot).toBeGreaterThan(0);
+    });
   });
 
   it('scales the weapon by the model weaponScale', () => {

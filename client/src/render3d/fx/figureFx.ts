@@ -7,6 +7,7 @@ import { addLight } from './booms';
 import { has } from '../../game/effectBits';
 import { GLOOM, gazePulse } from '../../game/fxLooks';
 import { MELEE_T } from '../../game/anim/pose';
+import { isWindup } from '../../game/anim/defs';
 import { TILE } from '../../sim/map';
 import { pushGlow } from '../cards';
 import { fangTris, FX_WHITE, swirlTris, swooshTris } from '../models/fx';
@@ -18,7 +19,7 @@ import type { DrawnFig, FxCtx, FxOut } from './types';
 
 const rgbIn = (c: number, out: MV3): MV3 => { out[0] = ((c >> 16) & 255) / 255; out[1] = ((c >> 8) & 255) / 255; out[2] = (c & 255) / 255; return out; };
 const c0: MV3 = [0, 0, 0], c1: MV3 = [0, 0, 0], gl: MV3 = [0, 0, 0];
-const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0];
+const pa: MV3 = [0, 0, 0], pb: MV3 = [0, 0, 0], tipAt: MV3 = [0, 0, 0];
 
 /** The camera passes stretch the figure by 1 / cos(pitch): so are the heights of the effects that sit on it. */
 export const stretchOf = (ctx: FxCtx): number => 1 / Math.cos(ctx.cam.pitch);
@@ -107,17 +108,20 @@ function drawSpark(out: FxOut, frame: FxFrame, rec: FxRec, age: number): void {
 /** Gloom sparks gather at the staff tip (3 per 0.1 s) and a violet glow breathes there. */
 function novaWindup(out: FxOut, frame: FxFrame, f: DrawnFig, tipUp: number): void {
   const ctx = frame.ctx, T = out.tris, n = Math.max(3, Math.round(9 * ctx.detail));
-  const ty = f.hand[1] + tipUp;
+  // a built figure names its own gem; a card's sparks gather at the staff tip
+  let g = f.gem;
+  if (!g) { tipAt[0] = f.hand[0]; tipAt[1] = f.hand[1] + tipUp; tipAt[2] = f.hand[2]; g = tipAt; }
+  const ty = g[1];
   for (let i = 0; i < n; i++) {
     const t = f.animT / 0.3 + i / n, cyc = Math.floor(t), ph = t - cyc, sd = f.id * 31 + i;
     const dark = hash3(sd, cyc, 0) < 0.5;
     rgbIn(dark ? GLOOM.dark : GLOOM.spark, c0);
     const dx = (hash3(sd, cyc, 1) - 0.5) * 20 * 0.3 * ph / TILE, dy = (hash3(sd, cyc, 2) - 0.5) * 20 * 0.3 * ph / TILE, dz = (hash3(sd, cyc, 3) - 0.5) * 20 * 0.3 * ph / TILE;
-    dot(T, ctx.ax, f.hand[0] + dx, ty + dy, f.hand[2] + dz, dark ? PX * 1.6 : PX, c0[0], c0[1], c0[2], 1 - ph * ph);
+    dot(T, ctx.ax, g[0] + dx, ty + dy, g[2] + dz, dark ? PX * 1.6 : PX, c0[0], c0[1], c0[2], 1 - ph * ph);
   }
   const pulse = 0.75 + 0.25 * Math.sin(frame.ctx.now * 14);
   gl[0] = 0.5 * pulse; gl[1] = 0.2 * pulse; gl[2] = 0.95 * pulse;
-  pushGlow(out.glows, f.hand[0], ty, f.hand[2], 0.4, gl, ctx.cam);
+  pushGlow(out.glows, g[0], ty, g[2], 0.4, gl, ctx.cam);
 }
 
 // ---- the slam telegraph ----
@@ -168,7 +172,7 @@ function breath(out: FxOut, frame: FxFrame, f: DrawnFig): void {
     }
     return;
   }
-  if (f.anim !== ANIM.Windup && f.anim !== ANIM.Breath) return;
+  if (!isWindup(f.anim) && f.anim !== ANIM.Breath) return;
   const nos = f.nostril, k = Math.max(3, Math.round(8 * ctx.detail));
   rgbIn(0x706060, c1);
   if (nos) {
@@ -204,7 +208,8 @@ function gaze(out: FxOut, frame: FxFrame, f: DrawnFig): void {
     if (!t) return;
     tx = t.x / TILE; tz = t.y / TILE; ty = 0.5 * stretchOf(frame.ctx);
   }
-  gazeA[0] = f.x; gazeA[1] = f.foot + f.top - 0.15; gazeA[2] = f.z;
+  if (f.eyes) { gazeA[0] = f.eyes[0]; gazeA[1] = f.eyes[1]; gazeA[2] = f.eyes[2]; }
+  else { gazeA[0] = f.x; gazeA[1] = f.foot + f.top - 0.15; gazeA[2] = f.z; }
   gazeB[0] = tx; gazeB[1] = ty; gazeB[2] = tz;
   const a = gazePulse(frame.ctx.now);
   streak(out.tris, frame.ctx.ax, gazeA, gazeB, 0.05, GAZE_GREY, a, a);
@@ -221,17 +226,19 @@ function drain(out: FxOut, frame: FxFrame): void {
   const ctx = frame.ctx, T = out.tris, now = ctx.now, st = stretchOf(ctx);
   let lx = dr[0][0] / TILE, lz = dr[0][1] / TILE;
   // the lich in view (the one nearest the list's first point) draws the line's end smoothly
-  let best = 4;
+  let best = 4, ly = 12 / TILE * st;
   for (let i = 0; i < frame.figs.length; i++) {
     const g = frame.figs[i], dd = (g.x - lx) ** 2 + (g.z - lz) ** 2;
     if (g.kind === KIND.Lich && dd < best) {
       best = dd;
       // 3D hides the drain beams while the lich is hidden: the sight rule wins
       if (frame.hidden.has(g.id)) return;
-      lx = g.x; lz = g.z;
+      // a built figure's chest is where the lines end
+      if (g.chest) { lx = g.chest[0]; ly = g.chest[1]; lz = g.chest[2]; }
+      else { lx = g.x; lz = g.z; ly = 12 / TILE * st; }
     }
   }
-  const sy = 10 / TILE * st, ty = 12 / TILE * st;
+  const sy = 10 / TILE * st, ty = ly;
   for (let d = 1; d < dr.length; d++) {
     const id = d * 7919, sx = dr[d][0] / TILE, sz = dr[d][1] / TILE;
     const nx = -(lz - sz), nz = lx - sx, nl = Math.hypot(nx, nz) || 1, ux = nx / nl, uz = nz / nl;
@@ -271,6 +278,22 @@ function dust(o: FxOut, f: FxFrame, r: FxRec, age: number, spec: BurstSpec, y: n
   burst(o.lit,f.ctx.ax, spec, age, r.seed);
 }
 
+// ---- a built figure's lights ----
+/** The glow of a built figure's gem (and of its skull's flare) as small magic lights; only a figure with `magic` (the lich today) has them. */
+function builtLights(out: FxOut, f: DrawnFig, st: number): void {
+  const m = f.magic;
+  if (!m) return;
+  // the anchors are at the stretched height; lights work in true space (as the halo's does)
+  if (f.gem) {
+    const k = 0.6 * m.gem * f.alpha;
+    addLight(out, 'lg' + f.id, f.gem[0], f.foot + (f.gem[1] - f.foot) / st, f.gem[2], 2.5, 0.45 * k, 0.72 * k, 1.0 * k, LIGHT_KIND.Magic);
+  }
+  if (f.eyes && m.flare > 0.02) {
+    const k = 0.8 * m.flare * f.alpha;
+    addLight(out, 'lf' + f.id, f.eyes[0], f.foot + (f.eyes[1] - f.foot) / st, f.eyes[2], 3, 0.69 * k, 0.37 * k, 1.0 * k, LIGHT_KIND.Magic);
+  }
+}
+
 // ---- all of it ----
 /** The figure effects of a frame; registered as a frame drawer. */
 export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
@@ -282,7 +305,10 @@ export function drawFigureFx(out: FxOut, frame: FxFrame, fx: Effects3d): void {
   if (falls) for (let i = 0; i < falls.length; i++) if (!frame.hidden.has(falls[i].id)) fx.emit(FX_KIND.RimDust, now, falls[i].x, falls[i].z, falls[i].id);
   for (let i = 0; i < frame.figs.length; i++) {
     const f = frame.figs[i];
-    if (frame.hidden.has(f.id) || f.alpha < 0.05 || still(f)) continue;
+    if (frame.hidden.has(f.id) || f.alpha < 0.05) continue;
+    // a frozen figure's gem still shines; a petrified one's does not
+    if (f.magic && !has(f.effects, EFFECT.Petrified)) builtLights(out, f, st);
+    if (still(f)) continue;
     swoosh(T, f);
     if (f.bite >= 0 && f.mouth) fangTris(T, f.mouth, ctx.cam, f.bite);
     if (f.anim === ANIM.Channel) swirlTris(T, f.x, f.z, f.animT, f.def.base, f.top, 0.6, f.foot);

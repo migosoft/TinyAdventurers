@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BONES, MAX_BENDS, MAX_BONES, buildFigure, type FigureModel } from './model';
-import { OWNER_MAX, ROW, ROW_TEXELS, growRows, packInstance, type FigureInst } from './instances';
+import { OWNER_MAX, ROW, ROW_TEXELS, growRows, packInstance, packLook, type FigureInst } from './instances';
 import { restPose, type Pose3d } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS } from './table';
@@ -119,5 +119,17 @@ describe('growRows', () => {
     const a = new Float32Array(8);
     expect(growRows(a, 9).length).toBeGreaterThanOrEqual(16);
     expect(growRows(a, 8)).toBe(a);
+  });
+});
+
+describe('packLook', () => {
+  it('writes the same 12 floats as packInstance does for the tint, seen and flags texels', () => {
+    const i = inst({ tint: [0.2, 0.4, 0.6], stone: true, alpha: 0.7, dark: true, cut: true, groundY: 0.3, sight: { hard: 0.1, soft: 0.9 } });
+    const r = row(i, 3, 77);
+    const look = new Float32Array(12);
+    packLook(look, 0, i, 3, 77);
+    expect(Array.from(look)).toEqual(Array.from(r.subarray(ROW.tint * 4, ROW.tint * 4 + 12)));
+    expect(look[11]).toBeCloseTo(0.3, 6);
+    expect(look[10]).toBe(77);
   });
 });

@@ -1460,3 +1460,11 @@ describe('the floating gait', () => {
     }, SLOW);
   });
 });
+
+describe('the summoning wind-up (#358)', () => {
+  it('poses the necromancer in ANIM.Summon as in ANIM.Windup', () => {
+    const m = tube('necromancer'), d = tdef('necromancer');
+    const at = (anim: number) => flat(poseFigure(m, d, view({ anim, animT: 0.2, aim: 1 }), 0, settled({ clock: 0.2 })));
+    expect(at(ANIM.Summon)).toEqual(at(ANIM.Windup));
+  });
+});

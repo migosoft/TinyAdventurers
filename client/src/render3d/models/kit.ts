@@ -3,8 +3,9 @@
 
 import { FIGURES, type FigureDef } from '../../game/anim/defs';
 import { boundsOfPixels } from '../atlasBounds';
-import { buildJob, isFigureKey, isTubeKey, isWeaponKey } from './build';
+import { buildJob, isFigureKey, isPictureKey, isTubeKey, isWeaponKey, paintJob } from './build';
 import type { FigureModel } from './model';
+import type { PaintImage } from './paint';
 import { FIT_KIND } from './table';
 import { WEAPONS, type SpritePixels } from './weapons';
 
@@ -13,21 +14,25 @@ export interface FigureKit {
   get(key: string): FigureModel | null;
   /** False for a key nothing can build (an unknown weapon): `get` stays null and one warning is logged. */
   known(key: string): boolean;
+  /** A painted picture if it is ready; otherwise null, and the painting is started (once), off the frame. Keys: `PICTURES` in build.ts. */
+  picture(key: string): PaintImage | null;
   /** Build times in ms by key, for the F3 panel and the docs. */
   readonly times: ReadonlyMap<string, number>;
-  /** Bumped when a model arrives. Only the dev readout reads it (the layer asks `get` every frame). */
+  /** Bumped when a model or a picture arrives. Only the dev readout reads it (the layer asks `get` every frame). */
   readonly version: number;
   dispose(): void;
 }
 
-/** Builds one model; resolves with it and the build's own duration (not the queue wait). */
+/** Builds one model, or paints one picture when `job.picture` is set (#358); resolves with it, the duration being the job's own (not the queue wait). */
 export type BuildJob = {
   key: string;
   px: SpritePixels | null;
   /** A figure key only: the standing height (sprite px) of the card the model replaces; null when its sprite is unknown. */
   height?: number | null;
+  /** A picture job (#358): `key` is a `PICTURES` key and the result is a `PaintImage`, not a model. */
+  picture?: boolean;
 };
-export type BuildRunner = ((job: BuildJob) => Promise<FigureModel>) & {
+export type BuildRunner = ((job: BuildJob) => Promise<FigureModel | PaintImage>) & {
   /** Ends the runner (a worker is terminated); what is pending is rejected. */
   dispose?(): void;
 };
@@ -37,9 +42,9 @@ export type TimedRunner = BuildRunner & { lastMs?: Map<string, number> };
 
 /** Builds at once, on the calling thread (tests). It is not a fallback: when the worker dies, `workerRunner` rejects every later job and the figures stay sprite cards. */
 export const directRunner: TimedRunner & { lastMs: Map<string, number> } = Object.assign(
-  async (job: BuildJob): Promise<FigureModel> => {
+  async (job: BuildJob): Promise<FigureModel | PaintImage> => {
     const t = performance.now();
-    const m = buildJob(job.key, job.px, job.height);
+    const m = job.picture ? paintJob(job.key) : buildJob(job.key, job.px, job.height);
     directRunner.lastMs.set(job.key, Math.max(performance.now() - t, 1e-3));
     return m;
   },
@@ -48,7 +53,7 @@ export const directRunner: TimedRunner & { lastMs: Map<string, number> } = Objec
 
 /** Builds in a module worker; the typed arrays come back transferred. One worker per runner. */
 export const workerRunner = (): BuildRunner => {
-  const pending = new Map<number, { ok: (m: FigureModel) => void; fail: (e: Error) => void; key: string }>();
+  const pending = new Map<number, { ok: (m: FigureModel | PaintImage) => void; fail: (e: Error) => void; key: string }>();
   let next = 0, dead: Error | null = null, worker: Worker | null = null;
   /** The worker is gone or unusable: everything pending fails, and so does every later job. */
   const die = (why: string): void => {
@@ -58,11 +63,12 @@ export const workerRunner = (): BuildRunner => {
   };
   try {
     worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = (e: MessageEvent<{ id: number; model?: FigureModel; ms?: number; error?: string }>) => {
+    worker.onmessage = (e: MessageEvent<{ id: number; model?: FigureModel; image?: PaintImage; ms?: number; error?: string }>) => {
       const d = e.data, p = pending.get(d.id);
       if (!p) return;
       pending.delete(d.id);
-      if (d.model) { runner.lastMs.set(p.key, d.ms ?? 0); p.ok(d.model); } else p.fail(new Error(d.error ?? 'build failed'));
+      const made = d.model ?? d.image;
+      if (made) { runner.lastMs.set(p.key, d.ms ?? 0); p.ok(made); } else p.fail(new Error(d.error ?? 'build failed'));
     };
     worker.onerror = (e) => die(e.message || 'the model worker failed');
     worker.onmessageerror = () => die('the model worker sent a message that could not be read');
@@ -70,11 +76,11 @@ export const workerRunner = (): BuildRunner => {
     die(`the model worker could not be started (${e instanceof Error ? e.message : String(e)})`);
   }
   const runner: BuildRunner & { lastMs: Map<string, number> } = Object.assign(
-    (job: BuildJob) => new Promise<FigureModel>((ok, fail) => {
+    (job: BuildJob) => new Promise<FigureModel | PaintImage>((ok, fail) => {
       if (dead || !worker) { fail(dead ?? new Error('the model worker is closed')); return; }
       const id = next++;
       pending.set(id, { ok, fail, key: job.key });
-      worker.postMessage({ id, key: job.key, px: job.px, height: job.height ?? null });
+      worker.postMessage({ id, key: job.key, px: job.px, height: job.height ?? null, picture: job.picture === true });
     }),
     {
       lastMs: new Map<string, number>(),
@@ -126,20 +132,45 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
       } catch (e) { warnOnce(key, `the card sprite lookup failed (${e instanceof Error ? e.message : String(e)})`); }
     }
     const t0 = performance.now();
-    let job: Promise<FigureModel>;
+    let job: Promise<FigureModel | PaintImage>;
     try { job = run({ key, px, height }); } catch (e) { job = Promise.reject(e); }
     job.then((m) => {
       if (disposed) return;
       const own = (run as TimedRunner).lastMs?.get(key);
       times.set(key, own ?? performance.now() - t0);
-      models.set(key, m);
+      models.set(key, m as FigureModel);
       version++;
     }, (e: unknown) => {
       if (!disposed) warnOnce(key, `the build failed (${e instanceof Error ? e.message : String(e)})`);
     });
   };
 
+  const pictures = new Map<string, PaintImage>();
+  const picturesStarted = new Set<string>();
+  const startPicture = (key: string): void => {
+    picturesStarted.add(key);
+    let job: Promise<FigureModel | PaintImage>;
+    try { job = run({ key, px: null, picture: true }); } catch (e) { job = Promise.reject(e); }
+    const t0 = performance.now();
+    job.then((img) => {
+      if (disposed) return;
+      times.set(key, (run as TimedRunner).lastMs?.get(key) ?? performance.now() - t0);
+      pictures.set(key, img as PaintImage);
+      version++;
+    }, (e: unknown) => {
+      if (!disposed) warnOnce(key, `the painting failed (${e instanceof Error ? e.message : String(e)})`);
+    });
+  };
+
   return {
+    picture(key) {
+      const p = pictures.get(key);
+      if (p) return p;
+      if (disposed || picturesStarted.has(key)) return null;
+      if (!isPictureKey(key)) { picturesStarted.add(key); warnOnce(key, 'no such picture'); return null; }
+      startPicture(key);
+      return null;
+    },
     get(key) {
       const m = models.get(key);
       if (m) return m;
@@ -151,6 +182,6 @@ export function createKit(sprite: (name: string) => SpritePixels | null, run: Bu
     known,
     times,
     get version() { return version; },
-    dispose() { disposed = true; models.clear(); times.clear(); run.dispose?.(); },
+    dispose() { disposed = true; models.clear(); pictures.clear(); times.clear(); run.dispose?.(); },
   };
 }

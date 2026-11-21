@@ -4,7 +4,7 @@
 // particles, sparks and swooshes stay in the views.
 import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../effectBits';
-import type { FigureDef } from './defs';
+import { isWindup, type FigureDef } from './defs';
 import { lieLayout, lyingPose, type Bounds } from './lying';
 import { pickFrame, windupOf } from './pickFrame';
 import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
@@ -240,7 +240,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   // The hurt flash (every other 1/30 s for a figure without a hit frame) wins over the rest; `tintUnhurt` is what is chosen without it.
   const flash = hurt && !d.hit && Math.floor(m.clock * 30) % 2 === 0;
   if (silhouette) tint = { mode: 'fill', rgb: SILHOUETTE_FILL };
-  else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
+  else if (!stone && !iced && (isWindup(s.anim) || s.anim === ANIM.Slam || own?.windup)) {
     // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
     tint = { mode: 'mul', rgb: Math.floor(m.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff) };
     if (!flash) {
@@ -409,7 +409,7 @@ function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean): Wea
           rot += sgn * half;
           alpha = Math.min(1, Math.max(0, (k - 0.7) / 0.3));
         }
-      } else if (s.anim === ANIM.Windup) rot -= sgn * 1.6;
+      } else if (isWindup(s.anim)) rot -= sgn * 1.6;
       else if (s.anim === ANIM.Slam) {
         // Ground slam: the club goes up over the head, then comes down at the impact.
         const k = Math.min(t / 0.3, 1);
@@ -433,7 +433,7 @@ function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean): Wea
         const k = Math.min(t / 0.12, 1);
         ox = -ax * 3 * (1 - k);
         oy = -ay * 3 * (1 - k);
-      } else if (s.anim === ANIM.Windup) {
+      } else if (isWindup(s.anim)) {
         ox = -ax * 2;
         oy = -ay * 2;
       }
@@ -443,7 +443,7 @@ function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean): Wea
       // Held upright, leaning toward the aim; thrust forward when casting.
       originY = 0.75;
       rot = sgn * 0.25;
-      if (s.anim === ANIM.Cast || s.anim === ANIM.Shoot || s.anim === ANIM.Windup || s.anim === ANIM.Channel) {
+      if (s.anim === ANIM.Cast || s.anim === ANIM.Shoot || isWindup(s.anim) || s.anim === ANIM.Channel) {
         const k = Math.min(t / 0.25, 1);
         rot = sgn * 0.25 + (s.screenAim + HALF_PI - sgn * 0.25) * Math.sin(k * Math.PI) * 0.6;
       } else if (s.anim === ANIM.Slam) {

@@ -283,3 +283,53 @@ describe('workerRunner', () => {
     expect(kit.version).toBe(0);
   });
 });
+
+describe('pictures (#358)', () => {
+  // The console.warn spies are restored by the file-level afterEach (`vi.restoreAllMocks`; there is no `restoreMocks` in the vite config).
+  afterEach(() => { vi.unstubAllGlobals(); FakeWorker.all = []; });
+  it('picture is null until the runner resolves, then a 512 x 512 image; the runner ran once for five calls', async () => {
+    const jobs: { key: string; picture?: boolean }[] = [];
+    const kit = createKit(noPixels, async (job) => { jobs.push(job); return directRunner(job); });
+    for (let i = 0; i < 5; i++) expect(kit.picture('lich')).toBeNull();
+    await settle();
+    const img = kit.picture('lich');
+    expect(img?.w).toBe(512);
+    expect(img?.h).toBe(512);
+    expect(img?.data.length).toBe(512 * 512 * 4);
+    expect(jobs).toEqual([{ key: 'lich', px: null, picture: true }]);
+    expect(kit.version).toBe(1);
+  });
+
+  it('an unknown picture stays null with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const kit = createKit(noPixels, directRunner);
+    expect(kit.picture('nope')).toBeNull();
+    expect(kit.picture('nope')).toBeNull();
+    await settle();
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a runner that rejects leaves the picture null with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const kit = createKit(noPixels, async () => { throw new Error('no canvas'); });
+    kit.picture('lich'); kit.picture('lich');
+    await settle();
+    expect(kit.picture('lich')).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('3D model lich');
+  });
+
+  it('the worker runner sends the picture job as a flagged message and takes the image from its reply', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const kit = createKit(noPixels, workerRunner());
+    const w = FakeWorker.all[0];
+    kit.picture('lich');
+    await settle();
+    expect(w.sent.length).toBe(1);
+    expect((w.sent[0] as unknown as { picture: boolean }).picture).toBe(true);
+    w.onmessage?.({ data: { id: w.sent[0].id, image: { w: 2, h: 2, data: new Uint8Array(16) }, ms: 5 } });
+    await settle();
+    expect(kit.picture('lich')?.w).toBe(2);
+    expect(kit.times.get('lich')).toBe(5);
+  });
+});

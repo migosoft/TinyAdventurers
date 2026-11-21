@@ -4,6 +4,7 @@ import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushGlow, pushShadow, pushWall, quadsOf, type Card } from './cards';
 import type { FigureInst } from './models/instances';
+import { newBuiltBuf, type BuiltInst } from './built';
 import { newSmokeBuf, type SmokeBuf } from './fx/smoke';
 import { cardSightData, figureSight, glowSightData, hiddenByPicture, shadowSightData, smokeUpload, type SmokeArrays } from './sightAttrs';
 import { footSight, SightMask, thingHard } from './sightmask';
@@ -254,5 +255,31 @@ describe('the smoke upload (#359)', () => {
     const big = { pos: a.pos, rgba: a.rgba, c: a.c, sight: a.sight };
     smokeUpload(smoke(10), null, a);
     expect(a.pos).toBe(big.pos); expect(a.rgba).toBe(big.rgba); expect(a.c).toBe(big.c); expect(a.sight).toBe(big.sight);
+  });
+});
+
+describe('the sight of built figures (#358)', () => {
+  const built = (owner: number, x: number, z: number): BuiltInst => ({
+    owner, key: 'lich', x, z, lift: 0, yaw: 0, scale: 1, body: newBuiltBuf(1, 3), glow: null, levels: [0, 0, 0, 0],
+    tint: [1, 1, 1], stone: false, alpha: 1, dark: false, cut: false, groundY: 0, sight: { hard: 0, soft: 0 }, reach: 0,
+  });
+
+  it('figureSight fills the sight of a built instance, at its foot', () => {
+    const m = mask(), near = built(1, 20.5, 20.5), far = built(2, 38, 38);
+    figureSight([near, far], m);
+    expect(near.sight.hard).toBeLessThan(0.1);
+    expect(far.sight.hard).toBeGreaterThan(0.9);
+    expect(far.sight.soft).toBeCloseTo(footSight(m, 38, 38, 0).soft, 6);
+    figureSight([far], null);
+    expect(far.sight).toEqual({ hard: 0, soft: 0 });
+  });
+
+  it('hiddenByPicture adds the owner of a built instance that lies in the dark, and not a seen one', () => {
+    const m = mask(), near = built(1, 20.5, 20.5), far = built(2, 38, 38);
+    figureSight([near, far], m);
+    expect(far.sight.hard).toBeGreaterThan(0.5);
+    const out = new Set<number>();
+    hiddenByPicture([], m, new Set(), out, [], [near, far]);
+    expect([...out]).toEqual([2]);
   });
 });

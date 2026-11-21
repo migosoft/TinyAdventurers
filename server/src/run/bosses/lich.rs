@@ -5,7 +5,7 @@
 //! (skeletons, half of them archers). The numbers (damage, radius, push, wind-up, cooldown) are the kit's.
 
 use super::{ahead, boss_idx, set_anim, target, BossBehaviour};
-use crate::defs::abilities::AbilityId;
+use crate::defs::abilities::{windup_anim, AbilityId};
 use crate::defs::bosses::{LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_RAISE_FIRST, LICH_SLEEP_FIRST};
 use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
@@ -198,7 +198,7 @@ impl BossBehaviour for Lich {
         let raise = kit(run, bi, AbilityId::RaiseDead);
         if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 {
             self.begin(run, bi, AbilityId::RaiseDead, raise.windup);
-            set_anim(run, bi, Anim::Windup);
+            set_anim(run, bi, windup_anim(AbilityId::RaiseDead));
         } else if self.ready(run, bi, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
             self.begin(run, bi, AbilityId::Nova, kit(run, bi, AbilityId::Nova).windup);
@@ -212,11 +212,11 @@ impl BossBehaviour for Lich {
             } else {
                 self.gaze = None;
                 self.aim_at = Some(run.players[pi].id);
-                set_anim(run, bi, Anim::Windup);
+                set_anim(run, bi, windup_anim(s));
             }
         } else if self.ready(run, bi, AbilityId::GloomBolts) {
             self.begin(run, bi, AbilityId::GloomBolts, kit(run, bi, AbilityId::GloomBolts).windup);
-            set_anim(run, bi, Anim::Windup);
+            set_anim(run, bi, windup_anim(AbilityId::GloomBolts));
         } else {
             let speed = run.monsters[bi].speed;
             // Keep a casting distance.
@@ -531,6 +531,17 @@ pub(crate) mod tests {
 
     fn windup(run: &Run, id: AbilityId) -> f64 {
         kit(run, boss_idx(run).unwrap(), id).windup
+    }
+
+    #[test]
+    fn raising_winds_up_in_summon_and_gloom_bolts_in_windup() {
+        let (mut run, mut l) = only(AbilityId::RaiseDead, Vec2::new(60.0, 0.0));
+        l.not_before.clear();
+        l.tick(&mut run, DT);
+        assert_eq!(run.monsters[boss_idx(&run).unwrap()].anim, Anim::Summon);
+        let (mut run, mut l) = only(AbilityId::GloomBolts, Vec2::new(60.0, 0.0));
+        l.tick(&mut run, DT);
+        assert_eq!(run.monsters[boss_idx(&run).unwrap()].anim, Anim::Windup);
     }
 
     #[test]

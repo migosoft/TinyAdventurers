@@ -5,6 +5,8 @@ import { BONES } from '../src/render3d/models/model';
 import { buildTubeFigure } from '../src/render3d/models/tubeModel';
 import { DESCS, outlineFrame, TUBE_DESCS } from '../src/render3d/models/table';
 
+import { LICH, LICH_TOP } from '../src/render3d/lich/shape';
+
 const WIDTH = 512;
 const keys = [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)];
 const build = (key: string) => (key in DESCS ? buildFigure(key, DESCS[key as keyof typeof DESCS]) : buildTubeFigure(key, TUBE_DESCS[key as keyof typeof TUBE_DESCS]));
@@ -72,5 +74,20 @@ describe('buildModelOutlines', () => {
     };
     expect(above('stag')).toBeGreaterThan(0);
     expect(above('deer')).toBe(0);
+  });
+});
+
+describe('buildModelOutlines, the built figures (#358)', () => {
+  it('has model_lich, as tall as the figure at rest, with the collar or skull on top and the hem on the bottom row', () => {
+    const f = frames['model_lich'];
+    expect(f).toBeDefined();
+    expect(Object.keys(frames).length).toBe(keys.length + 1);
+    expect(f.h).toBe(Math.ceil(LICH_TOP * LICH.unit));
+    expect(f.w % 2).toBe(0);
+    expect(f.w).toBeGreaterThanOrEqual(11);
+    let top = 0, bottom = 0;
+    for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) if (alpha(f.x + x, f.y + y)) (y < f.h / 4 ? top++ : 0, y === f.h - 1 ? bottom++ : 0);
+    expect(top).toBeGreaterThan(0);
+    expect(bottom).toBeGreaterThan(0);
   });
 });

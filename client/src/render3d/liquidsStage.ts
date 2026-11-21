@@ -231,7 +231,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       c.timer.renderStart();
       return c.view.draw(
         {
-          ...(kit ? { models: { insts: fo.models, kit } } : {}),
+          ...(kit ? { models: { insts: fo.models, built: fo.built, kit } } : {}),
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },

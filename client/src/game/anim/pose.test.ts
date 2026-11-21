@@ -168,3 +168,11 @@ describe('figurePose', () => {
     expect(seen).toEqual([true, false, true]);
   });
 });
+
+describe('the summoning wind-up (#358)', () => {
+  it('poses the Necromancer in ANIM.Summon as in ANIM.Windup at the same animT', () => {
+    const NECRO = FIGURES[KIND.Necromancer];
+    const at = (anim: number) => pose(NECRO, { anim, animT: 0.3, aim: 1 }, 0.07);
+    expect(at(ANIM.Summon)).toEqual(at(ANIM.Windup));
+  });
+});

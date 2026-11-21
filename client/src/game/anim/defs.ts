@@ -225,6 +225,8 @@ export function isProjectileKind(k: number): boolean {
 export function isHazardKind(k: number): boolean {
   return k === KIND.FirePatch || k === KIND.HolyGround || k === KIND.Roots;
 }
+/** A wind-up anim: the plain one or the summoning's (the server's `Anim::Windup` and `Anim::Summon`). */
+export const isWindup = (anim: number): boolean => anim === ANIM.Windup || anim === ANIM.Summon;
 export function isBossKind(k: number): boolean {
   return k === KIND.Demon || k === KIND.Lich || k === KIND.Dragon;
 }

@@ -513,7 +513,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
         {
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, built: fo.built, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
         },
         c.timer,
       );

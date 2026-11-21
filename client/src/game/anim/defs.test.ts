@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { KIND } from '../../generated/defs';
-import { FIGURES, heroWeapons } from './defs';
+import { ANIM, KIND } from '../../generated/defs';
+import { FIGURES, heroWeapons, isWindup } from './defs';
 
 describe('heroWeapons', () => {
   it('gives a melee class the melee item sprite', () => {
@@ -19,5 +19,13 @@ describe('heroWeapons', () => {
     expect(FIGURES[KIND.Paladin].weapon).toBe('weapon_knight_sword');
     expect(FIGURES[KIND.ElvenRanger].weapon).toBe('weapon_bow');
     expect(FIGURES[KIND.ElvenRanger].meleeWeapon).toBe('weapon_duel_sword');
+  });
+});
+
+describe('isWindup', () => {
+  it('is true for the plain and the summoning wind-up only', () => {
+    expect(isWindup(ANIM.Windup)).toBe(true);
+    expect(isWindup(ANIM.Summon)).toBe(true);
+    expect(isWindup(ANIM.Slam)).toBe(false);
   });
 });

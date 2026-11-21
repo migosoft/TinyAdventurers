@@ -106,6 +106,7 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
     case ANIM.Breath:
       return ground(at('breath', windup ? 0 : 1), windup);
     case ANIM.Windup:
+    case ANIM.Summon:
       // The fireball volley: head back, mouth opening.
       return ground(at('breath', 0));
     case ANIM.Cast:

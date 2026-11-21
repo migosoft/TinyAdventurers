@@ -1,6 +1,8 @@
 // What the kit and its worker share (#338): the build of one key and the list of buffers a model hands over.
 
+import { paintLich } from '../lich/paint';
 import { buildFigure, buildSkull, type FigureModel } from './model';
+import type { PaintImage } from './paint';
 import { DESCS, TUBE_DESCS, type DescKey, type TubeKey } from './table';
 import { buildTubeFigure } from './tubeModel';
 import { WEAPONS, buildWeapon, type SpritePixels } from './weapons';
@@ -16,6 +18,17 @@ export function buildJob(key: string, px: SpritePixels | null, height?: number |
   if (key === 'skull') return buildSkull();
   if (isWeaponKey(key)) return buildWeapon(key, px);
   throw new Error(`no model for ${key}`);
+}
+
+/** The painted pictures of built figures (#358) by key: what a picture job paints (off the frame, like a model build). */
+export const PICTURES: Record<string, () => PaintImage> = { lich: paintLich };
+
+export const isPictureKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(PICTURES, key);
+
+/** Paints the picture of `key`; throws for an unknown key. */
+export function paintJob(key: string): PaintImage {
+  if (!isPictureKey(key)) throw new Error(`no picture for ${key}`);
+  return PICTURES[key]();
 }
 
 /** The distinct buffers behind the typed arrays of a model. */
