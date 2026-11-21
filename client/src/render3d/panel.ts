@@ -152,7 +152,7 @@ export function createPanel(
   // The slider reaches ZOOM_MAX (#356); under Auto it rests at the buttons' middle.
   const zoomRow = el('div', 'r3d-row');
   const zoomLabel = el('label');
-  const zoom = slider(1, ZOOM_MAX, 1, () => cur.zoom ?? 4, (v) => change({ zoom: v }));
+  const zoom = slider(1, ZOOM_MAX, 0.1, () => cur.zoom ?? 4, (v) => change({ zoom: v }));
   zoom.input.id = 'r3d-zoom';
   zoomLabel.htmlFor = 'r3d-zoom';
   zoomRow.append(zoomLabel, zoom.input);

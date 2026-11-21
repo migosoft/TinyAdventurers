@@ -1152,7 +1152,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         return renderer.info.render.drawCalls;
       }
       // Into the picture's target; with a pool in view also on High, where the target has the canvas's size.
-      const rt = targetFor(p.targetW, p.targetH, p.linear);
+      const rt = targetFor(p.targetW, p.targetH, p.scaleX !== Math.round(p.scaleX));
       if (wp.copy) splitPicture(rt);
       else {
         renderer.setRenderTarget(rt);

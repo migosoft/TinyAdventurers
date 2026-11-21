@@ -9,7 +9,7 @@ const base: R3dStats = {
   drawCalls: 6,
   canvas: [1920, 1080],
   render: [960, 540],
-  zoom: 4,
+  zoom: 4.37,
   quality: 'balanced',
   backend: 'WebGPU',
 };
@@ -30,7 +30,7 @@ describe('statsText3d', () => {
       'draw calls 6',
       'canvas     1920x1080',
       'render     960x540 (balanced)',
-      'zoom       4',
+      'zoom       4.37',
       'backend    WebGPU',
     ]);
   });

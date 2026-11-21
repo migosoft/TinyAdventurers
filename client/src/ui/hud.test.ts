@@ -336,6 +336,6 @@ describe('statsText', () => {
 
   it('prints the 3D view\'s render size, zoom and backend after the canvas (#314)', () => {
     const t = statsText({ ...stats, renderer: { backend: 'WebGPU', w: 640, h: 360, quality: 'balanced', zoom: 4 } }).split('\n');
-    expect(t.slice(8, 13)).toEqual(['canvas     2560x1440', 'render     640x360 (balanced)', 'zoom       4', 'backend    WebGPU', 'ping       20 ms']);
+    expect(t.slice(8, 13)).toEqual(['canvas     2560x1440', 'render     640x360 (balanced)', 'zoom       4.00', 'backend    WebGPU', 'ping       20 ms']);
   });
 });

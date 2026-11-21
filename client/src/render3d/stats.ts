@@ -59,7 +59,7 @@ export function statsText3d(s: R3dStats): string {
     `draw calls ${s.drawCalls}\n` +
     `canvas     ${s.canvas[0]}x${s.canvas[1]}\n` +
     `render     ${s.render[0]}x${s.render[1]} (${s.quality})\n` +
-    `zoom       ${s.zoom}\n` +
+    `zoom       ${s.zoom.toFixed(2)}\n` +
     `backend    ${s.backend}`
   );
 }

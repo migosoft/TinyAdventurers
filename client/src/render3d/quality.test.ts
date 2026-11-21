@@ -9,6 +9,15 @@ describe('effZoom', () => {
     expect(zs.map((z) => effZoom('high', z))).toEqual(zs);
   });
 
+  it('gives a whole number for a fractional zoom', () => {
+    expect(effZoom('high', 4.5)).toBe(5);
+    expect(effZoom('balanced', 5.3)).toBe(3);
+    expect(effZoom('balanced', 13.3)).toBe(7);
+    expect(effZoom('fast', 13.3)).toBe(2);
+    expect(effZoom('balanced', 1.5)).toBe(2);
+    expect(effZoom('high', 2.857)).toBe(3);
+  });
+
   it('never exceeds the zoom: at zoom 1 every quality gives 1', () => {
     for (const q of ['fast', 'balanced', 'high'] as const) expect(effZoom(q, 1)).toBe(1);
     expect(renderPlan('balanced', 1, 1280, 720).direct).toBe(true);
@@ -38,12 +47,44 @@ describe('renderPlan', () => {
     expect(p.ze).toBe(2);
     expect(p.targetW).toBe(962);
     expect(p.targetH).toBe(542);
-    expect(p.linear).toBe(false);
+    expect(p.scaleX).toBe(2);
     expect(p.dstX).toBe(Math.floor((1921 - 1924) / 2));
   });
 
-  it('is linear when the zoom is not a multiple', () => {
-    expect(renderPlan('balanced', 3, 900, 600).linear).toBe(true);
+  it('scales by a whole ratio when the zoom is a multiple, by a fraction otherwise', () => {
+    expect(renderPlan('balanced', 4, 1921, 1081).scaleX).toBe(2);
+    const p = renderPlan('balanced', 5, 1280, 768);
+    expect(p.ze).toBe(3);
+    expect(p.scaleX).toBeCloseTo(5 / 3, 1);
+    expect(p.direct).toBe(false);
+  });
+
+  it('plans a fractional zoom that is shrunk to a whole target', () => {
+    const p = renderPlan('high', 4.5, 1280, 768);
+    expect(p.ze).toBe(5);
+    expect(p.targetW).toBe(285 * 5);
+    expect(p.scaleX).toBeLessThan(1);
+    expect(p.dstW).toBe(Math.round(285 * 4.5));
+    expect(p.dstW).toBeGreaterThanOrEqual(1280);
+  });
+
+  it('always covers the canvas with a whole target, for any zoom', () => {
+    for (const q of ['high', 'balanced', 'fast'] as const) {
+      for (const z of [1, 2.857, 4.37, 5, 7.7, 12.63]) {
+        for (const [w, h] of [[1281, 767], [1, 1], [1920, 1080]]) {
+          const p = renderPlan(q, z, w, h);
+          const tag = `${q} ${z} ${w}x${h}`;
+          expect(Number.isInteger(p.targetW) && p.targetW >= 1, tag).toBe(true);
+          expect(Number.isInteger(p.targetH) && p.targetH >= 1, tag).toBe(true);
+          expect(p.dstW, tag).toBeGreaterThanOrEqual(w);
+          expect(p.dstH, tag).toBeGreaterThanOrEqual(h);
+          expect(p.dstX, tag).toBeLessThanOrEqual(0);
+          expect(p.dstY, tag).toBeLessThanOrEqual(0);
+          expect(p.dstX + p.dstW, tag).toBeGreaterThanOrEqual(w);
+          expect(p.dstY + p.dstH, tag).toBeGreaterThanOrEqual(h);
+        }
+      }
+    }
   });
 
   it('draws direct when ze equals zoom', () => {

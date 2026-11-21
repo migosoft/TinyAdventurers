@@ -403,7 +403,7 @@ export async function startHost(
     state.zoom = zoom;
     // While the view is being rebuilt the stage keeps stepping; only the drawing waits.
     const restoring = recovery.busy || !view;
-    const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom} · render ${plan.targetW}×${plan.targetH}`;
+    const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;
     if (text !== readout) {
       readout = text;
       panel.setReadout(text);

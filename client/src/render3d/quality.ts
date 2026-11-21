@@ -14,14 +14,12 @@ export function pickZoom(w: number, h: number): number {
   return Math.min(8, Math.max(2, z));
 }
 
-/** Render px per art px of the scene pass. */
+/** Render px per art px of the scene pass: a whole number >= 1 for any zoom > 0. */
 export function effZoom(q: Quality, zoom: number): number {
-  if (q === 'high') return zoom;
-  if (q === 'fast') return Math.min(2, zoom);
-  for (let d = Math.floor(zoom / 2); d >= 2; d--) {
-    if (zoom % d === 0) return d;
-  }
-  return Math.min(zoom, Math.max(2, Math.ceil(zoom / 2)));
+  const up = Math.ceil(zoom);
+  if (q === 'high') return up;
+  if (q === 'fast') return Math.min(2, up);
+  return Math.min(up, Math.max(2, Math.ceil(zoom / 2)));
 }
 
 export interface RenderPlan {
@@ -31,7 +29,8 @@ export interface RenderPlan {
   halfW: number; halfH: number;
   /** The picture's size in art px (one per 1/zoom of the canvas), the same in both modes: the shaft pass works at this size. */
   artW: number; artH: number;
-  linear: boolean;
+  /** Canvas px per target texel of the copy (1 when direct); a whole number filters nearest, a fraction linear. */
+  scaleX: number; scaleY: number;
   dstX: number; dstY: number; dstW: number; dstH: number;
 }
 
@@ -40,20 +39,24 @@ export function renderPlan(q: Quality, zoom: number, canvasW: number, canvasH: n
   const artW = Math.ceil(canvasW / zoom);
   const artH = Math.ceil(canvasH / zoom);
   const direct = ze === zoom;
-  const dstW = artW * zoom;
-  const dstH = artH * zoom;
+  const dstW = Math.round(artW * zoom);
+  const dstH = Math.round(artH * zoom);
+  const targetW = direct ? canvasW : Math.max(1, artW * ze);
+  const targetH = direct ? canvasH : Math.max(1, artH * ze);
+  const copyW = direct ? canvasW : dstW;
+  const copyH = direct ? canvasH : dstH;
   return {
     artW, artH,
     direct,
     ze,
-    targetW: direct ? canvasW : Math.max(1, artW * ze),
-    targetH: direct ? canvasH : Math.max(1, artH * ze),
+    targetW, targetH,
     halfW: direct ? canvasW / (32 * zoom) : artW / 32,
     halfH: direct ? canvasH / (32 * zoom) : artH / 32,
-    linear: zoom % ze !== 0,
+    scaleX: copyW / targetW,
+    scaleY: copyH / targetH,
     dstX: direct ? 0 : Math.floor((canvasW - dstW) / 2),
     dstY: direct ? 0 : Math.floor((canvasH - dstH) / 2),
-    dstW: direct ? canvasW : dstW,
-    dstH: direct ? canvasH : dstH,
+    dstW: copyW,
+    dstH: copyH,
   };
 }

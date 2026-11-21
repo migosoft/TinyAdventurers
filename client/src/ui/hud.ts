@@ -77,7 +77,7 @@ export function statsText(f: FrameStats): string {
     `objects    ${f.objects}\n` +
     `draw calls ${f.drawCalls}\n` +
     `canvas     ${f.canvas.w}x${f.canvas.h}${f.canvas.cssZoom === 1 ? '' : ` x${f.canvas.cssZoom} css`}\n` +
-    (r ? `render     ${r.w}x${r.h} (${r.quality})\nzoom       ${r.zoom}\nbackend    ${r.backend}\n` : '') +
+    (r ? `render     ${r.w}x${r.h} (${r.quality})\nzoom       ${r.zoom.toFixed(2)}\nbackend    ${r.backend}\n` : '') +
     `ping       ${f.rtt.toFixed(0)} ms\n` +
     `jitter     ${f.jitter.toFixed(1)} ms\n` +
     `interp     ${f.interp.toFixed(0)} ms\n` +

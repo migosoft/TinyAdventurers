@@ -110,7 +110,7 @@ export function parseParams(search: string): R3dParams {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
-    zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(ZOOM_MAX, Math.max(1, zoom)) : null,
+    zoom: zoom !== null ? Math.round(Math.min(ZOOM_MAX, Math.max(1, zoom)) * 100) / 100 : null,
     backend: q.get('backend') === 'webgl' ? 'webgl' : 'auto',
     shadows: q.get('shadows') === '0' ? false : DEFAULTS.shadows,
     orb: q.get('orb') === '0' ? false : DEFAULTS.orb,

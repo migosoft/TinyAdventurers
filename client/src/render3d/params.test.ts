@@ -45,7 +45,10 @@ describe('parseParams', () => {
     expect(parseParams('?pitch=5').pitch).toBe(30);
     expect(parseParams('?pitch=200').pitch).toBe(80);
     expect(parseParams('?zoom=99').zoom).toBe(ZOOM_MAX);
-    expect(parseParams('?zoom=1.5').zoom).toBeNull();
+    expect(parseParams('?zoom=4.5').zoom).toBe(4.5);
+    expect(parseParams('?zoom=0.3').zoom).toBe(1);
+    expect(parseParams('?zoom=x').zoom).toBeNull();
+    expect(parseParams('?zoom=4.567').zoom).toBe(4.57);
     expect(parseParams('?quality=ultra').quality).toBe('balanced');
     expect(parseParams('?yaw=720').yaw).toBe(0);
     expect(parseParams('?yaw=-190').yaw).toBe(170);
@@ -106,7 +109,7 @@ describe('toSearch', () => {
 
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
-      pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
+      pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 4.5, backend: 'webgl',
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'off', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
