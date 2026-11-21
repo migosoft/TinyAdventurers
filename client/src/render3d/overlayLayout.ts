@@ -57,8 +57,10 @@ export interface LayoutIn {
   dark: ReadonlySet<number>;
   /** A point in tiles on the canvas (device px): `y` the height above the floor in tiles (a foot on the bed of a dip is below 0). */
   at: (x: number, z: number, y: number) => { px: number; py: number };
-  /** Canvas px per art px. */
+  /** Canvas px per art px of the world: heights above the floor. */
   zoom: number;
+  /** Canvas px per art px of a label: sizes, gaps and rises of the overlay's own things (between limits, see `labelZoom`). */
+  label: number;
   /** The width in art px of `text` in style `kind`; optional (a rough estimate when missing). */
   measure?: (text: string, kind: WorldTextKind) => number;
 }
@@ -81,11 +83,11 @@ export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
     const a = i.anchors.get(e.id);
     if (!a || a.descending) continue;   // a falling or drowning figure has no bar or name
     const f = foot(i, a.x, a.z, a.y);
-    const x = Math.round(f.px - (look.w * i.zoom) / 2);
-    const y = Math.round(f.py - (a.height + BAR_GAP) * i.zoom);
+    const x = Math.round(f.px - (look.w * i.label) / 2);
+    const y = Math.round(f.py - (a.height * i.zoom + BAR_GAP * i.label));
     out.push({ t: 'bar', x, y, w: look.w, frac: e.hp, color: FILL[look.fill] });
     if (look.label) {
-      out.push({ t: 'text', x: f.px, y: Math.round(y - LABEL_GAP * i.zoom), text: look.label.text, kind: 'tag', color: look.label.color, stroke: '', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
+      out.push({ t: 'text', x: f.px, y: Math.round(y - LABEL_GAP * i.label), text: look.label.text, kind: 'tag', color: look.label.color, stroke: '', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
     }
   }
 }
@@ -102,11 +104,11 @@ export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
     out.push({ t: 'text', x: f.px, y, text: name, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: a.alpha, scale: 1, align: 'center', base: 'bottom' });
     // The symbols start ICON_GAP right of the tag's edge, centred on the tag's middle.
     const right = textWidth(i, name, 'tag') / 2 + ICON_GAP;
-    const midY = Math.round(y - ((WORLD_TEXT.tag.size * TAG_LINE) / 2) * i.zoom);
+    const midY = Math.round(y - ((WORLD_TEXT.tag.size * TAG_LINE) / 2) * i.label);
     let n = 0;
     for (const id of ICON_IDS) {
       if (!(a.effects & (1 << id))) continue;
-      out.push({ t: 'icon', x: Math.round(f.px + (right + n * (ICON_SIZE + ICON_STEP)) * i.zoom), y: midY, id });
+      out.push({ t: 'icon', x: Math.round(f.px + (right + n * (ICON_SIZE + ICON_STEP)) * i.label), y: midY, id });
       n++;
     }
   }
@@ -120,7 +122,7 @@ export function layoutTags(i: LayoutIn, tagOf: (e: EntState) => string | null, o
     const text = tagOf(e);
     if (text === null) continue;
     const f = foot(i, a.x, a.z, a.y);
-    out.push({ t: 'text', x: f.px, y: Math.round(f.py - (a.height + TAG_RISE) * i.zoom), text, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
+    out.push({ t: 'text', x: f.px, y: Math.round(f.py - (a.height * i.zoom + TAG_RISE * i.label)), text, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
   }
 }
 
@@ -135,7 +137,7 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
   out.push({ t: 'cap', x, y });
   if (h.label) {
     out.push({
-      t: 'text', x: Math.round(x + (CAP_SIZE / 2 + CAP_LABEL_GAP) * i.zoom), y: Math.round(y - (CAP_SIZE / 2) * i.zoom), text: h.label, kind: 'tag',
+      t: 'text', x: Math.round(x + (CAP_SIZE / 2 + CAP_LABEL_GAP) * i.label), y: Math.round(y - (CAP_SIZE / 2) * i.label), text: h.label, kind: 'tag',
       color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'left', base: 'middle',
     });
   }
@@ -199,11 +201,12 @@ export class Floats {
     }
   }
 
-  layout(at: LayoutIn['at'], zoom: number, out: OverlayItem[]): void {
+  /** `zoom`: the world's (the start height above the spot); `label`: the label's (the sideways spread and the rise). */
+  layout(at: LayoutIn['at'], zoom: number, label: number, out: OverlayItem[]): void {
     for (const f of this.list) {
       const p = at(f.x, f.z, 0);
       out.push({
-        t: 'text', x: Math.round(p.px + f.dx * zoom), y: Math.round(p.py + (f.rise - f.up) * zoom), text: f.text, kind: f.kind, color: f.color, stroke: f.stroke,
+        t: 'text', x: Math.round(p.px + f.dx * label), y: Math.round(p.py + f.rise * label - f.up * zoom), text: f.text, kind: f.kind, color: f.color, stroke: f.stroke,
         alpha: Math.min(1, (f.life / f.max) * 2), scale: f.pop ? popScale(f.age) : 1, align: 'center', base: 'bottom',
       });
     }
@@ -252,18 +255,23 @@ export class Marks {
     for (const id of this.states.keys()) if (!anchors.has(id)) this.states.delete(id);
   }
 
-  layout(at: LayoutIn['at'], zoom: number, out: OverlayItem[]): void {
-    const mark = (text: string, color: string, p: { px: number; py: number }, dx: number, up: number, alpha: number): void => {
-      out.push({ t: 'text', x: Math.round(p.px + dx * zoom), y: Math.round(p.py - up * zoom), text, kind: 'mark', color, stroke: SOUND_TEXT.stroke, alpha, scale: 1, align: 'center', base: 'bottom' });
+  /** `zoom`: the world's (the head height and the figure's `cx`); `label`: the label's (the Z's drift and rise, the "!" bounce). */
+  layout(at: LayoutIn['at'], zoom: number, label: number, out: OverlayItem[]): void {
+    // `dxWorld` and `dxLabel`: sideways art px by each zoom; `upWorld` and `upLabel`: upward art px by each zoom.
+    const mark = (text: string, color: string, p: { px: number; py: number }, dxWorld: number, dxLabel: number, upWorld: number, upLabel: number, alpha: number): void => {
+      out.push({
+        t: 'text', x: Math.round(p.px + dxWorld * zoom + dxLabel * label), y: Math.round(p.py - (upWorld * zoom + upLabel * label)), text, kind: 'mark', color,
+        stroke: SOUND_TEXT.stroke, alpha, scale: 1, align: 'center', base: 'bottom',
+      });
     };
     for (const s of this.states.values()) {
       for (const z of s.zs) {
         const k = z.age / Z_LIFE;
-        mark('Z', SOUND_TEXT.fill, at(z.x, z.z, z.y), 3 + Math.sin(z.age * 5) * 1.5, z.head + k * Z_RISE, (1 - k) * s.alpha);
+        mark('Z', SOUND_TEXT.fill, at(z.x, z.z, z.y), 0, 3 + Math.sin(z.age * 5) * 1.5, z.head, k * Z_RISE, (1 - k) * s.alpha);
       }
       const foot = at(s.x, s.z, s.y);
-      if (s.fear) mark('!', SOUND_TEXT.fill, foot, s.cx, s.head + 3 + Math.abs(Math.sin(this.clock * 9)) * 1.5, s.alpha);
-      if (s.charm) mark('♥', CHARM_COLOR, foot, s.cx + (s.fear ? 7 : 0), s.head + 3 + Math.abs(Math.sin(this.clock * 9 + 1)) * 1.5, s.alpha);
+      if (s.fear) mark('!', SOUND_TEXT.fill, foot, s.cx, 0, s.head, 3 + Math.abs(Math.sin(this.clock * 9)) * 1.5, s.alpha);
+      if (s.charm) mark('♥', CHARM_COLOR, foot, s.cx, s.fear ? 7 : 0, s.head, 3 + Math.abs(Math.sin(this.clock * 9 + 1)) * 1.5, s.alpha);
     }
   }
 }

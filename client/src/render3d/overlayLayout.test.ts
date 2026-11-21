@@ -20,7 +20,7 @@ const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => (
 const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, descending: false, effects: 0, y: 0, ...o });
 
 function input(ents: EntState[], anchors: [number, FigureAnchor][], o: Partial<LayoutIn> = {}): LayoutIn {
-  return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, dark: new Set(), at, zoom: ZOOM, ...o };
+  return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, dark: new Set(), at, zoom: ZOOM, label: ZOOM, ...o };
 }
 const bars = (i: LayoutIn): OverlayItem[] => {
   const out: OverlayItem[] = [];
@@ -206,7 +206,7 @@ describe('layoutUseHint', () => {
 const mid = () => 0.5;
 const floatItems = (f: Floats, a = at): OverlayItem[] => {
   const out: OverlayItem[] = [];
-  f.layout(a, ZOOM, out);
+  f.layout(a, ZOOM, ZOOM, out);
   return out;
 };
 
@@ -323,7 +323,7 @@ describe('Floats.addPicture', () => {
           : ({ t: 'Heal', x: 160, y: 110, v: 5, p: false } as PictureEv);
         f.addPicture(ev, { x: 0, y: 0 }, null);
         const out: OverlayItem[] = [];
-        f.layout(to, zoom, out);
+        f.layout(to, zoom, zoom, out);
         const foot = to(10, 7.5);
         const t = only(out, 'text')[0];
         expect(t.x).toBe(Math.round(foot.px));
@@ -349,9 +349,38 @@ describe('Floats.addPicture', () => {
 const sleeper = (o: Partial<FigureAnchor> = {}): [number, FigureAnchor][] => [[7, anchor({ effects: 1 << EFFECT.Sleep, ...o })]];
 const texts = (m: Marks): Of<'text'>[] => {
   const out: OverlayItem[] = [];
-  m.layout(at, ZOOM, out);
+  m.layout(at, ZOOM, ZOOM, out);
   return only(out, 'text');
 };
+
+describe('world and label zoom apart (#376)', () => {
+  it('a bar: the height by the world zoom, the gap and the width by the label zoom', () => {
+    const b = only(bars(input([ent(7, KIND.SkeletonWarrior)], [[7, anchor()]], { zoom: 10, label: 6 })), 'bar')[0];
+    const foot = at(5, 5);
+    expect(b.y).toBe(Math.round(foot.py - (20 * 10 + 3 * 6)));
+    expect(b.x).toBe(Math.round(foot.px - (12 * 6) / 2));
+  });
+  it('a hero tag: its height by the world zoom', () => {
+    const t = only(tags(input([ent(1, KIND.Wizard), ent(2, KIND.Paladin)], [[2, anchor()]], { zoom: 10, label: 6, heroNames: new Map([[2, 'Bob']]) })), 'text')[0];
+    expect(t.y).toBe(Math.round(at(5, 5).py - 23 * 10));
+  });
+  it('a float: the start height by the world zoom, the rise by the label zoom', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, '5', '#fff', { up: 14 });
+    f.update(0.1);
+    const out: OverlayItem[] = [];
+    f.layout(at, 10, 6, out);
+    const rise = (f as unknown as { list: { rise: number }[] }).list[0].rise;
+    expect(only(out, 'text')[0].y).toBe(Math.round(at(5, 5).py + rise * 6 - 14 * 10));
+  });
+  it('a sleep Z at age 0 sits head x zoom above the foot', () => {
+    const m = new Marks();
+    m.update(0.01, new Map(sleeper()), new Set());
+    const out: OverlayItem[] = [];
+    m.layout(at, 10, 6, out);
+    expect(only(out, 'text')[0].y).toBe(Math.round(at(5, 5).py - 18 * 10));
+  });
+});
 
 describe('Marks', () => {
   it('a sleeper gets a Z every 0.6 s, rising 10 art px over 1.2 s', () => {

@@ -560,17 +560,17 @@ export class RunView3d implements RunView {
     o.size(c.canvas.w, c.canvas.h);
     const items: OverlayItem[] = [];
     const i: LayoutIn = {
-      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: this.hidden, zoom: c.zoom,
+      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: this.hidden, zoom: c.zoom, label: c.labelZoom,
       at: (x, z, y) => toCanvas(cam, c.plan, c.zoom, x, y, z), measure: (t, k) => o.measure(t, k),
     };
     layoutBars(i, items);
     layoutHeroTags(i, items);
     if (this.tagOf) layoutTags(i, this.tagOf, items);
     layoutUseHint(i, items);
-    this.marks.layout(i.at, c.zoom, items);
-    this.floats.layout(i.at, c.zoom, items);
+    this.marks.layout(i.at, c.zoom, c.labelZoom, items);
+    this.floats.layout(i.at, c.zoom, c.labelZoom, items);
     this.overlayCount = items.length;
-    o.paint(items, c.zoom);
+    o.paint(items, c.labelZoom);
   }
 
   /** Items the overlay painted last frame (for `window.__r3d`). */

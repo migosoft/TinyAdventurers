@@ -42,8 +42,9 @@ export class Overlay3d {
     return w;
   }
 
-  /** Clears the layer and draws `items`; `zoom` is canvas px per art px. */
-  paint(items: readonly OverlayItem[], zoom: number): void {
+  /** Clears the layer and draws `items`; `label` is canvas px per art px of a label (every size drawn: bars, frames, fonts, strokes, cap, symbols). */
+  paint(items: readonly OverlayItem[], label: number): void {
+    const zoom = label;
     const ctx = this.ctx;
     if (!ctx) return;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
