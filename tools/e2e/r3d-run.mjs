@@ -145,7 +145,7 @@ try {
     console.log(`forest build: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, ${build.frames} frames, longest frame ${build.longest.toFixed(1)} ms`);
     await page.keyboard.press('F3');
   }
-  // ZOOM=far|near|start (#376): wheel over the canvas until the zoom stops changing, then check it against the limit.
+  // ZOOM=far|near|start (#376): send 40 wheel notches over the canvas, wait until the zoom is within 1 % of the limit, then check it.
   if (process.env.ZOOM) {
     const want = process.env.ZOOM;
     const [cw, ch] = await page.evaluate(() => { const c = document.querySelector('#game canvas.r3d'), d = window.devicePixelRatio || 1; return [Math.max(1, Math.round(c.clientWidth * d)), Math.max(1, Math.round(c.clientHeight * d))]; }); // the host's w, h
