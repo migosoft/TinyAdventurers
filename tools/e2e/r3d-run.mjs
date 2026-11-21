@@ -255,7 +255,10 @@ try {
   const before = await r3d();
   await page.keyboard.press('f');
   await page.keyboard.down('d');
+  // Hold D for 1 s and until two more frames were drawn: the far woodland takes about 1.7 s a frame in software, so a fixed second may hold no frame at all.
+  const fr0 = (await r3d()).frames;
   await page.waitForTimeout(1000);
+  await page.waitForFunction((n) => window.__r3d.frames >= n + 2, fr0, { timeout: 15000 }).catch(() => {});
   await page.keyboard.up('d');
   const after = await r3d();
   if (before.cam && after.cam) {
