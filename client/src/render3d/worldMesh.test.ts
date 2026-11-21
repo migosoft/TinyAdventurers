@@ -4,15 +4,15 @@ import { TileMap } from '../sim/map';
 import { MAP_ROWS, parseMap } from './demoMap';
 import { inDipMesh } from './dips/shape';
 import { WALL_H, heightAt } from './heights';
-import { CHUNK, KIND, buildChunk, chunkGrid, chunksOfTile, faceFrame, flatSurface, floorFrame, tileHash, type Chunk, type FrameRects } from './worldMesh';
+import { CHUNK, KIND, buildChunk as buildWithKit, chunkGrid, chunksOfTile, flatSurface, tileHash, type Chunk } from './worldMesh';
+import { stoneField } from './stone/field';
+import { noMarks } from './stone/place';
+import { planSheets } from './stone/plan';
 
-const NAMES = [
-  'floor_1', 'floor_2', 'floor_3', 'floor_4', 'floor_5', 'floor_6', 'floor_7', 'floor_8',
-  'wall_mid', 'wall_hole_1', 'wall_hole_2', 'wall_goo',
-  'wall_banner_red', 'wall_banner_blue', 'wall_banner_green', 'wall_banner_yellow',
-];
-const frames: FrameRects = {};
-NAMES.forEach((n, i) => { frames[n] = { x: 100 + i * 16, y: 200 + i * 32, w: 16, h: 16 }; });
+/** `buildChunk` as the view calls it: the stone kit of the map (all laid, the plan of its layout, no marks). The last argument is ignored (the pack's atlas frames are gone). */
+const buildChunk = (m: TileMap, painted: boolean, cx: number, cz: number, _frames?: unknown): Chunk =>
+  buildWithKit(m, painted, cx, cz, { field: stoneField(m), plan: planSheets(m), marks: noMarks() });
+const frames = {};
 
 type Q = { q: number; kind: number; normal: number[]; min: number[]; max: number[] };
 
@@ -200,13 +200,13 @@ describe('buildChunk', () => {
     }
   });
 
-  it('flatSurface gives the floor frame, or the painted ground', () => {
+  it('flatSurface gives a sheet floor with no rect, or the painted ground', () => {
     const t = TILE_ID;
     const m = mapOf(3, 1, [t.Floor, t.Chasm, t.Road]);
-    expect(flatSurface(m, false, 0, 0, frames)).toMatchObject({ kind: KIND.floor, rect: frames[floorFrame(0, 0)], u0: frames[floorFrame(0, 0)].x });
-    expect(flatSurface(m, true, 1, 0, frames).kind).toBe(KIND.floor);
-    expect(flatSurface(m, true, 2, 0, frames)).toEqual({ kind: KIND.ground, rect: { x: 0, y: 0, w: 48, h: 16 }, u0: 32, v0: 0 });
-    expect(flatSurface(m, false, 2, 0, frames).kind).toBe(KIND.floor);
+    expect(flatSurface(m, false, 0, 0)).toEqual({ kind: KIND.floor, rect: { x: 0, y: 0, w: 0, h: 0 }, u0: 0, v0: 0 });
+    expect(flatSurface(m, true, 1, 0).kind).toBe(KIND.floor);
+    expect(flatSurface(m, true, 2, 0)).toEqual({ kind: KIND.ground, rect: { x: 0, y: 0, w: 48, h: 16 }, u0: 32, v0: 0 });
+    expect(flatSurface(m, false, 2, 0).kind).toBe(KIND.floor);
   });
 
   it('DoorClosed and DoorOpen are floor', () => {
@@ -283,16 +283,23 @@ describe('buildChunk', () => {
     }
   });
 
-  it('puts the frame top row of a face at the top and spans 16 px per tile', () => {
-    const c = whole(['###', '#.#', '###']);
-    for (const f of quads(c, KIND.face)) {
-      const w = c.world;
-      let vt = Infinity, vb = -Infinity;
-      for (let i = f.q * 6; i < f.q * 6 + 6; i++) {
-        const y = w.position[i * 3 + 1], v = w.uv[i * 2 + 1];
-        if (y === f.max[1]) vt = v; else vb = v;
+  it('gives every vertex the stone attributes: the woodland ground has layer -1 and zero uv on stone vertices', () => {
+    const t = TILE_ID;
+    const m = mapOf(3, 1, [t.Floor, t.Wall, t.Void]);
+    const w = buildChunk(m, true, 0, 0, frames).world;
+    expect(w.sheet.length).toBe(w.count * 3);
+    expect(w.faceA.length).toBe(w.count * 3);
+    expect(w.faceB.length).toBe(w.count * 3);
+    expect(w.push.length).toBe(w.count * 2);
+    expect(w.index.length).toBe(w.count);
+    for (let i = 0; i < w.count; i++) {
+      if (w.kind[i] === KIND.ground) {
+        expect(w.sheet[i * 3 + 2]).toBe(-1);
+        expect(w.rect[i * 4 + 2]).toBeGreaterThan(0);
+      } else {
+        expect(w.rect[i * 4 + 2]).toBe(0);
+        expect(w.uv[i * 2]).toBe(0);
       }
-      expect(vb - vt).toBe(16);
     }
   });
 });
@@ -310,29 +317,7 @@ describe('chunksOfTile', () => {
   });
 });
 
-describe('frames', () => {
-  it('floorFrame and faceFrame are stable and in their shares', () => {
-    const N = 20000;
-    let f1 = 0, lowerOdd = 0, banner = 0, plainOdd = 0;
-    for (let i = 0; i < N; i++) {
-      const x = i % 200, z = Math.floor(i / 200);
-      expect(floorFrame(x, z)).toBe(floorFrame(x, z));
-      if (floorFrame(x, z) === 'floor_1') f1++;
-      else expect(/^floor_[2-8]$/.test(floorFrame(x, z))).toBe(true);
-      const side = i % 4;
-      if (faceFrame(x, z, side, 0, true) !== 'wall_mid') lowerOdd++;
-      if (faceFrame(x, z, side, 1, true).startsWith('wall_banner')) banner++;
-      if (faceFrame(x, z, side, 0, false) !== 'wall_mid' || faceFrame(x, z, side, 1, false) !== 'wall_mid') plainOdd++;
-    }
-    expect(f1 / N).toBeGreaterThan(0.92);
-    expect(f1 / N).toBeLessThan(0.94);
-    expect(lowerOdd / N).toBeGreaterThan(0.05);
-    expect(lowerOdd / N).toBeLessThan(0.07);
-    expect(banner / N).toBeGreaterThan(0.01);
-    expect(banner / N).toBeLessThan(0.02);
-    expect(plainOdd).toBe(0);
-  });
-
+describe('tileHash', () => {
   it('tileHash is in [0, 1) and deterministic', () => {
     for (let i = 0; i < 100; i++) {
       const h = tileHash(i, i * 3);

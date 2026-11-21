@@ -8,6 +8,8 @@ import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 import { dipMaterial } from './dips/dipNodes';
+import { unplanned } from './stone/plan';
+import { makeSheets } from './stone/sheets';
 import { airMaterials } from './air/airNodes';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
@@ -19,7 +21,9 @@ const lit = () => {
 };
 
 // The air's vertex layouts (airQuads.ts); the builders read the attributes from the geometry.
-const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['dip', 1], ['marks', 3]];
+const DIP_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['sheet', 3], ['dip', 1], ['marks', 3]];
+/** The stone sheets of the world and dip materials. */
+const sheets = () => makeSheets(unplanned(), { size: 4096, layers: 256 });
 const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 2], ['rgba', 4], ['kind', 1], ['sightXZ', 2]];
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
@@ -42,10 +46,10 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
   const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover });
   const air = airMaterials(l, sight, { sun: false, toward });
   return [
-    { name: 'world', m: worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, world: true },
+    { name: 'world', m: worldMaterial(l, t, t, sight, cover, sheets()).material, world: true },
     // The ground cover (#330): sheets and bushels end with the sight step.
     // The dips' ground (#324): floor above, bank rock below.
-    { name: 'dip', m: dipMaterial(t, t, 64, 64, l, t, sight, cover).material, world: true, attrs: DIP_ATTRS },
+    { name: 'dip', m: dipMaterial(l, t, sight, cover, sheets()).material, world: true, attrs: DIP_ATTRS },
     // The water's surface and the ceiling of its mirror pass (#345).
     { name: 'water', m: waterMaterial(l, sight, t, { w: 4, h: 3 }, toward).material, world: true },
     { name: 'ceiling', m: ceilingMaterial(l, sight), world: true },
@@ -113,7 +117,7 @@ describe('a world without a sun', () => {
       const t = new Texture();
       const toward = viewTowardUniform();
       const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
-      const ms = [worldMaterial(t, t, 64, 64, l, t, t, sight, cover).material, cardMaterial(t, 64, 64, l, toward, sight).material];
+      const ms = [worldMaterial(l, t, t, sight, cover, sheets()).material, cardMaterial(t, 64, 64, l, toward, sight).material];
       for (const m of ms) {
         const code = fragment(B, m, { compare: true });
         expect(code).not.toMatch(B === WGSLNodeBuilder ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/);

@@ -72,7 +72,12 @@ import { lichMaterials } from './lich/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
-import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
+import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type StoneKit, type WorldArrays } from './worldMesh';
+import { noMarks } from './stone/place';
+import { facesKey, groundNeeded, planSheets, unplanned, type SheetPlan } from './stone/plan';
+import { makeSheets, type Sheets } from './stone/sheets';
+import type { StoneJobResult } from './stone/stoneJob';
+import { stoneField } from './stone/field';
 import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
 import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
@@ -234,6 +239,10 @@ export interface View {
   tileChanged(x: number, z: number): void;
   /** Uploads the painted ground; throws GroundTooLargeError when it exceeds the device's texture limit. */
   setGround(img: GroundImage): void;
+  /** The stone sheets' plan and the sheets themselves (#380); null on the woodland. A tile change that moves a face replaces both (a new object each), which the paint job notices by identity. */
+  readonly stone: { readonly plan: SheetPlan; readonly sheets: Sheets } | null;
+  /** Writes the pages and faces the stone job finished into the sheets (one layer each is marked for upload). */
+  setStonePages(r: StoneJobResult): void;
   /** Builds the ground cover's meshes and uploads its image (#330); throws GroundTooLargeError above the device's texture limit. */
   setCover(r: CoverResult): void;
   /** Chunk meshes (world, dips, water, lava and its shimmer): all of them, and those three drew in the last frame. */
@@ -322,11 +331,22 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
 
   const atlas = new Texture(assets.image);
   pixelTexture(atlas);
-  // The same image, filtered linearly, for the smoothed ground.
-  const atlasLinear = new Texture(assets.image);
-  pixelTexture(atlasLinear);
-  atlasLinear.magFilter = LinearFilter;
-  atlasLinear.minFilter = LinearFilter;
+  // The stone sheets (#380): one plan and one pair of array textures per map layout. A woodland has none (its stone cells read layer -1: the flat stone colour).
+  const deviceLimits = (): { size: number; layers: number } => {
+    const b = renderer.backend as { isWebGPUBackend?: boolean; device?: { limits?: { maxTextureDimension2D: number; maxTextureArrayLayers: number } }; gl?: WebGL2RenderingContext };
+    if (b.isWebGPUBackend) return { size: b.device?.limits?.maxTextureDimension2D ?? 8192, layers: b.device?.limits?.maxTextureArrayLayers ?? 256 };
+    return { size: b.gl ? (b.gl.getParameter(b.gl.MAX_TEXTURE_SIZE) as number) : 4096, layers: b.gl ? (b.gl.getParameter(b.gl.MAX_ARRAY_TEXTURE_LAYERS) as number) : 256 };
+  };
+  /** New sheets for a plan, uploaded in full at once: a later `setPage` then marks only its layer (a layer update before the first upload would upload only that layer). */
+  const newSheets = (p: SheetPlan): Sheets => {
+    const s = makeSheets(p, deviceLimits());
+    renderer.initTexture(s.ground);
+    renderer.initTexture(s.wall);
+    return s;
+  };
+  let plan: SheetPlan = world.stone ? planSheets(map) : unplanned();
+  let sheets = newSheets(plan);
+  const kit: StoneKit = { field: world.stone ?? stoneField(map), plan, marks: noMarks() };
   const heights = new DataTexture(heightBytes(map), map.w, map.h, RedFormat, UnsignedByteType);
   heights.unpackAlignment = 1;
   pixelTexture(heights);
@@ -346,9 +366,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const sight = makeSight();
   // The ground cover (#330): a 1x1 stand-in with the layer off until `setCover` uploads the image.
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType));
-  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight, cover);
+  const wm = worldMaterial(lighting, groundStart, mask.texture, sight, cover, sheets);
   const material = wm.material;
-  const dm = dipMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, sight, cover);
+  const dm = dipMaterial(lighting, groundStart, sight, cover, sheets);
   // The water (#345). The field: the bed's height and the water's outline mask, half floats, filtered linearly (the lava light
   // texture is read the same way), kept up to date by `tileChanged`.
   const wField = waterField(map);
@@ -410,13 +430,18 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('normal', new BufferAttribute(a.normal, 3));
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
     g.setAttribute('rect', new BufferAttribute(a.rect, 4));
+    g.setAttribute('sheet', new BufferAttribute(a.sheet, 3));
+    g.setAttribute('faceA', new BufferAttribute(a.faceA, 3));
+    g.setAttribute('faceB', new BufferAttribute(a.faceB, 3));
+    g.setAttribute('push', new BufferAttribute(a.push, 2));
+    g.setIndex(new BufferAttribute(a.index, 1));
     const box = new Box3(
       new Vector3(cx * CHUNK, 0, cz * CHUNK),
       new Vector3(Math.min(map.w, cx * CHUNK + CHUNK), top, Math.min(map.h, cz * CHUNK + CHUNK)),
     );
     return finishMesh(g, box, material);
   };
-  /** The dip ground of a chunk: seven attributes (position, normal, uv, rect, kind, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
+  /** The dip ground of a chunk: eight attributes (position, normal, uv, rect, kind, sheet, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
   const makeDipMesh = (d: DipChunk): ChunkMesh => {
     const a = d.arrays;
     const g = new BufferGeometry();
@@ -425,6 +450,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('uv', new BufferAttribute(a.uv, 2));
     g.setAttribute('rect', new BufferAttribute(a.rect, 4));
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
+    g.setAttribute('sheet', new BufferAttribute(a.sheet, 3));
     g.setAttribute('dip', new BufferAttribute(a.dip, 1));
     g.setAttribute('marks', new BufferAttribute(a.marks, 3));
     g.setIndex(new BufferAttribute(a.index, 1));
@@ -492,11 +518,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const buildAt = (cx: number, cz: number, dips = true): void => {
     const i = cz * nx + cx;
     dropChunk(worldChunks, i);
-    const c = buildChunk(map, world.painted, cx, cz, assets.frames);
+    const c = buildChunk(map, world.painted, cx, cz, kit);
     if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H);
     if (!dips) return;
     dropChunk(dipChunks, i);
-    const d = buildDipChunk(map, world.painted, cx, cz, assets.frames);
+    const d = buildDipChunk(map, world.painted, cx, cz, kit.plan);
     if (d) dipChunks[i] = makeDipMesh(d);
     dropChunk(waterChunks, i);
     const w = buildWaterChunk(map, cx, cz);
@@ -509,6 +535,22 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const s = buildShimmerChunk(map, cx, cz);
     if (s) shimmerChunks[i] = makeShimmerMesh(s.position);
     lavaBoxes = null;
+  };
+  /** Per chunk: what its sheet layout depends on (its faces, and whether it has a ground page); `tileChanged` compares it. Empty on the woodland. */
+  const planKeyOf = (cx: number, cz: number): string => `${facesKey(map, cx, cz)}|${groundNeeded(map, cx, cz)}`;
+  const planKeys: string[] = world.stone ? Array.from({ length: nx * nz }, (_, i) => planKeyOf(i % nx, Math.floor(i / nx))) : [];
+  /** Plans and uploads new sheets for the map as it is now (a face appeared or went, or a chunk gained or lost its ground page); every chunk's layers move, so the caller rebuilds every chunk. Throws StoneTooLargeError before changing anything when the device cannot hold them. */
+  const replan = (): void => {
+    const p = planSheets(map);
+    const next = newSheets(p);
+    const old = sheets;
+    plan = p;
+    sheets = next;
+    kit.plan = p;
+    wm.setSheets(next);
+    dm.setSheets(next);
+    old.dispose();
+    for (let i = 0; i < planKeys.length; i++) planKeys[i] = planKeyOf(i % nx, Math.floor(i / nx));
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
   const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks];
@@ -847,7 +889,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         refreshWaterField(wField, map, x, z);
         uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       }
-      for (const [cx, cz] of chunksOfTile(map, x, z)) buildAt(cx, cz, dips);
+      const around = chunksOfTile(map, x, z);
+      // The stone sheets (#380): only a change of the faces, or of a chunk's ground page, moves the layout (a door opening or closing does not).
+      const moved = world.stone !== null && (cellHeight(was) !== cellHeight(map.tiles[cell]) || around.some(([cx, cz]) => planKeyOf(cx, cz) !== planKeys[cz * nx + cx]));
+      if (moved) {
+        replan();
+        for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
+      } else for (const [cx, cz] of around) buildAt(cx, cz, dips);
       rebuildField();
       chunks.total = chunkTotal();
     },
@@ -872,6 +920,14 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     setCover(r) {
       if (disposed || lost) return;
       coverLayer.set(r, textureLimit());
+    },
+    get stone() {
+      return world.stone ? { plan, sheets } : null;
+    },
+    setStonePages(r) {
+      if (disposed || lost || !world.stone) return;
+      for (const p of r.pages) sheets.setPage('ground', p.layer, p.px);
+      for (const f of r.faces) sheets.setFace(f.slot, f.px);
     },
     backend: be.isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
     get maxTexture() {
@@ -1184,7 +1240,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       disposed = true;
       try {
         atlas.dispose();
-        atlasLinear.dispose();
+        sheets.dispose();
         heights.dispose();
         groundStart.dispose();
         for (const t of groundTex) t.dispose();

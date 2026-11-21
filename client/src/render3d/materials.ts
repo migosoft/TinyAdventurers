@@ -1,7 +1,8 @@
 // Node materials of the 3D view (TSL).
 import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, clamp, mx_noise_float, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, mx_noise_float, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, normalize, positionGeometry, positionWorld, round, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { FACE_H, FACE_W, PAGE, SLOPES } from './stone/format';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
 import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
@@ -77,36 +78,115 @@ export interface WorldMaterial {
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
+  /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */
+  setSheets(sheets: SheetTextures): void;
 }
 
+/** The two stone sheets as textures (array textures; see `stone/sheets.ts`). */
+export interface SheetTextures { ground: Texture; wall: Texture }
+
 export interface FlatTexel {
-  /** The floor or ground texel (rgba) of the surface point. */
+  /** The surface texel (rgba) of the point: the stone (alpha 1) or the woodland's ground. */
   texel: N;
-  /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
+  /** The relief's slope as a world vector (dimensionless): the surface normal is the vertex normal minus it. Zero on flat texels and on the ground kind. */
+  bend: N;
+  /** 0 or 1: floors and the ground read the sheets at a sharpened position. */
   smooth: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
+  setSheets(sheets: SheetTextures): void;
+}
+
+/** Where the weights of a sheet read are rounded: the layer attribute is a float, -1 for "none". */
+const layerOf = (a: N): N => int(max(a.add(0.5), 0));
+
+/** The slope index (0..6) of a relief byte's three bits as a slope: the table's constants summed by 0/1 weights (a nested `select` would put the relief texel's first use in a branch). */
+const slopeOf = (i: N): N => {
+  let r: N = float(0);
+  for (let k = 0; k < SLOPES.length; k++) if (SLOPES[k] !== 0) r = r.add(weight(i.sub(k).abs().lessThan(0.5)).mul(SLOPES[k]));
+  return r;
+};
+
+/** The edge (px) beyond a slot's right or bottom edge a fragment may sit by float error: the slot is told from the point, biased this much toward the slot before it. */
+const SLOT_BIAS = 0.005;
+
+/**
+ * One read of a sheet at the px point `p` of layer `layer` (a float node; -1 gives layer 0 and the caller gives it weight 0), inside the
+ * page or slot [lo, hi] (px). The colour is read at the sharpened position (nearest when `smooth` is 0) clamped half a texel inside; the
+ * relief (alpha) at the texel's centre, so slopes and flags are never blended. All reads sit at the top level of the fragment code.
+ */
+function sheetRead(base: N, p: N, layer: N, lo: N, hi: N, smooth: N): { rgb: N; slope: N } {
+  const fw = max(fwidth(p), vec2(1e-6));
+  const seam = floor(p.add(0.5));
+  const sharp = seam.add(clamp(p.sub(seam).div(fw), -0.5, 0.5));
+  const centre = floor(p).add(0.5);
+  const inside = (q: N): N => clamp(q, lo.add(0.5), hi.sub(0.5)).div(PAGE);
+  const d = layerOf(layer);
+  const colour = base.sample(inside(mix(centre, sharp, smooth))).depth(d);
+  const relief = base.sample(inside(centre)).depth(d);
+  const a = round(relief.a.mul(255));
+  const sx = floor(a.div(8)).sub(floor(a.div(64)).mul(8));
+  const sy = a.sub(floor(a.div(8)).mul(8));
+  return { rgb: colour.rgb, slope: vec2(slopeOf(sx), slopeOf(sy)) };
 }
 
 /**
- * The texel code of a flat surface, shared by the world and the dip material: the atlas frame (`kind` 0, floor) or the painted ground
- * (`kind` > 2.5), read nearest or, with `smooth`, linear at a sharpened position. `kind` is the vertex attribute node. Each call makes its own uniforms.
+ * The texel code of a flat surface, shared by the world and the dip material: the stone sheets (`kind` floor, face or top) or the painted
+ * ground (`kind` > 2.5), read nearest or, with `smooth`, linear at a sharpened position. `kind` is the vertex attribute node. Each call makes its own uniforms.
+ *
+ * The stone: the vertex attribute `sheet` (ground u, v, layer) gives the ground read; with `faces` the attributes `faceA` and `faceB` (wall u, v,
+ * layer) give the two wall reads. Weights: the ground by `smoothstep(0.45, 0.75, normal.y)` (always 1 without `faces`), the walls by the squared
+ * horizontal normal; a layer of -1 has weight 0 and the rest is renormalised; with every weight 0 the colour is `STONE`.
  */
-export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, groundStart: Texture, kind: N): FlatTexel {
+export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, faces: boolean): FlatTexel {
   const isGround = kind.greaterThan(2.5);
-  const size = vec2(atlasW, atlasH);
   const p0 = uv();
   // Derivatives are taken here, at the top level of the fragment code and outside any branch (WGSL requires uniform control flow).
   const fw = max(fwidth(p0), vec2(1e-6));
   const seam = floor(p0.add(0.5));
   const sharp = seam.add(clamp(p0.sub(seam).div(fw), -0.5, 0.5));
   const rect = attribute('rect', 'vec4');
-  // The atlas has no padding: keep the linear taps inside the frame.
+  // Keep the linear taps inside the image.
   const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
   const smooth = uniform(0);
   const useSmooth = smooth.greaterThan(0.5);
   // Every read sits at the top level and float weights (exactly 0 or 1) pick among them: a `select` between texels can become an `if`, and sampling must stay in uniform control flow.
-  const atlasTexel = mix(texture(atlas, p0.div(size)), texture(linearAtlas, p.div(size)), weight(useSmooth.and(kind.lessThan(0.5))));
+
+  // The stone: one base texture node per sheet (the reads are clones that follow its value, so `setSheets` swaps them all).
+  const groundSheet = texture(sheets.ground), wallSheet = texture(sheets.wall);
+  const sheet = attribute('sheet', 'vec3');
+  const whole = { lo: vec2(0, 0), hi: vec2(PAGE, PAGE) };
+  const g = sheetRead(groundSheet, sheet.xy, sheet.z, whole.lo, whole.hi, smooth);
+  const wGround = faces ? smoothstep(0.45, 0.75, attribute('normal', 'vec3').y) : float(1);
+  const availG = weight(sheet.z.greaterThan(-0.5));
+  let stone: N, bend: N;
+  if (faces) {
+    const n = attribute('normal', 'vec3');
+    const slot = vec2(FACE_W, FACE_H);
+    const slotOf = (q: N): { lo: N; hi: N } => {
+      const lo = floor(q.sub(SLOT_BIAS).div(slot)).mul(slot);
+      return { lo, hi: lo.add(slot) };
+    };
+    const fa = attribute('faceA', 'vec3'), fb = attribute('faceB', 'vec3');
+    const sa = slotOf(fa.xy), sb = slotOf(fb.xy);
+    const a = sheetRead(wallSheet, fa.xy, fa.z, sa.lo, sa.hi, smooth);
+    const b = sheetRead(wallSheet, fb.xy, fb.z, sb.lo, sb.hi, smooth);
+    const nx2 = n.x.mul(n.x), nz2 = n.z.mul(n.z);
+    const across = float(1).sub(wGround);
+    const wG = wGround.mul(availG);
+    const wA = across.mul(nz2.div(max(nx2.add(nz2), 1e-4))).mul(weight(fa.z.greaterThan(-0.5)));
+    const wB = across.mul(nx2.div(max(nx2.add(nz2), 1e-4))).mul(weight(fb.z.greaterThan(-0.5)));
+    const total = wG.add(wA).add(wB);
+    const none = weight(total.lessThan(1e-4));
+    const k = float(1).div(max(total, 1e-4));
+    // The sheets' axes in the world: ground (+x, +z); the north/south wall plane (+x, down); the east/west one (+z, down).
+    const gradG = vec3(g.slope.x, 0, g.slope.y), gradA = vec3(a.slope.x, a.slope.y.negate(), 0), gradB = vec3(0, b.slope.y.negate(), b.slope.x);
+    stone = g.rgb.mul(wG.mul(k)).add(a.rgb.mul(wA.mul(k))).add(b.rgb.mul(wB.mul(k))).add(vec3(...STONE).mul(none));
+    bend = gradG.mul(wG.mul(k)).add(gradA.mul(wA.mul(k))).add(gradB.mul(wB.mul(k)));
+  } else {
+    stone = mix(vec3(...STONE), g.rgb, availG);
+    bend = vec3(g.slope.x, 0, g.slope.y).mul(availG);
+  }
 
   const groundReady = uniform(0);
   const groundNear = texture(groundStart, p0.div(max(rect.zw, vec2(1))));
@@ -117,28 +197,39 @@ export function flatTexel(atlas: Texture, linearAtlas: Texture, atlasW: number, 
   const groundTexel = mix(groundNear, groundLin, weight(useSmooth));
   const readyW = weight(groundReady.greaterThan(0.5));
   const ground = vec4(mix(vec3(...GRASS_FLAT), groundTexel.rgb, readyW), mix(float(1), groundTexel.a, readyW));
-  const texel = mix(atlasTexel, ground, weight(isGround));
+  const groundW = weight(isGround);
+  const bent = bend.mul(float(1).sub(groundW));
+  // The relief reads must sit at the top level too. A node is emitted where it is first used, and the bent normal's first use is inside the
+  // light loops, so the texel (built first, by the albedo) carries a zero term of it. The shader compiler drops the zero; the reads stay out of the loops.
+  const top = bent.x.add(bent.y).add(bent.z).mul(0);
+  const texel = vec4(mix(stone, ground.rgb, groundW).add(top), mix(float(1), ground.a, groundW));
   return {
     texel,
+    bend: bent,
     smooth,
     setGround(nearest, linear) {
       groundNear.value = nearest;
       groundLin.value = linear;
       groundReady.value = 1;
     },
+    setSheets(s) {
+      groundSheet.value = s.ground;
+      wallSheet.value = s.wall;
+    },
   };
 }
 
 /**
- * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower,
+ * Lit world material: the stone sheets for floors, faces and tops (`flatTexel`), a pale rim where a wall top drops to something lower,
  * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
- * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
+ * `smooth` (0 or 1) switches floor and ground to a sharpened linear read; it is a uniform, so flipping it recompiles nothing.
+ * The vertex attribute `push` (tiles, xz) moves the point where the light and the sight mask are read.
  */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared): WorldMaterial {
+export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight, cover: CoverShared, sheets: SheetTextures): WorldMaterial {
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
   const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
-  const { texel, smooth, setGround } = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
+  const { texel, bend, smooth, setGround, setSheets } = flatTexel(sheets, groundStart, kind, true);
 
   const wp = positionWorld;
   const cx = floor(wp.x);
@@ -152,13 +243,12 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
     .or(fx.lessThan(PX).and(lower(-1, 0)))
     .or(fx.greaterThan(1 - PX).and(lower(1, 0)));
 
-  const top = select(rim, vec3(...RIM), vec3(...STONE));
   // The texel comes first, by a weight (exactly 0 or 1): a `select` here could hold its first use in a branch.
-  const base = mix(texel.rgb, top, weight(isTop));
+  const base = mix(texel.rgb, vec3(...RIM), weight(isTop.and(rim)));
   // Ground cover (#330): floor and ground darken where cover stands (the sheets and bushels show on it); with the layer off they show the cover's colour flat.
   const grown = coverTexel(cover, floor(wp.xz.mul(16)));
   const covered = isTop.or(isFace).not().and(grown.h.greaterThan(0.5));
-  // Mixed by weights (exactly 0 or 1), with `base` first: the atlas samples and their `fwidth` stay at the top level, outside any `if`.
+  // Mixed by weights (exactly 0 or 1), with `base` first: the sheet samples and their `fwidth` stay at the top level, outside any `if`.
   const coverW = weight(covered);
   const darkenW = weight(cover.on.greaterThan(0.5));
   const albedo = mix(base, mix(grown.rgb, base.mul(kindLook(grown.id).darken), darkenW), coverW);
@@ -166,12 +256,17 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   // the lights hang below it, and the test would cut ragged wedges into it. So the walls around a lit room show as a stone band,
   // also from behind, where no brick face points at the camera (#342).
   const wrap = select(isTop, float(TOP_WRAP), select(isFace, float(0.5), float(0.35)));
-  const normal = attribute('normal', 'vec3');
+  const vertexNormal = attribute('normal', 'vec3');
+  // The relief bends the vertex normal along the sheets' axes (flat texels: not at all); the sight below keeps the vertex normal.
+  const normal = normalize(vertexNormal.sub(bend));
+  // The light and the sight mask are read at the point moved by `push` (a rock slope reads the light of the open cell beside it).
+  const push = attribute('push', 'vec2');
+  const wpLight = wp.add(vec3(push.x, 0, push.y));
   // The sun (#306): the shadow map is read a hair off the surface, and the cosine term wraps like the point lights'.
   const sun = lighting.sun;
-  const lit = lighting.lightAt(wp, normal, wrap, { open: isTop, sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
+  const lit = lighting.lightAt(wpLight, normal, wrap, { open: isTop, sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
   // Sight (#305): a wall face is seen where the floor at its foot is: its point pushed out along the normal. Floors, ground and tops have an upright normal and read their own point.
-  const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
+  const unseen = sight.unseenAt(wpLight.xz.add(vertexNormal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
   const see = seeUniforms();
@@ -179,7 +274,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const open = onWall.and(seeOpenNode(maskTex, wp, see));
 
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
+  m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wpLight, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
     material: m,
@@ -188,6 +283,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
     },
     smooth,
     setGround,
+    setSheets,
   };
 }
 

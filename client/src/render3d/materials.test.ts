@@ -6,7 +6,12 @@ import { makeSight } from './sightNodes';
 import { makeSunLight } from './sunNodes';
 import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { makeCoverShared } from './cover/coverRead';
+import { unplanned } from './stone/plan';
+import { makeSheets } from './stone/sheets';
 import { fragment, readsInBranches, type Builder } from './shaderCode.testutil';
+
+/** The stone sheets of a one-page plan: what the view gives the materials. */
+const sheets = () => makeSheets(unplanned(), { size: 4096, layers: 256 });
 
 type Opts = { self?: unknown; darkOnly?: unknown; sun?: unknown } | undefined;
 /** A stub `Lighting` that records the options `lightAt` was called with. */
@@ -73,7 +78,7 @@ describe('cardMaterial', () => {
 describe('worldMaterial', () => {
   it('passes no shade options to the light, only the sun', () => {
     const { lighting, calls } = stub();
-    worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture(), makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1)));
+    worldMaterial(lighting, new Texture(), new Texture(), makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1)), sheets());
     expect(calls).toHaveLength(1);
     expect(calls[0]?.self).toBeUndefined();
     expect(calls[0]?.darkOnly).toBeUndefined();
@@ -85,15 +90,24 @@ describe('worldMaterial shader code', () => {
   /** The world mesh's vertex layout. */
   const geometry = (): BufferGeometry => {
     const g = new BufferGeometry();
-    for (const [n, s] of [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1]] as [string, number][]) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
+    for (const [n, s] of [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['sheet', 3], ['faceA', 3], ['faceB', 3], ['push', 2]] as [string, number][]) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
     return g;
   };
+  const build = () => {
+    const t = new Texture();
+    const l = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
+    return worldMaterial(l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1)), sheets()).material;
+  };
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
-    it(`${B.name}: no atlas or ground sample and no derivative sits in a branch`, () => {
-      const t = new Texture();
-      const l = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
-      const m = worldMaterial(t, t, 64, 64, l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1))).material;
-      expect(readsInBranches(fragment(B, m, { geometry: geometry() }))).toEqual([]);
+    it(`${B.name}: no sheet or ground sample and no derivative sits in a branch`, () => {
+      expect(readsInBranches(fragment(B, build(), { geometry: geometry() }))).toEqual([]);
+    });
+
+    it(`${B.name}: the code builds and samples the ground sheet and the wall sheet, not an atlas pair`, () => {
+      const code = fragment(B, build(), { geometry: geometry() });
+      // Two array textures are bound (ground and wall); the old atlas pair was two plain 2D textures of the pack's size.
+      const arrays = B === GLSLNodeBuilder ? code.match(/uniform\s+(?:highp\s+)?sampler2DArray\s+\w+/g) : code.match(/texture_2d_array<f32>/g);
+      expect(arrays?.length).toBe(2);
     });
   }
 });

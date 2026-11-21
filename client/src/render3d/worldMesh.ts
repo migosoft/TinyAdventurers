@@ -2,25 +2,40 @@ import { WALL_H, heightAt } from './heights';
 import { isTerrain, type TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
+import { CHUNK, KIND, chunkGrid } from './stone/grid';
+import { buildStoneChunk } from './stone/mesh';
+import type { StoneField } from './stone/field';
+import type { Marks } from './stone/place';
+import type { SheetPlan } from './stone/plan';
+
+export { CHUNK, KIND, chunkGrid };
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
 
-export const CHUNK = 16;
-
-export const KIND = { floor: 0, face: 1, top: 2, ground: 3 } as const;
-
-/** Per vertex: position (tiles), uv (atlas px), normal, kind, rect (the atlas frame the uv lies in). 6 vertices per quad. */
+/**
+ * Per vertex: position (tiles), uv and rect (the woodland ground's image px and whole-image rect; zero on stone vertices), normal, kind, the
+ * stone attributes (`sheet`, `faceA`, `faceB` as 3 values each, `push` as 2: see `stone/mesh.ts`; the woodland ground has layer -1) and an index.
+ * 6 vertices per quad.
+ */
 export interface WorldArrays {
   position: Float32Array;
   uv: Float32Array;
   normal: Float32Array;
   kind: Float32Array;
   rect: Float32Array;
+  sheet: Float32Array;
+  faceA: Float32Array;
+  faceB: Float32Array;
+  push: Float32Array;
+  index: Uint32Array;
   count: number;
 }
 
 export interface Chunk { cx: number; cz: number; world: WorldArrays; min: [number, number, number]; max: [number, number, number] }
+
+/** What the stone cells of a chunk are built from. */
+export interface StoneKit { field: StoneField; plan: SheetPlan; marks: Marks }
 
 export function tileHash(x: number, z: number): number {
   let n = (Math.imul(x, 374761393) + Math.imul(z, 668265263)) | 0;
@@ -54,13 +69,9 @@ export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [n
   }
 }
 
-export function chunkGrid(map: { w: number; h: number }): { nx: number; nz: number } {
-  return { nx: Math.ceil(map.w / CHUNK), nz: Math.ceil(map.h / CHUNK) };
-}
-
 /**
- * The chunk of the cell and those of its eight neighbours (a face's `straight` flag and the terrain edges read the diagonal
- * cells) where they differ and lie inside the grid; no duplicates.
+ * The chunk of the cell and those of its eight neighbours (a face's `straight` flag and the terrain edges
+ * read the diagonal cells) where they differ and lie inside the grid; no duplicates.
  */
 export function chunksOfTile(map: { w: number; h: number }, x: number, z: number): [cx: number, cz: number][] {
   const { nx, nz } = chunkGrid(map);
@@ -73,100 +84,60 @@ export function chunksOfTile(map: { w: number; h: number }, x: number, z: number
   return out;
 }
 
-/** The floor frame of a cell: floor_1 for 93 %, the other seven share the rest (the same tile hash the wall autotiling uses). */
-export function floorFrame(x: number, z: number): string {
-  const h = tileHash(x, z);
-  return h < 0.93 ? 'floor_1' : `floor_${2 + Math.floor(h * 1000) % 7}`;
-}
-
-const BANNERS = ['wall_banner_red', 'wall_banner_blue', 'wall_banner_green', 'wall_banner_yellow'];
-
-/** Which frame a face quad shows. `side`: 0 south, 1 north, 2 east, 3 west; `row`: 0 the lower tile, 1 the upper. */
-export function faceFrame(x: number, z: number, side: number, row: number, straight: boolean): string {
-  if (!straight) return 'wall_mid';
-  if (row === 0) {
-    const q = tileHash(x * 4 + side + 91, z + 17);
-    return q < 0.025 ? 'wall_hole_1' : q < 0.045 ? 'wall_hole_2' : q < 0.06 ? 'wall_goo' : 'wall_mid';
-  }
-  const q = tileHash(x + 31, z * 4 + side + 7);
-  return q < 0.015 ? BANNERS[Math.floor(q * 4000) % 4] : 'wall_mid';
-}
-
 /**
- * What a height-0 cell shows where it is flat: the painted ground (kind ground, the whole image as rect) on a painted map's
- * GROUND_TILES, else floorFrame(x, z) (kind floor). Terrain cells take the floor frame. (u0, v0) is the uv of the cell's corner (x, z).
+ * What a height-0 cell shows where it is flat: the painted ground (kind ground, the whole image as rect) on a painted map's GROUND_TILES,
+ * else a stone sheet's floor (kind floor, no rect). Terrain cells take the floor kind. (u0, v0) is the uv of the cell's corner (x, z).
  */
-export function flatSurface(m: TileMap, painted: boolean, x: number, z: number, frames: FrameRects): { kind: number; rect: Rect; u0: number; v0: number } {
+export function flatSurface(m: TileMap, painted: boolean, x: number, z: number): { kind: number; rect: Rect; u0: number; v0: number } {
   const t = m.get(x, z);
   if (painted && !isTerrain(t) && GROUND_TILES.has(t)) {
     return { kind: KIND.ground, rect: { x: 0, y: 0, w: m.w * 16, h: m.h * 16 }, u0: x * 16, v0: z * 16 };
   }
-  const r = frames[floorFrame(x, z)];
-  if (!r) throw new Error(`atlas frame missing: ${floorFrame(x, z)}`);
-  return { kind: KIND.floor, rect: r, u0: r.x, v0: r.y };
+  return { kind: KIND.floor, rect: NO_RECT, u0: 0, v0: 0 };
 }
 
-/** Floor, ground, faces and tops of the cells x in [16cx, min(w, 16cx+16)), z likewise. `painted`: the run has a woodland. */
-export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): Chunk {
+/**
+ * The woodland's ground quads, then the stone cells (`buildStoneChunk`), of the cells x in [16cx, min(w, 16cx+16)), z likewise.
+ * `painted`: the run has a woodland. One vertex layout for both, because one material draws them.
+ */
+export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, kit: StoneKit): Chunk {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(m.w, x0 + CHUNK), z1 = Math.min(m.h, z0 + CHUNK);
   const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [], rect: number[] = [];
-  const frame = (name: string): Rect => {
-    const r = frames[name];
-    if (!r) throw new Error(`atlas frame missing: ${name}`);
-    return r;
-  };
+  const isGround = (x: number, z: number): boolean => flatSurface(m, painted, x, z).kind === KIND.ground;
 
-  const quad = (c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number, r: Rect) => pushQuad({ position, uv, normal, kind, rect }, c, n, k, r);
-
-  /** Faces of a wall cell on one side, one quad per tile of height; (ax,az) is the left edge end seen from outside. */
-  const side = (h: number, hn: number, ax: number, az: number, bx: number, bz: number, n: [number, number, number], pick: (k: number) => string) => {
-    for (let k = Math.floor(hn); k < h; k++) {
-      const lo = Math.max(hn, k), hi = Math.min(h, k + 1);
-      if (hi <= lo) continue;
-      const r = frame(pick(k));
-      const vt = r.y + (k + 1 - hi) * 16, vb = r.y + (k + 1 - lo) * 16;
-      quad([[ax, hi, az, r.x, vt], [bx, hi, bz, r.x + 16, vt], [bx, lo, bz, r.x + 16, vb], [ax, lo, az, r.x, vb]], n, KIND.face, r);
-    }
-  };
-
-  // dx, dz of the neighbour, then the left (ax, az) and right (bx, bz) edge end offsets seen from outside.
-  const sideDefs: [number, number, number, number, number, number][] = [
-    [0, 1, 0, 1, 1, 1],
-    [0, -1, 1, 0, 0, 0],
-    [1, 0, 1, 1, 1, 0],
-    [-1, 0, 0, 0, 0, 1],
-  ];
-  const fullFace = (x: number, z: number, s: number) => heightAt(m, x, z) === WALL_H && heightAt(m, x + sideDefs[s][0], z + sideDefs[s][1]) === 0;
-
-  for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
-    const h = heightAt(m, x, z);
-    if (h === 0) {
-      if (inDipMesh(m, x, z)) continue;
-      const f = flatSurface(m, painted, x, z, frames), r = f.rect;
-      quad([[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind, r);
-      continue;
-    }
-    quad([[x, h, z, 0, 0], [x + 1, h, z, 0, 0], [x + 1, h, z + 1, 0, 0], [x, h, z + 1, 0, 0]], [0, 1, 0], KIND.top, NO_RECT);
-    for (let s = 0; s < 4; s++) {
-      const d = sideDefs[s];
-      const hn = heightAt(m, x + d[0], z + d[1]);
-      if (hn >= h) continue;
-      // beside along the wall: east and west for sides 0 and 1, north and south for sides 2 and 3
-      const [bx, bz] = s < 2 ? [1, 0] : [0, 1];
-      const straight = fullFace(x + bx, z + bz, s) && fullFace(x - bx, z - bz, s);
-      side(h, hn, x + d[2], z + d[3], x + d[4], z + d[5], [d[0], 0, d[1]], (k) => faceFrame(x, z, s, k, straight));
+  if (painted) {
+    const sink = { position, uv, normal, kind, rect };
+    for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
+      if (heightAt(m, x, z) !== 0 || inDipMesh(m, x, z) || !isGround(x, z)) continue;
+      const f = flatSurface(m, painted, x, z);
+      pushQuad(sink, [[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind, f.rect);
     }
   }
-
+  const groundCount = kind.length;
+  const s = buildStoneChunk(m, kit.field, kit.plan, kit.marks, cx, cz, painted ? isGround : undefined);
+  const count = groundCount + s.count;
+  const cat = (a: number[], b: Float32Array, per: number, fill: number[]): Float32Array => {
+    const out = new Float32Array(count * per);
+    out.set(a);
+    out.set(b, groundCount * per);
+    if (fill.length) for (let i = 0; i < groundCount; i++) out.set(fill, i * per);
+    return out;
+  };
+  const NONE3 = [0, 0, -1];
   return {
     cx, cz,
     world: {
-      position: new Float32Array(position),
-      uv: new Float32Array(uv),
-      normal: new Float32Array(normal),
-      kind: new Float32Array(kind),
-      rect: new Float32Array(rect),
-      count: kind.length,
+      position: cat(position, s.position, 3, []),
+      uv: cat(uv, new Float32Array(s.count * 2), 2, []),
+      normal: cat(normal, s.normal, 3, []),
+      kind: cat(kind, s.kind, 1, []),
+      rect: cat(rect, new Float32Array(s.count * 4), 4, []),
+      sheet: cat([], s.sheet, 3, NONE3),
+      faceA: cat([], s.faceA, 3, NONE3),
+      faceB: cat([], s.faceB, 3, NONE3),
+      push: cat([], s.push, 2, []),
+      index: Uint32Array.from({ length: count }, (_, i) => i),
+      count,
     },
     min: [x0, 0, z0],
     max: [x1, WALL_H, z1],

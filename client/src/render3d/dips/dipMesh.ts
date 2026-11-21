@@ -1,6 +1,8 @@
 import type { TileMap } from '../../sim/map';
 import { cellHeight } from '../heights';
-import { CHUNK, flatSurface, type FrameRects } from '../worldMesh';
+import { CHUNK, KIND, flatSurface } from '../worldMesh';
+import { STONE_PX } from '../stone/field';
+import type { SheetPlan } from '../stone/plan';
 import { TILE_ID } from '../../generated/defs';
 import { GROUND_TILES } from '../../game/woodland/ground';
 import { bedAt, dipOf, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
@@ -14,6 +16,8 @@ export interface DipArrays {
   uv: Float32Array;
   rect: Float32Array;
   kind: Float32Array;
+  /** The ground sheet's u, v (px) and layer of the vertex's world point (layer -1: no ground page, as on the woodland); the dip ground reads the stone through it. */
+  sheet: Float32Array;
   /** The DipKind at each vertex: which bank material it takes. */
   dip: Float32Array;
   /**
@@ -43,10 +47,11 @@ export function dipClassChanged(a: number, b: number): boolean {
   return dipOf(a) !== dipOf(b) || (a === TILE_ID.DeepWater) !== (b === TILE_ID.DeepWater) || cellHeight(a) !== cellHeight(b) || GROUND_TILES.has(a) !== GROUND_TILES.has(b);
 }
 
-/** The ground of the dip cells of chunk (cx, cz), or null when it has none. */
-export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): DipChunk | null {
+/** The ground of the dip cells of chunk (cx, cz), or null when it has none. `plan` gives the chunk's ground page. */
+export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: number, plan: SheetPlan): DipChunk | null {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
-  const position: number[] = [], normal: number[] = [], uv: number[] = [], rect: number[] = [], kind: number[] = [], dip: number[] = [], marks: number[] = [];
+  const layer = plan.groundOf(cx, cz);
+  const position: number[] = [], normal: number[] = [], uv: number[] = [], rect: number[] = [], kind: number[] = [], sheet: number[] = [], dip: number[] = [], marks: number[] = [];
   const index: number[] = [];
   const min: [number, number, number] = [Infinity, Infinity, Infinity], max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   const R = DIP_RES, N = R + 1, G = R + 3;
@@ -54,7 +59,7 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
 
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     if (!inDipMesh(map, x, z)) continue;
-    const s = flatSurface(map, painted, x, z, frames);
+    const s = flatSurface(map, painted, x, z);
     const r = s.rect;
     const push = (px: number, py: number, pz: number, n: [number, number, number]) => {
       position.push(px, py, pz);
@@ -62,6 +67,7 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
       uv.push(s.u0 + (px - x) * 16, s.v0 + (pz - z) * 16);
       rect.push(r.x, r.y, r.w, r.h);
       kind.push(s.kind);
+      sheet.push((px - x0) * STONE_PX, (pz - z0) * STONE_PX, s.kind === KIND.ground ? -1 : layer);
       const chasm = maskAt(map, px, pz, isChasm);
       dip.push(kindOf(maskAt(map, px, pz, isWater), maskAt(map, px, pz, isLava), chasm));
       marks.push(chasm, 0, 0);
@@ -111,7 +117,7 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
     cx, cz,
     arrays: {
       position: new Float32Array(position), normal: new Float32Array(normal), uv: new Float32Array(uv),
-      rect: new Float32Array(rect), kind: new Float32Array(kind), dip: new Float32Array(dip), marks: new Float32Array(marks),
+      rect: new Float32Array(rect), kind: new Float32Array(kind), sheet: new Float32Array(sheet), dip: new Float32Array(dip), marks: new Float32Array(marks),
       index: new Uint32Array(index), count: kind.length,
     },
     min, max,

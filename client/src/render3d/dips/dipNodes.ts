@@ -6,10 +6,10 @@
 // along walls. The numbers are first guesses from the mockup, to be tuned by eye.
 import type { NodeMaterial, Texture } from 'three/webgpu';
 import { MeshBasicNodeMaterial } from 'three/webgpu';
-import { Fn, If, abs, attribute, exp, float, floor, fract, max, min, mix, positionWorld, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, If, abs, attribute, exp, float, floor, fract, max, min, mix, normalize, positionWorld, sign, smoothstep, sqrt, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
-import { flatTexel, weight } from '../materials';
+import { flatTexel, weight, type SheetTextures } from '../materials';
 import { coverTexel, kindLook, type CoverShared } from '../cover/coverRead';
 import { fbm2, hash21, vnoise2 } from '../noiseNodes';
 import { LAVA_LEVEL, OUTLINE_EDGE } from './shape';
@@ -143,17 +143,20 @@ export interface DipMaterial {
   time: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
+  /** Points the stone reads at new sheets. */
+  setSheets(sheets: SheetTextures): void;
 }
 
 /**
  * The dip ground: `mix(floor texel, rock, bank)` by the depth below the floor, lit with `lightAt` (the lava's own glow is not a term of it: the
  * material draws a band of it at the lava's level), then the sight step. Opaque. `time` drives the band.
  */
-export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, sight: Sight, cover: CoverShared): DipMaterial {
+export function dipMaterial(lighting: Lighting, groundStart: Texture, sight: Sight, cover: CoverShared, sheets: SheetTextures): DipMaterial {
   const kind = attribute('kind', 'float');
   const dip = attribute('dip', 'float');
   const normal = attribute('normal', 'vec3');
-  const flat = flatTexel(atlas, linearAtlas, atlasW, atlasH, groundStart, kind);
+  // The floor above the lip reads the ground sheet through the vertex attribute `sheet` (no wall reads: the skirts read the ground too).
+  const flat = flatTexel(sheets, groundStart, kind, false);
   const time = uniform(0);
 
   const wp = positionWorld;
@@ -248,7 +251,7 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
   const rock = mix(mix(waterRock, lavaRock, lavaW), chasmRock, chasmW);
   const albedo = mix(byChasm, rock, bank);
 
-  const lit = lighting.lightAt(wp, normal, WRAP);
+  const lit = lighting.lightAt(wp, normalize(normal.sub(flat.bend)), WRAP);
   const base = lighting.finish(albedo, lit).add(ember);
 
   // The lava's glowing band at its own level, and the chasm's cool self-light, then its fade with depth (the twin of `depthFade`).
@@ -263,5 +266,5 @@ export function dipMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number
 
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(sight.apply(colour, wp, sight.unseenAt(wp.xz)), 1);
-  return { material: m, smooth: flat.smooth, time, setGround: flat.setGround };
+  return { material: m, smooth: flat.smooth, time, setGround: flat.setGround, setSheets: flat.setSheets };
 }

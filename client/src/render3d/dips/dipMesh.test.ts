@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { CHUNK, floorFrame, type FrameRects } from '../worldMesh';
-import { DIP_RES, buildDipChunk, dipClassChanged, type DipChunk } from './dipMesh';
+import { CHUNK, KIND } from '../worldMesh';
+import { planSheets } from '../stone/plan';
+import { DIP_RES, buildDipChunk as buildWithPlan, dipClassChanged, type DipChunk } from './dipMesh';
 import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
 
-const frames: FrameRects = {};
-for (let i = 1; i <= 8; i++) frames[`floor_${i}`] = { x: 100 + i * 16, y: 200 + i * 32, w: 16, h: 16 };
+/** `buildDipChunk` as the view calls it, with the plan of the map's own layout. The last argument is ignored (the pack's atlas frames are gone). */
+const buildDipChunk = (m: TileMap, painted: boolean, cx: number, cz: number, _frames?: unknown): DipChunk | null => buildWithPlan(m, painted, cx, cz, planSheets(m));
+const frames = {};
 
 const CH: Record<string, number> = { '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, C: TILE_ID.Chasm, L: TILE_ID.Lava };
 const filled = (w: number, h: number, id = TILE_ID.Floor) => new TileMap(w, h, new Uint8Array(w * h).fill(id));
@@ -119,25 +121,14 @@ describe('buildDipChunk', () => {
   it('carries the floor of its cell', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
     const c = buildDipChunk(m, false, 0, 0, frames)!;
-    const { position: p, uv, rect } = c.arrays;
+    const { position: p, rect, kind, sheet } = c.arrays;
+    expect(sheet.length).toBe(c.arrays.count * 3);
     for (let v = 0; v < c.arrays.count; v++) {
-      const r = frames[floorFrame(Math.min(Math.floor(p[v * 3]), 8), Math.min(Math.floor(p[v * 3 + 2]), 8))];
-      // a vertex on a cell edge belongs to the cell it was built for; test the rect of any of the (up to four) cells
-      const cx = Math.floor(p[v * 3] - 1e-6), cz = Math.floor(p[v * 3 + 2] - 1e-6);
-      const options = [[cx, cz], [cx + 1, cz], [cx, cz + 1], [cx + 1, cz + 1]].map(([x, z]) => frames[floorFrame(x, z)]);
-      const mine = options.find((o) => o.x === rect[v * 4] && o.y === rect[v * 4 + 1]);
-      expect(mine, `vertex ${v}`).toBeDefined();
-      expect(rect[v * 4 + 2]).toBe(16);
-      expect(uv[v * 2]).toBeGreaterThanOrEqual(mine!.x - 1e-4);
-      expect(uv[v * 2]).toBeLessThanOrEqual(mine!.x + 16 + 1e-4);
-      expect(uv[v * 2 + 1]).toBeGreaterThanOrEqual(mine!.y - 1e-4);
-      expect(uv[v * 2 + 1]).toBeLessThanOrEqual(mine!.y + 16 + 1e-4);
-      void r;
+      // stone: the floor kind with no atlas rect; the ground sheet's texel of the vertex's world point in the chunk's page
+      expect(kind[v]).toBe(KIND.floor);
+      expect(rect[v * 4 + 2]).toBe(0);
+      expect([sheet[v * 3], sheet[v * 3 + 1], sheet[v * 3 + 2]]).toEqual([p[v * 3] * 32, p[v * 3 + 2] * 32, 0]);
     }
-    // the chasm cell takes its own floor frame
-    const r = frames[floorFrame(4, 4)];
-    const first = V * 4; // cells are built in row order: (3,3) (4,3) (5,3) (3,4) (4,4)
-    expect([...rect.slice(first * 4, first * 4 + 4)]).toEqual([r.x, r.y, r.w, r.h]);
   });
 
   it('carries the marks and the kind of every vertex', () => {

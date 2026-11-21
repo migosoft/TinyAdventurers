@@ -27,7 +27,7 @@ const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Ex
 function fakeView(): View & { setGround: ReturnType<typeof vi.fn>; tileChanged: ReturnType<typeof vi.fn> } {
   return {
     backend: 'WebGL2 fallback', setSize: vi.fn(), draw: vi.fn(() => 3), canForceLoss: true, maxTexture: 8192, forceLoss: vi.fn(() => true), readback: vi.fn(async () => null),
-    dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), setCover: vi.fn(), chunks: { total: 4, drawn: 2 }, meshes: 7,
+    dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), setCover: vi.fn(), stone: null, setStonePages: vi.fn(), chunks: { total: 4, drawn: 2 }, meshes: 7,
   };
 }
 
