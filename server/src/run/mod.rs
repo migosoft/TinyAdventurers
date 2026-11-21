@@ -295,7 +295,10 @@ impl Run {
         }
         // Torches after the barrels, so every other entity keeps its id.
         for t in run.layout.torches.clone() {
-            run.spawn_torch(&t);
+            match t.kind {
+                crate::dungeon::WallLight::Torch => run.spawn_torch(&t),
+                crate::dungeon::WallLight::Crystal => run.spawn_crystal(&t),
+            };
         }
         // Lava glows from the start (light ids are separate from entity ids).
         run.add_lava_lights();
@@ -1672,7 +1675,7 @@ pub mod tests {
         }
         // Chests only: barrels and torches are spawned last (after every other
         // id) and left out, so the rest of the setup is compared with the old values.
-        let is_late = |o: &objects::WorldObject| matches!(o.kind, EntityKind::Barrel | EntityKind::Torch);
+        let is_late = |o: &objects::WorldObject| matches!(o.kind, EntityKind::Barrel | EntityKind::Torch | EntityKind::Crystal);
         let barrels = run.objects.iter().filter(|o| is_late(o)).count() as u32;
         for o in run.objects.iter().filter(|o| !is_late(o)) {
             eat(o.id as u64);
@@ -1743,7 +1746,8 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
+        // 2026-11-21, crystals (#380): in rock the server drops a torch of a sunlit room instead of keeping it unlit, and the cove's animal spots keep 16 px clear of every torch in `layout.torches`. Dragon dungeons are all rock and demon dungeons partly, so their cove animals stand elsewhere (seeds 0, 3 and 5; ids unchanged). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
+        assert_eq!(got, vec![17727463263737435381, 9378562978013154725, 18111976853352986814, 12416239204757202148, 8700733743784210261, 9232515669825717783]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1777,7 +1781,8 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
+        // Same re-recording as `level_setup_is_unchanged` (crystals, #380).
+        assert_eq!(got, vec![17727463263737435381, 9378562978013154725, 18111976853352986814, 12416239204757202148, 8700733743784210261, 9232515669825717783]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1820,7 +1825,8 @@ pub mod tests {
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster, and the chests' ids after it shift by one, so all three halls differ. Re-recorded once, on purpose.
         // 2026-11-06, the cove's animals (#227): every dungeon has 15 wild animals, extra monsters in the hash and in the next id, so all three halls differ. Proved before re-recording: with the wild monsters left out of the hash, the old values come back. Re-recorded once, on purpose.
         // 2026-11-20, the demon's new fight (#379): its kit and script changed (tail, Fireball, breath, flight, a random pick), so the demon's value (the first) differs; lich and dragon unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
+        // 2026-11-21, crystals (#380): the demon's (first) and dragon's (third) values differ. Those dungeons are rock or part rock, where the server drops a torch of a sunlit room instead of keeping it unlit; the cove's animal spots keep 16 px clear of every torch in `layout.torches`, so the wild animals (in the hash) stand elsewhere. Proved before re-recording: with the drop switched off, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, vec![2314882696827388790, 5858418345972872518, 17045174971711796544]);
     }
 
     #[test]
@@ -1839,7 +1845,8 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
+        // Same re-recording as in the test without the log (crystals, #380).
+        assert_eq!(got, vec![2314882696827388790, 5858418345972872518, 17045174971711796544]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
@@ -1879,7 +1886,8 @@ pub mod tests {
             assert!(!boss.airborne, "it ends on the ground");
             got.push(h);
         }
-        assert_eq!(got, [2575310725276619299, 2575310725276619299]); // log off, log on: the same value
+        // 2026-11-21, crystals (#380): dragon dungeons are all rock, where the server drops a torch of a sunlit room; the cove's animals (in the fingerprint) stand elsewhere. The flight is unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old value comes back. Re-recorded once, on purpose.
+        assert_eq!(got, [13208703587897612969, 13208703587897612969]); // log off, log on: the same value
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -1935,7 +1943,8 @@ pub mod tests {
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
+        // 2026-11-21, crystals (#380): `fight` runs in a demon dungeon, partly rock, where the server drops a torch of a sunlit room; the cove's animal spots keep clear of torches, so the wild animals in the hash stand elsewhere. The fights themselves are unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
+        assert_eq!(got, [18139093506043227335, 3611266026804214876, 14103597634797748611]);
     }
 
     #[test]
@@ -1945,7 +1954,8 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
+        // Same re-recording as in the test without the log (crystals, #380).
+        assert_eq!(got, [18139093506043227335, 3611266026804214876, 14103597634797748611]);
     }
 
     #[test]

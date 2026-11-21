@@ -17,6 +17,7 @@ pub fn def(kind: EntityKind) -> ObjDef {
         EntityKind::Chest => ObjDef { radius: CHEST_RADIUS, solid: false },
         EntityKind::Barrel => ObjDef { radius: BARREL_RADIUS, solid: true },
         EntityKind::Torch => ObjDef { radius: TORCH_RADIUS, solid: false },
+        EntityKind::Crystal => ObjDef { radius: CRYSTAL_RADIUS, solid: false },
         _ => panic!("{kind:?} is not an object"),
     }
 }
@@ -27,6 +28,8 @@ pub const CHEST_RADIUS: f64 = 6.0;
 pub const BARREL_RADIUS: f64 = 6.0;
 /// Torch footprint (hits and hand reach); it hangs on the wall, nothing collides with it.
 pub const TORCH_RADIUS: f64 = 4.0;
+/// Crystal footprint: a little wider than a torch, since a cluster juts from the rock; it still hangs on the wall.
+pub const CRYSTAL_RADIUS: f64 = 5.0;
 /// Seconds from the first hit to the explosion; also the delay per link of a chain.
 pub const BARREL_FUSE: f64 = 0.3;
 pub const BARREL_BLAST_R: f64 = 40.0;
@@ -48,7 +51,7 @@ pub fn weight(kind: EntityKind) -> f64 {
     match kind {
         EntityKind::Barrel => 6.0,
         EntityKind::Chest => 40.0,
-        EntityKind::Torch => f64::INFINITY,
+        EntityKind::Torch | EntityKind::Crystal => f64::INFINITY,
         _ => panic!("{kind:?} is not an object"),
     }
 }
@@ -71,6 +74,7 @@ mod tests {
         assert_eq!(weight(EntityKind::Barrel), 6.0);
         assert_eq!(weight(EntityKind::Chest), 40.0);
         assert_eq!(weight(EntityKind::Torch), f64::INFINITY);
+        assert_eq!(weight(EntityKind::Crystal), f64::INFINITY);
         assert_eq!(BARREL_BLAST_STR, 18);
     }
 }

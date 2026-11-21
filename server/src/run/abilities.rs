@@ -1155,10 +1155,10 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         if run.layout.map.opaque_at(pos) {
-            // A plain shot into a torch's wall hits the torch (an explosion reaches it anyway).
+            // A plain shot into a torch's or crystal's wall hits it (an explosion reaches it anyway).
             let tile = crate::dungeon::Map::tile_of(pos);
             if run.projectiles[i].explode_r == 0.0 {
-                if let Some(oi) = run.objects.iter().position(|o| matches!(o.state, crate::run::objects::ObjState::Torch { wall, .. } if wall == tile)) {
+                if let Some(oi) = run.objects.iter().position(|o| o.wall() == Some(tile)) {
                     let (dmg, by) = (run.projectiles[i].damage.clone(), shot_owner(run, run.projectiles[i].side, run.projectiles[i].owner));
                     crate::run::objects::hurt_object(run, oi, dmg, by);
                 }
@@ -2479,7 +2479,7 @@ mod tests {
 
     /// A torch on a wall north of hero 0, with the hero right under it, facing it.
     fn torch_ahead(run: &mut Run) -> usize {
-        use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn};
+        use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn, WallLight};
         run.monsters.retain(|m| m.is_boss);
         run.objects.clear();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
@@ -2491,7 +2491,7 @@ mod tests {
         for x in tx - 2..=tx + 2 {
             run.layout.map.set(x, ty - 2, Tile::Wall);
         }
-        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true });
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true, kind: WallLight::Torch });
         let oi = run.objects.len() - 1;
         let at = run.objects[oi].pos;
         run.players[0].mv.x = at.x;
@@ -2501,7 +2501,7 @@ mod tests {
     }
 
     fn torch_lit(run: &Run, oi: usize) -> bool {
-        matches!(run.objects[oi].state, crate::run::objects::ObjState::Torch { light, .. } if crate::run::objects::torch_on(run, light))
+        matches!(run.objects[oi].state, crate::run::objects::ObjState::Torch { light, .. } if crate::run::objects::light_on(run, light))
     }
 
     #[test]

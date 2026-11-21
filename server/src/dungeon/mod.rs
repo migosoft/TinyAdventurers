@@ -265,6 +265,13 @@ pub enum TorchSide {
     East = 2,
 }
 
+/// What hangs on a wall cell: a torch in masonry, a crystal cluster in rock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WallLight {
+    Torch,
+    Crystal,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TorchSpawn {
     /// The wall cell it hangs on.
@@ -272,6 +279,8 @@ pub struct TorchSpawn {
     pub side: TorchSide,
     /// Starts burning. False in a sunlit room (the daylight is enough); heat lights it.
     pub lit: bool,
+    /// A torch, or a crystal in rock (`stone::crystals`).
+    pub kind: WallLight,
 }
 
 impl TorchSpawn {

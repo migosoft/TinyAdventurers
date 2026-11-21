@@ -76,6 +76,8 @@ pub enum EntityKind {
     Barrel = 81,
     /// A wall torch (a world object with a static light).
     Torch = 82,
+    /// A crystal cluster in a rock wall (a world object with a static light, breakable).
+    Crystal = 83,
 }
 
 /// Serialized as its id.
@@ -87,7 +89,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 51] = [
+    pub const ALL: [EntityKind; 52] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -139,6 +141,7 @@ impl EntityKind {
         EntityKind::Chest,
         EntityKind::Barrel,
         EntityKind::Torch,
+        EntityKind::Crystal,
     ];
 
     /// How tall the figure is drawn above its feet (px, from the sprites; 0 for

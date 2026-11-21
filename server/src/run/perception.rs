@@ -60,6 +60,14 @@ mod tests {
         assert!(sees(&run, human, at(tx - 3, ty), at(tx, ty)));
     }
 
+    /// Crystals are the only light in rock, and a broken one leaves it dark: bosses see there all the same.
+    #[test]
+    fn every_boss_sees_in_full_darkness() {
+        for id in BossId::ALL {
+            assert_eq!(crate::defs::bosses::profile(id).sight.darkvision, 1.0, "{id:?}");
+        }
+    }
+
     #[test]
     fn a_monster_sees_a_dark_hero_at_two_tiles_not_four() {
         let (run, tx, ty) = dark_run();

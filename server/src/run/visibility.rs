@@ -782,8 +782,8 @@ mod tests {
     fn torches_are_sent_in_sight_lit_or_not_and_not_out_of_sight() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
-        let near = crate::dungeon::TorchSpawn { wall: (tx + 3, ty), side: crate::dungeon::TorchSide::Face, lit: true };
-        let far = crate::dungeon::TorchSpawn { wall: (tx + 12, ty), side: crate::dungeon::TorchSide::Face, lit: true };
+        let near = crate::dungeon::TorchSpawn { wall: (tx + 3, ty), side: crate::dungeon::TorchSide::Face, lit: true, kind: crate::dungeon::WallLight::Torch };
+        let far = crate::dungeon::TorchSpawn { wall: (tx + 12, ty), side: crate::dungeon::TorchSide::Face, lit: true, kind: crate::dungeon::WallLight::Torch };
         run.spawn_torch(&near);
         run.spawn_torch(&far);
         let (i_near, i_far) = (run.objects.len() - 2, run.objects.len() - 1);

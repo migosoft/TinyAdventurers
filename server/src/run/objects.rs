@@ -29,8 +29,10 @@ pub struct WorldObject {
 pub enum ObjState {
     Chest { opened: Option<f64> },
     Barrel(Barrel),
-    /// Lit while its light is on (`torch_on`): the light registry holds that state.
+    /// Lit while its light is on (`light_on`): the light registry holds that state.
     Torch { wall: (i32, i32), side: crate::dungeon::TorchSide, light: u32 },
+    /// A crystal cluster in a rock wall: whole while its light is on; a hit breaks it for good.
+    Crystal { wall: (i32, i32), side: crate::dungeon::TorchSide, light: u32 },
 }
 
 pub struct Barrel {
@@ -60,7 +62,15 @@ impl WorldObject {
 
     /// Owns a static light: always sent, so its light can be drawn from afar.
     pub fn owns_light(&self) -> bool {
-        matches!(self.state, ObjState::Torch { .. })
+        matches!(self.state, ObjState::Torch { .. } | ObjState::Crystal { .. })
+    }
+
+    /// The wall cell a torch or crystal sits on.
+    pub fn wall(&self) -> Option<(i32, i32)> {
+        match self.state {
+            ObjState::Torch { wall, .. } | ObjState::Crystal { wall, .. } => Some(wall),
+            _ => None,
+        }
     }
 }
 
@@ -90,6 +100,13 @@ impl Run {
         self.spawn_object(EntityKind::Torch, t.pos(), ObjState::Torch { wall: t.wall, side: t.side, light })
     }
 
+    /// A crystal cluster in a rock wall with its static light (always shining at spawn).
+    pub fn spawn_crystal(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
+        let (fx, fy) = t.front();
+        let light = self.add_light(crate::defs::lights::LightKind::Crystal, crate::run::light::Anchor::Tile(fx, fy), None);
+        self.spawn_object(EntityKind::Crystal, t.pos(), ObjState::Crystal { wall: t.wall, side: t.side, light })
+    }
+
     /// Footprints of the solid objects, except `except` (an object's own id).
     pub fn solids(&self, except: Option<u32>) -> Vec<crate::collision::Solid> {
         self.objects
@@ -115,8 +132,8 @@ pub fn set_torch(run: &mut Run, oi: usize, on: bool) {
     run.set_light(light, on);
 }
 
-/// Is the torch with this light burning?
-pub fn torch_on(run: &Run, light: u32) -> bool {
+/// Is the torch or crystal with this light shining?
+pub fn light_on(run: &Run, light: u32) -> bool {
     run.lights.get(light).map_or(false, |l| l.on)
 }
 
@@ -132,6 +149,11 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
         ObjState::Torch { .. } => {
             let heat = dmg.split.share(crate::defs::damage::DamageType::Heat) > 0.0;
             set_torch(run, oi, heat);
+        }
+        // A hit breaks a crystal for good: nothing switches its light on again.
+        ObjState::Crystal { light, .. } => {
+            let light = *light;
+            run.set_light(light, false);
         }
         ObjState::Barrel(_) => {
             let time = run.time;
@@ -245,8 +267,8 @@ pub fn use_object(run: &mut Run, pi: usize) {
                 let str = run.players[pi].sheet.attrs.get(crate::defs::attributes::Attr::Str);
                 push_barrel(run, oi, at, str)
             }
-            ObjState::Torch { light, .. } => set_torch(run, oi, !torch_on(run, light)),
-            ObjState::Chest { .. } => {}
+            ObjState::Torch { light, .. } => set_torch(run, oi, !light_on(run, light)),
+            ObjState::Chest { .. } | ObjState::Crystal { .. } => {}
         }
     }
 }
@@ -390,10 +412,10 @@ pub fn snap(run: &Run, o: &WorldObject) -> EntSnap {
             (None, Some(_)) => (1, ms_since(time, b.lit_at)),
             _ => (0, 0),
         },
-        ObjState::Torch { light, .. } => (torch_on(run, *light) as u8, 0),
+        ObjState::Torch { light, .. } | ObjState::Crystal { light, .. } => (light_on(run, *light) as u8, 0),
     };
     let extra = match &o.state {
-        ObjState::Torch { side, .. } => *side as u32,
+        ObjState::Torch { side, .. } | ObjState::Crystal { side, .. } => *side as u32,
         _ => 0,
     };
     EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, extra, 0, 0)
@@ -954,7 +976,7 @@ mod tests {
         assert_eq!(run.players[0].anim, crate::defs::kinds::Anim::Melee);
     }
 
-    use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn};
+    use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn, WallLight};
 
     /// A torch on the brick face just north of the hero, on open floor.
     fn torch_run() -> (Run, usize) {
@@ -964,13 +986,13 @@ mod tests {
         for x in tx - 6..=tx + 6 {
             run.layout.map.set(x, ty - 2, Tile::Wall);
         }
-        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true });
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true, kind: WallLight::Torch });
         let oi = run.objects.len() - 1;
         (run, oi)
     }
 
     fn torch_lit(run: &Run, oi: usize) -> bool {
-        matches!(run.objects[oi].state, ObjState::Torch { light, .. } if torch_on(run, light))
+        matches!(run.objects[oi].state, ObjState::Torch { light, .. } if light_on(run, light))
     }
 
     #[test]
@@ -992,7 +1014,7 @@ mod tests {
         for x in tx - 6..=tx + 6 {
             run.layout.map.set(x, ty - 2, Tile::Wall);
         }
-        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: false });
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: false, kind: WallLight::Torch });
         let oi = run.objects.len() - 1;
         let sun = run.add_sun(tx + 3, ty);
         assert_eq!(run.tick, 0);
@@ -1005,7 +1027,7 @@ mod tests {
         assert!(!torch_lit(&run, oi));
         hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::split(&[(DamageType::Heat, 0.3)])), None);
         assert!(torch_lit(&run, oi), "heat lights it");
-        assert!(torch_on(&run, sun), "the daylight stays on");
+        assert!(light_on(&run, sun), "the daylight stays on");
     }
 
     #[test]
@@ -1052,6 +1074,85 @@ mod tests {
         crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, -100.0));
         step_for(&mut run, 0.3);
         assert!(!torch_lit(&run, oi), "an arrow puts it out");
+    }
+
+    /// A crystal on the brick face just north of the hero, on open floor.
+    fn crystal_run() -> (Run, usize) {
+        let mut run = clear_run(BossId::Lich);
+        run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for x in tx - 6..=tx + 6 {
+            run.layout.map.set(x, ty - 2, Tile::Wall);
+        }
+        run.spawn_crystal(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true, kind: WallLight::Crystal });
+        let oi = run.objects.len() - 1;
+        (run, oi)
+    }
+
+    fn crystal_lit(run: &Run, oi: usize) -> bool {
+        matches!(run.objects[oi].state, ObjState::Crystal { light, .. } if light_on(run, light))
+    }
+
+    fn light_off_events(run: &Run) -> usize {
+        run.events.iter().filter(|(e, _)| matches!(e, Ev::Light { on: false, .. })).count()
+    }
+
+    #[test]
+    fn a_crystal_lights_the_floor_in_front_of_it() {
+        let (mut run, oi) = crystal_run();
+        assert!(crystal_lit(&run, oi));
+        assert!(run.is_lit(run.players[0].pos()));
+        assert_eq!(run.objects[oi].kind, EntityKind::Crystal);
+        let s = snap(&run, &run.objects[oi]);
+        assert_eq!((s.1, s.5, s.9), (EntityKind::Crystal as u8, 1, TorchSide::Face as u32));
+        let o = &run.objects[oi];
+        assert!(o.owns_light() && !o.solid);
+        assert_eq!(o.wall(), Some((Map::tile_of(run.players[0].pos()).0, Map::tile_of(run.players[0].pos()).1 - 2)));
+    }
+
+    #[test]
+    fn a_hit_breaks_a_crystal_for_good() {
+        let (mut run, oi) = crystal_run();
+        hurt_object(&mut run, oi, Damage::physical(5.0), None);
+        assert!(!crystal_lit(&run, oi), "a sword breaks it");
+        assert_eq!(snap(&run, &run.objects[oi]).5, 0);
+        assert!(!run.objects[oi].gone, "the crystal stays, dark");
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::split(&[(DamageType::Heat, 0.3)])), None);
+        assert!(!crystal_lit(&run, oi), "heat does not light it");
+        let wall_y = (Map::tile_of(run.players[0].pos()).1 - 1) as f64 * crate::dungeon::TILE;
+        run.players[0].mv.y = wall_y + crate::defs::classes::PLAYER_RADIUS + 0.5;
+        run.players[0].mv.x = run.objects[oi].pos.x;
+        push(&mut run);
+        assert!(!crystal_lit(&run, oi), "E does not light it either");
+    }
+
+    #[test]
+    fn a_broken_crystal_ignores_further_hits() {
+        let (mut run, oi) = crystal_run();
+        run.events.clear();
+        for _ in 0..2 {
+            hurt_object(&mut run, oi, Damage::physical(5.0), None);
+        }
+        assert_eq!(light_off_events(&run), 1, "two hits in one step, one switch");
+        hurt_object(&mut run, oi, Damage::physical(5.0), None);
+        assert_eq!(light_off_events(&run), 1, "a later hit, still one");
+    }
+
+    #[test]
+    fn a_shot_into_the_crystal_wall_breaks_it() {
+        let (mut run, oi) = crystal_run();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        let from = Map::center_of(tx, ty - 1);
+        crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, -100.0));
+        step_for(&mut run, 0.3);
+        assert!(!crystal_lit(&run, oi), "an arrow breaks it");
+    }
+
+    #[test]
+    fn poison_does_not_break_a_crystal() {
+        let (mut run, oi) = crystal_run();
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::pure(DamageType::Poison)), None);
+        assert!(crystal_lit(&run, oi));
     }
 
     #[test]

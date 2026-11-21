@@ -5,7 +5,7 @@
 //! can be on any side and the boss hall is centered on the opposite side.
 
 use super::stone::{self, StoneLayout};
-use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn};
+use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn, WallLight};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 use crate::protocol::BossId;
@@ -64,6 +64,7 @@ pub fn generate(seed: u64, theme: Theme) -> Dungeon {
     dungeon.haunts = place_haunts(&mut ChaCha8Rng::seed_from_u64(seed ^ HAUNT_SALT), &dungeon);
     // The stone kinds come last too, from their own stream (`stone::lay`).
     dungeon.stone = stone::lay(seed, theme.stone, &dungeon);
+    stone::crystals(&mut dungeon);
     dungeon
 }
 
@@ -817,11 +818,11 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
                 continue;
             }
             let t = if floor(x, y + 1) && !floor(x - 1, y) && !floor(x + 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::Face, lit: true }
+                TorchSpawn { wall: (x, y), side: TorchSide::Face, lit: true, kind: WallLight::Torch }
             } else if wall(x, y - 1) && wall(x, y + 1) && floor(x + 1, y) && !floor(x - 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::West, lit: true }
+                TorchSpawn { wall: (x, y), side: TorchSide::West, lit: true, kind: WallLight::Torch }
             } else if wall(x, y - 1) && wall(x, y + 1) && floor(x - 1, y) && !floor(x + 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::East, lit: true }
+                TorchSpawn { wall: (x, y), side: TorchSide::East, lit: true, kind: WallLight::Torch }
             } else {
                 continue;
             };
@@ -852,7 +853,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
             for &a in run.iter().skip(offset).step_by(TORCH_SPACING as usize) {
                 let wall = if side == TorchSide::Face { (a, line) } else { (line, a) };
                 if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
-                    out.push(TorchSpawn { wall, side, lit: true });
+                    out.push(TorchSpawn { wall, side, lit: true, kind: WallLight::Torch });
                 }
             }
         }
@@ -892,7 +893,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
                 _ => ((line, a), TorchSide::East),
             };
             if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
-                out.push(TorchSpawn { wall, side, lit: true });
+                out.push(TorchSpawn { wall, side, lit: true, kind: WallLight::Torch });
                 break;
             }
         }

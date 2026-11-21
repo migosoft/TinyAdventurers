@@ -156,7 +156,7 @@ fn export_defs() {
     let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });
     consts.as_object_mut().unwrap().extend(hero.as_object().unwrap().clone());
     let objs = json!({
-        "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "CHEST_RADIUS": crate::defs::objects::CHEST_RADIUS, "TORCH_RADIUS": crate::defs::objects::TORCH_RADIUS,
+        "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "CHEST_RADIUS": crate::defs::objects::CHEST_RADIUS, "TORCH_RADIUS": crate::defs::objects::TORCH_RADIUS, "CRYSTAL_RADIUS": crate::defs::objects::CRYSTAL_RADIUS,
         "BARREL_FUSE": crate::defs::objects::BARREL_FUSE,
         "BARREL_BLAST_R": crate::defs::objects::BARREL_BLAST_R, "USE_REACH": crate::defs::objects::USE_REACH,
     });
