@@ -27,13 +27,14 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Shift+L** | Show or hide the calculation lines of the rules log |
 | **F3** | Show frame rate, frame times (whole frame, rendering, and the game's own parts), ping and network stats |
 
-**The camera.** You see the dungeon from above at an angle, in 3D. Besides the controls above there are three keys and a mouse drag to turn the camera. Every run starts facing north.
+**The camera.** You see the dungeon from above at an angle, in 3D. Besides the controls above there are three keys and a mouse drag to turn the camera, and the mouse wheel zooms. Every run starts facing north.
 
 | Input | Action |
 |---|---|
 | **Z** | Turn the camera 45°, so it walks around the scene to the left. Press again for another step. |
 | **C** | Turn the camera 45° the other way |
 | **X** | Turn the camera back to north |
+| **Mouse wheel** | Zoom in and out, from about 6 to about 28 tiles across. Every run starts at the default zoom. Zooming out shows only what your hero can see. |
 | **Middle mouse button, drag** | Turn the camera freely; dragging right turns it the same way as Z. When you let go it snaps to the nearest 45°. |
 
 The keys sit in the same place on every keyboard layout: on a German (QWERTZ) keyboard they are Y, X and C. While you drag, the aim follows the way you walk. The help line at the bottom shows the keys with your layout's letters. The mouse aims at the point in front of your hero at weapon height, so a shot aimed at a monster's chest hits it however the camera is tilted. Health bars, names, damage numbers and hints are drawn sharp over the picture at any quality setting.
