@@ -29,6 +29,7 @@ import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, FrameInput, WorldInput } from './view';
+import { stoneField } from './stone/field';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
@@ -89,7 +90,7 @@ const ALL_VISIBLE = { isVisible: (): boolean => true };
 /** `host`: the panel gets the page's three buttons (Second crack, Reroll, Vary), the same as the keys 2, R and V. */
 export function createSunlightStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons'>): Stage {
   const map = sunlightMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: 8.8, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 

@@ -10,6 +10,7 @@ import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
+import { stoneField } from './stone/field';
 import { QUALITIES, type Quality } from './quality';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
@@ -160,7 +161,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   return {
     runView,
     job,
-    world: { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone' },
+    world: { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone) },
     built(view: View): void {
       runView.attach(view);
       if (job.done) upload(view); // the kept result, no new job

@@ -31,6 +31,7 @@ import {
   WebGPURenderer,
   DepthTexture,
 } from 'three/webgpu';
+import type { StoneField } from './stone/field';
 import { sharpCopyNode } from './sharpCopy';
 import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
@@ -86,8 +87,8 @@ import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
-/** The world the view draws: `painted` marks a woodland (ground tiles read the ground image); `clear` is the clear colour, 'stone' the lit wall top's. */
-export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [number, number, number] }
+/** The world the view draws: `painted` marks a woodland (ground tiles read the ground image) and `stone` is null exactly then; `clear` is the clear colour, 'stone' the lit wall top's. */
+export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [number, number, number]; stone: StoneField | null }
 /** The painted ground, RGBA, w x h px. */
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 /** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */

@@ -89,7 +89,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures of the line-ups.
   const at = /[?&]at=(\d+),(\d+)/.exec(search);
   const start = at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
-  const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR };
+  const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR, stone: null };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   host?.setDaylight(true);
   host?.setSky(true);

@@ -29,6 +29,7 @@ import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
 import { View as SightView } from '../sim/view';
 import type { Assets, WorldInput } from './view';
+import { stoneField } from './stone/field';
 
 const TILE = 16;
 /** The free camera's speed in tiles per second. */
@@ -89,7 +90,7 @@ const ALL_VISIBLE = { isVisible: (): boolean => true };
 export function createLightsStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'params' | 'setParams'>): Stage {
   const opts = parseLights(search);
   const map = buildMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const LAVA_SEED = 344;
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };

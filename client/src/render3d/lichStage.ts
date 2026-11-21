@@ -34,6 +34,7 @@ import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
+import { stoneField } from './stone/field';
 import { Water3d } from './water/water';
 
 /** The hall (tiles), the wall around it, and the lich's and the knight's speed (tiles/s) and the pause of the glide at a corner (s). */
@@ -98,7 +99,7 @@ export function parseLich(search: string): LichOpts {
 export function createLichStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons' | 'params' | 'setParams'>): Stage {
   const opts = parseLich(search);
   const map = lichMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const kit = createStageKit(assets);
   const readout = modelsReadouter(kit);

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearErrors, showError, startHost, type Host, type Stage } from './host';
 import type { View, WorldInput } from './view';
+import { stoneField } from './stone/field';
 import { parseMap, MAP_ROWS } from './demoMap';
 import { DEFAULTS } from './params';
 import { QUALITY_KEY } from './qualityPref';
@@ -13,7 +14,7 @@ function fakeView(): View {
   };
 }
 
-const world: WorldInput = { map: parseMap(MAP_ROWS), painted: false, clear: 'stone' };
+const world: WorldInput = { map: parseMap(MAP_ROWS), painted: false, clear: 'stone', stone: stoneField(parseMap(MAP_ROWS)) };
 
 function setup() {
   const views: View[] = [];

@@ -30,6 +30,7 @@ import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
+import { stoneField } from './stone/field';
 import { Water3d } from './water/water';
 import { reflects } from './params';
 
@@ -432,7 +433,7 @@ const NO_IDS: ReadonlySet<number> = new Set();
 export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw: number }, search: string, deps: { kit?: FigureKit } = {}): Stage {
   const opts = parseGallery(search);
   const map = GALLERY.map;
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d(galleryInit(), assets.frames, atlasBounds(assets.image, assets.frames));
   const water = new Water3d(map);
   // One kit for the stage, kept across a rebuilt view (the new layer draws from its cached models).

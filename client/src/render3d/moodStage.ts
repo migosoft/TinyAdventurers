@@ -36,6 +36,7 @@ import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, FrameInput, WorldInput } from './view';
+import { stoneField } from './stone/field';
 import { Water3d } from './water/water';
 
 /** The free camera's speed in tiles per second. */
@@ -108,7 +109,7 @@ const fireAir = projectileAir(KIND.Fireball);
 export function createMoodStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'params' | 'setParams' | 'setAirDev'>): Stage {
   const opts = parseLights(search);
   const map = moodMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: 9.2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;

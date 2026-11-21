@@ -37,6 +37,7 @@ import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
+import { stoneField } from './stone/field';
 import { Water3d } from './water/water';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
@@ -87,7 +88,7 @@ export function parseLiquids(search: string): LiquidsOpts {
 export function createLiquidsStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons'>): Stage {
   const opts = parseLiquids(search);
   const map = liquidsMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };

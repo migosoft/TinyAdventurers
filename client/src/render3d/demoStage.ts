@@ -10,10 +10,11 @@ import { seeLook } from './seeThrough';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import type { Assets, View, WorldInput } from './view';
+import { stoneField } from './stone/field';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
-  const world: WorldInput = { map, painted: false, clear: 'stone' };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const scene = newScene();
   const cam = { x: scene.player.x, z: scene.player.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };
 
