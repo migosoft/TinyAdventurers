@@ -1,5 +1,6 @@
 pub mod cove;
 pub mod generate;
+pub mod stone;
 pub mod woodland;
 
 use crate::defs::enemies::EnemyType;
@@ -316,6 +317,8 @@ pub struct Dungeon {
     pub haunts: Vec<Vec2>,
     /// The nymph's cove (always `Some` from `generate`).
     pub cove: Option<Cove>,
+    /// One stone kind per cell (`stone::LAID`, `stone::ROCK`), row-major, `map.w * map.h` long (`stone::lay`).
+    pub stone: Vec<u8>,
 }
 
 impl Dungeon {
@@ -344,6 +347,8 @@ pub struct Layout {
     pub daylight: bool,
     /// The woodland's plants, start and end; other level types have none.
     pub woodland: Option<woodland::Woodland>,
+    /// One stone kind per cell like `Dungeon::stone`; empty for the woodland and the test levels.
+    pub stone: Vec<u8>,
 }
 
 /// What only the room-and-corridor dungeon has.
@@ -366,8 +371,8 @@ impl DungeonParts {
 
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
-        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts, cove } = self;
-        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns, cove, daylight: false, woodland: None }, DungeonParts { rooms, start, boss, door, haunts })
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts, cove, stone } = self;
+        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns, cove, daylight: false, woodland: None, stone }, DungeonParts { rooms, start, boss, door, haunts })
     }
 }
 

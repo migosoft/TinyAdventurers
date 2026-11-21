@@ -567,7 +567,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
     let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
     let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, ellipses };
-    let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()) };
+    let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()), stone: vec![] };
     (layout, wl)
 }
 

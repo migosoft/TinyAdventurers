@@ -4,6 +4,7 @@
 //! centered at the top), then rotated by a random quarter turn so the start
 //! can be on any side and the boss hall is centered on the opposite side.
 
+use super::stone::{self, StoneLayout};
 use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
@@ -21,20 +22,34 @@ const TARGET_ROOMS: usize = 24;
 
 /// Which liquid the dungeon's terrain uses. Chasms appear in every theme.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Theme {
+pub enum Liquid {
     Water,
     Lava,
 }
 
+/// What a level is made of: its liquid and its stone layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Theme {
+    pub liquid: Liquid,
+    pub stone: StoneLayout,
+}
+
 impl Theme {
-    /// Lava in the demon's dungeon, water everywhere else.
+    /// The one place that maps a run's boss to a theme: the lich's dungeon is laid stone with
+    /// water, the dragon's natural rock with water, the demon's zones of both with lava.
     pub fn for_boss(boss: BossId) -> Theme {
-        if boss == BossId::Demon {
-            Theme::Lava
-        } else {
-            Theme::Water
+        match boss {
+            BossId::Demon => Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones },
+            BossId::Dragon => Theme { liquid: Liquid::Water, stone: StoneLayout::Rock },
+            BossId::Lich => Theme { liquid: Liquid::Water, stone: StoneLayout::Laid },
         }
     }
+
+    /// Fixtures for the generator's tests: laid stone with water or lava.
+    #[cfg(test)]
+    pub const WATER: Theme = Theme { liquid: Liquid::Water, stone: StoneLayout::Laid };
+    #[cfg(test)]
+    pub const LAVA: Theme = Theme { liquid: Liquid::Lava, stone: StoneLayout::Laid };
 }
 
 /// Mixed into the seed for the haunts' own random stream.
@@ -47,6 +62,8 @@ pub fn generate(seed: u64, theme: Theme) -> Dungeon {
     let mut dungeon = generate_without_haunts(seed, theme);
     // Haunts come last, from a stream of their own: the map and the usual spawns do not move.
     dungeon.haunts = place_haunts(&mut ChaCha8Rng::seed_from_u64(seed ^ HAUNT_SALT), &dungeon);
+    // The stone kinds come last too, from their own stream (`stone::lay`).
+    dungeon.stone = stone::lay(seed, theme.stone, &dungeon);
     dungeon
 }
 
@@ -241,7 +258,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     hall_rng.set_stream(9);
     place_boss_chasms(&mut hall_rng, &mut map, &boss);
     // The demon's hall also gets a lava pool (it walks through lava unharmed and at full speed).
-    if theme == Theme::Lava {
+    if theme.liquid == Liquid::Lava {
         place_boss_lava(&mut hall_rng, &mut map, &boss);
     }
     // One ogre per run (stream 10), after the terrain so it stands on safe ground.
@@ -270,6 +287,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         player_spawns: Vec::new(),
         haunts: Vec::new(),
         cove: None,
+        stone: Vec::new(),
     };
 
     let turns = rng.gen_range(0..4);
@@ -522,7 +540,7 @@ fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: The
             }
             let chasm = rng.gen_bool(0.4);
             for _ in 0..8 {
-                let cells = if chasm { chasm_strip(rng, &room.rect) } else { pool(rng, &room.rect, theme) };
+                let cells = if chasm { chasm_strip(rng, &room.rect) } else { pool(rng, &room.rect, theme.liquid) };
                 let Some(cells) = cells else { break };
                 let fits = cells.iter().all(|&(x, y, _)| {
                     map.get(x, y) == Tile::Floor as u8 && !chest_tiles.contains(&(x, y)) && !near_entrance(map, &room.rect, x, y)
@@ -596,7 +614,7 @@ fn hall_connected(map: &Map, r: &Rect) -> bool {
 /// undone if it cuts any of the hall's floor off from the entrance.
 fn place_boss_lava(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
     for _ in 0..100 {
-        let Some(cells) = pool(rng, r, Theme::Lava) else { return };
+        let Some(cells) = pool(rng, r, Liquid::Lava) else { return };
         let fits = cells.iter().all(|&(x, y, _)| {
             map.get(x, y) == Tile::Floor as u8 && !hall_keep_clear(r, x, y) && (-1..=1).all(|dy| (-1..=1).all(|dx| map.get(x + dx, y + dy) != Tile::Chasm as u8))
         });
@@ -679,9 +697,9 @@ fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i3
 /// An oval pool, a tile away from the room's walls. Water pools are deep
 /// wherever the whole neighbourhood is pool, so a shallow rim always surrounds
 /// the deep centre; lava pools are all lava.
-fn pool(rng: &mut ChaCha8Rng, r: &Rect, theme: Theme) -> Option<Vec<(i32, i32, Tile)>> {
+fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32, Tile)>> {
     let (max_w, max_h) = (r.w - 2, r.h - 2);
-    let (min, cap) = if theme == Theme::Water { (5, (9, 7)) } else { (4, (7, 6)) };
+    let (min, cap) = if liquid == Liquid::Water { (5, (9, 7)) } else { (4, (7, 6)) };
     if max_w < min || max_h < min {
         return None;
     }
@@ -699,10 +717,10 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, theme: Theme) -> Option<Vec<(i32, i32, T
                 continue;
             }
             let deep = (-1..=1).all(|dy| (-1..=1).all(|dx| inside(x + dx, y + dy)));
-            let t = match theme {
-                Theme::Lava => Tile::Lava,
-                Theme::Water if deep => Tile::DeepWater,
-                Theme::Water => Tile::ShallowWater,
+            let t = match liquid {
+                Liquid::Lava => Tile::Lava,
+                Liquid::Water if deep => Tile::DeepWater,
+                Liquid::Water => Tile::ShallowWater,
             };
             cells.push((x, y, t));
         }
@@ -1050,7 +1068,7 @@ mod tests {
     fn torches_hang_on_walls_with_floor_in_front_spaced_and_never_adjacent() {
         let mut dark_regions = 0;
         for seed in 0..200u64 {
-            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            let d = generate(seed, if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA });
             assert!(!d.torches.is_empty(), "seed {seed}");
             for t in &d.torches {
                 let (x, y) = t.wall;
@@ -1075,7 +1093,7 @@ mod tests {
     }
 
     fn theme_of(seed: u64) -> Theme {
-        if seed % 2 == 0 { Theme::Water } else { Theme::Lava }
+        if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA }
     }
 
     /// Rooms a sun could be in: not the boss hall, big enough, with a qualifying tile.
@@ -1217,7 +1235,7 @@ mod tests {
     #[test]
     fn torches_keep_their_spacing_along_the_start_room_wall() {
         for seed in 0..50u64 {
-            let d = generate(seed, Theme::Water);
+            let d = generate(seed, Theme::WATER);
             let r = d.rooms[d.start].rect;
             // Face torches on the start room's top wall: one region, so one spacing rule.
             let mut xs: Vec<i32> = d.torches.iter().filter(|t| t.side == TorchSide::Face && t.wall.1 == r.y - 1 && r.contains_tile(t.wall.0, r.y)).map(|t| t.wall.0).collect();
@@ -1233,7 +1251,7 @@ mod tests {
     #[test]
     fn split_keeps_every_part() {
         for seed in 0..20u64 {
-            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            let d = generate(seed, if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA });
             let (hall, door, tiles) = (*d.boss_hall(), d.door.clone(), d.map.tiles.clone());
             let (n_sp, n_ch, ps, n_b) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone(), d.barrels.len());
             let (n_t, suns) = (d.torches.len(), d.suns.clone());
@@ -1251,7 +1269,7 @@ mod tests {
     fn barrels_stand_on_dry_floor_and_never_cut_anything_off() {
         let mut total = 0;
         for seed in 0..40u64 {
-            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            let d = generate(seed, if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA });
             let tiles: Vec<(i32, i32)> = d.barrels.iter().map(|&p| Map::tile_of(p)).collect();
             total += tiles.len();
             let chests: Vec<(i32, i32)> = d.chests.iter().map(|c| Map::tile_of(c.pos)).collect();
@@ -1287,7 +1305,7 @@ mod tests {
     fn haunts_leave_the_map_unchanged() {
         let mut total = 0;
         for seed in 0..20u64 {
-            for theme in [Theme::Water, Theme::Lava] {
+            for theme in [Theme::WATER, Theme::LAVA] {
                 let (with, without) = (generate(seed, theme), generate_without_haunts(seed, theme));
                 assert!(without.haunts.is_empty());
                 assert_eq!(with.map.tiles, without.map.tiles, "seed {seed}");
@@ -1306,16 +1324,16 @@ mod tests {
         }
         assert!(total > 0, "some seeds have haunts ({total})");
         // The separate stream: with a different haunt stream the rest of the seed stays the same.
-        let d = generate_without_haunts(3, Theme::Water);
+        let d = generate_without_haunts(3, Theme::WATER);
         let other = place_haunts(&mut ChaCha8Rng::seed_from_u64(99), &d);
-        assert_eq!(d.map.tiles, generate(3, Theme::Water).map.tiles);
-        assert_ne!(other, generate(3, Theme::Water).haunts, "the haunts come from their own stream");
+        assert_eq!(d.map.tiles, generate(3, Theme::WATER).map.tiles);
+        assert_ne!(other, generate(3, Theme::WATER).haunts, "the haunts come from their own stream");
     }
 
     #[test]
     fn deterministic_per_seed() {
-        let a = generate(42, Theme::Water);
-        let b = generate(42, Theme::Water);
+        let a = generate(42, Theme::WATER);
+        let b = generate(42, Theme::WATER);
         assert_eq!(a.map.tiles, b.map.tiles);
         assert_eq!(a.spawns.len(), b.spawns.len());
         assert_eq!(a.chests.len(), b.chests.len());
@@ -1323,7 +1341,7 @@ mod tests {
 
     #[test]
     fn terrain_keeps_layout_and_chests() {
-        let (w, l) = (generate(7, Theme::Water), generate(7, Theme::Lava));
+        let (w, l) = (generate(7, Theme::WATER), generate(7, Theme::LAVA));
         let base = |t: u8| if is_terrain(t) { Tile::Floor as u8 } else { t };
         assert_eq!(w.map.tiles.iter().map(|&t| base(t)).collect::<Vec<_>>(), l.map.tiles.iter().map(|&t| base(t)).collect::<Vec<_>>());
         assert_eq!(w.chests.iter().map(|c| c.pos).collect::<Vec<_>>(), l.chests.iter().map(|c| c.pos).collect::<Vec<_>>());
@@ -1335,7 +1353,7 @@ mod tests {
         let (mut terrain, mut open) = (0usize, 0usize);
         let mut seen = [0usize; 10];
         for seed in 0..200u64 {
-            let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
+            let theme = if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA };
             let d = generate(seed, theme);
             chests += d.chests.len();
             mimics += d.chests.iter().filter(|c| c.mimic).count();
@@ -1366,7 +1384,7 @@ mod tests {
                 if room.kind == RoomKind::Boss {
                     // Chasms, and a lava pool in the demon's (lava) hall; never at the boss's start or the entrance.
                     let tiles: Vec<u8> = (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).map(|(x, y)| d.map.get(x, y)).collect();
-                    let lava = theme == Theme::Lava;
+                    let lava = theme == Theme::LAVA;
                     assert!(tiles.iter().all(|&t| !is_terrain(t) || t == Tile::Chasm as u8 || lava && t == Tile::Lava as u8), "seed {seed}: other terrain in the boss hall");
                     assert!(tiles.contains(&(Tile::Chasm as u8)), "seed {seed}: no chasm in the boss hall");
                     assert_eq!(tiles.contains(&(Tile::Lava as u8)), lava, "seed {seed}: lava pool in the demon's hall only");
@@ -1389,7 +1407,7 @@ mod tests {
                     open += 1;
                 }
             }
-            let wrong = if theme == Theme::Water { Tile::Lava } else { Tile::ShallowWater };
+            let wrong = if theme == Theme::WATER { Tile::Lava } else { Tile::ShallowWater };
             assert!(!d.map.tiles.contains(&(wrong as u8)), "seed {seed}: wrong liquid for {theme:?}");
             // Boss hall is on the side opposite the start.
             let s = d.rooms[d.start].rect.center_px();
@@ -1441,5 +1459,12 @@ mod tests {
         }
         let share = terrain as f64 / (terrain + open) as f64;
         assert!((0.02..0.15).contains(&share), "terrain covers {:.1} % of the floor", share * 100.0);
+    }
+
+    #[test]
+    fn for_boss_sets_liquid_and_stone() {
+        assert_eq!(Theme::for_boss(BossId::Lich), Theme { liquid: Liquid::Water, stone: StoneLayout::Laid });
+        assert_eq!(Theme::for_boss(BossId::Dragon), Theme { liquid: Liquid::Water, stone: StoneLayout::Rock });
+        assert_eq!(Theme::for_boss(BossId::Demon), Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones });
     }
 }

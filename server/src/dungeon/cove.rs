@@ -82,7 +82,7 @@ mod tests {
 
     fn each_dungeon(seeds: u64, mut f: impl FnMut(u64, &Dungeon)) {
         for seed in 0..seeds {
-            let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
+            let theme = if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA };
             f(seed, &generate(seed, theme));
         }
     }
@@ -206,7 +206,7 @@ mod tests {
     fn every_cove_has_ten_bunnies_four_deer_and_a_boar() {
         let (mut fewest, mut most) = (usize::MAX, 0);
         for seed in 1..=50u64 {
-            let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
+            let theme = if seed % 2 == 0 { Theme::WATER } else { Theme::LAVA };
             let (layout, _) = generate(seed, theme).split();
             let cove = layout.cove.expect("cove");
             let spots = animal_spots(&layout, &cove);
