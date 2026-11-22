@@ -120,7 +120,9 @@ pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>, recor
     };
     let Some(db) = db else { return };
     if !awards.is_empty() {
-        // One transaction, so a retry is safe; a database restart or pool timeout may pass in a few seconds.
+        // A database restart or pool timeout may pass in a few seconds. One transaction, so a retry is safe, except after
+        // a commit that landed but whose reply was lost: then the run banks twice.
+        // shortcut: no run key makes banking idempotent; add one before stored progress matters.
         let mut tries = 0;
         let banked = loop {
             match db::bank_awards(&db, &awards, record.debug).await {

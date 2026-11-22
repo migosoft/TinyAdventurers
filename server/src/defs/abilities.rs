@@ -670,7 +670,6 @@ mod tests {
         assert_eq!([Spell, Innate, Technique, WeaponAttack].map(cooldown_attr), [Attr::Int, Attr::Cha, Attr::Dex, Attr::Dex]);
     }
 
-
     #[test]
     fn touch_needs_a_touch_weapon() {
         let d = def(AbilityId::Touch);
