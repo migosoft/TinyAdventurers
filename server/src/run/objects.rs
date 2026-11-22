@@ -458,6 +458,24 @@ mod tests {
     /// Weight 6 + 4: pushes a barrel the full `BARREL_PUSH`.
     const FULL_PUSH_STR: i32 = 10;
 
+    /// The client keeps a barrel as a solid only while `anim < 2` (`session.ts`); 2 and 3 are the two sinkings.
+    #[test]
+    fn a_barrel_snaps_with_the_anim_codes_the_client_filters_on() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(40.0, 0.0));
+        let anim = |run: &Run| snap(run, &run.objects[oi]).5;
+        assert_eq!(anim(&run), 0);
+        let ObjState::Barrel(b) = &mut run.objects[oi].state else { unreachable!() };
+        b.fuse = Some(0.3);
+        assert_eq!(anim(&run), 1);
+        let ObjState::Barrel(b) = &mut run.objects[oi].state else { unreachable!() };
+        b.sinking = Some((1.0, Sink::Fall, 0.0));
+        assert_eq!(anim(&run), 2);
+        let ObjState::Barrel(b) = &mut run.objects[oi].state else { unreachable!() };
+        b.sinking = Some((1.0, Sink::Drown, 0.0));
+        assert_eq!(anim(&run), 3);
+    }
+
     pub fn barrel_at(run: &mut Run, off: Vec2) -> (u32, usize) {
         let pos = run.players[0].pos() + off;
         let id = run.spawn_object(EntityKind::Barrel, pos, ObjState::Barrel(Barrel::new()));

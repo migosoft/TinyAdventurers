@@ -65,6 +65,9 @@ export interface SessionDeps {
   now?: () => number;
 }
 
+/** Half size of every solid object kind (server `defs/objects.rs`), by kind id. */
+const SOLID_HALF: Record<number, number> = CONST.SOLID_OBJECTS;
+
 export class RunSession {
   readonly map: TileMap;
   readonly light: LightField;
@@ -533,7 +536,7 @@ export class RunSession {
   private onSnapshot(s: Snapshot): void {
     this.interp.push(s, this.now());
     this.lastSnap = s;
-    this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
+    this.pred.solids = s.ents.filter((e) => e[1] in SOLID_HALF && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: SOLID_HALF[e[1]] }));
     // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
     const drawn = this.ents.get(this.runInfo.you);
     if (s.me.alive) this.pred.reconcile(s, drawn ? [drawn.x, drawn.y] : undefined);

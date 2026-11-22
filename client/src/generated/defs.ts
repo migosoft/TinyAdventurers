@@ -182,6 +182,9 @@ export const CONST = {
   "SHALLOW_SPEED": 0.7,
   "SHOT_HEIGHT": 8.0,
   "SNAPSHOT_HZ": 30.0,
+  "SOLID_OBJECTS": {
+    "81": 6.0
+  },
   "TICK_HZ": 60.0,
   "TILE": 16.0,
   "TORCH_RADIUS": 4.0,

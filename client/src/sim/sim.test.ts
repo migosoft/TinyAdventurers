@@ -110,3 +110,18 @@ describe('trunk and thicket block like the server', () => {
     expect(v.isVisible(tx, ty + 2)).toBe(true);
   });
 });
+
+describe('tile rules', () => {
+  it('every server tile has the same sight, light, walking and speed rules here', () => {
+    expect(fixtures.tileRules.length).toBe(Object.keys(TILE_ID).length);
+    const one = new TileMap(1, 1, new Uint8Array(1));
+    for (const r of fixtures.tileRules) {
+      one.set(0, 0, r.id);
+      expect([one.opaque(0, 0), one.hardOpaque(0, 0)], `tile ${r.id}`).toEqual([r.opaque, r.hardOpaque]);
+      for (const mover of ['hero', 'enemy', 'demon', 'dash'] as Mover[]) {
+        expect(one.blocks(0, 0, mover), `tile ${r.id} blocks ${mover}`).toBe(r.blocks[mover]);
+        expect(one.speedFactor(TILE / 2, TILE / 2, mover), `tile ${r.id} speed ${mover}`).toBe(r.speed[mover]);
+      }
+    }
+  });
+});

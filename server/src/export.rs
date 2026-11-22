@@ -161,6 +161,13 @@ fn export_defs() {
         "BARREL_BLAST_R": crate::defs::objects::BARREL_BLAST_R, "USE_REACH": crate::defs::objects::USE_REACH,
     });
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
+    // The half size of every solid object kind, by kind id: what blocks the hero's prediction.
+    let solid_objects: serde_json::Map<_, _> = [EntityKind::Chest, EntityKind::Barrel, EntityKind::Torch, EntityKind::Crystal]
+        .into_iter()
+        .filter(|&k| crate::defs::objects::def(k).solid)
+        .map(|k| ((k as u8).to_string(), json!(crate::defs::objects::def(k).radius)))
+        .collect();
+    consts.as_object_mut().unwrap().insert("SOLID_OBJECTS".into(), json!(solid_objects));
     let fl = json!({
         "IMMUNE": flags::IMMUNE,
         "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE, "INCORPOREAL": flags::INCORPOREAL, "WILD": flags::WILD,
@@ -469,12 +476,69 @@ fn fixture_map() -> Map {
     for x in 11..15 {
         m.set(x, 18, Tile::Barrier);
     }
+    // A wall with a one-tile doorway (open) and a closed door, and two walls touching only at a corner.
+    for y in 9..15 {
+        m.set(21, y, Tile::Wall);
+    }
+    m.set(21, 12, Tile::DoorOpen);
+    m.set(21, 10, Tile::DoorClosed);
+    m.set(19, 10, Tile::Wall);
+    m.set(20, 11, Tile::Wall);
     m
 }
 
 /// Barrels in the fixture room (floor tiles), so the port is checked against solids too.
 fn fixture_solids() -> Vec<Solid> {
     vec![Solid { x: 4.5 * TILE, y: 8.5 * TILE, half: 6.0 }, Solid { x: 8.5 * TILE, y: 12.5 * TILE, half: 6.0 }, Solid { x: 13.5 * TILE, y: 4.5 * TILE, half: 6.0 }]
+}
+
+/// A real run of a Barbarian through a fixed input list: walk, Charge, Strike twice (the second refused), a push, a
+/// root with an attack inside it, then onto a chasm and on after the fall began. Each step records what the server
+/// holds after it; the client's `Predictor` must reproduce position and cooldowns (`world.test.ts`).
+fn predictor_case() -> serde_json::Value {
+    use crate::protocol::{BossId, InputMsg};
+    use crate::run::effects::Creature;
+    use crate::run::tests::test_run;
+    let mut run = test_run(&[ClassId::Barbarian], BossId::Lich);
+    run.monsters.retain(|m| m.is_boss);
+    run.objects.clear(); // no solids: the client predicts without any here
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    for y in ty - 2..=ty + 2 {
+        for x in tx - 1..=tx + 12 {
+            run.layout.map.set(x, y, if (tx + 8..=tx + 9).contains(&x) && (ty - 1..=ty + 1).contains(&y) { Tile::Chasm } else { Tile::Floor });
+        }
+    }
+    let start = Map::center_of(tx, ty);
+    run.players[0].mv = MoveState::at(start.x, start.y);
+    let sheet = run.players[0].sheet.clone();
+    let mut steps = Vec::new();
+    for i in 0..220u32 {
+        let (primary, secondary) = (matches!(i, 10 | 12 | 40 | 150), i == 2);
+        let mut knock = json!(null);
+        if i == 14 {
+            let from = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+            run.knock_player(0, from, 0.0, 20.0, crate::run::tests::PUSH_STR);
+            knock = json!([run.players[0].mv.knock_vx, run.players[0].mv.knock_vy]);
+        }
+        if i == 30 {
+            assert!(run.apply_effect(Creature::Player(0), EffectKind::Entangled, Some(0.5)));
+        }
+        let input = InputMsg { seq: i + 1, mx: 1, primary: primary.then_some(i as u16 + 1), secondary: secondary.then_some(i as u16 + 1), ..Default::default() };
+        run.players[0].inputs.push_back(input);
+        run.step();
+        let p = &run.players[0];
+        steps.push(json!({
+            "primary": primary, "secondary": secondary, "knock": knock,
+            "speedMul": p.effects.speed_mul(), "noAct": p.effects.no_act(), "cdRate": p.effects.cooldown_dt(DT) / DT,
+            "x": p.mv.x, "y": p.mv.y, "cd1": p.cd1, "cd2": p.cd2, "sinking": p.sinking.is_some(),
+        }));
+        if !p.alive {
+            break;
+        }
+    }
+    assert!(steps.iter().any(|s| s["sinking"] == json!(true)), "the walk ends in the chasm");
+    assert!(steps.iter().any(|s| s["speedMul"] == json!(0.0)), "the root holds the hero");
+    json!({ "speed": sheet.speed, "abilities": [sheet.primary, sheet.secondary], "fallback": sheet.fallback, "start": [start.x, start.y], "steps": steps, "map": { "w": run.layout.map.w, "h": run.layout.map.h, "tiles": run.layout.map.tiles } })
 }
 
 #[test]
@@ -525,7 +589,7 @@ fn export_fixtures() {
     let mut fov = Fov::new(map.w, map.h);
     let mut fovs = Vec::new();
     use crate::dungeon::Blocker;
-    for (cx, cy, b) in [(3, 3, Blocker::All), (8, 8, Blocker::All), (15, 12, Blocker::All), (11, 2, Blocker::All), (20, 17, Blocker::All), (3, 7, Blocker::All), (3, 7, Blocker::Hard), (6, 8, Blocker::All), (6, 8, Blocker::Hard)] {
+    for (cx, cy, b) in [(3, 3, Blocker::All), (8, 8, Blocker::All), (15, 12, Blocker::All), (11, 2, Blocker::All), (20, 17, Blocker::All), (3, 7, Blocker::All), (3, 7, Blocker::Hard), (6, 8, Blocker::All), (6, 8, Blocker::Hard), (19, 11, Blocker::All), (20, 12, Blocker::All)] {
         fov.compute(&map, cx, cy, PLAYER_FOV_RADIUS, b);
         let mut vis = Vec::new();
         for y in 0..map.h {
@@ -594,7 +658,7 @@ fn export_fixtures() {
     // the long wall's end, the 3-tile pillar and the wall block, on a tile corner and in the open.
     let mut view_cases = Vec::new();
     // Also the trunk (3,10) and the thicket strip (5..7,11), under both blockers.
-    for (x, y, b) in [(150.5, 200.3, Blocker::All), (90.7, 108.2, Blocker::All), (186.4, 168.9, Blocker::All), (176.0, 208.0, Blocker::All), (60.0, 200.0, Blocker::All), (52.0, 120.0, Blocker::All), (52.0, 120.0, Blocker::Hard), (100.0, 136.0, Blocker::All), (100.0, 136.0, Blocker::Hard)] {
+    for (x, y, b) in [(150.5, 200.3, Blocker::All), (90.7, 108.2, Blocker::All), (186.4, 168.9, Blocker::All), (176.0, 208.0, Blocker::All), (60.0, 200.0, Blocker::All), (52.0, 120.0, Blocker::All), (52.0, 120.0, Blocker::Hard), (100.0, 136.0, Blocker::All), (100.0, 136.0, Blocker::Hard), (330.0, 200.0, Blocker::All), (312.0, 184.0, Blocker::All)] {
         let p = crate::math::Vec2::new(x, y);
         assert!(!map.opaque_at(p), "view viewer {x},{y} stands on open floor");
         view.compute_with(&map, p, PLAYER_FOV_RADIUS, b);
@@ -603,10 +667,25 @@ fn export_fixtures() {
         let visible: Vec<i32> = (0..map.w * map.h).filter(|i| view.is_visible(i % map.w, i / map.w)).collect();
         view_cases.push(json!({ "x": x, "y": y, "hard": b == Blocker::Hard, "vision": PLAYER_FOV_RADIUS, "points": points, "visible": visible }));
     }
+    // Every tile's rules, so a new or changed tile fails the client's port: sight, light, walking and speed per mover.
+    use crate::dungeon::Mover;
+    let movers = [("hero", Mover::Hero), ("enemy", Mover::Enemy), ("demon", Mover::Demon), ("dash", Mover::Dash)];
+    let tile_rules: Vec<serde_json::Value> = (0..=Tile::Barrier as u8)
+        .map(|id| {
+            let mut one = Map::new(1, 1);
+            one.tiles[0] = id;
+            let centre = crate::math::Vec2::new(TILE / 2.0, TILE / 2.0);
+            let blocks: serde_json::Map<_, _> = movers.iter().map(|&(n, mv)| (n.to_string(), json!(one.blocks(0, 0, mv)))).collect();
+            let speed: serde_json::Map<_, _> = movers.iter().map(|&(n, mv)| (n.to_string(), json!(one.speed_factor(centre, mv)))).collect();
+            json!({ "id": id, "opaque": one.opaque(0, 0), "hardOpaque": one.hard_opaque(0, 0), "blocks": blocks, "speed": speed })
+        })
+        .collect();
     let light_case = json!({ "sources": srcs, "lit": lit, "moving": moving });
     let doc = json!({
         "lights": light_case, "darkvision": dark_cases, "view": view_cases,
         "w": map.w, "h": map.h, "tiles": map.tiles,
+        "tileRules": tile_rules,
+        "predictor": predictor_case(),
         "radius": PLAYER_RADIUS, "dt": DT, "dashSpeed": ab::DASH_SPEED, "fovRadius": PLAYER_FOV_RADIUS,
         "solids": solids.iter().map(|s| json!([s.x, s.y, s.half])).collect::<Vec<_>>(),
         "moves": moves, "fov": fovs,
