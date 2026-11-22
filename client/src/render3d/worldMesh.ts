@@ -4,6 +4,7 @@ import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
 import { CHUNK, KIND, chunkGrid, chunksOfTile } from './stone/grid';
 import { buildStoneChunk } from './stone/mesh';
+import { GRATE_DEPTH } from './stone/laidMesh';
 import type { StoneField } from './stone/field';
 import type { Marks } from './stone/place';
 import type { SheetPlan } from './stone/plan';
@@ -16,7 +17,7 @@ export type FrameRects = Record<string, { x: number; y: number; w: number; h: nu
 /**
  * Per vertex: position (tiles), uv (the woodland ground's image px; zero on stone vertices), normal, kind, the
  * stone attributes (`sheet`, `faceA`, `faceB` as 3 values each, `push` as 2: see `stone/mesh.ts`; the woodland ground has layer -1) and an index.
- * 6 vertices per quad.
+ * 3 vertices per triangle, none shared (the woodland's ground: 6 per quad).
  */
 export interface WorldArrays {
   position: Float32Array;
@@ -122,7 +123,7 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
       index: Uint32Array.from({ length: count }, (_, i) => i),
       count,
     },
-    min: [x0, 0, z0],
+    min: [x0, -GRATE_DEPTH, z0], // floors lie at or below 0, a grate's shaft deepest
     max: [x1, WALL_H, z1],
   };
 }

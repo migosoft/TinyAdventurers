@@ -2,8 +2,10 @@
 // stone, level and tilt. The painter and the mesh both read it, so paint and shape agree. Pure: no three, nothing that draws.
 // Every block follows from the seed and its own position, so a query looks at a few neighbours only and never at the whole map.
 import type { TileMap } from '../../sim/map';
+import { inDipMesh } from '../dips/shape';
+import { heightAt } from '../heights';
 import { hash, rockAmount, STONE_PX, type StoneField } from './field';
-import type { FloorPiece, Marks } from './place';
+import type { FloorPiece, Grate, Marks } from './place';
 import type { Face } from './plan';
 
 export interface Block {
@@ -25,15 +27,17 @@ export interface Block {
   frieze: boolean;
   /** A wedge or the disc (ring 0) of a circle, a field of a mosaic. */
   piece?: { of: FloorPiece; ring: number; index: number };
+  /** The shaft of a drain grate: no stone, a hole (the mesh sinks it, the painter makes it dark). */
+  hole?: true;
 }
 
 // First guesses, all of them.
 /** Tiles between two levels; floors: raised 0, flush -STEP, sunk -2 * STEP; walls the same, into the wall. */
-export const LEVEL_STEP = 0.03;
+export const LEVEL_STEP = 0.045;
 /** The shares of sunk and raised blocks; the rest is flush. */
 const SUNK = 0.18, RAISED = 0.14;
-/** The steepest tilt (tiles per px): a tile-wide slab falls by half a level step. */
-const TILT = 0.0005;
+/** The most a block falls along one of its sides by its tilt (tiles): a small block leans more steeply than a long slab, and none sinks far. */
+const TILT_DROP = 0.025;
 /** The shares of brown and grey blocks; the rest is sandstone. */
 const BROWN = 0.5, GREY = 0.27;
 /** The floor's slabs: one per cell of this grid (px), whose corners are shifted by up to the jitter (below half a cell). */
@@ -57,38 +61,70 @@ export const MOSAIC_TESSERA = 4;
 const MOSAIC_BAND = 5, MOSAIC_BORDER = 2;
 /** The ring number of a mosaic's border. */
 export const MOSAIC_BORDER_RING = 99;
+/** A drain grate's shaft: a square of this many px in the middle of its cell. */
+export const GRATE_PX = 16;
 
 // The ids pack a block's place into bit fields (slab cell, wall plane, course and joint, piece and stone): they assume a map of fewer than
 // 1024 cells a side and px no lower than -64.
-const WALL_ID = 2 ** 29, PIECE_ID = 2 ** 30;
+const WALL_ID = 2 ** 29, PIECE_ID = 2 ** 30, HOLE_ID = 2 ** 28;
 const GREY_STONE = 1, SAND = 2;
 
 /** A block, and whether it is rock (then the queries answer null). */
 interface Made { b: Block; rock: boolean }
 // The blocks made so far for one field and map: the painter asks px by px, so nearly every call finds its block here.
 // shortcut: a door that appears or goes within 2.5 tiles of a block made earlier does not change whether that block is rock; empty `made` on such a tile change if the game ever makes one
-let made = new Map<number, Made>(), madeF: StoneField | null = null, madeMap: TileMap | null = null;
+let made = new Map<number, Made>(), madeF: StoneField | null = null, madeMap: TileMap | null = null, madeMarks: Marks | null = null;
 /** `made` is emptied at this size, so it never grows with the map. */
 const MADE_MAX = 20000;
+
+/** A floor cell beside one the dip mesh draws: its stone lies level with that mesh's rim, at height 0. */
+const besideDip = (map: TileMap, x: number, z: number): boolean =>
+  heightAt(map, x, z) === 0 && !inDipMesh(map, x, z) && (inDipMesh(map, x + 1, z) || inDipMesh(map, x - 1, z) || inDipMesh(map, x, z + 1) || inDipMesh(map, x, z - 1));
+
+/** The level of a floor piece's stones: flush, or raised where it reaches a cell beside a dip. */
+function pieceLie(map: TileMap, p: FloorPiece): 0 | 1 {
+  for (let z = Math.floor(p.z - p.r); z <= Math.floor(p.z + p.r); z++) for (let x = Math.floor(p.x - p.r); x <= Math.floor(p.x + p.r); x++) {
+    if (Math.hypot(Math.max(x - p.x, 0, p.x - x - 1), Math.max(z - p.z, 0, p.z - z - 1)) < p.r && besideDip(map, x, z)) return 1;
+  }
+  return 0;
+}
+
+/**
+ * Where a slab must lie level, whatever its own number says: raised (height 0) where it reaches a cell beside a dip, so the floor meets
+ * the dip mesh without a step; at a floor piece's level where it touches the piece, so the ground round a piece is level; flush round a
+ * grate. Null: free.
+ */
+// shortcut: a block keeps the level it was made with (`made`), and the view rebuilds only the chunks a changed tile touches, so a tile change that makes or unmakes a dip-mesh cell (a wall opening one cell from a chasm) can leave a step of one level at that cell's edge; empty `made` and rebuild the chunks within two tiles if levels get such changes.
+function lieOf(map: TileMap, marks: Marks, u0: number, v0: number, u1: number, v1: number): 0 | 1 | null {
+  for (let z = v0 >> 5; z <= (v1 - 1) >> 5; z++) for (let x = u0 >> 5; x <= (u1 - 1) >> 5; x++) if (besideDip(map, x, z)) return 1;
+  for (const p of marks.pieces) {
+    const cx = p.x * STONE_PX, cz = p.z * STONE_PX;
+    if (Math.hypot(Math.max(u0 - cx, 0, cx - u1), Math.max(v0 - cz, 0, cz - v1)) < p.r * STONE_PX + 1) return pieceLie(map, p);
+  }
+  // round a grate's shaft the floor is flush, so its bars lie at one depth below every edge
+  for (const g of marks.grates) if (Math.max(u0 - g.x * STONE_PX, g.x * STONE_PX - u1, v0 - g.z * STONE_PX, g.z * STONE_PX - v1) < GRATE_PX / 2 + 1) return 0;
+  return null;
+}
 
 /**
  * The block `id` with its rectangle. It is rock as a whole: the rock at its centre (x, z in tiles) against its own number, which breaks
  * the border up block by block. A frieze block is raised, level sandstone.
  */
-function block(f: StoneField, map: TileMap, id: number, u0: number, v0: number, u1: number, v1: number, x: number, z: number, frieze = false): Made {
-  if (madeF !== f || madeMap !== map || made.size >= MADE_MAX) {
-    made = new Map(); madeF = f; madeMap = map;
-    lastFloor = lastWall = null; // they were made for the field and map before
+function block(f: StoneField, map: TileMap, marks: Marks | null, id: number, u0: number, v0: number, u1: number, v1: number, x: number, z: number, frieze = false): Made {
+  if (madeF !== f || madeMap !== map || (marks && madeMarks !== marks) || made.size >= MADE_MAX) {
+    made = new Map(); madeF = f; madeMap = map; madeMarks = marks ?? madeMarks;
+    lastFloor = lastWall = null; // they were made for the field, map and marks before
   }
   let m = made.get(id);
   if (m) return m;
   const s = hash(f.seed, id, 1, 31), l = hash(f.seed, id, 2, 31);
+  const lie = frieze ? 1 : marks ? lieOf(map, marks, u0, v0, u1, v1) : null;
   m = {
     b: {
       id, u0, v0, u1, v1,
       stone: frieze ? SAND : s < BROWN ? 0 : s < BROWN + GREY ? 1 : 2,
-      level: frieze || l >= 1 - RAISED ? 1 : l < SUNK ? -1 : 0,
-      tilt: frieze ? [0, 0] : [(hash(f.seed, id, 3, 31) * 2 - 1) * TILT, (hash(f.seed, id, 4, 31) * 2 - 1) * TILT],
+      level: lie ?? (l >= 1 - RAISED ? 1 : l < SUNK ? -1 : 0),
+      tilt: lie !== null ? [0, 0] : [((hash(f.seed, id, 3, 31) * 2 - 1) * TILT_DROP) / (u1 - u0), ((hash(f.seed, id, 4, 31) * 2 - 1) * TILT_DROP) / (v1 - v0)],
       frieze,
     },
     rock: rockAmount(f, map, x, z) > hash(f.seed, id, 5, 31),
@@ -102,7 +138,7 @@ function block(f: StoneField, map: TileMap, id: number, u0: number, v0: number, 
 const cu = (seed: number, i: number, j: number): number => i * SLAB_U + Math.round((hash(seed, i, j, 11) * 2 - 1) * SLAB_JU);
 const cv = (seed: number, i: number, j: number): number => j * SLAB_V + Math.round((hash(seed, i, j, 12) * 2 - 1) * SLAB_JV);
 
-function slabAt(f: StoneField, map: TileMap, pu: number, pv: number): Made {
+function slabAt(f: StoneField, map: TileMap, marks: Marks, pu: number, pv: number): Made {
   const s = f.seed, i0 = Math.floor(pu / SLAB_U), j0 = Math.floor(pv / SLAB_V);
   for (const dj of [0, -1, 1]) for (const di of [0, -1, 1]) {
     const i = i0 + di, j = j0 + dj, odd = (i + j) & 1;
@@ -117,7 +153,7 @@ function slabAt(f: StoneField, map: TileMap, pu: number, pv: number): Made {
       half = (wide ? pu : pv) < cut ? 0 : 1;
       if (wide) { if (half) u0 = cut; else u1 = cut; } else if (half) v0 = cut; else v1 = cut;
     }
-    return block(f, map, ((j + 2) * 8192 + i + 2) * 2 + half, u0, v0, u1, v1, (u0 + u1) / 2 / STONE_PX, (v0 + v1) / 2 / STONE_PX);
+    return block(f, map, marks, ((j + 2) * 8192 + i + 2) * 2 + half, u0, v0, u1, v1, (u0 + u1) / 2 / STONE_PX, (v0 + v1) / 2 / STONE_PX);
   }
   throw new Error(`no slab at ${pu},${pv}`); // the jitter is below half a cell, so one of the nine cells holds the px
 }
@@ -143,14 +179,14 @@ function mosaicStone(r: number, du: number, dv: number): [number, number] {
   return [Math.floor((Math.abs(tu) + Math.abs(tv)) / MOSAIC_BAND), 0];
 }
 
-function stonesOf(f: StoneField, marks: Marks, p: FloorPiece): PieceStones {
+function stonesOf(f: StoneField, map: TileMap, marks: Marks, p: FloorPiece): PieceStones {
   let t = pieceStones.get(p);
   const salt = marks.pieces.indexOf(p);
   if (t && t.seed === f.seed && t.salt === salt) return t; // the stones follow the seed and the piece's place in the marks
   const cx = p.x * STONE_PX, cz = p.z * STONE_PX, r = p.r * STONE_PX;
   const u0 = Math.floor(cx - r), v0 = Math.floor(cz - r), n = Math.max(Math.ceil(cx + r) - u0, Math.ceil(cz + r) - v0);
   t = { seed: f.seed, salt, u0, v0, n, at: new Int16Array(n * n).fill(-1), blocks: [] };
-  const byKey = new Map<number, number>();
+  const byKey = new Map<number, number>(), level = pieceLie(map, p);
   for (let v = 0; v < n; v++) for (let u = 0; u < n; u++) {
     const du = u0 + u + 0.5 - cx, dv = v0 + v + 0.5 - cz, d = Math.hypot(du, dv);
     if (d >= r) continue;
@@ -163,7 +199,7 @@ function stonesOf(f: StoneField, marks: Marks, p: FloorPiece): PieceStones {
       // level ground: every stone flush and untilted. A circle's rings go pale, dark from the disc outward (the rune ring dark, the rim pale);
       // a mosaic's bands take the three stones in turn.
       const stone = p.kind === 'mosaic' ? (ring === MOSAIC_BORDER_RING ? GREY_STONE : ((ring + 2) % 3)) : ring % 2 ? GREY_STONE : SAND;
-      t.blocks.push({ id: PIECE_ID + (salt * 128 + (ring % 128)) * 256 + index, u0: u0 + u, v0: v0 + v, u1: u0 + u + 1, v1: v0 + v + 1, stone: stone as 0 | 1 | 2, level: 0, tilt: [0, 0], frieze: false, piece: { of: p, ring, index } });
+      t.blocks.push({ id: PIECE_ID + (salt * 128 + (ring % 128)) * 256 + index, u0: u0 + u, v0: v0 + v, u1: u0 + u + 1, v1: v0 + v + 1, stone: stone as 0 | 1 | 2, level, tilt: [0, 0], frieze: false, piece: { of: p, ring, index } });
     }
     const b = t.blocks[i];
     b.u0 = Math.min(b.u0, u0 + u); b.u1 = Math.max(b.u1, u0 + u + 1); b.v1 = v0 + v + 1;
@@ -183,14 +219,43 @@ const holds = (m: Made | null, f: StoneField, map: TileMap, pu: number, pv: numb
  * A floor piece's stones replace the slabs inside its radius; they are always laid.
  */
 export function floorBlockAt(f: StoneField, map: TileMap, marks: Marks, px: number, pz: number): Block | null {
-  for (const p of marks.pieces) {
-    const du = px + 0.5 - p.x * STONE_PX, dv = pz + 0.5 - p.z * STONE_PX, r = p.r * STONE_PX;
-    if (du * du + dv * dv >= r * r) continue;
-    const t = stonesOf(f, marks, p);
+  const m = markAt(marks, px, pz);
+  if (!m) {
+    const s = slabOf(f, map, marks, px, pz);
+    return s.rock ? null : s.b;
+  }
+  if ('kind' in m) {
+    const t = stonesOf(f, map, marks, m);
     return t.blocks[t.at[(pz - t.v0) * t.n + px - t.u0]];
   }
-  if (!holds(lastFloor, f, map, px, pz)) lastFloor = slabAt(f, map, px, pz);
-  return lastFloor.rock ? null : lastFloor.b;
+  let b = holes.get(m);
+  if (!b) {
+    const u0 = m.x * STONE_PX - GRATE_PX / 2, v0 = m.z * STONE_PX - GRATE_PX / 2;
+    holes.set(m, b = { id: HOLE_ID + marks.grates.indexOf(m), u0, v0, u1: u0 + GRATE_PX, v1: v0 + GRATE_PX, stone: GREY_STONE, level: -1, tilt: [0, 0], frieze: false, hole: true });
+  }
+  return b;
+}
+const holes = new WeakMap<Grate, Block>();
+
+/** The grate whose shaft, or the floor piece whose stones, a ground px belongs to; null: a slab's px. */
+export function markAt(marks: Marks, px: number, pz: number): Grate | FloorPiece | null {
+  for (const g of marks.grates) if (Math.abs(px + 0.5 - g.x * STONE_PX) < GRATE_PX / 2 && Math.abs(pz + 0.5 - g.z * STONE_PX) < GRATE_PX / 2) return g;
+  for (const p of marks.pieces) {
+    const du = px + 0.5 - p.x * STONE_PX, dv = pz + 0.5 - p.z * STONE_PX, r = p.r * STONE_PX;
+    if (du * du + dv * dv < r * r) return p;
+  }
+  return null;
+}
+/** The one px of a grate's shaft that is painted iron: the bars read their colour there (the default camera sees it behind the shaft's near side). */
+export const ironPx = (hole: Block): [number, number] => [hole.u0, hole.v1 - 1];
+
+/**
+ * The slab over a ground px whatever its stone, and whether it is rock: the mesh fills whole rectangles by it. It knows no floor piece
+ * and no grate: ask only away from them.
+ */
+export function slabOf(f: StoneField, map: TileMap, marks: Marks, px: number, pz: number): { b: Block; rock: boolean } {
+  if (madeMarks !== marks || !holds(lastFloor, f, map, px, pz)) lastFloor = slabAt(f, map, marks, px, pz);
+  return lastFloor;
 }
 
 /** The upright joint `k` of a course: where it stands, and whether it is there (every third one always is, so no block grows without end). */
@@ -218,7 +283,7 @@ export function wallBlockAt(f: StoneField, map: TileMap, face: Face, pu: number,
   }
   // the block's centre on the ground: on the edge of the face's cell that the side looks out of
   const along = (u0 + u1) / 2 / STONE_PX, off = face.side === 0 || face.side === 2 ? 1 : 0;
-  lastWall = block(f, map, WALL_ID + row * 4096 + k + 8, u0, COURSES[course], u1, COURSES[course + 1], across ? along : face.x + off, across ? face.z + off : along, frieze);
+  lastWall = block(f, map, null, WALL_ID + row * 4096 + k + 8, u0, COURSES[course], u1, COURSES[course + 1], across ? along : face.x + off, across ? face.z + off : along, frieze);
   lastPlane = plane;
   return lastWall.rock ? null : lastWall.b;
 }

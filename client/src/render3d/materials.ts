@@ -137,7 +137,8 @@ function sheetRead(base: N, p: N, layer: N, lo: N, hi: N, smooth: N): { rgb: N; 
  *
  * The stone: the vertex attribute `sheet` (ground u, v, layer) gives the ground read; with `faces` the attributes `faceA` and `faceB` (wall u, v,
  * layer) give the two wall reads. Weights: the ground by `smoothstep(0.45, 0.75, normal.y)` (always 1 without `faces`), the walls by the squared
- * horizontal normal; a layer of -1 has weight 0 and the rest is renormalised; with every weight 0 the colour is `STONE`.
+ * horizontal normal; a layer of -1 has weight 0 and the rest is renormalised; where that leaves nothing (a block's skirt) every layer the
+ * vertex has counts; with no layer at all the colour is `STONE`.
  */
 export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, faces: boolean): FlatTexel {
   const isGround = kind.greaterThan(2.5);
@@ -175,9 +176,13 @@ export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, 
     const b = sheetRead(wallSheet, fb.xy, fb.z, sb.lo, sb.hi, smooth);
     const nx2 = n.x.mul(n.x), nz2 = n.z.mul(n.z);
     const across = float(1).sub(wGround);
-    const wG = wGround.mul(availG);
-    const wA = across.mul(nz2.div(max(nx2.add(nz2), 1e-4))).mul(weight(fa.z.greaterThan(-0.5)));
-    const wB = across.mul(nx2.div(max(nx2.add(nz2), 1e-4))).mul(weight(fb.z.greaterThan(-0.5)));
+    const availA = weight(fa.z.greaterThan(-0.5)), availB = weight(fb.z.greaterThan(-0.5));
+    const g0 = wGround.mul(availG);
+    const a0 = across.mul(nz2.div(max(nx2.add(nz2), 1e-4))).mul(availA);
+    const b0 = across.mul(nx2.div(max(nx2.add(nz2), 1e-4))).mul(availB);
+    // A skirt faces a way its block has no sheet for (a floor block's side, a wall block's ledge): it takes the texels it has.
+    const lost = weight(g0.add(a0).add(b0).lessThan(1e-4));
+    const wG = g0.add(lost.mul(availG)), wA = a0.add(lost.mul(availA)), wB = b0.add(lost.mul(availB));
     const total = wG.add(wA).add(wB);
     const none = weight(total.lessThan(1e-4));
     const k = float(1).div(max(total, 1e-4));

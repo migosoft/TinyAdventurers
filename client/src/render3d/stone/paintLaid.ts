@@ -7,7 +7,7 @@ import { DIP, OUTLINE_EDGE, dipOf, inDipMesh, maskAt } from '../dips/shape';
 import { heightAt } from '../heights';
 import { STONE } from '../light';
 import type { TileMap } from '../../sim/map';
-import { CIRCLE_RINGS, CIRCLE_STONES, MOSAIC_BORDER_RING, MOSAIC_TESSERA, RUNE_RING, circleTurn, floorBlockAt, wallBlockAt, type Block } from './blocks';
+import { CIRCLE_RINGS, CIRCLE_STONES, MOSAIC_BORDER_RING, MOSAIC_TESSERA, RUNE_RING, circleTurn, floorBlockAt, ironPx, wallBlockAt, type Block } from './blocks';
 import { STONE_PX, hash, type StoneField } from './field';
 import { FACE_H, FLAG, FLAT_A, encodeRelief } from './format';
 import { CHUNK } from './grid';
@@ -39,9 +39,10 @@ export const MEAN_TOLERANCE = 36;
 // ---- relief
 /** A block's bevel by level (sunk, flush, raised): the slope of the px beside the joint, and of the next one. */
 const BEVEL = [[0.25], [0.5], [0.5, 0.25]];
-/** A tilt (tiles per px, `Block.tilt`) of at least this shows as the slope `TILT_SLOPE` over the whole block: the table has no finer step. */
-export const TILT_SHOWN = 0.00025;
-const TILT_SLOPE = 0.1;
+/** A mosaic tessera's lean. (A block's tilt is not painted: it is the mesh's, `laidMesh.ts`.) */
+const TESSERA_LEAN = 0.1;
+/** A drain grate's shaft and the iron of its bars. */
+const SHAFT: Rgb = [9, 8, 10], IRON: Rgb = [112, 116, 128];
 /** The share of blocks with a chipped corner, its size range (px) and its slope on both axes. */
 const CHIP_SHARE = 0.3, CHIP_MIN = 2, CHIP_SPAN = 3, CHIP_SLOPE = 0.5;
 /** The share of blocks with a crack, and the shortest side (px) of a block that may have one. */
@@ -139,8 +140,6 @@ function stonePx(out: Uint8Array, at: number, seed: number, b: Block, pal: reado
       const corner = Math.floor(hash(seed, b.id, 9, 31) * 4), right = corner & 1, low = corner & 2;
       if ((right ? kr : kl) + (low ? kb : kt) < CHIP_MIN + Math.floor(hash(seed, b.id, 10, 31) * CHIP_SPAN)) { du = right ? -CHIP_SLOPE : CHIP_SLOPE; dv = low ? -CHIP_SLOPE : CHIP_SLOPE; }
     }
-    if (Math.abs(b.tilt[0]) >= TILT_SHOWN) du += Math.sign(b.tilt[0]) * TILT_SLOPE;
-    if (Math.abs(b.tilt[1]) >= TILT_SHOWN) dv += Math.sign(b.tilt[1]) * TILT_SLOPE;
   }
   const a = relief(du, dv, FLAG.plain);
   if (damp > 0 && (kl === 0 || kt === 0 || kr === 0 || kb === 0) && hash(seed, u, v, 53) < MOSS_CREEP * damp) {
@@ -179,7 +178,7 @@ const isDip = (t: number): boolean => dipOf(t) !== DIP.none;
 /** The smooth outline of pools, lava and chasms together at a ground px. */
 export const dipMask = (map: TileMap, u: number, v: number): number => maskAt(map, (u + 0.5) / STONE_PX, (v + 0.5) / STONE_PX, isDip);
 /** A mosaic tessera's lean along one axis. */
-const lean = (seed: number, i: number, j: number, k: number): number => [-TILT_SLOPE, 0, 0, TILT_SLOPE][Math.floor(hash(seed, i, j, k) * 4)];
+const lean = (seed: number, i: number, j: number, k: number): number => [-TESSERA_LEAN, 0, 0, TESSERA_LEAN][Math.floor(hash(seed, i, j, k) * 4)];
 /** The wall of the frieze's cut toward a neighbour px: none where that px is cut too. */
 const friezeWall = (x: number, y: number): number => (cut(FRIEZE, x, y) ? 0 : CARVE);
 /** What the ground painter keeps for one page: the dip mesh's cells of the page and one cell round it, and the floor pieces. */
@@ -236,6 +235,11 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
   const { f, map, marks } = c, seed = f.seed;
   const b = floorBlockAt(f, map, marks, u, v);
   if (!b) return false;
+  if (b.hole) {
+    const iron = ironPx(b), c = u === iron[0] && v === iron[1] ? IRON : SHAFT;
+    out[at] = c[0]; out[at + 1] = c[1]; out[at + 2] = c[2]; out[at + 3] = FLAT_A;
+    return true;
+  }
   const x = u >> 5, z = v >> 5, top = heightAt(map, x, z) > 0;
   const damp = !top && dampAt(map, marks, u >> 1, v >> 1) ? 1 : 0;
   let near = b.piece !== undefined || c.dip[(z - c.z0) * SPAN + x - c.x0] === 1;

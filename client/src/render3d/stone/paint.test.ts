@@ -5,7 +5,7 @@ import { CIRCLE_STONES, RUNE_RING, floorBlockAt, wallBlockAt } from './blocks';
 import { ROCK, stoneField } from './field';
 import { FACE_H, FACE_W, FLAG, FLAT_A, PAGE, decodeRelief } from './format';
 import { paintFace, paintGroundRows } from './paint';
-import { MEAN_TOLERANCE, OLD_FLOOR, RUNES, TILT_SHOWN } from './paintLaid';
+import { MEAN_TOLERANCE, OLD_FLOOR, RUNES } from './paintLaid';
 import { VEIN } from './paintRock';
 import { noMarks, placeMarks } from './place';
 import { planSheets } from './plan';
@@ -63,15 +63,14 @@ describe('the painter of laid stone', () => {
     expect(stray).toBeLessThan(8);
   });
 
-  it('leaves a px inside an untilted slab flat', () => {
+  it('leaves a px inside a slab flat, tilted or not: the tilt is the mesh\'s', () => {
     const map = floorMap(), f = stoneField(map, null, SEED), marks = noMarks(), p = page(map, 0, 0);
     let flat = 0;
     for (let y = 8; y < PAGE - 8; y += 3) for (let x = 8; x < PAGE - 8; x += 3) {
       const b = floorBlockAt(f, map, marks, x, y)!;
-      if (Math.abs(b.tilt[0]) >= TILT_SHOWN || Math.abs(b.tilt[1]) >= TILT_SHOWN) continue;
-      if (x - b.u0 < 4 || b.u1 - x < 5 || y - b.v0 < 4 || b.v1 - y < 5 || flagAt(p, x, y) !== FLAG.plain) continue; // off the bevel and the chips, not a crack
-      const r = decodeRelief(p[(y * PAGE + x) * 4 + 3]);
-      if (r.dhdu === 0 && r.dhdv === 0) { flat++; expect(p[(y * PAGE + x) * 4 + 3]).toBe(FLAT_A); }
+      if (x - b.u0 < 8 || b.u1 - x < 9 || y - b.v0 < 8 || b.v1 - y < 9 || flagAt(p, x, y) !== FLAG.plain) continue; // off the bevel and the chips, not a crack
+      flat++;
+      expect(p[(y * PAGE + x) * 4 + 3]).toBe(FLAT_A);
     }
     expect(flat).toBeGreaterThan(200);
   });
@@ -121,7 +120,7 @@ describe('the painter of laid stone', () => {
     const { map, f, marks } = stoneLevel();
     const out = new Uint8Array(PAGE * PAGE * 4);
     paintGroundRows(f, map, marks, 2, 1, 0, PAGE, out);
-    expect(fnv(out)).toBe(921680116); // re-pinned whenever the laid look is tuned
+    expect(fnv(out)).toBe(3233483785); // re-pinned whenever the laid look is tuned; last: a block's tilt left the paint for the mesh, and the slabs round a floor piece lie level (Task 11)
     expect(RUNES.length).toBe(CIRCLE_STONES[RUNE_RING]); // one glyph per stone of the rune ring: what keeps the runes of a ring all different
   });
 });
