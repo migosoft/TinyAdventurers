@@ -2,6 +2,7 @@
 // tile of rock, and the drain grates' bars (`ornamentMesh.ts`), with the attributes the world material reads the stone sheets by.
 // Pure: no three.
 import type { TileMap } from '../../sim/map';
+import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
 import { FACE_H, FACE_W } from './format';
 import { CHUNK, KIND, SIDE_STEP } from './grid';
@@ -106,7 +107,8 @@ export function buildStoneChunk(map: TileMap, f: StoneField, plan: SheetPlan, ma
       const slot = plan.slotOf(fs.face);
       if (fs.rock) side(x, z, s, h, fs.hn, slot);
       else laidFace(c, fs, tri);
-      foot(x, z, s, fs.hn, slot);
+      // only beside laid floor: a lower wall hides it, and the dip mesh draws its own skirt in this plane
+      if (fs.hn === 0 && !inDipMesh(map, x + SIDE_STEP[s][0], z + SIDE_STEP[s][1])) foot(x, z, s, fs.hn, slot);
     }
   }
   for (const g of marks.grates) if (g.x >= x0 && g.x < x1 && g.z >= z0 && g.z < z1) grateBars(f, map, marks, g, ground, quad);

@@ -78,6 +78,7 @@ import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
+import { GRATE_DEPTH } from './stone/laidMesh';
 import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
 import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
@@ -442,7 +443,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('push', new BufferAttribute(a.push, 2));
     g.setIndex(new BufferAttribute(a.index, 1));
     const box = new Box3(
-      new Vector3(cx * CHUNK, 0, cz * CHUNK),
+      new Vector3(cx * CHUNK, -GRATE_DEPTH, cz * CHUNK), // laid floors lie at or below 0, a grate's shaft deepest
       new Vector3(Math.min(map.w, cx * CHUNK + CHUNK), top, Math.min(map.h, cz * CHUNK + CHUNK)),
     );
     return finishMesh(g, box, material);
@@ -517,15 +518,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     c.mesh.geometry.dispose();
     list[i] = null;
   };
-  /** The tile of every cell as the chunks were built from it: `tileChanged` rebuilds the dip, water and lava chunks only when the class changed. */
+  /** The tile of every cell as the chunks were built from it: `tileChanged` rebuilds the chunks only when the cell's class changed. */
   const builtTiles = Uint8Array.from(map.tiles);
-  /** `dips` false: only the world chunk (a change that leaves every cell's dip class alone). */
-  const buildAt = (cx: number, cz: number, dips = true): void => {
+  const buildAt = (cx: number, cz: number): void => {
     const i = cz * nx + cx;
     dropChunk(worldChunks, i);
     const c = buildChunk(map, world.painted, cx, cz, kit);
     if (c.world.count > 0) worldChunks[i] = makeChunkMesh(c.world, cx, cz, WALL_H);
-    if (!dips) return;
     dropChunk(dipChunks, i);
     const d = buildDipChunk(map, world.painted, cx, cz, kit.plan);
     if (d) dipChunks[i] = makeDipMesh(d);
@@ -897,10 +896,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         refreshWaterField(wField, map, x, z);
         uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       }
-      const around = chunksOfTile(map, x, z);
+      // The chunks are built from each cell's height, dip kind and ground kind (`dipClassChanged` names all three), the world chunk's
+      // stone too: a door opening or closing changes none of them and rebuilds nothing.
       if (moved) {
         for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-      } else for (const [cx, cz] of around) buildAt(cx, cz, dips);
+      } else if (dips) for (const [cx, cz] of chunksOfTile(map, x, z)) buildAt(cx, cz);
       rebuildField();
       chunks.total = chunkTotal();
     },

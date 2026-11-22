@@ -90,6 +90,15 @@ describe('buildStoneChunk', () => {
     expect(low).toBeLessThan(-0.2); // the grate's shaft
   });
 
+  it('draws a wall\'s foot below 0 only beside laid floor: the dip mesh has its own skirt in that plane', () => {
+    // a wall over a chasm at x = 1, and a wall over plain floor at x = 5
+    const m = floorMap(7, 3);
+    m.set(1, 0, TILE_ID.Wall); m.set(1, 1, TILE_ID.Chasm); m.set(5, 0, TILE_ID.Wall);
+    const faces = vertices(build(m).a).filter((v) => v.kind === KIND.face);
+    expect(Math.min(...faces.filter((v) => v.p[0] <= 2).map((v) => v.p[1]))).toBe(0);
+    expect(Math.min(...faces.filter((v) => v.p[0] >= 5).map((v) => v.p[1]))).toBeLessThan(0);
+  });
+
   it('gives a higher block a skirt that faces the lower one beside it', () => {
     const m = floorMap(16, 16), f = stoneField(m, null, SEED), none = noMarks();
     const tris = triangles(build(m).a);
