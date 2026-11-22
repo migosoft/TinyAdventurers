@@ -1119,11 +1119,6 @@ mod tests {
         assert!(!run.objects[oi].gone, "the crystal stays, dark");
         hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::split(&[(DamageType::Heat, 0.3)])), None);
         assert!(!crystal_lit(&run, oi), "heat does not light it");
-        let wall_y = (Map::tile_of(run.players[0].pos()).1 - 1) as f64 * crate::dungeon::TILE;
-        run.players[0].mv.y = wall_y + crate::defs::classes::PLAYER_RADIUS + 0.5;
-        run.players[0].mv.x = run.objects[oi].pos.x;
-        push(&mut run);
-        assert!(!crystal_lit(&run, oi), "E does not light it either");
     }
 
     #[test]

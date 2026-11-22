@@ -22,12 +22,14 @@ function page(map: TileMap, cx: number, cz: number, seed = SEED, marks = noMarks
 }
 const flagAt = (p: Uint8Array, x: number, y: number): number => decodeRelief(p[(y * PAGE + x) * 4 + 3]).flag;
 
-/** The stone page's level with its marks, as the page builds them. */
-function stoneLevel() {
+/** The stone page's level with its marks, as the page builds them; built once for the file (no test changes it). */
+let level: ReturnType<typeof makeLevel> | undefined;
+function makeLevel() {
   const map = stoneMap(), f = stoneField(map, zoneKinds(map), STONE_SEED);
   const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y })), spawn: STONE_SPAWN });
   return { map, f, marks };
 }
+const stoneLevel = () => (level ??= makeLevel());
 
 function fnv(bytes: Uint8Array): number {
   let h = 0x811c9dc5;
@@ -120,7 +122,7 @@ describe('the painter of laid stone', () => {
     const { map, f, marks } = stoneLevel();
     const out = new Uint8Array(PAGE * PAGE * 4);
     paintGroundRows(f, map, marks, 2, 1, 0, PAGE, out);
-    expect(fnv(out)).toBe(482073302); // re-pinned whenever the laid look is tuned; last: the runes are 15 by 18 px, a dark ground with walls of the ring's stone beside it (Task 13)
+    expect(fnv(out)).toBe(482073302); // re-pinned whenever the laid look is tuned; last: the runes are 15 by 18 px, a dark ground with walls of the ring's stone beside it
     expect(RUNES.length).toBe(CIRCLE_STONES[RUNE_RING]); // one glyph per stone of the rune ring: what keeps the runes of a ring all different
   });
 });
@@ -265,7 +267,8 @@ describe('the painter of natural rock', () => {
     for (let z = 10; z < 15; z++) for (let x = 10; x < 15; x++) map.set(x, z, TILE_ID.DeepWater);
     const stray: string[] = [];
     for (let seed = 1; seed <= 12; seed++) {
-      const p = page(map, 0, 0, seed);
+      const p = new Uint8Array(PAGE * PAGE * 4);
+      paintGroundRows(stoneField(map, null, seed), map, noMarks(), 0, 0, 10 * 32, 15 * 32, p); // only the pool's rows
       for (let v = 10 * 32; v < 15 * 32; v++) for (let u = 10 * 32; u < 15 * 32; u++) {
         const i = (v * PAGE + u) * 4;
         if (p[i] === CRACK[0] && p[i + 1] === CRACK[1] && p[i + 2] === CRACK[2]) stray.push(`${seed}@${u},${v}`);

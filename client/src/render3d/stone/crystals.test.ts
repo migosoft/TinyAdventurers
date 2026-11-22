@@ -10,6 +10,7 @@ const maxY = (p: Float32Array): number => {
 
 describe('crystalCluster', () => {
   it('is closed and outward, whole and broken: every edge has a twin and the volume is positive', () => {
+    const bad: string[] = [];
     for (const broken of [false, true]) for (const size of [BIG_SIZE, SMALL_SIZE]) for (let seed = 1; seed <= 12; seed++) {
       const c = crystalCluster(seed, size, broken), what = `seed ${seed} size ${size} broken ${broken}`;
       const key = (i: number): string => [0, 1, 2].map((k) => Math.round(c.position[i * 3 + k] * 1e5)).join(',');
@@ -25,17 +26,18 @@ describe('crystalCluster', () => {
         // the stored normal is the triangle's own, pointing the way its winding does
         const e1 = [0, 1, 2].map((k) => v(b, k) - v(a, k)), e2 = [0, 1, 2].map((k) => v(d, k) - v(a, k));
         const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-        expect(n[0] * c.normal[a * 3] + n[1] * c.normal[a * 3 + 1] + n[2] * c.normal[a * 3 + 2], what).toBeGreaterThan(0);
+        if (!(n[0] * c.normal[a * 3] + n[1] * c.normal[a * 3 + 1] + n[2] * c.normal[a * 3 + 2] > 0)) bad.push(`${what} normal of triangle ${t / 3}`);
       }
       for (const [e, n] of edges) {
         const [p, q] = e.split('>');
-        expect(n, `${what} edge ${e}`).toBe(1);
-        expect(edges.get(`${q}>${p}`), `${what} twin of ${e}`).toBe(1);
+        if (n !== 1) bad.push(`${what} edge ${e}`);
+        if (edges.get(`${q}>${p}`) !== 1) bad.push(`${what} twin of ${e}`);
       }
       expect(vol, what).toBeGreaterThan(0);
       expect(c.glow.length).toBe(c.position.length / 3);
-      for (const g of c.glow) expect(g >= 0 && g <= 1).toBe(true);
+      if (!c.glow.every((g) => g >= 0 && g <= 1)) bad.push(`${what} glow`);
     }
+    expect(bad).toEqual([]);
   });
 
   it('whole: the tallest shard is about its size high; broken: no vertex above BROKEN_TOP of it', () => {

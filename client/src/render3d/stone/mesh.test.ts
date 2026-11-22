@@ -25,8 +25,8 @@ const LAID_CHUNK_TRIS = 6600;
 const PIECE_CHUNK_TRIS = 10900, CIRCLE_CHUNK_TRIS = 15200;
 /** The most triangles a crevice of two pieces and a branch, 9 tiles of line, may add to a chunk of laid floor (measured: 3 888). */
 const CREVICE_TRIS = 4300;
-/** What the mosaic's chunk measures: Task 11's 8 914, 18 more for the grate's wider shaft and its iron, 1 014 for the crevice's groove (Task 13). The mesh of laid stone has not moved. */
-const TASK_11_CHUNK_TRIS = 9946;
+/** What the mosaic's chunk measures: 8 914 for the laid stone, 18 more for the grate's wider shaft and its iron, 1 014 for the crevice's groove. The mesh of laid stone has not moved. */
+const MOSAIC_CHUNK_TRIS = 9946;
 /**
  * The most triangles a chunk of the stone page's caves may have (measured: 3 877, 5 238 with the passage's laid half, 4 830 and 3 834), and the
  * whole page of ten chunks as rock (measured: 25 335; as laid stone it has 59 215).
@@ -55,13 +55,15 @@ const vertex = (a: StoneArrays, i: number): V => ({
 const vertices = (a: StoneArrays): V[] => Array.from({ length: a.count }, (_, i) => vertex(a, i));
 const triangles = (a: StoneArrays): V[][] => Array.from({ length: a.index.length / 3 }, (_, t) => [vertex(a, a.index[t * 3]), vertex(a, a.index[t * 3 + 1]), vertex(a, a.index[t * 3 + 2])]);
 
-/** The stone page's level with its marks (a circle, a mosaic, a grate, a chasm), all laid. */
-function stoneLevel() {
+/** The stone page's level with its marks (a circle, a mosaic, a grate, a chasm), all laid; built once for the file (no test changes it). */
+let level: ReturnType<typeof makeLevel> | undefined;
+function makeLevel() {
   const map = stoneMap(), f = stoneField(map, null, STONE_SEED);
   const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y })), spawn: STONE_SPAWN });
   const plan = planSheets(map);
   return { map, f, marks, chunk: (cx: number, cz: number): StoneArrays => buildStoneChunk(map, f, plan, marks, cx, cz) };
 }
+const stoneLevel = () => (level ??= makeLevel());
 
 describe('buildStoneChunk', () => {
   it('builds triangles wound to their normals, a flat top on a wall and nothing but stone kinds', () => {
@@ -189,6 +191,7 @@ describe('buildStoneChunk', () => {
   it('lays the ground under a floor piece level: every stone at its piece\'s level, only a circle\'s dark rings a step lower', () => {
     const { map, f, marks } = stoneLevel();
     expect(marks.pieces.map((p) => p.kind).sort()).toEqual(['circle', 'mosaic']);
+    const bad: string[] = []; // px whose level, tilt or height is wrong
     for (const p of marks.pieces) {
       const cu = p.x * 32, cv = p.z * 32, R = p.r * 32;
       let low = 0, high = 0;
@@ -196,14 +199,13 @@ describe('buildStoneChunk', () => {
         if (Math.hypot(u + 0.5 - cu, v + 0.5 - cv) >= R + 1) continue;
         const b = floorBlockAt(f, map, marks, u, v)!, dark = p.kind === 'circle' && b.piece !== undefined && b.stone === 1;
         // (the stone page's pieces lie away from dips: the piece's level is flush; so is every slab that touches it)
-        expect(b.level, `px ${u},${v}`).toBe(dark ? -1 : 0);
-        expect(b.tilt).toEqual([0, 0]);
-        expect(floorHeight(f, map, marks, (u + 0.5) / 32, (v + 0.5) / 32)).toBeCloseTo((b.level - 1) * LEVEL_STEP, 6);
+        if (b.level !== (dark ? -1 : 0) || b.tilt[0] !== 0 || b.tilt[1] !== 0 || Math.abs(floorHeight(f, map, marks, (u + 0.5) / 32, (v + 0.5) / 32) - (b.level - 1) * LEVEL_STEP) > 5e-7) bad.push(`${u},${v}`);
         if (dark) low++; else if (b.piece) high++;
       }
       expect(high).toBeGreaterThan(1000);
       expect(low > 1000).toBe(p.kind === 'circle');
     }
+    expect(bad).toEqual([]);
   });
 
   it('cuts no stone of a floor piece by a slab outside it: inside a piece every top is level, and a step lies only between two rings', () => {
@@ -425,19 +427,19 @@ describe('buildStoneChunk', () => {
     for (const v of vertices(rockBuild(m))) if (v.kind === KIND.floor) expect(v.p[1]).toBeLessThanOrEqual(0);
   });
 
-  it('builds Task 11\'s mesh where the rock amount is 0, and keeps the caves under their budgets', () => {
+  it('builds the laid mesh where the rock amount is 0, and keeps the caves under their budgets', () => {
     const map = stoneMap(), plan = planSheets(map), lights = TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y }));
-    const level = (kinds: Uint8Array | null) => {
+    const levelOf = (kinds: Uint8Array | null) => {
       const f = stoneField(map, kinds, STONE_SEED), marks = placeMarks(map, f, { lights, spawn: STONE_SPAWN });
       return (cx: number, cz: number): StoneArrays => buildStoneChunk(map, f, plan, marks, cx, cz);
     };
-    const laid = level(null), zones = level(zoneKinds(map));
-    // the mosaic room lies deep in laid stone: the same arrays, and the count Task 11 measured
+    const laid = levelOf(null), zones = levelOf(zoneKinds(map));
+    // the mosaic room lies deep in laid stone: the same arrays, and the measured count
     expect(zones(3, 0)).toEqual(laid(3, 0));
-    expect(laid(3, 0).index.length / 3).toBe(TASK_11_CHUNK_TRIS);
+    expect(laid(3, 0).index.length / 3).toBe(MOSAIC_CHUNK_TRIS);
     // the two caves' chunks, and the whole page as rock
     for (const [cx, cz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) expect(zones(cx, cz).index.length / 3, `chunk ${cx},${cz}`).toBeLessThan(ROCK_CHUNK_TRIS);
-    const rock = level(new Uint8Array(map.w * map.h).fill(1));
+    const rock = levelOf(new Uint8Array(map.w * map.h).fill(1));
     let all = 0;
     for (let cz = 0; cz < 2; cz++) for (let cx = 0; cx < 5; cx++) all += rock(cx, cz).index.length / 3;
     expect(all).toBeLessThan(ROCK_PAGE_TRIS);

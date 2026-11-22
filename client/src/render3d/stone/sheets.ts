@@ -5,7 +5,7 @@ import { DataArrayTexture, LinearFilter, NoColorSpace, RGBAFormat, UnsignedByteT
 import { FACE_H, FACE_W, FLAT_A, FLAT_RGB, PAGE } from './format';
 import type { FaceSlot, SheetPlan } from './plan';
 
-/** The plan needs more layers, or a bigger page, than the device's textures allow. (Shown to the player like `GroundTooLargeError`.) */
+/** The plan needs more layers, or a bigger page, than the device's textures allow. (Nothing catches it: the host shows it as a fatal error and the 3D view stops; `GroundTooLargeError` instead lets the run go on without the cover.) */
 export class StoneTooLargeError extends Error {
   constructor(what: string, need: number, limit: number) {
     super(`The stone sheets need ${need} ${what}, more than this device's texture limit (${limit}).`);
