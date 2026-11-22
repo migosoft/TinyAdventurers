@@ -47,7 +47,7 @@ export const FRIEZE_COURSE = 2;
 export const FRIEZE_W = 16;
 /** A wall course's upright joints: one per this many px, shifted by up to the jitter; odd courses start half a step on. A joint is left out with the share `WALL_DROP`. */
 const WALL_U = 16, WALL_JU = 3, WALL_DROP = 0.35;
-/** A circle's rings: their outer edges as shares of the radius (ring 0 is the centre disc), and the stones in each (even, so dark and pale close). */
+/** A circle's rings: their outer edges as shares of the radius (ring 0 is the centre disc), and the stones in each. */
 export const CIRCLE_RINGS = [0.16, 0.36, 0.58, 0.84, 1];
 export const CIRCLE_STONES = [1, 6, 10, 12, 28];
 /** The ring whose stones each get a carved rune. */
@@ -151,8 +151,9 @@ function stonesOf(f: StoneField, marks: Marks, p: FloorPiece): PieceStones {
     if (i === undefined) {
       i = t.blocks.length;
       byKey.set(key, i);
-      // level ground: every stone flush and untilted. A circle's stones go dark, pale round a ring; a mosaic's bands take the three stones in turn.
-      const stone = p.kind === 'mosaic' ? (ring === MOSAIC_BORDER_RING ? GREY_STONE : ((ring + 2) % 3)) : ring === 0 ? 0 : (ring + index) % 2 ? GREY_STONE : SAND;
+      // level ground: every stone flush and untilted. A circle's rings go pale, dark from the disc outward (the rune ring dark, the rim pale);
+      // a mosaic's bands take the three stones in turn.
+      const stone = p.kind === 'mosaic' ? (ring === MOSAIC_BORDER_RING ? GREY_STONE : ((ring + 2) % 3)) : ring % 2 ? GREY_STONE : SAND;
       t.blocks.push({ id: PIECE_ID + (salt * 128 + (ring % 128)) * 256 + index, u0: u0 + u, v0: v0 + v, u1: u0 + u + 1, v1: v0 + v + 1, stone: stone as 0 | 1 | 2, level: 0, tilt: [0, 0], frieze: false, piece: { of: p, ring, index } });
     }
     const b = t.blocks[i];

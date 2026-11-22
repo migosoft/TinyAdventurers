@@ -88,7 +88,7 @@ describe('the block layout', () => {
     expect(shares[5]).toBeGreaterThan(0.98);
   });
 
-  it("covers a circle's rings with wedges that alternate", () => {
+  it("covers a circle's rings with wedges, the rings dark and pale in turn", () => {
     const p: FloorPiece = { kind: 'circle', x: 10.5, z: 10.5, r: 1.5 };
     const marks: Marks = { ...noMarks(), pieces: [p] };
     const cx = p.x * STONE_PX, cz = p.z * STONE_PX, R = p.r * STONE_PX;
@@ -101,7 +101,7 @@ describe('the block layout', () => {
       expect(b.level).toBe(0);
     }
     expect(CIRCLE_STONES[0]).toBe(1);
-    expect(RUNE_RING).toBeGreaterThan(0);
+    const stones: number[] = [floorBlockAt(laid, map, marks, Math.floor(cx), Math.floor(cz))!.stone];
     for (let ring = 1; ring < CIRCLE_RINGS.length; ring++) {
       const mid = ((CIRCLE_RINGS[ring - 1] + CIRCLE_RINGS[ring]) / 2) * R, round: Block[] = [];
       for (let i = 0; i < 2000; i++) {
@@ -111,8 +111,14 @@ describe('the block layout', () => {
       }
       if (round[0].id === round[round.length - 1].id) round.pop();
       expect(round.length, `ring ${ring}`).toBe(CIRCLE_STONES[ring]);
-      round.forEach((b, i) => expect(b.stone).not.toBe(round[(i + 1) % round.length].stone));
+      // a ring is one stone all round, the other stone than the ring inside it; its wedges are separate blocks
+      expect(new Set(round.map((b) => b.id)).size).toBe(round.length);
+      expect(new Set(round.map((b) => b.stone)).size).toBe(1);
+      stones.push(round[0].stone);
+      expect(stones[ring]).not.toBe(stones[ring - 1]);
     }
+    expect(stones[RUNE_RING]).toBe(1);
+    expect(stones[stones.length - 1]).toBe(2);
     const ids = floorBlocksOf(laid, map, marks, 10, 10).filter((b) => b.piece).length;
     expect(ids).toBeGreaterThan(CIRCLE_STONES[1]);
   });
