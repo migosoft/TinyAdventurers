@@ -6,7 +6,7 @@ import { FACE_H, FACE_W } from './format';
 import { KIND } from './grid';
 import { NONE, type Corner, type Out, type Vec3 } from './laidMesh';
 import type { SheetPlan } from './plan';
-import { BASIN_GRID, COLUMN, columnRadius, cornerLow, floorIn, heightIn, keyOf, sideReach, wallY, type Seg, type Shape, type Wall } from './shape';
+import { BASIN_GRID, COLUMN, columnRadius, cornerLow, floorIn, grooveAt, heightIn, keyOf, sideReach, up, wallY, type Seg, type Shape, type Wall } from './shape';
 
 /** What the rock is meshed with: the level's shape, the sheets' plan and the chunk's ground texel of a world point. */
 export interface RockEnv { s: Shape; plan: SheetPlan; ground(x: number, z: number): Vec3 }
@@ -80,7 +80,7 @@ export function rockSlope(e: RockEnv, w: Wall, out: Out): void {
   /** A station's place along its axis (0..1) and how far up the low and the high side's slope it lies. */
   const place = (st: [number, number], rl: number, rh: number): [number, number, number] => {
     const lo = Math.max(0, rl), hi = 1 - Math.max(0, rh);
-    return st[0] === 0 ? [lo * st[1], rl < 0 ? 1 : st[1], 1] : st[0] === 2 ? [1 - (1 - hi) * st[1], 1, rh < 0 ? 1 : st[1]] : [lo + (hi - lo) * st[1], 1, 1];
+    return st[0] === 0 ? [lo * st[1], rl < 0 ? 1 : up(st[1], rl), 1] : st[0] === 2 ? [1 - (1 - hi) * st[1], 1, rh < 0 ? 1 : up(st[1], rh)] : [lo + (hi - lo) * st[1], 1, 1];
   };
   const ids: number[] = [];
   for (const sz of zs) for (const sx of xs) {
@@ -177,14 +177,26 @@ export function rockFloor(e: RockEnv, x: number, z: number, out: Out): void {
     polys.push([[x0, z0], [x1, z0], [x0, z1]], [[x1, z0], [x1, z1], [x0, z1]]);
   }
   for (const c of segs ?? []) polys = cutAlong(polys, c);
+  /** The nearest point of the crevices' lines. */
+  const onLine = (x: number, z: number): P => {
+    let best = Infinity, at: P = [x, z];
+    for (const c of segs ?? []) {
+      const dx = c.x1 - c.x0, dz = c.z1 - c.z0, t = Math.min(1, Math.max(0, ((x - c.x0) * dx + (z - c.z0) * dz) / (dx * dx + dz * dz || 1)));
+      const qx = c.x0 + dx * t, qz = c.z0 + dz * t, d = (x - qx) ** 2 + (z - qz) ** 2;
+      if (d < best) { best = d; at = [qx, qz]; }
+    }
+    return at;
+  };
   for (const poly of polys) {
     const p = poly.map(([px, pz]): Vec3 => [px, floorIn(s, px, pz), pz]);
+    // a piece of a groove reads the px on the crevice's line, which the painter made black: the groove is black whichever way its sides face
+    const groove = !!segs && grooveAt(segs, poly.reduce((a, q) => a + q[0], 0) / poly.length, poly.reduce((a, q) => a + q[1], 0) / poly.length) > 0;
     // the piece's normal: the sum over its corners (Newell), which no three corners in a line can spoil
     let nx = 0, ny = 0, nz = 0;
     p.forEach((a, i) => { const b = p[(i + 1) % p.length]; nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]); });
     const l = Math.hypot(nx, ny, nz) * Math.sign(ny);
     if (!l) continue; // no area
-    const ids = p.map((v) => out.vert({ p: v, sheet: e.ground(v[0], v[2]), a: NONE, b: NONE }, [nx / l, ny / l, nz / l], KIND.floor));
+    const ids = p.map((v) => out.vert({ p: v, sheet: groove ? e.ground(...onLine(v[0], v[2])) : e.ground(v[0], v[2]), a: NONE, b: NONE }, [nx / l, ny / l, nz / l], KIND.floor));
     for (let i = 1; i + 1 < ids.length; i++) out.tri(ids[0], ids[i], ids[i + 1]);
   }
 }

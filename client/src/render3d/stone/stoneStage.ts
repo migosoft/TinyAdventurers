@@ -1,5 +1,5 @@
 // The stage of the ?r3d=stone page (#380): the stonework's own level on the real code, no server. A knight walks with WASD.
-// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2`, `&lamp=0` (the light that walks with the knight off),
+// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door`, `&lamp=0` (the light that walks with the knight off),
 // `&break=1` (every crystal broken: its light is off; the crystal model comes later), `&t=<s>` shifts the lights' flicker clock.
 import { LIGHT, LIGHT_KIND } from '../../generated/defs';
 import { LightField } from '../../game/light';

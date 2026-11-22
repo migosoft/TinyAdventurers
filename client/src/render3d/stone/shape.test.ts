@@ -38,11 +38,14 @@ describe('stoneHeight', () => {
       expect(stoneHeight(f, m, none, 5 + t, 1)).toBe(WALL_H);
     }
     // in between it rises all the way, more gently at the foot than above
-    const up = [0.02, 0.1, 0.2, 0.45].map((d) => stoneHeight(f, m, none, 2 - d, 5.5));
-    expect(up[0]).toBeGreaterThan(0);
-    expect(up[0]).toBeLessThan(0.2);
-    for (let i = 1; i < up.length; i++) expect(up[i]).toBeGreaterThan(up[i - 1]);
-    expect(up[3]).toBe(WALL_H);
+    // (a long slope begins level, so the first step may still lie at 0)
+    for (const z of [3.5, 5.5, 6.25]) {
+      const up = Array.from({ length: 48 }, (_, i) => stoneHeight(f, m, none, 2 - i / 100, z));
+      expect(up[2]).toBeLessThan(0.2);
+      for (let i = 1; i < up.length; i++) expect(up[i]).toBeGreaterThanOrEqual(up[i - 1]);
+      expect(up.filter((h) => h > 0.05 && h < WALL_H - 0.05).length).toBeGreaterThan(5); // a slope, not a step
+      expect(up[47]).toBe(WALL_H);
+    }
   });
 
   it('is equal on both sides of every shared cell edge', () => {

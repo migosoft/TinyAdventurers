@@ -16,6 +16,8 @@ import { unplanned } from './plan';
 export const REACH = 0.29, REACH_WOBBLE = 0.17;
 /** The slope's profile over its reach, 0..1: this share of the height rises evenly (the gentle foot), the rest by the power `STEEP`. */
 const FOOT_RISE = 0.14, STEEP = 2.4;
+/** The longest slope lies level over this share of its reach per tile of reach beyond the shortest (0.34 more: over a quarter of it). */
+const FOOT_LEVEL = 0.8;
 /** The rock stands back from a big crystal: no slope within `NICHE_IN` tiles of its foot, the full one from `NICHE_OUT`. */
 const NICHE_IN = 0.16, NICHE_OUT = 0.5;
 /** A rock floor's corners lie up to this far below 0 (tiles), a puddle's basin this deep at its middle. */
@@ -149,8 +151,16 @@ export function sideReach(w: Wall, side: number, px: number, pz: number): number
   const east = dx ? dx > 0 : px >= w.x + 0.5, south = dz ? dz > 0 : pz >= w.z + 0.5;
   return w.diag[(east ? 1 : 0) + (south ? 2 : 0)] ? w.reach[(east ? 2 : 0) + (south ? 6 : 0)] : -1;
 }
+/**
+ * How far up a slope of reach `r` the share `t` of that reach lies, 0..1: a long slope begins level and rises later, so the line a wall's
+ * foot begins to rise on wobbles with the reach instead of following the cell's edge.
+ */
+export function up(t: number, r: number): number {
+  const level = Math.max(0, r - REACH + REACH_WOBBLE) * FOOT_LEVEL;
+  return Math.max(0, (t - level) / (1 - level));
+}
 /** How far up a side's slope a point lies, 0 on the side's edge .. 1 at the slope's reach `r` and beyond; with no reach the wall is upright in the edge. */
-const along = (d: number, r: number): number => (r < 0 ? 1 : r > 0 ? Math.min(1, d / r) : d > 0 ? 1 : 0);
+const along = (d: number, r: number): number => (r < 0 ? 1 : r > 0 ? up(Math.min(1, d / r), r) : d > 0 ? 1 : 0);
 /** That for the four sides at a point of the cell. */
 function paramsAt(w: Wall, px: number, pz: number): number[] {
   return [along(w.z + 1 - pz, sideReach(w, 0, px, pz)), along(pz - w.z, sideReach(w, 1, px, pz)), along(w.x + 1 - px, sideReach(w, 2, px, pz)), along(px - w.x, sideReach(w, 3, px, pz))];
@@ -224,7 +234,7 @@ function basinAt(s: Shape, ps: readonly Puddle[], x: number, z: number): number 
   return b > 0 ? b * BASIN * deepAt(s, x, z) : 0;
 }
 /** The depth of the crevices at a point: full on a piece's line, none from half its width. */
-function grooveAt(segs: readonly Seg[], x: number, z: number): number {
+export function grooveAt(segs: readonly Seg[], x: number, z: number): number {
   let g = 0;
   for (const c of segs) {
     const dx = c.x1 - c.x0, dz = c.z1 - c.z0, t = Math.min(1, Math.max(0, ((x - c.x0) * dx + (z - c.z0) * dz) / (dx * dx + dz * dz || 1)));
