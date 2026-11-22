@@ -120,7 +120,7 @@ describe('the painter of laid stone', () => {
     const { map, f, marks } = stoneLevel();
     const out = new Uint8Array(PAGE * PAGE * 4);
     paintGroundRows(f, map, marks, 2, 1, 0, PAGE, out);
-    expect(fnv(out)).toBe(3040661358); // re-pinned whenever the laid look is tuned; last: the page's border passage is three rows wide, which moved the level's crevices (Task 12)
+    expect(fnv(out)).toBe(482073302); // re-pinned whenever the laid look is tuned; last: the runes are 15 by 18 px, a dark ground with walls of the ring's stone beside it (Task 13)
     expect(RUNES.length).toBe(CIRCLE_STONES[RUNE_RING]); // one glyph per stone of the rune ring: what keeps the runes of a ring all different
   });
 });

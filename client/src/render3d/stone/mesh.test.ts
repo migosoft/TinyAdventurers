@@ -10,12 +10,13 @@ import { stoneField } from './field';
 import { buildStoneChunk, type StoneArrays } from './mesh';
 import { noMarks, placeMarks, type Marks } from './place';
 import { planSheets } from './plan';
+import { floorHeight } from './shape';
 import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 6600;
-/** The same for the stone page's worst chunk, with the mosaic and a grate (measured: 8 914). */
-const PIECE_CHUNK_TRIS = 9800;
+/** The same for the stone page's chunks with a floor piece: the mosaic and a grate (measured: 8 914), and the circle, whose dark rings lie a step lower (measured: 12 993; 7 843 with level rings). */
+const PIECE_CHUNK_TRIS = 9800, CIRCLE_CHUNK_TRIS = 14300;
 /** What Task 11 measured for that chunk: the mesh of laid stone has not moved. */
 const TASK_11_CHUNK_TRIS = 8914;
 /**
@@ -172,8 +173,53 @@ describe('buildStoneChunk', () => {
     const { a } = build(floorMap(16, 16));
     expect(a.index.length / 3).toBeLessThan(LAID_CHUNK_TRIS);
     expect(a.index.length / 3).toBeGreaterThan(16 * 16 * 2); // blocks, not one quad a cell
-    // the stone page's worst chunk: the mosaic and a grate
+    // the stone page's chunks with the mosaic and a grate, and with the circle
     expect(stoneLevel().chunk(3, 0).index.length / 3).toBeLessThan(PIECE_CHUNK_TRIS);
+    expect(stoneLevel().chunk(2, 1).index.length / 3).toBeLessThan(CIRCLE_CHUNK_TRIS);
+  });
+
+  it('lays the ground under a floor piece level: every stone at its piece\'s level, only a circle\'s dark rings a step lower', () => {
+    const { map, f, marks } = stoneLevel();
+    expect(marks.pieces.map((p) => p.kind).sort()).toEqual(['circle', 'mosaic']);
+    for (const p of marks.pieces) {
+      const cu = p.x * 32, cv = p.z * 32, R = p.r * 32;
+      let low = 0, high = 0;
+      for (let v = Math.floor(cv - R) - 2; v < cv + R + 2; v++) for (let u = Math.floor(cu - R) - 2; u < cu + R + 2; u++) {
+        if (Math.hypot(u + 0.5 - cu, v + 0.5 - cv) >= R + 1) continue;
+        const b = floorBlockAt(f, map, marks, u, v)!, dark = p.kind === 'circle' && b.piece !== undefined && b.stone === 1;
+        // (the stone page's pieces lie away from dips: the piece's level is flush; so is every slab that touches it)
+        expect(b.level, `px ${u},${v}`).toBe(dark ? -1 : 0);
+        expect(b.tilt).toEqual([0, 0]);
+        expect(floorHeight(f, map, marks, (u + 0.5) / 32, (v + 0.5) / 32)).toBeCloseTo((b.level - 1) * LEVEL_STEP, 6);
+        if (dark) low++; else if (b.piece) high++;
+      }
+      expect(high).toBeGreaterThan(1000);
+      expect(low > 1000).toBe(p.kind === 'circle');
+    }
+  });
+
+  it('cuts no stone of a floor piece by a slab outside it: inside a piece every top is level, and a step lies only between two rings', () => {
+    const { map, f, marks, chunk } = stoneLevel();
+    let tops = 0, steps = 0;
+    for (const p of marks.pieces) for (const t of triangles(chunk(Math.floor(p.x / CHUNK), Math.floor(p.z / CHUNK)))) {
+      if (t[0].kind !== KIND.floor) continue;
+      const x = (t[0].p[0] + t[1].p[0] + t[2].p[0]) / 3, z = (t[0].p[2] + t[1].p[2] + t[2].p[2]) / 3, n = t[0].n;
+      if (Math.hypot(x - p.x, z - p.z) > p.r - 2 / 32) continue;
+      if (n[1] > 0.5) {
+        tops++;
+        expect(n[1]).toBe(1);
+        const b = floorBlockAt(f, map, marks, Math.floor(x * 32), Math.floor(z * 32))!;
+        for (const c of t) expect(c.p[1]).toBeCloseTo((b.level - 1) * LEVEL_STEP, 6);
+        continue;
+      }
+      // a skirt: the px on its two sides are stones of two rings of a circle
+      steps++;
+      const a = floorBlockAt(f, map, marks, Math.floor(x * 32 + n[0] * 0.5), Math.floor(z * 32 + n[2] * 0.5))!, b = floorBlockAt(f, map, marks, Math.floor(x * 32 - n[0] * 0.5), Math.floor(z * 32 - n[2] * 0.5))!;
+      expect(p.kind).toBe('circle');
+      expect(a.piece!.ring, `skirt at ${x},${z}`).not.toBe(b.piece!.ring);
+    }
+    expect(tops).toBeGreaterThan(200);
+    expect(steps).toBeGreaterThan(200);
   });
 
   it('makes a cell that is all rock one quad', () => {

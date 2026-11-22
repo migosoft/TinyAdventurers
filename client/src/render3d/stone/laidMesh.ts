@@ -8,7 +8,7 @@
 import type { TileMap } from '../../sim/map';
 import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
-import { COURSES, LEVEL_STEP, floorBlockAt, markAt, slabOf, wallBlockAt, type Block } from './blocks';
+import { COURSES, LEVEL_STEP, floorBlockAt, slabOf, wallBlockAt, type Block } from './blocks';
 import { FACE_H, FACE_W } from './format';
 import { CHUNK, KIND, SIDE_STEP } from './grid';
 import { STONE_PX, rockWall, type StoneField } from './field';
@@ -152,11 +152,11 @@ export interface Laid {
   map: TileMap; f: StoneField; plan: SheetPlan; marks: Marks; skip?: (x: number, z: number) => boolean;
   /** The chunk's ground page: its first cell and its layer. */
   x0: number; z0: number; layer: number;
-  cells: Map<number, Cell | null>; faces: Map<number, FaceShape | null>; planes: Map<number, Plane>; marked: Map<object, Plane>;
+  cells: Map<number, Cell | null>; faces: Map<number, FaceShape | null>; planes: Map<number, Plane>;
   open: Map<number, boolean>; wide: Map<number, Surf | null>;
 }
 export function laid(map: TileMap, f: StoneField, plan: SheetPlan, marks: Marks, x0: number, z0: number, layer: number, skip?: (x: number, z: number) => boolean): Laid {
-  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), marked: new Map(), open: new Map(), wide: new Map() };
+  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), open: new Map(), wide: new Map() };
 }
 const inMap = (c: Laid, x: number, z: number): boolean => x >= 0 && z >= 0 && x < c.map.w && z < c.map.h;
 
@@ -232,12 +232,9 @@ function cellOf(c: Laid, x: number, z: number): Cell | null {
     const planes: Plane[] = [];
     const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      const mark = markAt(c.marks, pu + i, pv + j);
-      if (!mark) { const s = slabOf(c.f, c.map, c.marks, pu + i, pv + j); grid[j * N + i] = index(s.rock ? LEVEL[2] : top(c, s.b)); continue; }
-      // a piece's stones all lie at one level: its middle stone says which
-      let p = c.marked.get(mark);
-      if (!p) c.marked.set(mark, p = 'kind' in mark ? top(c, floorBlockAt(c.f, c.map, c.marks, Math.floor(mark.x * N), Math.floor(mark.z * N))!) : SHAFT);
-      grid[j * N + i] = index(p);
+      // a slab, a piece's stone (level, so the stones of a ring are one plane) or a grate's shaft; rock lies at the raised level
+      const b = floorBlockAt(c.f, c.map, c.marks, pu + i, pv + j);
+      grid[j * N + i] = index(b ? top(c, b) : LEVEL[2]);
     }
     cell = { at: new Uint16Array(N * N), surfs: [] };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {

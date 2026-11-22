@@ -199,10 +199,11 @@ function stonesOf(f: StoneField, map: TileMap, marks: Marks, p: FloorPiece): Pie
     if (i === undefined) {
       i = t.blocks.length;
       byKey.set(key, i);
-      // level ground: every stone flush and untilted. A circle's rings go pale, dark from the disc outward (the rune ring dark, the rim pale);
-      // a mosaic's bands take the three stones in turn.
+      // level ground: every stone untilted at the piece's level. A circle's rings go pale, dark from the disc outward (the rune ring dark,
+      // the rim pale), and its dark rings lie one level lower, so the wheel is inlaid; a mosaic's bands take the three stones in turn.
       const stone = p.kind === 'mosaic' ? (ring === MOSAIC_BORDER_RING ? GREY_STONE : ((ring + 2) % 3)) : ring % 2 ? GREY_STONE : SAND;
-      t.blocks.push({ id: PIECE_ID + (salt * 128 + (ring % 128)) * 256 + index, u0: u0 + u, v0: v0 + v, u1: u0 + u + 1, v1: v0 + v + 1, stone: stone as 0 | 1 | 2, level, tilt: [0, 0], frieze: false, piece: { of: p, ring, index } });
+      const lie = (p.kind === 'circle' && ring % 2 ? level - 1 : level) as -1 | 0 | 1;
+      t.blocks.push({ id: PIECE_ID + (salt * 128 + (ring % 128)) * 256 + index, u0: u0 + u, v0: v0 + v, u1: u0 + u + 1, v1: v0 + v + 1, stone: stone as 0 | 1 | 2, level: lie, tilt: [0, 0], frieze: false, piece: { of: p, ring, index } });
     }
     const b = t.blocks[i];
     b.u0 = Math.min(b.u0, u0 + u); b.u1 = Math.max(b.u1, u0 + u + 1); b.v1 = v0 + v + 1;

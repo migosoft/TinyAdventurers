@@ -58,12 +58,12 @@ const MOSS_GROOVE = 0.8;
 export const MOSS_CREEP = 0.3;
 /** The rim round a dip: the outline's mask from which the edge stones lie (the outline itself is `OUTLINE_EDGE`), and a stone's length (px). */
 const RIM_FROM = 0.2, RIM_LEN = 11;
-/** A rune's cell (px); a glyph is 5 by 6 cells. */
-const RUNE_CELL = 2.4;
+/** A rune's cell (px); a glyph is 5 by 6 cells, so 15 by 18 px in the rune ring's 25. The share of a cell beside a cut one that is the cut's wall. */
+const RUNE_CELL = 3, RUNE_WALL = 1 / 3;
 /** The share of a mosaic's tesserae that are a tone darker, and a tone lighter, than their band. */
 const MOSAIC_ODD = 0.15;
-/** The ground of a rune's cut: the dirt that has gathered in it. */
-const RUNE: Rgb = [24, 21, 26];
+/** The ground of a rune's cut: the dirt that has gathered in it; and the tone of the ring's stone its walls have. */
+const RUNE: Rgb = [24, 21, 26], RUNE_TONE = 2;
 
 /** The frieze's carving, one block (16 px) wide, in the rows 2 to 6 of its course: a bar, a diamond, a bar. */
 const FRIEZE = ['........#.......', '..##...###...##.', '..##..#####..##.', '..##...###...##.', '........#.......'];
@@ -215,17 +215,19 @@ function keyNow(c: GroundCtx, u: number, v: number): number {
 const rimStone: Block = { id: 0, u0: 0, v0: 0, u1: 0, v1: 0, stone: 1, level: 1, tilt: [0, 0], frieze: false };
 const FAR = 9;
 
-/** The rune of a stone of a circle's rune ring at a px, as slopes; null where the px is not carved. The glyph stands in the wedge's own frame. */
+/** The rune of a stone of a circle's rune ring at a px: the slopes of the cut's wall, [0, 0] on its ground; null where the px is not carved. The glyph stands in the wedge's own frame. */
 function runeAt(seed: number, marks: Marks, p: FloorPiece, b: Block, u: number, v: number): [number, number] | null {
   const du = u + 0.5 - p.x * STONE_PX, dv = v + 0.5 - p.z * STONE_PX, d = Math.hypot(du, dv), n = CIRCLE_STONES[RUNE_RING];
   const pos = (((Math.atan2(dv, du) / (Math.PI * 2) + circleTurn(seed, marks.pieces.indexOf(p), RUNE_RING) + 1) % 1) * n) % 1;
   // across the wedge and outward from the ring's middle, in rune cells
   const t = ((pos - 0.5) * Math.PI * 2 * d) / n / RUNE_CELL + 2.5, s = 3 - (d - ((CIRCLE_RINGS[RUNE_RING - 1] + CIRCLE_RINGS[RUNE_RING]) / 2) * p.r * STONE_PX) / RUNE_CELL;
   const gx = Math.floor(t), gy = Math.floor(s), g = RUNES[(b.piece!.index + Math.floor(hash(seed, b.id >> 8, 0, 71) * RUNES.length)) % RUNES.length];
-  if (!cut(g, gx, gy)) return null;
-  // the cut's walls: the half of the cell toward a side that is not cut falls away from that side
-  const st = t - gx < 0.5 ? (cut(g, gx - 1, gy) ? 0 : -CARVE) : cut(g, gx + 1, gy) ? 0 : CARVE;
-  const ss = s - gy < 0.5 ? (cut(g, gx, gy - 1) ? 0 : -CARVE) : cut(g, gx, gy + 1) ? 0 : CARVE;
+  if (cut(g, gx, gy)) return [0, 0];
+  // the cut's walls: the stone beside a cut cell falls into it
+  const ft = t - gx, fs = s - gy;
+  const st = ft < RUNE_WALL && cut(g, gx - 1, gy) ? CARVE : ft >= 1 - RUNE_WALL && cut(g, gx + 1, gy) ? -CARVE : 0;
+  const ss = fs < RUNE_WALL && cut(g, gx, gy - 1) ? CARVE : fs >= 1 - RUNE_WALL && cut(g, gx, gy + 1) ? -CARVE : 0;
+  if (!st && !ss) return null;
   // t runs with the turn (-dv, du) / d, s inward (-du, -dv) / d
   return [(-st * dv - ss * du) / d, (st * du - ss * dv) / d];
 }
@@ -274,7 +276,9 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
   } else {
     const pal = b.stone === 1 ? CIRCLE_DARK : CIRCLE_PALE;
     const r = b.piece!.ring === RUNE_RING && kl + kt + kr + kb === 4 * FAR ? runeAt(seed, marks, p, b, u, v) : null;
-    if (r) { out[at] = RUNE[0]; out[at + 1] = RUNE[1]; out[at + 2] = RUNE[2]; out[at + 3] = relief(r[0], r[1], FLAG.plain); }
+    // a rune's walls are the ring's own stone, a tone down, leaning into the cut: the lamp lights the side that faces it; its ground is dirt
+    if (r && (r[0] || r[1])) put(out, at, pal, RUNE_TONE, relief(r[0], r[1], FLAG.plain));
+    else if (r) { out[at] = RUNE[0]; out[at + 1] = RUNE[1]; out[at + 2] = RUNE[2]; out[at + 3] = FLAT_A; }
     else stonePx(out, at, seed, b, pal, u, v, kl, kt, kr, kb, 0, true, damp);
   }
   return true;

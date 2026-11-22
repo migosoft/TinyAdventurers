@@ -60,9 +60,9 @@ export const STONE_SEED = 537;
 /** The heroes' start the marks keep clear, whatever `&at=` says (so the marks do not move with it). */
 export const STONE_SPAWN = { x: 10.5, z: 7.5 };
 
-/** The places `&at=` names (tile centres): the knight starts there and the camera looks at it. Circle and mosaic are where the seed laid them. */
+/** The places `&at=` names (tile centres): the knight starts there and the camera looks at it. Circle and mosaic are where the seed laid them; `grate` is beside the grate (seen with `&yaw=180`: it lies at a south wall's foot). */
 export const PLACES = {
-  cave: [10.5, 7.5], border: [24.5, 9.5], hall: [40.5, 7.5], circle: [37.5, 22.5], mosaic: [60.5, 9.5], cave2: [10.5, 24.5], door: [9.5, 16.5],
+  cave: [10.5, 7.5], border: [24.5, 9.5], hall: [40.5, 7.5], circle: [37.5, 22.5], mosaic: [60.5, 9.5], cave2: [10.5, 24.5], door: [9.5, 16.5], grate: [53.3, 14.8],
 } as const;
 
 /** Lamp tiles: torches under a north wall of the laid rooms, crystals in the caves: on the floor, and the first at a wall's foot (its niche). */

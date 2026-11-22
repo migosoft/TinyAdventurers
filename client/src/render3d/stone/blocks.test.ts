@@ -98,7 +98,7 @@ describe('the block layout', () => {
       if (k >= 1) { expect(b.piece).toBeUndefined(); continue; }
       expect(b.piece!.of).toBe(p);
       expect(b.piece!.ring).toBe(CIRCLE_RINGS.findIndex((edge) => k < edge));
-      expect(b.level).toBe(0);
+      expect(b.level).toBe(b.piece!.ring % 2 ? -1 : 0); // the dark rings lie a level lower
     }
     expect(CIRCLE_STONES[0]).toBe(1);
     const stones: number[] = [floorBlockAt(laid, map, marks, Math.floor(cx), Math.floor(cz))!.stone];
