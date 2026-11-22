@@ -20,3 +20,11 @@ export function heightBytes(map: TileMap): Uint8Array {
   for (let i = 0; i < out.length; i++) out[i] = Math.round(cellHeight(map.tiles[i]) * 100);
   return out;
 }
+
+/** The wall a light's tile fronts, guessed from the walls beside it (north, west, east; none: the tile centre): the point on the wall face and its normal into the room. */
+export function torchWall(x: number, y: number, map: TileMap): { x: number; z: number; nx: number; nz: number } {
+  if (map.opaque(x, y - 1)) return { x: x + 0.5, z: y, nx: 0, nz: 1 };
+  if (map.opaque(x - 1, y)) return { x, z: y + 0.5, nx: 1, nz: 0 };
+  if (map.opaque(x + 1, y)) return { x: x + 1, z: y + 0.5, nx: -1, nz: 0 };
+  return { x: x + 0.5, z: y + 0.5, nx: 0, nz: 0 };
+}

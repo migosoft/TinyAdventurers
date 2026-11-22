@@ -2,7 +2,7 @@
 // shards. The painter and the mesh read them. Positions are tiles (x, z).
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, type TileMap } from '../../sim/map';
-import { TorchPairs } from '../lights';
+import { torchWall } from '../heights';
 import { hash, kindAt, LAID, ROCK, type StoneField } from './field';
 
 export interface Room { cells: number[]; kind: 0 | 1; x0: number; z0: number; x1: number; z1: number }
@@ -101,15 +101,14 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
   marks.rooms = roomsOf(map, f);
   if (!marks.rooms.length) return marks;
   const used: Disc[] = [{ x: taken.spawn.x, z: taken.spawn.z, r: 1 }];
-  const pairs = new TorchPairs();
   const lights = taken.lights.filter((l) => l.kind === LIGHT_KIND.Torch || l.kind === LIGHT_KIND.Crystal);
   for (const l of lights) used.push({ x: l.x + 0.5, z: l.y + 0.5, r: 0.7 });
   const rnd = (a: number, b: number, c: number): number => hash(f.seed, a, b, c);
   const free = (x: number, z: number, r: number): boolean => used.every((u) => Math.hypot(x - u.x, z - u.z) >= r + u.r);
-  /** Disc free of other marks, and every cell it reaches plain floor. */
-  const clear = (x: number, z: number, r: number): boolean => {
+  /** Disc free of other marks, and every cell it reaches plain floor of the stone `kind`. */
+  const clear = (x: number, z: number, r: number, kind: number): boolean => {
     for (let cz = Math.floor(z - r); cz <= Math.floor(z + r); cz++) for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++) {
-      if (!plain(map, cx, cz) && Math.hypot(Math.max(cx - x, 0, x - cx - 1), Math.max(cz - z, 0, z - cz - 1)) < r) return false;
+      if ((!plain(map, cx, cz) || kindAt(f, cx, cz) !== kind) && Math.hypot(Math.max(cx - x, 0, x - cx - 1), Math.max(cz - z, 0, z - cz - 1)) < r) return false;
     }
     return free(x, z, r);
   };
@@ -128,7 +127,7 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
       const [cx, cz] = cellOf(room, 10 + k, t);
       const r = PUDDLE_R[0] + rnd(cx, cz, 2) * (PUDDLE_R[1] - PUDDLE_R[0]);
       const x = cx + 0.2 + rnd(cx, cz, 3) * 0.6, z = cz + 0.2 + rnd(cx, cz, 4) * 0.6;
-      if (kindAt(f, x, z) !== ROCK || !clear(x, z, r + 0.15)) continue;
+      if (!clear(x, z, r + 0.15, ROCK)) continue;
       marks.puddles.push({ x, z, r }); used.push({ x, z, r });
       break;
     }
@@ -137,20 +136,19 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
     if (room.kind !== LAID) continue;
     if (rnd(room.x0, room.z0, 5) < PIECE_SHARE) for (let t = 0; t < TRIES; t++) {
       const [cx, cz] = cellOf(room, 20, t), x = cx + 0.5, z = cz + 0.5;
-      // shortcut: only the centre's kind is checked, so a piece may straddle a stone border, when borders can cross a laid room.
-      if (kindAt(f, x, z) !== LAID || !clear(x, z, PIECE_R + PIECE_RING)) continue;
+      if (!clear(x, z, PIECE_R + PIECE_RING, LAID)) continue;
       marks.pieces.push({ kind: rnd(cx, cz, 6) < 0.5 ? 'circle' : 'mosaic', x, z, r: PIECE_R }); used.push({ x, z, r: PIECE_R });
       break;
     }
     if (rnd(room.x0, room.z0, 7) < GRATE_SHARE) for (let t = 0; t < TRIES; t++) {
       const [cx, cz] = cellOf(room, 30, t), x = cx + 0.5, z = cz + 0.5;
-      if (kindAt(f, x, z) !== LAID || !plain(map, cx, cz) || !wallDir(cx, cz) || !clear(x, z, GRATE_R)) continue;
+      if (!wallDir(cx, cz) || !clear(x, z, GRATE_R, LAID)) continue;
       marks.grates.push({ x, z }); used.push({ x, z, r: GRATE_R });
       break;
     }
   }
   for (const l of lights.filter((l) => l.kind === LIGHT_KIND.Crystal)) {
-    const w = pairs.wallOf({ ...l, colour: 0, on: true }, map);
+    const w = torchWall(l.x, l.y, map);
     marks.shards.push({ x: w.x, z: w.z, nx: w.nx, nz: w.nz, big: true, lightId: l.id });
     used.push({ x: w.x, z: w.z, r: SHARD_BIG_R });
   }
@@ -168,17 +166,20 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
   }
 
   /** Two straight pieces and a branch from a point in the room, or null when anything is not clear. */
-  const crack = (room: Room, salt: number, t: number): Crack | null => {
-    const [cx, cz] = cellOf(room, salt, t);
+  const crack = (room: Room, base: number, t: number): Crack | null => {
+    const salt = base * 16 + t * 10; // a retry (t) draws new numbers
+    const [cx, cz] = cellOf(room, base, t);
     let a = rnd(cx, cz, salt + 1) * Math.PI * 2, x = cx + rnd(cx, cz, salt + 2), z = cz + rnd(cx, cz, salt + 3);
     const pts: [number, number][] = [[x, z]];
     for (let i = 0; i < 2; i++) {
+      if (i) a += (rnd(cx, cz, salt + 6) - 0.5) * 1.2;
       const len = 1 + rnd(cx, cz, salt + 4 + i);
-      x += Math.cos(a) * len; z += Math.sin(a) * len; a += (rnd(cx, cz, salt + 6 + i) - 0.5) * 1.2;
+      x += Math.cos(a) * len; z += Math.sin(a) * len;
       pts.push([x, z]);
     }
+    // the branch leaves the joint of the two pieces, on the drawn line
     const b = a + (rnd(cx, cz, salt + 8) < 0.5 ? 0.9 : -0.9), bl = 0.8 + rnd(cx, cz, salt + 9) * 0.5;
-    const branch = [[x - Math.cos(a) * 1, z - Math.sin(a) * 1, x - Math.cos(a) + Math.cos(b) * bl, z - Math.sin(a) + Math.sin(b) * bl]];
+    const branch = [[pts[1][0], pts[1][1], pts[1][0] + Math.cos(b) * bl, pts[1][1] + Math.sin(b) * bl]];
     const segs = [...pts.slice(1).map((p, i) => [...pts[i], ...p]), ...branch];
     const samples: Disc[] = [];
     for (const s of segs) {
@@ -186,7 +187,7 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
       for (let i = 0; i <= n; i++) samples.push({ x: s[0] + ((s[2] - s[0]) * i) / n, z: s[1] + ((s[3] - s[1]) * i) / n, r: 0.1 });
     }
     // every point of a piece lies within half a step of a sample, so this margin holds between the samples too
-    if (!samples.every((p) => clear(p.x, p.z, CRACK_MARGIN + CRACK_STEP / 2))) return null;
+    if (!samples.every((p) => clear(p.x, p.z, CRACK_MARGIN + CRACK_STEP / 2, room.kind))) return null;
     used.push(...samples);
     return { pts, branch };
   };

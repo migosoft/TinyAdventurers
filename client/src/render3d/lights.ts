@@ -10,7 +10,7 @@ import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import { groundAt, type Cam } from './camera';
 import { TORCH_MID } from './figures';
-import { WALL_H } from './heights';
+import { torchWall, WALL_H } from './heights';
 import type { Light } from './light';
 
 /** A light's colour is scaled by this on its way to the shader (first guess). */
@@ -71,11 +71,7 @@ export class TorchPairs {
   wallOf(l: StaticLight, map: TileMap): TorchWall {
     const known = this.seen.get(`${l.x},${l.y}`);
     if (known) return known;
-    const phase = l.id * 1.7;
-    if (map.opaque(l.x, l.y - 1)) return { x: l.x + 0.5, z: l.y, nx: 0, nz: 1, phase };
-    if (map.opaque(l.x - 1, l.y)) return { x: l.x, z: l.y + 0.5, nx: 1, nz: 0, phase };
-    if (map.opaque(l.x + 1, l.y)) return { x: l.x + 1, z: l.y + 0.5, nx: -1, nz: 0, phase };
-    return { x: l.x + 0.5, z: l.y + 0.5, nx: 0, nz: 0, phase };
+    return { ...torchWall(l.x, l.y, map), phase: l.id * 1.7 };
   }
 }
 

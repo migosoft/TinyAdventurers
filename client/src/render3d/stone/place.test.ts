@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, TileMap } from '../../sim/map';
-import { TorchPairs } from '../lights';
+import { torchWall } from '../heights';
 import { hash, kindAt, LAID, ROCK, stoneField, type StoneField } from './field';
-import { noMarks, placeMarks, roomsOf, type Marks, type Taken } from './place';
+import { noMarks, placeMarks, roomsOf, type Crack, type Marks, type Taken } from './place';
 import { stoneMap, zoneKinds } from './stoneMap';
 
 interface Case { map: TileMap; f: StoneField; taken: Taken }
@@ -33,10 +33,9 @@ function generated(seed: number): Case {
   }
   const mode = seed % 3; // all laid, all rock, or rock in the west
   const kinds = Uint8Array.from({ length: w * h }, (_, i) => (mode === 1 || (mode === 2 && i % w < w / 2) ? ROCK : LAID));
-  const lights: Taken['lights'] = [];
-  for (let z = 1; z < h && lights.length < 6; z++) for (let x = 1; x < w && lights.length < 6; x++) {
-    if (map.get(x, z) === TILE_ID.Floor && map.opaque(x, z - 1) && h01(x, z) < 0.01) lights.push({ id: lights.length + 1, kind: lights.length % 2 ? LIGHT_KIND.Crystal : LIGHT_KIND.Torch, x, y: z });
-  }
+  // a crystal in every rock room, a torch in every laid one, at the room's north-west corner; and a door in the first room's west wall
+  const lights: Taken['lights'] = rooms.map(([x0, z0], i) => ({ id: i + 1, kind: kinds[z0 * w + x0] === ROCK ? LIGHT_KIND.Crystal : LIGHT_KIND.Torch, x: x0, y: z0 }));
+  map.set(rooms[0][0] - 1, rooms[0][1] + 1, TILE_ID.DoorClosed);
   return { map, f: stoneField(map, kinds, seed), taken: { lights, spawn: { x: rooms[0][0] + 4.5, z: rooms[0][1] + 4.5 } } };
 }
 
@@ -57,7 +56,9 @@ const along = (a: number[], b: number[]): [number, number][] => {
   const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.05));
   return Array.from({ length: n + 1 }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]);
 };
-const lines = (m: Marks): number[][][] => [...m.rockCracks, ...m.crevices].flatMap((c) => [...c.pts.slice(1).map((p, i) => [c.pts[i], p]), ...c.branch.map((b) => [[b[0], b[1]], [b[2], b[3]]])]);
+const drawn = (c: Crack): number[][][] => c.pts.slice(1).map((p, i) => [c.pts[i], p]);
+const lines = (m: Marks): number[][][] => [...m.rockCracks, ...m.crevices].flatMap((c) => [...drawn(c), ...c.branch.map((b) => [[b[0], b[1]], [b[2], b[3]]])]);
+const onSegment = (p: number[], [a, b]: number[][]): boolean => Math.hypot(p[0] - a[0], p[1] - a[1]) + Math.hypot(p[0] - b[0], p[1] - b[1]) - Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-6;
 const rectDist = (x: number, z: number, cx: number, cz: number): number => Math.hypot(Math.max(cx - x, 0, x - cx - 1), Math.max(cz - z, 0, z - cz - 1));
 
 describe('placement', () => {
@@ -98,18 +99,41 @@ describe('placement', () => {
       }
       for (const g of m.grates) expect(plain(c.map, g.x, g.z)).toBe(true);
       for (const s of m.shards.filter((s) => !s.big)) expect(plain(c.map, s.x, s.z)).toBe(true);
-      for (const [a, b] of lines(m)) for (const [x, z] of along(a, b)) {
-        expect(plain(c.map, x, z)).toBe(true);
-        for (const d of [...m.pieces, ...m.grates.map((g) => ({ ...g, r: 0.45 })), ...m.shards.map((s) => ({ ...s, r: 0.2 }))]) expect(Math.hypot(x - d.x, z - d.z)).toBeGreaterThan(d.r);
-      }
+      const cracks = [...m.rockCracks, ...m.crevices];
+      cracks.forEach((ck, j) => {
+        const mine = [...drawn(ck), ...ck.branch.map((b) => [[b[0], b[1]], [b[2], b[3]]])].flatMap(([a, b]) => along(a, b));
+        for (const [x, z] of mine) {
+          expect(plain(c.map, x, z)).toBe(true);
+          for (const d of [...m.pieces, ...m.grates.map((g) => ({ ...g, r: 0.45 })), ...m.shards.map((s) => ({ ...s, r: 0.2 })), ...discs.filter((d) => fixed(d.what))]) expect(Math.hypot(x - d.x, z - d.z)).toBeGreaterThan(d.r);
+        }
+        for (const other of cracks.slice(j + 1)) for (const [a, b] of [...drawn(other), ...other.branch.map((b) => [[b[0], b[1]], [b[2], b[3]]])]) for (const [x, z] of along(a, b).filter((_, k) => k % 5 === 0)) {
+          for (const [px, pz] of mine.filter((_, k) => k % 5 === 0)) expect(Math.hypot(x - px, z - pz)).toBeGreaterThan(0.3); // coarse: points are 0.25 apart, cracks keep 0.7
+        }
+      });
     });
   });
 
   it('puddles_only_in_rock_and_pieces_only_in_laid', () => {
     cases.forEach((c, i) => {
-      for (const p of all[i].puddles) expect(kindAt(c.f, p.x, p.z)).toBe(ROCK);
-      for (const p of all[i].pieces) expect(kindAt(c.f, p.x, p.z)).toBe(LAID);
+      const covered = (p: { x: number; z: number; r: number }): number[] => {
+        const out: number[] = [];
+        for (let dz = -p.r; dz <= p.r; dz += 0.1) for (let dx = -p.r; dx <= p.r; dx += 0.1) if (Math.hypot(dx, dz) <= p.r) out.push(kindAt(c.f, p.x + dx, p.z + dz));
+        return out;
+      };
+      for (const p of all[i].puddles) expect(covered(p).every((k) => k === ROCK)).toBe(true);
+      for (const p of all[i].pieces) expect(covered(p).every((k) => k === LAID)).toBe(true);
+      const room = (x: number, z: number): number | undefined => all[i].rooms.find((r) => r.cells.includes(Math.floor(z) * c.map.w + Math.floor(x)))?.kind;
+      for (const ck of all[i].rockCracks) expect(room(ck.pts[0][0], ck.pts[0][1])).toBe(ROCK);
     });
+  });
+
+  it('branches_start_on_their_crack', () => {
+    let n = 0;
+    all.forEach((m) => [...m.rockCracks, ...m.crevices].forEach((ck) => {
+      n++;
+      for (const b of ck.branch) expect(drawn(ck).some((s) => onSegment(b, s))).toBe(true);
+    }));
+    expect(n).toBeGreaterThan(20);
   });
 
   it('at_most_one_grate_and_one_piece_per_room', () => {
@@ -129,7 +153,7 @@ describe('placement', () => {
       const big = all[i].shards.filter((s) => s.big);
       expect(big.length).toBe(crystals.length);
       for (const l of crystals) {
-        const w = new TorchPairs().wallOf({ ...l, colour: 0, on: true }, c.map);
+        const w = torchWall(l.x, l.y, c.map);
         expect(big.find((s) => s.lightId === l.id)).toMatchObject({ x: w.x, z: w.z, nx: w.nx, nz: w.nz });
       }
     });
