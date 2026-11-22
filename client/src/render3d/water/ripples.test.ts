@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RIPPLE_CAP, RIPPLE_LIFE, Ripples, rippleHeight } from './ripples';
+import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, puddleDrops, rippleHeight } from './ripples';
 
 function peak(age: number, strength = 1): { max: number; at: number } {
   let max = 0, at = 0;
@@ -63,6 +63,30 @@ describe('ripples', () => {
     const xs = Array.from({ length: RIPPLE_CAP }, (_, i) => out[i * 4]);
     expect(xs).toContain(99);
     expect(xs).toContain(98);
+  });
+
+  it('drops into puddles the same for a clock, and never outside the puddle (#380)', () => {
+    const puddles = [{ x: 3.5, z: 4.2, r: 0.5 }, { x: 10.1, z: 2.7, r: 0.8 }];
+    const run = (from: number, to: number) => {
+      const out: [number, number, number, number][] = [];
+      puddleDrops(puddles, from, to, (p, x, z, at) => out.push([puddles.indexOf(p), x, z, at]));
+      return out;
+    };
+    const all = run(0, 60);
+    expect(run(0, 60)).toEqual(all);
+    // one drop per puddle every DROP.every seconds on average, each in its time span and inside its puddle
+    expect(all.length).toBeGreaterThanOrEqual(2 * (60 / DROP.every) - 2);
+    expect(all.length).toBeLessThanOrEqual(2 * (60 / DROP.every) + 2);
+    for (const [k, x, z, at] of all) {
+      expect(at).toBeGreaterThan(0);
+      expect(at).toBeLessThanOrEqual(60);
+      expect(Math.hypot(x - puddles[k].x, z - puddles[k].z)).toBeLessThanOrEqual(puddles[k].r * DROP.within);
+    }
+    // the two puddles do not drop in step, and a span cut in pieces gives the same drops
+    expect(all.filter((d) => d[0] === 0).map((d) => d[3])).not.toEqual(all.filter((d) => d[0] === 1).map((d) => d[3]));
+    const key = (d: number[]) => d[3] * 1000 + d[0];
+    expect([...run(0, 17.3), ...run(17.3, 41), ...run(41, 60)].sort((a, b) => key(a) - key(b))).toEqual([...all].sort((a, b) => key(a) - key(b)));
+    expect(run(5, 5)).toEqual([]);
   });
 
   it('reuses an expired slot before replacing a live one', () => {

@@ -75,6 +75,7 @@ import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type StoneKit, type WorldArrays } from './worldMesh';
 import { noMarks, placeMarks, type Marks, type Taken } from './stone/place';
 import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
+import { floorHeight } from './stone/shape';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -378,8 +379,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const material = wm.material;
   const dm = dipMaterial(lighting, groundStart, sight, cover, sheets);
   // The water (#345). The field: the bed's height and the water's outline mask, half floats, filtered linearly (the lava light
-  // texture is read the same way), kept up to date by `tileChanged`.
-  const wField = waterField(map);
+  // texture is read the same way), kept up to date by `tileChanged`. A puddle's bed (#380) is the rock floor the stone mesh draws.
+  const floorAt = (x: number, z: number): number => floorHeight(field, map, kit.marks, x, z);
+  const wField = waterField(map, kit.marks.puddles, floorAt);
   const fieldTex = new DataTexture(new Uint16Array(wField.data.length), wField.w, wField.h, RGFormat, HalfFloatType);
   fieldTex.colorSpace = NoColorSpace;
   fieldTex.magFilter = LinearFilter;
@@ -529,7 +531,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const d = buildDipChunk(map, world.painted, cx, cz, kit.plan);
     if (d) dipChunks[i] = makeDipMesh(d);
     dropChunk(waterChunks, i);
-    const w = buildWaterChunk(map, cx, cz);
+    const w = buildWaterChunk(map, cx, cz, kit.marks.puddles);
     if (w) waterChunks[i] = makeWaterMesh(w.position);
     waterBoxes = null;
     dropChunk(lavaChunks, i);
@@ -892,8 +894,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const dips = dipClassChanged(was, map.tiles[cell]);
       // The water's field around the cell (the rows `refreshWaterField` can change), only when the dip class changed (its kind, height
       // or deep/shallow): a door opening must not cost an upload.
-      if (dips) {
-        refreshWaterField(wField, map, x, z);
+      // New marks (a replan placed them again) may have moved the puddles: the whole field then.
+      if (moved) {
+        wField.data.set(waterField(map, kit.marks.puddles, floorAt).data);
+        uploadField(0, wField.h - 1);
+      } else if (dips) {
+        refreshWaterField(wField, map, x, z, kit.marks.puddles, floorAt);
         uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       }
       // The chunks are built from each cell's height, dip kind and ground kind (`dipClassChanged` names all three), the world chunk's

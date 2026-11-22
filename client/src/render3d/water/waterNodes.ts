@@ -11,7 +11,7 @@ import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import type { ViewToward } from '../materials';
 import { fbm2, vnoise2 } from '../noiseNodes';
-import { BED_RES, OUTLINE_EDGE, WATER_LEVEL } from '../dips/shape';
+import { BED_RES, OUTLINE_EDGE } from '../dips/shape';
 import { RIPPLE, RIPPLE_CAP, RIPPLE_LIFE, RIPPLE_SPEED } from './ripples';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,7 +100,8 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
 
   // Bed height and water mask: one filtered sample at the top level. Texel (i, j) lies at tile (i / BED_RES, j / BED_RES).
   const fieldAt = texture(field, p.mul(BED_RES).add(0.5).div(vec2(map.w * BED_RES + 1, map.h * BED_RES + 1)));
-  const depth = max(float(WATER_LEVEL).sub(fieldAt.r), 0);
+  // The surface's own height: a pool's sheet lies at WATER_LEVEL, a puddle's at PUDDLE_LEVEL (#380).
+  const depth = max(P.y.sub(fieldAt.r), 0);
   const thick = depth.div(max(V.y, VIEW_MIN));
 
   // What lies behind the surface, absorbed along its way, plus the little the water scatters back of the light at the surface.

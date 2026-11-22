@@ -1,6 +1,6 @@
 // The stage of the ?r3d=stone page (#380): the stonework's own level on the real code, no server. A knight walks with WASD.
 // `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate`, `&lamp=0` (the light that walks with the knight off),
-// `&break=1` (every crystal broken: its light is off; the crystal model comes later), `&t=<s>` shifts the lights' flicker clock.
+// `&break=1` (every crystal broken: its light is off; the crystal model comes later), `&t=<s>` shifts the clock of the lights' flicker and the puddles' drops; `&refl=0` turns the puddles' reflections off.
 import { LIGHT, LIGHT_KIND } from '../../generated/defs';
 import { LightField } from '../../game/light';
 import { closeCam, keysToWorld } from '../camera';
@@ -8,10 +8,11 @@ import { buildDynamic } from '../cards';
 import { MOVE_KEYS, type Stage, type StageCtx } from '../host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from '../light';
 import { footprint, lightView, movingCands, selectLights, staticCands, TorchPairs } from '../lights';
-import type { R3dParams } from '../params';
+import { reflects, type R3dParams } from '../params';
 import { newScene, stepScene } from '../scene';
 import { seeLook } from '../seeThrough';
 import type { Assets, WorldInput } from '../view';
+import { Water3d } from '../water/water';
 import { ROCK, stoneField } from './field';
 import { CRYSTAL_TILES, PLACES, STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
 import { makeStoneRun } from './stoneRun';
@@ -43,6 +44,8 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
   world.taken = { lights: [...field.lights.values()], spawn: STONE_SPAWN };
   const lamp = q.get('lamp') !== '0';
   const pairs = new TorchPairs();
+  const water = new Water3d(map);
+  const NONE_IDS = new Set<number>();
   let t = Number(q.get('t')) > 0 ? Number(q.get('t')) : 0;
 
   return {
@@ -69,12 +72,15 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
         ? selectLights([...staticCands(field, pairs, map, t), ...movingCands(lamp ? [[scene.player.x * TILE, scene.player.z * TILE, LIGHT_KIND.Torch, LIGHT[LIGHT_KIND.Torch].colour]] : [], [], () => null, t)], lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), cam, Math.min(LIGHT_CAP, c.params.lcap)).list
         : [];
       c.timer.lap('lights');
+      // The puddles' drops, on the page's clock `t`.
+      const wo = water.step({ dt: c.dt, now: t, figs: [], sinks: [], landed: null, hidden: NONE_IDS, puddles: c.view.stone?.marks.puddles, fp: footprint(cam, c.plan.halfW, c.plan.halfH) });
       c.timer.renderStart();
       return c.view.draw(
         {
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters: [],
+          water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
         },
         c.timer,
       );

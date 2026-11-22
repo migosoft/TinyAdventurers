@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { BED_RES, OUTLINE_EDGE, bedAt, isWater, maskAt } from '../dips/shape';
+import { ROCK, stoneField } from '../stone/field';
+import { noMarks } from '../stone/place';
+import { floorHeight } from '../stone/shape';
 import { refreshWaterField, sampleWaterField, waterField } from './waterField';
+import { PUDDLE_LEVEL } from './waterMesh';
+
+/** The weighted sum of the field of the test below, recorded before puddles existed. */
+const PINNED_SUM = -4653.0024;
 
 const CH: Record<string, number> = {
   '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, W: TILE_ID.DeepWater,
@@ -81,6 +88,41 @@ describe('waterField', () => {
       expect(centre(1.5), `water beside ${other}`).toBeGreaterThan(OUTLINE_EDGE);
       expect(centre(2.5), `${other}`).toBeLessThan(OUTLINE_EDGE);
     }
+  });
+
+  it('gives a map without puddles the field it gave before (#380, pinned)', () => {
+    const m = room('.......', '.~~W...', '.~WW.LL', '.....LL', '.CC....', '.CC....', '.......');
+    const f = waterField(m), g = waterField(m, [], () => { throw new Error('no floor is asked without a puddle'); });
+    expect(Array.from(g.data)).toEqual(Array.from(f.data));
+    let sum = 0;
+    f.data.forEach((v, i) => { sum += v * ((i % 13) + 1); });
+    expect(sum).toBeCloseTo(PINNED_SUM, 3);
+  });
+
+  it('keeps the outline of a puddle inside its basin (#380)', () => {
+    const m = room('.........', '.........', '.........', '.........', '.........', '.........', '.........');
+    const sf = stoneField(m, new Uint8Array(m.w * m.h).fill(ROCK), 7);
+    const p = { x: 4.6, z: 4.3, r: 0.7 }, marks = { ...noMarks(), puddles: [p] };
+    const floor = (x: number, z: number) => floorHeight(sf, m, marks, x, z);
+    const f = waterField(m, marks.puddles, floor);
+    // water in the middle: inside the outline, and the bed (the rock mesh's own floor) below the puddle's level
+    const mid = sampleWaterField(f, p.x, p.z);
+    expect(mid.mask).toBeGreaterThan(OUTLINE_EDGE);
+    expect(mid.bed).toBeLessThan(PUDDLE_LEVEL);
+    const i = Math.round(p.x * BED_RES), j = Math.round(p.z * BED_RES);
+    expect(f.data[2 * (j * f.w + i)]).toBe(Math.fround(floor(i / BED_RES, j / BED_RES)));
+    let wet = 0;
+    for (let z = 0; z <= m.h; z += 0.05) for (let x = 0; x <= m.w; x += 0.05) {
+      const s = sampleWaterField(f, x, z), d = Math.hypot(x - p.x, z - p.z);
+      // inside the outline is inside the basin, and the surface never lies over floor outside it
+      if (s.mask >= OUTLINE_EDGE) { wet++; expect(d, `${x}, ${z}`).toBeLessThanOrEqual(p.r + 1e-6); }
+      if (d > p.r) expect(floor(x, z), `floor at ${x}, ${z}`).toBeGreaterThan(PUDDLE_LEVEL);
+    }
+    expect(wet).toBeGreaterThan(100);
+    // a tile change beside it leaves the puddle in the field
+    const before = Array.from(f.data);
+    refreshWaterField(f, m, 4, 4, marks.puddles, floor);
+    expect(Array.from(f.data)).toEqual(before);
   });
 
   it('follows a tile change', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { WATER_LEVEL } from '../dips/shape';
-import { buildWaterChunk, waterCell } from './waterMesh';
+import { PUDDLE_LEVEL, buildWaterChunk, waterCell } from './waterMesh';
 
 const T = TILE_ID;
 function with_(w: number, h: number, cells: [number, number, number][]) {
@@ -80,6 +80,18 @@ describe('buildWaterChunk', () => {
     expect(new Set(quadsOf(right))).toEqual(new Set(['16,1', '16,2', '16,3']));
     expect(left.cx).toBe(0);
     expect(right.cx).toBe(1);
+  });
+
+  it('has the cells a puddle touches at the puddle level, and no other floor cell (#380)', () => {
+    // a puddle of radius 0.6 in the middle of cell (3, 3): it reaches the four cells beside it, not the corners
+    const c = buildWaterChunk(with_(8, 8, []), 0, 0, [{ x: 3.5, z: 3.5, r: 0.6 }])!;
+    expect(new Set(quadsOf(c))).toEqual(new Set(['3,2', '2,3', '3,3', '4,3', '3,4']));
+    for (let v = 0; v < c.count; v++) expect(c.position[v * 3 + 1]).toBe(Math.fround(PUDDLE_LEVEL));
+    // a pool's own cells keep the pool's level
+    const both = buildWaterChunk(with_(8, 8, [[3, 3, T.ShallowWater]]), 0, 0, [{ x: 6.5, z: 6.5, r: 0.3 }])!;
+    expect(quadsOf(both)).toHaveLength(10);
+    expect(both.position[1]).toBe(Math.fround(WATER_LEVEL));
+    expect(both.position[both.position.length - 2]).toBe(Math.fround(PUDDLE_LEVEL));
   });
 
   it('covers a chasm or lava cell beside the pool', () => {

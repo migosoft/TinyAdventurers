@@ -1,6 +1,7 @@
 // Ripple sources of the water surface (#345): where a figure or an effect disturbed the water, and the
 // height such a source adds. Pure TypeScript; the water shader holds a twin of rippleHeight and reads
 // the array Ripples.pack fills.
+import { hash } from '../stone/field';
 
 export const RIPPLE_CAP = 16, RIPPLE_SPEED = 0.75, RIPPLE_LIFE = 3.5;
 export const RIPPLE = { height: 0.022, decay: 1.2, rise: 0.15, width: 4, waves: 26 } as const;
@@ -17,6 +18,25 @@ export function rippleHeight(d: number, age: number, strength: number): number {
   const u = d - age * RIPPLE_SPEED;
   return RIPPLE.height * strength * Math.exp(-RIPPLE.decay * age) * smoothstep(0, RIPPLE.rise, age)
     * Math.exp(-((u * RIPPLE.width) ** 2)) * Math.sin(u * RIPPLE.waves);
+}
+
+/** A puddle's drops (#380): one every `every` seconds on average, of this strength, within this share of the puddle's radius from its middle. */
+export const DROP = { every: 5, strength: 0.6, within: 0.5 } as const;
+
+/**
+ * The drops that fall into the puddles after `from` and up to `to` (s): `emit` gets the puddle, the spot (tiles) and the time. Drop n of a
+ * puddle falls somewhere in the n-th span of `DROP.every` seconds; when and where comes from the puddle's place and n alone.
+ */
+export function puddleDrops<P extends { x: number; z: number; r: number }>(puddles: readonly P[], from: number, to: number, emit: (p: P, x: number, z: number, at: number) => void): void {
+  for (const p of puddles) {
+    const a = Math.round(p.x * 64), b = Math.round(p.z * 64);
+    for (let n = Math.floor(from / DROP.every); n <= Math.floor(to / DROP.every); n++) {
+      const at = (n + hash(n, a, b, 1)) * DROP.every;
+      if (!(at > from && at <= to)) continue;
+      const ang = hash(n, a, b, 2) * Math.PI * 2, d = Math.sqrt(hash(n, a, b, 3)) * p.r * DROP.within;
+      emit(p, p.x + Math.cos(ang) * d, p.z + Math.sin(ang) * d, at);
+    }
+  }
 }
 
 export class Ripples {

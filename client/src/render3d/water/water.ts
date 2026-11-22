@@ -4,7 +4,9 @@ import { CONST } from '../../generated/defs';
 import { WATER_LEVEL, isWater } from '../dips/shape';
 import type { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
-import { RIPPLE_CAP, Ripples } from './ripples';
+import type { Footprint } from '../lights';
+import type { Puddle } from '../stone/place';
+import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, puddleDrops } from './ripples';
 
 /** Seconds between the rings of a wader, its speed (tiles/s) above which it rings, the strengths of the ripples and the rates (per second) of the cues. */
 export const WADE = { every: 0.3, speed: 0.3, ring: 1, enter: 1.6, drip: 0.55, plunge: 1.6, plunges: 3, stir: 0.6, stirRate: 8, bubbleRate: 12, sprayRate: 30 } as const;
@@ -22,6 +24,9 @@ export interface WaterIn {
   /** The drips that reached the water this frame: (x, z) pairs. */
   landed: { count: number; pos: Float32Array } | null;
   hidden: ReadonlySet<number>;
+  /** The level's puddles and the ground the screen shows (#380): drops ring the puddles in view. Absent: none. */
+  puddles?: readonly Puddle[];
+  fp?: Footprint;
 }
 
 /** `standing`: in the water last frame; a dash over water counts as in it (a figure keeps its tile during a dash), so a dash that ends in water makes no entering. */
@@ -53,6 +58,15 @@ export class Water3d {
   private readonly bubbles = new Spots();
   private readonly cues: WaterCues = { enters: this.enters.list, plunges: this.plunges.list, spray: this.spray.list, bubbles: this.bubbles.list };
   private readonly result = { ripples: this.packed, live: 0, cues: this.cues };
+
+  /** The clock the puddles' drops are made up to, and the ground in view this frame. */
+  private dropsTo = -Infinity;
+  private fp: Footprint = { x0: 0, z0: 0, x1: 0, z1: 0 };
+  /** A drop rings its puddle only in view: the ripple slots are few. */
+  private readonly drop = (p: Puddle, x: number, z: number, at: number): void => {
+    const f = this.fp;
+    if (p.x + p.r > f.x0 && p.x - p.r < f.x1 && p.z + p.r > f.z0 && p.z - p.r < f.z1) this.ripples.add(x, z, at, DROP.strength);
+  };
 
   constructor(private readonly map: TileMap, private readonly rng: () => number = Math.random) {}
 
@@ -126,6 +140,13 @@ export class Water3d {
 
     const l = i.landed;
     if (l) for (let k = 0; k < l.count; k++) this.ripples.add(l.pos[k * 2], l.pos[k * 2 + 1], now, WADE.drip);
+
+    // The puddles' drops since the last frame; the first frame, and one after the clock went back, brings the rings that still live.
+    if (i.puddles && i.fp) {
+      this.fp = i.fp;
+      puddleDrops(i.puddles, Math.max(now - RIPPLE_LIFE, this.dropsTo > now ? -Infinity : this.dropsTo), now, this.drop);
+    }
+    this.dropsTo = now;
 
     this.result.live = this.ripples.pack(now, this.packed);
     return this.result;
