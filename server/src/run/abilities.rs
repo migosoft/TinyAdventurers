@@ -3273,7 +3273,7 @@ mod tests {
         assert_eq!(a.damage, 0.0);
         let d = ab::def(AbilityId::Charm);
         assert_eq!((d.slot, d.category), (Slot::Secondary, AbilityCategory::Spell));
-        assert!(d.magical && d.ranged);
+        assert!(d.ranged);
         assert_eq!(d.req, &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Cha, 14)]);
         assert_eq!(d.own.effects.len(), 1);
         assert_eq!((d.own.effects[0].kind, d.own.effects[0].power), (EffectKind::Charmed, Attr::Cha));

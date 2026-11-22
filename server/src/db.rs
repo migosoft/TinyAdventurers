@@ -91,16 +91,22 @@ pub async fn create_account(db: &Db, name: &str, password_hash: &str) -> Result<
     Ok(row.get(0))
 }
 
+const ACCOUNT_SELECT: &str = "SELECT id, name, password_hash, debug FROM accounts";
+
+fn account_from(r: &sqlx::postgres::PgRow) -> Account {
+    Account { id: r.get(0), name: r.get(1), password_hash: r.get(2), debug: r.get(3) }
+}
+
 #[tracing::instrument(skip_all)]
 pub async fn find_account(db: &Db, name: &str) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, name, password_hash, debug FROM accounts WHERE lower(name) = lower($1)").bind(name).fetch_optional(db).await?;
-    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2), debug: r.get(3) }))
+    let row = sqlx::query(&format!("{ACCOUNT_SELECT} WHERE lower(name) = lower($1)")).bind(name).fetch_optional(db).await?;
+    Ok(row.as_ref().map(account_from))
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn account(db: &Db, id: i32) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, name, password_hash, debug FROM accounts WHERE id = $1").bind(id).fetch_optional(db).await?;
-    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2), debug: r.get(3) }))
+    let row = sqlx::query(&format!("{ACCOUNT_SELECT} WHERE id = $1")).bind(id).fetch_optional(db).await?;
+    Ok(row.as_ref().map(account_from))
 }
 
 /// Deletes the account with its sessions and characters (ON DELETE CASCADE).
@@ -183,16 +189,18 @@ fn character_from(r: &sqlx::postgres::PgRow) -> Character {
     }
 }
 
+const CHARACTER_SELECT: &str = "SELECT c.id, c.account_id, c.name, c.class, c.progress, a.debug AS debug FROM characters c JOIN accounts a ON a.id = c.account_id";
+
 #[tracing::instrument(skip_all)]
 pub async fn list_characters(db: &Db, account_id: i32) -> Result<Vec<Character>, sqlx::Error> {
-    let rows = sqlx::query("SELECT c.id, c.account_id, c.name, c.class, c.progress, a.debug AS debug FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.account_id = $1 ORDER BY c.id").bind(account_id).fetch_all(db).await?;
+    let rows = sqlx::query(&format!("{CHARACTER_SELECT} WHERE c.account_id = $1 ORDER BY c.id")).bind(account_id).fetch_all(db).await?;
     Ok(rows.iter().map(character_from).collect())
 }
 
 /// One of the account's characters (`None` if it belongs to someone else).
 #[tracing::instrument(skip_all)]
 pub async fn load_character(db: &Db, account_id: i32, id: i32) -> Result<Option<Character>, sqlx::Error> {
-    let row = sqlx::query("SELECT c.id, c.account_id, c.name, c.class, c.progress, a.debug AS debug FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1 AND c.account_id = $2").bind(id).bind(account_id).fetch_optional(db).await?;
+    let row = sqlx::query(&format!("{CHARACTER_SELECT} WHERE c.id = $1 AND c.account_id = $2")).bind(id).bind(account_id).fetch_optional(db).await?;
     Ok(row.as_ref().map(character_from))
 }
 

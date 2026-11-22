@@ -256,8 +256,6 @@ pub struct AbilityDef {
     pub name: &'static str,
     pub slot: AbilitySlot,
     pub category: AbilityCategory,
-    /// Whether the ability is magic (Spell and Innate today): what an anti-magic effect or a Dispel pauses (#187).
-    pub magical: bool,
     pub uses: Uses,
     /// A ranged ability: in melee a primary falls back to Strike and a secondary is blocked.
     pub ranged: bool,
@@ -435,7 +433,6 @@ pub fn def(id: AbilityId) -> AbilityDef {
         name,
         slot,
         category,
-        magical: matches!(category, C::Spell | C::Innate),
         uses,
         ranged,
         req: &[],
@@ -673,13 +670,6 @@ mod tests {
         assert_eq!([Spell, Innate, Technique, WeaponAttack].map(cooldown_attr), [Attr::Int, Attr::Cha, Attr::Dex, Attr::Dex]);
     }
 
-    #[test]
-    fn ability_magic_follows_the_table() {
-        for id in AbilityId::ALL {
-            let d = def(id);
-            assert_eq!(d.magical, matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), "{id:?}");
-        }
-    }
 
     #[test]
     fn touch_needs_a_touch_weapon() {

@@ -6,6 +6,7 @@ use super::*;
 use crate::collision::line_of_sight;
 use super::text;
 use crate::dungeon::{Map, Tile};
+use crate::protocol::EntSnap;
 use crate::protocol::ClientMsg;
 use crate::run::effects::Creature;
 use crate::run::visibility::{dark_range, send_snapshots, Dark, Sent};

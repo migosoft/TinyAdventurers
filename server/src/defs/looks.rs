@@ -87,11 +87,12 @@ pub fn look(figure: EntityKind, id: AbilityId) -> Look {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::abilities::AbilityCategory;
 
     #[test]
     fn a_rune_exactly_for_magical_abilities() {
         for id in AbilityId::ALL {
-            assert_eq!(look(EntityKind::SkeletonWarrior, id).rune.is_some(), super::super::abilities::def(id).magical, "{id:?}");
+            assert_eq!(look(EntityKind::SkeletonWarrior, id).rune.is_some(), matches!(super::super::abilities::def(id).category, AbilityCategory::Spell | AbilityCategory::Innate), "{id:?}");
         }
     }
 

@@ -120,7 +120,19 @@ pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>, recor
     };
     let Some(db) = db else { return };
     if !awards.is_empty() {
-        match db::bank_awards(&db, &awards, record.debug).await {
+        // One transaction, so a retry is safe; a database restart or pool timeout may pass in a few seconds.
+        let mut tries = 0;
+        let banked = loop {
+            match db::bank_awards(&db, &awards, record.debug).await {
+                Err(e) if tries < 3 => {
+                    tries += 1;
+                    tracing::warn!("run {rid}: banking failed (try {tries}): {e}");
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
+                r => break r,
+            }
+        };
+        match banked {
             Ok(banked) => {
                 let mut l = lobby.lock().unwrap();
                 for (id, p) in banked {

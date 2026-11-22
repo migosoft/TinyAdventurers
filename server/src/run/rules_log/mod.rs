@@ -9,7 +9,6 @@ use crate::defs::damage::{Damage, DamageType, Resistances, What};
 use crate::defs::attributes::Attr;
 use crate::defs::effects::EffectKind;
 use crate::defs::kinds::EntityKind;
-use crate::protocol::EntSnap;
 use crate::run::effects::{Creature, Duration, EffectOutcome};
 
 pub mod record;
