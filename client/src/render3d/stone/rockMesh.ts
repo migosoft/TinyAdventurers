@@ -6,7 +6,7 @@ import { FACE_H, FACE_W } from './format';
 import { KIND } from './grid';
 import { NONE, type Corner, type Out, type Vec3 } from './laidMesh';
 import type { SheetPlan } from './plan';
-import { BASIN_GRID, COLUMN, columnRadius, cornerLow, floorIn, grooveAt, heightIn, keyOf, sideReach, up, wallY, type Seg, type Shape, type Wall } from './shape';
+import { BASIN_GRID, COLUMN, along, columnRadius, cornerGap, cornerKnot, cornerLow, floorIn, grooveAt, heightIn, keyOf, sideReach, wallY, type Seg, type Shape, type Wall } from './shape';
 
 /** What the rock is meshed with: the level's shape, the sheets' plan and the chunk's ground texel of a world point. */
 export interface RockEnv { s: Shape; plan: SheetPlan; ground(x: number, z: number): Vec3 }
@@ -15,8 +15,12 @@ export interface RockEnv { s: Shape; plan: SheetPlan; ground(x: number, z: numbe
 export const SLOPE_ROWS = [0, 0.4, 0.65, 0.85, 1];
 /** The quads between a slope and the cell's far edge or the slope of the other side, and along a side without a slope. */
 const FILL = 2, PLAIN = 4;
-/** A rock wall's vertex reads light and sight this far inside the nearest open cell (tiles). */
-export const PUSH_IN = 0.2;
+/** A vertex at height 0 whose normal points up at least this much is where a slope leaves the floor (below it: the foot of an upright face). */
+const FOOT_UP = 0.6;
+/** The rows of two slopes from opposite sides are spread over no more than this share of the cell together. */
+const MEET = 0.96;
+/** A rock wall's vertex reads light and sight inside the nearest open cell: this far (tiles) at the foot, and further by its depth in the wall up to `PUSH_IN`. */
+export const PUSH_IN = 0.2, PUSH_FOOT = 0.02;
 /** The normal is the height's fall over this distance (tiles). */
 const NORMAL_STEP = 0.02;
 /** A column's sides round. */
@@ -24,14 +28,15 @@ const COLUMN_SIDES = 16;
 
 /** The offset from a point of a wall cell to the point `PUSH_IN` inside the nearest lower cell beside it. */
 function pushOf(e: RockEnv, w: Wall, px: number, pz: number): [number, number] {
-  let best = Infinity, tx = px, tz = pz;
+  let best = Infinity, cx = w.x, cz = w.z;
   for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
     if (heightAt(e.s.map, w.x + dx, w.z + dz) >= w.h) continue;
-    const qx = Math.min(w.x + dx + 1 - PUSH_IN, Math.max(w.x + dx + PUSH_IN, px)), qz = Math.min(w.z + dz + 1 - PUSH_IN, Math.max(w.z + dz + PUSH_IN, pz));
-    const d = (qx - px) ** 2 + (qz - pz) ** 2;
-    if (d < best) { best = d; tx = qx; tz = qz; }
+    const d = Math.max(w.x + dx - px, 0, px - w.x - dx - 1) ** 2 + Math.max(w.z + dz - pz, 0, pz - w.z - dz - 1) ** 2;
+    if (d < best) { best = d; cx = w.x + dx; cz = w.z + dz; }
   }
-  return [tx - px, tz - pz];
+  // at the foot hardly inside, so the slope is lit as the floor it rises from; deeper in the wall further, clear of the wall's own shade
+  const m = Math.min(PUSH_IN, PUSH_FOOT + Math.sqrt(best));
+  return [Math.min(cx + 1 - m, Math.max(cx + m, px)) - px, Math.min(cz + 1 - m, Math.max(cz + m, pz)) - pz];
 }
 
 /**
@@ -75,30 +80,54 @@ function stations(low: boolean, high: boolean): [number, number][] {
  * there, so with no reach (against masonry) they stand upright in the cell's edge.
  */
 export function rockSlope(e: RockEnv, w: Wall, out: Out): void {
-  const active = (side: number, corners: number[]): boolean => w.open[side] || corners.some((c) => w.diag[c]);
-  const xs = stations(active(3, [0, 2]), active(2, [1, 3])), zs = stations(active(1, [0, 1]), active(0, [2, 3]));
-  /** A station's place along its axis (0..1) and how far up the low and the high side's slope it lies. */
-  const place = (st: [number, number], rl: number, rh: number): [number, number, number] => {
-    const lo = Math.max(0, rl), hi = 1 - Math.max(0, rh);
-    return st[0] === 0 ? [lo * st[1], rl < 0 ? 1 : up(st[1], rl), 1] : st[0] === 2 ? [1 - (1 - hi) * st[1], 1, rh < 0 ? 1 : up(st[1], rh)] : [lo + (hi - lo) * st[1], 1, 1];
+  /** The corners of each side (south, north, east, west) that alone touch open ground: the first one's half of the cell comes first along the side. */
+  const corners = [[2, 3], [0, 1], [1, 3], [0, 2]].map((pair) => pair.filter((k) => w.diag[k]));
+  /** The reach the rows of a side's slope are spread over at a point: an open side's own; else that of its corner (of two: the one in whose half the point lies); -1: no slope. */
+  const spread = (side: number, px: number, pz: number): number => {
+    if (w.open[side]) return sideReach(w, side, px, pz);
+    const cs = corners[side], far = side < 2 ? px >= w.x + 0.5 : pz >= w.z + 0.5;
+    return cs.length ? w.reach[cornerKnot(cs[cs.length === 2 && far ? 1 : 0])] : -1;
   };
-  const ids: number[] = [];
+  const active = (side: number): boolean => w.open[side] || corners[side].length > 0;
+  const xs = stations(active(3), active(2)), zs = stations(active(1), active(0));
+  /** A station's place along its axis (0..1) and its share of the low and of the high side's slope (1: beyond it). Two slopes that would cross are both drawn in. */
+  const place = (st: [number, number], rl: number, rh: number): [number, number, number] => {
+    const k = Math.min(1, MEET / (Math.max(0, rl) + Math.max(0, rh) || 1)), lo = Math.max(0, rl) * k, hi = 1 - Math.max(0, rh) * k;
+    return st[0] === 0 ? [lo * st[1], rl < 0 ? 1 : st[1], 1] : st[0] === 2 ? [1 - (1 - hi) * st[1], 1, rh < 0 ? 1 : st[1]] : [lo + (hi - lo) * st[1], 1, 1];
+  };
+  const at: Vec3[] = [], ids: number[] = [];
   for (const sz of zs) for (const sx of xs) {
     // a slope's reach is taken where the vertex lies along its side, and that depends on the other axis's slopes: two rounds settle it
     let px = w.x + 0.5, pz = w.z + 0.5, ax = [0, 1, 1], az = [0, 1, 1];
     for (let i = 0; i < 2; i++) {
-      ax = place(sx, sideReach(w, 3, px, pz), sideReach(w, 2, px, pz));
+      ax = place(sx, spread(3, px, pz), spread(2, px, pz));
       px = w.x + ax[0];
-      az = place(sz, sideReach(w, 1, px, pz), sideReach(w, 0, px, pz));
+      az = place(sz, spread(1, px, pz), spread(0, px, pz));
       pz = w.z + az[0];
     }
-    const y = wallY(e.s, w, [az[2], az[1], ax[2], ax[1]], px, pz);
-    ids.push(out.vert(wallCorner(e, w, px, y, pz, pz >= w.z + 0.5, px >= w.x + 0.5), normalAt(e, px, pz), KIND.face));
+    // how far up each slope the vertex lies: by its place, as `stoneHeight` has it; a slope with no reach stands upright, its rows one above the other by their shares
+    const t = [az[2], az[1], ax[2], ax[1]], d = [w.z + 1 - pz, pz - w.z, w.x + 1 - px, px - w.x];
+    const p = d.map((di, side) => { const r = w.open[side] ? sideReach(w, side, px, pz) : -1; return r > 0 ? along(di, r) : r === 0 ? t[side] : 1; });
+    const c = w.diag.map((on, k) => { const r = on ? w.reach[cornerKnot(k)] : -1; return r > 0 ? along(cornerGap(w, k, px, pz), r) : r === 0 ? Math.min(1, Math.hypot(t[k & 1 ? 2 : 3], t[k & 2 ? 0 : 1])) : 1; });
+    at.push([px, wallY(e.s, w, p, c, px, pz), pz]);
   }
+  /** A vertex is made when a triangle with an area first needs it: rows that fall together make none. */
+  const id = (i: number): number => {
+    if (ids[i] === undefined) {
+      const n = normalAt(e, at[i][0], at[i][2]);
+      // where a slope leaves the floor its vertices are floor (lit as the floor is), so the kinds change inside the slope's first row, along the wobbling reach, not on the cell's edge
+      ids[i] = out.vert(wallCorner(e, w, at[i][0], at[i][1], at[i][2], at[i][2] >= w.z + 0.5, at[i][0] >= w.x + 0.5), n, at[i][1] === 0 && n[1] > FOOT_UP ? KIND.floor : KIND.face);
+    }
+    return ids[i];
+  };
+  const tri = (a: number, b: number, c: number): void => {
+    const [p, q, r] = [at[a], at[b], at[c]], ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2], vx = r[0] - p[0], vy = r[1] - p[1], vz = r[2] - p[2];
+    if ((uy * vz - uz * vy) ** 2 + (uz * vx - ux * vz) ** 2 + (ux * vy - uy * vx) ** 2 > 1e-14) out.tri(id(a), id(b), id(c));
+  };
   const n = xs.length;
   for (let j = 0; j + 1 < zs.length; j++) for (let i = 0; i + 1 < n; i++) {
-    const a = ids[j * n + i], b = ids[j * n + i + 1], c = ids[(j + 1) * n + i + 1], d = ids[(j + 1) * n + i];
-    out.tri(a, b, c); out.tri(a, c, d);
+    const a = j * n + i, b = a + 1, d = a + n, c = d + 1;
+    tri(a, b, c); tri(a, c, d);
   }
 }
 

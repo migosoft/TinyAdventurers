@@ -1,23 +1,30 @@
 // The shape of natural rock (#380 part 4): the stone's height at a point. A rock wall cell beside open ground rises from 0 on its open
-// edges to the wall's height within the slope's reach, gently at the foot and steeply above; the reach wobbles along the wall, and shrinks
-// to 0 with the rock amount and toward a wall cell of masonry, where the face is upright. A wall cell with open ground on all four sides
+// edges to the wall's height within the slope's reach, gently at the foot and steeply above; the reach swings along the wall between a
+// tenth of the cell and most of it, and shrinks to 0 with the rock amount and toward a wall cell of masonry, where the face is upright. A wall cell with open ground on all four sides
 // is a column. A rock floor lies a little below 0, with a basin under each puddle and a groove along each crevice. The slope lies inside
 // the wall's own cell and no floor rises above 0, so open ground is exactly as wide as the server's. `rockMesh.ts` meshes all of it.
 // Pure: no three. Every number is a first guess.
 import type { TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
-import { STONE_PX, hash, rockAmount, rockWall, type StoneField } from './field';
+import { STONE_PX, hash, rockAmount, rockWall, wobble, type StoneField } from './field';
 import { SIDE_STEP } from './grid';
 import { floorIsRock, laid, laidHeight, type Laid } from './laidMesh';
 import type { Marks, Puddle, Shard } from './place';
 import { unplanned } from './plan';
 
-/** How far into its cell a rock wall's slope reaches (tiles): the middle value and how far the wobble moves it; together below 0.5, so two slopes of a cell never meet. */
-export const REACH = 0.29, REACH_WOBBLE = 0.17;
-/** The slope's profile over its reach, 0..1: this share of the height rises evenly (the gentle foot), the rest by the power `STEEP`. */
-const FOOT_RISE = 0.14, STEEP = 2.4;
-/** The longest slope lies level over this share of its reach per tile of reach beyond the shortest (0.34 more: over a quarter of it). */
-const FOOT_LEVEL = 0.8;
+/**
+ * How far into its cell a rock wall's slope reaches (tiles): the middle value, a slow swing along the wall (the border wobble's noise, a
+ * feature every three tiles) and a fine wobble from point to point, kept between the two ends. So a wall's line bulges in and out by most
+ * of a tile, and a long reach is a long gentle foot.
+ */
+export const REACH = 0.45, REACH_SWING = 0.7, REACH_WOBBLE = 0.1, REACH_MIN = 0.1, REACH_MAX = 0.85;
+/** The longest reach where the wall is one cell thick: slopes from its two sides must leave its top standing between them. */
+const REACH_THIN = 0.38;
+/**
+ * The slope's profile over its reach, 0..1: this share of the height rises evenly from the cell's edge on, the rest by the power `STEEP`.
+ * The even share is small, so the floor runs into the foot almost without a bend and no lit line follows the cell's edge.
+ */
+const FOOT_RISE = 0.05, STEEP = 2.2;
 /** The rock stands back from a big crystal: no slope within `NICHE_IN` tiles of its foot, the full one from `NICHE_OUT`. */
 const NICHE_IN = 0.16, NICHE_OUT = 0.5;
 /** A rock floor's corners lie up to this far below 0 (tiles), a puddle's basin this deep at its middle. */
@@ -34,7 +41,7 @@ export interface Seg { x0: number; z0: number; x1: number; z1: number; half: num
 /** What the shape of one level is worked out with: the laid floor's pieces, and what was asked before. */
 export interface Shape {
   f: StoneField; map: TileMap; marks: Marks; laid: Laid;
-  lean: Map<number, number>; low: Map<number, number>; rough: Map<number, boolean>; walls: Map<number, Wall | null>;
+  lean: Map<number, number>; low: Map<number, number>; rough: Map<number, boolean>; walls: Map<number, Wall | null>; reach: Map<number, number>;
   /** The puddles, crevice pieces and big crystals that reach a cell. */
   puddles: Map<number, Puddle[]>; segs: Map<number, Seg[]>; niches: Map<number, Shard[]>;
 }
@@ -42,7 +49,7 @@ export interface Shape {
 export const keyOf = (s: Shape, x: number, z: number): number => (z + 2) * (s.map.w + 4) + x + 2;
 
 export function shapeOf(c: Laid): Shape {
-  const s: Shape = { f: c.f, map: c.map, marks: c.marks, laid: c, lean: new Map(), low: new Map(), rough: new Map(), walls: new Map(), puddles: new Map(), segs: new Map(), niches: new Map() };
+  const s: Shape = { f: c.f, map: c.map, marks: c.marks, laid: c, lean: new Map(), low: new Map(), rough: new Map(), walls: new Map(), reach: new Map(), puddles: new Map(), segs: new Map(), niches: new Map() };
   const add = <T>(m: Map<number, T[]>, x: number, z: number, v: T): void => {
     const k = keyOf(s, Math.floor(x), Math.floor(z)), list = m.get(k);
     if (!list) m.set(k, [v]);
@@ -67,26 +74,33 @@ export function shapeOf(c: Laid): Shape {
 // The shape the two functions below were last asked with, per level.
 // shortcut: it outlives a tile change that moves a cell's height or a dip (the mesh makes its own per chunk, so only later callers such as the cover would read stale floor levels); drop it from the view's `tileChanged` if such a caller needs it after one.
 const kept = new WeakMap<Marks, Shape>(), KEPT_CELLS = 4096;
-function shapeFor(f: StoneField, map: TileMap, marks: Marks): Shape {
+type Skip = (x: number, z: number) => boolean;
+function shapeFor(f: StoneField, map: TileMap, marks: Marks, skip?: Skip): Shape {
   let s = kept.get(marks);
-  if (!s || s.f !== f || s.map !== map || s.laid.cells.size > KEPT_CELLS) kept.set(marks, (s = shapeOf(laid(map, f, unplanned(), marks, 0, 0, -1))));
+  if (!s || s.f !== f || s.map !== map || s.laid.skip !== skip || s.laid.cells.size > KEPT_CELLS) kept.set(marks, (s = shapeOf(laid(map, f, unplanned(), marks, 0, 0, -1, skip))));
   return s;
 }
 
-/** The stone's height at a point (tiles): 0 or below on open ground (unevenness, basins, crevices), up to WALL_H inside a wall cell. Blended with the upright laid face by `rockAmount`. */
-export function stoneHeight(f: StoneField, map: TileMap, marks: Marks, x: number, z: number): number {
-  return heightIn(shapeFor(f, map, marks), x, z);
+/**
+ * The stone's height at a point (tiles): 0 or below on open ground (unevenness, basins, crevices), up to WALL_H inside a wall cell. Blended
+ * with the upright laid face by `rockAmount`. `skip`: the cells another mesh draws, as `buildStoneChunk` is given them (the woodland's ground).
+ */
+export function stoneHeight(f: StoneField, map: TileMap, marks: Marks, x: number, z: number, skip?: Skip): number {
+  return heightIn(shapeFor(f, map, marks, skip), x, z);
 }
-/** The floor's height at a point of open ground, at or below 0: laid blocks' levels or the rock floor. What the cover and the dips stand on. */
-export function floorHeight(f: StoneField, map: TileMap, marks: Marks, x: number, z: number): number {
-  return floorIn(shapeFor(f, map, marks), x, z);
+/** The floor's height at a point of open ground, at or below 0: laid blocks' levels or the rock floor. What the cover and the dips stand on. `skip` as for `stoneHeight`. */
+export function floorHeight(f: StoneField, map: TileMap, marks: Marks, x: number, z: number, skip?: Skip): number {
+  return floorIn(shapeFor(f, map, marks, skip), x, z);
 }
 
 export function heightIn(s: Shape, x: number, z: number): number {
   const cx = Math.floor(x), cz = Math.floor(z), h = heightAt(s.map, cx, cz);
   if (h === 0) return floorIn(s, x, z);
   const w = wallOf(s, cx, cz);
-  return !w ? h : isColumn(w) ? columnY(s, w, x, z) : wallY(s, w, paramsAt(w, x, z), x, z);
+  if (!w) return h;
+  if (isColumn(w)) return columnY(s, w, x, z);
+  const d = [w.z + 1 - z, z - w.z, w.x + 1 - x, x - w.x];
+  return wallY(s, w, d.map((di, side) => (w.open[side] ? along(di, sideReach(w, side, x, z)) : 1)), w.diag.map((on, k) => (on ? along(cornerGap(w, k, x, z), w.reach[cornerKnot(k)]) : 1)), x, z);
 }
 
 // ---- rock walls
@@ -110,9 +124,9 @@ export function wallOf(s: Shape, x: number, z: number): Wall | null {
     const diag = [0, 1, 2, 3].map((i) => { const dx = i & 1 ? 1 : -1, dz = i & 2 ? 1 : -1; return low(dx, dz) && !low(dx, 0) && !low(0, dz); });
     if (open.some(Boolean) || diag.some(Boolean)) {
       const c = [cornerLean(s, x, z), cornerLean(s, x + 1, z), cornerLean(s, x, z + 1), cornerLean(s, x + 1, z + 1)];
-      // the reach wobbles from point to point; the points are the map's, so cells side by side agree along their edge
-      const reach = Array.from({ length: 9 }, (_, i) => mix2(c[0], c[1], c[2], c[3], (i % 3) / 2, Math.floor(i / 3) / 2) * (REACH + REACH_WOBBLE * (hash(s.f.seed, x * 2 + (i % 3), z * 2 + Math.floor(i / 3), 72) * 2 - 1)));
-      w = { x, z, h, open, diag, reach, lean: (c[0] + c[1] + c[2] + c[3]) / 4 };
+      const reach = Array.from({ length: 9 }, (_, i) => mix2(c[0], c[1], c[2], c[3], (i % 3) / 2, Math.floor(i / 3) / 2) * reachAt(s, x * 2 + (i % 3), z * 2 + Math.floor(i / 3)));
+      // with no reach anywhere (masonry at every corner) the cell is an upright block: a level top and flat faces
+      if (open.every(Boolean) || reach.some((r) => r > 0)) w = { x, z, h, open, diag, reach, lean: (c[0] + c[1] + c[2] + c[3]) / 4 };
     }
   }
   s.walls.set(k, w);
@@ -120,8 +134,26 @@ export function wallOf(s: Shape, x: number, z: number): Wall | null {
 }
 /** Open ground on all four sides: a natural column. */
 export const isColumn = (w: Wall): boolean => w.open.every(Boolean);
-/** The corner of the quarter of its cell a point lies in. */
-const quarter = (w: Wall, px: number, pz: number): number => (px >= w.x + 0.5 ? 1 : 0) + (pz >= w.z + 0.5 ? 2 : 0);
+
+/** Whether a point of the half-tile grid (X2, Z2 in half tiles) touches open ground: lies in an open cell or on its edge. */
+function touchesOpen(map: TileMap, X2: number, Z2: number): boolean {
+  for (let z = (Z2 - 1) >> 1; z <= Z2 >> 1; z++) for (let x = (X2 - 1) >> 1; x <= X2 >> 1; x++) if (heightAt(map, x, z) === 0) return true;
+  return false;
+}
+/**
+ * The reach in full rock at a point of the half-tile grid. The points are the map's, so cells side by side agree along their edge. Where
+ * open ground lies one tile on through the wall, the wall is thin there and the reach stops short of its middle.
+ */
+function reachAt(s: Shape, X2: number, Z2: number): number {
+  const k = (Z2 + 4) * (s.map.w * 2 + 8) + X2 + 4;
+  let r = s.reach.get(k);
+  if (r === undefined) {
+    r = Math.min(REACH_MAX, Math.max(REACH_MIN, REACH + REACH_SWING * wobble(s.f.seed, X2 / 2, Z2 / 2, 2) + REACH_WOBBLE * (hash(s.f.seed, X2, Z2, 72) * 2 - 1)));
+    for (const [dx, dz] of SIDE_STEP) if (touchesOpen(s.map, X2 + dx * 2, Z2 + dz * 2) && !touchesOpen(s.map, X2 + dx, Z2 + dz)) r = Math.min(r, REACH_THIN);
+    s.reach.set(k, r);
+  }
+  return r;
+}
 
 /** How much of the rock's lean a cell corner has, 0..1: the rock amount, and 0 where a wall cell of masonry touches it, so the rock stands upright against masonry. */
 function cornerLean(s: Shape, X: number, Z: number): number {
@@ -141,39 +173,25 @@ function reach(w: Wall, x: number, z: number): number {
   return mix2(r[k], r[k + 1], r[k + 3], r[k + 4], fx - i, fz - j);
 }
 
-/**
- * The reach of the slope that rises from a side of the wall cell, for the point (px, pz): an open side's is taken where the point lies
- * along it; a side that only touches open ground in a corner has that corner's, in the corner's half of the cell. -1: no slope from there.
- */
+/** The reach of the slope that rises from an open side of the wall cell, taken where the point (px, pz) lies along that side. */
 export function sideReach(w: Wall, side: number, px: number, pz: number): number {
   const [dx, dz] = SIDE_STEP[side];
-  if (w.open[side]) return reach(w, dx ? w.x + (dx > 0 ? 1 : 0) : px, dz ? w.z + (dz > 0 ? 1 : 0) : pz);
-  const east = dx ? dx > 0 : px >= w.x + 0.5, south = dz ? dz > 0 : pz >= w.z + 0.5;
-  return w.diag[(east ? 1 : 0) + (south ? 2 : 0)] ? w.reach[(east ? 2 : 0) + (south ? 6 : 0)] : -1;
+  return reach(w, dx ? w.x + (dx > 0 ? 1 : 0) : px, dz ? w.z + (dz > 0 ? 1 : 0) : pz);
 }
-/**
- * How far up a slope of reach `r` the share `t` of that reach lies, 0..1: a long slope begins level and rises later, so the line a wall's
- * foot begins to rise on wobbles with the reach instead of following the cell's edge.
- */
-export function up(t: number, r: number): number {
-  const level = Math.max(0, r - REACH + REACH_WOBBLE) * FOOT_LEVEL;
-  return Math.max(0, (t - level) / (1 - level));
-}
-/** How far up a side's slope a point lies, 0 on the side's edge .. 1 at the slope's reach `r` and beyond; with no reach the wall is upright in the edge. */
-const along = (d: number, r: number): number => (r < 0 ? 1 : r > 0 ? up(Math.min(1, d / r), r) : d > 0 ? 1 : 0);
-/** That for the four sides at a point of the cell. */
-function paramsAt(w: Wall, px: number, pz: number): number[] {
-  return [along(w.z + 1 - pz, sideReach(w, 0, px, pz)), along(pz - w.z, sideReach(w, 1, px, pz)), along(w.x + 1 - px, sideReach(w, 2, px, pz)), along(px - w.x, sideReach(w, 3, px, pz))];
-}
+/** Where a corner (east: +1, south: +2) lies among the cell's nine reach points, and how far a point lies from it. */
+export const cornerKnot = (k: number): number => (k & 1 ? 2 : 0) + (k & 2 ? 6 : 0);
+export const cornerGap = (w: Wall, k: number, px: number, pz: number): number => Math.hypot(px - w.x - (k & 1), pz - w.z - (k >> 1));
+/** How far up a slope a point lies, 0 at its foot .. 1 at the slope's reach `r` and beyond; with no reach the wall is upright in the edge. */
+export const along = (d: number, r: number): number => (r > 0 ? Math.min(1, d / r) : d > 0 ? 1 : 0);
 
 /**
- * The height of a rock wall at a point with the sides' `p` (`paramsAt`, or the mesh's own). Two open sides that meet round the wall's
- * top between them; round a corner that alone touches open ground the slope turns in a quarter circle.
+ * The height of a rock wall at a point, from how far up each open side's slope it lies (`p`, 1 for a side that is not open) and up the
+ * slope round each corner that alone touches open ground (`c`, 1 for the others): `along`, or the mesh's own where a slope has no reach.
+ * Two slopes that meet round the wall's top between them; round such a corner the slope turns in a quarter circle.
  */
-export function wallY(s: Shape, w: Wall, p: readonly number[], px: number, pz: number): number {
-  const u = Math.min(w.open[3] ? p[3] : 1, w.open[2] ? p[2] : 1), v = Math.min(w.open[1] ? p[1] : 1, w.open[0] ? p[0] : 1);
-  const q = quarter(w, px, pz), c = w.diag[q] ? Math.max(0, 1 - Math.hypot(p[q & 1 ? 2 : 3], p[q & 2 ? 0 : 1])) : 0;
-  let t = Math.max(0, 1 - Math.sqrt((1 - u) ** 2 + (1 - v) ** 2 + c * c));
+export function wallY(s: Shape, w: Wall, p: readonly number[], c: readonly number[], px: number, pz: number): number {
+  const u = Math.min(p[3], p[2]), v = Math.min(p[1], p[0]);
+  let t = Math.max(0, 1 - Math.sqrt((1 - u) ** 2 + (1 - v) ** 2 + (1 - c[0]) ** 2 + (1 - c[1]) ** 2 + (1 - c[2]) ** 2 + (1 - c[3]) ** 2));
   for (const b of s.niches.get(keyOf(s, w.x, w.z)) ?? []) {
     const k = Math.min(1, Math.max(0, (Math.hypot(px - b.x, pz - b.z) - NICHE_IN) / (NICHE_OUT - NICHE_IN)));
     t *= k * k * (3 - 2 * k);

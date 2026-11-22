@@ -44,7 +44,7 @@ export function hash(seed: number, a: number, b: number, c: number): number {
 }
 
 /** Smooth value noise in [-1, 1] on a grid of `WOBBLE_CELL` tiles; `c` picks the channel. */
-function wobble(seed: number, x: number, z: number, c: number): number {
+export function wobble(seed: number, x: number, z: number, c: number): number {
   const gx = x / WOBBLE_CELL, gz = z / WOBBLE_CELL;
   const x0 = Math.floor(gx), z0 = Math.floor(gz);
   const fx = gx - x0, fz = gz - z0;

@@ -276,8 +276,8 @@ describe('buildStoneChunk', () => {
     return m;
   };
   const rockBuild = (m: TileMap): StoneArrays => buildStoneChunk(m, stoneField(m, new Uint8Array(m.w * m.h).fill(1), SEED), planSheets(m), noMarks(), 0, 0);
-  /** The vertices of the rock's surface over wall cells: faces that are no foot. */
-  const rockVertices = (a: StoneArrays): V[] => vertices(a).filter((v) => v.kind === KIND.face && v.sheet[2] >= 0);
+/** The vertices of the rock's surface over wall cells: faces that are no foot strip, and where a slope leaves the floor its floor vertices (they alone of the floor's have a `push`). */
+  const rockVertices = (a: StoneArrays): V[] => vertices(a).filter((v) => (v.kind === KIND.face && v.sheet[2] >= 0) || (v.kind === KIND.floor && (v.push[0] !== 0 || v.push[1] !== 0)));
 
   it('makes a lone rock wall cell a column, narrower at mid height than at its foot and its top, and a group of two an outcrop', () => {
     const vs = rockVertices(rockBuild(cave()));
