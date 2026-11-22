@@ -5,7 +5,6 @@ import {
   Color,
   DataTexture,
   DataUtils,
-  DynamicDrawUsage,
   HalfFloatType,
   LinearFilter,
   LinearSRGBColorSpace,
@@ -200,9 +199,8 @@ class DynMesh {
     const old = this.mesh.geometry;
     const g = new BufferGeometry();
     for (const [name, size] of this.attrs) {
-      const a = new BufferAttribute(new Float32Array(cap * size), size);
-      a.setUsage(DynamicDrawUsage);
-      g.setAttribute(name, a);
+      // No DynamicDrawUsage: three re-uploads such an attribute in every render() of a frame, ignoring its version.
+      g.setAttribute(name, new BufferAttribute(new Float32Array(cap * size), size));
     }
     this.mesh.geometry = g;
     for (const t of this.twins) t.geometry = g;
@@ -220,6 +218,9 @@ class DynMesh {
   set(data: Record<string, Float32Array>, count: number): void {
     if (count > this.cap) this.grow(Math.max(count, this.cap * 2));
     const g = this.mesh.geometry;
+    g.setDrawRange(0, count);
+    // An empty range would upload the whole array on WebGL (bufferSubData length 0 means "to the end").
+    if (count === 0) return;
     for (const [name, size] of this.attrs) {
       const a = g.getAttribute(name) as BufferAttribute;
       (a.array as Float32Array).set(data[name].subarray(0, count * size));
@@ -227,7 +228,6 @@ class DynMesh {
       a.addUpdateRange(0, count * size); // only the used part goes to the GPU
       a.needsUpdate = true;
     }
-    g.setDrawRange(0, count);
   }
   dispose(): void {
     this.mesh.geometry.dispose();
