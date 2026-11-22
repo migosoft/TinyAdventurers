@@ -20,7 +20,8 @@ export const piecesOf = (c: Crack): number[][] => [...c.pts.slice(1).map((q, i) 
 export function onPiece(u: number, v: number, x0: number, z0: number, x1: number, z1: number, half: number): boolean {
   const ax = x0 * STONE_PX, az = z0 * STONE_PX, dx = (x1 - x0) * STONE_PX, dz = (z1 - z0) * STONE_PX;
   const t = Math.min(1, Math.max(0, ((u + 0.5 - ax) * dx + (v + 0.5 - az) * dz) / (dx * dx + dz * dz || 1)));
-  return Math.hypot(u + 0.5 - ax - dx * t, v + 0.5 - az - dz * t) < half;
+  const ex = u + 0.5 - ax - dx * t, ez = v + 0.5 - az - dz * t;
+  return ex * ex + ez * ez < half * half; // (`Math.hypot` is many times slower)
 }
 
 /** No marks at all: what every caller passes until the placement exists. */

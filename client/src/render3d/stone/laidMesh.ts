@@ -163,8 +163,6 @@ export function laid(map: TileMap, f: StoneField, plan: SheetPlan, marks: Marks,
   return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), open: new Map(), wide: new Map(), grooves };
 }
 const inMap = (c: Laid, x: number, z: number): boolean => x >= 0 && z >= 0 && x < c.map.w && z < c.map.h;
-/** The groove's bottom over a ground px: the px the painter makes a crevice's black (`onPiece`); undefined: none. */
-const grooveAt = (c: Laid, u: number, v: number): Plane | undefined => c.grooves.find((g) => onPiece(u, v, g.at[0], g.at[1], g.at[2], g.at[3], g.half))?.p;
 
 // ---- floors
 const grid = new Int16Array(STONE_PX * STONE_PX), rows = new Int32Array(STONE_PX);
@@ -188,10 +186,12 @@ function top(c: Laid, b: Block): Plane {
  */
 const marked = (c: Laid, x: number, z: number): boolean => c.marks.grates.some((g) => Math.floor(g.x) === x && Math.floor(g.z) === z)
   || c.marks.pieces.some((p) => x + 1 > p.x - p.r - 0.1 && x < p.x + p.r + 0.1 && z + 1 > p.z - p.r - 0.1 && z < p.z + p.r + 0.1)
-  || (c.grooves.some(({ at: [x0, z0, x1, z1], half }) => {
-    const r = half / STONE_PX;
-    return x + 1 > Math.min(x0, x1) - r && x < Math.max(x0, x1) + r && z + 1 > Math.min(z0, z1) - r && z < Math.max(z0, z1) + r;
-  }) && someLaid(c, x, z));
+  || (groovesIn(c, x, z).length > 0 && someLaid(c, x, z));
+/** The crevice pieces that reach the cell (by their boxes): few cells ask every px for more than none. */
+const groovesIn = (c: Laid, x: number, z: number): Laid['grooves'] => c.grooves.filter(({ at: [x0, z0, x1, z1], half }) => {
+  const r = half / STONE_PX;
+  return x + 1 > Math.min(x0, x1) - r && x < Math.max(x0, x1) + r && z + 1 > Math.min(z0, z1) - r && z < Math.max(z0, z1) + r;
+});
 /** Whether any px of the floor cell is laid stone. */
 function someLaid(c: Laid, x: number, z: number): boolean {
   for (let v = z * STONE_PX; v < (z + 1) * STONE_PX; v++) for (let u = x * STONE_PX; u < (x + 1) * STONE_PX; u++) if (!slabOf(c.f, c.map, c.marks, u, v).rock) return true;
@@ -247,12 +247,13 @@ function cellOf(c: Laid, x: number, z: number): Cell | null {
     }
     if (!laidStone) cell = { at: null, surfs: [{ ...whole, p: LEVEL[2] }], rock: true };
   } else {
-    const planes: Plane[] = [];
+    const planes: Plane[] = [], grooves = groovesIn(c, x, z);
     const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      // a crevice's groove, else a slab, a piece's stone (level, so the stones of a ring are one plane) or a grate's shaft; rock lies at the raised level
-      const b = floorBlockAt(c.f, c.map, c.marks, pu + i, pv + j);
-      grid[j * N + i] = index(grooveAt(c, pu + i, pv + j) ?? (b ? top(c, b) : LEVEL[2]));
+      // a crevice's groove (the px the painter makes black, `onPiece`), else a slab, a piece's stone (level, so the stones of a ring are
+      // one plane) or a grate's shaft; rock lies at the raised level
+      const b = floorBlockAt(c.f, c.map, c.marks, pu + i, pv + j), g = grooves.find((o) => onPiece(pu + i, pv + j, o.at[0], o.at[1], o.at[2], o.at[3], o.half));
+      grid[j * N + i] = index(g ? g.p : b ? top(c, b) : LEVEL[2]);
     }
     cell = { at: new Uint16Array(N * N), surfs: [] };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
