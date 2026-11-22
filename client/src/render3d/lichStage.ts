@@ -26,7 +26,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { parseMap } from './demoMap';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { actPeriod, LICH_ACTS, lichAct, type LichAct } from './lichScript';
 import { seenOpeners } from './openers';
 import { reflects, type R3dParams } from './params';
@@ -247,7 +247,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
       let lights: Cand[] = [];
       if (game) lights = selectLights([...staticCands(field, pairs, map, clock), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
       label.textContent = `lich (#358): ${state.act}${state.glide ? ' + glide' : ''}; act ${actClock(clock).toFixed(2)} of ${actPeriod(state.act === 'glide' ? 'stand' : state.act).toFixed(2)} s; t ${clock.toFixed(2)} s; WASD moves the knight`;
       const r = window.__r3d as unknown as Record<string, unknown> | undefined;

@@ -22,7 +22,7 @@ import { emitWaterCues } from './fx/waterFx';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import type { FigureKit } from './models/kit';
@@ -223,7 +223,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
         inView = sel.inView;
       }
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
       const r = window.__r3d;
       if (r) {

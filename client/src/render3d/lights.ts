@@ -85,7 +85,7 @@ export class TorchPairs {
 export interface ShadowCaster { id: number; x: number; z: number; w: number; y0: number; y1: number; u0: number; v0: number; u1: number; v1: number }
 
 /** A light that may enter the list: its id is stable (`s<lightId>`, `m<entityId>` or `m<n>`). */
-export interface Cand extends Light { id: string; kind: number; /** The brightness without flicker: what `selectLights` ranks by, so the choice does not flutter. */ base: number }
+export interface Cand extends Light { id: string; kind: number; /** The entity that carries the light (its own card must not shadow it), -1 for none. */ carrier: number; /** The brightness without flicker: what `selectLights` ranks by, so the choice does not flutter. */ base: number }
 
 /**
  * Every light of the field that is on, except lava (its glow is the ground's own). Torches sit at their flame. A Daylight light is
@@ -117,7 +117,7 @@ export function staticCands(field: LightField, torches: TorchPairs, map: TileMap
     const cloud = l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, lookFor(l.id, sun)) : 1;
     const [r, g, b] = lightRgb(l.kind, l.colour, lightFlicker(l.kind, t, ph) * bounce * cloud);
     const base = Math.max(...lightRgb(l.kind, l.colour, bounce));
-    out.push({ id: `s${l.id}`, kind: l.kind, x, y, z, radius: LIGHT[l.kind].radius, r, g, b, shadow: true, skip: -1, base });
+    out.push({ id: `s${l.id}`, kind: l.kind, carrier: -1, x, y, z, radius: LIGHT[l.kind].radius, r, g, b, shadow: true, skip: -1, base });
   }
   return out;
 }
@@ -166,7 +166,7 @@ export function movingCands(moving: readonly MovingLight[], snapEnts: readonly E
     }
     const [r, g, b] = lightRgb(kind, colour, lightFlicker(kind, t, ph));
     const base = Math.max(...lightRgb(kind, colour, 1));
-    out.push({ id, kind, x, y, z, radius: LIGHT[kind].radius, r, g, b, shadow: true, skip: -1, base });
+    out.push({ id, kind, carrier: best ? best[0] : -1, x, y, z, radius: LIGHT[kind].radius, r, g, b, shadow: true, skip: -1, base });
   }
   return out;
 }
@@ -238,25 +238,9 @@ export function selectCasters(casters: readonly ShadowCaster[], lights: readonly
   return scored.slice(0, Math.max(0, cap)).map((s) => s.c);
 }
 
-/**
- * Light id -> the entity that carries it, read from the ids `movingCands` makes: `m<entityId>` and `m<entityId>.<n>`
- * (a carried light); static (`s<lightId>`) and uncarried moving lights (`p<kind>:<x>:<y>`) have none.
- */
-export function carrierMap(lights: readonly Cand[]): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const l of lights) {
-    const m = /^m(\d+)(?:\.\d+)?$/.exec(l.id);
-    if (m) out.set(l.id, Number(m[1]));
-  }
-  return out;
-}
-
 /** Sets each light's `skip` to the slot (in `slots`) of its carrier, -1 when it has none or the carrier casts no shadow in this list. */
-export function assignSkips(lights: Cand[], carriers: ReadonlyMap<string, number>, slots: readonly ShadowCaster[]): void {
-  for (const l of lights) {
-    const car = carriers.get(l.id);
-    l.skip = car === undefined ? -1 : slots.findIndex((c) => c.id === car);
-  }
+export function assignSkips(lights: Cand[], slots: readonly ShadowCaster[]): void {
+  for (const l of lights) l.skip = l.carrier < 0 ? -1 : slots.findIndex((c) => c.id === l.carrier);
 }
 
 /** The lava lights as one texel per tile (rgba, `map.w * map.h * 4`): rgb the summed Lava lights over the whole map, alpha 1 on lava tiles (#304). */

@@ -22,7 +22,7 @@ import type { DrawnFig } from './fx/types';
 import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, OBJECT_PLACES, SPECTRE_PLACES, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
 import type { FigureKit } from './models/kit';
 import { SMOKE_TONES } from './models/tubeDesc';
 import { MODEL_OF_KIND, OBJECT_MODEL, floats, objectModelOf, type ModelKey } from './models/table';
@@ -525,7 +525,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
         lights = sel.list;
         inView = sel.inView;
         casters = selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap));
-        assignSkips(lights, carrierMap(lights), casters);
+        assignSkips(lights, casters);
       }
       c.timer.lap('lights');
       // The water under the wading group (#345): ripples only (the gallery has no effects pass), on the page's clock `t`.

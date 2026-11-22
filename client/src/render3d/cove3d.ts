@@ -80,7 +80,7 @@ export class Pixies3d {
     const [r, g, b] = [GLOW[0] * PIXIE_LIGHT.gain, GLOW[1] * PIXIE_LIGHT.gain, GLOW[2] * PIXIE_LIGHT.gain];
     for (let i = 0; i < this.count; i++) {
       const p = this.at(i, t);
-      out.push({ id: `x${i}`, kind: LIGHT_KIND.Magic, x: p.x, y: p.y, z: p.z, radius: PIXIE_LIGHT.radius, r, g, b, shadow: false, skip: -1, base: Math.max(r, g, b) });
+      out.push({ id: `x${i}`, kind: LIGHT_KIND.Magic, carrier: -1, x: p.x, y: p.y, z: p.z, radius: PIXIE_LIGHT.radius, r, g, b, shadow: false, skip: -1, base: Math.max(r, g, b) });
     }
     return out;
   }

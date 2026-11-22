@@ -21,7 +21,7 @@ import { rng } from './fx/rand';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MIST } from './mist';
@@ -189,7 +189,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       }
       // The figures that cast a shadow for these lights, and each carried light skips its carrier.
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
       const sight = c.params.sight
         ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }

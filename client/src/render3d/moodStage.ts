@@ -26,7 +26,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { parseLights } from './lightsStage';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
@@ -202,7 +202,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
         inView = sel.inView;
       }
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
       const sight = c.params.sight
         ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }

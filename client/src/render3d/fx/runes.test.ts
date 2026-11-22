@@ -5,7 +5,6 @@ import type { EntState } from '../../game/world';
 import { ANIM, EFFECT, FLAG, KIND, LIGHT_KIND, RUNE_LOOK, SIDE } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { newFxBuf } from '../models/fx';
-import { carrierMap } from '../lights';
 import { Effects3d, clearFxRegistry, type FxFrame } from './effects3d';
 import { APPEAR, channelPalette, HOLD, newRune, registerRunes, RUNE_N, RUNE_PALETTES, runeBorn, SPHERE_MIN } from './runes';
 import { FxTris } from './tris';
@@ -173,7 +172,7 @@ describe('runes', () => {
     const l = out.lights[0];
     expect(l.id).toBe(`m${ID}.9`);
     expect(l.kind).toBe(LIGHT_KIND.Magic);
-    expect(carrierMap(out.lights).get(l.id)).toBe(ID);
+    expect(l.carrier).toBe(ID);
   });
 
   it('same seed, same picture', () => {

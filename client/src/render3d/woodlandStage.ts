@@ -19,7 +19,7 @@ import { CoverField } from './cover/coverField';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WOODLAND_CLEAR, WORK_AMBIENT } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, movingCands, selectCasters, selectLights } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, movingCands, selectCasters, selectLights } from './lights';
 import { MIST } from './mist';
 import type { FigureKit } from './models/kit';
 import { createStageKit, modelsReadouter } from './stageKit';
@@ -211,7 +211,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         inView = sel.inView;
       }
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
 
       let sight: SightFrame = SIGHT_OFF;

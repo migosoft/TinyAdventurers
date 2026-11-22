@@ -28,7 +28,7 @@ export function run(T: FxTris, ctx: FxCtx, s: BurstSpec, base: number, x: number
 /** Adds a client light unless the frame's cap is reached (a light of an unseen event would give it away; `event` drops those). */
 export function addLight(out: FxOut, id: string, x: number, y: number, z: number, radius: number, r: number, g: number, b: number, kind: number): void {
   if (out.lights.length >= FX_LIGHT_CAP) return;
-  const lc: Cand = { id, kind, x, y, z, radius, r, g, b, shadow: false, skip: -1, base: Math.max(r, g, b) };
+  const lc: Cand = { id, kind, carrier: -1, x, y, z, radius, r, g, b, shadow: false, skip: -1, base: Math.max(r, g, b) };
   out.lights.push(lc);
 }
 

@@ -19,7 +19,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
 import { seeLook } from './seeThrough';
@@ -509,7 +509,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
         lights = selectLights(cands, lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
       }
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
       const r = window.__r3d;
       if (r) { r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal }; r.figures = figures.count; r.lights = { list: lights.length, inView: lights.length }; r.casters = casters.length; }

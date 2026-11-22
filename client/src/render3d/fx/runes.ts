@@ -329,7 +329,7 @@ export function drawRunes(out: FxOut, frame: FxFrame, rec: FxRec): boolean {
       // like the runes, the light follows the caster until the release (or the end), then stays at the spot
       const following = fig !== null && (r.release === null || now < r.release) && (r.end === null || now < r.end);
       const lc: Cand = {
-        id: `m${r.caster}.9`, kind: LIGHT_KIND.Magic, x: following ? fig.x : r.x, y: LIGHT_Y, z: following ? fig.z : r.z, radius: LIGHT_RADIUS,
+        id: `m${r.caster}.9`, kind: LIGHT_KIND.Magic, carrier: r.caster, x: following ? fig.x : r.x, y: LIGHT_Y, z: following ? fig.z : r.z, radius: LIGHT_RADIUS,
         r: pal.light[0] * k, g: pal.light[1] * k, b: pal.light[2] * k, shadow: true, skip: -1, base: Math.max(pal.light[0], pal.light[1], pal.light[2]) * k,
       };
       out.lights.push(lc);

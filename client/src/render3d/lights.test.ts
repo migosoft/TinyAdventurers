@@ -8,7 +8,7 @@ import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import { project, type Cam } from './camera';
 import { WALL_H } from './heights';
-import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -207,12 +207,14 @@ describe('movingCands', () => {
     expect(out[1].y).toBe(0.5);
     expect(out[0].id).toBe('p4:160:80');
     expect(out[1].id).toBe('p3:32:48');
+    expect(out.map((c) => c.carrier)).toEqual([-1, -1]);
   });
   it('names several lights on one carrier uniquely, in snapshot order, whatever the list index', () => {
     const snap: MovingLight[] = [[10, 10, LIGHT_KIND.Magic, null], [10, 10, LIGHT_KIND.Fire, null], [10, 11, LIGHT_KIND.Holy, null]];
     const car = (id: number): { id: number; x: number; z: number; y: number } | null => (id === 5 ? { id: 5, x: 1, z: 1, y: 0.5 } : null);
     const out = movingCands(snap, [ent(5, 10, 10)], car, 0);
     expect(out.map((c) => c.id)).toEqual(['m5', 'm5.1', 'm5.2']);
+    expect(out.map((c) => c.carrier)).toEqual([5, 5, 5]);
     const again = movingCands([snap[2], snap[0]], [ent(5, 10, 10)], car, 0);
     expect(again.map((c) => c.id)).toEqual(['m5', 'm5.1']);
   });
@@ -261,14 +263,14 @@ describe('lightView', () => {
   it('keeps a torch below the bottom edge whose light reaches a wall top on screen', () => {
     const cam: Cam = { x: 10, z: 10, pitch: Math.PI / 3, yaw: 0 };
     const fp = footprint(cam, 8, 4);
-    const torch: Cand = { id: 's1', kind: 0, x: 10, y: 1, z: fp.z1 + 4, radius: 3, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 };
+    const torch: Cand = { id: 's1', kind: 0, carrier: -1, x: 10, y: 1, z: fp.z1 + 4, radius: 3, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 };
     expect(selectLights([torch], fp, { x: 10, z: 10 }, 16).list).toEqual([]);
     expect(selectLights([torch], lightView(fp, cam), { x: 10, z: 10 }, 16).list.map((c) => c.id)).toEqual(['s1']);
   });
 });
 
 describe('selectLights', () => {
-  const cand = (id: string, x: number, z: number, radius = 3, r = 1): Cand => ({ id, kind: 0, x, y: 1, z, radius, r, g: 0, b: 0, shadow: true, skip: -1, base: r });
+  const cand = (id: string, x: number, z: number, radius = 3, r = 1): Cand => ({ id, kind: 0, carrier: -1, x, y: 1, z, radius, r, g: 0, b: 0, shadow: true, skip: -1, base: r });
   const fp = { x0: 0, z0: 0, x1: 20, z1: 20 };
   const twenty = Array.from({ length: 20 }, (_, i) => cand(`s${i}`, 5 + (i % 5) * 2, 5 + Math.floor(i / 5) * 2));
   it('caps equal lights deterministically in any order', () => {
@@ -329,9 +331,9 @@ describe('lavaTexels', () => {
   });
 });
 
-describe('selectCasters, assignSkips and carrierMap', () => {
+describe('selectCasters and assignSkips', () => {
   const caster = (id: number, x: number, z: number): ShadowCaster => ({ id, x, z, w: 1, y0: 0, y1: 1, u0: 0, v0: 0, u1: 1, v1: 1 });
-  const lamp = (id: string, x: number, z: number, radius = 3): Cand => ({ id, kind: 0, x, y: 1, z, radius, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 });
+  const lamp = (id: string, x: number, z: number, radius = 3, carrier = -1): Cand => ({ id, kind: 0, carrier, x, y: 1, z, radius, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 });
   it('keeps the 16 nearest of 20, stable, and drops one beyond every light\'s reach', () => {
     const light = lamp('s1', 10, 10, 8);
     const twenty = Array.from({ length: 20 }, (_, i) => caster(i, 10 + (i + 1) * 0.3, 10));
@@ -352,13 +354,9 @@ describe('selectCasters, assignSkips and carrierMap', () => {
     expect(tie.map((c) => c.id)).toEqual([7, 8]);
   });
   it('gives a carried light its carrier\'s slot, -1 when the carrier is not in the list or there is none', () => {
-    const lights = [lamp('m7', 0, 0), lamp('m9.1', 0, 0), lamp('s3', 0, 0), lamp('m5', 0, 0)];
+    const lights = [lamp('m7', 0, 0, 3, 7), lamp('m9.1', 0, 0, 3, 9), lamp('s3', 0, 0), lamp('m5', 0, 0, 3, 5)];
     const slots = [caster(4, 0, 0), caster(7, 0, 0), caster(9, 0, 0)];
-    assignSkips(lights, carrierMap(lights), slots);
+    assignSkips(lights, slots);
     expect(lights.map((l) => l.skip)).toEqual([1, 2, -1, -1]);
-  });
-  it('derives the carriers from the ids m<entity> and m<entity>.<n> only', () => {
-    const m = carrierMap([lamp('m12', 0, 0), lamp('m12.1', 0, 0), lamp('s4', 0, 0), lamp('p3:10:20', 0, 0)]);
-    expect([...m]).toEqual([['m12', 12], ['m12.1', 12]]);
   });
 });

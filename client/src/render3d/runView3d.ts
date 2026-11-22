@@ -34,7 +34,7 @@ import { MoverTracker, collectAirMovers } from '../game/airmovers';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips, carrierMap, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
+import { assignSkips,footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, fxLine, lightLines, skyLines, stoneLine, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
@@ -468,7 +468,7 @@ export class RunView3d implements RunView {
       const mask = this.mask;
       const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
       casters = selectCasters(cove.length > 0 ? [...fo.casters, ...cove] : fo.casters, lights, c.params.ccap);
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       if (this.field.version !== this.lavaSeen) {
         this.lavaSeen = this.field.version;
         lavaTexels(this.field, this.map, this.lava);

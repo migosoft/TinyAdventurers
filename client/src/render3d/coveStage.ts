@@ -19,7 +19,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, dungeonAmbient, stoneClear } from './light';
-import { assignSkips, carrierMap, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -162,7 +162,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       // The cove's plants cast only where the knight sees them, as in a run.
       const shown = params.sight ? coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : coveCasters;
       const casters = selectCasters([...fo.casters, ...shown], lights, Math.min(CASTER_CAP, params.ccap));
-      assignSkips(lights, carrierMap(lights), casters);
+      assignSkips(lights, casters);
       c.timer.lap('lights');
 
       let sight: SightFrame = SIGHT_OFF;
