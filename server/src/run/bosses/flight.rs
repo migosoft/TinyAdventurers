@@ -43,8 +43,8 @@ pub(crate) fn holds(run: &Run, bi: usize, p: Vec2) -> bool {
 
 /// The spot to land on from the boss's position: the target's, if it holds, else the nearest tile centre
 /// within 12 tiles that does and that a straight flight reaches past walls and barriers (ties by scan order,
-/// y then x).
-fn landing_spot(run: &Run, bi: usize, use_target: bool) -> Option<Vec2> {
+/// y then x). Tiles in `skip` (ones the boss stalled on) are left out.
+fn landing_spot(run: &Run, bi: usize, use_target: bool, skip: &[Vec2]) -> Option<Vec2> {
     if let Some((_, at, _)) = target(run, bi).filter(|_| use_target) {
         if holds(run, bi, at) {
             return Some(at);
@@ -57,7 +57,7 @@ fn landing_spot(run: &Run, bi: usize, use_target: bool) -> Option<Vec2> {
         for dx in -12..=12 {
             let c = Map::center_of(tx + dx, ty + dy);
             let d = c.dist(pos);
-            if best.map_or(true, |(bd, _)| d < bd) && holds(run, bi, c) && walk_line(&run.layout.map, pos, c, Mover::Dash) {
+            if best.map_or(true, |(bd, _)| d < bd) && !skip.contains(&c) && holds(run, bi, c) && walk_line(&run.layout.map, pos, c, Mover::Dash) {
                 best = Some((d, c));
             }
         }
@@ -72,12 +72,16 @@ pub struct Flight {
     times: FlightTimes,
     /// This landing could not fly to the target: it heads for the nearest holding tile instead. Cleared on landing.
     gave_up: bool,
+    /// Tiles this landing stalled on (a gap too narrow for the body, a solid object): not tried again. Cleared on landing.
+    skip: Vec<Vec2>,
+    /// Where the boss took off: it held the body then; the way back when no tile in reach does.
+    origin: Vec2,
 }
 
 impl Flight {
     /// On the ground, the first flight in `first` seconds.
     pub fn new(times: FlightTimes, first: f64) -> Flight {
-        Flight { phase: Phase::Ground, t: first, times, gave_up: false }
+        Flight { phase: Phase::Ground, t: first, times, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO }
     }
 
     pub fn in_air(&self) -> bool {
@@ -98,6 +102,7 @@ impl Flight {
                     return false;
                 }
                 self.phase = Phase::TakeOff;
+                self.origin = run.monsters[bi].pos;
                 self.t = self.times.takeoff;
                 set_anim(run, bi, Anim::TakeOff);
                 true
@@ -119,20 +124,32 @@ impl Flight {
                 let pos = run.monsters[bi].pos;
                 if !holds(run, bi, pos) {
                     // Over a hole: fly to ground that holds the whole body, then land.
-                    match landing_spot(run, bi, !self.gave_up) {
+                    let speed = run.monsters[bi].speed;
+                    // What a tick must move to count as progress: a quarter step at the speed it really has.
+                    let least = speed * run.monsters[bi].effects.speed_mul() * dt * 0.25;
+                    match landing_spot(run, bi, !self.gave_up, &self.skip) {
                         Some(goal) => {
-                            let speed = run.monsters[bi].speed;
                             if move_toward(run, bi, goal, speed, dt) {
                                 // `move_toward` stops short of the goal; it holds, so stand on it and land next tick.
                                 run.monsters[bi].pos = goal;
-                            } else if run.monsters[bi].pos.dist(pos) < speed * dt * 0.25 {
-                                // Hardly any progress (a barrier, a wall or an object in the way, sliding along it): drop
-                                // the target as the goal.
+                            } else if run.monsters[bi].pos.dist(pos) < least {
+                                // Hardly any progress (a barrier, a wall, an object or a too narrow gap in the way, sliding
+                                // along it): drop the target as the goal, then the tile.
+                                if self.gave_up {
+                                    self.skip.push(goal);
+                                }
                                 self.gave_up = true;
                             }
                             set_anim(run, bi, Anim::Move);
                         }
-                        None => set_anim(run, bi, Anim::Idle),
+                        None => {
+                            // No tile in reach holds the body: back to where it took off, and if that is blocked too,
+                            // land there at once, so the flight always ends.
+                            if move_toward(run, bi, self.origin, speed, dt) || run.monsters[bi].pos.dist(pos) < least {
+                                run.monsters[bi].pos = self.origin;
+                            }
+                            set_anim(run, bi, Anim::Move);
+                        }
                     }
                     return true;
                 }
@@ -153,6 +170,7 @@ impl Flight {
                     monster_use(run, bi, AbilityId::Smash, at);
                     run.monsters[bi].airborne = false;
                     self.gave_up = false;
+                    self.skip.clear();
                     self.phase = Phase::Ground;
                     self.t = run.rng.gen_range(self.times.every.0..self.times.every.1);
                     set_anim(run, bi, Anim::Idle);
@@ -226,7 +244,7 @@ mod tests {
         assert!(f.tick(&mut run, bi, DT, false));
         assert_eq!(f.phase, Phase::TakeOff);
 
-        let mut f = Flight { phase: Phase::Air, t: 1.0, times: TIMES, gave_up: false };
+        let mut f = Flight { phase: Phase::Air, t: 1.0, times: TIMES, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO };
         ticks(&mut f, &mut run, bi, 2.0, true);
         assert!(f.in_air(), "no landing while acting");
         f.tick(&mut run, bi, DT, false);
@@ -342,6 +360,63 @@ mod tests {
         // 18 px from the chasm's east edge; the dragon's radius is 17.
         let edge = |tx: i32| (tx + 3) as f64 * crate::dungeon::TILE;
         let (run, bi, f) = over_a_hole_with(true, |tx, ty| Vec2::new(edge(tx) + 18.0, crate::dungeon::Map::center_of(tx, ty).y));
+        lands_on_ground(run, bi, f);
+    }
+
+    /// `over_a_hole`, walled in: only the chasm and the floor east of it are left.
+    fn walled_hole() -> (Run, usize, Flight, i32, i32) {
+        let (mut run, bi, mut f) = over_a_hole(true);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        for dy in -12..=12 {
+            for dx in -12..=12 {
+                if !((-2..=2).contains(&dx) && (-2..=2).contains(&dy)) && !((3..=8).contains(&dx) && (-2..=2).contains(&dy)) {
+                    run.layout.map.set(tx + dx, ty + dy, Tile::Wall);
+                }
+            }
+        }
+        f.origin = run.monsters[bi].pos;
+        (run, bi, f, tx, ty)
+    }
+
+    #[test]
+    fn it_leaves_a_tile_behind_a_solid_object_for_another() {
+        let (mut run, bi, mut f, tx, ty) = walled_hole();
+        // A wall of barrels across the east floor: every tile there is "reachable" on a zero-width line but not by the body.
+        let x = crate::dungeon::Map::center_of(tx + 3, ty).x;
+        for i in -8..=8 {
+            let y = crate::dungeon::Map::center_of(tx, ty).y + i as f64 * 16.0;
+            run.spawn_object(crate::defs::kinds::EntityKind::Barrel, Vec2::new(x, y), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        }
+        // A way west to ground the line and the body both reach.
+        for dx in -10..=-3 {
+            for dy in -1..=1 {
+                run.layout.map.set(tx + dx, ty + dy, if dx <= -9 { Tile::Floor } else { Tile::Chasm });
+            }
+        }
+        f.origin = Map::center_of(tx - 10, ty);
+        lands_on_ground(run, bi, f);
+    }
+
+    #[test]
+    fn it_flies_back_to_where_it_took_off_when_no_ground_in_reach_holds_it() {
+        let (mut run, bi, mut f, tx, ty) = walled_hole();
+        for dy in -2..=2 {
+            run.layout.map.set(tx + 3, ty + dy, Tile::Wall);
+        }
+        // The only ground is behind the wall, so no straight flight finds it; the take-off spot is there (a charm moved the boss).
+        f.origin = Map::center_of(tx + 6, ty);
+        assert!(landing_spot(&run, bi, false, &[]).is_none());
+        lands_on_ground(run, bi, f);
+    }
+
+    #[test]
+    fn it_slides_along_a_barrier_to_ground_beyond_it() {
+        let (mut run, bi, f) = over_a_hole(true);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        // A barrier along the straight line to the hero's row, ending beside it: the flight slides past its end.
+        for dy in -4..=0 {
+            run.layout.map.set(tx + 3, ty + dy, Tile::Barrier);
+        }
         lands_on_ground(run, bi, f);
     }
 
