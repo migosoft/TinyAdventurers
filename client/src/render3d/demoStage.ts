@@ -15,7 +15,7 @@ import { makeStoneRun } from './stone/stoneRun';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
-  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map), taken: { lights: [], spawn: { x: map.w / 2, z: map.h / 2 } } };
   const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const scene = newScene();
   const cam = { x: scene.player.x, z: scene.player.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };

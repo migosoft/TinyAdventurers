@@ -206,6 +206,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
     lastMs = ms;
     return { fo, wo, fp, ambient, game };
   };
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
   return {
     world,
     frame(c: StageCtx): number {

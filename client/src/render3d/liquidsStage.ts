@@ -150,6 +150,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   // The page's cover: the moss along the pool (`ignoreLava`: a run's dungeon with lava has no moss, this room shows every terrain),
   // built whole at the first build and kept for the rebuilds.
   let job: CoverJob | null = null;
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
   return {
     world,
     built(view: View): void {

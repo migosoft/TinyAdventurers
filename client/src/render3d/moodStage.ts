@@ -155,6 +155,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
     if (st.fireball) add(tracker.track(3, st.fireball.x, st.fireball.y, fireAir.r, true, fireAir.heat));
     return movers;
   };
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
 
   return {
     world,

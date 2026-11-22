@@ -117,6 +117,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   };
 
   let seconds = 0;
+  world.taken = { lights: [...field.lights.values()], spawn: KNIGHT_START };
   return {
     world,
     built(view: View): void {

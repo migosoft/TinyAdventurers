@@ -434,6 +434,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
     { name: 'Cast now', pressed: null, press: () => { origin = t; prev = -1e-6; } },
     { name: 'Torches', pressed: () => torchesOn, press: () => { torchesOn = !torchesOn; for (let s = 0; s <= BAY; s++) TORCH_TILES.forEach((_, i) => field.set(s * 2 + i + 1, torchesOn, 0xffaa5a)); } },
   ]);
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
 
   return {
     world,

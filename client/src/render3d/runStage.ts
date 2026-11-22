@@ -159,9 +159,13 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   turnKeyLabels().then((k) => { if (live) run.hud.setTurnHelp(k); }, () => {});
 
   let looped = false;
-  const world: WorldInput = { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone) };
+  const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };
+  const world: WorldInput = {
+    map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
+    taken: { lights: info.lights.map(([id, kind, , x, y]) => ({ id, kind, x, y })), spawn },
+  };
   // The stone paint job (#380), beside the cover job: nearest the spawn first.
-  const stoneRun = makeStoneRun(world, { x: info.spawn_x / TILE, z: info.spawn_y / TILE });
+  const stoneRun = makeStoneRun(world, spawn);
   return {
     runView,
     job,

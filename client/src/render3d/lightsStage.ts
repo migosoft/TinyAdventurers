@@ -135,6 +135,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
     label.textContent = `lights demo in 3D: torches, lava, fireball, frost bolt, explosion; darkvision ${Math.round(dv * 100)}% (V); WASD pans`;
   };
   caption(dvOf(p));
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
 
   return {
     world,

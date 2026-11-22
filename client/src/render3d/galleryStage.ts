@@ -470,6 +470,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   const specEnts = new Map<number, EntState>();
   clearVeils();
   let first = true;
+  world.taken = { lights: [...field.lights.values()], spawn: { x: map.w / 2, z: map.h / 2 } };
 
   return {
     world,

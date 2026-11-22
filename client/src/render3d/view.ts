@@ -73,7 +73,7 @@ import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type StoneKit, type WorldArrays } from './worldMesh';
-import { noMarks } from './stone/place';
+import { noMarks, placeMarks, type Marks, type Taken } from './stone/place';
 import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
@@ -93,7 +93,11 @@ import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
 /** The world the view draws: `painted` marks a woodland (ground tiles read the ground image) and `stone` is null exactly then; `clear` is the clear colour, 'stone' the lit wall top's. */
-export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [number, number, number]; stone: StoneField | null }
+export interface WorldInput {
+  map: TileMap; painted: boolean; clear: 'stone' | [number, number, number]; stone: StoneField | null;
+  /** The level's static lights and the heroes' start: what the stone's marks keep clear (#380). Without it the stone has no marks. */
+  taken?: Taken;
+}
 /** The painted ground, RGBA, w x h px. */
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 /** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */
@@ -239,8 +243,8 @@ export interface View {
   tileChanged(x: number, z: number): void;
   /** Uploads the painted ground; throws GroundTooLargeError when it exceeds the device's texture limit. */
   setGround(img: GroundImage): void;
-  /** The stone sheets' plan and the sheets themselves (#380); null on the woodland. A tile change that moves a face replaces both (a new object each), which the paint job notices by identity. */
-  readonly stone: { readonly plan: SheetPlan; readonly sheets: Sheets } | null;
+  /** The stone sheets' plan, the sheets themselves and the marks placed for that plan (#380); null on the woodland. A tile change that moves a face replaces all three (a new object each), which the paint job notices by identity. */
+  readonly stone: { readonly plan: SheetPlan; readonly sheets: Sheets; readonly marks: Marks } | null;
   /** Writes the pages and faces the stone job finished into the sheets (one layer each is marked for upload). */
   setStonePages(r: StoneJobResult): void;
   /** Builds the ground cover's meshes and uploads its image (#330); throws GroundTooLargeError above the device's texture limit. */
@@ -346,7 +350,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   let plan: SheetPlan = world.stone ? planSheets(map) : unplanned();
   let sheets = newSheets(plan);
-  const kit: StoneKit = { field: world.stone ?? stoneField(map), plan, marks: noMarks() };
+  const field = world.stone ?? stoneField(map);
+  /** The marks of the map as it is now: one object for the mesh and the paint job, placed again with every new plan. */
+  const marksNow = (): Marks => (world.stone && world.taken ? placeMarks(map, field, world.taken) : noMarks());
+  const kit: StoneKit = { field, plan, marks: marksNow() };
   const heights = new DataTexture(heightBytes(map), map.w, map.h, RedFormat, UnsignedByteType);
   heights.unpackAlignment = 1;
   pixelTexture(heights);
@@ -544,6 +551,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     plan = p;
     sheets = next;
     kit.plan = p;
+    kit.marks = marksNow();
     wm.setSheets(next);
     dm.setSheets(next);
     old.dispose();
@@ -919,7 +927,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       coverLayer.set(r, textureLimit());
     },
     get stone() {
-      return world.stone ? { plan, sheets } : null;
+      return world.stone ? { plan, sheets, marks: kit.marks } : null;
     },
     setStonePages(r) {
       if (disposed || lost || !world.stone) return;

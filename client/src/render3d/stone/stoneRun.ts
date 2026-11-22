@@ -1,7 +1,6 @@
 // The stone paint job of a stage (#380): steps `stoneJob` each frame into the view's sheets, and hands the painted pixels to a view rebuilt after
 // a lost device (the old view's sheets keep their CPU data, so nothing is painted again). A stage makes one of these beside its cover job.
 import type { View, WorldInput } from '../view';
-import { noMarks } from './place';
 import { samePlan, type SheetPlan } from './plan';
 import type { Sheets } from './sheets';
 import { STONE_BUDGET_MS, stoneJob, type StoneJob } from './stoneJob';
@@ -36,7 +35,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
       s.sheets.copyFrom(kept.sheets);
     } else {
       // The first view, or the layout moved (a face appeared or went): everything is painted (again), on the view's plan.
-      job = stoneJob(field, map, s.plan, noMarks(), spawn);
+      job = stoneJob(field, map, s.plan, s.marks, spawn);
     }
     seen = s.plan;
     kept = { plan: s.plan, sheets: s.sheets };

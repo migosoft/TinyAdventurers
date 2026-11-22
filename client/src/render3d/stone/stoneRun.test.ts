@@ -4,6 +4,7 @@ import { TileMap } from '../../sim/map';
 import type { View, WorldInput } from '../view';
 import { stoneField } from './field';
 import { PAGE } from './format';
+import { noMarks } from './place';
 import { planSheets, type SheetPlan } from './plan';
 import { makeSheets, type Sheets } from './sheets';
 import { makeStoneRun } from './stoneRun';
@@ -17,7 +18,7 @@ function level() {
 function fakeView(map: TileMap, plan: SheetPlan = planSheets(map)): View & { sheets: Sheets } {
   const sheets = makeSheets(plan, { size: 4096, layers: 256 });
   return {
-    stone: { plan, sheets }, sheets,
+    stone: { plan, sheets, marks: noMarks() }, sheets,
     setStonePages(this: { stone: { sheets: Sheets } }, r: { pages: { layer: number; px: Uint8Array }[]; faces: { slot: { layer: number; u: number; v: number }; px: Uint8Array }[] }) {
       // the view's current sheets (a replan swaps them)
       for (const p of r.pages) this.stone.sheets.setPage('ground', p.layer, p.px);

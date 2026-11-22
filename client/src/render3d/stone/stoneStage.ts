@@ -13,7 +13,7 @@ import { newScene, stepScene } from '../scene';
 import { seeLook } from '../seeThrough';
 import type { Assets, WorldInput } from '../view';
 import { ROCK, stoneField } from './field';
-import { CRYSTAL_TILES, PLACES, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
+import { CRYSTAL_TILES, PLACES, STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
 import { makeStoneRun } from './stoneRun';
 
 const TILE = 16;
@@ -23,7 +23,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
   const map = stoneMap();
   const mode = q.get('stone');
   const kinds = mode === 'rock' ? new Uint8Array(map.w * map.h).fill(ROCK) : mode === 'laid' ? null : zoneKinds(map);
-  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map, kinds) };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map, kinds, STONE_SEED) };
   const [px, pz] = PLACES[(q.get('at') ?? 'cave') as keyof typeof PLACES] ?? PLACES.cave;
   const stoneRun = makeStoneRun(world, { x: px, z: pz });
 
@@ -40,6 +40,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
   let id = 1;
   for (const [x, y] of TORCH_TILES) field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x, y, on: true });
   for (const [x, y] of CRYSTAL_TILES) field.add({ id: id++, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x, y, on: q.get('break') !== '1' });
+  world.taken = { lights: [...field.lights.values()], spawn: STONE_SPAWN };
   const lamp = q.get('lamp') !== '0';
   const pairs = new TorchPairs();
   let t = Number(q.get('t')) > 0 ? Number(q.get('t')) : 0;
