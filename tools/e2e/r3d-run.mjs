@@ -21,18 +21,22 @@ const account = `e2e_${tag()}`;
 // R3D_W / R3D_H: the window (1280x768). BACKEND=webgpu: the page picks WebGPU (default: WebGL2). FPS_S=10: the frame-rate measurement (below).
 const viewport = { width: Number(process.env.R3D_W) || VIEWPORT.width, height: Number(process.env.R3D_H) || VIEWPORT.height };
 const page = await (await browser.newContext({ viewport })).newPage();
-// Frame-rate bookkeeping, from the first script of the page: every requestAnimationFrame interval, and the draw calls and triangles
-// the context submits (all passes: depth, colour, sun). WebGL2 and WebGPU are both hooked.
-await page.addInitScript(() => {
-  const perf = { t: [], dt: [], calls: 0, tris: 0 };
+// Frame times for the timed windows (the forest build, the stone paint, the zoom glide, FPS_S): a requestAnimationFrame loop that records only
+// while a window is open (`measure(true)` clears and opens it, `measure(false)` closes it). The draw-call and triangle counters wrap the
+// context's draw calls and are installed only for FPS_S (WebGL2: drawElements, drawArrays, their Instanced forms and drawRangeElements;
+// WebGPU: draw and drawIndexed; not counted: multiDraw* and drawIndirect).
+await page.addInitScript((counters) => {
+  const perf = { t: [], dt: [], calls: 0, tris: 0, on: false };
   window.__perf = perf;
   let last = performance.now();
-  const loop = (t) => { perf.t.push(t); perf.dt.push(t - last); last = t; requestAnimationFrame(loop); };
+  const loop = (t) => { if (perf.on) { perf.t.push(t); perf.dt.push(t - last); } last = t; requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
+  if (!counters) return;
   const tri = (mode, n, inst = 1) => { perf.calls++; if (mode === 4) perf.tris += (n / 3) * inst; };
   for (const [name, f] of [
     ['drawElements', (mode, n) => tri(mode, n)], ['drawElementsInstanced', (mode, n, _t, _o, i) => tri(mode, n, i)],
     ['drawArrays', (mode, _f, n) => tri(mode, n)], ['drawArraysInstanced', (mode, _f, n, i) => tri(mode, n, i)],
+    ['drawRangeElements', (mode, _s, _e, n) => tri(mode, n)],
   ]) {
     const orig = WebGL2RenderingContext.prototype[name];
     WebGL2RenderingContext.prototype[name] = function (...a) { f(...a); return orig.apply(this, a); };
@@ -43,7 +47,8 @@ await page.addInitScript(() => {
       GPURenderPassEncoder.prototype[name] = function (n, inst = 1, ...r) { perf.calls++; perf.tris += (n / 3) * inst; return orig.call(this, n, inst, ...r); };
     }
   }
-});
+}, !!process.env.FPS_S);
+const measure = (on) => page.evaluate((on) => { const p = window.__perf; if (on) { p.t.length = 0; p.dt.length = 0; } p.on = on; }, on);
 // A lost device is only a console warning (host.ts); unless the script loses it on purpose below, it is a failure.
 let losing = false;
 watchPage(page, '', errors, () => losing);
@@ -89,6 +94,7 @@ try {
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   if (gpuOn) await printGpu(page);
   const t0 = await page.evaluate(() => performance.now()); // the build window starts here
+  await measure(true);
   // The woodland's trees are grown a few per frame: wait until the F3 line `plants <built> of <total>` shows them all (WAIT_MS: the time allowed, default 120 s).
   if (level === 'woodland') {
     await page.keyboard.press('F3');
@@ -106,6 +112,7 @@ try {
       const dts = window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b);
       return { frames: dts.length, longest: Math.max(0, ...dts) };
     }, [t0, t1]);
+    await measure(false);
     console.log(`forest build: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, ${build.frames} frames, longest frame ${build.longest.toFixed(1)} ms`);
     await page.keyboard.press('F3');
   }
@@ -121,6 +128,7 @@ try {
     if (!n || n[0] < need(n)) errors.push(`the stone was not painted in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 stone line'}`);
     const t1 = await page.evaluate(() => performance.now());
     const paint = await page.evaluate(([a, b]) => Math.max(0, ...window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b)), [t0, t1]);
+    await measure(false);
     console.log(`stone painted ${n ? `${n[0]} of ${n[1]}` : 'unknown'}: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, longest frame ${paint.toFixed(1)} ms`);
     await page.keyboard.press('F3');
   }
@@ -135,7 +143,8 @@ try {
     for (let pass = 0; pass < passes; pass++) {
       const out = (want === 'far') === (pass % 2 === 0);
       const target = out ? lim.min : lim.max;
-          const g0 = await page.evaluate(() => performance.now());
+      await measure(true);
+      const g0 = await page.evaluate(() => performance.now());
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
       for (let i = 0; i < 40; i++) {
         await page.mouse.wheel(0, out ? 100 : -100);
@@ -150,7 +159,8 @@ try {
         const slow = p.dt.map((d, i) => [d, p.t[i] - g0]).filter(([d, t]) => t >= 0 && d > 33).map(([d, t]) => `${d.toFixed(0)} ms at +${(t / 1000).toFixed(2)} s`);
         return { n: dts.length, median: dts[Math.floor(dts.length / 2)] ?? 0, p99: dts[Math.floor(dts.length * 0.99)] ?? 0, max: dts[dts.length - 1] ?? 0, slow };
       }, g0);
-        console.log(`glide: ${g.n} frames, median ${g.median.toFixed(1)} ms, 99th ${g.p99.toFixed(1)} ms, longest ${g.max.toFixed(1)} ms; over 33 ms: ${g.slow.join(', ') || 'none'}`);
+      await measure(false);
+      console.log(`glide: ${g.n} frames, median ${g.median.toFixed(1)} ms, 99th ${g.p99.toFixed(1)} ms, longest ${g.max.toFixed(1)} ms; over 33 ms: ${g.slow.join(', ') || 'none'}`);
     }
     const zoom = await page.evaluate(() => window.__r3d.zoom);
     console.log(`zoom ${zoom.toFixed(3)} (expected ${expected.toFixed(3)}, start ${start}, limits ${lim.min.toFixed(3)} to ${lim.max.toFixed(3)})`);
@@ -162,7 +172,8 @@ try {
   // (all passes) and the F3 block. With FPS_ONLY=1 the run ends after this and the picture r3d-run-<level>-fps.png.
   if (process.env.FPS_S) {
     await page.waitForTimeout(1000);
-      const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
+    await measure(true);
+    const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
     await page.waitForTimeout(Number(process.env.FPS_S) * 1000);
     const m = await page.evaluate((a) => {
       const p = window.__perf, now = performance.now();
@@ -172,14 +183,18 @@ try {
       const median = dts[Math.floor(dts.length / 2)];
       return { n: dts.length, secs: (now - a.now) / 1000, worst: worst.reduce((s, v) => s + v, 0) / worst.length, max: dts[0], median, stalls, calls: p.calls - a.calls, tris: p.tris - a.tris };
     }, a);
+    await measure(false);
     console.log(`median frame ${m.median.toFixed(1)} ms (${(1000 / m.median).toFixed(0)} fps); frames over 200 ms: ${m.stalls.join(', ') || 'none'}`);
-    console.log(`fps ${(m.n / m.secs).toFixed(1)} mean over ${m.secs.toFixed(1)} s (${m.n} frames), 1% low ${(1000 / m.worst).toFixed(1)} fps, longest frame ${m.max.toFixed(1)} ms; per frame ${(m.calls / m.n).toFixed(0)} draw calls and ${(m.tris / m.n / 1000).toFixed(0)}k triangles (all passes)`);
+    console.log(`fps ${(m.n / m.secs).toFixed(1)} mean over ${m.secs.toFixed(1)} s (${m.n} frames), 1% low ${(1000 / m.worst).toFixed(1)} fps, longest frame ${m.max.toFixed(1)} ms; per frame ${(m.calls / m.n).toFixed(0)} draw calls and ${(m.tris / m.n / 1000).toFixed(0)}k triangles (all passes; counted: WebGL2 drawElements, drawArrays, their Instanced forms, drawRangeElements, WebGPU draw, drawIndexed; not counted: multiDraw*, drawIndirect)`);
     await page.keyboard.press('F3');
     await page.waitForTimeout(1500);
     console.log(`F3:\n${await page.evaluate(() => [...document.querySelectorAll('body *')].map((e) => e.children.length === 0 ? e.innerText : '').find((t) => /^FPS/.test(t)) ?? document.body.innerText.slice(0, 600))}`);
     await page.screenshot({ path: `${out}/r3d-run-${level}-fps.png` });
     await page.keyboard.press('F3');
-    if (process.env.FPS_ONLY) throw Object.assign(new Error('FPS_ONLY'), { quiet: true });
+    if (process.env.FPS_ONLY) {
+      console.log('FPS_ONLY: the canvas, figure, walk and key checks were skipped');
+      throw Object.assign(new Error('FPS_ONLY'), { quiet: true });
+    }
   }
   // The 3D canvas, plus the overlay canvas over it (#311).
   if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push('expected exactly one 3D canvas in #game');
@@ -338,5 +353,5 @@ try {
   if (failed) errors.push(`deleting ${account}: ${status}; ${failed}`);
   await browser.close();
 }
-console.log(errors.length ? errors.join('\n') : 'no browser errors');
+console.log(errors.length ? errors.join('\n') : `no browser errors${process.env.FPS_ONLY && process.env.FPS_S ? ' (FPS_ONLY: only the frame rate was measured, the other checks were skipped)' : ''}`);
 if (errors.length) process.exit(1);
