@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BIG_SIZE, BROKEN_TOP, SMALL_SIZE, buildCrystalChunk, crystalCluster } from './crystals';
+import { BIG_SIZE, BROKEN_TOP, SMALL_SIZE, buildCrystalChunk, crystalChunkOf, crystalCluster, switchedChunks } from './crystals';
 import { noMarks, type Marks } from './place';
 
 const maxY = (p: Float32Array): number => {
@@ -79,5 +79,17 @@ describe('buildCrystalChunk', () => {
     expect(maxY(small.position)).toBeLessThanOrEqual(SMALL_SIZE * 1.05);
     expect(small.foot.length / 2).toBe(small.position.length / 3);
     expect(buildCrystalChunk(marks, () => false, 0, 1)).toBeNull();
+  });
+});
+
+describe('switchedChunks', () => {
+  const marks: Marks = { ...noMarks(), shards: [{ x: 3.5, z: 2, nx: 0, nz: 1, big: true, lightId: 7 }, { x: 20.5, z: 3.15, nx: 0, nz: 1, big: false }] };
+
+  it('marks the chunk of a light that switched, once; a small shard (no light) marks nothing', () => {
+    const built = new Set<number>();
+    expect(switchedChunks(marks.shards, () => false, built)).toEqual([]);
+    expect(switchedChunks(marks.shards, (id) => id === 7, built)).toEqual([crystalChunkOf(marks.shards[0])]);
+    expect(switchedChunks(marks.shards, (id) => id === 7, built)).toEqual([]);
+    expect(switchedChunks(marks.shards, () => false, built)).toEqual([crystalChunkOf(marks.shards[0])]);
   });
 });

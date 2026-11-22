@@ -76,7 +76,7 @@ import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type Stone
 import { noMarks, placeMarks, type Marks, type Taken } from './stone/place';
 import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
 import { floorHeight } from './stone/shape';
-import { buildCrystalChunk, crystalChunkOf } from './stone/crystals';
+import { buildCrystalChunk, switchedChunks } from './stone/crystals';
 import { crystalMaterial } from './stone/crystalNodes';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
@@ -911,6 +911,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const cell = z * map.w + x, was = builtTiles[cell];
       // The sheets' layout first (#380): a move (a face appeared or went; a door opening or closing is none) re-plans, and a StoneTooLargeError leaves the view as it was.
       const moved = world.stone !== null && layoutMoved(map, x, z, was, keys);
+      const hadPuddles = kit.marks.puddles.length > 0;
       if (moved) replan();
       (heights.image.data as Uint8Array)[cell] = Math.round(cellHeight(map.tiles[cell]) * 100);
       heights.needsUpdate = true;
@@ -918,8 +919,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const dips = dipClassChanged(was, map.tiles[cell]);
       // The water's field around the cell (the rows `refreshWaterField` can change), only when the dip class changed (its kind, height
       // or deep/shallow): a door opening must not cost an upload.
-      // New marks (a replan placed them again) may have moved the puddles: the whole field then.
-      if (moved) {
+      // New marks (a replan placed them again) may have moved the puddles: the whole field then, only if the old or the new marks have any.
+      if (moved && (hadPuddles || kit.marks.puddles.length > 0)) {
         wField.data.set(waterField(map, kit.marks.puddles, floorAt).data);
         uploadField(0, wField.h - 1);
       } else if (dips) {
@@ -1046,16 +1047,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       crystal.time.value = f.crystals?.now ?? f.t;
       if (f.crystals) {
         // A light that switched: its chunk's clusters are built again, broken or whole.
-        const dirty = new Set<number>();
-        for (const b of kit.marks.shards) {
-          if (b.lightId === undefined || f.crystals.off(b.lightId) === crystalsOff.has(b.lightId)) continue;
-          if (!crystalsOff.delete(b.lightId)) crystalsOff.add(b.lightId);
-          const [cx, cz] = crystalChunkOf(b);
-          dirty.add(cz * nx + cx);
-        }
-        for (const i of dirty) buildCrystals(i % nx, Math.floor(i / nx));
-        if (dirty.size) chunks.total = chunkTotal();
-      }      lava.setBubbles(f.lavaPool?.bubbles ?? null);
+        const dirty = switchedChunks(kit.marks.shards, f.crystals.off, crystalsOff);
+        for (const [cx, cz] of dirty) buildCrystals(cx, cz);
+        if (dirty.length) chunks.total = chunkTotal();
+      }
+      lava.setBubbles(f.lavaPool?.bubbles ?? null);
       lava.setStirs(f.lavaPool?.stirs ?? null);
       fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
       chunks.drawn = counters.drawn;

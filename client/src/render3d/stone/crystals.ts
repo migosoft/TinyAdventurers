@@ -121,6 +121,23 @@ export function crystalChunkOf(b: Marks['shards'][number]): [cx: number, cz: num
   return [Math.floor(x / CHUNK), Math.floor(z / CHUNK)];
 }
 
+const NONE: [number, number][] = [];
+/**
+ * The chunks whose clusters must be built again: those of the shards whose light's `off` state differs from `built` (the lights the meshes
+ * were built broken for). `built` is updated to match, so the same state asked twice marks nothing. Small shards have no light.
+ */
+export function switchedChunks(shards: readonly Marks['shards'][number][], off: (lightId: number) => boolean, built: Set<number>): [number, number][] {
+  let out = NONE;
+  for (const b of shards) {
+    if (b.lightId === undefined || off(b.lightId) === built.has(b.lightId)) continue;
+    if (!built.delete(b.lightId)) built.add(b.lightId);
+    if (out === NONE) out = [];
+    const c = crystalChunkOf(b);
+    if (!out.some((o) => o[0] === c[0] && o[1] === c[1])) out.push(c);
+  }
+  return out;
+}
+
 /**
  * The clusters of the shards whose foot lies in chunk (cx, cz), turned out of their wall; null without one. `broken` is asked for each
  * big shard's light: whole it glows, broken (and every small one) it only glimmers.
