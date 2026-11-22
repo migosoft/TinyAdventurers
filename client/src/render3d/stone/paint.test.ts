@@ -5,7 +5,7 @@ import { CIRCLE_STONES, RUNE_RING, floorBlockAt, wallBlockAt } from './blocks';
 import { ROCK, stoneField } from './field';
 import { FACE_H, FACE_W, FLAG, FLAT_A, PAGE, decodeRelief } from './format';
 import { paintFace, paintGroundRows } from './paint';
-import { MEAN_TOLERANCE, OLD_FLOOR, RUNES } from './paintLaid';
+import { CRACK, MEAN_TOLERANCE, OLD_FLOOR, RUNES } from './paintLaid';
 import { VEIN } from './paintRock';
 import { noMarks, placeMarks } from './place';
 import { planSheets } from './plan';
@@ -243,6 +243,35 @@ describe('the painter of natural rock', () => {
     }
     expect(mid / nMid).toBeLessThan(ring / nRing);
     expect(outline).toBeLessThan(mid / nMid);
+  });
+
+  it('draws no vein under a puddle\'s water', () => {
+    const { map, f, marks } = stoneLevel();
+    const pages = new Map<number, Uint8Array>();
+    const stray: string[] = [];
+    for (const p of marks.puddles) for (let v = Math.floor((p.z - p.r) * 32); v <= (p.z + p.r) * 32; v++) for (let u = Math.floor((p.x - p.r) * 32); u <= (p.x + p.r) * 32; u++) {
+      if (Math.hypot(u + 0.5 - p.x * 32, v + 0.5 - p.z * 32) >= p.r * 32) continue;
+      const key = (v >> 9) * 8 + (u >> 9);
+      let g = pages.get(key);
+      if (!g) { g = new Uint8Array(PAGE * PAGE * 4); paintGroundRows(f, map, marks, u >> 9, v >> 9, 0, PAGE, g); pages.set(key, g); }
+      const i = ((v & 511) * PAGE + (u & 511)) * 4;
+      if (g[i] === VEIN[0] && g[i + 1] === VEIN[1] && g[i + 2] === VEIN[2]) stray.push(`${u},${v}`);
+    }
+    expect(stray).toEqual([]);
+  });
+
+  it('paints no block crack on a pool\'s bed', () => {
+    const map = floorMap();
+    for (let z = 10; z < 15; z++) for (let x = 10; x < 15; x++) map.set(x, z, TILE_ID.DeepWater);
+    const stray: string[] = [];
+    for (let seed = 1; seed <= 12; seed++) {
+      const p = page(map, 0, 0, seed);
+      for (let v = 10 * 32; v < 15 * 32; v++) for (let u = 10 * 32; u < 15 * 32; u++) {
+        const i = (v * PAGE + u) * 4;
+        if (p[i] === CRACK[0] && p[i + 1] === CRACK[1] && p[i + 2] === CRACK[2]) stray.push(`${seed}@${u},${v}`);
+      }
+    }
+    expect(stray).toEqual([]);
   });
 
   it('draws mineral veins in rock only', () => {

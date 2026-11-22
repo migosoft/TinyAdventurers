@@ -158,7 +158,7 @@ function stonePx(out: Uint8Array, at: number, seed: number, b: Block, pal: reado
 // ---- the damp patches: the moss cover's own source, worked a tile row at a time as the painter reaches it.
 // shortcut: the painter keeps its own moss source (the cover job makes a second one, and only that one knows the cove, where this one
 // may paint moss into joints under the grass, and the cover's options, so on a dev page that passes `everywhere` or `ignoreLava` paint
-// and cover disagree); share the cover job's source when the cover is built on the stone (Task 14).
+// and cover disagree); share the cover job's source if the two disagree.
 let moss: { map: TileMap; marks: Marks; src: CoverSource | null; rows: Uint8Array } | null = null;
 /** Drops the moss source (6 bytes per map px): the paint job calls it when its last unit is done. */
 export const forgetMoss = (): void => { moss = null; };
@@ -255,7 +255,8 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
     }
     return true;
   }
-  let near = b.piece !== undefined || c.dip[(z - c.z0) * SPAN + x - c.x0] === 1;
+  const dip = c.dip[(z - c.z0) * SPAN + x - c.x0] === 1;
+  let near = b.piece !== undefined || dip;
   if (!near) for (const p of marks.pieces) if (Math.abs(u - p.x * STONE_PX) < p.r * STONE_PX + 3 && Math.abs(v - p.z * STONE_PX) < p.r * STONE_PX + 3) near = true;
   if (!near) {
     // a slab away from pieces and dips: its rectangle says where its joints are (its left and top px)
@@ -274,7 +275,7 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
     return true;
   }
   const p = b.piece?.of;
-  if (!p) stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, kl, kt, kr, kb, top ? 0 : b.level + 1, top, damp);
+  if (!p) stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, kl, kt, kr, kb, top ? 0 : b.level + 1, top || dip, damp); // no block crack on a pool's bed
   else if (p.kind === 'mosaic') {
     // tesserae with thin joints; each has its own tone and leans its own way, so a passing light glints on them
     const tu = u - p.x * STONE_PX, tv = v - p.z * STONE_PX, T = MOSAIC_TESSERA;

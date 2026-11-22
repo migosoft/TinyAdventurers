@@ -186,14 +186,14 @@ function rockPx(out: Uint8Array, at: number, seed: number, u: number, v: number,
     out[at] = c[0]; out[at + 1] = c[1]; out[at + 2] = c[2]; out[at + 3] = a;
     return;
   }
-  if (line === VEIN_PX && !edge) { out[at] = VEIN[0]; out[at + 1] = VEIN[1]; out[at + 2] = VEIN[2]; out[at + 3] = a; return; }
-  let tone = FACET_TONE[Math.floor(fTone * 4)] - (edge ? EDGE_TONES : 0) - (mark >> 2);
+  let tone =FACET_TONE[Math.floor(fTone * 4)] - (edge ? EDGE_TONES : 0) - (mark >> 2);
   if (mark >= WET * 3) {
     // under a puddle's water: the darkest stone darker still, the facets only faint; the water's outline px darkest
     const k = mark >= WET * 4 ? SHORE : edge ? SUNK_EDGE : SUNK;
     out[at] = pal[0] * k; out[at + 1] = pal[1] * k; out[at + 2] = pal[2] * k; out[at + 3] = a;
     return;
   }
+  if (line === VEIN_PX && !edge) { out[at] = VEIN[0]; out[at + 1] = VEIN[1]; out[at + 2] = VEIN[2]; out[at + 3] = a; return; }
   const g = hash(seed, u, v, 51);
   if (g < GRAIN_DARK) tone--;
   else if (g > 1 - GRAIN_LIGHT) tone++;
