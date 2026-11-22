@@ -3,7 +3,8 @@ import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
-import { LEVEL_STEP, floorBlockAt, type Block } from './blocks';
+import { LEVEL_STEP, floorBlockAt, ironPx, type Block } from './blocks';
+import { GRATE_DEPTH } from './laidMesh';
 import { FACE_H, FACE_W } from './format';
 import { CHUNK, KIND } from './grid';
 import { stoneField } from './field';
@@ -15,10 +16,10 @@ import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './sto
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 6600;
-/** The same for the stone page's chunks with a floor piece: the mosaic and a grate (measured: 8 914), and the circle, whose dark rings lie a step lower (measured: 12 993; 7 843 with level rings). */
+/** The same for the stone page's chunks with a floor piece: the mosaic and a grate (measured: 8 932), and the circle, whose dark rings lie a step lower (measured: 12 993; 7 843 with level rings). */
 const PIECE_CHUNK_TRIS = 9800, CIRCLE_CHUNK_TRIS = 14300;
-/** What Task 11 measured for that chunk: the mesh of laid stone has not moved. */
-const TASK_11_CHUNK_TRIS = 8914;
+/** What that chunk measures: Task 11's 8 914, and 18 more for the grate's wider shaft and its iron (Task 13). The mesh of laid stone has not moved. */
+const TASK_11_CHUNK_TRIS = 8932;
 /**
  * The most triangles a chunk of the stone page's caves may have (measured: 3 877, 5 238 with the passage's laid half, 4 830 and 3 834), and the
  * whole page of ten chunks as rock (measured: 25 335; as laid stone it has 59 215).
@@ -220,6 +221,31 @@ describe('buildStoneChunk', () => {
     }
     expect(tops).toBeGreaterThan(200);
     expect(steps).toBeGreaterThan(200);
+  });
+
+  it('sets a grate\'s iron into its cell: a frame and bars three quarters of the cell across, below the level floor round it and above the shaft\'s bottom', () => {
+    const { map, f, marks, chunk } = stoneLevel(), g = marks.grates[0], hole = floorBlockAt(f, map, marks, g.x * 32, g.z * 32)!;
+    expect(hole.hole).toBe(true);
+    expect(hole.u1 - hole.u0).toBe(24);
+    const cx = Math.floor(g.x / CHUNK), cz = Math.floor(g.z / CHUNK), iron = ironPx(hole);
+    // the iron reads one px of the shaft
+    const bars = vertices(chunk(cx, cz)).filter((v) => v.sheet[0] === iron[0] + 0.5 - cx * CHUNK * 32 && v.sheet[1] === iron[1] + 0.5 - cz * CHUNK * 32);
+    for (const v of bars) {
+      expect(v.kind).toBe(KIND.floor);
+      for (const [c, o, lo, hi] of [[v.p[0], g.x, hole.u0, hole.u1], [v.p[2], g.z, hole.v0, hole.v1]]) {
+        expect(Math.abs(c - o)).toBeLessThanOrEqual(0.5);
+        expect(c * 32).toBeGreaterThanOrEqual(lo - 1e-4);
+        expect(c * 32).toBeLessThanOrEqual(hi + 1e-4);
+      }
+      expect(v.p[1]).toBeLessThan(-LEVEL_STEP);
+      expect(v.p[1]).toBeGreaterThan(-GRATE_DEPTH);
+    }
+    const tops = bars.filter((v) => v.n[1] === 1);
+    expect(tops.length / 4).toBeGreaterThanOrEqual(8); // a frame of four, and bars
+    for (const k of [0, 2]) expect(Math.max(...tops.map((v) => v.p[k])) - Math.min(...tops.map((v) => v.p[k]))).toBeCloseTo(0.75, 5);
+    // the cell round the shaft is level, flush floor: the kerb
+    for (const [du, dv] of [[-14, 0], [14, 0], [0, -14], [-14, -14], [14, 14]]) expect(floorHeight(f, map, marks, g.x + du / 32, g.z + dv / 32)).toBeCloseTo(-LEVEL_STEP, 6);
+    expect(floorHeight(f, map, marks, g.x, g.z)).toBeCloseTo(-GRATE_DEPTH, 6);
   });
 
   it('makes a cell that is all rock one quad', () => {

@@ -64,8 +64,8 @@ export const MOSAIC_TESSERA = 4;
 const MOSAIC_BAND = 5, MOSAIC_BORDER = 2;
 /** The ring number of a mosaic's border. */
 export const MOSAIC_BORDER_RING = 99;
-/** A drain grate's shaft: a square of this many px in the middle of its cell. */
-export const GRATE_PX = 16;
+/** A drain grate's shaft: a square of this many px in the middle of its cell (three quarters of it); the rest of the cell is its kerb. */
+export const GRATE_PX = 24;
 
 // The ids pack a block's place into bit fields (slab cell, wall plane, course and joint, piece and stone): they assume a map of fewer than
 // 1024 cells a side and px no lower than -64.
@@ -94,8 +94,8 @@ function pieceLie(map: TileMap, p: FloorPiece): 0 | 1 {
 
 /**
  * Where a slab must lie level, whatever its own number says: raised (height 0) where it reaches a cell beside a dip, so the floor meets
- * the dip mesh without a step; at a floor piece's level where it touches the piece, so the ground round a piece is level; flush round a
- * grate. Null: free.
+ * the dip mesh without a step; at a floor piece's level where it touches the piece, so the ground round a piece is level; flush in a
+ * grate's cell. Null: free.
  */
 // shortcut: a block keeps the level it was made with (`made`), and the view rebuilds only the chunks a changed tile touches, so a tile change that makes or unmakes a dip-mesh cell (a wall opening one cell from a chasm) can leave a step of one level at that cell's edge; empty `made` and rebuild the chunks within two tiles if levels get such changes.
 function lieOf(map: TileMap, marks: Marks, u0: number, v0: number, u1: number, v1: number): 0 | 1 | null {
@@ -104,8 +104,8 @@ function lieOf(map: TileMap, marks: Marks, u0: number, v0: number, u1: number, v
     const cx = p.x * STONE_PX, cz = p.z * STONE_PX;
     if (Math.hypot(Math.max(u0 - cx, 0, cx - u1), Math.max(v0 - cz, 0, cz - v1)) < p.r * STONE_PX + 1) return pieceLie(map, p);
   }
-  // round a grate's shaft the floor is flush, so its bars lie at one depth below every edge
-  for (const g of marks.grates) if (Math.max(u0 - g.x * STONE_PX, g.x * STONE_PX - u1, v0 - g.z * STONE_PX, g.z * STONE_PX - v1) < GRATE_PX / 2 + 1) return 0;
+  // a grate's cell is flush all over: its kerb is level, and its iron lies at one depth below every edge
+  for (const g of marks.grates) if (Math.max(u0 - g.x * STONE_PX, g.x * STONE_PX - u1, v0 - g.z * STONE_PX, g.z * STONE_PX - v1) < STONE_PX / 2) return 0;
   return null;
 }
 
@@ -250,7 +250,7 @@ export function markAt(marks: Marks, px: number, pz: number): Grate | FloorPiece
   }
   return null;
 }
-/** The one px of a grate's shaft that is painted iron: the bars read their colour there (the default camera sees it behind the shaft's near side). */
+/** The one px of a grate's shaft that is painted iron: the bars read their colour there (it lies under the frame's corner). */
 export const ironPx = (hole: Block): [number, number] => [hole.u0, hole.v1 - 1];
 
 /**

@@ -41,8 +41,8 @@ export const MEAN_TOLERANCE = 36;
 const BEVEL = [[0.25], [0.5], [0.5, 0.25]];
 /** A mosaic tessera's lean. (A block's tilt is not painted: it is the mesh's, `laidMesh.ts`.) */
 const TESSERA_LEAN = 0.1;
-/** A drain grate's shaft and the iron of its bars. */
-const SHAFT: Rgb = [9, 8, 10], IRON: Rgb = [112, 116, 128];
+/** A drain grate's shaft and its dark iron. */
+const SHAFT: Rgb = [9, 8, 10], IRON: Rgb = [56, 58, 68];
 /** The share of blocks with a chipped corner, its size range (px) and its slope on both axes. */
 const CHIP_SHARE = 0.3, CHIP_MIN = 2, CHIP_SPAN = 3, CHIP_SLOPE = 0.5;
 /** The share of blocks with a crack, and the shortest side (px) of a block that may have one. */
@@ -244,6 +244,17 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
   }
   const x = u >> 5, z = v >> 5, top = heightAt(map, x, z) > 0;
   const damp = !top && dampAt(map, marks, u >> 1, v >> 1) ? 1 : 0;
+  for (const g of marks.grates) {
+    if (Math.floor(g.x) !== x || Math.floor(g.z) !== z) continue;
+    // a grate's kerb: the cell round the shaft is four edge stones, mitred at the corners, with a joint round them
+    const i = u & 31, j = v & 31, E = STONE_PX - 1;
+    if (i === 0 || j === 0 || i === E || j === E || i === j || i === E - j) groove(out, at, seed, u, v, MORTAR, damp);
+    else {
+      rimStone.id = -2 - (marks.grates.indexOf(g) * 4 + (i < j ? (i < E - j ? 0 : 1) : i < E - j ? 2 : 3));
+      stonePx(out, at, seed, rimStone, RIM, u, v, i - 1, j - 1, E - 1 - i, E - 1 - j, 1, true, damp);
+    }
+    return true;
+  }
   let near = b.piece !== undefined || c.dip[(z - c.z0) * SPAN + x - c.x0] === 1;
   if (!near) for (const p of marks.pieces) if (Math.abs(u - p.x * STONE_PX) < p.r * STONE_PX + 3 && Math.abs(v - p.z * STONE_PX) < p.r * STONE_PX + 3) near = true;
   if (!near) {
