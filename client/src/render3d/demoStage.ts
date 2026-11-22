@@ -11,10 +11,12 @@ import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import type { Assets, View, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const scene = newScene();
   const cam = { x: scene.player.x, z: scene.player.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };
 
@@ -46,6 +48,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       c.timer.lap('lights');
       const cr = (job as CoverJob | null)?.result();
       if (cr && window.__r3d) window.__r3d.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
+      stoneRun.frame(c.view);
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(

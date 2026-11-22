@@ -5,7 +5,7 @@ import { TILE_ID } from '../../generated/defs';
 import type { TileMap } from '../../sim/map';
 import { cellHeight, heightAt } from '../heights';
 import { FACE_H, FACE_W, PAGE } from './format';
-import { CHUNK, SIDE_STEP, chunkGrid } from './grid';
+import { CHUNK, SIDE_STEP, chunkGrid, chunksOfTile } from './grid';
 
 /** A wall cell and the side (worldMesh's order: 0 south, 1 north, 2 east, 3 west) that borders a lower cell. */
 export interface Face { x: number; z: number; side: 0 | 1 | 2 | 3 }
@@ -80,6 +80,26 @@ export function planSheets(map: TileMap): SheetPlan {
       return s;
     },
   };
+}
+
+/** What a chunk's page layout depends on: its faces, and whether it has a ground page. */
+const planKey = (map: TileMap, cx: number, cz: number): string => `${facesKey(map, cx, cz)}|${groundNeeded(map, cx, cz)}`;
+
+/** `planKey` of every chunk, chunk row by row: what a plan was made from (`layoutMoved` compares against it). */
+export function planKeys(map: TileMap): string[] {
+  const { nx, nz } = chunkGrid(map);
+  return Array.from({ length: nx * nz }, (_, i) => planKey(map, i % nx, Math.floor(i / nx)));
+}
+
+/**
+ * Whether the tile change at (x, z) (it was tile `was`, the map holds the new one) moves the sheets' layout, so the plan, sheets and job are made
+ * again: the cell's height changed, or a chunk it touches has other faces or gained or lost its ground page. A door opening or closing does not.
+ * `keys` are the plan's `planKeys`; on a move the caller makes new ones.
+ */
+export function layoutMoved(map: TileMap, x: number, z: number, was: number, keys: readonly string[]): boolean {
+  if (cellHeight(was) !== heightAt(map, x, z)) return true;
+  const { nx } = chunkGrid(map);
+  return chunksOfTile(map, x, z).some(([cx, cz]) => planKey(map, cx, cz) !== keys[cz * nx + cx]);
 }
 
 /** The plan of a map that draws no stone sheets (the woodland): no layers, so every sheet read has weight 0 and the stone cells show the flat stone colour. */

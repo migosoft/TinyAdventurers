@@ -30,6 +30,7 @@ import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, FrameInput, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
@@ -91,6 +92,7 @@ const ALL_VISIBLE = { isVisible: (): boolean => true };
 export function createSunlightStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setPageButtons' | 'syncPageButtons'>): Stage {
   const map = sunlightMap();
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: 8.8, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 
@@ -158,6 +160,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       }
       caption();
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0; // the air pauses while the view is rebuilt after a device loss
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;

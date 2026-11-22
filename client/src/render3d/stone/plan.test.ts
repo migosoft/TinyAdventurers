@@ -4,7 +4,7 @@ import { TileMap } from '../../sim/map';
 import { MAP_ROWS, parseMap } from '../demoMap';
 import { FACE_H, FACE_W, PAGE } from './format';
 import { CHUNK, chunkGrid } from './grid';
-import { facesKey, planSheets, samePlan } from './plan';
+import { facesKey, layoutMoved, planKeys, planSheets, samePlan } from './plan';
 
 const filled = (w: number, h: number, t: number) => new TileMap(w, h, new Uint8Array(w * h).fill(t));
 
@@ -81,6 +81,26 @@ describe('planSheets', () => {
     expect(facesKey(map, 0, 0)).toBe(before);
     map.set(2, 2, TILE_ID.Floor);
     expect(facesKey(map, 0, 0)).not.toBe(before);
+  });
+
+  it('layoutMoved: a door closing keeps the layout, a wall turning into floor moves it', () => {
+    const map = filled(20, 20, TILE_ID.Floor);
+    map.set(5, 5, TILE_ID.Wall);
+    map.set(1, 1, TILE_ID.DoorOpen);
+    const keys = planKeys(map);
+    const was = map.get(1, 1);
+    map.set(1, 1, TILE_ID.DoorClosed);
+    expect(layoutMoved(map, 1, 1, was, keys)).toBe(false);
+    const wall = map.get(5, 5);
+    map.set(5, 5, TILE_ID.Floor);
+    expect(layoutMoved(map, 5, 5, wall, keys)).toBe(true);
+  });
+
+  it('layoutMoved: a Void cell turning Wall in a chunk of only Void gives it a ground page', () => {
+    const map = filled(CHUNK, CHUNK, TILE_ID.Void);
+    const keys = planKeys(map);
+    map.set(3, 3, TILE_ID.Wall);
+    expect(layoutMoved(map, 3, 3, TILE_ID.Void, keys)).toBe(true);
   });
 
   it('samePlan tells equal layouts from different ones', () => {

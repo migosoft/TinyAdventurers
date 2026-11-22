@@ -27,6 +27,7 @@ import { SIGHT_OFF } from './sightNodes';
 import { createStageKit } from './stageKit';
 import type { Assets, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 
 const PAN_SPEED = 12;
 /** One room: its size in tiles, and the map's grid of rooms (the boss bay is the extra one below the grid). */
@@ -390,6 +391,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
   const opts = parseFx(search);
   const map = fxMap();
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const kit = createStageKit(assets);
   // `&at=<slot>` starts the camera over that slot's room (the default is the corner of the first four)
@@ -488,6 +490,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       label.textContent = `fx try-out (#308): ${group}${rows.length ? '' : ' (no rows yet)'}: ${rows.map((r) => r.name).join(', ')}; t ${t.toFixed(2)} s; WASD pans`;
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0;
 
       const game = c.params.light === 'game';

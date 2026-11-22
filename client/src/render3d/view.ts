@@ -74,7 +74,7 @@ import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type StoneKit, type WorldArrays } from './worldMesh';
 import { noMarks } from './stone/place';
-import { facesKey, groundNeeded, planSheets, unplanned, type SheetPlan } from './stone/plan';
+import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -536,9 +536,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (s) shimmerChunks[i] = makeShimmerMesh(s.position);
     lavaBoxes = null;
   };
-  /** Per chunk: what its sheet layout depends on (its faces, and whether it has a ground page); `tileChanged` compares it. Empty on the woodland. */
-  const planKeyOf = (cx: number, cz: number): string => `${facesKey(map, cx, cz)}|${groundNeeded(map, cx, cz)}`;
-  const planKeys: string[] = world.stone ? Array.from({ length: nx * nz }, (_, i) => planKeyOf(i % nx, Math.floor(i / nx))) : [];
+  /** What the sheets' plan was made from (per chunk); `tileChanged` compares it (`layoutMoved`). Empty on the woodland. */
+  let keys: string[] = world.stone ? planKeys(map) : [];
   /** Plans and uploads new sheets for the map as it is now (a face appeared or went, or a chunk gained or lost its ground page); every chunk's layers move, so the caller rebuilds every chunk. Throws StoneTooLargeError before changing anything when the device cannot hold them. */
   const replan = (): void => {
     const p = planSheets(map);
@@ -550,7 +549,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     wm.setSheets(next);
     dm.setSheets(next);
     old.dispose();
-    for (let i = 0; i < planKeys.length; i++) planKeys[i] = planKeyOf(i % nx, Math.floor(i / nx));
+    keys = planKeys(map);
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
   const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks];
@@ -891,8 +890,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       }
       const around = chunksOfTile(map, x, z);
       // The stone sheets (#380): only a change of the faces, or of a chunk's ground page, moves the layout (a door opening or closing does not).
-      const moved = world.stone !== null && (cellHeight(was) !== cellHeight(map.tiles[cell]) || around.some(([cx, cz]) => planKeyOf(cx, cz) !== planKeys[cz * nx + cx]));
-      if (moved) {
+      if (world.stone !== null && layoutMoved(map, x, z, was, keys)) {
         replan();
         for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
       } else for (const [cx, cz] of around) buildAt(cx, cz, dips);

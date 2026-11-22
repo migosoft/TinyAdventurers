@@ -2,13 +2,13 @@ import { WALL_H, heightAt } from './heights';
 import { isTerrain, type TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
-import { CHUNK, KIND, chunkGrid } from './stone/grid';
+import { CHUNK, KIND, chunkGrid, chunksOfTile } from './stone/grid';
 import { buildStoneChunk } from './stone/mesh';
 import type { StoneField } from './stone/field';
 import type { Marks } from './stone/place';
 import type { SheetPlan } from './stone/plan';
 
-export { CHUNK, KIND, chunkGrid };
+export { CHUNK, KIND, chunkGrid, chunksOfTile };
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
@@ -67,21 +67,6 @@ export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [n
     s.kind.push(k);
     s.rect.push(r.x, r.y, r.w, r.h);
   }
-}
-
-/**
- * The chunk of the cell and those of its eight neighbours (a face's `straight` flag and the terrain edges
- * read the diagonal cells) where they differ and lie inside the grid; no duplicates.
- */
-export function chunksOfTile(map: { w: number; h: number }, x: number, z: number): [cx: number, cz: number][] {
-  const { nx, nz } = chunkGrid(map);
-  const out: [number, number][] = [];
-  for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const cx = Math.floor((x + dx) / CHUNK), cz = Math.floor((z + dz) / CHUNK);
-    if (cx < 0 || cz < 0 || cx >= nx || cz >= nz) continue;
-    if (!out.some((c) => c[0] === cx && c[1] === cz)) out.push([cx, cz]);
-  }
-  return out;
 }
 
 /**

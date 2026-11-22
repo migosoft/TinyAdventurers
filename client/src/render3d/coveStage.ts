@@ -29,6 +29,7 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import type { Assets, View, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 
 const TILE = 16;
 const KNIGHT_ID = 100;
@@ -65,6 +66,7 @@ const ent = (id: number, kind: number, x: number, y: number, o: Partial<EntState
 export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stage {
   const map = coveStageMap();
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, KNIGHT_START);
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures.
   const at = /[?&]at=(\d+),(\d+)/.exec(search);
@@ -140,6 +142,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       cam.z = knight.z;
       const ents: EntState[] = [...torchEnts, ent(KNIGHT_ID, KIND.Knight, knight.x * TILE, knight.z * TILE, { anim: knight.moving ? ANIM.Move : ANIM.Idle, animMs: c.now * 1000, aim: knight.aim })];
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0;
 
       const ambient = dungeonAmbient(params.amb);

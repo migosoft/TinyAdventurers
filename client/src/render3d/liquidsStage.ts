@@ -38,6 +38,7 @@ import { createStageKit, modelsReadouter } from './stageKit';
 import { SIGHT_OFF } from './sightNodes';
 import type { Assets, View, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 import { Water3d } from './water/water';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
@@ -89,6 +90,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const opts = parseLiquids(search);
   const map = liquidsMap();
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
@@ -203,6 +205,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       const ents = [...torchEnts, ...sc.ents];
       label.textContent = `liquids (#324): t ${t.toFixed(2)} s; 1 push into the chasm, 2 into deep water, 3 the barrel; WASD pans`;
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0;
 
       const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);

@@ -31,6 +31,7 @@ import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import type { Assets, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 import { Water3d } from './water/water';
 import { reflects } from './params';
 
@@ -434,6 +435,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   const opts = parseGallery(search);
   const map = GALLERY.map;
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d(galleryInit(), assets.frames, atlasBounds(assets.image, assets.frames));
   const water = new Water3d(map);
   // One kit for the stage, kept across a rebuilt view (the new layer draws from its cached models).
@@ -490,6 +492,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const only = STATES.findIndex(([n]) => n === opts.state);
       label.textContent = `state: ${STATES[only >= 0 ? only : Math.floor(t / 1.2) % STATES.length][0]} (hurt flash every 3 s); WASD pans`;
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0;
       // The figures that died since the last frame leave their skulls; the event comes before the frame that no longer has them.
       // The spectres of the dying row also send theirs to the effects (the Shade's death smoke, the Ghost's death effect); no other kind has one here.

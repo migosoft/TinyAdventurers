@@ -11,6 +11,7 @@ import { atlasBounds } from './atlasBounds';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 import { QUALITIES, type Quality } from './quality';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
@@ -21,7 +22,7 @@ import { RunView3d, moveInput } from './runView3d';
 import type { R3dSystem } from './stats';
 import type { FrameTimer } from '../game/frameTimer';
 import { wrapYaw } from './params';
-import { GroundTooLargeError, type Assets, type View } from './view';
+import { GroundTooLargeError, type Assets, type View, type WorldInput } from './view';
 
 /** What the host's frame tells the session's input function. */
 export interface RunInputState {
@@ -158,12 +159,16 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   turnKeyLabels().then((k) => { if (live) run.hud.setTurnHelp(k); }, () => {});
 
   let looped = false;
+  const world: WorldInput = { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone) };
+  // The stone paint job (#380), beside the cover job: nearest the spawn first.
+  const stoneRun = makeStoneRun(world, { x: info.spawn_x / TILE, z: info.spawn_y / TILE });
   return {
     runView,
     job,
-    world: { map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone) },
+    world,
     built(view: View): void {
       runView.attach(view);
+      stoneRun.built(view);
       if (job.done) upload(view); // the kept result, no new job
     },
     frame(c: StageCtx): number {
@@ -189,6 +194,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       if (!job.done && job.step(COVER_BUDGET_MS)) {
         if (c.view) upload(c.view);
       }
+      stoneRun.frame(c.view);
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
       const r = window.__r3d;

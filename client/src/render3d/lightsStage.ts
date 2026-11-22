@@ -30,6 +30,7 @@ import { SIGHT_OFF } from './sightNodes';
 import { View as SightView } from '../sim/view';
 import type { Assets, WorldInput } from './view';
 import { stoneField } from './stone/field';
+import { makeStoneRun } from './stone/stoneRun';
 
 const TILE = 16;
 /** The free camera's speed in tiles per second. */
@@ -91,6 +92,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const opts = parseLights(search);
   const map = buildMap();
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const LAVA_SEED = 344;
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
@@ -156,6 +158,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const ents = lightsEnts(t);
       for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       c.timer.lap('sim');
+      stoneRun.frame(c.view);
       if (!c.view) return 0;
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
