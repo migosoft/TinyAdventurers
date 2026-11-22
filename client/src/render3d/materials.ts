@@ -2,7 +2,7 @@
 import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector2, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { attribute, clamp, mx_noise_float, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, normalize, positionGeometry, positionWorld, round, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
-import { FACE_H, FACE_W, PAGE, SLOPES } from './stone/format';
+import { FACE_H, FACE_W, FLAG, PAGE, SLOPES } from './stone/format';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
 import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
@@ -90,6 +90,8 @@ export interface FlatTexel {
   texel: N;
   /** The relief's slope as a world vector (dimensionless): the surface normal is the vertex normal minus it. Zero on flat texels and on the ground kind. */
   bend: N;
+  /** 1 on a ground texel the sheet flags as a joint or crack (`FLAG.groove`), else 0. */
+  groove: N;
   /** 0 or 1: floors and the ground read the sheets at a sharpened position. */
   smooth: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
@@ -116,7 +118,7 @@ const SLOT_BIAS = 0.005;
  * page or slot [lo, hi] (px). The colour is read at the sharpened position (nearest when `smooth` is 0) clamped half a texel inside; the
  * relief (alpha) at the texel's centre, so slopes and flags are never blended. All reads sit at the top level of the fragment code.
  */
-function sheetRead(base: N, p: N, layer: N, lo: N, hi: N, smooth: N): { rgb: N; slope: N } {
+function sheetRead(base: N, p: N, layer: N, lo: N, hi: N, smooth: N): { rgb: N; slope: N; groove: N } {
   const fw = max(fwidth(p), vec2(1e-6));
   const seam = floor(p.add(0.5));
   const sharp = seam.add(clamp(p.sub(seam).div(fw), -0.5, 0.5));
@@ -128,7 +130,7 @@ function sheetRead(base: N, p: N, layer: N, lo: N, hi: N, smooth: N): { rgb: N; 
   const a = round(relief.a.mul(255));
   const sx = floor(a.div(8)).sub(floor(a.div(64)).mul(8));
   const sy = a.sub(floor(a.div(8)).mul(8));
-  return { rgb: colour.rgb, slope: vec2(slopeOf(sx), slopeOf(sy)) };
+  return { rgb: colour.rgb, slope: vec2(slopeOf(sx), slopeOf(sy)), groove: weight(floor(a.div(64)).sub(FLAG.groove).abs().lessThan(0.5)) };
 }
 
 /**
@@ -213,6 +215,7 @@ export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, 
   return {
     texel,
     bend: bent,
+    groove: g.groove.mul(availG),
     smooth,
     setGround(nearest, linear, w, h) {
       size.value.set(w, h);

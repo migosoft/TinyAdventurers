@@ -57,6 +57,10 @@ describe('dipMaterial', () => {
       expect(() => fragment(B, build().m.material, { geometry: geometry() })).not.toThrow();
     });
 
+    it(`${B.name}: reads the sheet's groove flag (the lava's embers follow the joints and cracks)`, () => {
+      expect(/\bgroove\b/.test(fragment(B, build().m.material, { geometry: geometry() }))).toBe(true);
+    });
+
     it(`${B.name}: uses no sine hash`, () => {
       expect(fragment(B, build().m.material, { geometry: geometry() })).not.toContain('43758');
     });

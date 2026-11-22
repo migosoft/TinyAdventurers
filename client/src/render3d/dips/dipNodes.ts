@@ -91,7 +91,7 @@ function slabs(s: N, y: N): N {
  * the outline's mask the pieces at the rim break off; and the dust that dulls the floor at the rim.
  */
 const SHARD_FREQ = 1.35, CRACK_REACH = 0.9, CRACK_RAGGED = 0.5, CRACK_WIDTH = 0.11, CRACK_DARK = 0.95, CHIP = 0.3, RIM_DUST = 0.3;
-/** The floor by lava: how far the scorching runs (tiles) and how dark it makes the floor, the soot's colour and cover, how far the glow in the tile joints and cracks runs, its colour and the cracks' width (in pieces). */
+/** The floor by lava: how far the scorching runs (tiles) and how dark it makes the floor, the soot's colour and cover, how far the glow in the stone's joints and cracks runs, its colour and the cracks' width (in pieces). */
 const SCORCH_REACH = 0.9, SCORCH_DARK = 0.3, SOOT_COVER = 0.45, EMBER_REACH = 0.5, EMBER_WIDTH = 0.07;
 const SOOT = vec3(0.045, 0.03, 0.026), EMBER = vec3(0.85, 0.24, 0.04);
 /** Where the rock starts: the depth below the floor (world units) where `bank` begins to turn the floor's texel into rock and where it is full. The slab gate starts at the same depth (one quantity: above it no rock shows, so no slabs are computed). */
@@ -104,8 +104,8 @@ const ALONG_Z_FROM = 0.3, ALONG_Z_TO = 0.7, ALONG_X_ONLY = 0.01, ALONG_Z_ONLY = 
 const PIECE_MARK_MIN = 0.02, PIECE_BANK_MAX = 0.99;
 /** The patchy noise that breaks up the reach of the scorch and the ember: its frequency and offset, and its weight in the scorch and in the ember. */
 const PATCHY_FREQ = 2.6, PATCHY_OFFSET = 7, SCORCH_PATCHY = 0.35, EMBER_PATCHY = 0.3;
-/** The glow in the tile joints: the width of the joint line (from the cell's edge, tiles) and its share of the ember line against the cracks'. */
-const JOINT_FROM = 0.02, JOINT_TO = 0.09, JOINT_SHARE = 0.6;
+/** The glow in the stone's joints and cracks (the ground sheet's groove flag): its share of the ember line against the pieces' cracks'. */
+const JOINT_SHARE = 0.6;
 /** The ember's flicker (a base and the noise's range) and the upper end of its reach (the lower end is `1 - EMBER_REACH`). */
 const EMBER_FLICKER_BASE = 0.55, EMBER_FLICKER = 0.6, EMBER_REACH_TO = 0.98;
 /** The upper end of the cracks' reach (the lower end is `1 - CRACK_REACH`), and the width of the fade at the mesh's border (in near-chasm: the cracks fade to nothing there). */
@@ -220,8 +220,8 @@ export function dipMaterial(lighting: Lighting, groundStart: Texture, sight: Sig
     return v;
   })();
   const sh = { id: piece.x, edge: piece.y };
-  const cellXZ: N = fract(wp.xz);
-  const joint = float(1).sub(smoothstep(JOINT_FROM, JOINT_TO, min(min(cellXZ.x, float(1).sub(cellXZ.x)), min(cellXZ.y, float(1).sub(cellXZ.y)))));
+  // The stone's own joints and cracks, as the ground sheet flags them (one stone px wide).
+  const joint: N = flat.groove.toVar('groove');
   const patchy = vnoise2(wp.xz.mul(PATCHY_FREQ).add(PATCHY_OFFSET)).sub(0.5);
 
   // By water the rim is the game's own moss (the ground cover, #330: `cover/moss.ts` grows it along every pool). The floor under it is

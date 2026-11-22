@@ -3,6 +3,9 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { CHUNK, KIND } from '../worldMesh';
 import { planSheets } from '../stone/plan';
+import { ROCK, stoneField } from '../stone/field';
+import { buildStoneChunk } from '../stone/mesh';
+import { placeMarks } from '../stone/place';
 import { DIP_RES, buildDipChunk as buildWithPlan, dipClassChanged, type DipChunk } from './dipMesh';
 import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
 
@@ -77,6 +80,44 @@ describe('buildDipChunk', () => {
     }
     expect(shared).toBeGreaterThan(R);
     expect(heights.has('16.0000,4.5000')).toBe(true);
+  });
+
+  it('meets the stone mesh along shared cell edges at equal heights, in laid stone and in rock', () => {
+    const m = open(16, 16, [[3, 3, TILE_ID.Chasm], [4, 3, TILE_ID.Chasm], [10, 4, TILE_ID.Lava], [10, 5, TILE_ID.Lava], [5, 10, TILE_ID.ShallowWater], [6, 10, TILE_ID.DeepWater], [6, 11, TILE_ID.DeepWater]]);
+    const plan = planSheets(m);
+    /** The height of every vertex that faces up on an edge between a dip-mesh cell and a floor cell of the stone mesh, by its point. */
+    const onJoin = (position: Float32Array, normal: Float32Array, count: number): number[] => {
+      const ys: number[] = [];
+      for (let v = 0; v < count; v++) {
+        const x = position[v * 3], z = position[v * 3 + 2];
+        if (normal[v * 3 + 1] < 0.5) continue;
+        const cells = [[Math.floor(x - 1e-3), Math.floor(z - 1e-3)], [Math.floor(x + 1e-3), Math.floor(z - 1e-3)], [Math.floor(x - 1e-3), Math.floor(z + 1e-3)], [Math.floor(x + 1e-3), Math.floor(z + 1e-3)]];
+        if (cells.some(([i, j]) => inDipMesh(m, i, j)) && cells.some(([i, j]) => !inDipMesh(m, i, j))) ys.push(position[v * 3 + 1]);
+      }
+      return ys;
+    };
+    const dip = buildWithPlan(m, false, 0, 0, plan)!.arrays;
+    const dipYs = onJoin(dip.position, dip.normal, dip.count);
+    expect(dipYs.length).toBeGreaterThan(R * 8);
+    for (const kinds of [null, new Uint8Array(16 * 16).fill(ROCK)]) {
+      const f = stoneField(m, kinds, 7), stone = buildStoneChunk(m, f, plan, placeMarks(m, f, { lights: [], spawn: { x: 1.5, z: 14.5 } }), 0, 0);
+      const stoneYs = onJoin(stone.position, stone.normal, stone.count);
+      expect(stoneYs.length).toBeGreaterThan(8);
+      for (const y of [...dipYs, ...stoneYs]) expect(y).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('carries its own chunk\'s ground layer in `sheet`', () => {
+    const m = open(34, 9, [[4, 4, TILE_ID.Lava], [20, 4, TILE_ID.Lava]]);
+    const plan = planSheets(m);
+    expect(plan.groundOf(1, 0)).not.toBe(plan.groundOf(0, 0));
+    for (const cx of [0, 1]) {
+      const { sheet, position: p, count } = buildWithPlan(m, false, cx, 0, plan)!.arrays;
+      for (let v = 0; v < count; v++) {
+        expect(sheet[v * 3 + 2]).toBe(plan.groundOf(cx, 0));
+        expect(sheet[v * 3]).toBeCloseTo((p[v * 3] - cx * CHUNK) * 32, 3);
+      }
+    }
   });
 
   it('faces up', () => {
