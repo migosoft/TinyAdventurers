@@ -39,6 +39,22 @@ describe('buildCoverChunk', () => {
     }
   });
 
+  it('stands on the floor: every sheet vertex and bushel foot is at floorY, and without floorY at 0', () => {
+    const bushels: Bushel[] = [{ x: 3.4, z: 2.6, w: 12, h: 13, seed: 0.3, fern: false }];
+    const r = result([[3 * 16 + 4, 2 * 16 + 9, 2]], bushels);
+    const floorY = (x: number, z: number): number => -0.05 * x - 0.02 * z;
+    const flat = buildCoverChunk(r, 0, 0)!, c = buildCoverChunk(r, 0, 0, floorY)!;
+    expect(flat.sheet.position.filter((_, i) => i % 3 === 1).every((y) => y === 0)).toBe(true);
+    expect(flat.bushel.foot.filter((_, i) => i % 3 === 1).every((y) => y === 0)).toBe(true);
+    for (let i = 0; i < c.sheet.count; i++) {
+      const [x, y, z] = [c.sheet.position[i * 3], c.sheet.position[i * 3 + 1], c.sheet.position[i * 3 + 2]];
+      expect(y).toBeCloseTo(floorY(x, z), 5);
+      expect(c.sheet.position[i * 3]).toBe(flat.sheet.position[i * 3]); // only y moved
+    }
+    expect(c.bushel.foot[1]).toBeCloseTo(floorY(3.4, 2.6), 5);
+    expect(c.min[1]).toBeLessThanOrEqual(c.bushel.foot[1]);
+  });
+
   it('only builds quads over cells inside the map', () => {
     const put: [number, number, number][] = [];
     for (let x = 0; x < W * 16; x++) for (let z = 0; z < H * 16; z += 16) put.push([x, z, 1]);

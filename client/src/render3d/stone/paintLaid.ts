@@ -164,7 +164,7 @@ let moss: { map: TileMap; marks: Marks; src: CoverSource | null; rows: Uint8Arra
 export const forgetMoss = (): void => { moss = null; };
 /** Whether moss grows at a map px (16 per tile). The source is made anew for other marks: a re-plan places new ones, and the map has changed then. */
 export function dampAt(map: TileMap, marks: Marks, mx: number, mz: number): boolean {
-  if (!moss || moss.map !== map || moss.marks !== marks) moss = { map, marks, src: mossSource(map, null), rows: new Uint8Array(map.h) };
+  if (!moss || moss.map !== map || moss.marks !== marks) moss = { map, marks, src: mossSource(map, null, marks), rows: new Uint8Array(map.h) };
   const s = moss.src;
   if (!s || mx < 0 || mz < 0 || mx >= s.w || mz >= s.h) return false;
   const row = mz >> 4;

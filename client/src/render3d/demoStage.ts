@@ -9,7 +9,7 @@ import { newScene, stepScene } from './scene';
 import { seeLook } from './seeThrough';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
-import type { Assets, View, WorldInput } from './view';
+import { marksOf, type Assets, type View, type WorldInput } from './view';
 import { stoneField } from './stone/field';
 import { makeStoneRun } from './stone/stoneRun';
 
@@ -26,7 +26,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
     world,
     built(view: View): void {
       if (!job) {
-        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [] }, { everywhere: true }), tilesSeed(map));
+        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [], marks: marksOf(world) }, { everywhere: true }), tilesSeed(map));
         job.step(Infinity);
       }
       view.setCover(job.result()!);

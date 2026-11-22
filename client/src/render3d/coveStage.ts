@@ -27,7 +27,7 @@ import { seeLook } from './seeThrough';
 import { SightMask, hiddenAt } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
-import type { Assets, View, WorldInput } from './view';
+import { marksOf, type Assets, type View, type WorldInput } from './view';
 import { stoneField } from './stone/field';
 import { makeStoneRun } from './stone/stoneRun';
 
@@ -84,7 +84,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   let coverField: CoverField | null = null;
   const build = (): CoverJob => {
     if (!job) {
-      job = coverJob(coverSources(map, { woodland: null, cove: COVE_STAGE, spawnRow: KNIGHT_START.z, spots: cove.bushelSpots() }), tilesSeed(map));
+      job = coverJob(coverSources(map, { woodland: null, cove: COVE_STAGE, spawnRow: KNIGHT_START.z, spots: cove.bushelSpots(), marks: marksOf(world) }), tilesSeed(map));
       job.step(Infinity);
     }
     return job;

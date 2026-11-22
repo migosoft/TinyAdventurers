@@ -7,6 +7,8 @@ import { P } from '../../game/vegetation/canvas';
 import { TILE, type TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
 import { isWater, maskAt } from '../dips/shape';
+import { STONE_PX } from '../stone/field';
+import { onPiece, piecesOf, type Marks } from '../stone/place';
 import { COVER } from './kinds';
 import type { CoverSource } from './source';
 
@@ -34,9 +36,9 @@ const BAD_NEIGHBOUR = new Set<number>([TILE_ID.DoorOpen, TILE_ID.DoorClosed, TIL
 
 /**
  * `everywhere`: every eligible tile is mossy (the dev scene). `ignoreLava`: a map with lava still grows moss (a dev page that shows
- * every terrain in one room; a run's dungeon with lava has none).
+ * every terrain in one room; a run's dungeon with lava has none). `marks`: moss grows in no puddle's basin and on no crevice.
  */
-export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywhere?: boolean; ignoreLava?: boolean }): CoverSource | null {
+export function mossSource(map: TileMap, cove: CoveInfo | null, marks: Marks, opts?: { everywhere?: boolean; ignoreLava?: boolean }): CoverSource | null {
   const everywhere = opts?.everywhere ?? false;
   const { w: tw, h: th } = map;
   if (!opts?.ignoreLava) for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === TILE_ID.Lava) return null;
@@ -75,6 +77,7 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
     return { x: tx * TILE + hash(seed, tx, ty, 12) * TILE, y: ty * TILE + hash(seed, tx, ty, 13) * TILE, rx: r, ry: r * (0.55 + hash(seed, tx, ty, 14) * 0.3) };
   };
 
+  const pieces = marks.crevices.flatMap((c) => piecesOf(c).map(([x0, z0, x1, z1]) => ({ x0, z0, x1, z1, half: (c.width * STONE_PX) / 2 })));
   const grow = new Uint8Array(w * h), allow = new Uint8Array(w * h), colour = new Uint8ClampedArray(w * h * 4);
 
   const band = (ty: number): void => {
@@ -93,6 +96,9 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
         const p = patchAt(nx, nz);
         if (p) patches.push(p);
       }
+      // What of the marks reaches this tile (a puddle's basin, a crevice's piece with its width and a px's reach), so the px loop asks few.
+      const basins = marks.puddles.filter((p) => Math.hypot(p.x - tx - 0.5, p.z - ty - 0.5) < p.r + 0.71);
+      const pits = pieces.filter((s) => Math.min(s.x0, s.x1) - s.half / STONE_PX - 0.01 < tx + 1 && Math.max(s.x0, s.x1) + s.half / STONE_PX + 0.01 > tx && Math.min(s.z0, s.z1) - s.half / STONE_PX - 0.01 < ty + 1 && Math.max(s.z0, s.z1) + s.half / STONE_PX + 0.01 > ty);
       for (let ly = 0; ly < TILE; ly++) for (let lx = 0; lx < TILE; lx++) {
         const x = tx * TILE + lx, y = ty * TILE + ly, o = y * w + x;
         const n = fine(x, y) * 0.7 + hash(seed, x, y, 20) * 0.3;
@@ -101,6 +107,9 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
         // Beside water the ground falls into the pool inside the rounded outline (dips/shape.ts): no moss on the bank, and none creeps there.
         const dry = !waterside[i] || maskAt(map, (x + 0.5) / TILE, (y + 0.5) / TILE, isWater) < MOSS.waterEdge;
         if (!dry) continue;
+        // `onPiece` takes a ground px (`STONE_PX` a tile); this px's centre, in those.
+        const gu = ((x + 0.5) * STONE_PX) / TILE - 0.5, gv = ((y + 0.5) * STONE_PX) / TILE - 0.5;
+        if (basins.some((p) => Math.hypot((x + 0.5) / TILE - p.x, (y + 0.5) / TILE - p.z) < p.r) || pits.some((s) => onPiece(gu, gv, s.x0, s.z0, s.x1, s.z1, s.half))) continue;
         allow[o] = 1;
         if (!mossy[i]) continue;
         let d = 99;

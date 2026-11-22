@@ -102,6 +102,8 @@ export interface WorldInput {
   /** The level's static lights and the heroes' start: what the stone's marks keep clear (#380). Without it the stone has no marks. */
   taken?: Taken;
 }
+/** The marks of a world (the same for the same world every time): what the view places, and what a stage's moss keeps clear of. */
+export const marksOf = (world: WorldInput): Marks => (world.stone && world.taken ? placeMarks(world.map, world.stone, world.taken) : noMarks());
 /** The painted ground, RGBA, w x h px. */
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 /** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */
@@ -358,7 +360,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   let sheets = newSheets(plan);
   const field = world.stone ?? stoneField(map);
   /** The marks of the map as it is now: one object for the mesh and the paint job, placed again with every new plan. */
-  const marksNow = (): Marks => (world.stone && world.taken ? placeMarks(map, field, world.taken) : noMarks());
+  const marksNow = (): Marks => marksOf(world);
   const kit: StoneKit = { field, plan, marks: marksNow() };
   const heights = new DataTexture(heightBytes(map), map.w, map.h, RedFormat, UnsignedByteType);
   heights.unpackAlignment = 1;
@@ -912,7 +914,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // The sheets' layout first (#380): a move (a face appeared or went; a door opening or closing is none) re-plans, and a StoneTooLargeError leaves the view as it was.
       const moved = world.stone !== null && layoutMoved(map, x, z, was, keys);
       const hadPuddles = kit.marks.puddles.length > 0;
-      if (moved) replan();
+      if (moved) {
+        replan();
+        coverLayer.rebuild(); // the cover stands on the new marks' floor
+      }
       (heights.image.data as Uint8Array)[cell] = Math.round(cellHeight(map.tiles[cell]) * 100);
       heights.needsUpdate = true;
       builtTiles[cell] = map.tiles[cell];
@@ -955,7 +960,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     setCover(r) {
       if (disposed || lost) return;
-      coverLayer.set(r, textureLimit());
+      coverLayer.set(r, textureLimit(), world.stone ? floorAt : undefined);
     },
     get stone() {
       return world.stone ? { plan, sheets, marks: kit.marks } : null;

@@ -36,7 +36,7 @@ import { clearVeils } from './fx/status';
 import { seeLook } from './seeThrough';
 import { createStageKit, modelsReadouter } from './stageKit';
 import { SIGHT_OFF } from './sightNodes';
-import type { Assets, View, WorldInput } from './view';
+import { marksOf, type Assets, type View, type WorldInput } from './view';
 import { stoneField } from './stone/field';
 import { makeStoneRun } from './stone/stoneRun';
 import { Water3d } from './water/water';
@@ -155,7 +155,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
     world,
     built(view: View): void {
       if (!job) {
-        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [] }, { ignoreLava: true }), tilesSeed(map));
+        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [], marks: marksOf(world) }, { ignoreLava: true }), tilesSeed(map));
         job.step(Infinity);
       }
       view.setCover(job.result()!);

@@ -3,6 +3,7 @@
 import type { CoveInfo } from '../../generated/CoveInfo';
 import type { TileMap } from '../../sim/map';
 import type { GroundImage } from '../view';
+import { noMarks, type Marks } from '../stone/place';
 import { placeBushels } from './bushels';
 import { coveSource } from './cove';
 import { HeightBuilder } from './heights';
@@ -97,12 +98,14 @@ export function coverJob(sources: readonly CoverSource[], seed: number): CoverJo
 /** The cover sources of a run: the woodland's grass, or a dungeon's moss and then the cove's grass (the cove wins where both have height). */
 export function coverSources(
   map: TileMap,
-  info: { woodland: { seed: number } | null; cove: CoveInfo | null; spawnRow: number; /** The cove's bushel spots (`Cove3d.bushelSpots()`). */ spots: BushelSpot[] },
+  info: { woodland: { seed: number } | null; cove: CoveInfo | null; spawnRow: number; /** The cove's bushel spots (`Cove3d.bushelSpots()`). */ spots: BushelSpot[];
+    /** The dungeon's marks (what the view places for the level: `marksOf`): moss keeps out of puddle basins and crevices. shortcut: placed once with the job, so a re-plan's new marks move the floor under the cover but not where moss grows; make a re-plan rerun the job if puddles ever move on a tile change. */
+    marks?: Marks },
   opts?: { everywhere?: boolean; ignoreLava?: boolean },
 ): CoverSource[] {
   if (info.woodland) return [woodlandSource(map, info.woodland.seed, info.spawnRow)];
   const out: CoverSource[] = [];
-  const moss = mossSource(map, info.cove, opts);
+  const moss = mossSource(map, info.cove, info.marks ?? noMarks(), opts);
   if (moss) out.push(moss);
   if (info.cove) out.push(coveSource(map, info.cove, info.spots));
   return out;

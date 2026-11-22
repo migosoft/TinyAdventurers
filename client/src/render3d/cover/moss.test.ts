@@ -7,6 +7,7 @@ import { COVER } from './kinds';
 import { mossSource, MOSS, MOSS_TONES, tilesSeed } from './moss';
 import type { CoverSource } from './source';
 import { isWater, maskAt } from '../dips/shape';
+import { noMarks, onPiece, piecesOf, type Marks } from '../stone/place';
 
 // 5 x 5 rooms of 7 x 7 floor, walls between (1 tile), 1-tile doors in the walls between neighbours in a row,
 // a 2 x 2 pool in room (1,1), and a 1-wide corridor leaving the grid at the bottom right.
@@ -29,7 +30,7 @@ const px = (tx: number, ty: number, f: (i: number) => void) => {
   for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) f((ty * TILE + y) * W * TILE + tx * TILE + x);
 };
 function run(s: CoverSource): CoverSource { for (const p of s.prep) p(); return s; }
-const make = (m: TileMap, cove: CoveInfo | null = null, everywhere = false) => run(mossSource(m, cove, { everywhere })!);
+const make = (m: TileMap, cove: CoveInfo | null = null, everywhere = false) => run(mossSource(m, cove, noMarks(), { everywhere })!);
 
 describe('mossSource', () => {
   it('is the same for the same map, and tilesSeed follows the tiles', () => {
@@ -41,10 +42,30 @@ describe('mossSource', () => {
     expect(tilesSeed(roomsMap())).not.toBe(tilesSeed(roomsMap(1)));
   });
 
+  it('grows nothing in a puddle basin or on a crevice, and the same elsewhere', () => {
+    const m = roomsMap(), o = roomOrigin(3, 3), cx = o.x + 3, cz = o.y + 3;
+    const marks: Marks = { ...noMarks(), puddles: [{ x: cx, z: cz, r: 0.9 }], crevices: [{ pts: [[o.x + 0.5, o.y + 6.5], [o.x + 6.5, o.y + 6.5]], branch: [], width: 0.2, depth: 0.1 }] };
+    const base = make(m, null, true), s = run(mossSource(m, null, marks, { everywhere: true })!);
+    let inBasin = 0, onPit = 0, same = 0, differs = 0;
+    for (let y = 0; y < H * TILE; y++) for (let x = 0; x < W * TILE; x++) {
+      const i = y * W * TILE + x, d = Math.hypot((x + 0.5) / TILE - cx, (y + 0.5) / TILE - cz);
+      const u = (x + 0.5) * 2 - 0.5, v = (y + 0.5) * 2 - 0.5, [x0, z0, x1, z1] = piecesOf(marks.crevices[0])[0];
+      const pit = onPiece(u, v, x0, z0, x1, z1, 3.2);
+      if (d < 0.9 || pit) {
+        expect(s.grow[i] + s.allow[i]).toBe(0);
+        if (base.grow[i]) differs++;
+        if (d < 0.9) inBasin++; else onPit++;
+      } else if (d > 1.2) { if (s.grow[i] !== base.grow[i]) same = -1e9; else same++; }
+    }
+    expect(inBasin).toBeGreaterThan(0); expect(onPit).toBeGreaterThan(0);
+    expect(differs).toBeGreaterThan(0);
+    expect(same).toBeGreaterThan(0);
+  });
+
   it('is null in a map with lava', () => {
     const m = roomsMap(), t = m.tiles.slice();
     t[(roomOrigin(2, 2).y + 1) * W + roomOrigin(2, 2).x + 1] = TILE_ID.Lava;
-    expect(mossSource(new TileMap(W, H, t), null)).toBeNull();
+    expect(mossSource(new TileMap(W, H, t), null, noMarks())).toBeNull();
   });
 
   it('rims every pool with moss, in a room the area noise leaves bare too, and keeps it off the bank', () => {
@@ -83,8 +104,8 @@ describe('mossSource', () => {
     const m = roomsMap(), t = m.tiles.slice();
     t[(roomOrigin(2, 2).y + 1) * W + roomOrigin(2, 2).x + 1] = TILE_ID.Lava;
     const withLava = new TileMap(W, H, t);
-    expect(mossSource(withLava, null)).toBeNull();
-    const s = run(mossSource(withLava, null, { ignoreLava: true })!);
+    expect(mossSource(withLava, null, noMarks())).toBeNull();
+    const s = run(mossSource(withLava, null, noMarks(), { ignoreLava: true })!);
     expect(s.grow.reduce((a, v) => a + v, 0)).toBeGreaterThan(0);
     // The tiles beside the lava stay bare.
     let byLava = 0;

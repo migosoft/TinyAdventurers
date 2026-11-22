@@ -22,7 +22,7 @@ import { RunView3d, moveInput } from './runView3d';
 import type { R3dSystem } from './stats';
 import type { FrameTimer } from '../game/frameTimer';
 import { wrapYaw } from './params';
-import { GroundTooLargeError, type Assets, type View, type WorldInput } from './view';
+import { GroundTooLargeError, marksOf, type Assets, type View, type WorldInput } from './view';
 
 /** What the host's frame tells the session's input function. */
 export interface RunInputState {
@@ -105,9 +105,14 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   const overlay = new Overlay3d(el);
   const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
+  const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };
+  const world: WorldInput = {
+    map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
+    taken: { lights: info.lights.map(([id, kind, , x, y]) => ({ id, kind, x, y })), spawn },
+  };
   // The cover of every level (the woodland's grass; a dungeon's moss and the cove's grass), built once and kept for the rebuilds after a lost device.
   const job: CoverJob = coverJob(
-    coverSources(session.map, { woodland: info.woodland, cove: info.cove ?? null, spawnRow: info.spawn_y / TILE, spots: runView.bushelSpots() }),
+    coverSources(session.map, { woodland: info.woodland, cove: info.cove ?? null, spawnRow: info.spawn_y / TILE, spots: runView.bushelSpots(), marks: marksOf(world) }),
     info.woodland ? info.woodland.seed : tilesSeed(session.map),
   );
   // A ground or cover too large for the device: shown once, the run goes on without cover (nothing is lifted then).
@@ -159,11 +164,6 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   turnKeyLabels().then((k) => { if (live) run.hud.setTurnHelp(k); }, () => {});
 
   let looped = false;
-  const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };
-  const world: WorldInput = {
-    map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
-    taken: { lights: info.lights.map(([id, kind, , x, y]) => ({ id, kind, x, y })), spawn },
-  };
   // The stone paint job (#380), beside the cover job: nearest the spawn first.
   const stoneRun = makeStoneRun(world, spawn);
   return {

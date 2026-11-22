@@ -27,6 +27,8 @@ export class CoverLayer {
   private tex: DataTexture | null = null;
   /** True only while a good image with cover is bound; the layer stays off (the ground bare) otherwise. */
   private ready = false;
+  /** The result and floor the meshes were built from. */
+  private kept: { r: CoverResult; floorY?: (x: number, z: number) => number } | null = null;
   /** The texture the shared uniforms started with, bound again when `set` fails. */
   private readonly standIn: Texture;
 
@@ -38,8 +40,9 @@ export class CoverLayer {
   get meshCount(): number { return this.meshes.length; }
 
   /** Builds every chunk's meshes and uploads the image; throws GroundTooLargeError above `limit` (the layer is then empty). */
-  set(r: CoverResult, limit: number): void {
+  set(r: CoverResult, limit: number, floorY?: (x: number, z: number) => number): void {
     this.clear();
+    this.kept = { r, floorY };
     this.ready = false;
     const { w, h } = r.image;
     if (w > limit || h > limit) {
@@ -61,9 +64,21 @@ export class CoverLayer {
     this.tex = t;
     if (r.sheets <= 0) return;
     this.ready = true;
+    this.build();
+  }
+
+  /** Builds the meshes again from the kept result, for a floor that changed under the cover (new marks after a re-plan). */
+  rebuild(): void {
+    if (!this.ready || !this.kept) return;
+    this.clear();
+    this.build();
+  }
+
+  private build(): void {
+    const { r, floorY } = this.kept!, { w, h } = r.image;
     const nx = Math.ceil(Math.floor(w / 16) / CHUNK), nz = Math.ceil(Math.floor(h / 16) / CHUNK);
     for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) {
-      const c = buildCoverChunk(r, cx, cz);
+      const c = buildCoverChunk(r, cx, cz, floorY);
       if (!c) continue;
       if (c.sheet.count > 0) {
         const g = new BufferGeometry();
