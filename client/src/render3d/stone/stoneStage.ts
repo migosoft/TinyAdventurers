@@ -11,7 +11,9 @@ import { footprint, lightView, movingCands, selectLights, staticCands, TorchPair
 import { reflects, type R3dParams } from '../params';
 import { newScene, stepScene } from '../scene';
 import { seeLook } from '../seeThrough';
-import type { Assets, WorldInput } from '../view';
+import { coverJob, coverSources, type CoverJob } from '../cover/coverJob';
+import { tilesSeed } from '../cover/moss';
+import { marksOf, type Assets, type View, type WorldInput } from '../view';
 import { Water3d } from '../water/water';
 import { ROCK, stoneField } from './field';
 import { CRYSTAL_TILES, PLACES, STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
@@ -48,8 +50,17 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
   const NONE_IDS = new Set<number>();
   let t = Number(q.get('t')) > 0 ? Number(q.get('t')) : 0;
 
+  // The cover as the dev scene has it (moss in every room), built whole at the first build and kept for the rebuilds.
+  let job: CoverJob | null = null;
   return {
     world,
+    built(view: View): void {
+      if (!job) {
+        job = coverJob(coverSources(map, { woodland: null, cove: null, spawnRow: 0, spots: [], marks: marksOf(world) }, { everywhere: true }), tilesSeed(map));
+        job.step(Infinity);
+      }
+      view.setCover(job.result()!);
+    },
     frame(c: StageCtx): number {
       t += c.dt;
       cam.pitch = (c.params.pitch * Math.PI) / 180;
@@ -82,6 +93,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
           lava: null, lavaVersion: 0, darkvision: null, casters: [],
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
           crystals: { off: (i) => field.lights.get(i)?.on === false, now: t },
+          cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
         },
         c.timer,
       );
