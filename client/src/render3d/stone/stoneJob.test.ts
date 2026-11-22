@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { FACE_H, FACE_W, FLAT_A, PAGE } from './format';
+import { FACE_H, FACE_W, PAGE } from './format';
 import { ROCK, stoneField } from './field';
 import { noMarks } from './place';
 import { planSheets } from './plan';
-import { STAND_IN_ROCK, paintFace, paintGroundRows } from './paint';
+import { paintFace, paintGroundRows } from './paint';
 import { STONE_BUDGET_MS, stoneJob, type StoneJob } from './stoneJob';
 
 /** 48 by 16: three chunks in a row, a wall cell in each. */
@@ -67,17 +67,16 @@ describe('stoneJob', () => {
   });
 });
 
-describe('the stand-in painter of rock', () => {
+describe('the painter of rock', () => {
   const rock = (map: TileMap) => stoneField(map, new Uint8Array(map.w * map.h).fill(ROCK));
 
-  it('paints the rock colour, flat, rows by rows', () => {
+  it('paints the asked rows only', () => {
     const map = level();
     const out = new Uint8Array(PAGE * PAGE * 4);
     paintGroundRows(rock(map), map, noMarks(), 0, 0, 32, 64, out);
-    const at = (x: number, y: number) => out[(y * PAGE + x) * 4];
-    expect(at(10, 40)).toBe(STAND_IN_ROCK[0]);
-    expect(at(0, 32)).toBe(STAND_IN_ROCK[0]);
-    expect(out[(40 * PAGE + 10) * 4 + 3]).toBe(FLAT_A);
+    const at = (x: number, y: number) => out[(y * PAGE + x) * 4 + 3];
+    expect(at(10, 40)).not.toBe(0);
+    expect(at(0, 32)).not.toBe(0);
     expect(at(10, 10)).toBe(0); // row 10 is not in the asked rows
   });
 
@@ -85,6 +84,6 @@ describe('the stand-in painter of rock', () => {
     const map = level();
     const out = new Uint8Array(FACE_W * FACE_H * 4);
     paintFace(rock(map), map, noMarks(), { x: 5, z: 8, side: 0 }, out);
-    for (const i of [0, 10 * FACE_W + 10, FACE_W * FACE_H - 1]) expect(out[i * 4]).toBe(STAND_IN_ROCK[0]);
+    for (const i of [0, 10 * FACE_W + 10, FACE_W * FACE_H - 1]) expect(out[i * 4 + 3]).not.toBe(0);
   });
 });

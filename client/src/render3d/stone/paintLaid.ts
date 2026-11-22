@@ -19,18 +19,19 @@ type Rgb = readonly [number, number, number];
 // ---- colours. Each stone has five tones of one named base colour (index 2), dark to light; a block takes one of the middle three and its
 // grain the tones beside it.
 const TONE = [0.68, 0.84, 1, 1.16, 1.34];
-const tones = (c: Rgb): number[] => TONE.flatMap((k) => c.map((x) => Math.min(255, Math.round(x * k))));
+export const tones = (c: Rgb): number[] => TONE.flatMap((k) => c.map((x) => Math.min(255, Math.round(x * k))));
 /** The three stones of floors and walls: brown, grey, sandstone (`Block.stone`). */
 const STONES = [tones([98, 78, 68]), tones([84, 82, 88]), tones([134, 106, 74])];
 /** A wall top's capping slabs: the old top's cool `STONE`. */
-const CAP = tones([STONE[0] * 255, STONE[1] * 255, STONE[2] * 255]);
+export const CAP = tones([STONE[0] * 255, STONE[1] * 255, STONE[2] * 255]);
 /** A summoning circle's dark and pale rings. */
 const CIRCLE_DARK = tones([62, 64, 78]), CIRCLE_PALE = tones([146, 128, 100]);
 /** A mosaic's tesserae by `Block.stone` (terracotta, slate, cream) and its border. */
 const MOSAIC = [tones([140, 66, 46]), tones([58, 76, 102]), tones([176, 156, 116])], MOSAIC_EDGE = tones([70, 60, 58]);
 /** The edge stones round a pool, lava or a chasm. */
 const RIM = tones([112, 104, 98]);
-const MORTAR: Rgb = [38, 31, 31], CRACK: Rgb = [20, 16, 17], TESSERA_JOINT: Rgb = [54, 46, 42];
+export const MORTAR: Rgb = [38, 31, 31], CRACK: Rgb = [20, 16, 17];
+const TESSERA_JOINT: Rgb = [54, 46, 42];
 /** The mean of the pack's `floor_1` tile, the old dungeon floor: what a laid page's mean colour stays near, by `MEAN_TOLERANCE` per channel. */
 export const OLD_FLOOR: Rgb = [73, 59, 58];
 export const MEAN_TOLERANCE = 36;
@@ -52,7 +53,8 @@ const GRAIN_DARK = 0.05, GRAIN_LIGHT = 0.03, STREAK = 0.035;
 /** The slope of a carving's wall (frieze, rune). */
 const CARVE = 0.5;
 /** Moss in a damp patch: the share of groove px it fills and of the px beside a groove it creeps onto; on a wall both times the square of the height below the top. */
-const MOSS_GROOVE = 0.8, MOSS_CREEP = 0.3;
+const MOSS_GROOVE = 0.8;
+export const MOSS_CREEP = 0.3;
 /** The rim round a dip: the outline's mask from which the edge stones lie (the outline itself is `OUTLINE_EDGE`), and a stone's length (px). */
 const RIM_FROM = 0.2, RIM_LEN = 11;
 /** A rune's cell (px); a glyph is 5 by 6 cells. */
@@ -65,7 +67,7 @@ const RUNE: Rgb = [24, 21, 26];
 /** The frieze's carving, one block (16 px) wide, in the rows 2 to 6 of its course: a bar, a diamond, a bar. */
 const FRIEZE = ['........#.......', '..##...###...##.', '..##..#####..##.', '..##...###...##.', '........#.......'];
 /** The runes: 5 by 6 cells each, the top toward the circle's rim. */
-const RUNES = [
+export const RUNES = [
   ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..'], ['..#..', '.#.#.', '#...#', '#...#', '.#.#.', '..#..'],
   ['#####', '....#', '..##.', '..#..', '..#..', '..#..'], ['#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
   ['.###.', '#....', '.##..', '...#.', '....#', '.###.'], ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#'],
@@ -76,16 +78,16 @@ const RUNES = [
 const cut = (rows: readonly string[], x: number, y: number): boolean => rows[y]?.[x] === '#';
 
 /** The relief byte; never 0, which is no texel at all (the one slope pair that would give it leans a step less). */
-const relief = (du: number, dv: number, flag: number): number =>
+export const relief = (du: number, dv: number, flag: number): number =>
   du === 0 && dv === 0 && flag === FLAG.plain ? FLAT_A : encodeRelief(du, dv, flag) || encodeRelief(du, -0.25, flag);
 
-function put(out: Uint8Array, at: number, pal: readonly number[], tone: number, a: number): void {
+export function put(out: Uint8Array, at: number, pal: readonly number[], tone: number, a: number): void {
   const i = (tone < 0 ? 0 : tone > 4 ? 4 : tone) * 3;
   out[at] = pal[i]; out[at + 1] = pal[i + 1]; out[at + 2] = pal[i + 2]; out[at + 3] = a;
 }
 
 /** A groove px: the joint's mortar or a crack, or moss where it is damp. */
-function groove(out: Uint8Array, at: number, seed: number, u: number, v: number, c: Rgb, damp: number): void {
+export function groove(out: Uint8Array, at: number, seed: number, u: number, v: number, c: Rgb, damp: number): void {
   if (damp > 0 && hash(seed, u, v, 54) < MOSS_GROOVE * damp) c = MOSS_TONES[Math.floor(hash(seed, u, v, 55) * 3)];
   out[at] = c[0]; out[at + 1] = c[1]; out[at + 2] = c[2]; out[at + 3] = relief(0, 0, FLAG.groove);
 }
@@ -156,10 +158,13 @@ function stonePx(out: Uint8Array, at: number, seed: number, b: Block, pal: reado
 
 // ---- the damp patches: the moss cover's own source, worked a tile row at a time as the painter reaches it.
 // shortcut: the painter keeps its own moss source (the cover job makes a second one, and only that one knows the cove, where this one
-// may paint moss into joints under the grass); share the cover job's source when the cover is built on the stone (Task 14).
+// may paint moss into joints under the grass, and the cover's options, so on a dev page that passes `everywhere` or `ignoreLava` paint
+// and cover disagree); share the cover job's source when the cover is built on the stone (Task 14).
 let moss: { map: TileMap; marks: Marks; src: CoverSource | null; rows: Uint8Array } | null = null;
+/** Drops the moss source (6 bytes per map px): the paint job calls it when its last unit is done. */
+export const forgetMoss = (): void => { moss = null; };
 /** Whether moss grows at a map px (16 per tile). The source is made anew for other marks: a re-plan places new ones, and the map has changed then. */
-function dampAt(map: TileMap, marks: Marks, mx: number, mz: number): boolean {
+export function dampAt(map: TileMap, marks: Marks, mx: number, mz: number): boolean {
   if (!moss || moss.map !== map || moss.marks !== marks) moss = { map, marks, src: mossSource(map, null), rows: new Uint8Array(map.h) };
   const s = moss.src;
   if (!s || mx < 0 || mz < 0 || mx >= s.w || mz >= s.h) return false;
@@ -172,14 +177,14 @@ function dampAt(map: TileMap, marks: Marks, mx: number, mz: number): boolean {
 // (the helpers below are module functions, not closures made per px: the painter runs a quarter of a million times a page)
 const isDip = (t: number): boolean => dipOf(t) !== DIP.none;
 /** The smooth outline of pools, lava and chasms together at a ground px. */
-const dipMask = (map: TileMap, u: number, v: number): number => maskAt(map, (u + 0.5) / STONE_PX, (v + 0.5) / STONE_PX, isDip);
+export const dipMask = (map: TileMap, u: number, v: number): number => maskAt(map, (u + 0.5) / STONE_PX, (v + 0.5) / STONE_PX, isDip);
 /** A mosaic tessera's lean along one axis. */
 const lean = (seed: number, i: number, j: number, k: number): number => [-TILT_SLOPE, 0, 0, TILT_SLOPE][Math.floor(hash(seed, i, j, k) * 4)];
 /** The wall of the frieze's cut toward a neighbour px: none where that px is cut too. */
 const friezeWall = (x: number, y: number): number => (cut(FRIEZE, x, y) ? 0 : CARVE);
 /** What the ground painter keeps for one page: the dip mesh's cells of the page and one cell round it, and the floor pieces. */
 export interface GroundCtx { f: StoneField; map: TileMap; marks: Marks; x0: number; z0: number; dip: Uint8Array }
-const SPAN = CHUNK + 2;
+export const SPAN = CHUNK + 2;
 /** `keyAt`'s answers for the page being painted and the 2 px round it (0: not asked yet): a px beside a piece or a dip asks for six neighbours. */
 const KEYS_W = CHUNK * STONE_PX + 4, keys = new Int32Array(KEYS_W * KEYS_W);
 export function groundCtx(f: StoneField, map: TileMap, marks: Marks, cx: number, cz: number): GroundCtx {
@@ -193,7 +198,7 @@ export function groundCtx(f: StoneField, map: TileMap, marks: Marks, cx: number,
  * Which stone a ground px belongs to: its block's id, -1 for rock, or below that an edge stone of a dip's rim. The rim is the band just
  * outside the dip's rounded outline; its stones are cut across the outline every `RIM_LEN` px along the axis the outline runs along there.
  */
-function keyAt(c: GroundCtx, u: number, v: number): number {
+export function keyAt(c: GroundCtx, u: number, v: number): number {
   const i = (v - (c.z0 + 1) * STONE_PX + 2) * KEYS_W + u - (c.x0 + 1) * STONE_PX + 2;
   return keys[i] || (keys[i] = keyNow(c, u, v));
 }
@@ -282,16 +287,19 @@ export function faceDamp(map: TileMap, marks: Marks, face: Face): boolean[] {
   return out;
 }
 
+/** The seed of what is scattered over a wall's plane (grain, moss, a block's tone, rock facets): parallel walls differ. */
+export const planeSeed = (seed: number, face: Face): number => seed ^ Math.imul(face.side * 1024 + (face.side < 2 ? face.z : face.x) + 1, 0x9e3779b1);
+
 /** Paints the px (u, v) of a wall face (v down from the wall's top); `dampCol` from `faceDamp`. False where that wall is rock. */
 export function laidFacePx(f: StoneField, map: TileMap, face: Face, dampCol: readonly boolean[], u: number, v: number, out: Uint8Array, at: number): boolean {
   const pu = (face.side < 2 ? face.x : face.z) * STONE_PX + u, b = wallBlockAt(f, map, face, pu, v);
   if (!b) return false;
-  const dl = pu - b.u0, dt = v - b.v0, damp = dampCol[u] ? (v / FACE_H) ** 2 : 0;
-  if (dl === 0 || dt === 0) groove(out, at, f.seed, pu, v + face.side * 64, MORTAR, damp);
+  const dl = pu - b.u0, dt = v - b.v0, damp = dampCol[u] ? (v / FACE_H) ** 2 : 0, seed = planeSeed(f.seed, face);
+  if (dl === 0 || dt === 0) groove(out, at, seed, pu, v, MORTAR, damp);
   else if (b.frieze && cut(FRIEZE, dl, dt - 2)) {
     // the carving: its walls fall into the cut from every side that is not cut, its ground is two tones darker
     const y = dt - 2;
     put(out, at, STONES[b.stone], 1, relief(friezeWall(dl + 1, y) - friezeWall(dl - 1, y), friezeWall(dl, y + 1) - friezeWall(dl, y - 1), FLAG.plain));
-  } else stonePx(out, at, f.seed, b, STONES[b.stone], pu, v, dl - 1, dt - 1, b.u1 - 1 - pu, b.v1 - 1 - v, b.frieze ? 1 : b.level + 1, b.frieze, damp);
+  } else stonePx(out, at, seed, b, STONES[b.stone], pu, v, dl - 1, dt - 1, b.u1 - 1 - pu, b.v1 - 1 - v, b.frieze ? 1 : b.level + 1, b.frieze, damp);
   return true;
 }

@@ -4,7 +4,7 @@ import type { TileMap } from '../../sim/map';
 import { PAGE, FACE_H, FACE_W } from './format';
 import { CHUNK, chunkGrid } from './grid';
 import { STONE_PX, type StoneField } from './field';
-import { paintFace, paintGroundRows } from './paint';
+import { forgetMoss, paintFace, paintGroundRows } from './paint';
 import type { Marks } from './place';
 import type { FaceSlot, SheetPlan } from './plan';
 
@@ -75,6 +75,7 @@ export function stoneJob(f: StoneField, map: TileMap, plan: SheetPlan, marks: Ma
       if (next >= units.length) {
         finished = true;
         units.length = 0; // the closures hold the painter's inputs
+        forgetMoss();
       }
       return res;
     },
