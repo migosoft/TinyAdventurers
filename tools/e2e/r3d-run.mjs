@@ -160,8 +160,10 @@ try {
     const read = () => page.evaluate(() => { const m = /stone\s+(\d+) of (\d+)/.exec(document.body.innerText); return m ? [Number(m[1]), Number(m[2])] : null; });
     const until = Date.now() + Number(process.env.WAIT_MS || 120000);
     let n = await read();
-    while ((!n || n[0] < n[1]) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
-    if (!n || n[0] < n[1]) errors.push(`the stone was not painted in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 stone line'}`);
+    // On the real GPU all of it; in software (a unit or two a frame at 15-28 fps) the wait is only pacing: the first 40 units.
+    const need = (m) => (gpuOn ? m[1] : Math.min(40, m[1])); // first guess: 40
+    while ((!n || n[0] < need(n)) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
+    if (!n || n[0] < need(n)) errors.push(`the stone was not painted in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 stone line'}`);
     const t1 = await page.evaluate(() => performance.now());
     const paint = await page.evaluate(([a, b]) => Math.max(0, ...window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b)), [t0, t1]);
     console.log(`stone painted ${n ? `${n[0]} of ${n[1]}` : 'unknown'}: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, longest frame ${paint.toFixed(1)} ms`);
