@@ -17,6 +17,10 @@ export interface CoverChunk {
 }
 
 const QUAD: readonly (readonly [number, number])[] = [[0, 0], [1, 0], [1, 1], [0, 0], [1, 1], [0, 1]];
+/** A sheet quad on a floor: split on the diagonal the rock floor's triangles use (`tri` in stone/shape.ts), so the sheet meets a leaning cell's floor in the middle. */
+const FLOOR_QUAD: readonly (readonly [number, number])[] = [[0, 0], [1, 0], [0, 1], [1, 1], [0, 1], [1, 0]];
+/** A corner is asked just inside its cell: `floorHeight` floors the point, and a whole number is the next cell's (a wall's or laid ground's). */
+const INSIDE = 1e-9;
 const PX = 16;
 const STRETCH = 1 / Math.cos((PITCH_MAX * Math.PI) / 180);
 /** The largest bushel sway of any cover kind, tiles (the bounds do not depend on which kind a bushel stands on). */
@@ -35,9 +39,9 @@ export function buildCoverChunk(r: CoverResult, cx: number, cz: number, floorY?:
     if (!top) continue;
     cells++;
     // The floor under the cell's four corners, taken once for all its sheets.
-    const ys = [0, 1, 2, 3].map((k) => floorY?.(x + (k & 1), z + (k >> 1)) ?? 0);
+    const ys = [0, 1, 2, 3].map((k) => floorY?.(x + ((k & 1) && 1 - INSIDE), z + ((k >> 1) && 1 - INSIDE)) ?? 0);
     low = Math.min(low, ...ys);
-    for (let n = 1; n <= Math.min(top, r.sheets); n++) for (const [u, v] of QUAD) { pos.push(x + u, ys[v * 2 + u], z + v); layer.push(n); }
+    for (let n = 1; n <= Math.min(top, r.sheets); n++) for (const [u, v] of floorY ? FLOOR_QUAD : QUAD) { pos.push(x + u, ys[v * 2 + u], z + v); layer.push(n); }
   }
   const mine = r.bushels.filter((b) => Math.floor(b.x / CHUNK) === cx && Math.floor(b.z / CHUNK) === cz);
   if (!cells && !mine.length) return null;

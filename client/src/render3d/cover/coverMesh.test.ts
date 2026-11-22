@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { TILE_ID } from '../../generated/defs';
+import { TileMap } from '../../sim/map';
+import { LAID, ROCK, stoneField } from '../stone/field';
+import { noMarks } from '../stone/place';
+import { floorHeight } from '../stone/shape';
 import { CARD_BIAS } from '../materials';
 import { PITCH_MAX } from '../params';
 import { SWAY_WAVE_MAX } from '../wind';
@@ -49,10 +54,47 @@ describe('buildCoverChunk', () => {
     for (let i = 0; i < c.sheet.count; i++) {
       const [x, y, z] = [c.sheet.position[i * 3], c.sheet.position[i * 3 + 1], c.sheet.position[i * 3 + 2]];
       expect(y).toBeCloseTo(floorY(x, z), 5);
-      expect(c.sheet.position[i * 3]).toBe(flat.sheet.position[i * 3]); // only y moved
     }
+    expect(c.sheet.count).toBe(flat.sheet.count);
     expect(c.bushel.foot[1]).toBeCloseTo(floorY(3.4, 2.6), 5);
     expect(c.min[1]).toBeLessThanOrEqual(c.bushel.foot[1]);
+  });
+
+  describe('on the real floor', () => {
+    // Rock everywhere, a wall line along x 10 and along z 10, and one laid cell at (4, 3).
+    const map = new TileMap(W, H, new Uint8Array(W * H).fill(TILE_ID.Floor));
+    for (let i = 0; i < W; i++) map.tiles[10 * W + i] = TILE_ID.Wall;
+    for (let i = 0; i < H; i++) map.tiles[i * W + 10] = TILE_ID.Wall;
+    const kinds = new Uint8Array(W * H).fill(ROCK);
+    kinds[1 * W + 1] = LAID;
+    const f = stoneField(map, kinds, 5), marks = noMarks();
+    const floorY = (x: number, z: number): number => floorHeight(f, map, marks, x, z);
+    const cell = (cx: number, cz: number) => buildCoverChunk(result([[cx * 16 + 4, cz * 16 + 4, 2]]), 0, 0, floorY)!;
+
+    it('takes each corner inside its own cell: beside a wall or laid ground the neighbour does not decide', () => {
+      for (let cz = 1; cz < 10; cz++) for (let cx = 1; cx < 10; cx++) {
+        const c = cell(cx, cz);
+        for (let i = 0; i < c.sheet.count; i++) {
+          const x = c.sheet.position[i * 3], z = c.sheet.position[i * 3 + 2];
+          expect(c.sheet.position[i * 3 + 1], `${cx},${cz} vertex ${i}`).toBeCloseTo(floorY(x > cx ? x - 1e-6 : x, z > cz ? z - 1e-6 : z), 4);
+        }
+      }
+    });
+
+    it('splits a leaning cell on the rock floor\'s diagonal: the sheet meets the floor at each triangle\'s centroid', () => {
+      let leaning = 0;
+      for (let cz = 2; cz < 9; cz++) for (let cx = 2; cx < 9; cx++) {
+        if (cx < 4 && cz < 4) continue; // near the laid cell the floor is laid blocks, which a sheet bridges (the brief lifts corners only)
+        const c = cell(cx, cz), p = c.sheet.position;
+        for (let t = 0; t < c.sheet.count; t += 3) {
+          const mx = (p[t * 3] + p[t * 3 + 3] + p[t * 3 + 6]) / 3, mz = (p[t * 3 + 2] + p[t * 3 + 5] + p[t * 3 + 8]) / 3;
+          expect((p[t * 3 + 1] + p[t * 3 + 4] + p[t * 3 + 7]) / 3, `${cx},${cz}`).toBeCloseTo(floorY(mx, mz), 6);
+        }
+        const [a, b, d, e] = [floorY(cx, cz), floorY(cx + 1 - 1e-9, cz), floorY(cx, cz + 1 - 1e-9), floorY(cx + 1 - 1e-9, cz + 1 - 1e-9)];
+        if (Math.abs(a + e - b - d) > 1e-3) leaning++;
+      }
+      expect(leaning).toBeGreaterThan(0);
+    });
   });
 
   it('only builds quads over cells inside the map', () => {
