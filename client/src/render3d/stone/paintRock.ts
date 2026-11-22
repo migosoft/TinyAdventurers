@@ -120,7 +120,7 @@ export function rockLines(f: StoneField, map: TileMap, marks: Marks): RockLines 
       const d = Math.hypot(u + 0.5 - cu, v + 0.5 - cv);
       if (d >= r + DAMP_RING || u < 0 || v < 0 || u >= W || v >= H) continue;
       const m = maskOf(u, v), i = (v & 31) * STONE_PX + (u & 31);
-      m[i] = Math.max(m[i], d < r ? WET * 2 : WET); // (placement keeps cracks out of puddles, so no line is lost here)
+      m[i] = Math.max(m[i], d < r ? WET * 2 : WET); // a line that crosses the puddle is dropped here: never a crack over a puddle
     }
   }
   // veins wander by straight pieces; a patch's second vein runs beside the first
@@ -142,6 +142,8 @@ export function rockLines(f: StoneField, map: TileMap, marks: Marks): RockLines 
 }
 
 let atLines: RockLines | null = null, atTile = -1, atMask: Uint8Array | undefined;
+/** Lets go of the level asked last (its masks and map): the paint job calls it when its last unit is done. */
+export const forgetLines = (): void => { atLines = null; atMask = undefined; };
 /** What is drawn on the ground px (u, v): a line kind in the low bits, the wetness above. */
 function lineAt(l: RockLines, u: number, v: number): number {
   const x = u >> 5, z = v >> 5;
@@ -178,8 +180,9 @@ function rockPx(out: Uint8Array, at: number, seed: number, u: number, v: number,
 export function rockGroundPx(c: GroundCtx, l: RockLines, u: number, v: number, out: Uint8Array, at: number): void {
   const { f, map, marks } = c, x = u >> 5, z = v >> 5, top = heightAt(map, x, z) > 0, mark = lineAt(l, u, v);
   const damp = !top && mark < WET * 2 && dampAt(map, marks, u >> 1, v >> 1) ? 1 : 0;
-  // a laid block to the left or above has its joint on this px: the rock comes up to the block's own edge everywhere else
-  if (keyAt(c, u - 1, v) >= 0 || keyAt(c, u, v - 1) >= 0) return groove(out, at, f.seed, u, v, MORTAR, damp);
+  // a laid block to the left or above has its joint on this px (not in a puddle's basin, which holds no groove): the rock comes up
+  // to the block's own edge everywhere else
+  if (mark < WET * 2 && (keyAt(c, u - 1, v) >= 0 || keyAt(c, u, v - 1) >= 0)) return groove(out, at, f.seed, u, v, MORTAR, damp);
   facetAt(f.seed, u, v);
   let du = 0, dv = 0;
   if (c.dip[(z - c.z0) * SPAN + x - c.x0]) {
@@ -193,13 +196,14 @@ export function rockGroundPx(c: GroundCtx, l: RockLines, u: number, v: number, o
 
 /**
  * Paints the px (u, v) of a rock wall's face (v down from the wall's top); `dampCol` from `faceDamp`. The lines of the ground run on up
- * the face as if it were the ground folded up along the wall's foot, so a crevice that meets a wall is black on both.
+ * the face's lower tile as if it were the ground of the wall's cell folded up along the wall's foot, so a crevice that meets a wall is black on both.
  */
 export function rockFacePx(f: StoneField, map: TileMap, l: RockLines, face: Face, dampCol: readonly boolean[], u: number, v: number, out: Uint8Array, at: number): void {
   const pu = (face.side < 2 ? face.x : face.z) * STONE_PX + u, seed = planeSeed(f.seed, face), damp = dampCol[u] ? (v / FACE_H) ** 2 : 0;
   if (wallBlockAt(f, map, face, pu - 1, v) || (v > 0 && wallBlockAt(f, map, face, pu, v - 1))) return groove(out, at, seed, pu, v, MORTAR, damp);
   const up = FACE_H - 1 - v, s = face.side;
-  const mark = s === 0 ? lineAt(l, pu, (face.z + 1) * STONE_PX - 1 - up) : s === 1 ? lineAt(l, pu, face.z * STONE_PX + up) : s === 2 ? lineAt(l, (face.x + 1) * STONE_PX - 1 - up, pu) : lineAt(l, face.x * STONE_PX + up, pu);
+  // (only within the wall's own cell: beyond it lies whatever is behind the wall, another room's floor perhaps)
+  const mark = up >= STONE_PX ? 0 : s === 0 ? lineAt(l, pu, (face.z + 1) * STONE_PX - 1 - up) : s === 1 ? lineAt(l, pu, face.z * STONE_PX + up) : s === 2 ? lineAt(l, (face.x + 1) * STONE_PX - 1 - up, pu) : lineAt(l, face.x * STONE_PX + up, pu);
   facetAt(seed, pu / (WALL_FACET * STRATA), v / WALL_FACET);
   fEdge *= WALL_FACET;
   rockPx(out, at, seed, pu, v, ROCK, WALL_LEAN, mark & LINE, damp, 0, 0);

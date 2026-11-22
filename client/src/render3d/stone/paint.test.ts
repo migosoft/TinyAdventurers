@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { CIRCLE_STONES, RUNE_RING, floorBlockAt } from './blocks';
+import { CIRCLE_STONES, RUNE_RING, floorBlockAt, wallBlockAt } from './blocks';
 import { ROCK, stoneField } from './field';
 import { FACE_H, FACE_W, FLAG, FLAT_A, PAGE, decodeRelief } from './format';
 import { paintFace, paintGroundRows } from './paint';
@@ -174,6 +174,32 @@ describe('the painter of natural rock', () => {
       expect(decodeRelief(face[foot + 3]).flag).toBe(FLAG.pit);
       expect(face[foot]).toBe(0);
       expect(decodeRelief(face[((FACE_H - 1) * FACE_W + 4) * 4 + 3]).flag).not.toBe(FLAG.pit);
+    }
+    // a crevice on the floor behind the one-cell wall is not this face's: the fold ends with the wall's own cell
+    const behind = noMarks();
+    behind.crevices.push({ pts: [[7, 7.5], [10, 7.5]], branch: [], width: 0.1, depth: 0.3 });
+    const face = new Uint8Array(FACE_W * FACE_H * 4);
+    paintFace(f, map, behind, { x: 8, z: 8, side: 0 }, face);
+    for (let i = 3; i < face.length; i += 4) expect(decodeRelief(face[i]).flag).toBe(FLAG.plain);
+  });
+
+  it('paints a face the same twice, and a wall\'s pattern runs on from face to face, in rock and in laid stone', () => {
+    const map = rockMap();
+    map.set(8, 8, TILE_ID.Wall); map.set(9, 8, TILE_ID.Wall);
+    for (const kinds of [allRock(map), null]) {
+      const f = stoneField(map, kinds, SEED), marks = noMarks();
+      const paint = (x: number): Uint8Array => { const o = new Uint8Array(FACE_W * FACE_H * 4); paintFace(f, map, marks, { x, z: 8, side: 0 }, o); return o; };
+      const left = paint(8), right = paint(9);
+      expect(paint(8)).toEqual(left);
+      let same = 0, leaning = 0;
+      for (let v = 0; v < FACE_H; v++) {
+        const a = left[(v * FACE_W + FACE_W - 1) * 4 + 3], b = right[v * FACE_W * 4 + 3];
+        if (kinds) { if (a === b) same++; if (a !== FLAT_A) leaning++; continue; } // rock: one facet, one slope either side of the seam
+        // laid: a joint stands on the seam exactly where the block query changes there (and on a course's top row)
+        const here = wallBlockAt(f, map, { x: 9, z: 8, side: 0 }, 9 * 32, v)!, there = wallBlockAt(f, map, { x: 9, z: 8, side: 0 }, 9 * 32 - 1, v)!;
+        expect(decodeRelief(b).flag === FLAG.groove).toBe(here.id !== there.id || v === here.v0);
+      }
+      if (kinds) { expect(same).toBeGreaterThan(FACE_H * 0.75); expect(leaning).toBeGreaterThan(FACE_H / 2); }
     }
   });
 
