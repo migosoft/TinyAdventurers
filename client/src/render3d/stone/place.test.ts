@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, TileMap } from '../../sim/map';
 import { torchWall } from '../heights';
-import { hash, kindAt, LAID, ROCK, stoneField, type StoneField } from './field';
+import { floorBlockAt } from './blocks';
+import { hash, kindAt, LAID, ROCK, STONE_PX, stoneField, type StoneField } from './field';
 import { noMarks, placeMarks, roomsOf, type Crack, type Marks, type Taken } from './place';
 import { stoneMap, zoneKinds } from './stoneMap';
 
@@ -126,6 +127,22 @@ describe('placement', () => {
       for (const ck of all[i].rockCracks) expect(room(ck.pts[0][0], ck.pts[0][1])).toBe(ROCK);
     });
   });
+
+  it('no_puddle_lies_over_laid_blocks_near_a_door_in_rock', () => {
+    const w = 20, h = 14, laid: string[] = [];
+    for (let seed = 1; seed <= 300; seed++) {
+      const map = new TileMap(w, h, new Uint8Array(w * h));
+      for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) map.set(x, z, TILE_ID.Floor);
+      map.set(w - 1, 6, TILE_ID.DoorOpen);
+      const f = stoneField(map, new Uint8Array(w * h).fill(ROCK), seed);
+      const taken: Taken = { lights: [{ id: 1, kind: LIGHT_KIND.Crystal, x: 1, y: 1 }], spawn: { x: 2.5, z: 2.5 } };
+      const marks = placeMarks(map, f, taken);
+      for (const p of marks.puddles) for (let dz = -p.r; dz <= p.r; dz += 0.1) for (let dx = -p.r; dx <= p.r; dx += 0.1) {
+        if (Math.hypot(dx, dz) <= p.r && floorBlockAt(f, map, marks, Math.floor((p.x + dx) * STONE_PX), Math.floor((p.z + dz) * STONE_PX))) laid.push(`${seed}@${(p.x + dx).toFixed(1)},${(p.z + dz).toFixed(1)}`);
+      }
+    }
+    expect(laid).toEqual([]);
+  }, 20000);
 
   it('branches_start_on_their_crack', () => {
     let n = 0;

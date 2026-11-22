@@ -3,7 +3,7 @@
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, type TileMap } from '../../sim/map';
 import { torchWall } from '../heights';
-import { hash, kindAt, LAID, ROCK, STONE_PX, type StoneField } from './field';
+import { hash, kindAt, LAID, ROCK, rockAmount, STONE_PX, type StoneField } from './field';
 
 export interface Room { cells: number[]; kind: 0 | 1; x0: number; z0: number; x1: number; z1: number }
 export interface Puddle { x: number; z: number; r: number }
@@ -138,6 +138,12 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
       const r = PUDDLE_R[0] + rnd(cx, cz, 2) * (PUDDLE_R[1] - PUDDLE_R[0]);
       const x = cx + 0.2 + rnd(cx, cz, 3) * 0.6, z = cz + 0.2 + rnd(cx, cz, 4) * 0.6;
       if (!clear(x, z, r + 0.15, ROCK)) continue;
+      // near a door the blocks turn laid (rockAmount < 1); a slab is up to about a tile across
+      let allRock = true;
+      for (let qz = Math.floor(z - r - 1); qz <= Math.floor(z + r + 1); qz++) for (let qx = Math.floor(x - r - 1); qx <= Math.floor(x + r + 1); qx++) {
+        if (rockAmount(f, map, qx + 0.5, qz + 0.5) < 1) allRock = false;
+      }
+      if (!allRock) continue;
       marks.puddles.push({ x, z, r }); used.push({ x, z, r });
       break;
     }
