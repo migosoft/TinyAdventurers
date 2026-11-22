@@ -284,7 +284,10 @@ if (!only || only.test('lose')) {
   // A Shade in view: its smoke is drawn again by the new view.
   for (const [name, key, place] of [['lose-ghost', 'ghost', 1], ['lose-shade', 'shade', 4]]) {
     await loseCheck(name, `${base}?r3d=gallery&at=spectre:${place}&zoom=8&slow=1000&t=1.7`, [key],
-      () => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }), drawsEqual);
+      () => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }), (before, after) => {
+        console.log(`${name}: draws ${before.draws} before, ${after.draws} after; ${after.drawn} figures drawn after the loss`);
+        return drawsEqual(before, after);
+      });
   }
 }
 
