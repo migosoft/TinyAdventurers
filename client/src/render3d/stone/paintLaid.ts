@@ -287,7 +287,7 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
   } else {
     const pal = b.stone === 1 ? CIRCLE_DARK : CIRCLE_PALE;
     const r = b.piece!.ring === RUNE_RING && kl + kt + kr + kb === 4 * FAR ? runeAt(seed, marks, p, b, u, v) : null;
-    // a rune's walls are the ring's own stone, a tone down, leaning into the cut: the lamp lights the side that faces it; its ground is dirt
+    // a rune's walls are the ring's own stone leaning into the cut: the lamp lights the side that faces it; its ground is dirt
     if (r && (r[0] || r[1])) put(out, at, pal, RUNE_TONE, relief(r[0], r[1], FLAG.plain));
     else if (r) { out[at] = RUNE[0]; out[at + 1] = RUNE[1]; out[at + 2] = RUNE[2]; out[at + 3] = FLAT_A; }
     else stonePx(out, at, seed, b, pal, u, v, kl, kt, kr, kb, 0, true, damp);
