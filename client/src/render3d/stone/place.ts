@@ -3,7 +3,7 @@
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, type TileMap } from '../../sim/map';
 import { torchWall } from '../heights';
-import { hash, kindAt, LAID, ROCK, type StoneField } from './field';
+import { hash, kindAt, LAID, ROCK, STONE_PX, type StoneField } from './field';
 
 export interface Room { cells: number[]; kind: 0 | 1; x0: number; z0: number; x1: number; z1: number }
 export interface Puddle { x: number; z: number; r: number }
@@ -13,6 +13,15 @@ export interface FloorPiece { kind: 'circle' | 'mosaic'; x: number; z: number; r
 export interface Grate { x: number; z: number }
 export interface Shard { x: number; z: number; nx: number; nz: number; big: boolean; lightId?: number }
 export interface Marks { rooms: Room[]; puddles: Puddle[]; rockCracks: Crack[]; crevices: Crevice[]; pieces: FloorPiece[]; grates: Grate[]; shards: Shard[] }
+
+/** A crack's or a crevice's straight pieces, [x0, z0, x1, z1] each: its line, then its branches. */
+export const piecesOf = (c: Crack): number[][] => [...c.pts.slice(1).map((q, i) => [...c.pts[i], ...q]), ...c.branch];
+/** Whether the centre of the ground px (u, v) lies within `half` px of the piece from (x0, z0) to (x1, z1) (tiles): the px a crevice is made of, for the painter and the mesh alike. */
+export function onPiece(u: number, v: number, x0: number, z0: number, x1: number, z1: number, half: number): boolean {
+  const ax = x0 * STONE_PX, az = z0 * STONE_PX, dx = (x1 - x0) * STONE_PX, dz = (z1 - z0) * STONE_PX;
+  const t = Math.min(1, Math.max(0, ((u + 0.5 - ax) * dx + (v + 0.5 - az) * dz) / (dx * dx + dz * dz || 1)));
+  return Math.hypot(u + 0.5 - ax - dx * t, v + 0.5 - az - dz * t) < half;
+}
 
 /** No marks at all: what every caller passes until the placement exists. */
 export function noMarks(): Marks {

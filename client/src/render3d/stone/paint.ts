@@ -5,7 +5,7 @@ import { FACE_H, FACE_W, PAGE } from './format';
 import { CHUNK } from './grid';
 import type { StoneField } from './field';
 import { faceDamp, forgetMoss, groundCtx, laidFacePx, laidGroundPx } from './paintLaid';
-import { forgetLines, rockFacePx, rockGroundPx, rockLines } from './paintRock';
+import { forgetLines, pitAt, pitPx, rockFacePx, rockGroundPx, rockLines } from './paintRock';
 import type { Face } from './plan';
 import type { Marks } from './place';
 
@@ -21,6 +21,7 @@ export function paintGroundRows(f: StoneField, map: TileMap, marks: Marks, cx: n
   for (let py = row0; py < row1; py++) for (let px = 0; px < PAGE; px++) {
     const at = (py * PAGE + px) * 4;
     if (!laidGroundPx(c, u0 + px, v0 + py, out, at)) rockGroundPx(c, l, u0 + px, v0 + py, out, at);
+    else if (pitAt(l, u0 + px, v0 + py)) pitPx(out, at); // a crevice through laid stone: the mesh cuts its groove along these px (`laidMesh.ts`)
   }
 }
 

@@ -9,7 +9,7 @@ import { wallBlockAt } from './blocks';
 import { STONE_PX, hash, type StoneField } from './field';
 import { FACE_H, FLAG } from './format';
 import { CAP, CRACK, MORTAR, MOSS_CREEP, SPAN, dampAt, dipMask, groove, keyAt, planeSeed, put, relief, tones, type GroundCtx } from './paintLaid';
-import type { Marks } from './place';
+import { onPiece, type Marks } from './place';
 import type { Face } from './plan';
 import { stoneHeight } from './shape';
 
@@ -98,15 +98,14 @@ export function rockLines(f: StoneField, map: TileMap, marks: Marks): RockLines 
   };
   /** A straight piece between two points in tiles: one px wide, or every px within `half` px of it. */
   const piece = (x0: number, z0: number, x1: number, z1: number, kind: number, half = 0): void => {
-    const ax = x0 * STONE_PX, az = z0 * STONE_PX, dx = (x1 - x0) * STONE_PX, dz = (z1 - z0) * STONE_PX, len2 = dx * dx + dz * dz || 1;
+    const ax = x0 * STONE_PX, az = z0 * STONE_PX, dx = (x1 - x0) * STONE_PX, dz = (z1 - z0) * STONE_PX;
     if (!half) {
       const n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dz))) || 1;
       for (let i = 0; i <= n; i++) set(Math.floor(ax + (dx * i) / n), Math.floor(az + (dz * i) / n), kind);
       return;
     }
     for (let v = Math.floor(Math.min(az, az + dz) - half); v <= Math.max(az, az + dz) + half; v++) for (let u = Math.floor(Math.min(ax, ax + dx) - half); u <= Math.max(ax, ax + dx) + half; u++) {
-      const t = Math.min(1, Math.max(0, ((u + 0.5 - ax) * dx + (v + 0.5 - az) * dz) / len2));
-      if (Math.hypot(u + 0.5 - ax - dx * t, v + 0.5 - az - dz * t) < half) set(u, v, kind);
+      if (onPiece(u, v, x0, z0, x1, z1, half)) set(u, v, kind);
     }
   };
   const crack = (c: { pts: [number, number][]; branch: number[][] }, kind: number, half = 0): void => {
@@ -154,13 +153,20 @@ function lineAt(l: RockLines, u: number, v: number): number {
   return atMask ? atMask[(v & 31) * STONE_PX + (u & 31)] : 0;
 }
 
+/** Whether the ground px (u, v) is a crevice's: black on rock and on laid stone alike. */
+export const pitAt = (l: RockLines, u: number, v: number): boolean => (lineAt(l, u, v) & LINE) === PIT_PX;
+/** A crevice's px: black, and flagged so that it stays black whichever way its surface faces. */
+export function pitPx(out: Uint8Array, at: number): void {
+  out[at] = out[at + 1] = out[at + 2] = 0; out[at + 3] = relief(0, 0, FLAG.pit);
+}
+
 /**
  * One rock px, after `facetAt`: a crevice's black, a crack, moss, a vein or the facet's own stone. `mark` is `lineAt`'s answer, `du` and
  * `dv` a slope added to the facet's own, `lean` the facet's slope table.
  */
 function rockPx(out: Uint8Array, at: number, seed: number, u: number, v: number, pal: readonly number[], lean: readonly number[], mark: number, damp: number, du: number, dv: number): void {
   const line = mark & LINE;
-  if (line === PIT_PX) { out[at] = out[at + 1] = out[at + 2] = 0; out[at + 3] = relief(0, 0, FLAG.pit); return; }
+  if (line === PIT_PX) return pitPx(out, at);
   if (line === CRACK_PX) return groove(out, at, seed, u, v, CRACK, damp);
   const iu = Math.floor(fU * LEANS), iv = Math.floor(fV * LEANS), edge = fEdge < EDGE;
   const a = du || dv ? relief(du + lean[iu], dv + lean[iv], FLAG.plain) : (lean === GROUND_LEAN ? GROUND_A : WALL_A)[iu * LEANS + iv];

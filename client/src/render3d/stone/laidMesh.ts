@@ -1,6 +1,6 @@
 // The shape of laid stone (#380 part 4): every block of floor and wall masonry is its own piece of mesh, at its level with its tilt, and
 // has a skirt on every side where its neighbour lies lower. A floor's blocks are cut at the chunk's borders (and at the cells of walls,
-// dips, floor pieces and grates) and a wall's at the face's edges, so a chunk owns its triangles; whatever two pieces share an edge have
+// dips, floor pieces, grates and crevices) and a wall's at the face's edges, so a chunk owns its triangles; whatever two pieces share an edge have
 // the same vertices on it, so nothing gapes. Pure: no three.
 //
 // A piece lives in the px space of its plane (ground: world px; wall: world px along the wall, px down from its top) with a height over
@@ -12,7 +12,7 @@ import { COURSES, LEVEL_STEP, floorBlockAt, slabOf, wallBlockAt, type Block } fr
 import { FACE_H, FACE_W } from './format';
 import { CHUNK, KIND, SIDE_STEP } from './grid';
 import { STONE_PX, rockWall, type StoneField } from './field';
-import type { Marks } from './place';
+import { onPiece, piecesOf, type Marks } from './place';
 import type { Face, SheetPlan } from './plan';
 
 export type Vec3 = [number, number, number];
@@ -36,8 +36,8 @@ const SKIRT_PAST_JOINT = 1.5, SKIRT_IN = 0.5;
 /** A wall's skirt reads light and sight this far in front of the wall (tiles): its own normal does not point out of it. */
 const SKIRT_PUSH = 0.03;
 
-/** The plane a piece lies in: its height at (uh, vh) and its fall per px. `solid`: no piece, the uncut stone beside one. */
-interface Plane { h0: number; tu: number; tv: number; uh: number; vh: number; solid: boolean }
+/** The plane a piece lies in: its height at (uh, vh) and its fall per px. `solid`: no piece, the uncut stone beside one. `pit`: a crevice's bottom. */
+interface Plane { h0: number; tu: number; tv: number; uh: number; vh: number; solid: boolean; pit?: true }
 /** A piece of the mesh: a rectangle of px, `u1` and `v1` exclusive. */
 interface Surf { u0: number; v0: number; u1: number; v1: number; p: Plane }
 const flat = (h0: number, solid = false): Plane => ({ h0, tu: 0, tv: 0, uh: 0, vh: 0, solid });
@@ -105,9 +105,10 @@ function shape(s: Surf, sp: Space, out: Out): void {
       const hang = (mine: boolean): void => {
         const k = mine ? 1 : -1;
         if (sp.hidden(du * k, dv * k)) return;
-        const normal = sp.dir(du * k, dv * k, 0);
-        const c0 = column(u0, v0, mine ? m0 : n0, mine ? n0 : m0, u0 - du * inset, v0 - dv * inset, normal);
-        const c1 = column(u1, v1, mine ? m1 : n1, mine ? n1 : m1, u1 - du * inset, v1 - dv * inset, normal);
+        // a crevice's side reads the groove's own px, which the painter made black: the groove is black whichever way its sides face
+        const normal = sp.dir(du * k, dv * k, 0), ins = n.p.pit ? -SKIRT_IN : inset;
+        const c0 = column(u0, v0, mine ? m0 : n0, mine ? n0 : m0, u0 - du * ins, v0 - dv * ins, normal);
+        const c1 = column(u1, v1, mine ? m1 : n1, mine ? n1 : m1, u1 - du * ins, v1 - dv * ins, normal);
         for (let i = 0; i + 1 < c1.length; i++) out.tri(c0[0], c1[i], c1[i + 1]);
         for (let i = 0; i + 1 < c0.length; i++) out.tri(c1[c1.length - 1], c0[i], c0[i + 1]);
       };
@@ -154,11 +155,16 @@ export interface Laid {
   x0: number; z0: number; layer: number;
   cells: Map<number, Cell | null>; faces: Map<number, FaceShape | null>; planes: Map<number, Plane>;
   open: Map<number, boolean>; wide: Map<number, Surf | null>;
+  /** The crevices' straight pieces (tiles), half their width (px) and the plane of their groove's bottom. */
+  grooves: { at: number[]; half: number; p: Plane }[];
 }
 export function laid(map: TileMap, f: StoneField, plan: SheetPlan, marks: Marks, x0: number, z0: number, layer: number, skip?: (x: number, z: number) => boolean): Laid {
-  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), open: new Map(), wide: new Map() };
+  const grooves = marks.crevices.flatMap((cr) => { const p: Plane = { ...flat(-cr.depth), pit: true }; return piecesOf(cr).map((at) => ({ at, half: (cr.width * STONE_PX) / 2, p })); });
+  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), open: new Map(), wide: new Map(), grooves };
 }
 const inMap = (c: Laid, x: number, z: number): boolean => x >= 0 && z >= 0 && x < c.map.w && z < c.map.h;
+/** The groove's bottom over a ground px: the px the painter makes a crevice's black (`onPiece`); undefined: none. */
+const grooveAt = (c: Laid, u: number, v: number): Plane | undefined => c.grooves.find((g) => onPiece(u, v, g.at[0], g.at[1], g.at[2], g.at[3], g.half))?.p;
 
 // ---- floors
 const grid = new Int16Array(STONE_PX * STONE_PX), rows = new Int32Array(STONE_PX);
@@ -176,9 +182,21 @@ function top(c: Laid, b: Block): Plane {
   if (!p) c.planes.set(b.id, p = planeOf(b, (b.level - 1) * LEVEL_STEP));
   return p;
 }
-/** Beside a floor piece or a grate the stones are no rectangles: there every px is asked. */
+/**
+ * Beside a floor piece or a grate, and where a crevice runs through laid stone, the stones are no rectangles: there every px is asked.
+ * (A cell that is all rock stays one piece under a crevice: its groove is the rock floor's, `rockMesh.ts`, or only painted.)
+ */
 const marked = (c: Laid, x: number, z: number): boolean => c.marks.grates.some((g) => Math.floor(g.x) === x && Math.floor(g.z) === z)
-  || c.marks.pieces.some((p) => x + 1 > p.x - p.r - 0.1 && x < p.x + p.r + 0.1 && z + 1 > p.z - p.r - 0.1 && z < p.z + p.r + 0.1);
+  || c.marks.pieces.some((p) => x + 1 > p.x - p.r - 0.1 && x < p.x + p.r + 0.1 && z + 1 > p.z - p.r - 0.1 && z < p.z + p.r + 0.1)
+  || (c.grooves.some(({ at: [x0, z0, x1, z1], half }) => {
+    const r = half / STONE_PX;
+    return x + 1 > Math.min(x0, x1) - r && x < Math.max(x0, x1) + r && z + 1 > Math.min(z0, z1) - r && z < Math.max(z0, z1) + r;
+  }) && someLaid(c, x, z));
+/** Whether any px of the floor cell is laid stone. */
+function someLaid(c: Laid, x: number, z: number): boolean {
+  for (let v = z * STONE_PX; v < (z + 1) * STONE_PX; v++) for (let u = x * STONE_PX; u < (x + 1) * STONE_PX; u++) if (!slabOf(c.f, c.map, c.marks, u, v).rock) return true;
+  return false;
+}
 /** A cell of this mesh's floor: height 0, not the dip mesh's, not left to another mesh. */
 const floorCell = (c: Laid, x: number, z: number): boolean => inMap(c, x, z) && heightAt(c.map, x, z) === 0 && !inDipMesh(c.map, x, z);
 /** A floor cell whose slabs are whole rectangles that this mesh draws. */
@@ -204,8 +222,8 @@ function wide(c: Laid, b: Block, x: number, z: number): Surf | null {
 /**
  * The pieces over the floor cell (x, z), or null where this mesh has no floor (a wall, the dip mesh's cells, beyond the map). An open
  * cell has its slabs (`wide`, or cut at the cell's edges), its rock slabs level at 0, and is one piece where it is all rock. Beside a
- * floor piece or a grate every px takes its block's plane, and px in a row and rows on end with the same plane are one piece: the level
- * stones of a floor piece together. A cell another mesh draws at height 0 (the woodland's ground) is uncut stone to its neighbours.
+ * floor piece or a grate and along a crevice (`marked`) every px takes its block's plane, or the groove's, and px in a row and rows on
+ * end with the same plane are one piece: the level stones of a ring together. A cell another mesh draws at height 0 (the woodland's ground) is uncut stone to its neighbours.
  */
 function cellOf(c: Laid, x: number, z: number): Cell | null {
   if (!inMap(c, x, z)) return null;
@@ -232,9 +250,9 @@ function cellOf(c: Laid, x: number, z: number): Cell | null {
     const planes: Plane[] = [];
     const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-      // a slab, a piece's stone (level, so the stones of a ring are one plane) or a grate's shaft; rock lies at the raised level
+      // a crevice's groove, else a slab, a piece's stone (level, so the stones of a ring are one plane) or a grate's shaft; rock lies at the raised level
       const b = floorBlockAt(c.f, c.map, c.marks, pu + i, pv + j);
-      grid[j * N + i] = index(b ? top(c, b) : LEVEL[2]);
+      grid[j * N + i] = index(grooveAt(c, pu + i, pv + j) ?? (b ? top(c, b) : LEVEL[2]));
     }
     cell = { at: new Uint16Array(N * N), surfs: [] };
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {

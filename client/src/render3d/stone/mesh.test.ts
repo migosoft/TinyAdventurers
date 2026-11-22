@@ -5,7 +5,8 @@ import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
 import { LEVEL_STEP, floorBlockAt, ironPx, type Block } from './blocks';
 import { GRATE_DEPTH } from './laidMesh';
-import { FACE_H, FACE_W } from './format';
+import { FACE_H, FACE_W, FLAG, PAGE, decodeRelief } from './format';
+import { paintGroundRows } from './paint';
 import { CHUNK, KIND } from './grid';
 import { stoneField } from './field';
 import { buildStoneChunk, type StoneArrays } from './mesh';
@@ -16,10 +17,16 @@ import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './sto
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 6600;
-/** The same for the stone page's chunks with a floor piece: the mosaic and a grate (measured: 8 932), and the circle, whose dark rings lie a step lower (measured: 12 993; 7 843 with level rings). */
-const PIECE_CHUNK_TRIS = 9800, CIRCLE_CHUNK_TRIS = 14300;
-/** What that chunk measures: Task 11's 8 914, and 18 more for the grate's wider shaft and its iron (Task 13). The mesh of laid stone has not moved. */
-const TASK_11_CHUNK_TRIS = 8932;
+/**
+ * The same for the stone page's chunks with a floor piece, each with a crevice's groove in its room: the mosaic and a grate (measured:
+ * 9 946, of them 1 014 the groove), and the circle, whose dark rings lie a step lower (measured: 13 873, of them 880 the groove; 7 843
+ * with level rings and a painted crevice).
+ */
+const PIECE_CHUNK_TRIS = 10900, CIRCLE_CHUNK_TRIS = 15200;
+/** The most triangles a crevice of two pieces and a branch, 9 tiles of line, may add to a chunk of laid floor (measured: 3 888). */
+const CREVICE_TRIS = 4300;
+/** What the mosaic's chunk measures: Task 11's 8 914, 18 more for the grate's wider shaft and its iron, 1 014 for the crevice's groove (Task 13). The mesh of laid stone has not moved. */
+const TASK_11_CHUNK_TRIS = 9946;
 /**
  * The most triangles a chunk of the stone page's caves may have (measured: 3 877, 5 238 with the passage's laid half, 4 830 and 3 834), and the
  * whole page of ten chunks as rock (measured: 25 335; as laid stone it has 59 215).
@@ -246,6 +253,31 @@ describe('buildStoneChunk', () => {
     // the cell round the shaft is level, flush floor: the kerb
     for (const [du, dv] of [[-14, 0], [14, 0], [0, -14], [-14, -14], [14, 14]]) expect(floorHeight(f, map, marks, g.x + du / 32, g.z + dv / 32)).toBeCloseTo(-LEVEL_STEP, 6);
     expect(floorHeight(f, map, marks, g.x, g.z)).toBeCloseTo(-GRATE_DEPTH, 6);
+  });
+
+  it('cuts a groove along a crevice through laid floor: the px the painter makes black lie at the crevice\'s depth, and no edge gapes', () => {
+    const m = floorMap(16, 16), f = stoneField(m, null, SEED), plan = planSheets(m), marks = noMarks();
+    marks.crevices.push({ pts: [[4.2, 4.3], [7.6, 6.1], [9.3, 9.4]], branch: [[7.6, 6.1, 8.9, 5.2]], width: 0.1, depth: 0.3 });
+    const page = new Uint8Array(PAGE * PAGE * 4);
+    paintGroundRows(f, m, marks, 0, 0, 0, PAGE, page);
+    let pits = 0;
+    for (let v = 96; v < 352; v++) for (let u = 96; u < 352; u++) {
+      const pit = decodeRelief(page[(v * PAGE + u) * 4 + 3]).flag === FLAG.pit, h = floorHeight(f, m, marks, (u + 0.5) / 32, (v + 0.5) / 32);
+      if (pit) { pits++; expect(h, `px ${u},${v}`).toBeCloseTo(-0.3, 6); } else expect(h, `px ${u},${v}`).toBeGreaterThan(-0.15);
+    }
+    expect(pits).toBeGreaterThan(400);
+    // every edge has a twin, but on the map's border
+    const a = buildStoneChunk(m, f, plan, marks, 0, 0), edges = new Map<string, number>(), key = (p: number[]): string => p.map((c) => Math.round(c * 1e5)).join(',');
+    for (const t of triangles(a)) for (let i = 0; i < 3; i++) {
+      const k = [key(t[i].p), key(t[(i + 1) % 3].p)].sort().join(' ');
+      edges.set(k, (edges.get(k) ?? 0) + 1);
+    }
+    for (const [k, n] of edges) {
+      if (n % 2 === 0) continue;
+      const [p, q] = k.split(' ').map((s) => s.split(',').map((c) => Number(c) / 1e5));
+      expect((p[0] === q[0] && (p[0] === 0 || p[0] === 16)) || (p[2] === q[2] && (p[2] === 0 || p[2] === 16)), `open edge ${k}`).toBe(true);
+    }
+    expect(a.index.length / 3).toBeLessThan(LAID_CHUNK_TRIS + CREVICE_TRIS);
   });
 
   it('makes a cell that is all rock one quad', () => {

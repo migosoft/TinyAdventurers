@@ -9,7 +9,7 @@ import { heightAt } from '../heights';
 import { STONE_PX, hash, rockAmount, rockWall, wobble, type StoneField } from './field';
 import { SIDE_STEP } from './grid';
 import { floorIsRock, laid, laidHeight, type Laid } from './laidMesh';
-import type { Marks, Puddle, Shard } from './place';
+import { piecesOf, type Marks, type Puddle, type Shard } from './place';
 import { unplanned } from './plan';
 
 /**
@@ -62,7 +62,7 @@ export function shapeOf(c: Laid): Shape {
   for (const p of c.marks.puddles) round(s.puddles, p.x, p.z, p.r, p);
   for (const b of c.marks.shards) if (b.big) round(s.niches, b.x, b.z, NICHE_OUT, b);
   for (const cr of c.marks.crevices) {
-    for (const [x0, z0, x1, z1] of [...cr.pts.slice(1).map((q, i) => [...cr.pts[i], ...q]), ...cr.branch]) {
+    for (const [x0, z0, x1, z1] of piecesOf(cr)) {
       const seg: Seg = { x0, z0, x1, z1, half: cr.width / 2, depth: cr.depth }, n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.05);
       // a piece shapes the floor up to its width beyond its line and its ends
       for (let i = 0; i <= n; i++) round(s.segs, x0 + ((x1 - x0) * i) / n, z0 + ((z1 - z0) * i) / n, cr.width, seg);
