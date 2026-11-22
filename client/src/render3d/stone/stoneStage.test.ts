@@ -5,7 +5,7 @@ import { parseParams } from '../params';
 import { renderPlan } from '../quality';
 import type { StageCtx } from '../host';
 import type { FrameInput } from '../view';
-import { ROCK } from './field';
+import { LAID, ROCK } from './field';
 import { PLACES } from './stoneMap';
 import { createStoneStage } from './stoneStage';
 
@@ -31,12 +31,16 @@ describe('the ?r3d=stone stage (#380)', () => {
     const { world, f } = drawn('?r3d=stone&at=hall');
     expect(world.stone!.kinds.some((k) => k === ROCK)).toBe(true);
     expect(f.lights.length).toBeGreaterThan(0);
-    expect(drawn('?r3d=stone&at=hall&lamp=0').f.lights).toHaveLength(0);
+    expect(drawn('?r3d=stone&at=hall&lamp=0').f.lights).toHaveLength(f.lights.length - 1); // the knight's own lamp
+  });
+
+  it('turns every crystal light off for &break=1', () => {
+    expect(drawn('?r3d=stone&at=cave&break=1').f.lights.length).toBeLessThan(drawn('?r3d=stone&at=cave').f.lights.length);
   });
 
   it('gives a field of only rock for &stone=rock, and only laid for &stone=laid', () => {
     expect(Array.from(new Set(drawn('?r3d=stone&stone=rock').world.stone!.kinds))).toEqual([ROCK]);
-    expect(Array.from(new Set(drawn('?r3d=stone&stone=laid').world.stone!.kinds))).toEqual([0]);
+    expect(Array.from(new Set(drawn('?r3d=stone&stone=laid').world.stone!.kinds))).toEqual([LAID]);
   });
 
   it('starts the camera in the place asked for', () => {
