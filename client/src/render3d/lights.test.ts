@@ -133,6 +133,33 @@ describe('staticCands', () => {
     expect(fire.y).toBe(1);
     expect([fire.x, fire.z]).toEqual([8.5, 8.5]);
   });
+  it('puts a crystal light low at its cluster, within half a tile of its wall, and pulses it less than a torch flickers (#380)', () => {
+    // a wall north of the tile (3, 5): the cluster stands at the wall's foot
+    const map = mapOf(Array.from({ length: 12 }, (_, z) => (z === 4 ? '#'.repeat(12) : '.'.repeat(12))));
+    const field = new LightField(map);
+    field.add({ id: 1, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x: 3, y: 5, on: true });
+    field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 8, y: 5, on: true });
+    const tp = new TorchPairs();
+    const at = (t: number): Cand[] => staticCands(field, tp, map, t);
+    const [crystal] = at(0);
+    expect(crystal.x).toBeCloseTo(3.5, 6);
+    expect(crystal.z).toBeGreaterThan(5);
+    expect(crystal.z - 5).toBeLessThan(0.5);
+    expect(crystal.y).toBeLessThan(TORCH_MID);
+    expect(crystal.y).toBeGreaterThan(0);
+    // the place does not move with the clock (a torch's flame does)
+    expect([at(0.37)[0].x, at(0.37)[0].y, at(0.37)[0].z]).toEqual([crystal.x, crystal.y, crystal.z]);
+    // brightness over any second: the crystal's swing is under half the torch's, and it does swing
+    for (const t0 of [0, 3.3, 17.9]) {
+      const swing = (i: number): number => {
+        const g = Array.from({ length: 101 }, (_, k) => at(t0 + k / 100)[i].g / at(0)[i].base);
+        return Math.max(...g) - Math.min(...g);
+      };
+      expect(swing(0)).toBeLessThan(swing(1) / 2);
+    }
+    const slow = Array.from({ length: 60 }, (_, k) => at(k / 10)[0].g);
+    expect(Math.max(...slow) - Math.min(...slow)).toBeGreaterThan(0.02 * crystal.base);
+  });
 });
 
 describe('staticCands: the Daylight bounce fill', () => {

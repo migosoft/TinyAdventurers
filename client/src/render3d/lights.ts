@@ -12,6 +12,10 @@ import { groundAt, type Cam } from './camera';
 import { TORCH_MID } from './figures';
 import { torchWall, WALL_H } from './heights';
 import type { Light } from './light';
+import { CRYSTAL_RATE, CRYSTAL_STAND, CRYSTAL_Y } from './stone/crystals';
+
+/** The swing of a crystal light's slow pulse (a torch's flicker swings by up to 0.16; first guess). */
+export const CRYSTAL_PULSE = 0.06;
 
 /** A light's colour is scaled by this on its way to the shader (first guess). */
 export const LIGHT_GAIN = 1.2;
@@ -35,6 +39,8 @@ const TILE = 16;
 
 /** The flicker of a light of `kind` at time `t` (s): the torch's three sines, scaled by the kind's flicker against the torch's. */
 export function lightFlicker(kind: number, t: number, phase: number): number {
+  // a crystal does not flicker: it pulses slowly (#380)
+  if (kind === LIGHT_KIND.Crystal) return 1 + CRYSTAL_PULSE * Math.sin(CRYSTAL_RATE * t + phase);
   const s = LIGHT[kind].flicker / LIGHT[LIGHT_KIND.Torch].flicker;
   return 1 + s * (0.07 * Math.sin(11 * t + phase) + 0.05 * Math.sin(23.3 * t + 2 * phase) + 0.04 * Math.sin(5.1 * t + 3 * phase));
 }
@@ -100,6 +106,12 @@ export function staticCands(field: LightField, torches: TorchPairs, map: TileMap
       x = w.x + w.nx * TORCH_STAND + 0.03 * Math.sin(13 * t + ph);
       z = w.z + w.nz * TORCH_STAND;
       y = TORCH_MID + 0.03 * Math.sin(17 * t + ph);
+    } else if (l.kind === LIGHT_KIND.Crystal) {
+      // at its cluster (stone/place.ts stands the big shard at the same wall), low at the wall's foot
+      const w = torchWall(l.x, l.y, map);
+      x = w.x + w.nx * CRYSTAL_STAND;
+      z = w.z + w.nz * CRYSTAL_STAND;
+      y = CRYSTAL_Y;
     } else if (l.kind === LIGHT_KIND.Daylight) y = BOUNCE_Y;
     const bounce = l.kind === LIGHT_KIND.Daylight ? BOUNCE_GAIN : 1;
     const cloud = l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, lookFor(l.id, sun)) : 1;

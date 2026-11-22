@@ -26,6 +26,8 @@ describe('opensWalls', () => {
     expect(opensWalls(e(KIND.Bunny, SIDE.Neutral), false)).toBe(false);
     expect(opensWalls(e(KIND.Barrel, SIDE.Neutral), false)).toBe(false);
     expect(opensWalls(e(KIND.Torch, SIDE.Neutral), false)).toBe(false);
+    // a crystal is no opener on any side (the cluster is world geometry, #380)
+    for (const side of [SIDE.Neutral, SIDE.Hostile, SIDE.Friendly]) expect(opensWalls(e(KIND.Crystal, side), false)).toBe(false);
     expect(opensWalls(e(KIND.FirePatch, SIDE.Hostile), false)).toBe(false);
     expect(opensWalls(e(KIND.Arrow, SIDE.Hostile), false)).toBe(false);
   });

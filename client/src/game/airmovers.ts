@@ -70,7 +70,7 @@ export function collectAirMovers(f: RunFrame, tracker: MoverTracker, myKind: num
       if (ownPredictedShot(e.extra, f.you) !== null) continue; // own shots come from f.shots
       const a = projectileAir(e.kind);
       add(shotMover(tracker.track(e.id, e.x, e.y, a.r, true, a.heat)));
-    } else if (e.kind === KIND.Torch || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
+    } else if (e.kind === KIND.Torch || e.kind === KIND.Crystal || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
       continue;
     } else {
       add(tracker.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0));

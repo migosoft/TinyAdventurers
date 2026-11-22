@@ -405,6 +405,14 @@ describe('Figures3d', () => {
       for (let q = 0; q < g.n; q++) expect(Math.min(...ys(g, q))).toBeGreaterThanOrEqual(-1e-6);
     }
   });
+
+  it('draws nothing for a crystal entity, whole or broken: the cluster is world geometry (#380)', () => {
+    for (const anim of [1, 0]) {
+      const o = make().frame(frame([ent(40, KIND.Crystal, { anim, hp: 1, side: SIDE.Neutral })]), cam());
+      expect(total(o) + o.emissive.n + o.glows.n + o.shadows.n).toBe(0);
+      expect([o.openers, o.casters, o.models, o.built, o.floats]).toEqual([[], [], [], [], []]);
+    }
+  });
 });
 
 describe('Figures3d anchors (#311)', () => {

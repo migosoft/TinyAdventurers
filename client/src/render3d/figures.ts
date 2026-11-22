@@ -221,8 +221,8 @@ function lookOf(t: Tint, grey: boolean): { tint: [number, number, number]; mode:
   return { tint: t.mode === 'mul' ? rgbOf(t.rgb) : [1, 1, 1], mode: grey ? 2 : 0 };
 }
 
-/** Not a figure: its own look is the object's (torches, chests, barrels, mimics, hazards) or the shot's. */
-const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Chest || k === KIND.Barrel || k === KIND.Mimic || isHazardKind(k) || isProjectileKind(k));
+/** Not a figure: its own look is the object's (torches, chests, crystals: world geometry, stone/crystals.ts, barrels, mimics, hazards) or the shot's. */
+const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Crystal || k === KIND.Chest || k === KIND.Barrel || k === KIND.Mimic || isHazardKind(k) || isProjectileKind(k));
 
 /** The frozen figure's cool tint (multiplies). */
 const FROZEN_TINT = 0xa8d8ff;
