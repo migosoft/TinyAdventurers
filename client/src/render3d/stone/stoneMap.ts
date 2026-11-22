@@ -55,14 +55,14 @@ export function zoneKinds(map: TileMap): Uint8Array {
   return Uint8Array.from({ length: map.w * map.h }, (_, i) => (i % map.w < BORDER_X ? ROCK : LAID));
 }
 
-/** The page's seed: with it the placement lays a summoning circle in the circle room, and a mosaic and a grate (67.5, 11.5) in the mosaic room. */
-export const STONE_SEED = 2083;
+/** The page's seed: with it the placement lays a summoning circle in the circle room, and a mosaic and a grate (54.5, 15.5) in the mosaic room. */
+export const STONE_SEED = 537;
 /** The heroes' start the marks keep clear, whatever `&at=` says (so the marks do not move with it). */
 export const STONE_SPAWN = { x: 10.5, z: 7.5 };
 
 /** The places `&at=` names (tile centres): the knight starts there and the camera looks at it. Circle and mosaic are where the seed laid them. */
 export const PLACES = {
-  cave: [10.5, 7.5], border: [24.5, 9.5], hall: [40.5, 7.5], circle: [37.5, 21.5], mosaic: [59.5, 8.5], cave2: [10.5, 24.5],
+  cave: [10.5, 7.5], border: [24.5, 9.5], hall: [40.5, 7.5], circle: [37.5, 22.5], mosaic: [60.5, 9.5], cave2: [10.5, 24.5],
 } as const;
 
 /** Lamp tiles: torches under a north wall of the laid rooms, crystals on the floor of the caves. */

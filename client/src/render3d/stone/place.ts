@@ -31,8 +31,8 @@ const PUDDLE_SECOND = 0.5;
 const PUDDLE_R: [number, number] = [0.45, 0.8];
 /** The chance of a floor piece in a laid room (about every third or fourth room). */
 const PIECE_SHARE = 0.28;
-/** A floor piece's radius (tiles), and the clear ring round it. */
-const PIECE_R = 1.5, PIECE_RING = 0.5;
+/** The radius of a summoning circle and of a mosaic (tiles), and the clear ring round a floor piece. */
+const CIRCLE_R = 3, MOSAIC_R = 2.5, PIECE_RING = 0.5;
 /** The chance of a grate in a laid room, and its radius. */
 const GRATE_SHARE = 0.4, GRATE_R = 0.45;
 /** Small shards per rock room, their radius, and how far they stand from the wall foot's cell centre. */
@@ -136,8 +136,9 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
     if (room.kind !== LAID) continue;
     if (rnd(room.x0, room.z0, 5) < PIECE_SHARE) for (let t = 0; t < TRIES; t++) {
       const [cx, cz] = cellOf(room, 20, t), x = cx + 0.5, z = cz + 0.5;
-      if (!clear(x, z, PIECE_R + PIECE_RING, LAID)) continue;
-      marks.pieces.push({ kind: rnd(cx, cz, 6) < 0.5 ? 'circle' : 'mosaic', x, z, r: PIECE_R }); used.push({ x, z, r: PIECE_R });
+      const kind = rnd(cx, cz, 6) < 0.5 ? 'circle' : 'mosaic', r = kind === 'circle' ? CIRCLE_R : MOSAIC_R;
+      if (!clear(x, z, r + PIECE_RING, LAID)) continue;
+      marks.pieces.push({ kind, x, z, r }); used.push({ x, z, r });
       break;
     }
     if (rnd(room.x0, room.z0, 7) < GRATE_SHARE) for (let t = 0; t < TRIES; t++) {

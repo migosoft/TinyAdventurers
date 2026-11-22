@@ -120,6 +120,6 @@ describe('the painter of laid stone', () => {
     const { map, f, marks } = stoneLevel();
     const out = new Uint8Array(PAGE * PAGE * 4);
     paintGroundRows(f, map, marks, 2, 1, 0, PAGE, out);
-    expect(fnv(out)).toBe(1442445131); // re-pinned whenever the laid look is tuned
+    expect(fnv(out)).toBe(921680116); // re-pinned whenever the laid look is tuned
   });
 });

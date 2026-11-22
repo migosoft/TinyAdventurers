@@ -56,7 +56,7 @@ const MOSS_GROOVE = 0.8, MOSS_CREEP = 0.3;
 /** The rim round a dip: the outline's mask from which the edge stones lie (the outline itself is `OUTLINE_EDGE`), and a stone's length (px). */
 const RIM_FROM = 0.2, RIM_LEN = 11;
 /** A rune's cell (px); a glyph is 5 by 6 cells. */
-const RUNE_CELL = 1.7;
+const RUNE_CELL = 2.4;
 /** The share of a mosaic's tesserae that are a tone darker, and a tone lighter, than their band. */
 const MOSAIC_ODD = 0.15;
 /** The ground of a rune's cut: the dirt that has gathered in it. */

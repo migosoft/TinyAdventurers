@@ -54,7 +54,7 @@ export const CIRCLE_STONES = [1, 6, 10, 12, 28];
 export const RUNE_RING = 3;
 /** A mosaic's tessera (px), the width of its diamond bands and of its border (tesserae). */
 export const MOSAIC_TESSERA = 4;
-const MOSAIC_BAND = 2, MOSAIC_BORDER = 2;
+const MOSAIC_BAND = 5, MOSAIC_BORDER = 2;
 /** The ring number of a mosaic's border. */
 export const MOSAIC_BORDER_RING = 99;
 
