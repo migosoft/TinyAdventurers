@@ -76,12 +76,15 @@ pub struct Flight {
     skip: Vec<Vec2>,
     /// Where the boss took off: it held the body then; the way back when no tile in reach does.
     origin: Vec2,
+    /// The boss's position at the start of the previous tick over a hole: progress is the net move since then, pushes
+    /// by other monsters included.
+    prev: Option<Vec2>,
 }
 
 impl Flight {
     /// On the ground, the first flight in `first` seconds.
     pub fn new(times: FlightTimes, first: f64) -> Flight {
-        Flight { phase: Phase::Ground, t: first, times, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO }
+        Flight { phase: Phase::Ground, t: first, times, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO, prev: None }
     }
 
     pub fn in_air(&self) -> bool {
@@ -122,17 +125,19 @@ impl Flight {
                     return false;
                 }
                 let pos = run.monsters[bi].pos;
-                if !holds(run, bi, pos) {
+                if !holds(run, bi, pos) && pos.dist(self.origin) >= 1.0 {
                     // Over a hole: fly to ground that holds the whole body, then land.
                     let speed = run.monsters[bi].speed;
                     // What a tick must move to count as progress: a quarter step at the speed it really has.
                     let least = speed * run.monsters[bi].effects.speed_mul() * dt * 0.25;
+                    let stalled = self.prev.is_some_and(|p| p.dist(pos) < least);
+                    self.prev = Some(pos);
                     match landing_spot(run, bi, !self.gave_up, &self.skip) {
                         Some(goal) => {
                             if move_toward(run, bi, goal, speed, dt) {
                                 // `move_toward` stops short of the goal; it holds, so stand on it and land next tick.
                                 run.monsters[bi].pos = goal;
-                            } else if run.monsters[bi].pos.dist(pos) < least {
+                            } else if stalled {
                                 // Hardly any progress (a barrier, a wall, an object or a too narrow gap in the way, sliding
                                 // along it): drop the target as the goal, then the tile.
                                 if self.gave_up {
@@ -144,8 +149,8 @@ impl Flight {
                         }
                         None => {
                             // No tile in reach holds the body: back to where it took off, and if that is blocked too,
-                            // land there at once, so the flight always ends.
-                            if move_toward(run, bi, self.origin, speed, dt) || run.monsters[bi].pos.dist(pos) < least {
+                            // stand there. The take-off spot always counts as landable, so the flight ends.
+                            if move_toward(run, bi, self.origin, speed, dt) || stalled {
                                 run.monsters[bi].pos = self.origin;
                             }
                             set_anim(run, bi, Anim::Move);
@@ -160,10 +165,12 @@ impl Flight {
             }
             Phase::Land => {
                 if self.t <= 0.0 {
-                    if !holds(run, bi, run.monsters[bi].pos) {
+                    let pos = run.monsters[bi].pos;
+                    if !holds(run, bi, pos) && pos.dist(self.origin) >= 1.0 {
                         // Moved over a hole during the landing: do not touch down, fly on to ground.
                         self.phase = Phase::Air;
                         self.t = 0.0;
+                        self.prev = None;
                         return true;
                     }
                     let at = ahead(run, bi);
@@ -171,6 +178,7 @@ impl Flight {
                     run.monsters[bi].airborne = false;
                     self.gave_up = false;
                     self.skip.clear();
+                    self.prev = None;
                     self.phase = Phase::Ground;
                     self.t = run.rng.gen_range(self.times.every.0..self.times.every.1);
                     set_anim(run, bi, Anim::Idle);
@@ -244,7 +252,7 @@ mod tests {
         assert!(f.tick(&mut run, bi, DT, false));
         assert_eq!(f.phase, Phase::TakeOff);
 
-        let mut f = Flight { phase: Phase::Air, t: 1.0, times: TIMES, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO };
+        let mut f = Flight { phase: Phase::Air, t: 1.0, times: TIMES, gave_up: false, skip: Vec::new(), origin: Vec2::ZERO, prev: None };
         ticks(&mut f, &mut run, bi, 2.0, true);
         assert!(f.in_air(), "no landing while acting");
         f.tick(&mut run, bi, DT, false);
@@ -378,23 +386,43 @@ mod tests {
         (run, bi, f, tx, ty)
     }
 
-    #[test]
-    fn it_leaves_a_tile_behind_a_solid_object_for_another() {
-        let (mut run, bi, mut f, tx, ty) = walled_hole();
-        // A wall of barrels across the east floor: every tile there is "reachable" on a zero-width line but not by the body.
+    /// A line of barrels across the east floor: every tile there is "reachable" on a zero-width line, but not by the body.
+    fn barrel_wall(run: &mut Run, tx: i32, ty: i32) {
         let x = crate::dungeon::Map::center_of(tx + 3, ty).x;
         for i in -8..=8 {
             let y = crate::dungeon::Map::center_of(tx, ty).y + i as f64 * 16.0;
             run.spawn_object(crate::defs::kinds::EntityKind::Barrel, Vec2::new(x, y), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
         }
-        // A way west to ground the line and the body both reach.
-        for dx in -10..=-3 {
-            for dy in -1..=1 {
-                run.layout.map.set(tx + dx, ty + dy, if dx <= -9 { Tile::Floor } else { Tile::Chasm });
+    }
+
+    #[test]
+    fn it_leaves_a_tile_behind_a_solid_object_for_another() {
+        let (mut run, bi, mut f, tx, ty) = walled_hole();
+        barrel_wall(&mut run, tx, ty);
+        // Ground to the west that holds the body: floor (dx -11..-6), chasm between it and the hole.
+        for dx in -11..=-3 {
+            for dy in -2..=2 {
+                run.layout.map.set(tx + dx, ty + dy, if dx <= -6 { Tile::Floor } else { Tile::Chasm });
             }
         }
-        f.origin = Map::center_of(tx - 10, ty);
+        assert!(holds(&run, bi, Map::center_of(tx - 9, ty)));
+        f.origin = Map::center_of(tx - 9, ty);
         lands_on_ground(run, bi, f);
+    }
+
+    #[test]
+    fn it_lands_at_the_take_off_spot_when_that_does_not_hold_either() {
+        let (mut run, bi, mut f, tx, ty) = walled_hole();
+        barrel_wall(&mut run, tx, ty);
+        f.origin = run.monsters[bi].pos;
+        assert!(!holds(&run, bi, f.origin));
+        for _ in 0..(20.0 / DT) as usize {
+            f.tick(&mut run, bi, DT, false);
+            if f.grounded() {
+                break;
+            }
+        }
+        assert!(f.grounded() && !run.monsters[bi].airborne, "the flight ends within 20 s");
     }
 
     #[test]
