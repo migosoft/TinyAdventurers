@@ -9,9 +9,8 @@ import { placeMarks } from '../stone/place';
 import { DIP_RES, buildDipChunk as buildWithPlan, dipClassChanged, type DipChunk } from './dipMesh';
 import { CHASM_BED, DIP, LIP, bedAt, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
 
-/** `buildDipChunk` as the view calls it, with the plan of the map's own layout. The last argument is ignored (the pack's atlas frames are gone). */
-const buildDipChunk = (m: TileMap, painted: boolean, cx: number, cz: number, _frames?: unknown): DipChunk | null => buildWithPlan(m, painted, cx, cz, planSheets(m));
-const frames = {};
+/** `buildDipChunk` as the view calls it, with the plan of the map's own layout. */
+const buildDipChunk = (m: TileMap, painted: boolean, cx: number, cz: number): DipChunk | null => buildWithPlan(m, painted, cx, cz, planSheets(m));
 
 const CH: Record<string, number> = { '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, C: TILE_ID.Chasm, L: TILE_ID.Lava };
 const filled = (w: number, h: number, id = TILE_ID.Floor) => new TileMap(w, h, new Uint8Array(w * h).fill(id));
@@ -43,11 +42,11 @@ describe('dipClassChanged (F2)', () => {
 
 describe('buildDipChunk', () => {
   it('has no chunk without terrain', () => {
-    expect(buildDipChunk(filled(6, 6), false, 0, 0, frames)).toBeNull();
+    expect(buildDipChunk(filled(6, 6), false, 0, 0)).toBeNull();
   });
 
   it('covers the terrain cell and its eight neighbours', () => {
-    const c = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm]]), false, 0, 0, frames)!;
+    const c = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm]]), false, 0, 0)!;
     expect(c.arrays.count).toBe(9 * V);
     expect(c.arrays.index.length).toBe(9 * 2 * R * R * 3);
     expect(c.arrays.position.length).toBe(9 * V * 3);
@@ -58,7 +57,7 @@ describe('buildDipChunk', () => {
 
   it('lies on bedAt', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm], [6, 6, TILE_ID.ShallowWater]]);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const p = c.arrays.position;
     for (let v = 0; v < c.arrays.count; v++) expect(p[v * 3 + 1]).toBeCloseTo(bedAt(m, p[v * 3], p[v * 3 + 2]), 2);
   });
@@ -68,7 +67,7 @@ describe('buildDipChunk', () => {
     const heights = new Map<string, number>();
     let shared = 0;
     for (const cx of [0, 1]) {
-      const c = buildDipChunk(m, false, cx, 0, frames)!;
+      const c = buildDipChunk(m, false, cx, 0)!;
       const p = c.arrays.position;
       for (let v = 0; v < c.arrays.count; v++) {
         const key = `${p[v * 3].toFixed(4)},${p[v * 3 + 2].toFixed(4)}`;
@@ -121,7 +120,7 @@ describe('buildDipChunk', () => {
   });
 
   it('faces up', () => {
-    const c = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm], [2, 2, TILE_ID.Lava]]), false, 0, 0, frames)!;
+    const c = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm], [2, 2, TILE_ID.Lava]]), false, 0, 0)!;
     const { position: p, normal: n, index } = c.arrays;
     for (let t = 0; t < index.length; t += 3) {
       const [a, b, d] = [index[t], index[t + 1], index[t + 2]];
@@ -138,7 +137,7 @@ describe('buildDipChunk', () => {
     const m = open(34, 9, [[15, 4, TILE_ID.Chasm], [16, 4, TILE_ID.Lava], [16, 5, TILE_ID.Lava]]);
     const h = 1 / R;
     for (const cx of [0, 1]) {
-      const c = buildDipChunk(m, false, cx, 0, frames)!;
+      const c = buildDipChunk(m, false, cx, 0)!;
       const { position: p, normal: n } = c.arrays;
       let checked = 0;
       for (let v = 0; v < c.arrays.count; v++) {
@@ -161,7 +160,7 @@ describe('buildDipChunk', () => {
 
   it('carries the floor of its cell', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const { position: p, kind, sheet } = c.arrays;
     expect(sheet.length).toBe(c.arrays.count * 3);
     for (let v = 0; v < c.arrays.count; v++) {
@@ -173,7 +172,7 @@ describe('buildDipChunk', () => {
 
   it('carries the marks and the kind of every vertex', () => {
     const m = open(11, 9, [[3, 4, TILE_ID.Chasm], [4, 4, TILE_ID.Chasm], [7, 4, TILE_ID.Lava], [5, 7, TILE_ID.ShallowWater]]);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const arrays = c.arrays as unknown as Record<string, Float32Array | undefined>;
     expect(arrays.rim).toBeUndefined();
     expect(arrays.near).toBeUndefined();
@@ -191,7 +190,7 @@ describe('buildDipChunk', () => {
     }
     for (const k of seen) expect(k).toBeGreaterThan(0);
     // The marks end where the mesh ends: on the outer border of the cells beside the chasm nothing is near.
-    const one = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm]]), false, 0, 0, frames)!.arrays;
+    const one = buildDipChunk(open(9, 9, [[4, 4, TILE_ID.Chasm]]), false, 0, 0)!.arrays;
     for (let v = 0; v < one.count; v++) {
       const x = one.position[v * 3], z = one.position[v * 3 + 2];
       if (x === 3 || x === 6 || z === 3 || z === 6) expect(one.marks[v * 3 + 2]).toBeCloseTo(0, 6);
@@ -199,7 +198,7 @@ describe('buildDipChunk', () => {
   });
   it('names the bank', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const { position: p, dip } = c.arrays;
     const at = (x: number, z: number) => {
       for (let v = 0; v < c.arrays.count; v++) if (Math.abs(p[v * 3] - x) < 1e-5 && Math.abs(p[v * 3 + 2] - z) < 1e-5) return dip[v];
@@ -213,7 +212,7 @@ describe('buildDipChunk', () => {
   it('bounds its geometry', () => {
     const m = open(34, 9, [[15, 4, TILE_ID.Chasm], [16, 4, TILE_ID.Chasm]]);
     for (const cx of [0, 1]) {
-      const c: DipChunk = buildDipChunk(m, false, cx, 0, frames)!;
+      const c: DipChunk = buildDipChunk(m, false, cx, 0)!;
       const p = c.arrays.position;
       const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
       for (let v = 0; v < c.arrays.count; v++) for (let a = 0; a < 3; a++) { mn[a] = Math.min(mn[a], p[v * 3 + a]); mx[a] = Math.max(mx[a], p[v * 3 + a]); }
@@ -228,7 +227,7 @@ describe('buildDipChunk', () => {
   it('draws the cells inDipMesh says and nothing else', () => {
     const m = open(12, 12, [[2, 2, TILE_ID.Lava], [3, 2, TILE_ID.ShallowWater], [8, 8, TILE_ID.Chasm]]);
     m.set(5, 5, TILE_ID.Wall); m.set(9, 8, TILE_ID.Wall);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     let cells = 0;
     for (let z = 0; z < 12; z++) for (let x = 0; x < 12; x++) if (inDipMesh(m, x, z)) cells++;
     expect(c.arrays.count).toBeGreaterThanOrEqual(cells * V);
@@ -242,7 +241,7 @@ describe('buildDipChunk', () => {
     const N = 24;
     const m = filled(N, N);
     for (let i = 0; i < N * N; i++) m.tiles[i] = kinds[Math.floor(rnd() * kinds.length)];
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const { position: p, normal: n } = c.arrays;
     let skirt = 0;
     for (let v = 0; v < c.arrays.count; v++) {
@@ -257,7 +256,7 @@ describe('buildDipChunk', () => {
 
   it('closes the slit at a concave corner against a wall', () => {
     const m = open(8, 8, [[4, 4, TILE_ID.Wall], [3, 3, TILE_ID.ShallowWater], [3, 4, TILE_ID.ShallowWater], [4, 3, TILE_ID.ShallowWater]]);
-    const c = buildDipChunk(m, false, 0, 0, frames)!;
+    const c = buildDipChunk(m, false, 0, 0)!;
     const { position: p, normal: n, index } = c.arrays;
     const strip = (nx: number, nz: number, onX: boolean, at: number) => {
       const out: number[] = [];

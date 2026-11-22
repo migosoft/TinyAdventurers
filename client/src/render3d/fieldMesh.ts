@@ -90,18 +90,16 @@ export function sealedCells(map: TileMap): [number, number][] {
   return out;
 }
 
-const NO = { x: 0, y: 0, w: 0, h: 0 };
-
 /**
  * A box of WALL_H per DoorClosed cell: its top, and a side toward every neighbour that is lower than WALL_H and not DoorClosed.
  * 6 vertices per quad; a side is three quads (a rim band of 1 px at the floor, the middle, a rim band at the top) so that `edge`
  * (1 on a rim band, else 0) needs no interpolation. `y01` is the height over WALL_H.
  */
 export function buildField(map: TileMap): { position: Float32Array; edge: Float32Array; y01: Float32Array; count: number } {
-  const sink = { position: [] as number[], uv: [] as number[], normal: [] as number[], kind: [] as number[], rect: [] as number[] };
+  const sink = { position: [] as number[], uv: [] as number[], normal: [] as number[], kind: [] as number[] };
   const H = WALL_H;
   for (const [x, z] of sealedCells(map)) {
-    pushQuad(sink, [[x, H, z, 0, 0], [x + 1, H, z, 0, 0], [x + 1, H, z + 1, 0, 0], [x, H, z + 1, 0, 0]], [0, 1, 0], KIND.top, NO);
+    pushQuad(sink, [[x, H, z, 0, 0], [x + 1, H, z, 0, 0], [x + 1, H, z + 1, 0, 0], [x, H, z + 1, 0, 0]], [0, 1, 0], KIND.top);
     // dx, dz, then the edge ends (left and right seen from outside)
     const sides: [number, number, number, number, number, number][] = [
       [0, 1, 0, 1, 1, 1], [0, -1, 1, 0, 0, 0], [1, 0, 1, 1, 1, 0], [-1, 0, 0, 0, 0, 1],
@@ -112,7 +110,7 @@ export function buildField(map: TileMap): { position: Float32Array; edge: Float3
       const ys = [H, H - RIM, RIM, 0];
       for (let b = 0; b < 3; b++) {
         const rim = b === 1 ? 0 : 1;
-        pushQuad(sink, [[x + ax, ys[b], z + az, rim, 0], [x + bx, ys[b], z + bz, rim, 0], [x + bx, ys[b + 1], z + bz, rim, 0], [x + ax, ys[b + 1], z + az, rim, 0]], [dx, 0, dz], KIND.face, NO);
+        pushQuad(sink, [[x + ax, ys[b], z + az, rim, 0], [x + bx, ys[b], z + bz, rim, 0], [x + bx, ys[b + 1], z + bz, rim, 0], [x + ax, ys[b + 1], z + az, rim, 0]], [dx, 0, dz], KIND.face);
       }
     }
   }

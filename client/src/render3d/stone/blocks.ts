@@ -49,9 +49,9 @@ const SLAB_U = 34, SLAB_V = 22, SLAB_JU = 11, SLAB_JV = 7;
 const SPLIT_MIN = 26, SPLIT_SHARE = 0.4, SPLIT_FROM = 0.35, SPLIT_SPAN = 0.3;
 /** The walls' courses: their edges in px down from the wall's top (64 px), and the one that is the frieze, just below the top third. */
 export const COURSES = [0, 10, 21, 29, 41, 52, 64];
-export const FRIEZE_COURSE = 2;
+const FRIEZE_COURSE = 2;
 /** A frieze block's width (px): all alike, so the carving repeats. */
-export const FRIEZE_W = 16;
+const FRIEZE_W = 16;
 /** A wall course's upright joints: one per this many px, shifted by up to the jitter; odd courses start half a step on. A joint is left out with the share `WALL_DROP`. */
 const WALL_U = 16, WALL_JU = 3, WALL_DROP = 0.35;
 /** A circle's rings: their outer edges as shares of the radius (ring 0 is the centre disc), and the stones in each. */
@@ -290,24 +290,4 @@ export function wallBlockAt(f: StoneField, map: TileMap, face: Face, pu: number,
   lastWall = block(f, map, null, WALL_ID + row * 4096 + k + 8, u0, COURSES[course], u1, COURSES[course + 1], across ? along : face.x + off, across ? face.z + off : along, frieze);
   lastPlane = plane;
   return lastWall.rock ? null : lastWall.b;
-}
-
-/** The blocks a scan of `w` by `h` px from (u0, v0) meets, each once, in the order met. */
-function met(at: (u: number, v: number) => Block | null, u0: number, v0: number, w: number, h: number): Block[] {
-  const out = new Map<number, Block>();
-  for (let v = v0; v < v0 + h; v++) for (let u = u0; u < u0 + w; u++) {
-    const b = at(u, v);
-    if (b && !out.has(b.id)) out.set(b.id, b);
-  }
-  return [...out.values()];
-}
-
-/** Every block that touches the floor cell (x, z), each once: what the mesh iterates. */
-export function floorBlocksOf(f: StoneField, map: TileMap, marks: Marks, x: number, z: number): Block[] {
-  return met((u, v) => floorBlockAt(f, map, marks, u, v), x * STONE_PX, z * STONE_PX, STONE_PX, STONE_PX);
-}
-
-/** Every block that touches the face, each once. */
-export function wallBlocksOf(f: StoneField, map: TileMap, face: Face): Block[] {
-  return met((u, v) => wallBlockAt(f, map, face, u, v), (face.side < 2 ? face.x : face.z) * STONE_PX, 0, STONE_PX, COURSES[COURSES.length - 1]);
 }

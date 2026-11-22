@@ -4,7 +4,7 @@ import { TileMap } from '../sim/map';
 import { MAP_ROWS, parseMap } from './demoMap';
 import { inDipMesh } from './dips/shape';
 import { WALL_H, heightAt } from './heights';
-import { CHUNK, KIND, buildChunk as buildWithKit, chunkGrid, chunksOfTile, flatSurface, tileHash, type Chunk } from './worldMesh';
+import { CHUNK, KIND, buildChunk as buildWithKit, chunkGrid, chunksOfTile, flatSurface, type Chunk } from './worldMesh';
 import { stoneField } from './stone/field';
 import { noMarks } from './stone/place';
 import { planSheets } from './stone/plan';
@@ -238,12 +238,12 @@ describe('buildChunk', () => {
     }
   });
 
-  it('flatSurface gives a sheet floor with no rect, or the painted ground', () => {
+  it('flatSurface gives a sheet floor, or the painted ground', () => {
     const t = TILE_ID;
     const m = mapOf(3, 1, [t.Floor, t.Chasm, t.Road]);
-    expect(flatSurface(m, false, 0, 0)).toEqual({ kind: KIND.floor, rect: { x: 0, y: 0, w: 0, h: 0 }, u0: 0, v0: 0 });
+    expect(flatSurface(m, false, 0, 0)).toEqual({ kind: KIND.floor, u0: 0, v0: 0 });
     expect(flatSurface(m, true, 1, 0).kind).toBe(KIND.floor);
-    expect(flatSurface(m, true, 2, 0)).toEqual({ kind: KIND.ground, rect: { x: 0, y: 0, w: 48, h: 16 }, u0: 32, v0: 0 });
+    expect(flatSurface(m, true, 2, 0)).toEqual({ kind: KIND.ground, u0: 32, v0: 0 });
     expect(flatSurface(m, false, 2, 0).kind).toBe(KIND.floor);
   });
 
@@ -356,13 +356,3 @@ describe('chunksOfTile', () => {
   });
 });
 
-describe('tileHash', () => {
-  it('tileHash is in [0, 1) and deterministic', () => {
-    for (let i = 0; i < 100; i++) {
-      const h = tileHash(i, i * 3);
-      expect(h).toBeGreaterThanOrEqual(0);
-      expect(h).toBeLessThan(1);
-      expect(h).toBe(tileHash(i, i * 3));
-    }
-  });
-});

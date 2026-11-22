@@ -37,24 +37,16 @@ export interface Chunk { cx: number; cz: number; world: WorldArrays; min: [numbe
 /** What the stone cells of a chunk are built from. */
 export interface StoneKit { field: StoneField; plan: SheetPlan; marks: Marks }
 
-export function tileHash(x: number, z: number): number {
-  let n = (Math.imul(x, 374761393) + Math.imul(z, 668265263)) | 0;
-  n = Math.imul(n ^ (n >>> 13), 1274126177) | 0;
-  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
-}
-
 export type Corner = [x: number, y: number, z: number, u: number, v: number];
-export type Rect = { x: number; y: number; w: number; h: number };
-const NO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 };
 
 /** Growing vertex arrays, 6 vertices per quad. */
-export interface QuadSink { position: number[]; uv: number[]; normal: number[]; kind: number[]; rect: number[] }
+export interface QuadSink { position: number[]; uv: number[]; normal: number[]; kind: number[] }
 
 /**
  * Pushes one quad as two triangles. c0..c3 run top-left, top-right, bottom-right, bottom-left as seen from the normal's side.
  * Whatever that order, the triangles are wound counter-clockwise seen from the normal.
  */
-export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number, r: Rect): void {
+export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number): void {
   const [a, b, d] = [c[0], c[1], c[2]];
   const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
   const dot = (e1[1] * e2[2] - e1[2] * e2[1]) * n[0] + (e1[2] * e2[0] - e1[0] * e2[2]) * n[1] + (e1[0] * e2[1] - e1[1] * e2[0]) * n[2];
@@ -65,20 +57,17 @@ export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [n
     s.uv.push(p[3], p[4]);
     s.normal.push(n[0], n[1], n[2]);
     s.kind.push(k);
-    s.rect.push(r.x, r.y, r.w, r.h);
   }
 }
 
 /**
- * What a height-0 cell shows where it is flat: the painted ground (kind ground, the whole image as rect) on a painted map's GROUND_TILES,
- * else a stone sheet's floor (kind floor, no rect). Terrain cells take the floor kind. (u0, v0) is the uv of the cell's corner (x, z).
+ * What a height-0 cell shows where it is flat: the painted ground (kind ground) on a painted map's GROUND_TILES, else a stone sheet's
+ * floor (kind floor). Terrain cells take the floor kind. (u0, v0) is the uv of the cell's corner (x, z).
  */
-export function flatSurface(m: TileMap, painted: boolean, x: number, z: number): { kind: number; rect: Rect; u0: number; v0: number } {
+export function flatSurface(m: TileMap, painted: boolean, x: number, z: number): { kind: number; u0: number; v0: number } {
   const t = m.get(x, z);
-  if (painted && !isTerrain(t) && GROUND_TILES.has(t)) {
-    return { kind: KIND.ground, rect: { x: 0, y: 0, w: m.w * 16, h: m.h * 16 }, u0: x * 16, v0: z * 16 };
-  }
-  return { kind: KIND.floor, rect: NO_RECT, u0: 0, v0: 0 };
+  if (painted && !isTerrain(t) && GROUND_TILES.has(t)) return { kind: KIND.ground, u0: x * 16, v0: z * 16 };
+  return { kind: KIND.floor, u0: 0, v0: 0 };
 }
 
 /**
@@ -87,15 +76,15 @@ export function flatSurface(m: TileMap, painted: boolean, x: number, z: number):
  */
 export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, kit: StoneKit): Chunk {
   const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(m.w, x0 + CHUNK), z1 = Math.min(m.h, z0 + CHUNK);
-  const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [], rect: number[] = [];
+  const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [];
   const isGround = (x: number, z: number): boolean => flatSurface(m, painted, x, z).kind === KIND.ground;
 
   if (painted) {
-    const sink = { position, uv, normal, kind, rect };
+    const sink = { position, uv, normal, kind };
     for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
       if (heightAt(m, x, z) !== 0 || inDipMesh(m, x, z) || !isGround(x, z)) continue;
       const f = flatSurface(m, painted, x, z);
-      pushQuad(sink, [[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind, f.rect);
+      pushQuad(sink, [[x, 0, z, f.u0, f.v0], [x + 1, 0, z, f.u0 + 16, f.v0], [x + 1, 0, z + 1, f.u0 + 16, f.v0 + 16], [x, 0, z + 1, f.u0, f.v0 + 16]], [0, 1, 0], f.kind);
     }
   }
   const groundCount = kind.length;

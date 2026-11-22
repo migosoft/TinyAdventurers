@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { CIRCLE_RINGS, CIRCLE_STONES, floorBlockAt, floorBlocksOf, RUNE_RING, wallBlockAt, wallBlocksOf, type Block } from './blocks';
-import { LAID, ROCK, rockAmount, STONE_PX, stoneField } from './field';
+import { CIRCLE_RINGS, CIRCLE_STONES, COURSES, floorBlockAt, RUNE_RING, wallBlockAt, type Block } from './blocks';
+import { LAID, ROCK, rockAmount, STONE_PX, stoneField, type StoneField } from './field';
 import { noMarks, type FloorPiece, type Marks } from './place';
 import type { Face } from './plan';
 
@@ -11,6 +11,18 @@ const W = 100, H = 100;
 const kinds = (rockWest: number): Uint8Array => Uint8Array.from({ length: W * H }, (_, i) => (i % W < rockWest ? ROCK : LAID));
 const map = new TileMap(W, H, new Uint8Array(W * H).fill(TILE_ID.Floor)), laid = stoneField(map, null, 7), none = noMarks();
 const face: Face = { x: 10, z: 3, side: 0 };
+
+/** The blocks a scan of `w` by `h` px from (u0, v0) meets, each once, in the order met. */
+function met(at: (u: number, v: number) => Block | null, u0: number, v0: number, w: number, h: number): Block[] {
+  const out = new Map<number, Block>();
+  for (let v = v0; v < v0 + h; v++) for (let u = u0; u < u0 + w; u++) {
+    const b = at(u, v);
+    if (b && !out.has(b.id)) out.set(b.id, b);
+  }
+  return [...out.values()];
+}
+const floorBlocksOf = (f: StoneField, map: TileMap, marks: Marks, x: number, z: number): Block[] => met((u, v) => floorBlockAt(f, map, marks, u, v), x * STONE_PX, z * STONE_PX, STONE_PX, STONE_PX);
+const wallBlocksOf = (f: StoneField, map: TileMap, face: Face): Block[] => met((u, v) => wallBlockAt(f, map, face, u, v), (face.side < 2 ? face.x : face.z) * STONE_PX, 0, STONE_PX, COURSES[COURSES.length - 1]);
 
 /** Every px of a 64 by 64 window has one block whose rect holds it, and the rects (cut to the window) add up to the window: none overlaps. */
 function tiles(at: (u: number, v: number) => Block | null, u0: number, v0: number): void {
