@@ -10,6 +10,7 @@ import { fragment, type Builder } from './shaderCode.testutil';
 import { dipMaterial } from './dips/dipNodes';
 import { unplanned } from './stone/plan';
 import { makeSheets } from './stone/sheets';
+import { crystalMaterial } from './stone/crystalNodes';
 import { airMaterials } from './air/airNodes';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
@@ -28,6 +29,7 @@ const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
 const LAVA_ATTRS: [string, number][] = [['position', 3], ['shore', 2]];
+const CRYSTAL_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['gem', 3], ['foot', 2]];
 const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
   if (!attrs) return undefined;
   const g = new BufferGeometry();
@@ -53,6 +55,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     // The water's surface and the ceiling of its mirror pass (#345).
     { name: 'water', m: waterMaterial(l, sight, t, { w: 4, h: 3 }, toward).material, world: true },
     { name: 'ceiling', m: ceilingMaterial(l, sight), world: true },
+    // The crystals (#380): gems lit by the room, then the sight step.
+    { name: 'crystal', m: crystalMaterial(l, sight).material, world: true, attrs: CRYSTAL_ATTRS },
     // The lava's surface (#344) ends with the sight step.
     { name: 'lava', m: lavaMaterial(sight).material, world: true, attrs: LAVA_ATTRS },
     // The heat shimmer (#344) is the one material without the sight step: it shows the scene copy, which went through the step, and its

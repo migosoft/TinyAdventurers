@@ -5,21 +5,23 @@ import { CHUNK } from './grid';
 import type { Marks } from './place';
 
 /** The tallest shard of a big and of a small cluster, in tiles. */
-export const BIG_SIZE = 0.95, SMALL_SIZE = 0.25;
+export const BIG_SIZE = 1.15, SMALL_SIZE = 0.28;
 /** A broken cluster has no vertex above this share of its size. */
-export const BROKEN_TOP = 0.24;
+export const BROKEN_TOP = 0.38;
 /** A big cluster's foot and its light stand this far in front of the wall, the light at this height (tiles). */
 export const CRYSTAL_STAND = 0.26, CRYSTAL_Y = 0.45;
 /** The slow pulse: its rate (rad/s), shared by the light and the gem's glow. */
 export const CRYSTAL_RATE = 1.3;
 /** The glow of a small or broken cluster against a whole big one's: a glimmer on the crystal itself. */
-const GLIMMER = 0.3;
+const GLIMMER = 0.4;
 /** A shard's radius and reach from the cluster's middle, as shares of the size: the main shard, then the others (from, range). */
-const MAIN_R = 0.1, SIDE_R = [0.045, 0.045], SIDE_OFF = [0.1, 0.13], SIDE_H = [0.3, 0.42], SIDE_LEAN = [0.28, 0.4];
+const MAIN_R = 0.13, SIDE_R = [0.06, 0.05], SIDE_OFF = [0.1, 0.13], SIDE_H = [0.3, 0.42], SIDE_LEAN = [0.28, 0.4];
 /** The tip's length in radii, the shaft's taper to its top ring, and how deep a shard's base lies under the floor (share of the size). */
 const TIP = 2.4, TAPER = 0.82, SUNK = 0.05;
 /** The glow weight (0..1) at a shard's base ring, at a face's middle, at the top ring and at the tip: bright edges and tips, a darker body. */
 const GLOW = { base: 0.22, face: 0.12, top: 0.7, tip: 1 } as const;
+/** A side's own share of that glow (from, range). */
+const FACET = [0.45, 1];
 
 export interface CrystalArrays { position: Float32Array; normal: Float32Array; /** glow weight, tint 0..1, pulse phase */ gem: Float32Array; /** the ground point the sight is read at */ foot: Float32Array; index: Uint32Array }
 
@@ -64,27 +66,30 @@ export function crystalCluster(seed: number, size: number, broken: boolean): { p
     });
     const on = (along: number, gl: number): V => [base[0] + axis[0] * along, base[1] + axis[1] * along, base[2] + axis[2] * along, gl * g];
     const lo = ring(0, rad, GLOW.base, 0), hi = ring(len, rad * (tip ? TAPER : 1), GLOW.top, tip ? 0 : slant);
-    const foot = on(0, 0), end = tip ? on(len + tip, GLOW.tip) : on(len, GLOW.tip);
+    const foot = on(0, 0), end = on(len + tip, GLOW.tip);
     for (let k = 0; k < 6; k++) {
-      const k2 = (k + 1) % 6;
-      const m: V = [0, 1, 2, 3].map((i) => (i < 3 ? (lo[k][i] + lo[k2][i] + hi[k][i] + hi[k2][i]) / 4 : GLOW.face * g)) as V;
-      tri(lo[k], lo[k2], m);
-      tri(lo[k2], hi[k2], m);
-      tri(hi[k2], hi[k], m);
-      tri(hi[k], lo[k], m);
-      tri(hi[k], hi[k2], end);
+      // each side glows by its own share, as a gem's facets do: no side is the lit one
+      const k2 = (k + 1) % 6, f = FACET[0] + r() * FACET[1], w = (p: V): V => [p[0], p[1], p[2], Math.min(1, p[3] * f)];
+      const m: V = [0, 1, 2, 3].map((i) => (i < 3 ? (lo[k][i] + lo[k2][i] + hi[k][i] + hi[k2][i]) / 4 : GLOW.face * g * f)) as V;
+      tri(w(lo[k]), w(lo[k2]), m);
+      tri(w(lo[k2]), w(hi[k2]), m);
+      tri(w(hi[k2]), w(hi[k]), m);
+      tri(w(hi[k]), w(lo[k]), m);
+      // a tip's side glows with its shaft's; a break face is the stump's brightest part
+      if (tip) tri(w(hi[k]), w(hi[k2]), end);
+      else tri([hi[k][0], hi[k][1], hi[k][2], g], [hi[k2][0], hi[k2][1], hi[k2][2], g], on(len, GLOW.base));
       tri(lo[k2], lo[k], foot);
     }
   };
   const n = 5 + Math.floor(r() * 3);
   for (let i = 0; i < n; i++) {
     // the same numbers whole and broken: a stump stands where its shard stood
-    const ang = i === 0 ? (r() - 0.5) * 0.6 : ((i - 1) / (n - 2) - 0.5) * 2.7 + (r() - 0.5) * 0.5;
+    const ang = i === 0 ? (r() - 0.5) * 0.6 : ((i - 1) / (n - 2) - 0.5) * 2.2 + (r() - 0.5) * 0.5;
     const off = i === 0 ? 0 : (SIDE_OFF[0] + r() * SIDE_OFF[1]) * size;
     const rad = (i === 0 ? MAIN_R : SIDE_R[0] + r() * SIDE_R[1]) * size;
     const h = i === 0 ? size : (SIDE_H[0] + r() * SIDE_H[1]) * size;
     const lean = i === 0 ? 0.04 + r() * 0.08 : SIDE_LEAN[0] + r() * SIDE_LEAN[1];
-    const turn = r() * 1.05, cut = 0.05 + r() * 0.07, slant = (r() - 0.5) * 1.6;
+    const turn = r() * 1.05, cut = 0.08 + r() * 0.12, slant = (r() < 0.5 ? -1 : 1) * (0.7 + r() * 0.5);
     const axis = [Math.cos(ang) * Math.sin(lean), Math.cos(lean), Math.sin(ang) * Math.sin(lean)];
     // sunk so far that the leaning base ring stays under the floor
     const base = [Math.cos(ang) * off, -(SUNK * size + rad * Math.sin(lean)), Math.sin(ang) * off];

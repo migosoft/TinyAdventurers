@@ -76,6 +76,8 @@ import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type Stone
 import { noMarks, placeMarks, type Marks, type Taken } from './stone/place';
 import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
 import { floorHeight } from './stone/shape';
+import { buildCrystalChunk, crystalChunkOf } from './stone/crystals';
+import { crystalMaterial } from './stone/crystalNodes';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -163,6 +165,8 @@ export interface FrameInput {
   water?: { ripples: Float32Array | null; now: number; reflect: boolean };
   /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
   lavaPool?: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean };
+  /** The crystals (#380): a big cluster whose light `off` names is drawn broken (its chunk is rebuilt only when a light of it switched); `now` is the clock of the lights' pulse (s), which the gems' glow follows. Absent: every cluster as it was, clock `t`. */
+  crystals?: { off: (lightId: number) => boolean; now: number };
 }
 
 export { GroundTooLargeError };
@@ -406,6 +410,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   water.setScene(sceneCopy.texture);
   // The lava (#344): its glowing surface, and the hot air over it, which shows the same copy a little off.
   const lava = lavaMaterial(sight);
+  const crystal = crystalMaterial(lighting, sight);
+  /** The crystal lights that are off: their clusters are built broken. */
+  const crystalsOff = new Set<number>();
   const shimmer = shimmerMaterial(sight, lighting.lavaTexture, map, toward);
   shimmer.setScene(sceneCopy.texture);
   const mirrorCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -426,6 +433,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const waterChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const lavaChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const shimmerChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const crystalChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   type GroundBox = { x0: number; z0: number; x1: number; z1: number };
   /** The ground each water chunk's quads cover (tiles), for `poolInView`; null: rebuilt from the chunks at the next frame. */
   let waterBoxes: GroundBox[] | null = null;
@@ -500,6 +508,21 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     cm.mesh.visible = shimmerOn;
     return cm;
   };
+  /** The crystal clusters of a chunk (#380), whole or broken by `crystalsOff`: an opaque mesh of its own layout in the opaque scene. */
+  const buildCrystals = (cx: number, cz: number): void => {
+    const i = cz * nx + cx;
+    dropChunk(crystalChunks, i);
+    const a = buildCrystalChunk(kit.marks, (id) => crystalsOff.has(id), cx, cz);
+    if (!a) return;
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(a.position, 3));
+    g.setAttribute('normal', new BufferAttribute(a.normal, 3));
+    g.setAttribute('gem', new BufferAttribute(a.gem, 3));
+    g.setAttribute('foot', new BufferAttribute(a.foot, 2));
+    g.setIndex(new BufferAttribute(a.index, 1));
+    g.computeBoundingBox();
+    crystalChunks[i] = finishMesh(g, g.boundingBox!, crystal.material);
+  };
   const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial): ChunkMesh => {
     g.boundingBox = box;
     g.boundingSphere = box.getBoundingSphere(new Sphere());
@@ -541,6 +564,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const s = buildShimmerChunk(map, cx, cz);
     if (s) shimmerChunks[i] = makeShimmerMesh(s.position);
     lavaBoxes = null;
+    buildCrystals(cx, cz);
   };
   /** What the sheets' plan was made from (per chunk); `tileChanged` compares it (`layoutMoved`). Empty on the woodland. */
   let keys: string[] = world.stone ? planKeys(map) : [];
@@ -559,7 +583,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     keys = planKeys(map);
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-  const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks];
+  const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks, crystalChunks];
   const chunkTotal = (): number => allChunks.reduce((n, list) => n + list.filter(Boolean).length, 0);
   const boxesOf = (list: (ChunkMesh | null)[]): GroundBox[] => {
     const out: GroundBox[] = [];
@@ -1019,7 +1043,19 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       water.time.value = f.water?.now ?? f.t;
       water.setRipples(f.water?.ripples ?? null);
       lava.time.value = shimmer.time.value = f.lavaPool?.now ?? f.t;
-      lava.setBubbles(f.lavaPool?.bubbles ?? null);
+      crystal.time.value = f.crystals?.now ?? f.t;
+      if (f.crystals) {
+        // A light that switched: its chunk's clusters are built again, broken or whole.
+        const dirty = new Set<number>();
+        for (const b of kit.marks.shards) {
+          if (b.lightId === undefined || f.crystals.off(b.lightId) === crystalsOff.has(b.lightId)) continue;
+          if (!crystalsOff.delete(b.lightId)) crystalsOff.add(b.lightId);
+          const [cx, cz] = crystalChunkOf(b);
+          dirty.add(cz * nx + cx);
+        }
+        for (const i of dirty) buildCrystals(i % nx, Math.floor(i / nx));
+        if (dirty.size) chunks.total = chunkTotal();
+      }      lava.setBubbles(f.lavaPool?.bubbles ?? null);
       lava.setStirs(f.lavaPool?.stirs ?? null);
       fieldU.age.value = f.field ? f.field.age : FIELD_OLD;
       chunks.drawn = counters.drawn;
@@ -1259,6 +1295,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldTex.dispose();
         water.material.dispose();
         lava.material.dispose();
+        crystal.material.dispose();
         shimmer.material.dispose();
         sceneCopy.dispose();
         mirrorTarget.dispose();

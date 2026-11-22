@@ -1,6 +1,6 @@
 // The stage of the ?r3d=stone page (#380): the stonework's own level on the real code, no server. A knight walks with WASD.
 // `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate`, `&lamp=0` (the light that walks with the knight off),
-// `&break=1` (every crystal broken: its light is off; the crystal model comes later), `&t=<s>` shifts the clock of the lights' flicker and the puddles' drops; `&refl=0` turns the puddles' reflections off.
+// `&break=1` (every crystal broken: its light is off and its cluster is stumps), `&t=<s>` shifts the clock of the lights' flicker and the puddles' drops; `&refl=0` turns the puddles' reflections off.
 import { LIGHT, LIGHT_KIND } from '../../generated/defs';
 import { LightField } from '../../game/light';
 import { closeCam, keysToWorld } from '../camera';
@@ -81,6 +81,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
           see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters: [],
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
+          crystals: { off: (i) => field.lights.get(i)?.on === false, now: t },
         },
         c.timer,
       );
