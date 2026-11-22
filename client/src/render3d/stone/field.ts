@@ -3,6 +3,7 @@
 import { TILE_ID } from '../../generated/defs';
 import type { TileMap } from '../../sim/map';
 import { tilesSeed } from '../cover/moss';
+import { heightAt } from '../heights';
 
 /** Stone pixels per tile in the stone sheets (a page is one chunk, 512 by 512 px). */
 export const STONE_PX = 32;
@@ -89,4 +90,9 @@ export function rockAmount(f: StoneField, map: TileMap, x: number, z: number): n
   const d = doorDistance(map, x, z, DOOR_CLEAR + DOOR_FADE);
   if (d <= DOOR_CLEAR) return 0;
   return amount * Math.min(1, (d - DOOR_CLEAR) / DOOR_FADE);
+}
+
+/** Whether the wall cell (x, z) is shaped as natural rock (`shape.ts`): there is rock at its middle. Every other wall cell is upright masonry. */
+export function rockWall(f: StoneField, map: TileMap, x: number, z: number): boolean {
+  return x >= 0 && z >= 0 && x < map.w && z < map.h && heightAt(map, x, z) > 0 && rockAmount(f, map, x + 0.5, z + 0.5) > 0;
 }

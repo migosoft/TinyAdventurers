@@ -11,6 +11,7 @@ import { FACE_H, FLAG } from './format';
 import { CAP, CRACK, MORTAR, MOSS_CREEP, SPAN, dampAt, dipMask, groove, keyAt, planeSeed, put, relief, tones, type GroundCtx } from './paintLaid';
 import type { Marks } from './place';
 import type { Face } from './plan';
+import { stoneHeight } from './shape';
 
 type Rgb = readonly [number, number, number];
 
@@ -191,7 +192,9 @@ export function rockGroundPx(c: GroundCtx, l: RockLines, u: number, v: number, o
       du = -BANK * Math.sign(dipMask(map, u + 1, v) - dipMask(map, u - 1, v)); dv = -BANK * Math.sign(dipMask(map, u, v + 1) - dipMask(map, u, v - 1));
     }
   }
-  rockPx(out, at, f.seed, u, v, top ? CAP : ROCK, GROUND_LEAN, mark, damp, du, dv);
+  // a rock wall's slope is rock like the floor, which so runs on up its foot; the capping tones begin where the slope ends, along its wobbling line
+  const cap = top && stoneHeight(f, map, marks, (u + 0.5) / STONE_PX, (v + 0.5) / STONE_PX) >= heightAt(map, x, z);
+  rockPx(out, at, f.seed, u, v, cap ? CAP : ROCK, GROUND_LEAN, mark, damp, du, dv);
 }
 
 /**

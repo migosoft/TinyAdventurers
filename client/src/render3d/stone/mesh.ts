@@ -1,5 +1,6 @@
-// The stone mesh of one chunk (#380): laid floors and wall faces block by block (`laidMesh.ts`), a flat quad per wall top and per face
-// tile of rock, and the drain grates' bars (`ornamentMesh.ts`), with the attributes the world material reads the stone sheets by.
+// The stone mesh of one chunk (#380): laid floors and wall faces block by block (`laidMesh.ts`), natural rock's slopes, columns and
+// uneven floor (`rockMesh.ts`), a flat quad per wall top, and the drain grates' bars (`ornamentMesh.ts`), with the attributes the world
+// material reads the stone sheets by.
 // Pure: no three.
 import type { TileMap } from '../../sim/map';
 import { inDipMesh } from '../dips/shape';
@@ -9,6 +10,8 @@ import { CHUNK, KIND, SIDE_STEP } from './grid';
 import { STONE_PX, type StoneField } from './field';
 import { NONE, faceOf, laid, laidFace, laidFloor, type Corner, type Out, type Vec3 } from './laidMesh';
 import { grateBars } from './ornamentMesh';
+import { rockColumn, rockFloor, rockSlope, type RockEnv } from './rockMesh';
+import { isColumn, roughCell, shapeOf, wallOf } from './shape';
 import type { Marks } from './place';
 import type { FaceSlot, SheetPlan } from './plan';
 
@@ -106,9 +109,22 @@ export function buildStoneChunk(map: TileMap, f: StoneField, plan: SheetPlan, ma
   };
 
   const c = laid(map, f, plan, marks, x0, z0, layer, skip);
+  const rock: RockEnv = { s: shapeOf(c), plan, ground };
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     const h = heightAt(map, x, z);
-    if (h === 0) { laidFloor(c, x, z, out); continue; }
+    if (h === 0) {
+      if (roughCell(rock.s, x, z)) rockFloor(rock, x, z, out);
+      else laidFloor(c, x, z, out);
+      continue;
+    }
+    const w = wallOf(rock.s, x, z);
+    if (w) {
+      // natural rock beside open ground: its own shape, no top and no upright faces
+      if (isColumn(w)) rockColumn(rock, w, out);
+      else rockSlope(rock, w, out);
+      for (let s = 0; s < 4; s++) if (w.open[s] && !inDipMesh(map, x + SIDE_STEP[s][0], z + SIDE_STEP[s][1])) foot(x, z, s, 0, plan.slotOf({ x, z, side: s as 0 | 1 | 2 | 3 }));
+      continue;
+    }
     quad([flatCorner(x, h, z), flatCorner(x + 1, h, z), flatCorner(x + 1, h, z + 1), flatCorner(x, h, z + 1)], [0, 1, 0], KIND.top);
     for (let s = 0; s < 4; s++) {
       const fs = faceOf(c, x, z, s);

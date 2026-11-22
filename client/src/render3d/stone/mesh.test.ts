@@ -10,12 +10,19 @@ import { stoneField } from './field';
 import { buildStoneChunk, type StoneArrays } from './mesh';
 import { noMarks, placeMarks, type Marks } from './place';
 import { planSheets } from './plan';
-import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap } from './stoneMap';
+import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 6600;
 /** The same for the stone page's worst chunk, with the mosaic and a grate (measured: 8 914). */
 const PIECE_CHUNK_TRIS = 9800;
+/** What Task 11 measured for that chunk: the mesh of laid stone has not moved. */
+const TASK_11_CHUNK_TRIS = 8914;
+/**
+ * The most triangles a chunk of the stone page's caves may have (measured: 3 877, 5 238 with the passage's laid half, 4 830 and 3 834), and the
+ * whole page of ten chunks as rock (measured: 25 335; as laid stone it has 59 215).
+ */
+const ROCK_CHUNK_TRIS = 5800, ROCK_PAGE_TRIS = 28000;
 
 /** A 3 by 3 floor with a wall in the middle. */
 function ring() {
@@ -258,6 +265,78 @@ describe('buildStoneChunk', () => {
       expect(across === 1 || across === 2, `end vertex ${v.p}`).toBe(true);
     }
     expect(ends).toBeGreaterThan(20);
+  });
+
+  // ---- natural rock (`rockMesh.ts`)
+  /** A cave of 8 by 6 cells in solid rock, with a lone wall cell at (4, 4) and a group of two at (7, 5) and (8, 5). */
+  const cave = (): TileMap => {
+    const m = new TileMap(12, 10, new Uint8Array(120).fill(TILE_ID.Wall));
+    for (let z = 2; z < 8; z++) for (let x = 2; x < 10; x++) m.set(x, z, TILE_ID.Floor);
+    for (const [x, z] of [[4, 4], [7, 5], [8, 5]]) m.set(x, z, TILE_ID.Wall);
+    return m;
+  };
+  const rockBuild = (m: TileMap): StoneArrays => buildStoneChunk(m, stoneField(m, new Uint8Array(m.w * m.h).fill(1), SEED), planSheets(m), noMarks(), 0, 0);
+  /** The vertices of the rock's surface over wall cells: faces that are no foot. */
+  const rockVertices = (a: StoneArrays): V[] => vertices(a).filter((v) => v.kind === KIND.face && v.sheet[2] >= 0);
+
+  it('makes a lone rock wall cell a column, narrower at mid height than at its foot and its top, and a group of two an outcrop', () => {
+    const vs = rockVertices(rockBuild(cave()));
+    /** The widest reach from (cx, cz) of the vertices in the box whose height lies in [lo, hi]. */
+    const reach = (cx: number, cz: number, lo: number, hi: number, d: (v: V) => number): number => {
+      const at = vs.filter((v) => Math.abs(v.p[0] - cx) <= 1 && Math.abs(v.p[2] - cz) <= 0.5 && v.p[1] >= lo && v.p[1] <= hi).map(d);
+      expect(at.length).toBeGreaterThan(8);
+      return Math.max(...at);
+    };
+    const round = (v: V): number => Math.hypot(v.p[0] - 4.5, v.p[2] - 4.5);
+    const foot = reach(4.5, 4.5, 0, 0.01, round), waist = reach(4.5, 4.5, 0.8, 1.2, round), top = reach(4.5, 4.5, WALL_H, WALL_H, round);
+    expect(waist).toBeLessThan(top - 0.08);
+    expect(top).toBeLessThan(foot - 0.03);
+    expect(waist).toBeGreaterThan(0.15);
+    // the group: a height field, so it is nowhere wider above than below
+    const across = (v: V): number => Math.abs(v.p[2] - 5.5);
+    const gFoot = reach(8, 5.5, 0, 0.01, across), gMid = reach(8, 5.5, 0.6, 1.4, across), gTop = reach(8, 5.5, WALL_H, WALL_H, across);
+    expect(gFoot).toBeCloseTo(0.5, 6);
+    expect(gMid).toBeLessThan(gFoot);
+    expect(gTop).toBeLessThan(gMid);
+    expect(gTop).toBeGreaterThan(0.02);
+  });
+
+  it('reads light and sight of every rock wall vertex in an open cell, and lets no vertex of a wall cell leave its cell', () => {
+    const m = cave(), vs = rockVertices(rockBuild(m));
+    expect(vs.length).toBeGreaterThan(1000);
+    for (const v of vs) {
+      expect(heightAt(m, Math.floor(v.p[0] + v.push[0]), Math.floor(v.p[2] + v.push[1])), `push of ${v.p}`).toBe(0);
+      expect(v.p[1]).toBeGreaterThanOrEqual(0);
+      expect(v.p[1]).toBeLessThanOrEqual(WALL_H);
+      const e = 1e-6;
+      expect([[e, e], [-e, e], [e, -e], [-e, -e]].some(([dx, dz]) => heightAt(m, Math.floor(v.p[0] + dx), Math.floor(v.p[2] + dz)) > 0), `vertex ${v.p}`).toBe(true);
+    }
+    // the lone cell and the group stand in open floor: what is drawn of them lies in their own cells
+    const near = vs.filter((v) => v.p[0] > 3.2 && v.p[0] < 5.8 && v.p[2] > 3.2 && v.p[2] < 5.8);
+    expect(near.length).toBeGreaterThan(100);
+    for (const v of near) for (const c of [v.p[0], v.p[2]]) { expect(c).toBeGreaterThanOrEqual(4); expect(c).toBeLessThanOrEqual(5); }
+    const group = vs.filter((v) => v.p[0] > 6.2 && v.p[0] < 9.8 && v.p[2] > 4.2 && v.p[2] < 6.8);
+    for (const v of group) { expect(v.p[0]).toBeGreaterThanOrEqual(7); expect(v.p[0]).toBeLessThanOrEqual(9); expect(v.p[2]).toBeGreaterThanOrEqual(5); expect(v.p[2]).toBeLessThanOrEqual(6); }
+    // floors of rock stay at or below 0
+    for (const v of vertices(rockBuild(m))) if (v.kind === KIND.floor) expect(v.p[1]).toBeLessThanOrEqual(0);
+  });
+
+  it('builds Task 11\'s mesh where the rock amount is 0, and keeps the caves under their budgets', () => {
+    const map = stoneMap(), plan = planSheets(map), lights = TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y }));
+    const level = (kinds: Uint8Array | null) => {
+      const f = stoneField(map, kinds, STONE_SEED), marks = placeMarks(map, f, { lights, spawn: STONE_SPAWN });
+      return (cx: number, cz: number): StoneArrays => buildStoneChunk(map, f, plan, marks, cx, cz);
+    };
+    const laid = level(null), zones = level(zoneKinds(map));
+    // the mosaic room lies deep in laid stone: the same arrays, and the count Task 11 measured
+    expect(zones(3, 0)).toEqual(laid(3, 0));
+    expect(laid(3, 0).index.length / 3).toBe(TASK_11_CHUNK_TRIS);
+    // the two caves' chunks, and the whole page as rock
+    for (const [cx, cz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) expect(zones(cx, cz).index.length / 3, `chunk ${cx},${cz}`).toBeLessThan(ROCK_CHUNK_TRIS);
+    const rock = level(new Uint8Array(map.w * map.h).fill(1));
+    let all = 0;
+    for (let cz = 0; cz < 2; cz++) for (let cx = 0; cx < 5; cx++) all += rock(cx, cz).index.length / 3;
+    expect(all).toBeLessThan(ROCK_PAGE_TRIS);
   });
 
   it('leaves cells to another mesh when asked, and a chunk of only Void ground layer -1', () => {

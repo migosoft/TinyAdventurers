@@ -11,7 +11,7 @@ import { WALL_H, heightAt } from '../heights';
 import { COURSES, LEVEL_STEP, floorBlockAt, markAt, slabOf, wallBlockAt, type Block } from './blocks';
 import { FACE_H, FACE_W } from './format';
 import { CHUNK, KIND, SIDE_STEP } from './grid';
-import { STONE_PX, type StoneField } from './field';
+import { STONE_PX, rockWall, type StoneField } from './field';
 import type { Marks } from './place';
 import type { Face, SheetPlan } from './plan';
 
@@ -146,7 +146,7 @@ function shape(s: Surf, sp: Space, out: Out): void {
 
 // ---- what a chunk's build keeps: the pieces of the cells and faces it has asked for (its own and the ring round them)
 /** A floor cell's pieces (one may reach on over other cells); `at`: the piece of each px, where the cell has too many to search. */
-interface Cell { at: Uint16Array | null; surfs: Surf[] }
+interface Cell { at: Uint16Array | null; surfs: Surf[]; rock?: true }
 interface FaceShape { face: Face; h: number; hn: number; rock: boolean; surfs: Surf[] }
 export interface Laid {
   map: TileMap; f: StoneField; plan: SheetPlan; marks: Marks; skip?: (x: number, z: number) => boolean;
@@ -227,7 +227,7 @@ function cellOf(c: Laid, x: number, z: number): Cell | null {
       laidStone ||= !s.rock;
       cell.surfs.push((s.rock ? null : wide(c, s.b, x, z)) ?? { u0: pu + i, v0: pv + j, u1: pu + i1, v1: pv + j1, p: s.rock ? LEVEL[2] : top(c, s.b) });
     }
-    if (!laidStone) cell.surfs = [{ ...whole, p: LEVEL[2] }];
+    if (!laidStone) cell = { at: null, surfs: [{ ...whole, p: LEVEL[2] }], rock: true };
   } else {
     const planes: Plane[] = [];
     const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
@@ -252,6 +252,17 @@ function cellOf(c: Laid, x: number, z: number): Cell | null {
   }
   c.cells.set(key, cell);
   return cell;
+}
+
+/** Whether the floor cell (x, z) is rock all over; null: this mesh has no floor there. */
+export function floorIsRock(c: Laid, x: number, z: number): boolean | null {
+  const cell = cellOf(c, x, z);
+  return cell ? !!cell.rock : null;
+}
+/** The height of the floor piece over the ground point (u, v) in px; null: this mesh has no floor there. */
+export function laidHeight(c: Laid, u: number, v: number): number | null {
+  const iu = Math.floor(u), iv = Math.floor(v), cell = cellOf(c, iu >> 5, iv >> 5);
+  return cell ? hOf(pieceAt(cell, iu, iv).p, u, v) : null;
 }
 
 /** The floor pieces that begin in the cell (x, z), with their skirts: a piece that reaches over several cells is drawn from its first. */
@@ -295,7 +306,7 @@ function wallPlane(c: Laid, face: Face, b: Block): Plane {
 
 /**
  * The side `s` of the wall cell (x, z) where it borders a lower cell, or null. Its blocks are cut at the face's edges. `rock`: some of it
- * is no block, and the whole face stays one flat piece in the cell's edge (uncut stone to its neighbours).
+ * is no block, or the cell is shaped as rock (`rockMesh.ts`): no piece of this mesh, uncut stone in the cell's edge to its neighbours.
  */
 export function faceOf(c: Laid, x: number, z: number, s: number): FaceShape | null {
   if (!inMap(c, x, z)) return null;
@@ -306,8 +317,8 @@ export function faceOf(c: Laid, x: number, z: number, s: number): FaceShape | nu
   fs = null;
   if (h > 0 && hn < h) {
     const face: Face = { x, z, side: s as 0 | 1 | 2 | 3 }, U0 = (s < 2 ? x : z) * STONE_PX, V0 = (WALL_H - h) * STONE_PX, V1 = (WALL_H - hn) * STONE_PX;
-    fs = { face, h, hn, rock: false, surfs: [] };
-    courses: for (let k = 0; k + 1 < COURSES.length; k++) {
+    fs = { face, h, hn, rock: rockWall(c.f, c.map, x, z), surfs: [] };
+    courses: for (let k = 0; !fs.rock && k + 1 < COURSES.length; k++) {
       if (COURSES[k + 1] <= V0 || COURSES[k] >= V1) continue;
       for (let u = U0; u < U0 + STONE_PX;) {
         const b = wallBlockAt(c.f, c.map, face, u, COURSES[k]);
