@@ -111,7 +111,7 @@ describe('placement', () => {
         }
       });
     });
-  });
+  }, 20000); // about 1.3 s alone, but the default 5 s failed once under a full parallel run
 
   it('puddles_only_in_rock_and_pieces_only_in_laid', () => {
     cases.forEach((c, i) => {
