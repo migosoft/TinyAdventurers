@@ -223,6 +223,8 @@ class DynMesh {
     for (const [name, size] of this.attrs) {
       const a = g.getAttribute(name) as BufferAttribute;
       (a.array as Float32Array).set(data[name].subarray(0, count * size));
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, count * size); // only the used part goes to the GPU
       a.needsUpdate = true;
     }
     g.setDrawRange(0, count);
@@ -295,6 +297,8 @@ function flipRows(data: Uint8Array, w: number, h: number): Uint8Array {
 function disposeRenderer(renderer: WebGPURenderer): void {
   Promise.resolve()
     .then(() => renderer.dispose())
+    // three loses the GL context only of a canvas it made itself; ours is passed in, so the fallback's context is released here (the 16-context cap).
+    .then(() => (renderer.backend as { gl?: WebGL2RenderingContext }).gl?.getExtension('WEBGL_lose_context')?.loseContext())
     .catch((e) => console.warn('Disposing the renderer failed:', e));
 }
 
@@ -762,15 +766,15 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (sightBuf.length < n * 3) sightBuf = new Float32Array(n * 3);
     if (footBuf.length < n * 2) footBuf = new Float32Array(n * 2);
     for (let i = 0; i < n; i++) {
-      // The card's foot (x, z): the sun turns the card around it. A quad without one (no foot data) stands on its own position.
-      footBuf[i * 2] = i * 4 + 1 < q.foot.length ? q.foot[i * 4] : q.position[i * 3];
-      footBuf[i * 2 + 1] = i * 4 + 1 < q.foot.length ? q.foot[i * 4 + 1] : q.position[i * 3 + 2];
+      // The card's foot (x, z): the sun turns the card around it. Every quad of these passes has foot, owner and dark data (the arrays may be longer than `count` says).
+      footBuf[i * 2] = q.foot[i * 4];
+      footBuf[i * 2 + 1] = q.foot[i * 4 + 1];
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
       // shade: x = the slot of the card's owner in the caster list (-1 none: a shot, an image, a card whose owner casts nothing), y = dark flag.
-      const owner = i < q.owner.length ? q.owner[i] : -1;
+      const owner = q.owner[i];
       shadeBuf[i * 2] = owner >= 0 ? (slotOf.get(owner) ?? -1) : -1;
-      shadeBuf[i * 2 + 1] = i < q.dark.length ? q.dark[i] : 0;
+      shadeBuf[i * 2 + 1] = q.dark[i];
     }
     return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf, sight: cardSightData(q, frameMask, sightBuf), cardFoot: footBuf };
   };

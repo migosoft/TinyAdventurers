@@ -11,7 +11,7 @@ import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
 import type { EntState } from '../game/world';
 import { Floats, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
-import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { emptyGlows, emptyQuads, emptyShadows, fillGlows, fillQuads, fillShadows, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type FigureOut, type Opener } from './figures';
 import { seenOpeners } from './openers';
@@ -106,6 +106,8 @@ export class RunView3d implements RunView {
   private readonly map: RunViewInit['map'];
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
+  /** The frame's quads, grow-only and refilled in place (no new arrays per frame). */
+  private readonly dynQ: Dynamic = { cards: emptyQuads(), ghosts: emptyQuads(), decals: emptyQuads(), shadows: emptyShadows(), emissive: emptyQuads(), glows: emptyGlows() };
   // The effects (#308): owned by the run (a lost device keeps them), drawn into these lists every frame, then flushed to the view's two buffers.
   private readonly fx: Effects3d;
   private readonly fxPass: FxPass;
@@ -416,7 +418,7 @@ export class RunView3d implements RunView {
     // The cove's pixies (glows and wings), where the viewer sees.
     this.cove?.push(c.now, cam, fo.glows, fo.ghosts, c.params.sight ? this.mask : null);
     // The sight and the ids it hides come first (the effects read them); cards and ghosts are copied once for both uses.
-    const cardsQ = quadsOf(fo.cards), ghostsQ = quadsOf(fo.ghosts);
+    const cardsQ = fillQuads(this.dynQ.cards, fo.cards), ghostsQ = fillQuads(this.dynQ.ghosts, fo.ghosts);
     const sight = this.sightFrame(f, c, ambient, skyNow);
     // The ids over which nothing is drawn: the snapshot's dark ones and what the picture hides (beyond sight, or in a shadow line).
     this.hidden.clear();
@@ -439,7 +441,8 @@ export class RunView3d implements RunView {
     li.bubbles = lo.bubbles; li.stirs = lo.stirs; li.now = c.now; li.heat = shimmers(c.params);
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
     this.fxFrame(f, c, cam, fo, fp, wo.cues, lo.cues);
-    const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+    const dq = this.dynQ;
+    const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: fillQuads(dq.decals, fo.decals), shadows: fillShadows(dq.shadows, fo.shadows), emissive: fillQuads(dq.emissive, fo.emissive), glows: fillGlows(dq.glows, fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
     this.forest?.step(cam, TREE_BUDGET_MS);

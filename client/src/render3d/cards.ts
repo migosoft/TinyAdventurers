@@ -39,6 +39,29 @@ export const newGlowBuf = (): GlowBuf => ({ position: [], uv: [], color: [], foo
 export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), foot: new Float32Array(0), count: 0 });
 export const emptyShadows = (): Shadows => ({ position: new Float32Array(0), uv: new Float32Array(0), alpha: new Float32Array(0), foot: new Float32Array(0), count: 0 });
 export const emptyGlows = (): Glows => ({ position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), foot: new Float32Array(0), count: 0 });
+/** `src` copied into `dst`, which only grows; what lies past `src` keeps old values, so readers go by `count`. */
+const fillArr = (dst: Float32Array, src: number[]): Float32Array => {
+  const out = dst.length >= src.length ? dst : new Float32Array(Math.max(src.length, dst.length * 2));
+  out.set(src);
+  return out;
+};
+/** Refills the grow-only `q` from `b` in place (no new arrays once they are big enough). */
+export const fillQuads = (q: Quads, b: CardBuf): Quads => {
+  q.position = fillArr(q.position, b.position); q.uv = fillArr(q.uv, b.uv); q.look = fillArr(q.look, b.look);
+  q.owner = fillArr(q.owner, b.owner); q.dark = fillArr(q.dark, b.dark); q.foot = fillArr(q.foot, b.foot);
+  q.count = b.n;
+  return q;
+};
+export const fillShadows = (q: Shadows, b: ShadowBuf): Shadows => {
+  q.position = fillArr(q.position, b.position); q.uv = fillArr(q.uv, b.uv); q.alpha = fillArr(q.alpha, b.alpha); q.foot = fillArr(q.foot, b.foot);
+  q.count = b.n;
+  return q;
+};
+export const fillGlows = (q: Glows, b: GlowBuf): Glows => {
+  q.position = fillArr(q.position, b.position); q.uv = fillArr(q.uv, b.uv); q.color = fillArr(q.color, b.color); q.foot = fillArr(q.foot, b.foot);
+  q.count = b.n;
+  return q;
+};
 
 export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), owner: new Float32Array(b.owner), dark: new Float32Array(b.dark), foot: new Float32Array(b.foot), count: b.n });
 export const shadowsOf = (b: ShadowBuf): Shadows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), alpha: new Float32Array(b.alpha), foot: new Float32Array(b.foot), count: b.n });
