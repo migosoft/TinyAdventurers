@@ -1,5 +1,5 @@
 // The stone paint job (#380 part 3): the whole map painted in small units, nearest the spawn first, a few milliseconds per frame, as the
-// woodland's ground job does. A unit is 32 px rows of one ground page, or all the faces of one chunk. Pure: no three.
+// woodland's ground job does. A unit is 32 px rows of one ground page, or a few faces of one chunk. Pure: no three.
 import type { TileMap } from '../../sim/map';
 import { PAGE, FACE_H, FACE_W } from './format';
 import { CHUNK, chunkGrid } from './grid';
@@ -10,6 +10,8 @@ import type { FaceSlot, SheetPlan } from './plan';
 
 /** Milliseconds of stone work per frame. */
 export const STONE_BUDGET_MS = 4;
+/** Wall faces painted in one unit: a face of masonry takes about 0.3 ms, so a unit stays inside the budget. */
+const FACES_PER_UNIT = 8;
 
 export interface StoneJobResult { pages: { layer: number; px: Uint8Array }[]; faces: { slot: FaceSlot; px: Uint8Array }[] }
 
@@ -19,7 +21,7 @@ export interface StoneJob {
   step(budgetMs: number, nowMs?: () => number): StoneJobResult;
 }
 
-/** Units: 32 px rows of a ground page, and one chunk's faces; chunks ordered by distance to `spawn` (tiles). */
+/** Units: 32 px rows of a ground page, and `FACES_PER_UNIT` of a chunk's faces; chunks ordered by distance to `spawn` (tiles). */
 export function stoneJob(f: StoneField, map: TileMap, plan: SheetPlan, marks: Marks, spawn: { x: number; z: number }): StoneJob {
   const { nx, nz } = chunkGrid(map);
   const order: [number, number][] = [];
@@ -46,9 +48,9 @@ export function stoneJob(f: StoneField, map: TileMap, plan: SheetPlan, marks: Ma
       }
     }
     const faces = plan.facesOf(cx, cz);
-    if (faces.length > 0) {
+    for (let i = 0; i < faces.length; i += FACES_PER_UNIT) {
       units.push(() => {
-        for (const face of faces) {
+        for (const face of faces.slice(i, i + FACES_PER_UNIT)) {
           const px = new Uint8Array(FACE_W * FACE_H * 4);
           paintFace(f, map, marks, face, px);
           out.faces.push({ slot: plan.slotOf(face), px });
