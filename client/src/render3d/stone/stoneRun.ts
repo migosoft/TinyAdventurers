@@ -2,7 +2,7 @@
 // a lost device (the old view's sheets keep their CPU data, so nothing is painted again). A stage makes one of these beside its cover job.
 import type { View, WorldInput } from '../view';
 import { noMarks } from './place';
-import { planSheets, samePlan, type SheetPlan } from './plan';
+import { samePlan, type SheetPlan } from './plan';
 import type { Sheets } from './sheets';
 import { STONE_BUDGET_MS, stoneJob, type StoneJob } from './stoneJob';
 
@@ -20,7 +20,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
   const field = world.stone;
   if (!field) return { done: true, frame: () => {}, built: () => {} };
   const map = world.map;
-  let job: StoneJob = stoneJob(field, map, planSheets(map), noMarks(), spawn);
+  let job: StoneJob | null = null; // made by the first `attach`, on the view's own plan
   /** The plan of the view that is drawing (compared by identity: a replan makes a new object). */
   let seen: SheetPlan | null = null;
   /** The view that is drawing. */
@@ -44,7 +44,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
 
   return {
     get done(): boolean {
-      return job.done;
+      return job?.done ?? false;
     },
     built(view) {
       current = view;
@@ -59,7 +59,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
         seen = null;
       }
       if (view.stone.plan !== seen) attach(view);
-      if (job.done) return;
+      if (!job || job.done) return;
       view.setStonePages(job.step(STONE_BUDGET_MS));
     },
   };

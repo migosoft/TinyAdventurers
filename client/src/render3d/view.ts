@@ -875,9 +875,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     tileChanged(x, z) {
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;
-      (heights.image.data as Uint8Array)[z * map.w + x] = Math.round(cellHeight(map.tiles[z * map.w + x]) * 100);
-      heights.needsUpdate = true;
       const cell = z * map.w + x, was = builtTiles[cell];
+      // The sheets' layout first (#380): a move (a face appeared or went; a door opening or closing is none) re-plans, and a StoneTooLargeError leaves the view as it was.
+      const moved = world.stone !== null && layoutMoved(map, x, z, was, keys);
+      if (moved) replan();
+      (heights.image.data as Uint8Array)[cell] = Math.round(cellHeight(map.tiles[cell]) * 100);
+      heights.needsUpdate = true;
       builtTiles[cell] = map.tiles[cell];
       const dips = dipClassChanged(was, map.tiles[cell]);
       // The water's field around the cell (the rows `refreshWaterField` can change), only when the dip class changed (its kind, height
@@ -887,9 +890,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         uploadField(Math.max(0, (z - 1) * BED_RES), Math.min(wField.h - 1, (z + 2) * BED_RES));
       }
       const around = chunksOfTile(map, x, z);
-      // The stone sheets (#380): only a change of the faces, or of a chunk's ground page, moves the layout (a door opening or closing does not).
-      if (world.stone !== null && layoutMoved(map, x, z, was, keys)) {
-        replan();
+      if (moved) {
         for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
       } else for (const [cx, cz] of around) buildAt(cx, cz, dips);
       rebuildField();

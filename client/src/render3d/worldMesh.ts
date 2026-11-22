@@ -14,7 +14,7 @@ export { CHUNK, KIND, chunkGrid, chunksOfTile };
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
 
 /**
- * Per vertex: position (tiles), uv and rect (the woodland ground's image px and whole-image rect; zero on stone vertices), normal, kind, the
+ * Per vertex: position (tiles), uv (the woodland ground's image px; zero on stone vertices), normal, kind, the
  * stone attributes (`sheet`, `faceA`, `faceB` as 3 values each, `push` as 2: see `stone/mesh.ts`; the woodland ground has layer -1) and an index.
  * 6 vertices per quad.
  */
@@ -23,7 +23,6 @@ export interface WorldArrays {
   uv: Float32Array;
   normal: Float32Array;
   kind: Float32Array;
-  rect: Float32Array;
   sheet: Float32Array;
   faceA: Float32Array;
   faceB: Float32Array;
@@ -116,7 +115,6 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
       uv: cat(uv, new Float32Array(s.count * 2), 2, []),
       normal: cat(normal, s.normal, 3, []),
       kind: cat(kind, s.kind, 1, []),
-      rect: cat(rect, new Float32Array(s.count * 4), 4, []),
       sheet: cat([], s.sheet, 3, NONE3),
       faceA: cat([], s.faceA, 3, NONE3),
       faceB: cat([], s.faceB, 3, NONE3),

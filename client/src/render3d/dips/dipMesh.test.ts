@@ -121,12 +121,11 @@ describe('buildDipChunk', () => {
   it('carries the floor of its cell', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm]]);
     const c = buildDipChunk(m, false, 0, 0, frames)!;
-    const { position: p, rect, kind, sheet } = c.arrays;
+    const { position: p, kind, sheet } = c.arrays;
     expect(sheet.length).toBe(c.arrays.count * 3);
     for (let v = 0; v < c.arrays.count; v++) {
       // stone: the floor kind with no atlas rect; the ground sheet's texel of the vertex's world point in the chunk's page
       expect(kind[v]).toBe(KIND.floor);
-      expect(rect[v * 4 + 2]).toBe(0);
       expect([sheet[v * 3], sheet[v * 3 + 1], sheet[v * 3 + 2]]).toEqual([p[v * 3] * 32, p[v * 3 + 2] * 32, 0]);
     }
   });

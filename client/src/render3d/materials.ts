@@ -108,6 +108,7 @@ const slopeOf = (i: N): N => {
 };
 
 /** The edge (px) beyond a slot's right or bottom edge a fragment may sit by float error: the slot is told from the point, biased this much toward the slot before it. */
+// shortcut: a fragment within SLOT_BIAS px of a slot's left or top edge is told to be in the slot before it (its clamp then reads 0.5 px outside), because the slot is derived from the point; pass the slot's corner as an attribute if that ever shows.
 const SLOT_BIAS = 0.005;
 
 /**

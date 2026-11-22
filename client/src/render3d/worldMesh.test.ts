@@ -228,7 +228,6 @@ describe('buildChunk', () => {
     expect(Math.max(...uvs.map((u) => u[0]))).toBe(64);
     expect(Math.min(...uvs.map((u) => u[1]))).toBe(0);
     expect(Math.max(...uvs.map((u) => u[1]))).toBe(16);
-    for (let j = i; j < i + 6; j++) expect([...c.world.rect.slice(j * 4, j * 4 + 4)]).toEqual([0, 0, 80, 16]);
     const plain = buildChunk(m, false, 0, 0, frames);
     expect(quads(plain).map((x) => x.kind)).toEqual([0, 0, 0, 0, 0]);
   });
@@ -265,7 +264,7 @@ describe('buildChunk', () => {
     expect(CHUNK).toBe(16);
   });
 
-  it('winds every triangle counter-clockwise seen from its normal side and keeps uvs in their rect', () => {
+  it('winds every triangle counter-clockwise seen from its normal side', () => {
     const w = buildChunk(parseMap(MAP_ROWS), false, 0, 0, frames).world;
     const p = (i: number) => [w.position[i * 3], w.position[i * 3 + 1], w.position[i * 3 + 2]];
     for (let t = 0; t < w.count / 3; t++) {
@@ -274,12 +273,6 @@ describe('buildChunk', () => {
       const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
       const n = t * 3;
       expect(cr[0] * w.normal[n * 3] + cr[1] * w.normal[n * 3 + 1] + cr[2] * w.normal[n * 3 + 2]).toBeGreaterThan(0);
-    }
-    for (let i = 0; i < w.count; i++) {
-      if (w.kind[i] === KIND.top) continue;
-      const [rx, ry, rw, rh] = [w.rect[i * 4], w.rect[i * 4 + 1], w.rect[i * 4 + 2], w.rect[i * 4 + 3]];
-      const u = w.uv[i * 2], v = w.uv[i * 2 + 1];
-      expect(u >= rx && u <= rx + rw && v >= ry && v <= ry + rh).toBe(true);
     }
   });
 
@@ -295,9 +288,7 @@ describe('buildChunk', () => {
     for (let i = 0; i < w.count; i++) {
       if (w.kind[i] === KIND.ground) {
         expect(w.sheet[i * 3 + 2]).toBe(-1);
-        expect(w.rect[i * 4 + 2]).toBeGreaterThan(0);
       } else {
-        expect(w.rect[i * 4 + 2]).toBe(0);
         expect(w.uv[i * 2]).toBe(0);
       }
     }
