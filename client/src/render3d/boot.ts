@@ -13,6 +13,7 @@ import { createLichStage } from './lichStage';
 import { createLightsStage } from './lightsStage';
 import { createLiquidsStage } from './liquidsStage';
 import { createMoodStage } from './moodStage';
+import { createStoneStage } from './stone/stoneStage';
 import { createSunlightStage } from './sunlightStage';
 import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
@@ -85,6 +86,13 @@ export async function bootLiquids(el: HTMLElement, search: string): Promise<void
 export async function bootLich(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
   await startHost(el, search, 'demo', (assets, host) => createLichStage(assets, p, search, host));
+}
+
+/** `?r3d=stone` (#380): the stonework's level (caves, a border passage, a laid hall and rooms), no server needed. Zoom 2 unless the URL picks one. */
+export async function bootStone(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createStoneStage(assets, p, s));
 }
 
 export interface Run3d {
