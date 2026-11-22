@@ -11,6 +11,7 @@ import { atlasBounds } from './atlasBounds';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { stoneField } from './stone/field';
+import { paintDone } from './stone/paint';
 import { makeStoneRun } from './stone/stoneRun';
 import { QUALITIES, type Quality } from './quality';
 import { RunMouse, turnKeyLabels } from './input';
@@ -290,6 +291,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       run.input.primary = run.input.secondary = () => false;
       run.clock.timer = null;
       runView.destroy();
+      paintDone(); // a level that ends before its paint job does would keep the painter's moss source and masks until the next dungeon paints
       overlay.dispose();
     },
   };
