@@ -36,7 +36,7 @@ export function kindAt(f: StoneField, x: number, z: number): 0 | 1 {
 }
 
 /** A hash of the seed and three integers in [0, 1). */
-function hash(seed: number, a: number, b: number, c: number): number {
+export function hash(seed: number, a: number, b: number, c: number): number {
   let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(a + 0x7f4a7c15, 0xc2b2ae35) ^ Math.imul(b + 0x165667b1, 0x27d4eb2f) ^ Math.imul(c + 0x1b873593, 0x85ebca77);
   h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
   return (h >>> 0) / 4294967296;
