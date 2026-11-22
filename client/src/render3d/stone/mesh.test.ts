@@ -12,10 +12,10 @@ import { noMarks, placeMarks, type Marks } from './place';
 import { planSheets } from './plan';
 import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap } from './stoneMap';
 
-/** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 8 986, 35 a cell; the flat floor had 512). */
-const LAID_CHUNK_TRIS = 11000;
-/** The same for the stone page's chunk with the mosaic and a grate. */
-const PIECE_CHUNK_TRIS = 13000;
+/** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
+const LAID_CHUNK_TRIS = 6600;
+/** The same for the stone page's worst chunk, with the mosaic and a grate (measured: 8 914). */
+const PIECE_CHUNK_TRIS = 9800;
 
 /** A 3 by 3 floor with a wall in the middle. */
 function ring() {
