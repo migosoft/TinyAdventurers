@@ -65,7 +65,7 @@ export class Water3d {
   /** A drop rings its puddle only in view: the ripple slots are few. */
   private readonly drop = (p: Puddle, x: number, z: number, at: number): void => {
     const f = this.fp;
-    if (p.x + p.r > f.x0 && p.x - p.r < f.x1 && p.z + p.r > f.z0 && p.z - p.r < f.z1) this.ripples.add(x, z, at, DROP.strength);
+    if (p.x + p.r > f.x0 && p.x - p.r < f.x1 && p.z + p.r > f.z0 && p.z - p.r < f.z1) this.ripples.add(x, z, at, -DROP.strength);
   };
 
   constructor(private readonly map: TileMap, private readonly rng: () => number = Math.random) {}

@@ -12,16 +12,22 @@ function smoothstep(a: number, b: number, x: number): number {
 }
 
 /** The height a source adds at distance d (tiles) and age (s): 0 outside 0 < age < RIPPLE_LIFE, else
- *  height * strength * exp(-decay * age) * smoothstep(0, rise, age) * exp(-((d - age * RIPPLE_SPEED) * width) ** 2) * sin((d - age * RIPPLE_SPEED) * waves). */
+ *  height * strength * exp(-decay * age) * smoothstep(0, rise, age) * exp(-((d - age * RIPPLE_SPEED) * width) ** 2) * sin((d - age * RIPPLE_SPEED) * waves);
+ *  for a negative strength with d / DROP.scale for d and DROP.scale * -strength for strength. */
 export function rippleHeight(d: number, age: number, strength: number): number {
   if (!(age > 0 && age < RIPPLE_LIFE)) return 0;
-  const u = d - age * RIPPLE_SPEED;
-  return RIPPLE.height * strength * Math.exp(-RIPPLE.decay * age) * smoothstep(0, RIPPLE.rise, age)
+  // A negative strength is a small ring (a puddle's drop): the same ring at `DROP.scale` of the size, so as steep and that much slower.
+  const s = strength < 0 ? DROP.scale : 1;
+  const u = d / s - age * RIPPLE_SPEED;
+  return RIPPLE.height * s * Math.abs(strength) * Math.exp(-RIPPLE.decay * age) * smoothstep(0, RIPPLE.rise, age)
     * Math.exp(-((u * RIPPLE.width) ** 2)) * Math.sin(u * RIPPLE.waves);
 }
 
-/** A puddle's drops (#380): one every `every` seconds on average, of this strength, within this share of the puddle's radius from its middle. */
-export const DROP = { every: 5, strength: 0.6, within: 0.5 } as const;
+/**
+ * A puddle's drops (#380): one every `every` seconds on average, within this share of the puddle's radius from its middle; its ring has
+ * this strength and `scale` of a pool ring's size (a pool's ring is as wide as a puddle).
+ */
+export const DROP = { every: 5, strength: 0.8, within: 0.5, scale: 0.35 } as const;
 
 /**
  * The drops that fall into the puddles after `from` and up to `to` (s): `emit` gets the puddle, the spot (tiles) and the time. Drop n of a
