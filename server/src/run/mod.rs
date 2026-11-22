@@ -615,6 +615,14 @@ impl Run {
                 p.acknowledge(&input);
             } else {
                 self.apply_input(pi, input);
+                // Like the client's replay: an input that leaves the hero over a chasm or deep water is the last of
+                // this tick; the next waits for `terrain_player` (#393).
+                let p = &self.players[pi];
+                let (tx, ty) = dungeon::Map::tile_of(p.pos());
+                let tile = self.layout.map.get(tx, ty);
+                if p.mv.dash_t <= 0.0 && (tile == Tile::Chasm as u8 || tile == Tile::DeepWater as u8) {
+                    break;
+                }
             }
         }
         if charmed {
@@ -2330,6 +2338,30 @@ pub mod tests {
         }
         assert!(matches!(run.players[0].sinking, Some((_, Sink::Fall))), "pushed into the chasm at {at:?}");
         assert!(!run.players[0].mv.knocked(), "the fall ends the slide");
+    }
+
+    #[test]
+    fn a_catch_up_stops_after_the_input_that_reaches_a_chasm() {
+        let (mut run, at) = terrain_run(Tile::Chasm);
+        let from = at - Vec2::new(8.5, 0.0); // 0.5 px short of the chasm's edge (a tile is 16 px)
+        let reach = |run: &mut Run, queued: u32| {
+            stand_at(run, from);
+            run.players[0].sinking = None;
+            run.players[0].mv = MoveState::at(from.x, from.y);
+            run.players[0].input_budget = 5;
+            for seq in 1..=queued {
+                run.players[0].inputs.push_back(InputMsg { seq, mx: 1, ..Default::default() });
+            }
+            run.players[0].ack = 0;
+            run.step();
+            run.players[0].pos().x
+        };
+        let alone = reach(&mut run, 1);
+        assert!(alone >= at.x - 8.0, "one input reaches the chasm");
+        assert!(run.players[0].sinking.is_some());
+        let burst = reach(&mut run, 5);
+        assert_eq!(run.players[0].ack, 1, "the second input of the tick waits");
+        assert_eq!(burst, alone);
     }
 
     #[test]
