@@ -39,6 +39,11 @@ export function treeLine(built: number, total: number): string {
   return `plants     ${built} of ${total}`;
 }
 
+/** The readout's line of the stone paint job (#380): units painted of all. */
+export function stoneLine(done: number, total: number): string {
+  return `stone      ${done} of ${total}`;
+}
+
 /** The readout's line of the effects (#308): records alive, triangles drawn this frame, triangles dropped at the cap since the run began. */
 export function fxLine(records: number, tris: number, dropped: number): string {
   return `fx         ${records} rec, ${tris} tris (${dropped} dropped total)`;

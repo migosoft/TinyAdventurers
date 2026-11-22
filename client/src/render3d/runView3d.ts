@@ -35,7 +35,7 @@ import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
 import { assignSkips, carrierMap, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
-import { R3D_SYSTEMS, fxLine, lightLines, skyLines, treeLine } from './stats';
+import { R3D_SYSTEMS, fxLine, lightLines, skyLines, stoneLine, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
 import type { CoverResult } from './cover/coverJob';
@@ -138,6 +138,8 @@ export class RunView3d implements RunView {
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
   private forest: Forest | null = null;
+  /** The stage's stone job progress, for the F3 line (#380); null without stone. */
+  stoneProgress: { done: number; total: number } | null = null;
   private critters: Critters3d | null = null;
   private fireflies: Fireflies | null = null;
   // The nymph's cove (dungeon runs): its tufts and ferns as bushel spots, the bushes' casters, the pixies.
@@ -603,6 +605,7 @@ export class RunView3d implements RunView {
     const lines = [
       ...(ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : []),
       ...(this.forest && this.woodland ? skyLines(hourLabel(this.hourNow), this.sunPx, this.forest.built, this.forest.total) : this.forest ? [treeLine(this.forest.built, this.forest.total)] : []),
+      ...(this.stoneProgress ? [stoneLine(this.stoneProgress.done, this.stoneProgress.total)] : []),
       fxLine(fs.records, fs.tris, fs.dropped),
     ];
     return {

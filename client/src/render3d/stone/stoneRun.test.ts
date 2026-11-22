@@ -48,6 +48,22 @@ describe('makeStoneRun', () => {
     expect(v.sheets.painted.wall.size).toBe(1);
   });
 
+  it('says the units done of all: counting up as it paints, total of total at the end, null without stone (the F3 line, #380)', () => {
+    const map = level();
+    const r = run(map), v = fakeView(map);
+    expect(r.progress).toBeNull(); // no view yet
+    r.built(v);
+    const first = r.progress!;
+    expect(first.total).toBeGreaterThan(1);
+    r.frame(v);
+    const second = r.progress!;
+    expect(second.done).toBeGreaterThan(first.done);
+    expect(second.total).toBe(first.total);
+    drain(r, v);
+    expect(r.progress).toEqual({ done: first.total, total: first.total });
+    expect(makeStoneRun({ map, painted: true, clear: [0, 0, 0], stone: null }, { x: 0, z: 0 }).progress).toBeNull();
+  });
+
   it('waits while the view is being rebuilt', () => {
     const map = level();
     const r = run(map), v = fakeView(map);

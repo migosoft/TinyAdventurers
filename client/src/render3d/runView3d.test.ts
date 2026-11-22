@@ -63,7 +63,7 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number } = {}) {
+function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0 } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
@@ -75,6 +75,7 @@ function run(over: { water?: [number, number][]; lava?: [number, number][]; cove
   const init: RunViewInit = { info, map, light, myKind: KIND.Wizard, lavaRng: over.lavaRng };
   const overlay = over.paint ? ({ size() {}, measure: () => 10, paint: (items: OverlayItem[]) => over.paint!.splice(0, over.paint!.length, ...items) } as unknown as Overlay3d) : null;
   const v = new RunView3d(init, frames, bounds, overlay);
+  v.stoneProgress = over.stone ?? null;
   let got: FrameInput | null = null;
   const view = { draw: (i: FrameInput) => ((got = i), 0), meshes: 0, tileChanged: () => {} };
   const params = { ...DEFAULTS, ...over.params };
@@ -162,6 +163,16 @@ describe('the run view and the game lights', () => {
   it('the readout lines say the lights in use and the caps', () => {
     const { stats } = run({ params: { lcap: 8, ccap: 4 } });
     expect(stats.lines).toEqual(['lights     1 of 1 (cap 8)', 'shadows    1 cards (cap 4)', 'fx         0 rec, 0 tris (0 dropped total)']);
+  });
+  it('a dungeon with a stone job shows `stone <done> of <total>` after the lights, a woodland or a level without one shows none (#380)', () => {
+    const lines = (p: { done: number; total: number } | null, woodland = false) => {
+      const r = run({ woodland, torch: false, stone: p });
+      return r.stats.lines!.filter((l) => l.startsWith('stone'));
+    };
+    expect(lines({ done: 3, total: 7 })).toEqual(['stone      3 of 7']);
+    expect(lines({ done: 7, total: 7 })).toEqual(['stone      7 of 7']);
+    expect(lines(null)).toEqual([]);
+    expect(lines(null, true)).toEqual([]);
   });
   it('a cove shows the trees built line but no sky lines; a level with a woodland and a cove is refused', () => {
     const { stats } = run({ cove: true });

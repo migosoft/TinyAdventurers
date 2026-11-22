@@ -3,6 +3,7 @@
 // It is a debug account, so the debug keys run here too: F4 (darkvision), F9 (immortality) and, with LOG=1, the rules log (L, F8).
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
 // Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
+// Dungeon: waits (WAIT_MS) for the F3 line `stone <done> of <total>` to be complete and prints `stone painted ...` with the time and the longest frame (#380).
 // BOSS=lich|dragon|demon: picks that boss in the room before the start (the boss decides the dungeon's stone: laid, natural rock, both; default: the room's own Random).
 // ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376). It prints the glide's frame times; ZOOM_PASSES=3 zooms there, back and there again (a hitch only in pass 1 is a first-use cost).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
@@ -151,6 +152,19 @@ try {
       return { frames: dts.length, longest: Math.max(0, ...dts) };
     }, [t0, t1]);
     console.log(`forest build: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, ${build.frames} frames, longest frame ${build.longest.toFixed(1)} ms`);
+    await page.keyboard.press('F3');
+  }
+  // The dungeon's stone is painted a few units per frame: wait until the F3 line `stone <done> of <total>` shows it all (WAIT_MS as above).
+  if (level === 'dungeon') {
+    await page.keyboard.press('F3');
+    const read = () => page.evaluate(() => { const m = /stone\s+(\d+) of (\d+)/.exec(document.body.innerText); return m ? [Number(m[1]), Number(m[2])] : null; });
+    const until = Date.now() + Number(process.env.WAIT_MS || 120000);
+    let n = await read();
+    while ((!n || n[0] < n[1]) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
+    if (!n || n[0] < n[1]) errors.push(`the stone was not painted in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 stone line'}`);
+    const t1 = await page.evaluate(() => performance.now());
+    const paint = await page.evaluate(([a, b]) => Math.max(0, ...window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b)), [t0, t1]);
+    console.log(`stone painted ${n ? `${n[0]} of ${n[1]}` : 'unknown'}: ${((t1 - t0) / 1000).toFixed(1)} s from the first frames, longest frame ${paint.toFixed(1)} ms`);
     await page.keyboard.press('F3');
   }
   // ZOOM=far|near|start (#376): send 40 wheel notches over the canvas, wait until the zoom is within 1 % of the limit, then check it.

@@ -199,6 +199,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         if (c.view) upload(c.view);
       }
       stoneRun.frame(c.view);
+      runView.stoneProgress = stoneRun.progress;
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
       const r = window.__r3d;

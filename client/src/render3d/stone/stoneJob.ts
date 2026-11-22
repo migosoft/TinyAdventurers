@@ -17,6 +17,8 @@ export interface StoneJobResult { pages: { layer: number; px: Uint8Array }[]; fa
 
 export interface StoneJob {
   readonly done: boolean;
+  /** The units finished of all (the F3 line). */
+  readonly progress: { done: number; total: number };
   /** Works for at most `budgetMs` (at least one unit); returns the pages and faces finished in this call. */
   step(budgetMs: number, nowMs?: () => number): StoneJobResult;
 }
@@ -58,8 +60,12 @@ export function stoneJob(f: StoneField, map: TileMap, plan: SheetPlan, marks: Ma
       });
     }
   }
-  let next = 0, finished = units.length === 0;
+  const total = units.length;
+  let next = 0, finished = total === 0;
   return {
+    get progress() {
+      return { done: next, total };
+    },
     get done(): boolean {
       return finished;
     },

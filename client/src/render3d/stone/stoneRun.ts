@@ -8,6 +8,8 @@ import { STONE_BUDGET_MS, stoneJob, type StoneJob } from './stoneJob';
 export interface StoneRun {
   /** True once every page and face is painted (always true without stone). */
   readonly done: boolean;
+  /** The job's units done of all, null while there is no job (no stone, or no view yet). */
+  readonly progress: { done: number; total: number } | null;
   /** One frame: works the job for `STONE_BUDGET_MS` into the view's sheets; a null view (being rebuilt) waits. */
   frame(view: View | null): void;
   /** A new view was built (the first one, or after a lost device): it takes over the painted pixels, or starts the job over when the layout changed. */
@@ -17,7 +19,7 @@ export interface StoneRun {
 /** `spawn` (tiles): the job paints the chunks nearest it first. A world without stone (the woodland) gets a run that does nothing. */
 export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number }): StoneRun {
   const field = world.stone;
-  if (!field) return { done: true, frame: () => {}, built: () => {} };
+  if (!field) return { done: true, progress: null, frame: () => {}, built: () => {} };
   const map = world.map;
   let job: StoneJob | null = null; // made by the first `attach`, on the view's own plan
   /** The plan of the view that is drawing (compared by identity: a replan makes a new object). */
@@ -44,6 +46,9 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
   return {
     get done(): boolean {
       return job?.done ?? false;
+    },
+    get progress() {
+      return job?.progress ?? null;
     },
     built(view) {
       current = view;
