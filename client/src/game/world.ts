@@ -367,17 +367,18 @@ export class Predictor {
       }
     }
     this.state = s;
-    // Cooldowns: trust the server when we disagree noticeably,
-    // after replaying the abilities it has not seen yet (else a held button
-    // fires again).
+    // Cooldowns: trust the server when we disagree by more than half its leeway (it accepts a use at
+    // `cd <= COOLDOWN_LEEWAY`, so a client that runs further ahead predicts shots it refuses, #206),
+    // after replaying the abilities it has not seen yet (else a held button fires again).
     let s1 = me.cd1;
     let s2 = me.cd2;
     for (const p of this.pending) {
       s1 = p.used[0] ?? Math.max(s1 - CONST.DT * this.cdRate, 0);
       s2 = p.used[1] ?? Math.max(s2 - CONST.DT * this.cdRate, 0);
     }
-    if (Math.abs(s1 - this.cd1) > 0.15) this.cd1 = s1;
-    if (Math.abs(s2 - this.cd2) > 0.15) this.cd2 = s2;
+    const tol = CONST.COOLDOWN_LEEWAY / 2;
+    if (Math.abs(s1 - this.cd1) > tol) this.cd1 = s1;
+    if (Math.abs(s2 - this.cd2) > tol) this.cd2 = s2;
   }
 
   /** While charmed: the interpolated server hero (`x`, `y`) plus the decaying offset of the charm's start. */

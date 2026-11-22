@@ -77,6 +77,19 @@ describe('Predictor', () => {
     expect(p2.cd1).toBeCloseTo(1.0 - 5 * 1.25 * CONST.DT, 9);
   });
 
+  it('takes the server cooldown when the rate changed unseen and the difference passes half the leeway (#206)', () => {
+    const pred = mk(chasmMap(), 'Wizard', 3 * TILE + 8, 2 * TILE + 8);
+    const s = snap(0, pred.state.x, pred.state.y);
+    // The client ticked 10 inputs at rate 1.25 while the server (Accelerated just ended) ticked at 1: 0.0417 s apart.
+    pred.cd1 = 1.0;
+    pred.cdRate = 1.25;
+    for (let i = 0; i < 10; i++) pred.step(0, 0, null);
+    const server = 1.0 - 10 * CONST.DT;
+    expect(pred.cd1).toBeLessThan(server - CONST.COOLDOWN_LEEWAY / 2);
+    pred.reconcile({ ...s, ack: 10, me: { ...s.me, cd1: server, cd_rate: 1 } });
+    expect(pred.cd1).toBeCloseTo(server, 9);
+  });
+
   it('cooldownOf never goes below MIN_COOLDOWN', () => {
     const pred = new Predictor(chasmMap(), 60, [ab('Strike', { cooldown: 0.05 }), ab('Charge')], ab('Strike', { cooldown: 0.05 }), 3 * TILE + 8, 2 * TILE + 8);
     const s = snap(0, pred.state.x, pred.state.y);
