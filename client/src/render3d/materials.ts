@@ -1,5 +1,5 @@
 // Node materials of the 3D view (TSL).
-import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector3 } from 'three/webgpu';
+import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector2, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { attribute, clamp, mx_noise_float, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, normalize, positionGeometry, positionWorld, round, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import { FACE_H, FACE_W, PAGE, SLOPES } from './stone/format';
@@ -77,7 +77,7 @@ export interface WorldMaterial {
   /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
-  setGround(nearest: Texture, linear: Texture): void;
+  setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */
   setSheets(sheets: SheetTextures): void;
 }
@@ -93,7 +93,7 @@ export interface FlatTexel {
   /** 0 or 1: floors and the ground read the sheets at a sharpened position. */
   smooth: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
-  setGround(nearest: Texture, linear: Texture): void;
+  setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   setSheets(sheets: SheetTextures): void;
 }
 
@@ -145,9 +145,10 @@ export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, 
   const fw = max(fwidth(p0), vec2(1e-6));
   const seam = floor(p0.add(0.5));
   const sharp = seam.add(clamp(p0.sub(seam).div(fw), -0.5, 0.5));
-  const rect = attribute('rect', 'vec4');
+  // The ground image's size in px, a uniform and not a vertex attribute: WebGPU allows 8 vertex buffers and the stone attributes use the rest.
+  const size = uniform(new Vector2(1, 1));
   // Keep the linear taps inside the image.
-  const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
+  const p = clamp(sharp, vec2(0.5), size.sub(0.5));
   const smooth = uniform(0);
   const useSmooth = smooth.greaterThan(0.5);
   // Every read sits at the top level and float weights (exactly 0 or 1) pick among them: a `select` between texels can become an `if`, and sampling must stay in uniform control flow.
@@ -189,8 +190,8 @@ export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, 
   }
 
   const groundReady = uniform(0);
-  const groundNear = texture(groundStart, p0.div(max(rect.zw, vec2(1))));
-  const groundLin = texture(groundStart, p.div(max(rect.zw, vec2(1))));
+  const groundNear = texture(groundStart, p0.div(size));
+  const groundLin = texture(groundStart, p.div(size));
   // Two texture nodes on one texture start are "mergeable" (same uniform hash, so one shared binding): then only one of them would follow `setGround`.
   groundNear.mergeable = false;
   groundLin.mergeable = false;
@@ -207,7 +208,8 @@ export function flatTexel(sheets: SheetTextures, groundStart: Texture, kind: N, 
     texel,
     bend: bent,
     smooth,
-    setGround(nearest, linear) {
+    setGround(nearest, linear, w, h) {
+      size.value.set(w, h);
       groundNear.value = nearest;
       groundLin.value = linear;
       groundReady.value = 1;

@@ -429,7 +429,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.setAttribute('uv', new BufferAttribute(a.uv, 2));
     g.setAttribute('normal', new BufferAttribute(a.normal, 3));
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
-    g.setAttribute('rect', new BufferAttribute(a.rect, 4));
     g.setAttribute('sheet', new BufferAttribute(a.sheet, 3));
     g.setAttribute('faceA', new BufferAttribute(a.faceA, 3));
     g.setAttribute('faceB', new BufferAttribute(a.faceB, 3));
@@ -441,14 +440,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     );
     return finishMesh(g, box, material);
   };
-  /** The dip ground of a chunk: eight attributes (position, normal, uv, rect, kind, sheet, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
+  /** The dip ground of a chunk: seven attributes (position, normal, uv, kind, sheet, dip, marks) and an index; bounds from the chunk's real extent (it reaches down to the chasm bed). */
   const makeDipMesh = (d: DipChunk): ChunkMesh => {
     const a = d.arrays;
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(a.position, 3));
     g.setAttribute('normal', new BufferAttribute(a.normal, 3));
     g.setAttribute('uv', new BufferAttribute(a.uv, 2));
-    g.setAttribute('rect', new BufferAttribute(a.rect, 4));
     g.setAttribute('kind', new BufferAttribute(a.kind, 1));
     g.setAttribute('sheet', new BufferAttribute(a.sheet, 3));
     g.setAttribute('dip', new BufferAttribute(a.dip, 1));
@@ -910,8 +908,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         return t;
       };
       const next = [mk(NearestFilter), mk(LinearFilter)];
-      wm.setGround(next[0], next[1]);
-      dm.setGround(next[0], next[1]);
+      wm.setGround(next[0], next[1], img.w, img.h);
+      dm.setGround(next[0], next[1], img.w, img.h);
       for (const t of groundTex) t.dispose();
       groundTex = next;
     },

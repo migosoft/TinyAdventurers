@@ -8,7 +8,7 @@ import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { makeCoverShared } from './cover/coverRead';
 import { unplanned } from './stone/plan';
 import { makeSheets } from './stone/sheets';
-import { fragment, readsInBranches, type Builder } from './shaderCode.testutil';
+import { fragment, readsInBranches, vertex, type Builder } from './shaderCode.testutil';
 
 /** The stone sheets of a one-page plan: what the view gives the materials. */
 const sheets = () => makeSheets(unplanned(), { size: 4096, layers: 256 });
@@ -90,7 +90,7 @@ describe('worldMaterial shader code', () => {
   /** The world mesh's vertex layout. */
   const geometry = (): BufferGeometry => {
     const g = new BufferGeometry();
-    for (const [n, s] of [['position', 3], ['normal', 3], ['uv', 2], ['rect', 4], ['kind', 1], ['sheet', 3], ['faceA', 3], ['faceB', 3], ['push', 2]] as [string, number][]) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
+    for (const [n, s] of [['position', 3], ['normal', 3], ['uv', 2], ['kind', 1], ['sheet', 3], ['faceA', 3], ['faceB', 3], ['push', 2]] as [string, number][]) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
     return g;
   };
   const build = () => {
@@ -98,6 +98,12 @@ describe('worldMaterial shader code', () => {
     const l = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
     return worldMaterial(l, t, t, makeSight(), makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1)), sheets()).material;
   };
+  it('reads at most 8 vertex attributes: WebGPU allows 8 vertex buffers (a ninth failed the pipeline on the real card)', () => {
+    const main = /fn main\(([\s\S]*?)\) -> /.exec(vertex(WGSLNodeBuilder, build(), { geometry: geometry() }))?.[1] ?? '';
+    const n = (main.match(/@location\(/g) ?? []).length;
+    expect(n).toBeGreaterThanOrEqual(7);
+    expect(n).toBeLessThanOrEqual(8);
+  });
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`${B.name}: no sheet or ground sample and no derivative sits in a branch`, () => {
       expect(readsInBranches(fragment(B, build(), { geometry: geometry() }))).toEqual([]);

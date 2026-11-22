@@ -142,7 +142,7 @@ export interface DipMaterial {
   /** Seconds, set by the view each frame: the lava band's flicker. */
   time: { value: number };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
-  setGround(nearest: Texture, linear: Texture): void;
+  setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets. */
   setSheets(sheets: SheetTextures): void;
 }
