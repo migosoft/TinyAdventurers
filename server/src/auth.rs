@@ -264,7 +264,8 @@ pub fn check_password(password: &str) -> Result<(), String> {
 /// Counts failures per key (an IP or an account name) inside a time window.
 #[derive(Default)]
 pub struct Limiter {
-    hits: HashMap<String, (u32, Instant)>,
+    /// Per key: hits, window start, and the key's own window (keys of different purposes share the map, #276).
+    hits: HashMap<String, (u32, Instant, Duration)>,
 }
 
 impl Limiter {
@@ -283,7 +284,7 @@ impl Limiter {
 
     fn blocked_at(&mut self, key: &str, max: u32, window: Duration, now: Instant) -> bool {
         match self.hits.get(key) {
-            Some(&(n, start)) if now.duration_since(start) < window => n >= max,
+            Some(&(n, start, _)) if now.duration_since(start) < window => n >= max,
             _ => false,
         }
     }
@@ -291,11 +292,11 @@ impl Limiter {
     fn hit_at(&mut self, key: &str, window: Duration, now: Instant) {
         if self.hits.len() > 10_000 {
             // Forget old windows so the map cannot grow without bound.
-            self.hits.retain(|_, (_, start)| now.duration_since(*start) < window);
+            self.hits.retain(|_, (_, start, w)| now.duration_since(*start) < *w);
         }
-        let e = self.hits.entry(key.to_string()).or_insert((0, now));
+        let e = self.hits.entry(key.to_string()).or_insert((0, now, window));
         if now.duration_since(e.1) >= window {
-            *e = (0, now);
+            *e = (0, now, window);
         }
         e.0 += 1;
     }
@@ -424,5 +425,20 @@ mod tests {
         assert!(!l.blocked_at("k", 5, w, t0 + w), "counter restarted");
         l.clear("k");
         assert!(!l.blocked_at("k", 5, w, t0));
+    }
+
+    #[test]
+    fn a_prune_keeps_a_key_whose_own_window_is_still_open() {
+        let mut l = Limiter::default();
+        let (short, long) = (Duration::from_secs(300), Duration::from_secs(3600));
+        let t0 = Instant::now();
+        l.hit_at("reg", long, t0);
+        for i in 0..10_001 {
+            l.hit_at(&format!("login-ip:{i}"), short, t0);
+        }
+        // A short-window hit after its window prunes the map: the long-window key must survive it.
+        l.hit_at("login-ip:late", short, t0 + short);
+        assert!(l.blocked_at("reg", 1, long, t0 + short));
+        assert!(!l.hits.contains_key("login-ip:0"), "expired short-window keys are pruned");
     }
 }

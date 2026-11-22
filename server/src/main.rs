@@ -154,7 +154,8 @@ async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap, State(state): Stat
         Ok(d) => d,
         Err(s) => return s.into_response(),
     };
-    ws.on_upgrade(move |socket| handle_socket(socket, state, session.account, debug, session.id_hash))
+    // Real client messages are a few hundred bytes; axum's default allows 64 MiB (#392).
+    ws.max_message_size(16 * 1024).on_upgrade(move |socket| handle_socket(socket, state, session.account, debug, session.id_hash))
 }
 
 /// The connection's debug flag from the account row: an unknown account is refused, a database error too.
@@ -169,6 +170,9 @@ fn connect_flag(r: Result<Option<db::Account>, sqlx::Error>) -> Result<bool, Sta
     }
 }
 
+/// Messages queued for one connection beyond which it counts as not reading (30 snapshots/s: about 8 s).
+const OUTGOING_QUEUE_MAX: usize = 256;
+
 #[tracing::instrument(name = "ws", skip(socket, state, id_hash))]
 async fn handle_socket(socket: WebSocket, state: AppState, account: i32, debug_conn: bool, id_hash: Vec<u8>) {
     telemetry::metrics().ws_connected(true);
@@ -177,8 +181,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, debug_c
     let lobby = state.lobby.clone();
     let id = lobby.lock().unwrap().connect(account, debug_conn, tx.clone());
 
-    let writer = tokio::spawn(async move {
+    let mut writer = tokio::spawn(async move {
         while let Some(m) = rx.recv().await {
+            // A client that stops reading (zero window, half-open) would make the queue grow without end (#392).
+            if rx.len() > OUTGOING_QUEUE_MAX {
+                tracing::warn!("connection {id} stopped reading; closing it");
+                break;
+            }
             let close = matches!(m, Message::Close(_));
             if sink.send(m).await.is_err() || close {
                 break;
@@ -186,7 +195,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, debug_c
         }
     });
 
-    while let Some(Ok(msg)) = stream.next().await {
+    loop {
+        // The connection ends when the client leaves or the writer gives up on it.
+        let next = tokio::select! {
+            m = stream.next() => m,
+            _ = &mut writer => break,
+        };
+        let Some(Ok(msg)) = next else { break };
         let bytes = match msg {
             Message::Binary(b) => b,
             Message::Close(_) => break,

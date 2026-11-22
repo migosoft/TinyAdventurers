@@ -437,7 +437,9 @@ impl Run {
                         let p = &mut self.players[pi];
                         // Only newer inputs: a repeated or replayed sequence number is dropped (#273).
                         let last = p.inputs.back().map_or(p.ack, |i| i.seq);
-                        if input.seq > last && p.inputs.len() < INPUT_BACKLOG_MAX {
+                        // MessagePack floats can be NaN or infinite; one would turn into NaN positions (#392).
+                        let finite = input.aim.is_finite() && input.aim_dist.is_finite();
+                        if finite && input.seq > last && p.inputs.len() < INPUT_BACKLOG_MAX {
                             p.inputs.push_back(input);
                         }
                     }
@@ -2520,6 +2522,16 @@ pub mod tests {
     fn send_input(run: &mut Run, seq: u32, (mx, my): (i8, i8)) {
         let conn = run.players[0].conn;
         run.handle(RunCmd::Msg { conn, msg: ClientMsg::Input(InputMsg { seq, mx, my, ..Default::default() }) });
+    }
+
+    #[test]
+    fn an_input_with_a_non_finite_aim_is_dropped() {
+        let mut run = input_run(0, |_, _| {});
+        let conn = run.players[0].conn;
+        for (seq, aim, aim_dist) in [(1, f32::NAN, 0.0), (2, f32::INFINITY, 0.0), (3, 0.0, f32::NEG_INFINITY), (4, 0.5, 20.0)] {
+            run.handle(RunCmd::Msg { conn, msg: ClientMsg::Input(InputMsg { seq, aim, aim_dist, ..Default::default() }) });
+        }
+        assert_eq!(run.players[0].inputs.iter().map(|i| i.seq).collect::<Vec<_>>(), [4]);
     }
 
     /// The direction (east, west, south, north) with the most walkable tiles in a row from player 0's spawn.

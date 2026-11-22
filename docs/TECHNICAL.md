@@ -285,6 +285,9 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - When the browser sends an `Origin` header, it must match `Host` (403 otherwise).
 - Server → client: `rmp_serde::to_vec_named` (structs as maps). Client → server: `@msgpack/msgpack` objects.
 - Enums use an internal tag `t`, e.g. `{ t: "Input", seq, mx, ... }`. Variant fields must not be named `t`.
+- A client message may be at most 16 KiB (`max_message_size`; real ones are a few hundred bytes); a larger one closes the socket.
+- Each connection's outgoing queue is unbounded, but its writer closes the connection once more than `OUTGOING_QUEUE_MAX` (256, about 8 s of snapshots) messages wait: a client that stops reading (zero window, half-open) is dropped through the normal disconnect path (the reader loop `select!`s on the writer task) instead of growing the queue without end (#392).
+- `Run::handle` drops an `Input` whose `aim` or `aim_dist` is not finite (MessagePack floats can carry NaN and infinity).
 
 **Client → server (`ClientMsg`)**
 - `SelectCharacter{id}`: play as one of the account's characters. The server loads it (ownership checked) and answers with `Character`. It is refused while in a room. The client sends it when a roster card is clicked, after connecting.
@@ -1811,13 +1814,14 @@ The database, statistics, telemetry and the admin page take the level as text (`
 ## 11a. Accounts, characters and progression
 
 **Accounts (`auth.rs`, `api.rs`).**
-- An account is a name and an Argon2id hash (19 MiB, 2 passes, 1 lane, run in `spawn_blocking`). No e-mail and no other personal data are stored, so a lost password cannot be recovered.
+- An account is a name and an Argon2id hash (19 MiB, 2 passes, 1 lane, run in `spawn_blocking`). At most four hashes or checks run at once (the semaphore `ARGON2_SLOTS` in `api::hash`/`verify`, which also serves the admin's password reset); more wait, so a burst of parallel logins cannot use up the memory (#392). No e-mail and no other personal data are stored, so a lost password cannot be recovered.
 - Names are 3–16 of `A-Z a-z 0-9 _ -` and unique ignoring case, for accounts and characters alike. Passwords are 8–128 characters.
 - A login for an unknown name still checks a dummy hash, so the timing does not reveal which names exist.
 - **Throttling** (in-memory `Limiter`):
   - 5 failed logins per account name in 30 s, and 20 per IP in 5 min, give a 429.
   - At most 10 registrations per IP per hour.
   - Deleting an account rechecks the password through the same limiter.
+  - All purposes share one map; each entry keeps its own window, and above 10,000 keys a hit prunes every entry whose own window is over (#276).
   - **The address** (`client_ip.rs`, extractor `ClientIp`, used by register, login, delete account and the admin login): the TCP peer, unless the peer is in `TRUSTED_PROXIES`. Then `X-Forwarded-For` is read from the right (several header lines count as one list) and the first entry that is not itself a trusted proxy is the client; entries further left were written by the client and are never used. A missing or unparsable entry keeps the peer address (the shared bucket). IPv4-mapped IPv6 addresses count as IPv4. Caddy's `reverse_proxy` appends the client to the header by default, so the live server needs only the setting.
 
 **Sessions.**

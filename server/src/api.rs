@@ -146,11 +146,16 @@ const LOGIN_IP_WINDOW: Duration = Duration::from_secs(300);
 const REGISTRATIONS_PER_IP: u32 = 10;
 const REGISTER_WINDOW: Duration = Duration::from_secs(3600);
 
+/// Argon2 takes 19 MiB per run: without a cap, a burst of parallel logins could use up the memory (#392).
+static ARGON2_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
 pub(crate) async fn hash(password: String) -> ApiResult<String> {
+    let _slot = ARGON2_SLOTS.acquire().await.map_err(server_error)?;
     tokio::task::spawn_blocking(move || auth::hash_password(&password)).await.map_err(server_error)
 }
 
 async fn verify(password: String, hash: Option<String>) -> ApiResult<bool> {
+    let _slot = ARGON2_SLOTS.acquire().await.map_err(server_error)?;
     tokio::task::spawn_blocking(move || auth::verify_password(&password, hash.as_deref())).await.map_err(server_error)
 }
 
