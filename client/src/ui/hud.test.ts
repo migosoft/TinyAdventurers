@@ -11,6 +11,18 @@ describe('secondaryLabel', () => {
   it('keeps the name of other classes', () => expect(secondaryLabel(null, 'Charge')).toBe('Charge'));
 });
 
+const RUN = {
+  you: 1,
+  abilities: [
+    { id: 'MagicMissile', cooldown: 1 },
+    { id: 'Fireball', cooldown: 1 },
+  ],
+  players: [
+    { ent: 1, name: 'Al', class: 'Wizard' },
+    { ent: 2, name: 'Bo', class: 'Barbarian' },
+  ],
+} as unknown as Parameters<Hud['startRun']>[0];
+
 describe('Hud', () => {
   let hud: Hud;
   beforeEach(() => {
@@ -31,6 +43,13 @@ describe('Hud', () => {
     expect(el.querySelector('kbd')!.textContent).toBe('E');
     hud.setAsleep(false);
     expect(el.classList.contains('hidden')).toBe(true);
+  });
+  it('closes a pause menu left open when the next run starts', () => {
+    hud.toggleMenu();
+    expect(hud.menuOpen).toBe(true);
+    hud.startRun(RUN);
+    expect(hud.menuOpen).toBe(false);
+    expect(document.querySelector('.menu')!.classList.contains('hidden')).toBe(true);
   });
   it('always says the XP and coins were banked on the end screen', () => {
     hud.showEnd({ victory: true, level: 'Dungeon', boss: null, time: 75, stats: [] });

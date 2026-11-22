@@ -250,6 +250,7 @@ export class Hud {
   }
 
   startRun(info: RunStartInfo): void {
+    if (this.menuOpen) this.toggleMenu(); // a menu left open by the last run would block attacks
     this.root.classList.remove('hidden');
     this.end.classList.add('hidden');
     this.debugBadge.classList.add("hidden");
