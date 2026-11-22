@@ -224,6 +224,27 @@ describe('the painter of natural rock', () => {
     }
   });
 
+  it('paints the water under a puddle darker than its damp ring, and its outline darker than its middle', () => {
+    const { map, f, marks } = stoneLevel();
+    const p = marks.puddles[0], cu = p.x * 32, cv = p.z * 32, r = p.r * 32;
+    const pg = new Map<number, Uint8Array>();
+    const tone = (u: number, v: number): number => {
+      const cx = u >> 9, cz = v >> 9;
+      let g = pg.get(cz * 8 + cx);
+      if (!g) { g = new Uint8Array(PAGE * PAGE * 4); paintGroundRows(f, map, marks, cx, cz, 0, PAGE, g); pg.set(cz * 8 + cx, g); }
+      return g[((v & 511) * PAGE + (u & 511)) * 4];
+    };
+    let mid = 0, nMid = 0, ring = 0, nRing = 0, outline = 255;
+    for (let v = Math.floor(cv - r - 3); v <= cv + r + 3; v++) for (let u = Math.floor(cu - r - 3); u <= cu + r + 3; u++) {
+      const d = Math.hypot(u + 0.5 - cu, v + 0.5 - cv), t = tone(u, v);
+      if (d < r / 3) { mid += t; nMid++; }
+      else if (d > r + 0.5 && d < r + 2) { ring += t; nRing++; }
+      if (d < r + 1) outline = Math.min(outline, t);
+    }
+    expect(mid / nMid).toBeLessThan(ring / nRing);
+    expect(outline).toBeLessThan(mid / nMid);
+  });
+
   it('draws mineral veins in rock only', () => {
     const { map, f, marks } = stoneLevel();
     const vein = (p: Uint8Array, i: number): boolean => p[i] === VEIN[0] && p[i + 1] === VEIN[1] && p[i + 2] === VEIN[2];
