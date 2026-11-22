@@ -126,10 +126,13 @@ function slabAt(f: StoneField, map: TileMap, pu: number, pv: number): Made {
 interface PieceStones { seed: number; salt: number; u0: number; v0: number; n: number; at: Int16Array; blocks: Block[] }
 const pieceStones = new WeakMap<FloorPiece, PieceStones>();
 
+/** The share of a full turn a circle's ring is turned by; `salt` is the piece's place in the marks. The painter sets each rune by it. */
+export const circleTurn = (seed: number, salt: number, ring: number): number => hash(seed, salt, ring, 41);
+
 /** Ring and index of the stone at (du, dv) px from a circle's centre, `k` the distance as a share of the radius. */
 function circleStone(seed: number, salt: number, du: number, dv: number, k: number): [number, number] {
   const ring = CIRCLE_RINGS.findIndex((edge) => k < edge);
-  const turn = Math.atan2(dv, du) / (Math.PI * 2) + hash(seed, salt, ring, 41) + 1; // each ring is turned by its own angle, so the joints do not line up
+  const turn = Math.atan2(dv, du) / (Math.PI * 2) + circleTurn(seed, salt, ring) + 1; // each ring is turned by its own angle, so the joints do not line up
   return [ring, Math.floor((turn % 1) * CIRCLE_STONES[ring])];
 }
 
