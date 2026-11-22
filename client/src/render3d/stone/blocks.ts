@@ -32,7 +32,10 @@ export interface Block {
 }
 
 // First guesses, all of them.
-/** Tiles between two levels; floors: raised 0, flush -STEP, sunk -2 * STEP; walls the same, into the wall. */
+/**
+ * Tiles between two levels; floors: raised 0, flush -STEP, sunk -2 * STEP; walls the same into the wall, behind the frieze (`laidMesh.ts`).
+ * 0.03 was too little to see at the game's zoom; at 0.045 a step is a good stone px.
+ */
 export const LEVEL_STEP = 0.045;
 /** The shares of sunk and raised blocks; the rest is flush. */
 const SUNK = 0.18, RAISED = 0.14;
