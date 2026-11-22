@@ -163,10 +163,9 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     // The half size of every solid object kind, by kind id: what blocks the hero's prediction.
-    let solid_objects: serde_json::Map<_, _> = [EntityKind::Chest, EntityKind::Barrel, EntityKind::Torch, EntityKind::Crystal]
+    let solid_objects: serde_json::Map<_, _> = EntityKind::ALL
         .into_iter()
-        .filter(|&k| crate::defs::objects::def(k).solid)
-        .map(|k| ((k as u8).to_string(), json!(crate::defs::objects::def(k).radius)))
+        .filter_map(|k| crate::defs::objects::object_def(k).filter(|d| d.solid).map(|d| ((k as u8).to_string(), json!(d.radius))))
         .collect();
     consts.as_object_mut().unwrap().insert("SOLID_OBJECTS".into(), json!(solid_objects));
     let fl = json!({
@@ -174,13 +173,7 @@ fn export_defs() {
         "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE, "INCORPOREAL": flags::INCORPOREAL, "WILD": flags::WILD,
     });
     let side = json!({ "Neutral": Side::Neutral as u8, "Hostile": Side::Hostile as u8, "Friendly": Side::Friendly as u8 });
-    let tiles = json!({
-        "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
-        "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
-        "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
-        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8, "Trunk": Tile::Trunk as u8, "Road": Tile::Road as u8, "Thicket": Tile::Thicket as u8,
-        "Barrier": Tile::Barrier as u8,
-    });
+    let tiles: serde_json::Map<_, _> = Tile::ALL.iter().map(|t| (format!("{t:?}"), json!(*t as u8))).collect();
     // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
     let mut hitbox = serde_json::Map::new();
     let monsters = enemies::EnemyType::ALL.iter().map(|&t| (enemies::def(t).kind, enemies::def(t).radius));
@@ -250,7 +243,7 @@ fn export_defs() {
         p(&json!(anims)),
         p(&fl),
         p(&side),
-        p(&tiles),
+        p(&json!(tiles)),
         p(&consts),
         p(&json!(class_defs)),
         p(&json!(abilities)),
@@ -493,11 +486,15 @@ fn fixture_solids() -> Vec<Solid> {
     vec![Solid { x: 4.5 * TILE, y: 8.5 * TILE, half: 6.0 }, Solid { x: 8.5 * TILE, y: 12.5 * TILE, half: 6.0 }, Solid { x: 13.5 * TILE, y: 4.5 * TILE, half: 6.0 }]
 }
 
-/// A real run of a Barbarian through a fixed input list: walk, Charge, Strike twice (the second refused), a push, a
-/// root with an attack inside it, then onto a chasm and on after the fall began. Each step records what the server
-/// holds after it; the client's `Predictor` must reproduce position and cooldowns (`world.test.ts`).
+/// A real run of a Barbarian through a fixed input list, recorded step by step (`world.test.ts` replays it through
+/// `Predictor.step` and `Predictor.reconcile`). It covers: a Charge; a Strike and a refused one (cooldown); a push with
+/// two Strikes sent inside the slide while the cooldown is 0 (ignored); an Entangled root with a Strike (allowed); a
+/// Sleep with a Strike (ignored); an Accelerated span (cooldown rate 1.25) with Strikes wherever the client and the
+/// server cannot differ over the leeway; a walk into a chasm and on after the fall began. Not covered: a charmed hero,
+/// Berserker's cooldown factor, a ranged ability in melee, the melee fallback.
 fn predictor_case() -> serde_json::Value {
     use crate::protocol::{BossId, InputMsg};
+    use crate::run::abilities::COOLDOWN_LEEWAY;
     use crate::run::effects::Creature;
     use crate::run::tests::test_run;
     let mut run = test_run(&[ClassId::Barbarian], BossId::Lich);
@@ -512,33 +509,58 @@ fn predictor_case() -> serde_json::Value {
     let start = Map::center_of(tx, ty);
     run.players[0].mv = MoveState::at(start.x, start.y);
     let sheet = run.players[0].sheet.clone();
-    let mut steps = Vec::new();
-    for i in 0..220u32 {
-        let (primary, secondary) = (matches!(i, 10 | 12 | 40 | 150), i == 2);
+    let mut steps: Vec<serde_json::Value> = Vec::new();
+    for i in 0..400u32 {
+        let mx: i8 = if i < 20 || (60..100).contains(&i) || (100..180).contains(&i) || i >= 230 { 1 } else { 0 };
+        let mut primary = matches!(i, 4 | 6 | 62 | 64 | 105 | 150);
+        // From the Accelerated span on, ask whenever both sides surely agree: the cooldown is 0 before the tick (the client fires then) or stays above the leeway after it (the server refuses).
+        if i >= 180 {
+            let cd1 = run.players[0].cd1;
+            let after = |dt: f64| (cd1 - dt).max(0.0);
+            primary = cd1 == 0.0 || [DT, DT * 1.25].iter().all(|&dt| after(dt) > COOLDOWN_LEEWAY);
+        }
+        let secondary = i == 2;
         let mut knock = json!(null);
-        if i == 14 {
-            let from = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
-            run.knock_player(0, from, 0.0, 20.0, crate::run::tests::PUSH_STR);
-            knock = json!([run.players[0].mv.knock_vx, run.players[0].mv.knock_vy]);
+        match i {
+            60 => {
+                let from = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+                run.knock_player(0, from, 0.0, 20.0, crate::run::tests::PUSH_STR);
+                knock = json!([run.players[0].mv.knock_vx, run.players[0].mv.knock_vy]);
+                assert_eq!(run.players[0].cd1, 0.0, "a Strike inside the push is sent with the cooldown at 0");
+            }
+            100 => assert!(run.apply_effect(Creature::Player(0), EffectKind::Entangled, Some(0.5))),
+            140 => assert!(run.apply_effect(Creature::Player(0), EffectKind::Sleep, Some(0.5))),
+            180 => assert!(run.apply_effect(Creature::Player(0), EffectKind::Accelerated, Some(1.0))),
+            _ => {}
         }
-        if i == 30 {
-            assert!(run.apply_effect(Creature::Player(0), EffectKind::Entangled, Some(0.5)));
+        let before = (run.players[0].cd1, run.players[0].cd2);
+        if matches!(i, 62 | 64) {
+            assert!(run.players[0].mv.knocked(), "step {i} is inside the push slide");
         }
-        let input = InputMsg { seq: i + 1, mx: 1, primary: primary.then_some(i as u16 + 1), secondary: secondary.then_some(i as u16 + 1), ..Default::default() };
+        let input = InputMsg { seq: i + 1, mx, primary: primary.then_some(i as u16 + 1), secondary: secondary.then_some(i as u16 + 1), ..Default::default() };
         run.players[0].inputs.push_back(input);
         run.step();
         let p = &run.players[0];
+        if matches!(i, 62 | 64 | 150) {
+            assert_eq!((before.0, p.cd1), (0.0, 0.0), "step {i}: the Strike is ignored by the server ({before:?} {})", p.cd1);
+        }
         steps.push(json!({
-            "primary": primary, "secondary": secondary, "knock": knock,
+            "mx": mx, "primary": primary, "secondary": secondary, "knock": knock,
             "speedMul": p.effects.speed_mul(), "noAct": p.effects.no_act(), "cdRate": p.effects.cooldown_dt(DT) / DT,
-            "x": p.mv.x, "y": p.mv.y, "cd1": p.cd1, "cd2": p.cd2, "sinking": p.sinking.is_some(),
+            "x": p.mv.x, "y": p.mv.y, "dashT": p.mv.dash_t, "dashDx": p.mv.dash_dx, "dashDy": p.mv.dash_dy,
+            "knockVx": p.mv.knock_vx, "knockVy": p.mv.knock_vy,
+            "cd1": p.cd1, "cd2": p.cd2, "sinking": p.sinking.is_some(),
         }));
         if !p.alive {
             break;
         }
     }
-    assert!(steps.iter().any(|s| s["sinking"] == json!(true)), "the walk ends in the chasm");
-    assert!(steps.iter().any(|s| s["speedMul"] == json!(0.0)), "the root holds the hero");
+    let any = |key: &str, v: serde_json::Value| steps.iter().any(|s| s[key] == v);
+    assert!(any("sinking", json!(true)), "the walk ends in the chasm");
+    assert!(any("speedMul", json!(0.0)) && any("noAct", json!(true)) && any("cdRate", json!(1.25)), "root, sleep and acceleration all held");
+    let uses = |range: std::ops::Range<usize>| (range.start..range.end).filter(|&i| steps[i]["cd1"].as_f64().unwrap() > steps[i - 1]["cd1"].as_f64().unwrap()).count();
+    assert!(uses(180..270) >= 2, "Strikes are used while accelerated: {}", uses(180..270));
+    assert!(steps[105]["cd1"].as_f64().unwrap() > 0.0, "the Strike while entangled is used");
     json!({ "speed": sheet.speed, "abilities": [sheet.primary, sheet.secondary], "fallback": sheet.fallback, "start": [start.x, start.y], "steps": steps, "map": { "w": run.layout.map.w, "h": run.layout.map.h, "tiles": run.layout.map.tiles } })
 }
 
@@ -671,8 +693,10 @@ fn export_fixtures() {
     // Every tile's rules, so a new or changed tile fails the client's port: sight, light, walking and speed per mover.
     use crate::dungeon::Mover;
     let movers = [("hero", Mover::Hero), ("enemy", Mover::Enemy), ("demon", Mover::Demon), ("dash", Mover::Dash)];
-    let tile_rules: Vec<serde_json::Value> = (0..=Tile::Barrier as u8)
-        .map(|id| {
+    let tile_rules: Vec<serde_json::Value> = Tile::ALL
+        .iter()
+        .map(|&t| {
+            let id = t as u8;
             let mut one = Map::new(1, 1);
             one.tiles[0] = id;
             let centre = crate::math::Vec2::new(TILE / 2.0, TILE / 2.0);

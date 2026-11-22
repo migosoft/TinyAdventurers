@@ -12,14 +12,19 @@ pub struct ObjDef {
     pub solid: bool,
 }
 
-pub fn def(kind: EntityKind) -> ObjDef {
-    match kind {
+/// The object's definition, or None for a kind that is not an object.
+pub fn object_def(kind: EntityKind) -> Option<ObjDef> {
+    Some(match kind {
         EntityKind::Chest => ObjDef { radius: CHEST_RADIUS, solid: false },
         EntityKind::Barrel => ObjDef { radius: BARREL_RADIUS, solid: true },
         EntityKind::Torch => ObjDef { radius: TORCH_RADIUS, solid: false },
         EntityKind::Crystal => ObjDef { radius: CRYSTAL_RADIUS, solid: false },
-        _ => panic!("{kind:?} is not an object"),
-    }
+        _ => return None,
+    })
+}
+
+pub fn def(kind: EntityKind) -> ObjDef {
+    object_def(kind).unwrap_or_else(|| panic!("{kind:?} is not an object"))
 }
 
 /// Chest footprint: the same as the mimic's, so shots and the melee strike treat both alike.

@@ -5,7 +5,7 @@ import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import fixtures from '../generated/fixtures.json';
-import { Interpolator, Predictor, ownPredictedShot, abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
+import { Interpolator, mayAct, Predictor, slotReady, ownPredictedShot, abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, cd_steps: { base: 1, attr: 'Dex', have: 10, scaled: 1, mods: 1 }, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0, per_cast: 0, alive: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -362,34 +362,57 @@ describe('ownPredictedShot', () => {
 });
 
 describe('Predictor against the server (fixtures.json, export.rs predictor_case)', () => {
-  it('walks, dashes, strikes, is pushed and rooted and falls as the real run does, cooldowns included', () => {
-    const f = fixtures.predictor;
-    const map = new TileMap(f.map.w, f.map.h, Uint8Array.from(f.map.tiles));
-    const abilities = f.abilities as unknown as ResolvedAbility[];
-    const pred = new Predictor(map, f.speed, abilities, f.fallback as unknown as ResolvedAbility, f.start[0], f.start[1]);
+  const f = fixtures.predictor;
+  const map = new TileMap(f.map.w, f.map.h, Uint8Array.from(f.map.tiles));
+  const abilities = f.abilities as unknown as ResolvedAbility[];
+  const fresh = () => new Predictor(map, f.speed, abilities, f.fallback as unknown as ResolvedAbility, f.start[0], f.start[1]);
+
+  /** One input as the session sends it: the effects of the snapshot, then the session's own firing rules (`mayAct`, `slotReady`). */
+  function send(pred: Predictor, i: number): void {
+    const st = f.steps[i];
+    if (st.knock) pred.state = { ...pred.state, knockVx: st.knock[0], knockVy: st.knock[1] };
+    pred.speedMul = st.speedMul;
+    pred.noAct = st.noAct;
+    pred.cdRate = st.cdRate;
+    const free = mayAct(pred);
+    const used: [number | null, number | null] = [null, null];
+    let dash: [number, number] | null = null;
+    if (st.primary && free && slotReady(pred, 0)) used[0] = pred.cooldownOf(0);
+    if (st.secondary && free && slotReady(pred, 1)) {
+      used[1] = pred.cooldownOf(1);
+      dash = [1, 0]; // the input's aim is 0; Charge is the secondary
+    }
+    pred.step(st.mx, 0, dash, used);
+  }
+
+  it('step: walks, dashes, strikes, is pushed, rooted, put to sleep, accelerated and falls as the real run does, cooldowns included', () => {
+    const pred = fresh();
     f.steps.forEach((st, i) => {
-      if (st.knock) pred.state = { ...pred.state, knockVx: st.knock[0], knockVy: st.knock[1] };
-      // What the server snapshot says at this input (the effects, as the session reads them).
-      pred.speedMul = st.speedMul;
-      pred.noAct = st.noAct;
-      pred.cdRate = st.cdRate;
-      // The session's rules: only a free hero uses an ability, and only when the cooldown has run out.
-      const free = !pred.sinking && !pred.knocked && !pred.noAct;
-      const used: [number | null, number | null] = [null, null];
-      let dash: [number, number] | null = null;
-      if (st.primary && free && pred.cd1 <= 0) used[0] = pred.cooldownOf(0);
-      if (st.secondary && free && pred.cd2 <= 0) {
-        used[1] = pred.cooldownOf(1);
-        dash = [1, 0]; // the input's aim is 0; Charge is the secondary
-      }
-      pred.step(1, 0, dash, used);
-      const where = `step ${i}`;
-      expect(pred.state.x, where).toBeCloseTo(st.x, 6);
-      expect(pred.state.y, where).toBeCloseTo(st.y, 6);
-      expect(pred.cd1, where).toBeCloseTo(st.cd1, 6);
-      expect(pred.cd2, where).toBeCloseTo(st.cd2, 6);
+      send(pred, i);
+      expect(pred.state.x, `step ${i}`).toBeCloseTo(st.x, 6);
+      expect(pred.state.y, `step ${i}`).toBeCloseTo(st.y, 6);
+      expect(pred.cd1, `step ${i}`).toBeCloseTo(st.cd1, 6);
+      expect(pred.cd2, `step ${i}`).toBeCloseTo(st.cd2, 6);
     });
     expect(f.steps.some((st) => st.sinking)).toBe(true);
+  });
+
+  it('reconcile: the replay of five unacknowledged inputs from the server state lands where the server did', () => {
+    const firstSink = f.steps.findIndex((st) => st.sinking);
+    // Inside the dash's end, the push (with two refused Strikes), the root, the sleep (a refused Strike), the acceleration and the fall.
+    for (const k of [25, 61, 104, 146, 185, firstSink - 3]) {
+      const pred = fresh();
+      for (let i = 0; i <= k + 5; i++) send(pred, i);
+      const at = f.steps[k];
+      const base = snap(k + 1, at.x, at.y);
+      const me = { ...base.me, dash_t: at.dashT, dash_dx: at.dashDx, dash_dy: at.dashDy, knock_vx: at.knockVx, knock_vy: at.knockVy, cd1: at.cd1, cd2: at.cd2, speed_mul: at.speedMul, no_act: at.noAct, cd_rate: at.cdRate };
+      pred.reconcile({ ...base, me });
+      const want = f.steps[k + 5];
+      expect(pred.state.x, `k ${k}`).toBeCloseTo(want.x, 6);
+      expect(pred.state.y, `k ${k}`).toBeCloseTo(want.y, 6);
+      expect(pred.cd1, `k ${k}`).toBeCloseTo(want.cd1, 6);
+      expect(pred.cd2, `k ${k}`).toBeCloseTo(want.cd2, 6);
+    }
   });
 });
 
@@ -413,6 +436,8 @@ describe('Interpolator clock', () => {
       if (k > 5) {
         expect(x).toBeGreaterThan(0);
         expect(x).toBeLessThanOrEqual(xAt(tick) + 0.1 * speed + 1e-6); // the late push may extrapolate, never beyond 0.1 s
+        // Never far in the past: at most the delay and two snapshot intervals behind the newest.
+        expect(x).toBeGreaterThanOrEqual(xAt(tick) - (it.delay + 2 / CONST.SNAPSHOT_HZ) * speed - 1e-6);
       }
     }
     it.sample(now + 5, out);

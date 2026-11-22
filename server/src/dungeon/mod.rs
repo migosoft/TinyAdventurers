@@ -22,10 +22,10 @@ pub fn is_terrain(t: u8) -> bool {
     (Tile::ShallowWater as u8..=Tile::Lava as u8).contains(&t)
 }
 
+crate::defs::enum_list::listed_enum! {
 /// Tile values sent to the client (one byte each).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Tile {
+pub enum Tile: u8 {
     Void = 0,
     Floor = 1,
     Wall = 2,
@@ -50,6 +50,7 @@ pub enum Tile {
     /// Drawn as the open ground beside it; blocks every mover, phasers too, like the map's edge; sight, light and
     /// shots pass.
     Barrier = 12,
+}
 }
 
 /// Which tiles stop a sight line: every opaque tile, or only the hard ones (light passes trunks and thickets).

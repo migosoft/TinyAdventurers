@@ -15,7 +15,7 @@ import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import { nextDarkvision } from '../game/darkvisionSteps';
 import { LightField } from '../game/light';
-import { abilityChoice, cosmeticCount, Interpolator, Predictor, slotUsable, volleyAngles, volleyShotIds, type EntState } from '../game/world';
+import { abilityChoice, cosmeticCount, Interpolator, mayAct, Predictor, slotReady, slotUsable, volleyAngles, volleyShotIds, type EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Net } from '../net';
 import type { Disabled, Hud } from '../ui/hud';
@@ -366,7 +366,7 @@ export class RunSession {
     const aim = this.pred.noTurn ? this.lastAim : pointerAim;
     this.lastAim = aim;
     // Falling, drowning or pushed heroes cannot attack (the server ignores it).
-    const free = !charmed && !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked && !this.pred.noAct;
+    const free = !charmed && !this.hud.menuOpen && mayAct(this.pred);
     const wantPrimary = inp.primary && free;
     const wantSecondary = inp.secondary && free;
     const act = inp.act && free;
@@ -378,12 +378,12 @@ export class RunSession {
     const usable = [this.slotUsable(0), this.slotUsable(1)] as const;
     if (wantPrimary && !usable[0]) this.hud.needs(0, this.disabled[0]!);
     if (wantSecondary && !usable[1]) this.hud.needs(1, this.disabled[1]!);
-    if (wantPrimary && this.pred.cd1 <= 0 && usable[0]) {
+    if (wantPrimary && slotReady(this.pred, 0) && usable[0]) {
       const ids = this.reserveShots(0);
       primary = ids[0];
       used[0] = this.predictAbility(0, ids, aim, dist);
     }
-    if (wantSecondary && this.pred.cd2 <= 0 && usable[1]) {
+    if (wantSecondary && slotReady(this.pred, 1) && usable[1]) {
       const ids = this.reserveShots(1);
       secondary = ids[0];
       used[1] = this.predictAbility(1, ids, aim, dist);

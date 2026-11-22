@@ -212,6 +212,16 @@ function dashDurationOf(abilities: ResolvedAbility[]): number {
   return sec.id === 'Charge' ? sec.duration : 0;
 }
 
+/** Whether the hero may attack or use an object at all: not falling, pushed or held (the server ignores it then). */
+export function mayAct(p: Predictor): boolean {
+  return !p.sinking && !p.knocked && !p.noAct;
+}
+
+/** Whether the slot's cooldown has run out (the server's leeway is only for the network: the client waits for 0). */
+export function slotReady(p: Predictor, slot: 0 | 1): boolean {
+  return (slot === 0 ? p.cd1 : p.cd2) <= 0;
+}
+
 export class Predictor {
   state: MoveState;
   /** Visual smoothing of small corrections (decays to 0). */
