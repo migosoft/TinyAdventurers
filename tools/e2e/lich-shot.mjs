@@ -8,8 +8,7 @@
 //      READBACK=1 (also saves <name>-readback.png: the frame re-drawn off-screen and read back; a WebGPU canvas capture may be black),
 //      R3D_W / R3D_H (1280x768), ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on), ZOOM (default 4).
 import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
-import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
+import { launch, gpuOn, printGpu } from './gpu.mjs';
 import { VIEWPORT, saveReadback, watchPage } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:5173/';
@@ -40,18 +39,7 @@ shots.push({ name: 'wading', q: `&px=20.5&pz=11.5${T}` });
 shots.push({ name: 'wading-zoom8', q: `&px=20.5&pz=11.5&zoom=8&face=90${T}`, zoom: '8' });
 shots.push({ name: 'wading-work', q: `&px=20.5&pz=11.5&light=work&zoom=8&face=90${T}`, zoom: '8' });
 
-const args =
-  mode === 'webgpu' && process.env.HEADED
-    ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
-    : mode === 'webgpu'
-    ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader']
-    : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const b = await chromium.launch({
-  executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: !process.env.HEADED,
-  args,
-  ...(gpuOn ? gpuLaunch() : {}),
-});
+const b = await launch(mode);
 // GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
 const backend = mode === 'webgl' ? '&backend=webgl' : '';
 const errs = [];
@@ -61,12 +49,7 @@ async function open(q, tag, zoomOf = zoom, lose = false) {
   const p = await b.newPage({ viewport: VIEWPORT });
   const mine = [];
   watchPage(p, tag, mine, () => lose);
-  p.on('console', (m) => {
-    const t = m.text();
-    if (m.type() === 'warning' && /^(3D model |built figure )/.test(t)) mine.push(`${tag}: ${t}`);
-    if (m.type() === 'warning' && /shader|uniform|validation|WGSL/i.test(t)) mine.push(`${tag}: ${t}`);
-    if (lose) for (let i = mine.length - 1; i >= 0; i--) if (/Device Lost/i.test(mine[i])) mine.splice(i, 1);
-  });
+  p.on('console', (m) => m.type() === 'warning' && /shader|uniform|validation|WGSL/i.test(m.text()) && mine.push(`${tag}: ${m.text()}`));
   p._mine = mine;
   await p.goto(`${base}?r3d=lich&zoom=${zoomOf}${backend}${q}`);
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });

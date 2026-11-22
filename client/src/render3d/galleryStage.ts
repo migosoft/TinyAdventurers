@@ -203,6 +203,8 @@ export function lineupCircles(T: FxTris): void {
 }
 /** The kinds with a model, in the order of the model rows. */
 const MODEL_KINDS = Object.keys(MODEL_OF_KIND).map(Number);
+/** The model key each model row wears, in row order: published as `__r3d.models.rows` so the check shots can verify their own list of rows. */
+const MODEL_ROWS = MODEL_KINDS.map((k) => MODEL_OF_KIND[k] as string);
 /** A figure of the dying row lives this many seconds of every `DIE_PERIOD`, then dies (and leaves its skull). */
 const DIE_PERIOD = 6;
 const DIE_AT = 3;
@@ -533,7 +535,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
-        r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, t);
+        r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, t, MODEL_ROWS);
         r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal };   // the spectres' effects pass: the cost and shot checks want 0 dropped
         r.lights = { list: lights.length, inView };
         r.casters = casters.length;

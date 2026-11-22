@@ -7,7 +7,7 @@
 // Fails (exit 1) on a console error, a "device lost" warning, a software renderer or a missing WebGPU adapter when GPU is set, or a page
 // that does not draw 10 frames in 40 s (that one stops the run at once; the others are listed at the end).
 import { chromium } from 'playwright-core';
-import { gpuLaunch, printGpu } from './gpu.mjs';
+import { gpuLaunch, printGpu, sampleFrames, SOFTWARE } from './gpu.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:4173/';
 const label = process.argv[3] ?? '';
@@ -15,7 +15,6 @@ const SECS = Number(process.env.SECS) || 10;
 const CROWD = Number(process.env.CROWD) || 40;
 const kinds = process.env.KINDS ? `&crowdKinds=${process.env.KINDS}` : '';
 const b = await chromium.launch({ executablePath: process.env.BROWSER, ...gpuLaunch() });
-const SOFTWARE = /swiftshader|llvmpipe|softpipe|software/i;
 const failures = [];
 let first = true;
 for (const backend of ['webgl', 'auto']) {
@@ -57,25 +56,13 @@ for (const backend of ['webgl', 'auto']) {
         if (!adapter || SOFTWARE.test(adapter)) failures.push(`${run}: ${adapter ? `software adapter ${adapter}` : 'no WebGPU adapter'}`);
       }
       await p.waitForTimeout(6000);
-      const r = await p.evaluate((secs) => new Promise((res) => {
-        const ts = [];
-        const t0 = performance.now();
-        const f = (t) => {
-          ts.push(t);
-          if (t - t0 < secs * 1000) requestAnimationFrame(f);
-          else {
-            const d = ts.slice(1).map((v, i) => v - ts[i]).sort((a, c) => a - c);
-            const w = window.__r3d;
-            res({
-              mean: (ts[ts.length - 1] - ts[0]) / (ts.length - 1), med: d[d.length >> 1], p99: d[Math.floor(d.length * 0.99)],
-              backend: w.backend, size: w.renderSize,
-              models: w.models && { figures: w.models.figures, draws: w.models.draws },
-              fx: w.fx && { tris: w.fx.tris, dropped: w.fx.dropped },
-            });
-          }
-        };
-        requestAnimationFrame(f);
-      }), SECS);
+      const r = {
+        ...(await sampleFrames(p, SECS)),
+        ...(await p.evaluate(() => {
+          const w = window.__r3d;
+          return { backend: w.backend, size: w.renderSize, models: w.models && { figures: w.models.figures, draws: w.models.draws }, fx: w.fx && { tris: w.fx.tris, dropped: w.fx.dropped } };
+        })),
+      };
       console.log(`${label}\t${r.backend}\t${light ? 'torch' : 'work'}\t${as}\tmean ${r.mean.toFixed(2)} ms\tmed ${r.med.toFixed(2)}\tp99 ${r.p99.toFixed(2)}\t${JSON.stringify(r.models)}\t${r.size}\tfx tris ${r.fx?.tris}\tdropped ${r.fx?.dropped}${errs.length ? `\tERR ${errs[0]}` : ''}`);
       if (r.fx?.dropped > 0) failures.push(`${backend} ${light || 'work'} ${as}: the effects dropped ${r.fx.dropped} triangles at their caps`);
       if (errs.length) failures.push(`${backend} ${light || 'work'} ${as}: ${errs[0]}`);

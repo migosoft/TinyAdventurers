@@ -6,14 +6,18 @@ export const VIEWPORT = { width: 1280, height: 768 };
 
 /**
  * Collects the page's failures into `errors`: uncaught errors, console errors (not the expected 401 of the first /api/me before
- * logging in) and a "device lost" warning (host.ts only warns; unless `isLosing()` says the script loses the device on purpose, it is a failure).
+ * logging in) and a "3D model" / "built figure" build warning and a "device lost" warning (host.ts only warns; unless `isLosing()` says the script loses the device on purpose, it is a failure).
  */
 export function watchPage(page, name, errors, isLosing = () => false) {
   const label = name ? `${name} ` : '';
   page.on('pageerror', (e) => errors.push(`${label}pageerror: ${e.message}`));
-  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`${label}console: ${m.text()}`));
+  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && !(isLosing() && /Device Lost/i.test(m.text())) && errors.push(`${label}console: ${m.text()}`));
+  page.on('console', (m) => m.type() === 'warning' && /^(3D model |built figure )/.test(m.text()) && errors.push(`${label}${m.text()}`));
   page.on('console', (m) => m.type() === 'warning' && /device lost/i.test(m.text()) && !isLosing() && errors.push(`${label}device lost: ${m.text()}`));
 }
+
+/** The URL of a page with the backend parameter appended to `query`. */
+export const pageUrl = (base, query = '') => base + query + (backendQuery() ? (query.includes('?') ? '&' : '?') + backendQuery() : '');
 
 /** The page parameter that picks the backend: nothing for BACKEND=webgpu, else `backend=webgl` (software WebGL2 is what headless has). */
 export function backendQuery() {
@@ -25,7 +29,7 @@ export function r3dState(page) {
   return page.evaluate(() => {
     const r = window.__r3d;
     return {
-      frames: r?.frames, hero: r?.hero, cam: r?.cam, figures: r?.figures, fx: r?.fx, renderSize: r?.renderSize, backend: r?.backend,
+      frames: r?.frames, hero: r?.hero, cam: r?.cam, figures: r?.figures, chunks: r?.chunks, fx: r?.fx, renderSize: r?.renderSize, backend: r?.backend,
     };
   });
 }

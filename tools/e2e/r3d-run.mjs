@@ -7,21 +7,15 @@
 // BOSS=lich|dragon|demon: picks that boss in the room before the start (the boss decides the dungeon's stone: laid, natural rock, both; default: the room's own Random).
 // ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376). It prints the glide's frame times; ZOOM_PASSES=3 zooms there, back and there again (a hitch only in pass 1 is a first-use cost).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
-import { chromium } from 'playwright-core';
-import { tag, markDebug, login, createCharacter, deleteAccount } from './account.mjs';
-import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
-import { VIEWPORT, watchPage, saveReadback } from './r3d-page.mjs';
+import { decode } from '../../client/node_modules/@msgpack/msgpack/dist.esm/index.mjs';
+import { tag, markDebug, login, createCharacter, deleteAccount, purge } from './account.mjs';
+import { launch, gpuOn, printGpu } from './gpu.mjs';
+import { VIEWPORT, watchPage, saveReadback, r3dState, backendQuery } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots';
 const level = (process.argv[4] ?? 'dungeon').toLowerCase();
-const browser = await chromium.launch({
-  executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  // GPU=1 (or GPU=uncapped): a visible window on the discrete card with the notebook's start line (gpu.mjs).
-  ...(gpuOn ? gpuLaunch() : {}),
-});
+const browser = await launch(); // GPU=1 (or GPU=uncapped): a visible window on the discrete card with the notebook's start line (gpu.mjs)
 const errors = [];
 const account = `e2e_${tag()}`;
 // R3D_W / R3D_H: the window (1280x768). BACKEND=webgpu: the page picks WebGPU (default: WebGL2). FPS_S=10: the frame-rate measurement (below).
@@ -53,64 +47,25 @@ await page.addInitScript(() => {
 // A lost device is only a console warning (host.ts); unless the script loses it on purpose below, it is a failure.
 let losing = false;
 watchPage(page, '', errors, () => losing);
-// A minimal MessagePack reader for the frames the page sends: an Input goes out as a bare array [seq, mx, my, aim, aim_dist, primary, ...].
-function unpack(buf) {
-  let p = 0;
-  const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const str = (n) => { const s = buf.toString('utf8', p, p + n); p += n; return s; };
-  const arr = (n) => Array.from({ length: n }, one);
-  const map = (n) => { const o = {}; for (let i = 0; i < n; i++) { const k = one(); o[k] = one(); } return o; };
-  function one() {
-    const b = buf[p++];
-    if (b < 0x80) return b;
-    if (b >= 0xe0) return b - 256;
-    if (b >= 0xa0 && b < 0xc0) return str(b & 0x1f);
-    if (b >= 0x90 && b < 0xa0) return arr(b & 0x0f);
-    if (b >= 0x80 && b < 0x90) return map(b & 0x0f);
-    const take = (n, f) => { const r = f(p); p += n; return r; };
-    switch (b) {
-      case 0xc0: return null;
-      case 0xc2: return false;
-      case 0xc3: return true;
-      case 0xca: return take(4, (o) => v.getFloat32(o));
-      case 0xcb: return take(8, (o) => v.getFloat64(o));
-      case 0xcc: return take(1, (o) => v.getUint8(o));
-      case 0xcd: return take(2, (o) => v.getUint16(o));
-      case 0xce: return take(4, (o) => v.getUint32(o));
-      case 0xcf: return take(8, (o) => Number(v.getBigUint64(o)));
-      case 0xd0: return take(1, (o) => v.getInt8(o));
-      case 0xd1: return take(2, (o) => v.getInt16(o));
-      case 0xd2: return take(4, (o) => v.getInt32(o));
-      case 0xd3: return take(8, (o) => Number(v.getBigInt64(o)));
-      case 0xd9: return str(take(1, (o) => v.getUint8(o)));
-      case 0xda: return str(take(2, (o) => v.getUint16(o)));
-      case 0xdc: return arr(take(2, (o) => v.getUint16(o)));
-      case 0xde: return map(take(2, (o) => v.getUint16(o)));
-      default: throw new Error(`msgpack byte ${b}`);
-    }
-  }
-  return one();
-}
+// The frames the page sends are MessagePack: an Input goes out as a bare array [seq, mx, my, aim, aim_dist, primary, ...].
 const sentInputs = []; // decoded Input arrays, in order
 page.on('websocket', (ws) => ws.on('framesent', (f) => {
   if (typeof f.payload === 'string') return;
   try {
-    const m = unpack(f.payload);
+    const m = decode(f.payload);
     if (Array.isArray(m) && typeof m[0] === 'number' && m.length >= 9) sentInputs.push(m);
   } catch { /* other messages are not read here */ }
 }));
 // The woodland's trees draw slowly in software (a few frames a second): the walk and the click get longer to be seen (the real GPU needs none of it).
 const slow = level === 'woodland' && !gpuOn ? 4 : 1;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); // window.__r3d.hero / cam are {x, z} in tiles
-const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window.__r3d?.cam, chunks: window.__r3d?.chunks, frames: window.__r3d?.frames, figures: window.__r3d?.figures }));
-let registered = false;
+const r3d = () => r3dState(page);
 
 try {
-  await page.goto(`${base}?r3d${process.env.BACKEND === 'webgpu' ? '' : '&backend=webgl'}${process.env.R3D_QUERY ?? ''}`); // R3D_QUERY: more page parameters, e.g. "&shadows=0&hour=14"
+  await page.goto(`${base}?r3d${backendQuery() && `&${backendQuery()}`}${process.env.R3D_QUERY ?? ''}`); // R3D_QUERY: more page parameters, e.g. "&shadows=0&hour=14"
   await page.bringToFront();
   await page.waitForSelector('#auth-name');
   await login(page, account, true);
-  registered = true;
   await markDebug(base, account); // no WebSocket yet, so the connection reads the new flag
   await createCharacter(page, `Hero${tag()}`, 'Paladin');
   await page.click('#to-dungeon');
@@ -172,17 +127,15 @@ try {
   // ZOOM=far|near|start (#376): send 40 wheel notches over the canvas, wait until the zoom is within 1 % of the limit, then check it.
   if (process.env.ZOOM) {
     const want = process.env.ZOOM;
-    const [cw, ch] = await page.evaluate(() => { const c = document.querySelector('#game canvas.r3d'), d = window.devicePixelRatio || 1; return [Math.max(1, Math.round(c.clientWidth * d)), Math.max(1, Math.round(c.clientHeight * d))]; }); // the host's w, h
-    // The formulas of client/src/render3d/zoom.ts (zoomLimits, FAR_TILES, NEAR_TILES) and quality.ts (pickZoom).
-    const start = Math.min(8, Math.max(2, Math.floor(Math.min(cw / 240, ch / 152))));
-    const lim = { min: Math.min(Math.max(cw / (16 * 28), ch / (16 * 17.7)), start), max: Math.max(Math.min(cw / (16 * 6), ch / (16 * 3.8)), start) };
+    const lim = await page.evaluate(() => window.__r3d.zoomRange); // the host's start zoom and limits for this canvas
+    const start = lim.start;
     const expected = want === 'far' ? lim.min : want === 'near' ? lim.max : start;
     // ZOOM_PASSES=3: zoom to the limit, back to the other limit, and to the limit again, measuring each glide (a hitch only in the first pass is a first-use cost).
     const passes = want === 'start' ? 0 : Number(process.env.ZOOM_PASSES || 1);
     for (let pass = 0; pass < passes; pass++) {
       const out = (want === 'far') === (pass % 2 === 0);
       const target = out ? lim.min : lim.max;
-      const g0 = await page.evaluate(() => performance.now());
+          const g0 = await page.evaluate(() => performance.now());
       await page.mouse.move(viewport.width / 2, viewport.height / 2);
       for (let i = 0; i < 40; i++) {
         await page.mouse.wheel(0, out ? 100 : -100);
@@ -197,10 +150,10 @@ try {
         const slow = p.dt.map((d, i) => [d, p.t[i] - g0]).filter(([d, t]) => t >= 0 && d > 33).map(([d, t]) => `${d.toFixed(0)} ms at +${(t / 1000).toFixed(2)} s`);
         return { n: dts.length, median: dts[Math.floor(dts.length / 2)] ?? 0, p99: dts[Math.floor(dts.length * 0.99)] ?? 0, max: dts[dts.length - 1] ?? 0, slow };
       }, g0);
-      console.log(`glide: ${g.n} frames, median ${g.median.toFixed(1)} ms, 99th ${g.p99.toFixed(1)} ms, longest ${g.max.toFixed(1)} ms; over 33 ms: ${g.slow.join(', ') || 'none'}`);
+        console.log(`glide: ${g.n} frames, median ${g.median.toFixed(1)} ms, 99th ${g.p99.toFixed(1)} ms, longest ${g.max.toFixed(1)} ms; over 33 ms: ${g.slow.join(', ') || 'none'}`);
     }
     const zoom = await page.evaluate(() => window.__r3d.zoom);
-    console.log(`zoom ${zoom.toFixed(3)} (expected ${expected.toFixed(3)}, start ${start}, canvas ${cw}x${ch})`);
+    console.log(`zoom ${zoom.toFixed(3)} (expected ${expected.toFixed(3)}, start ${start}, limits ${lim.min.toFixed(3)} to ${lim.max.toFixed(3)})`);
     if (Math.abs(zoom - expected) > 0.01 * expected) errors.push(`zoom ${zoom} is not within 1 % of ${expected} (${want})`);
     const scroll = await page.evaluate(() => [window.scrollY, document.scrollingElement.scrollTop]);
     if (scroll[0] !== 0 || scroll[1] !== 0) errors.push(`the page scrolled: ${scroll}`);
@@ -209,7 +162,7 @@ try {
   // (all passes) and the F3 block. With FPS_ONLY=1 the run ends after this and the picture r3d-run-<level>-fps.png.
   if (process.env.FPS_S) {
     await page.waitForTimeout(1000);
-    const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
+      const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
     await page.waitForTimeout(Number(process.env.FPS_S) * 1000);
     const m = await page.evaluate((a) => {
       const p = window.__perf, now = performance.now();
@@ -379,10 +332,10 @@ try {
 } catch (e) {
   if (!e.quiet) errors.push(`failed: ${e.message.split('\n')[0]}`);
 } finally {
-  if (registered) {
-    const status = await deleteAccount(page).catch((e) => `error ${e.message}`);
-    if (status !== 204) errors.push(`deleting ${account}: ${status}`);
-  }
+  // The API delete; a page that never got logged in answers 401 and the database delete takes the account (a no-op when it was never registered).
+  const status = await deleteAccount(page).catch((e) => `error ${e.message}`);
+  const failed = status === 204 ? null : purge([account]);
+  if (failed) errors.push(`deleting ${account}: ${status}; ${failed}`);
   await browser.close();
 }
 console.log(errors.length ? errors.join('\n') : 'no browser errors');

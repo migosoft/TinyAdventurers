@@ -1,4 +1,4 @@
-// Account helpers shared by the e2e scripts (smoke.mjs, r3d-run.mjs): throwaway e2e_* accounts.
+// Account helpers shared by the e2e scripts (smoke.mjs, r3d-run.mjs, charm-run.mjs): throwaway e2e_* accounts.
 import { execFileSync } from 'node:child_process';
 
 export const PASSWORD = 'smoke-test-password';
@@ -55,4 +55,19 @@ export function deleteAccount(page) {
     (password) => fetch('/api/account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }).then((r) => r.status),
     PASSWORD,
   );
+}
+
+/**
+ * Cleanup after a run: deletes the e2e_* accounts in `names` whose API delete did not return 204 (`deleted` lists the ones that did) from the
+ * database with psql. Returns an error line, or null when nothing was left or the delete worked.
+ */
+export function purge(names, deleted = []) {
+  const left = names.filter((n) => /^e2e_[0-9a-f]+$/.test(n) && !deleted.includes(n));
+  if (!left.length) return null;
+  try {
+    execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'tiny', '-d', 'tiny', '-c', `delete from accounts where name in (${left.map((n) => `'${n}'`).join(',')})`], { stdio: 'ignore' });
+    return null;
+  } catch (e) {
+    return `database cleanup failed: ${e.message.split('\n')[0]}`;
+  }
 }

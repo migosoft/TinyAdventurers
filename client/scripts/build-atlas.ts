@@ -63,40 +63,30 @@ const floor1 = new Uint8Array(16 * 16 * 4);
 for (let y = 0; y < 16; y++) floor1.set(src.data.subarray(((f1.y + y) * src.w + f1.x) * 4, ((f1.y + y) * src.w + f1.x + 16) * 4), y * 64);
 const terrain = buildTerrain(floor1);
 if (terrain.img.w > src.w) throw new Error('atlas: terrain sheet wider than the pack sheet');
-const terrainY = src.h + STRIP * RECOLORS.length;
 const dragonPng = (f: string) => decodePng(fs.readFileSync(path.join(root, 'assets-src', 'dragon', f)));
 const dragonSheets = Object.fromEntries(Object.keys(DRAGON_SHEETS).map((n) => [n, dragonPng(`dragon_${n}.png`)])) as Record<DragonSheet, Image>;
-const dragon = buildDragon(dragonPng('dragon_base.png'), dragonSheets, src.w);
-const dragonY = terrainY + terrain.img.h;
-const lich = buildLich(src.w);
-const lichY = dragonY + dragon.img.h;
-const demon = buildDemon(path.join(root, 'assets-src', 'demon'), src.w);
-const demonY = lichY + lich.img.h;
-const barrels = buildBarrels(src.w);
-const barrelY = demonY + demon.img.h;
-const torches = buildTorches(path.join(root, 'assets-src', 'torch'), src.w);
-const torchY = barrelY + barrels.img.h;
-const wolf = buildFigure(path.join(root, 'assets-src', 'enchanted-forest', 'frames', 'Wolf'), 'Wolf', 'dire_wolf', src.w);
-const wolfY = torchY + torches.img.h;
-const spectres = buildSpectres(src.w);
-const spectreY = wolfY + wolf.img.h;
-const explosions = buildExplosions(path.join(root, 'assets-src', 'explosion'), src.w);
-const explosionY = spectreY + spectres.img.h;
-const cove = buildCove(src.w);
-const coveY = explosionY + explosions.img.h;
-// The knight sits last, so nothing above it moves.
-const knight = buildFigure(path.join(root, 'assets-src', 'fantasy-npcs', 'frames', 'Knight - Standard'), 'Knight', 'npc_knight', src.w);
-const knightY = coveY + cove.img.h;
-// The cove's animals (lyaseek, Outline variant) sit after the knight, one strip each.
+// The cove's animals (lyaseek, Outline variant) are one strip each.
 const animalDir = path.join(root, 'assets-src', 'forest-animals', 'Outline');
 const animals = [['MiniBunny', 'bunny'], ['MiniDeer1', 'deer'], ['MiniDeer2', 'stag'], ['MiniBoar', 'boar']].map(([sheet, name]) => buildSheetFigure(path.join(animalDir, `${sheet}.png`), name, src.w));
-const animalYs: number[] = [];
-let animalsEnd = knightY + knight.img.h;
-for (const a of animals) (animalYs.push(animalsEnd), (animalsEnd += a.img.h));
-// The 3D models' side outlines (the lamp's shadow casters) sit last.
-const outlines = buildModelOutlines(src.w);
-const outlineY = animalsEnd;
-const outH = outlineY + outlines.img.h;
+// The generated strips, stacked below the recolor strips in this order; new ones go last, so nothing above them moves.
+const strips: { img: Image; frames: Record<string, { x: number; y: number; w: number; h: number }> }[] = [
+  terrain,
+  buildDragon(dragonPng('dragon_base.png'), dragonSheets, src.w),
+  buildLich(src.w),
+  buildDemon(path.join(root, 'assets-src', 'demon'), src.w),
+  buildBarrels(src.w),
+  buildTorches(path.join(root, 'assets-src', 'torch'), src.w),
+  buildFigure(path.join(root, 'assets-src', 'enchanted-forest', 'frames', 'Wolf'), 'Wolf', 'dire_wolf', src.w),
+  buildSpectres(src.w),
+  buildExplosions(path.join(root, 'assets-src', 'explosion'), src.w),
+  buildCove(src.w),
+  buildFigure(path.join(root, 'assets-src', 'fantasy-npcs', 'frames', 'Knight - Standard'), 'Knight', 'npc_knight', src.w),
+  ...animals,
+  buildModelOutlines(src.w),
+];
+const stripYs: number[] = [];
+let outH = src.h + STRIP * RECOLORS.length;
+for (const s of strips) (stripYs.push(outH), (outH += s.img.h));
 if (outH > 2048) throw new Error('atlas: ' + outH + ' px high, over the 2048 px every WebGL2 device has');
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
@@ -118,86 +108,13 @@ RECOLORS.forEach((r, row) => {
   }
 });
 
-// Generated terrain tiles below the recolor strips.
-for (let y = 0; y < terrain.img.h; y++)
-  out.data.set(terrain.img.data.subarray(y * terrain.img.w * 4, (y + 1) * terrain.img.w * 4), ((terrainY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(terrain.frames))
-  frames[name] = { frame: { x: f.x, y: terrainY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Dragon frames below the terrain.
-for (let y = 0; y < dragon.img.h; y++)
-  out.data.set(dragon.img.data.subarray(y * dragon.img.w * 4, (y + 1) * dragon.img.w * 4), ((dragonY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(dragon.frames))
-  frames[name] = { frame: { x: f.x, y: dragonY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Lich frames below the dragon.
-for (let y = 0; y < lich.img.h; y++)
-  out.data.set(lich.img.data.subarray(y * lich.img.w * 4, (y + 1) * lich.img.w * 4), ((lichY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(lich.frames))
-  frames[name] = { frame: { x: f.x, y: lichY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Demon frames below the lich.
-for (let y = 0; y < demon.img.h; y++)
-  out.data.set(demon.img.data.subarray(y * demon.img.w * 4, (y + 1) * demon.img.w * 4), ((demonY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(demon.frames))
-  frames[name] = { frame: { x: f.x, y: demonY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Barrel frames below the demon.
-for (let y = 0; y < barrels.img.h; y++)
-  out.data.set(barrels.img.data.subarray(y * barrels.img.w * 4, (y + 1) * barrels.img.w * 4), ((barrelY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(barrels.frames))
-  frames[name] = { frame: { x: f.x, y: barrelY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Torch frames below the barrels.
-for (let y = 0; y < torches.img.h; y++)
-  out.data.set(torches.img.data.subarray(y * torches.img.w * 4, (y + 1) * torches.img.w * 4), ((torchY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(torches.frames))
-  frames[name] = { frame: { x: f.x, y: torchY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Dire wolf frames below the torches.
-for (let y = 0; y < wolf.img.h; y++)
-  out.data.set(wolf.img.data.subarray(y * wolf.img.w * 4, (y + 1) * wolf.img.w * 4), ((wolfY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(wolf.frames))
-  frames[name] = { frame: { x: f.x, y: wolfY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Ghost and Shade frames below the wolf.
-for (let y = 0; y < spectres.img.h; y++)
-  out.data.set(spectres.img.data.subarray(y * spectres.img.w * 4, (y + 1) * spectres.img.w * 4), ((spectreY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(spectres.frames))
-  frames[name] = { frame: { x: f.x, y: spectreY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Explosion frames below the Ghost and the Shade.
-for (let y = 0; y < explosions.img.h; y++)
-  out.data.set(explosions.img.data.subarray(y * explosions.img.w * 4, (y + 1) * explosions.img.w * 4), ((explosionY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(explosions.frames))
-  frames[name] = { frame: { x: f.x, y: explosionY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Cove tree and plants below the explosions.
-for (let y = 0; y < cove.img.h; y++)
-  out.data.set(cove.img.data.subarray(y * cove.img.w * 4, (y + 1) * cove.img.w * 4), ((coveY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(cove.frames))
-  frames[name] = { frame: { x: f.x, y: coveY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Knight frames below the cove.
-for (let y = 0; y < knight.img.h; y++)
-  out.data.set(knight.img.data.subarray(y * knight.img.w * 4, (y + 1) * knight.img.w * 4), ((knightY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(knight.frames))
-  frames[name] = { frame: { x: f.x, y: knightY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
-
-// Animal frames below the knight.
-animals.forEach((a, n) => {
-  for (let y = 0; y < a.img.h; y++) out.data.set(a.img.data.subarray(y * a.img.w * 4, (y + 1) * a.img.w * 4), ((animalYs[n] + y) * out.w) * 4);
-  for (const [name, f] of Object.entries(a.frames))
-    frames[name] = { frame: { x: f.x, y: animalYs[n] + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+strips.forEach((st, n) => {
+  for (let y = 0; y < st.img.h; y++) out.data.set(st.img.data.subarray(y * st.img.w * 4, (y + 1) * st.img.w * 4), ((stripYs[n] + y) * out.w) * 4);
+  for (const [name, f] of Object.entries(st.frames))
+    frames[name] = { frame: { x: f.x, y: stripYs[n] + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 });
-
-// Model outlines below the animals.
-for (let y = 0; y < outlines.img.h; y++)
-  out.data.set(outlines.img.data.subarray(y * outlines.img.w * 4, (y + 1) * outlines.img.w * 4), ((outlineY + y) * out.w) * 4);
-for (const [name, f] of Object.entries(outlines.frames))
-  frames[name] = { frame: { x: f.x, y: outlineY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade, ${Object.keys(cove.frames).length} cove, ${Object.keys(knight.frames).length} knight, ${animals.reduce((n, a) => n + Object.keys(a.frames).length, 0)} animal, ${Object.keys(outlines.frames).length} model outline) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${strips.length} generated strips) -> public/assets/atlas.{png,json}`);

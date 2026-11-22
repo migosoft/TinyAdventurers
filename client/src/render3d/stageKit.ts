@@ -36,10 +36,10 @@ export const createStageKit = (assets: Assets): FigureKit => createKit(atlasSpri
  * What the stage publishes as `window.__r3d.models`: the layer's counts of the last frame, the kit's build times (ms by key; the object is
  * rebuilt only when the kit's `version` changes) and, for a stage with a clock of its own, its time `t` (s).
  */
-export function modelsReadouter(kit: FigureKit): (drawn: { figures: number; draws: number }, t?: number) => NonNullable<Window['__r3d']>['models'] {
+export function modelsReadouter(kit: FigureKit): (drawn: { figures: number; draws: number }, t?: number, rows?: string[]) => NonNullable<Window['__r3d']>['models'] {
   let version = -1, builtMs: Record<string, number> = {};
-  return (drawn, t) => {
+  return (drawn, t, rows) => {
     if (kit.version !== version) { version = kit.version; builtMs = Object.fromEntries(kit.times); }
-    return { figures: drawn.figures, draws: drawn.draws, builtMs, ...(t !== undefined ? { t } : {}) };
+    return { figures: drawn.figures, draws: drawn.draws, builtMs, ...(t !== undefined ? { t } : {}), ...(rows ? { rows } : {}) };
   };
 }

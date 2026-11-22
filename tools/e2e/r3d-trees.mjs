@@ -4,8 +4,8 @@
 // `at=x,z` starts the knight, and the camera that follows it, on that tile; `sight=0` takes the mist away.
 // Env: GPU=1 a visible window on the discrete card (WebGL2 over ANGLE-Vulkan, see gpu.mjs), BROWSER the browser, R3D_W / R3D_H the window (1600x900),
 // WAIT_MS the time allowed for the forest to grow (120000), R3D_BASE_QUERY extra parameters for every view.
-import { chromium } from 'playwright-core';
-import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
+import { launch, gpuOn, printGpu } from './gpu.mjs';
+import { watchPage } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots/trees-329';
@@ -20,17 +20,10 @@ const VIEWS = {
   forest13: { at: '20,6', zoom: 3, q: '&hour=13&hourRate=0&sight=0' },
 };
 const wanted = process.argv.slice(4).length ? process.argv.slice(4) : Object.keys(VIEWS);
-const browser = await chromium.launch({
-  executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  ...(gpuOn ? gpuLaunch() : {}),
-});
+const browser = await launch();
 const errs = [];
 const page = await browser.newPage({ viewport: { width: Number(process.env.R3D_W) || 1600, height: Number(process.env.R3D_H) || 900 } });
-page.on('pageerror', (e) => errs.push(e.message));
-page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
-page.on('console', (m) => m.type() === 'warning' && /device lost/i.test(m.text()) && errs.push(m.text()));
+watchPage(page, '', errs);
 const built = () => page.evaluate(() => { const p = window.__r3d?.plants; return p ? [p.built, p.total] : null; });
 for (const name of wanted) {
   const v = VIEWS[name];

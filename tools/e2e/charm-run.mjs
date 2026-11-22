@@ -3,36 +3,27 @@
 //   BROWSER=/usr/bin/brave-browser node charm-run.mjs http://localhost:8080/ "?lag=150&jitter=40&loss=2" shots
 // Prints a timeline: seconds since Charmed, whether the charmed view is shown, F3's correction (px). Screenshots:
 // charm-run-on.png (haze) and charm-run-off.png (after the end). Deletes its throwaway account.
-import { chromium } from 'playwright-core';
-import { execFileSync } from 'node:child_process';
-import { VIEWPORT, watchPage, backendQuery, r3dState } from './r3d-page.mjs';
+import { tag, login, createCharacter, markDebug, deleteAccount, purge } from './account.mjs';
+import { launch } from './gpu.mjs';
+import { VIEWPORT, watchPage, pageUrl, r3dState } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
 const out = process.argv[4] ?? 'shots';
-const PASSWORD = 'smoke-test-password';
-const account = `e2e_${Math.random().toString(16).slice(2, 8)}`;
-const psql = (sql) => execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'tiny', '-d', 'tiny', '-c', sql], { stdio: 'inherit' });
+const account = `e2e_${tag()}`;
 
-const browser = await chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await launch();
 const errors = [];
+let onShot = false;
+let page;
 try {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
   watchPage(page, '', errors);
-  await page.goto(base + query + (backendQuery() ? (query.includes('?') ? '&' : '?') + backendQuery() : ''));
+  await page.goto(pageUrl(base, query));
   await page.waitForSelector('#auth-name');
-  await page.click('#auth-switch');
-  await page.fill('#auth-name', account);
-  await page.fill('#auth-password', PASSWORD);
-  await page.fill('#auth-password2', PASSWORD);
-  await page.click('#register');
-  await page.waitForSelector('.ui-roster');
-  psql(`update accounts set debug = true where name = '${account}'`);
-  await page.click('#new-char');
-  await page.fill('#char-name', `Charm${account.slice(4)}`);
-  await page.click('.ui-class.c-barbarian');
-  await page.click('#char-create');
-  await page.waitForSelector('[data-attr]');
+  await login(page, account, true);
+  await markDebug(base, account);
+  await createCharacter(page, `Charm${account.slice(4)}`, 'Barbarian');
   await page.click('#to-dungeon');
   await page.waitForSelector('#runname');
   await page.fill('#runname', 'Charm Run');
@@ -59,7 +50,6 @@ try {
   let maxCorr = 0;
   let last = null;
   const log = [];
-  let onShot = false;
   for (let i = 0; i < 90; i++) {
     await page.waitForTimeout(250);
     const on = await shown();
@@ -89,7 +79,11 @@ try {
   console.log(log.join('\n'));
   console.log(`never charmed: ${!onShot}; max correction seen: ${maxCorr} px`);
 } finally {
+  // The API delete; the database delete takes the account when it did not return 204 (a crash before the login).
+  const status = page ? await deleteAccount(page).catch((e) => `error ${e.message}`) : null;
+  const failed = status === 204 ? null : purge([account]);
+  if (failed) errors.push(`deleting ${account}: ${status}; ${failed}`);
   await browser.close();
-  psql(`delete from accounts where name = '${account}'`);
 }
 console.log(errors.join('\n') || 'no browser errors');
+if (errors.length || !onShot) process.exit(1);

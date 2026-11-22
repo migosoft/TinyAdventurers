@@ -7,9 +7,9 @@
 //      GPU=1 (a visible window on the real GPU with the notebook's start line, gpu.mjs; headless SwiftShader loses the WebGPU device),
 //      READBACK=1 (also saves <name>-readback.png: the frame re-drawn off-screen and read back, for WebGPU), R3D_W / R3D_H (1280x768),
 //      ONLY=<regex> (only shots whose name matches), HIDE=0 (keep the panel on), QUALITY=<high|balanced|fast> (appends &quality= to every URL).
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { chromium } from 'playwright-core';
-import { gpuLaunch, gpuOn, printGpu } from './gpu.mjs';
+import { mkdirSync } from 'node:fs';
+import { launch, gpuOn, printGpu } from './gpu.mjs';
+import { watchPage, saveReadback } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:5173/';
 const out = process.argv[3] ?? 'shots';
@@ -25,7 +25,7 @@ const KINDS = [
   ['raisedskel', 'skelet'], ['disciple', 'disciple'], ['imp', 'imp'], ['chort', 'chort'], ['summoner', 'summoner'], ['ogre', 'ogre'], ['wolf', 'wolf'],
   ['ghost', 'ghost'], ['shade', 'shade'], ['npcknight', 'npcKnight'], ['bunny', 'bunny'], ['deer', 'deer'], ['stag', 'stag'], ['boar', 'boar'],
 ];
-/** A kind's row in the gallery's model rows (they wrap, so a position is looked up by name, never counted). */
+/** A kind's row in the gallery's model rows, looked up by name in KINDS; the page's own rows (`__r3d.models.rows`) are compared with KINDS at the start, so a kind added in the middle fails the run instead of shifting every later row. */
 const row = (name) => {
   const i = KINDS.findIndex((k) => k[0] === name);
   if (i < 0) throw new Error(`models-shots: no kind named ${name}`);
@@ -141,18 +141,7 @@ shots.push({ name: 'crowd-cards', q: '&crowd=40&crowdAs=cards&at=crowd:20&zoom=3
 shots.push({ name: 'crowd-models-many', q: '&crowd=184&at=crowd:90&zoom=2&slow=1000&t=0.6', need: ALL, readout: true });
 for (const hour of ['9.5', '18.5']) shots.push({ name: `woodland-${hour}`, page: 'woodland', q: `&models=1&hour=${hour}&hourRate=0&zoom=3`, need: WOODLAND, wait: 4000 });
 
-const args =
-  mode === 'webgpu' && process.env.HEADED
-    ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
-    : mode === 'webgpu'
-    ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader']
-    : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const b = await chromium.launch({
-  executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: !process.env.HEADED,
-  args,
-  ...(gpuOn ? gpuLaunch() : {}),
-});
+const b = await launch(mode);
 // GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
 const urlExtra = (gpuOn && mode === 'webgl' ? '&backend=webgl' : '') + (process.env.QUALITY ? `&quality=${process.env.QUALITY}` : '');
 const errs = [];
@@ -162,13 +151,7 @@ const viewport = { width: Number(process.env.R3D_W) || 1280, height: Number(proc
 /** A new page on `url`; its console problems go to `errs` tagged with `tag` (the loss run expects device-lost noise). */
 async function open(url, tag, lose = false) {
   const p = await b.newPage({ viewport });
-  p.on('pageerror', (e) => errs.push(`${tag}: ${e.message}`));
-  p.on('console', (m) => {
-    const t = m.text();
-    if (m.type() === 'error' && !(lose && t.includes('Device Lost'))) errs.push(`${tag}: ${t}`);
-    if (m.type() === 'warning' && !lose && /device lost/i.test(t)) errs.push(`${tag}: ${t}`);
-    if (m.type() === 'warning' && /^3D model /.test(t)) errs.push(`${tag}: ${t}`);
-  });
+  watchPage(p, tag, errs, () => lose);
   await p.goto(url + urlExtra);
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 40000 });
   return p;
@@ -206,24 +189,20 @@ async function snap(p, name) {
   if (process.env.HIDE !== '0') await p.evaluate(() => { const t = document.querySelector('.r3d-toggle'); if (t && t.textContent === 'Hide') t.click(); });
   await p.waitForTimeout(400);
   await p.screenshot({ path: `${out}/${name}.png` });
-  if (process.env.READBACK) {
-    const url = await p.evaluate(async () => {
-      const r = await window.__r3d.readback?.();
-      if (!r) return null;
-      const c = document.createElement('canvas');
-      c.width = r.w;
-      c.height = r.h;
-      c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(r.data), r.w, r.h), 0, 0);
-      return c.toDataURL('image/png');
-    });
-    if (url) writeFileSync(`${out}/${name}-readback.png`, Buffer.from(url.split(',')[1], 'base64'));
-    else errs.push(`${name}: readback returned nothing`);
-  }
+  if (!(await saveReadback(p, `${out}/${name}-readback.png`))) errs.push(`${name}: readback returned nothing`);
 }
 
 const first = await open(`${base}?r3d=gallery&zoom=2`, 'start');
 console.log(`backend: ${await first.evaluate(() => window.__r3d.backend)}`);
 if (gpuOn) await printGpu(first);
+// The gallery's model rows must be the ones KINDS names, in order (the check shots address rows by position).
+await first.waitForFunction(() => window.__r3d.models?.rows, null, { timeout: 40000 });
+const rows = await first.evaluate(() => window.__r3d.models.rows);
+if (rows.join() !== KINDS.map((k) => k[1]).join()) {
+  console.log(`FAILED: the gallery's model rows (${rows.join()}) are not the KINDS of models-shots.mjs`);
+  await b.close();
+  process.exit(1);
+}
 await first.close();
 
 for (const s of shots) {
@@ -264,73 +243,48 @@ for (const s of shots) {
   }
 }
 
-// A lost device: the stage's kit lives on, so the new view's layer draws from the models already built, which are not built again.
-if (!only || only.test('lose')) {
+/**
+ * A lost device at `url`: waits for `need`, shoots `<name>-before`, reads `probe()` in the page, loses the device, waits for 10 more frames,
+ * shoots `<name>-after`, reads again and lets `verify(before, after)` return its error lines.
+ */
+async function loseCheck(name, url, need, probe, verify) {
+  let p = null;
   try {
-    const p = await open(`${base}?r3d=gallery&focus=models&zoom=3&state=idle${STILL}`, 'lose', true);
-    await built(p, ALL);
-    await snap(p, 'lose-before');
-    const before = await p.evaluate(() => JSON.stringify(window.__r3d.models.builtMs));
-    const forced = await p.evaluate(() => window.__r3d.forceLoss());
-    console.log(`lose: forceLoss() returned ${forced}`);
+    p = await open(url, name, true);
+    await built(p, need);
+    await p.waitForTimeout(800);
+    await snap(p, `${name}-before`);
+    const before = await p.evaluate(probe);
+    console.log(`${name}: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
     const f0 = await p.evaluate(() => window.__r3d.frames);
     await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
     await p.waitForTimeout(1500);
-    const after = await p.evaluate(() => ({ builtMs: JSON.stringify(window.__r3d.models.builtMs), drawn: window.__r3d.models.figures }));
-    await snap(p, 'lose-after');
-    console.log(`lose: ${after.drawn} figures drawn after the loss; models rebuilt: ${before === after.builtMs ? 'no (same build times)' : 'YES'}`);
-    if (before !== after.builtMs) errs.push('lose: the models were built again after the loss');
-    if (!(after.drawn >= 13)) errs.push(`lose: only ${after.drawn} figures drawn after the loss`);
-    await p.close();
+    const after = await p.evaluate(probe);
+    await snap(p, `${name}-after`);
+    errs.push(...verify(before, after).map((m) => `${name}: ${m}`));
   } catch (e) {
-    errs.push(`lose: ${e.message}`);
+    errs.push(`${name}: ${e.message}`);
+  } finally {
+    await p?.close().catch(() => {});
   }
 }
-
-// A lost device with a Ghost in view (#359): its see-through draws are made again by the new view's layer, and the Ghost is drawn after the loss
-// with the same number of draws as before (the pictures lose-ghost-before and lose-ghost-after are the check by eye).
+const drawsEqual = (before, after) => [
+  ...(after.drawn >= 1 ? [] : ['no figure drawn after the loss']),
+  ...(after.draws === before.draws ? [] : [`${before.draws} draws before the loss, ${after.draws} after`]),
+];
 if (!only || only.test('lose')) {
-  try {
-    const p = await open(`${base}?r3d=gallery&at=spectre:1&zoom=8&slow=1000&t=1.7`, 'lose-ghost', true);
-    await built(p, ['ghost']);
-    await p.waitForTimeout(800);
-    await snap(p, 'lose-ghost-before');
-    const before = await p.evaluate(() => window.__r3d.models.draws);
-    console.log(`lose-ghost: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
-    const f0 = await p.evaluate(() => window.__r3d.frames);
-    await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
-    await p.waitForTimeout(1500);
-    const after = await p.evaluate(() => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }));
-    await snap(p, 'lose-ghost-after');
-    console.log(`lose-ghost: draws ${before} before, ${after.draws} after; ${after.drawn} figures drawn after the loss`);
-    if (!(after.drawn >= 1)) errs.push('lose-ghost: no figure drawn after the loss');
-    if (after.draws !== before) errs.push(`lose-ghost: ${before} draws before the loss, ${after.draws} after`);
-    await p.close();
-  } catch (e) {
-    errs.push(`lose-ghost: ${e.message}`);
-  }
-}
-
-// A lost device with a Shade in view (#359): its smoke is drawn again by the new view (lose-shade-before and lose-shade-after are the check by eye).
-if (!only || only.test('lose')) {
-  try {
-    const p = await open(`${base}?r3d=gallery&at=spectre:4&zoom=8&slow=1000&t=1.7`, 'lose-shade', true);
-    await built(p, ['shade']);
-    await p.waitForTimeout(800);
-    await snap(p, 'lose-shade-before');
-    const before = await p.evaluate(() => window.__r3d.models.draws);
-    console.log(`lose-shade: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
-    const f0 = await p.evaluate(() => window.__r3d.frames);
-    await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
-    await p.waitForTimeout(1500);
-    const after = await p.evaluate(() => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }));
-    await snap(p, 'lose-shade-after');
-    console.log(`lose-shade: draws ${before} before, ${after.draws} after; ${after.drawn} figures drawn after the loss`);
-    if (!(after.drawn >= 1)) errs.push('lose-shade: no figure drawn after the loss');
-    if (after.draws !== before) errs.push(`lose-shade: ${before} draws before the loss, ${after.draws} after`);
-    await p.close();
-  } catch (e) {
-    errs.push(`lose-shade: ${e.message}`);
+  // The stage's kit lives on, so the new view's layer draws from the models already built, which are not built again.
+  await loseCheck('lose', `${base}?r3d=gallery&focus=models&zoom=3&state=idle${STILL}`, ALL,
+    () => ({ builtMs: JSON.stringify(window.__r3d.models.builtMs), drawn: window.__r3d.models.figures }),
+    (before, after) => {
+      console.log(`lose: ${after.drawn} figures drawn after the loss; models rebuilt: ${before.builtMs === after.builtMs ? 'no (same build times)' : 'YES'}`);
+      return [...(before.builtMs === after.builtMs ? [] : ['the models were built again after the loss']), ...(after.drawn >= 13 ? [] : [`only ${after.drawn} figures drawn after the loss`])];
+    });
+  // A Ghost in view (#359): its see-through draws are made again by the new view's layer (lose-ghost-before and -after are the check by eye).
+  // A Shade in view: its smoke is drawn again by the new view.
+  for (const [name, key, place] of [['lose-ghost', 'ghost', 1], ['lose-shade', 'shade', 4]]) {
+    await loseCheck(name, `${base}?r3d=gallery&at=spectre:${place}&zoom=8&slow=1000&t=1.7`, [key],
+      () => ({ draws: window.__r3d.models.draws, drawn: window.__r3d.models.figures }), drawsEqual);
   }
 }
 

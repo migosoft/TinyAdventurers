@@ -10,7 +10,7 @@ import { isQuality, pickZoom, renderPlan, type RenderPlan } from './quality';
 import { browserStore, loadQuality, saveQuality, type QualityStore } from './qualityPref';
 import { frameDt } from './scene';
 import { onCanvas } from './input';
-import { WheelZoom, labelZoom } from './zoom';
+import { WheelZoom, labelZoom, zoomLimits } from './zoom';
 import { createRecovery, type Recovery } from './recover';
 import { trailingWriter } from './urlWriter';
 import { createView, RendererInitError, type Assets, type View, type WorldInput } from './view';
@@ -20,7 +20,7 @@ import './r3d.css';
 declare global {
   interface Window {
     __r3d?: {
-      backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean;
+      backend: string; frames: number; renderSize: [number, number]; zoom: number; /** The wheel zoom's start and limits for the canvas (#399, for r3d-run.mjs). */ zoomRange?: { start: number; min: number; max: number }; forceLoss?: () => boolean;
       /** Debug: the last frame re-drawn off-screen and read back (RGBA bytes); for e2e where a canvas capture is black. */
       readback?: () => Promise<{ w: number; h: number; data: Uint8Array } | null>;
       /** A run's stage adds these: the own hero and the camera target (tiles), the view's chunk meshes and the figures drawn last frame. */
@@ -36,7 +36,7 @@ declare global {
       /** ... and the ground cover's sheets (the tallest kind, art px) and bushels once it is built (#330). */
       cover?: { sheets: number; bushels: number };
       /** ... and the 3D figures of a dev stage (#338): instances and id, piece and hull draws of the last frame (#364), and the build time (ms) of each model built so far. */
-      models?: { figures: number; draws: number; builtMs: Record<string, number>; /** The gallery's clock (s), for the check shots. */ t?: number };
+      models?: { figures: number; draws: number; builtMs: Record<string, number>; /** The gallery's clock (s), for the check shots. */ t?: number; /** The gallery's model rows: the model key of each, in row order (#399). */ rows?: string[] };
       /** ... and the liquids page's clock, the number of things falling (#324) and the live ripples of its water (#345). */
       liquids?: { t: number; fallers: number; ripples: number; /** The live bubbles of its lava (#344). */ bubbles: number };
       /** ... and the live ripples of the mood page's pool (#345). */
@@ -417,6 +417,7 @@ export async function startHost(
     const plan = renderPlan(params.quality, zoom, w, h);
     state.renderSize = [plan.targetW, plan.targetH];
     state.zoom = zoom;
+    state.zoomRange = { start, ...zoomLimits(w, h, start) };
     // While the view is being rebuilt the stage keeps stepping; only the drawing waits.
     const restoring = recovery.busy || !view;
     const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;

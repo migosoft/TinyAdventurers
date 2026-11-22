@@ -7,17 +7,15 @@
 // The page gets `backend=webgl` appended (BACKEND=webgpu: nothing). READBACK=1 saves r3d-readback.png (Alice's frame read back).
 // NOCHUNK=1: Bob's page cannot load the 3D chunk; his run must end and the lobby must say "The 3D view could not load".
 // The debug keys (F4, F8, F9, the rules log) are checked by r3d-run.mjs, which uses a debug account.
-import { chromium } from 'playwright-core';
-import { execFileSync } from 'node:child_process';
-import { PASSWORD, tag, login, deleteAccount } from './account.mjs';
-import { VIEWPORT, watchPage, backendQuery, r3dState, saveReadback } from './r3d-page.mjs';
+import { PASSWORD, tag, login, deleteAccount, purge } from './account.mjs';
+import { launch } from './gpu.mjs';
+import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
 const out = process.argv[4] ?? '.';
 const classes = (process.argv[5] ?? 'Wizard,Barbarian').split(',');
 const level = (process.argv[6] ?? 'dungeon').toLowerCase();
-const launch = () => chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const browser = await launch();
 const errors = [];
 const noChunk = process.env.NOCHUNK === '1';
@@ -25,7 +23,7 @@ const noChunk = process.env.NOCHUNK === '1';
 const EXPECTED_NOCHUNK = /net::ERR_FAILED|The 3D view could not load/;
 const bobErrors = { push: (m) => { if (!EXPECTED_NOCHUNK.test(m)) errors.push(m); } };
 const created = []; // the e2e_* accounts this run registered
-const pageUrl = base + query + (backendQuery() ? (query.includes('?') ? '&' : '?') + backendQuery() : '');
+const pageUrl = urlOf(base, query);
 
 async function open(name, b = browser, errs = errors) {
   const ctx = await b.newContext({ viewport: VIEWPORT });
@@ -318,7 +316,8 @@ async function adminPass() {
 }
 
 
-// Clean up: delete the remaining throwaway accounts (and Bob's, if the form failed), whatever happened above.
+// Clean up: delete the remaining throwaway accounts through the API (and Bob's, if the form failed), whatever happened above.
+const deleted = [...(adminDone ? [a1?.account] : []), ...(typed === PASSWORD ? [a2?.account] : [])]; // deleted through the admin area or the account form
 try {
   for (const [page, account] of [
     ...(adminDone ? [] : [[p3 ?? p1, a1?.account]]),
@@ -327,15 +326,12 @@ try {
     if (!page || !account) continue;
     const status = await deleteAccount(page).catch((e) => `error ${e.message.split('\n')[0]}`);
     if (status !== 204) errors.push(`deleting ${account}: HTTP ${status}`);
+    else deleted.push(account);
   }
 } finally {
-  // Whatever is left (a step threw before the account was deleted, a page is gone) goes with the database.
-  const left = created.filter((n) => /^e2e_[0-9a-f]+$/.test(n));
-  if (left.length) {
-    try {
-      execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'tiny', '-d', 'tiny', '-c', `delete from accounts where name in (${left.map((n) => `'${n}'`).join(',')})`], { stdio: 'ignore' });
-    } catch (e) { errors.push(`database cleanup failed: ${e.message.split('\n')[0]}`); }
-  }
+  // Whatever the API did not delete (a step threw before the account was deleted, a page is gone) goes with the database.
+  const failed = purge(created, deleted);
+  if (failed) errors.push(failed);
   console.log(errors.length ? errors.join('\n') : 'no browser errors');
   await browser.close();
   await browser2?.close();
