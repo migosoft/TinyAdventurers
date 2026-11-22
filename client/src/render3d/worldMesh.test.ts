@@ -15,26 +15,46 @@ const buildChunk = (m: TileMap, painted: boolean, cx: number, cz: number, _frame
 const frames = {};
 
 /** A triangle: kind, normal, bounding corners, the cell its middle lies in, and whether it is a wall block's front (not a skirt or the foot). */
-type T = { t: number; kind: number; normal: number[]; min: number[]; max: number[]; cell: [number, number]; front: boolean };
+type T = { t: number; kind: number; normal: number[]; min: number[]; max: number[]; cell: [number, number]; front: boolean; pts: number[][] };
 
-/** Every triangle of the chunk (optionally of one kind). Laid stone is built block by block, so a cell or a face is many of them. */
+/** Every triangle of the chunk (optionally of one kind), by the index. Laid stone is built block by block, so a cell or a face is many of them. */
 function tris(c: Chunk, kind?: number): T[] {
   const w = c.world, out: T[] = [];
-  for (let t = 0; t < w.count / 3; t++) {
-    const i = t * 3;
+  for (let t = 0; t < w.index.length / 3; t++) {
+    const i = w.index[t * 3];
     if (kind !== undefined && w.kind[i] !== kind) continue;
-    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity], mid = [0, 0, 0];
-    for (let j = i; j < i + 3; j++) for (let a = 0; a < 3; a++) {
-      min[a] = Math.min(min[a], w.position[j * 3 + a]);
-      max[a] = Math.max(max[a], w.position[j * 3 + a]);
-      mid[a] += w.position[j * 3 + a] / 3;
+    const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity], mid = [0, 0, 0], pts: number[][] = [];
+    for (let k = 0; k < 3; k++) {
+      const j = w.index[t * 3 + k];
+      pts.push([w.position[j * 3], w.position[j * 3 + 1], w.position[j * 3 + 2]]);
+      for (let a = 0; a < 3; a++) {
+        min[a] = Math.min(min[a], pts[k][a]);
+        max[a] = Math.max(max[a], pts[k][a]);
+        mid[a] += pts[k][a] / 3;
+      }
     }
-    out.push({ t, kind: w.kind[i], normal: [w.normal[i * 3], w.normal[i * 3 + 1], w.normal[i * 3 + 2]], min, max, cell: [Math.floor(mid[0]), Math.floor(mid[2])], front: w.kind[i] === KIND.face && w.sheet[i * 3 + 2] >= 0 });
+    out.push({ t, kind: w.kind[i], normal: [w.normal[i * 3], w.normal[i * 3 + 1], w.normal[i * 3 + 2]], min, max, cell: [Math.floor(mid[0]), Math.floor(mid[2])], front: w.kind[i] === KIND.face && w.sheet[i * 3 + 2] >= 0, pts });
   }
   return out;
 }
-/** The quads of the kinds that are still one quad each (a wall's top, the woodland's ground): 6 vertices in a row. */
+/** The quads of the kinds that are still one quad each (a wall's top, the woodland's ground): two triangles in a row. */
 const quads = (c: Chunk, kind: number): T[] => tris(c, kind).filter((_, i) => i % 2 === 0);
+/** The floor's tops: the triangles of the floor kind that face up (a block of laid floor may reach over several cells). */
+const floorTops = (c: Chunk): T[] => tris(c, KIND.floor).filter((t) => t.normal[1] > 0.9);
+/** The ground area (tiles) the triangles cover, seen from above. */
+const areaOf = (list: T[]): number => list.reduce((s, { pts: [a, b, d] }) => s + Math.abs((b[0] - a[0]) * (d[2] - a[2]) - (d[0] - a[0]) * (b[2] - a[2])) / 2, 0);
+/** Whether one of the triangles lies over the ground point (x, z). */
+const over = (list: T[], x: number, z: number): boolean => list.some(({ pts: [a, b, d] }) => {
+  const s = (p: number[], q: number[]): number => (q[0] - p[0]) * (z - p[2]) - (q[2] - p[2]) * (x - p[0]);
+  const k = [s(a, b), s(b, d), s(d, a)];
+  return k.every((v) => v >= -1e-9) || k.every((v) => v <= 1e-9);
+});
+/** The cells of the chunk's box whose middle the floor covers. */
+function floorCells(c: Chunk): Set<string> {
+  const tops = floorTops(c), out = new Set<string>();
+  for (let z = c.min[2]; z < c.max[2]; z++) for (let x = c.min[0]; x < c.max[0]; x++) if (over(tops, x + 0.5, z + 0.5)) out.add(`${x},${z}`);
+  return out;
+}
 
 const whole = (rows: string[], painted = false) => buildChunk(parseMap(rows), painted, 0, 0, frames);
 const mapOf = (w: number, h: number, tiles: number[]) => new TileMap(w, h, Uint8Array.from(tiles));
@@ -78,9 +98,11 @@ describe('buildChunk', () => {
       expect(t.max[1]).toBeLessThanOrEqual(0);
       expect(t.min[1]).toBeGreaterThan(-0.2);
     }
-    const tops = q.filter((t) => t.normal[1] > 0.99);
-    expect(Math.min(...tops.map((t) => t.min[0]))).toBe(0);
-    expect(Math.max(...tops.map((t) => t.max[2]))).toBe(1);
+    // the tops cover the cell exactly once, and so do those of a floor of several cells, whose blocks reach from cell to cell
+    expect(areaOf(q.filter((t) => t.normal[1] > 0.9))).toBeCloseTo(1, 6);
+    const room = whole(['.....', '.....', '.....', '.....']);
+    expect(areaOf(floorTops(room))).toBeCloseTo(20, 5);
+    expect(floorCells(room).size).toBe(20);
   });
 
   it('a wall with floor on one side has a top and a face on that side', () => {
@@ -162,13 +184,24 @@ describe('buildChunk', () => {
   it('every wall vertex lies in a wall cell, on its edge or just behind it', () => {
     const map = parseMap(MAP_ROWS);
     const w = buildChunk(map, false, 0, 0, frames).world, e = 1e-6;
+    let seen = 0;
     for (let i = 0; i < w.count; i++) {
       if (w.kind[i] !== KIND.face) continue;
+      seen++;
       const x = w.position[i * 3], z = w.position[i * 3 + 2];
-      expect([[e, e], [-e, e], [e, -e], [-e, -e]].some(([dx, dz]) => heightAt(map, Math.floor(x + dx), Math.floor(z + dz)) > 0), `${x},${z}`).toBe(true);
-      const off = Math.min(x - Math.floor(x), Math.ceil(x) - x, z - Math.floor(z), Math.ceil(z) - z);
-      expect(off).toBeLessThan(0.2);
+      // the way its face looks: a skirt's light is read in front of its face (`push`), a front and the foot face that way themselves
+      const px = w.push[i * 2], pz = w.push[i * 2 + 1], [dx, dz] = px || pz ? [px, pz] : [w.normal[i * 3], w.normal[i * 3 + 2]];
+      const onX = Math.abs(dx) > Math.abs(dz), sign = Math.sign(onX ? dx : dz), c = onX ? x : z, other = onX ? z : x;
+      // the cell's edge the face looks out of, and how far behind it the vertex lies: along the face's own axis
+      const plane = sign > 0 ? Math.ceil(c - e) : Math.floor(c + e), behind = (plane - c) * sign;
+      expect(behind, `${x},${z}`).toBeGreaterThanOrEqual(-e);
+      expect(behind, `${x},${z}`).toBeLessThan(0.2);
+      // behind that edge is a wall, in front of it a lower cell (a vertex on a cell line may belong to the cell on either side of it)
+      const wall = sign > 0 ? plane - 1 : plane, front = sign > 0 ? plane : plane - 1;
+      const h = (a: number, b: number): number => (onX ? heightAt(map, a, b) : heightAt(map, b, a));
+      expect([Math.floor(other + e), Math.floor(other - e)].some((o) => h(wall, o) > 0 && h(front, o) < h(wall, o)), `${x},${z}`).toBe(true);
     }
+    expect(seen).toBeGreaterThan(1000);
   });
 
   it('terrain cells give no quad here', () => {
@@ -188,7 +221,7 @@ describe('buildChunk', () => {
     // the floor cells of each chunk; a tile change rebuilds the chunks it touches, as the view does
     const { nx, nz } = chunkGrid(map), built = new Map<string, Set<string>>();
     const check = (chunks: [number, number][]) => {
-      for (const [cx, cz] of chunks) built.set(`${cx},${cz}`, new Set(tris(buildChunk(map, false, cx, cz, frames), KIND.floor).filter((q) => q.normal[1] > 0.9).map((q) => q.cell.join(','))));
+      for (const [cx, cz] of chunks) built.set(`${cx},${cz}`, floorCells(buildChunk(map, false, cx, cz, frames)));
       for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
         const has = built.get(`${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`)!.has(`${x},${z}`);
         if (heightAt(map, x, z) !== 0) { expect(has, `wall ${x},${z}`).toBe(false); continue; }
@@ -215,9 +248,9 @@ describe('buildChunk', () => {
   });
 
   it('DoorClosed and DoorOpen are floor', () => {
-    const q = tris(buildChunk(mapOf(2, 1, [TILE_ID.DoorClosed, TILE_ID.DoorOpen]), false, 0, 0, frames));
-    expect(q.every((t) => t.kind === KIND.floor)).toBe(true);
-    expect(new Set(q.filter((t) => t.normal[1] > 0.9).map((t) => t.cell[0]))).toEqual(new Set([0, 1]));
+    const c = buildChunk(mapOf(2, 1, [TILE_ID.DoorClosed, TILE_ID.DoorOpen]), false, 0, 0, frames);
+    expect(tris(c).every((t) => t.kind === KIND.floor)).toBe(true);
+    expect(floorCells(c)).toEqual(new Set(['0,0', '1,0']));
   });
 
   it('woodland cells and Barrier give ground quads', () => {
@@ -234,9 +267,9 @@ describe('buildChunk', () => {
     expect(Math.max(...uvs.map((u) => u[0]))).toBe(64);
     expect(Math.min(...uvs.map((u) => u[1]))).toBe(0);
     expect(Math.max(...uvs.map((u) => u[1]))).toBe(16);
-    const plain = tris(buildChunk(m, false, 0, 0, frames));
-    expect(plain.every((x) => x.kind === KIND.floor)).toBe(true);
-    expect(new Set(plain.filter((x) => x.normal[1] > 0.9).map((x) => x.cell[0])).size).toBe(5);
+    const plain = buildChunk(m, false, 0, 0, frames);
+    expect(tris(plain).every((x) => x.kind === KIND.floor)).toBe(true);
+    expect(floorCells(plain).size).toBe(5);
   });
 
   it('a face whose neighbour is in the next chunk is built by the chunk of the wall', () => {
@@ -249,15 +282,15 @@ describe('buildChunk', () => {
     expect(Math.max(...east.map((f) => f.max[0]))).toBe(16);
     const c1 = buildChunk(m, false, 1, 0, frames);
     expect(tris(c1, KIND.face).length).toBe(0);
-    expect(new Set(tris(c1, KIND.floor).filter((t) => t.normal[1] > 0.9).map((t) => t.cell[0])).size).toBe(16);
+    expect(floorCells(c1).size).toBe(16);
   });
 
   it('edge chunks are narrower', () => {
     const m = mapOf(20, 5, new Array(100).fill(TILE_ID.Floor));
     expect(chunkGrid(m)).toEqual({ nx: 2, nz: 1 });
     const c = buildChunk(m, false, 1, 0, frames);
-    const cells = (k: Chunk): number => new Set(tris(k).filter((t) => t.normal[1] > 0.9).map((t) => t.cell.join(','))).size;
-    expect(cells(c)).toBe(20);
+    expect(floorCells(c).size).toBe(20);
+    expect(areaOf(floorTops(c))).toBeCloseTo(20, 5);
     expect(c.max[0]).toBe(20);
     expect(c.min[0]).toBe(16);
     expect(c.max[2]).toBe(5);
@@ -270,18 +303,19 @@ describe('buildChunk', () => {
     }
     const small = mapOf(3, 3, new Array(9).fill(TILE_ID.Floor));
     expect(chunkGrid(small)).toEqual({ nx: 1, nz: 1 });
-    expect(cells(buildChunk(small, false, 0, 0, frames))).toBe(9);
+    expect(floorCells(buildChunk(small, false, 0, 0, frames)).size).toBe(9);
     expect(CHUNK).toBe(16);
   });
 
   it('winds every triangle counter-clockwise seen from its normal side', () => {
     const w = buildChunk(parseMap(MAP_ROWS), false, 0, 0, frames).world;
     const p = (i: number) => [w.position[i * 3], w.position[i * 3 + 1], w.position[i * 3 + 2]];
-    for (let t = 0; t < w.count / 3; t++) {
-      const [a, b, c] = [p(t * 3), p(t * 3 + 1), p(t * 3 + 2)];
+    expect(w.index.length).toBeGreaterThan(3000);
+    for (let t = 0; t < w.index.length / 3; t++) {
+      const [a, b, c] = [p(w.index[t * 3]), p(w.index[t * 3 + 1]), p(w.index[t * 3 + 2])];
       const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
       const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-      const n = t * 3;
+      const n = w.index[t * 3];
       expect(cr[0] * w.normal[n * 3] + cr[1] * w.normal[n * 3 + 1] + cr[2] * w.normal[n * 3 + 2]).toBeGreaterThan(0);
     }
   });
@@ -294,7 +328,11 @@ describe('buildChunk', () => {
     expect(w.faceA.length).toBe(w.count * 3);
     expect(w.faceB.length).toBe(w.count * 3);
     expect(w.push.length).toBe(w.count * 2);
-    expect(w.index.length).toBe(w.count);
+    // every index names a vertex, and the stone's (after the ground's one quad of six) share theirs
+    expect(w.index.length % 3).toBe(0);
+    expect(Math.max(...w.index)).toBe(w.count - 1);
+    expect(Array.from(w.index.slice(0, 6))).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(w.index.length).toBeGreaterThan(w.count);
     for (let i = 0; i < w.count; i++) {
       if (w.kind[i] === KIND.ground) {
         expect(w.sheet[i * 3 + 2]).toBe(-1);

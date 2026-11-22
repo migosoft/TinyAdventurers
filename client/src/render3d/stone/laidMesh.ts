@@ -1,6 +1,7 @@
 // The shape of laid stone (#380 part 4): every block of floor and wall masonry is its own piece of mesh, at its level with its tilt, and
-// has a skirt on every side where its neighbour lies lower. A floor's blocks are cut at the cell's edges and a wall's at the face's, so a
-// chunk owns its cells' triangles; whatever two pieces share an edge have the same vertices on it, so nothing gapes. Pure: no three.
+// has a skirt on every side where its neighbour lies lower. A floor's blocks are cut at the chunk's borders (and at the cells of walls,
+// dips, floor pieces and grates) and a wall's at the face's edges, so a chunk owns its triangles; whatever two pieces share an edge have
+// the same vertices on it, so nothing gapes. Pure: no three.
 //
 // A piece lives in the px space of its plane (ground: world px; wall: world px along the wall, px down from its top) with a height over
 // that plane in tiles: a floor's height is y (never above 0), a wall's is how far it stands out of the cell's edge (never above 0 either).
@@ -9,7 +10,7 @@ import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
 import { COURSES, LEVEL_STEP, floorBlockAt, markAt, slabOf, wallBlockAt, type Block } from './blocks';
 import { FACE_H, FACE_W } from './format';
-import { KIND, SIDE_STEP } from './grid';
+import { CHUNK, KIND, SIDE_STEP } from './grid';
 import { STONE_PX, type StoneField } from './field';
 import type { Marks } from './place';
 import type { Face, SheetPlan } from './plan';
@@ -17,8 +18,12 @@ import type { Face, SheetPlan } from './plan';
 export type Vec3 = [number, number, number];
 /** A vertex: position, the three sheet coordinates, and the offset to where light and sight are read. */
 export interface Corner { p: Vec3; sheet: Vec3; a: Vec3; b: Vec3; push?: [number, number] }
-/** Takes one triangle and winds it to the normal. */
-export type Tri = (c0: Corner, c1: Corner, c2: Corner, n: Vec3, kind: number) => void;
+/** Where the mesh goes: vertices by number, shared by the triangles of one flat piece (they have one normal). */
+export interface Out {
+  vert(c: Corner, n: Vec3, kind: number): number;
+  /** A triangle of three vertices; it is wound to the first one's normal. */
+  tri(a: number, b: number, c: number): void;
+}
 export const NONE: Vec3 = [0, 0, -1];
 
 // First guesses, all of them.
@@ -31,30 +36,33 @@ const SKIRT_PAST_JOINT = 1.5, SKIRT_IN = 0.5;
 /** A wall's skirt reads light and sight this far in front of the wall (tiles): its own normal does not point out of it. */
 const SKIRT_PUSH = 0.03;
 
-/** The plane a piece lies in: its height at (uh, vh) and its fall per px. `row`: a px row of a wall block's course; `solid`: no piece, the uncut stone beside one. */
-interface Plane { h0: number; tu: number; tv: number; uh: number; vh: number; row: number; solid: boolean }
+/** The plane a piece lies in: its height at (uh, vh) and its fall per px. `solid`: no piece, the uncut stone beside one. */
+interface Plane { h0: number; tu: number; tv: number; uh: number; vh: number; solid: boolean }
 /** A piece of the mesh: a rectangle of px, `u1` and `v1` exclusive. */
 interface Surf { u0: number; v0: number; u1: number; v1: number; p: Plane }
-const flat = (h0: number, solid = false): Plane => ({ h0, tu: 0, tv: 0, uh: 0, vh: 0, row: -1, solid });
+const flat = (h0: number, solid = false): Plane => ({ h0, tu: 0, tv: 0, uh: 0, vh: 0, solid });
 const hOf = (p: Plane, u: number, v: number): number => p.h0 + p.tu * (u - p.uh) + p.tv * (v - p.vh);
 /** A block's plane: its highest corner lies at `top` and the rest falls away (`Block.tilt`). */
-const planeOf = (b: Block, top: number): Plane => ({ h0: top, tu: b.tilt[0], tv: b.tilt[1], uh: b.tilt[0] > 0 ? b.u1 : b.u0, vh: b.tilt[1] > 0 ? b.v1 : b.v0, row: b.v0, solid: false });
+const planeOf = (b: Block, top: number): Plane => ({ h0: top, tu: b.tilt[0], tv: b.tilt[1], uh: b.tilt[0] > 0 ? b.u1 : b.u0, vh: b.tilt[1] > 0 ? b.v1 : b.v0, solid: false });
 
 /** Untilted floors by level (sunk, flush, raised; rock lies at the raised level), so level stones side by side are one piece. */
 const LEVEL = [flat(-2 * LEVEL_STEP), flat(-LEVEL_STEP), flat(0)];
 const SHAFT = flat(-GRATE_DEPTH);
 /** The uncut stone beside a piece, at height 0: a neighbour that draws nothing, so the piece draws the skirt between them itself. */
-const OUT: Surf = { u0: -Infinity, v0: -Infinity, u1: Infinity, v1: Infinity, p: flat(0, true) };
+const UNCUT = flat(0, true);
+const OUT: Surf = { u0: -Infinity, v0: -Infinity, u1: Infinity, v1: Infinity, p: UNCUT };
 
 /** What a piece is shaped in: its neighbours, and how plane points become vertices. */
 interface Space {
   kind: number;
   /** The piece over a px (the asking piece's own px too); null: nothing to meet there. */
   at(u: number, v: number): Surf | null;
-  /** The vertex at the plane point (u, v) and height h, which lies on the plane `p`, reading the px (su, sv). */
-  corner(u: number, v: number, h: number, p: Plane, su: number, sv: number, skirt: boolean): Corner;
+  /** The vertex at the plane point (u, v) and height h, reading the px (su, sv). */
+  corner(u: number, v: number, h: number, su: number, sv: number, skirt: boolean): Corner;
   /** The world direction of a step (du, dv) in the plane and dh out of it. */
   dir(du: number, dv: number, dh: number): Vec3;
+  /** A skirt facing (du, dv) that the camera never sees. */
+  hidden(du: number, dv: number): boolean;
 }
 
 /**
@@ -62,26 +70,25 @@ interface Space {
  * skirt down to the neighbour's edge, facing the neighbour. Where two tilted pieces cross, each takes its side of the crossing, and the
  * crossing point becomes a vertex of both tops. Every point where a neighbour ends is a vertex of the top too.
  */
-function shape(s: Surf, sp: Space, tri: Tri): void {
+function shape(s: Surf, sp: Space, out: Out): void {
   const p = s.p, ring: [number, number, number][] = [], first = [0, 0, 0, 0];
   /** The vertices from `hi` down to `lo` at a point of the px grid: every piece that meets there has a vertex in between. */
-  const column = (u: number, v: number, hi: number, pHi: Plane, lo: number, pLo: Plane, su: number, sv: number): Corner[] => {
-    if (hi === lo) return [sp.corner(u, v, hi, pHi, su, sv, true)];
-    const mid: [number, Plane][] = [];
-    for (const [du, dv] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
-      const o = sp.at(u + du, v + dv);
-      if (!o) continue;
-      const h = hOf(o.p, u, v);
-      if (h < hi && h > lo && !mid.some((m) => m[0] === h)) mid.push([h, o.p]);
+  const column = (u: number, v: number, hi: number, lo: number, su: number, sv: number, n: Vec3): number[] => {
+    const hs = [hi];
+    if (hi !== lo) {
+      for (const [du, dv] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
+        const o = sp.at(u + du, v + dv), h = o ? hOf(o.p, u, v) : hi;
+        if (h < hi && h > lo && !hs.includes(h)) hs.push(h);
+      }
+      hs.sort((a, b) => b - a).push(lo);
     }
-    mid.sort((a, b) => b[0] - a[0]);
-    return [sp.corner(u, v, hi, pHi, su, sv, true), ...mid.map(([h, q]) => sp.corner(u, v, h, q, su, sv, true)), sp.corner(u, v, lo, pLo, su, sv, true)];
+    return hs.map((h) => out.vert(sp.corner(u, v, h, su, sv, true), n, sp.kind));
   };
   for (let e = 0; e < 4; e++) {
     // 0 the top edge (v0), 1 the right (u1), 2 the bottom (v1), 3 the left (u0); (du, dv) points out of the piece
-    const alongU = e % 2 === 0, fixed = [s.v0, s.u1, s.v1, s.u0][e], out = [s.v0 - 1, s.u1, s.v1, s.u0 - 1][e];
+    const alongU = e % 2 === 0, fixed = [s.v0, s.u1, s.v1, s.u0][e], beyond = [s.v0 - 1, s.u1, s.v1, s.u0 - 1][e];
     const a0 = alongU ? s.u0 : s.v0, a1 = alongU ? s.u1 : s.v1, du = e === 1 ? 1 : e === 3 ? -1 : 0, dv = e === 0 ? -1 : e === 2 ? 1 : 0;
-    const beside = (t: number): Surf | null => (alongU ? sp.at(t, out) : sp.at(out, t));
+    const beside = (t: number): Surf | null => (alongU ? sp.at(t, beyond) : sp.at(beyond, t));
     const inset = e === 0 || e === 3 ? SKIRT_PAST_JOINT : SKIRT_IN;
     const inner: [number, number, number][] = [];
     for (let t = a0; t < a1;) {
@@ -96,11 +103,13 @@ function shape(s: Surf, sp: Space, tri: Tri): void {
       const m0 = hOf(p, u0, v0), m1 = hOf(p, u1, v1), n0 = hOf(n.p, u0, v0), n1 = hOf(n.p, u1, v1), d0 = m0 - n0, d1 = m1 - n1;
       /** The skirt between the two ends: `mine` on top, or (beside uncut stone) the neighbour's edge on top and the skirt facing this piece. */
       const hang = (mine: boolean): void => {
-        const k = mine ? 1 : -1, normal = sp.dir(du * k, dv * k, 0);
-        const c0 = mine ? column(u0, v0, m0, p, n0, n.p, u0 - du * inset, v0 - dv * inset) : column(u0, v0, n0, n.p, m0, p, u0 - du * inset, v0 - dv * inset);
-        const c1 = mine ? column(u1, v1, m1, p, n1, n.p, u1 - du * inset, v1 - dv * inset) : column(u1, v1, n1, n.p, m1, p, u1 - du * inset, v1 - dv * inset);
-        for (let i = 0; i + 1 < c1.length; i++) tri(c0[0], c1[i], c1[i + 1], normal, sp.kind);
-        for (let i = 0; i + 1 < c0.length; i++) tri(c1[c1.length - 1], c0[i], c0[i + 1], normal, sp.kind);
+        const k = mine ? 1 : -1;
+        if (sp.hidden(du * k, dv * k)) return;
+        const normal = sp.dir(du * k, dv * k, 0);
+        const c0 = column(u0, v0, mine ? m0 : n0, mine ? n0 : m0, u0 - du * inset, v0 - dv * inset, normal);
+        const c1 = column(u1, v1, mine ? m1 : n1, mine ? n1 : m1, u1 - du * inset, v1 - dv * inset, normal);
+        for (let i = 0; i + 1 < c1.length; i++) out.tri(c0[0], c1[i], c1[i + 1]);
+        for (let i = 0; i + 1 < c0.length; i++) out.tri(c1[c1.length - 1], c0[i], c0[i + 1]);
       };
       if (n.p.solid) { if (d0 < 0 || d1 < 0) hang(false); }
       else if (d0 >= 0 && d1 >= 0) { if (d0 > 0 || d1 > 0) hang(true); }
@@ -109,9 +118,10 @@ function shape(s: Surf, sp: Space, tri: Tri): void {
         const tx = end - (end - (alongU ? u0 : v0)) * (d1 / (d1 - d0)), ux = alongU ? tx : fixed, vx = alongU ? fixed : tx;
         const hx = (hOf(p, ux, vx) + hOf(n.p, ux, vx)) / 2;
         inner.push([ux, vx, hx]);
-        const x = sp.corner(ux, vx, hx, p, ux - du * inset, vx - dv * inset, true), normal = sp.dir(du, dv, 0);
-        const c = d0 > 0 ? column(u0, v0, m0, p, n0, n.p, u0 - du * inset, v0 - dv * inset) : column(u1, v1, m1, p, n1, n.p, u1 - du * inset, v1 - dv * inset);
-        for (let i = 0; i + 1 < c.length; i++) tri(x, c[i], c[i + 1], normal, sp.kind);
+        if (sp.hidden(du, dv)) continue;
+        const normal = sp.dir(du, dv, 0), x = out.vert(sp.corner(ux, vx, hx, ux - du * inset, vx - dv * inset, true), normal, sp.kind);
+        const c = d0 > 0 ? column(u0, v0, m0, n0, u0 - du * inset, v0 - dv * inset, normal) : column(u1, v1, m1, n1, u1 - du * inset, v1 - dv * inset, normal);
+        for (let i = 0; i + 1 < c.length; i++) out.tri(x, c[i], c[i + 1]);
       }
     }
     const start = [[s.u0, s.v0], [s.u1, s.v0], [s.u1, s.v1], [s.u0, s.v1]][e];
@@ -119,23 +129,23 @@ function shape(s: Surf, sp: Space, tri: Tri): void {
     ring.push([start[0], start[1], hOf(p, start[0], start[1])], ...(e < 2 ? inner : inner.reverse()));
   }
   const up = sp.dir(-p.tu * STONE_PX, -p.tv * STONE_PX, 1), len = Math.hypot(...up), normal: Vec3 = [up[0] / len, up[1] / len, up[2] / len];
-  const c = ring.map(([u, v, h]) => sp.corner(u, v, h, p, u, v, false));
+  const c = ring.map(([u, v, h]) => out.vert(sp.corner(u, v, h, u, v, false), normal, sp.kind));
   c.push(c[0]);
   /**
    * The half of the top between two edges that meet in a corner and the diagonal: `a` runs along one edge to the corner, `r` along the
    * other. Every triangle has points of both edges, so none is flat, however many points lie on an edge.
    */
-  const half = (a: Corner[], r: Corner[]): void => {
+  const half = (a: number[], r: number[]): void => {
     const m = a.length - 2;
-    for (let i = 0; i < m; i++) tri(r[0], a[i], a[i + 1], normal, sp.kind);
-    for (let j = 0; j + 1 < r.length; j++) tri(a[m], r[j], r[j + 1], normal, sp.kind);
+    for (let i = 0; i < m; i++) out.tri(r[0], a[i], a[i + 1]);
+    for (let j = 0; j + 1 < r.length; j++) out.tri(a[m], r[j], r[j + 1]);
   };
   half(c.slice(first[0], first[1] + 1), c.slice(first[1], first[2] + 1).reverse());
   half(c.slice(first[2], first[3] + 1), c.slice(first[3]).reverse());
 }
 
 // ---- what a chunk's build keeps: the pieces of the cells and faces it has asked for (its own and the ring round them)
-/** A floor cell's pieces; `at`: the piece of each px, where the cell has too many to search. */
+/** A floor cell's pieces (one may reach on over other cells); `at`: the piece of each px, where the cell has too many to search. */
 interface Cell { at: Uint16Array | null; surfs: Surf[] }
 interface FaceShape { face: Face; h: number; hn: number; rock: boolean; surfs: Surf[] }
 export interface Laid {
@@ -143,20 +153,14 @@ export interface Laid {
   /** The chunk's ground page: its first cell and its layer. */
   x0: number; z0: number; layer: number;
   cells: Map<number, Cell | null>; faces: Map<number, FaceShape | null>; planes: Map<number, Plane>; marked: Map<object, Plane>;
+  open: Map<number, boolean>; wide: Map<number, Surf | null>;
 }
 export function laid(map: TileMap, f: StoneField, plan: SheetPlan, marks: Marks, x0: number, z0: number, layer: number, skip?: (x: number, z: number) => boolean): Laid {
-  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), marked: new Map() };
+  return { map, f, plan, marks, skip, x0, z0, layer, cells: new Map(), faces: new Map(), planes: new Map(), marked: new Map(), open: new Map(), wide: new Map() };
 }
 const inMap = (c: Laid, x: number, z: number): boolean => x >= 0 && z >= 0 && x < c.map.w && z < c.map.h;
-function planeFor(c: Laid, b: Block, top: number): Plane {
-  let p = c.planes.get(b.id);
-  if (!p) c.planes.set(b.id, p = planeOf(b, top));
-  return p;
-}
 
 // ---- floors
-/** A cell another mesh draws at height 0 (the woodland's ground): uncut stone to its neighbours. */
-const OUT_CELL: Cell = { at: null, surfs: [OUT] };
 const grid = new Int16Array(STONE_PX * STONE_PX), rows = new Int32Array(STONE_PX);
 /** The piece of a cell over a px. */
 const pieceAt = (o: Cell, u: number, v: number): Surf => {
@@ -164,69 +168,96 @@ const pieceAt = (o: Cell, u: number, v: number): Surf => {
   for (const s of o.surfs) if (u >= s.u0 && u < s.u1 && v >= s.v0 && v < s.v1) return s;
   throw new Error(`no piece at ${u},${v}`);
 };
+/** A slab's plane: level stones share one per level, a tilted one has its own. */
+function top(c: Laid, b: Block): Plane {
+  if (b.hole) return SHAFT;
+  if (b.tilt[0] === 0 && b.tilt[1] === 0) return LEVEL[b.level + 1];
+  let p = c.planes.get(b.id);
+  if (!p) c.planes.set(b.id, p = planeOf(b, (b.level - 1) * LEVEL_STEP));
+  return p;
+}
+/** Beside a floor piece or a grate the stones are no rectangles: there every px is asked. */
+const marked = (c: Laid, x: number, z: number): boolean => c.marks.grates.some((g) => Math.floor(g.x) === x && Math.floor(g.z) === z)
+  || c.marks.pieces.some((p) => x + 1 > p.x - p.r - 0.1 && x < p.x + p.r + 0.1 && z + 1 > p.z - p.r - 0.1 && z < p.z + p.r + 0.1);
+/** A cell of this mesh's floor: height 0, not the dip mesh's, not left to another mesh. */
+const floorCell = (c: Laid, x: number, z: number): boolean => inMap(c, x, z) && heightAt(c.map, x, z) === 0 && !inDipMesh(c.map, x, z);
+/** A floor cell whose slabs are whole rectangles that this mesh draws. */
+function open(c: Laid, x: number, z: number): boolean {
+  if (!inMap(c, x, z)) return false;
+  const key = z * c.map.w + x;
+  let o = c.open.get(key);
+  if (o === undefined) c.open.set(key, o = floorCell(c, x, z) && !c.skip?.(x, z) && !marked(c, x, z));
+  return o;
+}
+/** A slab as one piece of its chunk: cut at the chunk's borders only, where every cell it lies on there is open; else null (it is cut cell by cell). */
+function wide(c: Laid, b: Block, x: number, z: number): Surf | null {
+  const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK), key = b.id * 0x40000 + cz * 512 + cx;
+  let s = c.wide.get(key);
+  if (s !== undefined) return s;
+  const N = STONE_PX * CHUNK;
+  s = { u0: Math.max(b.u0, cx * N), v0: Math.max(b.v0, cz * N), u1: Math.min(b.u1, (cx + 1) * N), v1: Math.min(b.v1, (cz + 1) * N), p: top(c, b) };
+  for (let j = s.v0 >> 5; s && j <= (s.v1 - 1) >> 5; j++) for (let i = s.u0 >> 5; i <= (s.u1 - 1) >> 5; i++) if (!open(c, i, j)) { s = null; break; }
+  c.wide.set(key, s);
+  return s;
+}
 
 /**
- * The pieces of the floor cell (x, z), or null where this mesh has no floor (a wall, the dip mesh's cells, beyond the map): each slab cut
- * at the cell's edges (rock: level at 0). Beside a floor piece or a grate every px takes its block's plane, and px in a row and rows on
- * end with the same plane are one piece: the level stones of a floor piece together.
+ * The pieces over the floor cell (x, z), or null where this mesh has no floor (a wall, the dip mesh's cells, beyond the map). An open
+ * cell has its slabs (`wide`, or cut at the cell's edges), its rock slabs level at 0, and is one piece where it is all rock. Beside a
+ * floor piece or a grate every px takes its block's plane, and px in a row and rows on end with the same plane are one piece: the level
+ * stones of a floor piece together. A cell another mesh draws at height 0 (the woodland's ground) is uncut stone to its neighbours.
  */
 function cellOf(c: Laid, x: number, z: number): Cell | null {
   if (!inMap(c, x, z)) return null;
   const key = z * c.map.w + x;
   let cell = c.cells.get(key);
   if (cell !== undefined) return cell;
-  cell = null;
-  if (heightAt(c.map, x, z) === 0 && !inDipMesh(c.map, x, z)) {
-    if (c.skip?.(x, z)) cell = OUT_CELL;
-    else {
-      const N = STONE_PX, pu = x * N, pv = z * N, planes: Plane[] = [];
-      const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
-      const top = (b: Block | null): Plane => (!b ? LEVEL[2] : b.hole ? SHAFT : b.tilt[0] === 0 && b.tilt[1] === 0 ? LEVEL[b.level + 1] : planeFor(c, b, (b.level - 1) * LEVEL_STEP));
-      // beside a floor piece or a grate the stones are no rectangles: there every px is asked
-      const near = c.marks.grates.some((g) => Math.floor(g.x) === x && Math.floor(g.z) === z)
-        || c.marks.pieces.some((p) => x + 1 > p.x - p.r - 0.1 && x < p.x + p.r + 0.1 && z + 1 > p.z - p.r - 0.1 && z < p.z + p.r + 0.1);
-      cell = { at: null, surfs: [] };
-      if (!near) {
-        // slabs only: each is a rectangle, found at the first px of a row that none covers yet (a row's covered px are the bits of `rows`)
-        rows.fill(0);
-        for (let j = 0; j < N; j++) while (rows[j] !== -1) {
-          const i = 31 - Math.clz32(~rows[j] & (rows[j] + 1)), s = slabOf(c.f, c.map, c.marks, pu + i, pv + j);
-          const i1 = Math.min(N, s.b.u1 - pu), j1 = Math.min(N, s.b.v1 - pv), bits = (i1 === 32 ? -1 : (1 << i1) - 1) & ~((1 << i) - 1);
-          for (let jj = j; jj < j1; jj++) rows[jj] |= bits;
-          cell.surfs.push({ u0: pu + i, v0: pv + j, u1: pu + i1, v1: pv + j1, p: top(s.rock ? null : s.b) });
-        }
-        c.cells.set(key, cell);
-        return cell;
-      }
-      grid.fill(-1);
-      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-        const mark = markAt(c.marks, pu + i, pv + j);
-        if (!mark) { const s = slabOf(c.f, c.map, c.marks, pu + i, pv + j); grid[j * N + i] = index(top(s.rock ? null : s.b)); continue; }
-        // a piece's stones all lie at one level: its middle stone says which
-        let p = c.marked.get(mark);
-        if (!p) c.marked.set(mark, p = 'kind' in mark ? top(floorBlockAt(c.f, c.map, c.marks, Math.floor(mark.x * N), Math.floor(mark.z * N))) : SHAFT);
-        grid[j * N + i] = index(p);
-      }
-      cell.at = new Uint16Array(N * N);
-      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-        const k = grid[j * N + i];
-        if (k < 0) continue;
-        let w = 1, h = 1;
-        while (i + w < N && grid[j * N + i + w] === k) w++;
-        rows: for (; j + h < N; h++) for (let ii = i; ii < i + w; ii++) if (grid[(j + h) * N + ii] !== k) break rows;
-        for (let jj = j; jj < j + h; jj++) { grid.fill(-1, jj * N + i, jj * N + i + w); cell.at!.fill(cell.surfs.length, jj * N + i, jj * N + i + w); }
-        cell.surfs.push({ u0: pu + i, v0: pv + j, u1: pu + i + w, v1: pv + j + h, p: planes[k] });
-      }
+  const N = STONE_PX, pu = x * N, pv = z * N, whole = { u0: pu, v0: pv, u1: pu + N, v1: pv + N };
+  if (!floorCell(c, x, z)) cell = null;
+  else if (c.skip?.(x, z)) cell = { at: null, surfs: [{ ...whole, p: UNCUT }] };
+  else if (open(c, x, z)) {
+    // slabs only: each is a rectangle, found at the first px of a row that none covers yet (a row's covered px are the bits of `rows`)
+    cell = { at: null, surfs: [] };
+    let laidStone = false;
+    rows.fill(0);
+    for (let j = 0; j < N; j++) while (rows[j] !== -1) {
+      const i = 31 - Math.clz32(~rows[j] & (rows[j] + 1)), s = slabOf(c.f, c.map, c.marks, pu + i, pv + j);
+      const i1 = Math.min(N, s.b.u1 - pu), j1 = Math.min(N, s.b.v1 - pv), bits = (i1 === 32 ? -1 : (1 << i1) - 1) & ~((1 << i) - 1);
+      for (let jj = j; jj < j1; jj++) rows[jj] |= bits;
+      laidStone ||= !s.rock;
+      cell.surfs.push((s.rock ? null : wide(c, s.b, x, z)) ?? { u0: pu + i, v0: pv + j, u1: pu + i1, v1: pv + j1, p: s.rock ? LEVEL[2] : top(c, s.b) });
+    }
+    if (!laidStone) cell.surfs = [{ ...whole, p: LEVEL[2] }];
+  } else {
+    const planes: Plane[] = [];
+    const index = (p: Plane): number => { const i = planes.indexOf(p); return i >= 0 ? i : planes.push(p) - 1; };
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const mark = markAt(c.marks, pu + i, pv + j);
+      if (!mark) { const s = slabOf(c.f, c.map, c.marks, pu + i, pv + j); grid[j * N + i] = index(s.rock ? LEVEL[2] : top(c, s.b)); continue; }
+      // a piece's stones all lie at one level: its middle stone says which
+      let p = c.marked.get(mark);
+      if (!p) c.marked.set(mark, p = 'kind' in mark ? top(c, floorBlockAt(c.f, c.map, c.marks, Math.floor(mark.x * N), Math.floor(mark.z * N))!) : SHAFT);
+      grid[j * N + i] = index(p);
+    }
+    cell = { at: new Uint16Array(N * N), surfs: [] };
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const k = grid[j * N + i];
+      if (k < 0) continue;
+      let w = 1, h = 1;
+      while (i + w < N && grid[j * N + i + w] === k) w++;
+      more: for (; j + h < N; h++) for (let ii = i; ii < i + w; ii++) if (grid[(j + h) * N + ii] !== k) break more;
+      for (let jj = j; jj < j + h; jj++) { grid.fill(-1, jj * N + i, jj * N + i + w); cell.at!.fill(cell.surfs.length, jj * N + i, jj * N + i + w); }
+      cell.surfs.push({ u0: pu + i, v0: pv + j, u1: pu + i + w, v1: pv + j + h, p: planes[k] });
     }
   }
   c.cells.set(key, cell);
   return cell;
 }
 
-/** The floor of the cell (x, z): its pieces with their skirts. */
-export function laidFloor(c: Laid, x: number, z: number, tri: Tri): void {
+/** The floor pieces that begin in the cell (x, z), with their skirts: a piece that reaches over several cells is drawn from its first. */
+export function laidFloor(c: Laid, x: number, z: number, out: Out): void {
   const cell = cellOf(c, x, z);
-  if (!cell || cell === OUT_CELL) return;
+  if (!cell) return;
   const ou = c.x0 * STONE_PX, ov = c.z0 * STONE_PX;
   const sp: Space = {
     kind: KIND.floor,
@@ -234,15 +265,33 @@ export function laidFloor(c: Laid, x: number, z: number, tri: Tri): void {
       const o = u >> 5 === x && v >> 5 === z ? cell : cellOf(c, u >> 5, v >> 5);
       return o ? pieceAt(o, u, v) : null;
     },
-    corner: (u, v, h, _p, su, sv) => ({ p: [u / STONE_PX, h, v / STONE_PX], sheet: [su - ou, sv - ov, c.layer], a: NONE, b: NONE }),
+    corner: (u, v, h, su, sv) => ({ p: [u / STONE_PX, h, v / STONE_PX], sheet: [su - ou, sv - ov, c.layer], a: NONE, b: NONE }),
     dir: (du, dv, dh) => [du, dh, dv],
+    hidden: () => false,
   };
-  for (const s of cell.surfs) shape(s, sp, tri);
+  for (const s of cell.surfs) if (!s.p.solid && s.u0 >> 5 === x && s.v0 >> 5 === z) shape(s, sp, out);
 }
 
 // ---- walls
-/** A wall block's plane: the frieze in the cell's edge, the rest behind it by `FRIEZE_OUT` and its level. */
-const wallTop = (b: Block): number => (b.frieze ? 0 : -FRIEZE_OUT + (b.level - 1) * LEVEL_STEP);
+/** The plane in the cell's edge: the frieze course, and the corner stones of a wall's outer corners. */
+const FRONT = flat(0);
+
+/**
+ * A wall block's plane: behind the cell's edge by `FRIEZE_OUT` and its level, with its tilt. The frieze lies in the edge, and so does
+ * every block that reaches an outer corner of its wall: the two faces of the corner meet in the cell's corner, under the wall top's own.
+ */
+function wallPlane(c: Laid, face: Face, b: Block): Plane {
+  let p = c.planes.get(b.id);
+  if (p) return p;
+  const s = face.side, h = (j: number, out: number): number => (s < 2 ? heightAt(c.map, j, face.z + out * SIDE_STEP[s][1]) : heightAt(c.map, face.x + out * SIDE_STEP[s][0], j));
+  let front = b.frieze;
+  for (let j = b.u0 >> 5; !front && j <= (b.u1 - 1) >> 5; j++) {
+    // the wall has a face in cell j of this plane, and ends there in an outer corner the block reaches
+    front = h(j, 0) > 0 && h(j, 1) < h(j, 0) && ((h(j - 1, 0) < h(j, 0) && b.u0 <= j * STONE_PX) || (h(j + 1, 0) < h(j, 0) && b.u1 >= (j + 1) * STONE_PX));
+  }
+  c.planes.set(b.id, p = front ? FRONT : planeOf(b, -FRIEZE_OUT + (b.level - 1) * LEVEL_STEP));
+  return p;
+}
 
 /**
  * The side `s` of the wall cell (x, z) where it borders a lower cell, or null. Its blocks are cut at the face's edges. `rock`: some of it
@@ -263,7 +312,7 @@ export function faceOf(c: Laid, x: number, z: number, s: number): FaceShape | nu
       for (let u = U0; u < U0 + STONE_PX;) {
         const b = wallBlockAt(c.f, c.map, face, u, COURSES[k]);
         if (!b) { fs.rock = true; fs.surfs = []; break courses; }
-        fs.surfs.push({ u0: Math.max(b.u0, U0), v0: Math.max(b.v0, V0), u1: Math.min(b.u1, U0 + STONE_PX), v1: Math.min(b.v1, V1), p: planeFor(c, b, wallTop(b)) });
+        fs.surfs.push({ u0: Math.max(b.u0, U0), v0: Math.max(b.v0, V0), u1: Math.min(b.u1, U0 + STONE_PX), v1: Math.min(b.v1, V1), p: wallPlane(c, face, b) });
         u = b.u1;
       }
     }
@@ -275,49 +324,37 @@ const surfAt = (fs: FaceShape, u: number, v: number): Surf | null => fs.surfs.fi
 
 /**
  * A laid face: its blocks with their skirts. Below its foot lies uncut stone (the ledge the blocks stand back from); so does beyond an
- * end where the wall goes on without a face, or with a rock face. At an end that is the wall's outer corner the blocks stop where the
- * blocks of the face round the corner begin: each end vertex moves in by that face's depth there, and that face's by this one's.
+ * end where the wall goes on without a face, or with a rock face. A skirt that faces down, under a block that stands out further than the
+ * one below it, is left out: the camera looks from above.
  */
-// shortcut: the corner lookup takes a course's first px row, which lies outside a face of a wall lower than WALL_H (then: no move in); pass a row inside the face when levels get such walls.
-export function laidFace(c: Laid, fs: FaceShape, tri: Tri): void {
-  const { x, z, side: s } = fs.face, [dx, dz] = SIDE_STEP[s], along = s < 2 ? x : z, U0 = along * STONE_PX, U1 = U0 + STONE_PX;
+export function laidFace(c: Laid, fs: FaceShape, out: Out): void {
+  const { x, z, side: s } = fs.face, [dx, dz] = SIDE_STEP[s], U0 = (s < 2 ? x : z) * STONE_PX, U1 = U0 + STONE_PX;
   const V0 = (WALL_H - fs.h) * STONE_PX, V1 = (WALL_H - fs.hn) * STONE_PX, slot = c.plan.slotOf(fs.face);
-  /** The plane of the cell's edge the face looks out of, and that coordinate in px along the faces round the corner. */
-  const edge = (s < 2 ? z : x) + (s === 0 || s === 2 ? 1 : 0), ePx = edge * STONE_PX;
-  /** The wall cell beyond an end (-1 the low end, 1 the high one), and whether the wall ends there in an outer corner. */
-  const beyond = (d: number): [number, number] => (s < 2 ? [x + d, z] : [x, z + d]);
-  const outer = (d: number): boolean => heightAt(c.map, ...beyond(d)) < fs.h;
-  const round = [-1, 1].map((d) => (outer(d) ? faceOf(c, x, z, s < 2 ? (d < 0 ? 3 : 2) : d < 0 ? 1 : 0) : null));
-  /** How deep the face round the corner lies at this face's end, for a vertex of the course of `row` at px `v` down. */
-  const depthRound = (end: number, row: number, v: number): number => {
-    const g = round[end], o = g && surfAt(g, s === 0 || s === 2 ? ePx - 1 : ePx, row);
-    return o ? -hOf(o.p, ePx, v) : 0;
-  };
+  /** The plane of the cell's edge the face looks out of. */
+  const edge = (s < 2 ? z : x) + (s === 0 || s === 2 ? 1 : 0);
   const sp: Space = {
     kind: KIND.face,
     at(u, v) {
       if (v < V0) return null; // under the top's rim: nobody sees that skirt
       if (v >= V1) return OUT;
       if (u >= U0 && u < U1) return surfAt(fs, u, v);
-      const d = u < U0 ? -1 : 1, g = faceOf(c, ...beyond(d), s);
+      const d = u < U0 ? -1 : 1, bx = s < 2 ? x + d : x, bz = s < 2 ? z : z + d, g = faceOf(c, bx, bz, s);
       if (g) return g.rock ? OUT : surfAt(g, u, v) ?? OUT;
-      return outer(d) ? null : OUT;
+      return heightAt(c.map, bx, bz) < fs.h ? null : OUT; // an outer corner (its stones lie in the edge), or the wall goes on without a face
     },
-    corner(u, v, h, p, su, sv, skirt) {
-      let t = u;
-      if (p.row >= 0 && u === U0) t += depthRound(0, p.row, v) * STONE_PX;
-      else if (p.row >= 0 && u === U1) t -= depthRound(1, p.row, v) * STONE_PX;
-      const y = WALL_H - v / STONE_PX, pos: Vec3 = s < 2 ? [t / STONE_PX, y, edge + dz * h] : [edge + dx * h, y, t / STONE_PX];
+    corner(u, v, h, su, sv, skirt) {
+      const y = WALL_H - v / STONE_PX, pos: Vec3 = s < 2 ? [u / STONE_PX, y, edge + dz * h] : [edge + dx * h, y, u / STONE_PX];
       const reach = -h + (skirt ? SKIRT_PUSH : 0), push: [number, number] = [dx * reach, dz * reach];
       if (skirt) {
         // both wall planes read the block's own px, whichever way the skirt faces
         const own: Vec3 = [slot.u + Math.min(FACE_W, Math.max(0, su - U0)), slot.v + Math.min(FACE_H, Math.max(0, sv)), slot.layer];
         return { p: pos, sheet: NONE, a: own, b: own, push };
       }
-      const own: Vec3 = [slot.u + t - U0, slot.v + v, slot.layer];
+      const own: Vec3 = [slot.u + u - U0, slot.v + v, slot.layer];
       return { p: pos, sheet: [(pos[0] - c.x0) * STONE_PX, (pos[2] - c.z0) * STONE_PX, c.layer], a: s < 2 ? own : NONE, b: s < 2 ? NONE : own, push };
     },
     dir: (du, dv, dh) => (s < 2 ? [du + dx * dh, -dv, dz * dh] : [dx * dh, -dv, du + dz * dh]),
+    hidden: (_du, dv) => dv > 0,
   };
-  for (const o of fs.surfs) shape(o, sp, tri);
+  for (const o of fs.surfs) shape(o, sp, out);
 }

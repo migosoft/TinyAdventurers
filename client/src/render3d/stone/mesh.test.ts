@@ -14,6 +14,8 @@ import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap } from './stoneMap';
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 8 986, 35 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 11000;
+/** The same for the stone page's chunk with the mosaic and a grate. */
+const PIECE_CHUNK_TRIS = 13000;
 
 /** A 3 by 3 floor with a wall in the middle. */
 function ring() {
@@ -27,14 +29,15 @@ const build = (m: TileMap, cx = 0, cz = 0, marks: Marks = noMarks()): { a: Stone
   const plan = planSheets(m);
   return { a: buildStoneChunk(m, stoneField(m, null, SEED), plan, marks, cx, cz), plan };
 };
-type V = { p: number[]; n: number[]; sheet: number[]; A: number[]; B: number[]; kind: number };
+type V = { p: number[]; n: number[]; sheet: number[]; A: number[]; B: number[]; kind: number; push: number[] };
 const vertex = (a: StoneArrays, i: number): V => ({
+  push: [a.push[i * 2], a.push[i * 2 + 1]],
   p: [a.position[i * 3], a.position[i * 3 + 1], a.position[i * 3 + 2]], n: [a.normal[i * 3], a.normal[i * 3 + 1], a.normal[i * 3 + 2]],
   sheet: [a.sheet[i * 3], a.sheet[i * 3 + 1], a.sheet[i * 3 + 2]], A: [a.faceA[i * 3], a.faceA[i * 3 + 1], a.faceA[i * 3 + 2]], B: [a.faceB[i * 3], a.faceB[i * 3 + 1], a.faceB[i * 3 + 2]],
   kind: a.kind[i],
 });
 const vertices = (a: StoneArrays): V[] => Array.from({ length: a.count }, (_, i) => vertex(a, i));
-const triangles = (a: StoneArrays): V[][] => Array.from({ length: a.count / 3 }, (_, t) => [vertex(a, t * 3), vertex(a, t * 3 + 1), vertex(a, t * 3 + 2)]);
+const triangles = (a: StoneArrays): V[][] => Array.from({ length: a.index.length / 3 }, (_, t) => [vertex(a, a.index[t * 3]), vertex(a, a.index[t * 3 + 1]), vertex(a, a.index[t * 3 + 2])]);
 
 /** The stone page's level with its marks (a circle, a mosaic, a grate, a chasm), all laid. */
 function stoneLevel() {
@@ -47,8 +50,9 @@ function stoneLevel() {
 describe('buildStoneChunk', () => {
   it('builds triangles wound to their normals, a flat top on a wall and nothing but stone kinds', () => {
     const { a } = build(ring());
-    expect(a.count % 3).toBe(0);
-    expect(a.index.length).toBe(a.count);
+    expect(a.index.length % 3).toBe(0);
+    expect(a.count).toBeLessThan(a.index.length); // the triangles of a flat piece share their vertices
+    expect(Math.max(...a.index)).toBe(a.count - 1);
     expect(Array.from(a.push).every((x) => Math.abs(x) < 0.5)).toBe(true);
     for (const t of triangles(a)) {
       const [p, q, r] = t.map((v) => v.p), e1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], e2 = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
@@ -58,7 +62,7 @@ describe('buildStoneChunk', () => {
     }
     // the top: one quad at y = WALL_H over the cell (1, 1), normal up
     const top = vertices(a).filter((v) => v.kind === KIND.top);
-    expect(top.length).toBe(6);
+    expect(top.length).toBe(4);
     for (const v of top) {
       expect(v.p[1]).toBe(WALL_H);
       expect(v.n).toEqual([0, 1, 0]);
@@ -159,8 +163,17 @@ describe('buildStoneChunk', () => {
 
   it(`keeps a chunk of laid floor under ${LAID_CHUNK_TRIS} triangles`, () => {
     const { a } = build(floorMap(16, 16));
-    expect(a.count / 3).toBeLessThan(LAID_CHUNK_TRIS);
-    expect(a.count / 3).toBeGreaterThan(16 * 16 * 2); // blocks, not one quad a cell
+    expect(a.index.length / 3).toBeLessThan(LAID_CHUNK_TRIS);
+    expect(a.index.length / 3).toBeGreaterThan(16 * 16 * 2); // blocks, not one quad a cell
+    // the stone page's worst chunk: the mosaic and a grate
+    expect(stoneLevel().chunk(3, 0).index.length / 3).toBeLessThan(PIECE_CHUNK_TRIS);
+  });
+
+  it('makes a cell that is all rock one quad', () => {
+    const m = floorMap(16, 16), plan = planSheets(m);
+    const a = buildStoneChunk(m, stoneField(m, new Uint8Array(256).fill(1), SEED), plan, noMarks(), 0, 0);
+    expect(a.index.length / 3).toBe(16 * 16 * 2);
+    expect(a.count).toBe(16 * 16 * 4);
   });
 
   it('a floor vertex\'s sheet is its block\'s own px in the chunk\'s layer', () => {
@@ -199,35 +212,52 @@ describe('buildStoneChunk', () => {
   });
 
   it('a face vertex\'s faceA or faceB lies inside its slot: a block\'s front reads the px in front of it, v = 0 at the wall\'s top', () => {
-    const m = ring();
+    // a wall five cells long (x 1..5, z 1) in open floor: its long faces have blocks that stand back between the corner stones
+    const m = floorMap(7, 3);
+    for (let x = 1; x <= 5; x++) m.set(x, 1, TILE_ID.Wall);
     const { a, plan } = build(m);
+    const sideOf = (d: number[]): number => (d[1] > 0.9 ? 0 : d[1] < -0.9 ? 1 : d[0] > 0.9 ? 2 : 3);
+    /** The slot of the face on `side` whose cell the vertex lies in (a vertex on a cell line may be either cell's), if `own` lies in it. */
+    const slotOf = (v: V, own: number[], side: number) => (side === 2 ? [5] : side === 3 ? [1] : [Math.floor(v.p[0]), Math.floor(v.p[0]) - 1]).filter((x) => x >= 1 && x <= 5)
+      .map((x) => ({ x, slot: plan.slotOf({ x, z: 1, side: side as 0 | 1 | 2 | 3 }) }))
+      .find(({ slot }) => own[2] === slot.layer && own[0] >= slot.u && own[0] <= slot.u + FACE_W && own[1] >= slot.v && own[1] <= slot.v + FACE_H);
     let fronts = 0, skirts = 0;
     for (const v of vertices(a)) {
       if (v.kind !== KIND.face) continue;
-      const inSlot = (own: number[], side: number): boolean => {
-        const slot = plan.slotOf({ x: 1, z: 1, side: side as 0 | 1 | 2 | 3 });
-        return own[2] === slot.layer && own[0] >= slot.u && own[0] <= slot.u + FACE_W && own[1] >= slot.v && own[1] <= slot.v + FACE_H;
-      };
       if (v.sheet[2] < 0) {
-        // a skirt or the foot: both planes read the block's own px, whichever way the skirt faces
+        // a skirt or the foot: both planes read the px of the block's own face, whichever way the skirt faces.
+        // A skirt's light is read in front of its face (`push`), which names the face; the foot faces out of it.
         skirts++;
         expect(v.B).toEqual(v.A);
-        expect([0, 1, 2, 3].some((s) => inSlot(v.A, s))).toBe(true);
+        const len = Math.hypot(v.push[0], v.push[1]), side = sideOf(len > 0 ? [v.push[0] / len, v.push[1] / len] : [v.n[0], v.n[2]]);
+        expect(slotOf(v, v.A, side), `skirt at ${v.p} of side ${side}`).toBeDefined();
         continue;
       }
       fronts++;
-      const side = v.n[2] > 0.9 ? 0 : v.n[2] < -0.9 ? 1 : v.n[0] > 0.9 ? 2 : 3;
-      const slot = plan.slotOf({ x: 1, z: 1, side: side as 0 | 1 | 2 | 3 });
-      const own = side < 2 ? v.A : v.B, other = side < 2 ? v.B : v.A;
+      const side = sideOf([v.n[0], v.n[2]]), own = side < 2 ? v.A : v.B, other = side < 2 ? v.B : v.A, at = slotOf(v, own, side);
       expect(other[2]).toBe(-1);
-      expect(inSlot(own, side)).toBe(true);
+      expect(at, `front at ${v.p} of side ${side}`).toBeDefined();
       // v = 0 (the slot's top) at y = WALL_H, a tile (32 px) per unit of height down
-      expect(own[1]).toBeCloseTo(slot.v + (WALL_H - v.p[1]) * 32, 4);
+      expect(own[1]).toBeCloseTo(at!.slot.v + (WALL_H - v.p[1]) * 32, 4);
       // u grows with +x on sides 0 and 1, +z on sides 2 and 3
-      expect(own[0]).toBeCloseTo(slot.u + (side < 2 ? v.p[0] - 1 : v.p[2] - 1) * FACE_W, 4);
+      expect(own[0]).toBeCloseTo(at!.slot.u + (side < 2 ? v.p[0] - at!.x : v.p[2] - 1) * FACE_W, 4);
     }
     expect(fronts).toBeGreaterThan(100);
     expect(skirts).toBeGreaterThan(50);
+  });
+
+  it('lays the stones of a wall\'s outer corner in the cell\'s edge, so the faces meet under the top\'s corner', () => {
+    // a pillar of one cell: every vertex of a front that lies on a cell line lies in the cell's edge too
+    const { a } = build(ring());
+    let ends = 0;
+    for (const v of vertices(a)) {
+      if (v.kind !== KIND.face || v.sheet[2] < 0) continue;
+      const along = Math.abs(v.n[2]) > 0.9 ? v.p[0] : v.p[2], across = Math.abs(v.n[2]) > 0.9 ? v.p[2] : v.p[0];
+      if (along !== 1 && along !== 2) continue;
+      ends++;
+      expect(across === 1 || across === 2, `end vertex ${v.p}`).toBe(true);
+    }
+    expect(ends).toBeGreaterThan(20);
   });
 
   it('leaves cells to another mesh when asked, and a chunk of only Void ground layer -1', () => {
@@ -235,7 +265,7 @@ describe('buildStoneChunk', () => {
     const plan = planSheets(m);
     const skipped = buildStoneChunk(m, stoneField(m), plan, noMarks(), 0, 0, (x) => x === 0);
     expect(vertices(skipped).some((v) => v.kind === KIND.floor)).toBe(false); // the Void's top and its west face; no floor
-    expect(vertices(skipped).filter((v) => v.kind === KIND.top).length).toBe(6);
+    expect(vertices(skipped).filter((v) => v.kind === KIND.top).length).toBe(4);
     const v = new TileMap(1, 1, Uint8Array.from([TILE_ID.Void]));
     const all = buildStoneChunk(v, stoneField(v), planSheets(v), noMarks(), 0, 0);
     expect(all.sheet[2]).toBe(-1);

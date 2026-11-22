@@ -17,7 +17,7 @@ export type FrameRects = Record<string, { x: number; y: number; w: number; h: nu
 /**
  * Per vertex: position (tiles), uv (the woodland ground's image px; zero on stone vertices), normal, kind, the
  * stone attributes (`sheet`, `faceA`, `faceB` as 3 values each, `push` as 2: see `stone/mesh.ts`; the woodland ground has layer -1) and an index.
- * 3 vertices per triangle, none shared (the woodland's ground: 6 per quad).
+ * `index`: three vertex numbers per triangle; `count`: vertices. The stone's flat pieces share theirs; the woodland's ground has 6 per quad.
  */
 export interface WorldArrays {
   position: Float32Array;
@@ -109,6 +109,10 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
     return out;
   };
   const NONE3 = [0, 0, -1];
+  // the ground's quads keep six vertices each; the stone's own index follows, moved past them
+  const index = new Uint32Array(groundCount + s.index.length);
+  for (let i = 0; i < groundCount; i++) index[i] = i;
+  for (let i = 0; i < s.index.length; i++) index[groundCount + i] = s.index[i] + groundCount;
   return {
     cx, cz,
     world: {
@@ -120,7 +124,7 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
       faceA: cat([], s.faceA, 3, NONE3),
       faceB: cat([], s.faceB, 3, NONE3),
       push: cat([], s.push, 2, []),
-      index: Uint32Array.from({ length: count }, (_, i) => i),
+      index,
       count,
     },
     min: [x0, -GRATE_DEPTH, z0], // floors lie at or below 0, a grate's shaft deepest
