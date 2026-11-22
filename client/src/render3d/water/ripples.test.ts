@@ -20,6 +20,16 @@ describe('ripples', () => {
     expect(Math.abs(peak(2).at - 1.5)).toBeLessThan(0.15);
   });
 
+  it('makes a negative strength the same ring at DROP.scale of the size: as steep, that much slower (#380)', () => {
+    for (const age of [0.3, 0.8, 1.5]) for (const d of [0.02, 0.1, 0.3, 0.6]) {
+      expect(rippleHeight(d, age, -0.7)).toBeCloseTo(DROP.scale * rippleHeight(d / DROP.scale, age, 0.7), 12);
+    }
+    expect(DROP.scale).toBeLessThan(1);
+    expect(Math.abs(peak(2, -1).at - 1.5 * DROP.scale)).toBeLessThan(0.15 * DROP.scale);
+    expect(peak(0.5, -1).max).toBeCloseTo(peak(0.5, 1).max * DROP.scale, 3);
+    expect(rippleHeight(0.2, RIPPLE_LIFE + 0.1, -1)).toBe(0);
+  });
+
   it('fades', () => {
     expect(peak(3).max).toBeLessThan(peak(0.5).max / 10);
   });

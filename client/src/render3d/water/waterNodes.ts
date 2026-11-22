@@ -12,7 +12,7 @@ import type { Sight } from '../sightNodes';
 import type { ViewToward } from '../materials';
 import { fbm2, vnoise2 } from '../noiseNodes';
 import { BED_RES, OUTLINE_EDGE, WATER_LEVEL } from '../dips/shape';
-import { PUDDLE_LEVEL } from './waterMesh';
+import { PUDDLE_LEVEL } from '../stone/shape';
 import { DROP, RIPPLE, RIPPLE_CAP, RIPPLE_LIFE, RIPPLE_SPEED } from './ripples';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,8 +39,10 @@ export const ABSORB = [0.55, 0.22, 0.16] as const, SCATTER = [0.004, 0.02, 0.022
  * way through the water is divided by. `WRAP`: the wrap of the light the scatter colour is lit by.
  */
 export const REFRACT = 0.012, MIRROR_BASE = 0.45, FRESNEL_GAIN = 6, MIRROR_MAX = 0.95, MIRROR_WOBBLE = 0.015, MIRROR_GAIN = 1.15, VIEW_MIN = 0.2, WRAP = 0.5;
-/** A puddle's ring (#380): the share of the light at the surface its sides add, rising between these two tilts of the normal (the calm waves stay below the first). */
-export const RING_SHEEN = { from: 0.2, to: 0.6, gain: 0.22 } as const;
+/** A puddle's ring (#380): the share of the light at the surface its sides add, rising between these two tilts of the normal toward the eye (the calm waves stay below the first). */
+export const RING_SHEEN = { from: 0.12, to: 0.4, gain: 0.6 } as const;
+/** A sheet at or above this height is a puddle's (`PUDDLE_LEVEL`), below it a pool's (`WATER_LEVEL`): only a puddle's rings get the sheen. */
+export const PUDDLE_GATE = (WATER_LEVEL + PUDDLE_LEVEL) / 2;
 /** The Fresnel term: the share mirrored looking straight down, and the power of its rise toward a grazing view. */
 const FRESNEL_0 = 0.02, FRESNEL_POW = 5;
 
@@ -121,8 +123,9 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
   const mirrorNode = texture(new Texture(), vec2(ndc.x.mul(0.5).add(0.5), float(0.5).sub(ndc.y.mul(0.5))).add(Nw.xz.mul(MIRROR_WOBBLE)));
   const fresnel = float(FRESNEL_0).add(pow(float(1).sub(max(dot(Nw, V), 0)), FRESNEL_POW).mul(1 - FRESNEL_0));
   const share = clamp(float(MIRROR_BASE).add(fresnel.mul(FRESNEL_GAIN * (1 - MIRROR_BASE))), 0, MIRROR_MAX).mul(uMirrorOn);
-  // A puddle (its sheet lies above a pool's) mirrors only dark rock, so a ring's steep sides also catch the light at the surface.
-  const sheen = smoothstep(RING_SHEEN.from, RING_SHEEN.to, length(Nw.xz)).mul(step((WATER_LEVEL + PUDDLE_LEVEL) / 2, P.y)).mul(RING_SHEEN.gain);
+  // A puddle (its sheet lies above a pool's) mirrors only dark rock, so a ring's sides that lean toward the eye also catch the light at
+  // the surface: one line a crest.
+  const sheen = smoothstep(RING_SHEEN.from, RING_SHEEN.to, dot(Nw.xz, V.xz)).mul(step(PUDDLE_GATE, P.y)).mul(RING_SHEEN.gain);
   const colour = mix(through, mirrorNode.rgb.mul(MIRROR_GAIN), share).add(lighting.glintAt(P, Nw, V)).add(lit.mul(sheen));
 
   const m = new MeshBasicNodeMaterial();

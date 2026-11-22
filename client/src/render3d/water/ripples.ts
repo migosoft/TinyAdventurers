@@ -27,7 +27,7 @@ export function rippleHeight(d: number, age: number, strength: number): number {
  * A puddle's drops (#380): one every `every` seconds on average, within this share of the puddle's radius from its middle; its ring has
  * this strength and `scale` of a pool ring's size (a pool's ring is as wide as a puddle).
  */
-export const DROP = { every: 5, strength: 0.8, within: 0.5, scale: 0.35 } as const;
+export const DROP = { every: 5, strength: 1, within: 0.4, scale: 0.5 } as const;
 
 /**
  * The drops that fall into the puddles after `from` and up to `to` (s): `emit` gets the puddle, the spot (tiles) and the time. Drop n of a

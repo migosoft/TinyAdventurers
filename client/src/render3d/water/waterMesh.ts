@@ -2,10 +2,8 @@ import type { TileMap } from '../../sim/map';
 import { DIP, WATER_LEVEL, liquidCell } from '../dips/shape';
 import { heightAt } from '../heights';
 import type { Puddle } from '../stone/place';
+import { PUDDLE_LEVEL } from '../stone/shape';
 import { CHUNK } from '../worldMesh';
-
-/** A puddle's surface (#380): below the lowest rock floor round a basin (`ROUGH` in stone/shape.ts), so the water ends where the basin's bed crosses it. */
-export const PUDDLE_LEVEL = -0.07;
 
 /** A height-0 cell that is water, or has a water tile among its eight neighbours (the rounded outline reaches into those). */
 export function waterCell(map: TileMap, x: number, z: number): boolean {

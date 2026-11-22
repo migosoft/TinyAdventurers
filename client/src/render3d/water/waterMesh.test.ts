@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { WATER_LEVEL } from '../dips/shape';
-import { PUDDLE_LEVEL, buildWaterChunk, waterCell } from './waterMesh';
+import { PUDDLE_LEVEL } from '../stone/shape';
+import { buildWaterChunk, waterCell } from './waterMesh';
 
 const T = TILE_ID;
 function with_(w: number, h: number, cells: [number, number, number][]) {

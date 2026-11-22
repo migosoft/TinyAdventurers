@@ -28,7 +28,9 @@ const FOOT_RISE = 0.05, STEEP = 2.2;
 /** The rock stands back from a big crystal: no slope within `NICHE_IN` tiles of its foot, the full one from `NICHE_OUT`. */
 const NICHE_IN = 0.16, NICHE_OUT = 0.5;
 /** A rock floor's corners lie up to this far below 0 (tiles), a puddle's basin this deep at its middle. */
-export const ROUGH = 0.06, BASIN = 0.09;
+export const ROUGH = 0.06, BASIN = 0.16;
+/** A puddle's water (tiles): below the lowest rock floor round a basin (`ROUGH`), so it ends where the basin's bed crosses it and never lies on the floor outside. */
+export const PUDDLE_LEVEL = -0.07;
 /** A basin's cell is meshed this fine (quads a side); the basin's depth is taken at those points. */
 export const BASIN_GRID = 4;
 /** A column's rings: the share of its height and the radius (tiles); the first is the cell's square outline. A column in less than full rock is squarer. */

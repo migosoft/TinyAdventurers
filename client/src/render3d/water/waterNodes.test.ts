@@ -5,8 +5,9 @@ import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
 import { fragment, readsInBranches, type Builder } from '../shaderCode.testutil';
-import { OUTLINE_EDGE } from '../dips/shape';
-import { ceilingMaterial, waterMaterial, type WaterMaterial } from './waterNodes';
+import { OUTLINE_EDGE, WATER_LEVEL } from '../dips/shape';
+import { PUDDLE_LEVEL } from '../stone/shape';
+import { PUDDLE_GATE, ceilingMaterial, waterMaterial, type WaterMaterial } from './waterNodes';
 
 const lighting = () => makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
 const water = (): WaterMaterial => waterMaterial(lighting(), makeSight(), new Texture(), { w: 4, h: 3 }, viewTowardUniform());
@@ -66,6 +67,16 @@ describe('the water and ceiling materials', () => {
       // No loop sits inside a loop of its own name, and a ripple loop sits in none.
       for (const l of ls) expect(l.outer, l.name).not.toContain(l.name);
       for (const l of ls.filter((x) => x.name === 'rp')) expect(l.outer).toEqual([]);
+    });
+
+    it(`${B.name}: only a puddle's sheet gets the ring sheen (#380)`, () => {
+      // the gate lies above a pool's sheet and not above a puddle's, and the shader steps on the surface's own height with it
+      expect(PUDDLE_GATE).toBeGreaterThan(WATER_LEVEL);
+      expect(PUDDLE_GATE).toBeLessThanOrEqual(PUDDLE_LEVEL);
+      const w = fragment(B, water().material);
+      const gate = `${PUDDLE_GATE}`.replace('.', '\\.');
+      expect(w).toMatch(new RegExp(`step\\(\\s*${gate}\\s*,\\s*\\w+\\.y\\s*\\)`));
+      expect((w.match(new RegExp(gate, 'g')) ?? []).length).toBe(1);
     });
 
     it(`${B.name}: the water discards outside the pool's outline`, () => {

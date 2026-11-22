@@ -11,7 +11,7 @@ import { FACE_H, FLAG } from './format';
 import { CAP, CRACK, MORTAR, MOSS_CREEP, SPAN, dampAt, dipMask, groove, keyAt, planeSeed, put, relief, tones, type GroundCtx } from './paintLaid';
 import { onPiece, type Marks } from './place';
 import type { Face } from './plan';
-import { stoneHeight } from './shape';
+import { PUDDLE_LEVEL, floorHeight, stoneHeight } from './shape';
 
 type Rgb = readonly [number, number, number];
 
@@ -41,6 +41,8 @@ const MOSS_EDGE = 0.45, MOSS_REACH = 1.6;
 const VEIN_CELL = 5, VEIN_SHARE = 0.3, VEIN_LEN = 0.5, VEIN_LEN_SPAN = 0.9, VEIN_TURN = 1.3;
 /** A puddle's basin is two tones darker, and one tone in a damp ring of this many px round it. */
 const DAMP_RING = 2;
+/** Under a puddle's water the rock is this share of the darkest tone, on a facet's edge and on the water's outline px these. */
+const SUNK = 0.5, SUNK_EDGE = 0.42, SHORE = 0.25;
 /** The bank of a pool, lava or a chasm in rock: from this value of the dip's outline mask (it differs by up to `BANK_SPAN` from facet to facet) the rock falls toward the dip with this slope. */
 const BANK_FROM = 0.12, BANK_SPAN = 0.28, BANK = 0.25;
 
@@ -116,11 +118,20 @@ export function rockLines(f: StoneField, map: TileMap, marks: Marks): RockLines 
   for (const c of marks.crevices) crack(c, PIT_PX, (c.width * STONE_PX) / 2);
   for (const p of marks.puddles) {
     const cu = p.x * STONE_PX, cv = p.z * STONE_PX, r = p.r * STONE_PX;
-    for (let v = Math.floor(cv - r - DAMP_RING); v <= cv + r + DAMP_RING; v++) for (let u = Math.floor(cu - r - DAMP_RING); u <= cu + r + DAMP_RING; u++) {
-      const d = Math.hypot(u + 0.5 - cu, v + 0.5 - cv);
+    const u0 = Math.floor(cu - r - DAMP_RING), v0 = Math.floor(cv - r - DAMP_RING), n = Math.ceil(2 * (r + DAMP_RING)) + 2;
+    // the px the puddle's water lies over: inside the basin, the floor (as the mesh has it) below the water's level
+    const sunk = new Uint8Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const x = u0 + i + 0.5, z = v0 + j + 0.5;
+      if (Math.hypot(x - cu, z - cv) < r && floorHeight(f, map, marks, x / STONE_PX, z / STONE_PX) < PUDDLE_LEVEL) sunk[j * n + i] = 1;
+    }
+    const wet = (i: number, j: number): boolean => i >= 0 && j >= 0 && i < n && j < n && sunk[j * n + i] === 1;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const u = u0 + i, v = v0 + j, d = Math.hypot(u + 0.5 - cu, v + 0.5 - cv);
       if (d >= r + DAMP_RING || u < 0 || v < 0 || u >= W || v >= H) continue;
-      const m = maskOf(u, v), i = (v & 31) * STONE_PX + (u & 31);
-      m[i] = Math.max(m[i], d < r ? WET * 2 : WET); // a line that crosses the puddle is dropped here: never a crack over a puddle
+      const shore = wet(i, j) && !(wet(i - 1, j) && wet(i + 1, j) && wet(i, j - 1) && wet(i, j + 1));
+      const m = maskOf(u, v), k = (v & 31) * STONE_PX + (u & 31);
+      m[k] = Math.max(m[k], WET * (shore ? 4 : wet(i, j) ? 3 : d < r ? 2 : 1)); // a line that crosses the puddle is dropped here: never a crack over a puddle
     }
   }
   // veins wander by straight pieces; a patch's second vein runs beside the first
@@ -177,6 +188,12 @@ function rockPx(out: Uint8Array, at: number, seed: number, u: number, v: number,
   }
   if (line === VEIN_PX && !edge) { out[at] = VEIN[0]; out[at + 1] = VEIN[1]; out[at + 2] = VEIN[2]; out[at + 3] = a; return; }
   let tone = FACET_TONE[Math.floor(fTone * 4)] - (edge ? EDGE_TONES : 0) - (mark >> 2);
+  if (mark >= WET * 3) {
+    // under a puddle's water: the darkest stone darker still, the facets only faint; the water's outline px darkest
+    const k = mark >= WET * 4 ? SHORE : edge ? SUNK_EDGE : SUNK;
+    out[at] = pal[0] * k; out[at + 1] = pal[1] * k; out[at + 2] = pal[2] * k; out[at + 3] = a;
+    return;
+  }
   const g = hash(seed, u, v, 51);
   if (g < GRAIN_DARK) tone--;
   else if (g > 1 - GRAIN_LIGHT) tone++;
