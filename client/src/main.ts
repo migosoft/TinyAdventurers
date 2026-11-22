@@ -7,7 +7,7 @@ import { loadAtlas, type Atlas } from './ui/atlas';
 import { showAuth } from './ui/auth';
 import { Create } from './ui/create';
 import { Hub } from './ui/hub/hub';
-import { Hud } from './ui/hud';
+import { Hud, esc } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
@@ -17,7 +17,7 @@ import './style.css';
 import './ui/screens.css';
 
 function fatal(ui: HTMLElement, msg: string): void {
-  ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${msg}</div></div>`;
+  ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${esc(msg)}</div></div>`;
 }
 
 /** Login, then the roster; opening a character connects to the game and shows its hub. */

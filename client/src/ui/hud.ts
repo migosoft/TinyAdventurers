@@ -1,7 +1,6 @@
 import { ABILITIES, EFFECT, EFFECTS, FLAG } from '../generated/defs';
 import type { Attr } from '../generated/Attr';
 import type { BossId } from '../generated/BossId';
-import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
 import type { PlayerStats } from '../generated/PlayerStats';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
@@ -150,6 +149,9 @@ export class Hud {
   private hpFill = el('div', 'fill');
   private hpText = el('span');
   private fx = el('div', 'effects');
+  private rows = new Map<number, HTMLElement>(); // party row per hero entity, filled in startRun
+  private bossKey = ''; // kind and immunity of the boss box as built; '' = not built
+  private bossFill: HTMLElement | null = null;
   private fxKey = '';  // the shown icons' kinds, seconds, amounts, paused flags and chip ids
   private coins = el('div', 'coins');
   private coinCount = 0;
@@ -255,6 +257,7 @@ export class Hud {
     this.end.classList.add('hidden');
     this.debugBadge.classList.add("hidden");
     this.boss.classList.add('hidden');
+    this.bossKey = '';
     this.banner.classList.add('hidden');
     this.setAsleep(false);
     this.charm.update(null, 0);
@@ -274,6 +277,7 @@ export class Hud {
       this.slots[i].classList.remove('flash', 'disabled');
     });
     this.party.innerHTML = '';
+    this.rows.clear();
     for (const p of info.players) {
       const row = el('div', `member c-${p.class.toLowerCase()}`);
       row.dataset.ent = String(p.ent);
@@ -287,6 +291,7 @@ export class Hud {
       row.append(pname, el('div', 'mini'), el('div', 'pfx'));
       row.querySelector('.mini')!.append(el('div', 'fill'));
       this.party.append(row);
+      this.rows.set(p.ent, row);
     }
   }
 
@@ -322,7 +327,7 @@ export class Hud {
       else if (by === null && heart) heart.remove();
     }
     for (const e of s.ents) {
-      const row = this.party.querySelector<HTMLElement>(`[data-ent="${e[0]}"]`);
+      const row = this.rows.get(e[0]);
       if (!row) continue;
       const dead = (e[8] & FLAG.DEAD) !== 0;
       row.classList.toggle('dead', dead);
@@ -347,8 +352,14 @@ export class Hud {
     }
     if (s.boss) {
       this.boss.classList.remove('hidden');
-      const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}`;
-      this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].name} ${tags}</div><div class="bbar"><div class="fill" style="width:${(s.boss.hp / s.boss.max_hp) * 100}%"></div></div>`;
+      const key = `${s.boss.kind}|${s.boss.immune}`;
+      if (key !== this.bossKey) {
+        this.bossKey = key;
+        const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}`;
+        this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].name} ${tags}</div><div class="bbar"><div class="fill"></div></div>`;
+        this.bossFill = this.boss.querySelector('.fill');
+      }
+      this.bossFill!.style.width = `${(s.boss.hp / s.boss.max_hp) * 100}%`;
     }
     if (!s.me.alive) {
       const watched = info.players.find((p) => p.ent === s.me.spectating)?.name;
@@ -493,8 +504,6 @@ export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-export type { ClassId };
-
 /** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`) with a tooltip. */
 export function effectChipHtml(k: number, left: number, amount: number, paused = false): string {
   const drain = DRAIN_TEXT[k];
@@ -511,18 +520,10 @@ export function effectChipHtml(k: number, left: number, amount: number, paused =
 const NODE_NAMES: Record<string, string> = {};
 for (const tree of Object.values(TREES)) for (const [id, n] of Object.entries(tree.nodes)) NODE_NAMES[id] = n.name;
 
-/**
- * The own effect row: one icon per kind (an unpaused entry wins, with the longest time left; a kind whose entries
- * are all paused shows greyed), then a small grey chip with the name of each paused item and node.
- */
-export function effectsHtml(list: Snapshot['me']['effects'], items: readonly ItemId[], nodes: readonly NodeId[]): string {
-  return effectsRowHtml(effectRows(list), items, nodes);
-}
-
 type EffectRow = readonly [kind: number, left: number, amount: number, paused: boolean];
 
 /** One row per kind: timer from the unpaused entry with the longest time left; the amount sums the unpaused entries (all, if every entry is paused). */
-function effectRows(list: Snapshot['me']['effects']): EffectRow[] {
+export function effectRows(list: Snapshot['me']['effects']): EffectRow[] {
   const best = new Map<number, { left: number; paused: boolean; unpaused: number; all: number }>();
   for (const [k, left, amount, paused] of list) {
     const cur = best.get(k);
@@ -540,7 +541,8 @@ function effectRows(list: Snapshot['me']['effects']): EffectRow[] {
   return [...best].map(([k, c]) => [k, Math.ceil(c.left), c.paused ? c.all : c.unpaused, c.paused] as const);
 }
 
-function effectsRowHtml(rows: readonly EffectRow[], items: readonly ItemId[], nodes: readonly NodeId[]): string {
+/** The own effect row: one icon per kind, then a small grey chip with the name of each paused item and node. */
+export function effectsRowHtml(rows: readonly EffectRow[], items: readonly ItemId[], nodes: readonly NodeId[]): string {
   const icons = rows.map(([k, left, amount, paused]) => effectChipHtml(k, left, amount, paused));
   const chips = [...items.map((i) => ITEMS[i].name), ...nodes.map((n) => NODE_NAMES[n] ?? n)].map((n) => `<span class="pchip">${esc(n)}</span>`);
   return icons.concat(chips).join('');

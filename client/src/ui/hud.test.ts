@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, debugBadgeHtml, effectChipHtml, effectsHtml, helpHtml, secondaryLabel, statsText } from './hud';
+import { Hud, debugBadgeHtml, effectChipHtml, effectRows, effectsRowHtml, helpHtml, secondaryLabel, statsText } from './hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EFFECT } from '../generated/defs';
+import { BOSS_TEXT } from './text';
 import { EFFECT_ICON } from './effectIcons';
 
 describe('secondaryLabel', () => {
@@ -156,6 +157,35 @@ describe('Hud', () => {
     expect(rows[0].textContent).toBe('Al (you)');
     expect(rows[1].querySelector('em')).toBeNull();
   });
+  describe('boss box', () => {
+    const snapOf = (hp: number, immune: boolean, kind: string = 'Lich') =>
+      ({
+        me: { hp: 10, max_hp: 10, alive: true, effects: [], paused_items: [], paused_nodes: [] },
+        ents: [],
+        boss: { kind, hp, max_hp: 200, immune },
+      }) as unknown as Parameters<Hud['snapshot']>[0];
+    // The markup the box had when it was rebuilt on every snapshot.
+    const old = (s: ReturnType<typeof snapOf>) => {
+      const b = s.boss!;
+      const d = document.createElement('div');
+      d.innerHTML = `<div class="bname">${BOSS_TEXT[b.kind as 'Lich'].name} ${b.immune ? '<b class="chip immune">Immune</b>' : ''}</div><div class="bbar"><div class="fill"></div></div>`;
+      d.querySelector<HTMLElement>('.fill')!.style.width = `${(b.hp / b.max_hp) * 100}%`; // same serialisation as the live box
+      return d.innerHTML;
+    };
+    it('is built once and keeps its markup while only the fill and the Immune chip change', () => {
+      hud.startRun(RUN);
+      const box = document.querySelector('.boss')!;
+      for (const [hp, immune] of [[150, false], [100, true], [90, true], [50, false]] as const) {
+        const s = snapOf(hp, immune);
+        hud.snapshot(s, RUN);
+        expect(box.innerHTML).toBe(old(s));
+      }
+      const fill = box.querySelector('.fill');
+      hud.snapshot(snapOf(20, false), RUN);
+      expect(box.querySelector('.fill')).toBe(fill);
+      expect(box.innerHTML).toBe(old(snapOf(20, false)));
+    });
+  });
   describe('effect symbols', () => {
     const info = {
       you: 1,
@@ -240,7 +270,9 @@ describe('effectChipHtml', () => {
   });
 });
 
-describe('effectsHtml', () => {
+describe('the own effect row', () => {
+  const effectsHtml = (list: Parameters<typeof effectRows>[0], items: Parameters<typeof effectsRowHtml>[1], nodes: Parameters<typeof effectsRowHtml>[2]) =>
+    effectsRowHtml(effectRows(list), items, nodes);
   const host = (html: string) => {
     const d = document.createElement('div');
     d.innerHTML = html;

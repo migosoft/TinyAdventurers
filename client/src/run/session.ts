@@ -410,12 +410,14 @@ export class RunSession {
    */
   private inMelee(x: number, y: number): boolean {
     const reach = this.runInfo.fallback.range;
-    return [...this.ents.values()].some((e) => {
+    for (const e of this.ents.values()) {
       // A closed chest is struck like the hidden mimic it may be.
-      if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
+      if (e.kind === KIND.Chest) {
+        if (e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach) return true;
       // A flying dragon is out of reach, and a calm animal is no melee foe (a grudging boar is sent Hostile).
-      return e.id !== this.runInfo.you && meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
-    });
+      } else if (e.id !== this.runInfo.you && meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach) return true;
+    }
+    return false;
   }
 
   /** False for a pick an Attribute drain disabled (a ranged primary in melee still strikes). */
