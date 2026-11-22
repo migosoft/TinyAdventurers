@@ -123,6 +123,35 @@ describe('the block layout', () => {
     expect(ids).toBeGreaterThan(CIRCLE_STONES[1]);
   });
 
+  it('answers for the field asked, whatever was asked before', () => {
+    const other = stoneField(map, null, 8);
+    // a far px first, so the answer cannot come from the last one
+    const wall = (wallBlockAt(other, map, face, 5000, 3), wallBlockAt(other, map, face, 330, 3));
+    const ground = (floorBlockAt(other, map, none, 2900, 40), floorBlockAt(other, map, none, 300, 500));
+    expect(wallBlockAt(laid, map, face, 330, 3)).not.toEqual(wall);
+    floorBlockAt(other, map, none, 40, 40);
+    expect(wallBlockAt(other, map, face, 330, 3)).toEqual(wall);
+    expect(floorBlockAt(laid, map, none, 300, 500)).not.toEqual(ground);
+    wallBlockAt(other, map, face, 330, 3);
+    expect(floorBlockAt(other, map, none, 300, 500)).toEqual(ground);
+    // a piece's stones follow the field too
+    const rect = (b: Block | null): number[] => [b!.u0, b!.v0, b!.u1, b!.v1];
+    const marks = (): Marks => ({ ...noMarks(), pieces: [{ kind: 'circle', x: 10.5, z: 10.5, r: 1.5 }] });
+    const shared = marks(), at = (f: typeof laid, m: Marks): number[][] => [0, 1, 2, 3, 4, 5].map((i) => rect(floorBlockAt(f, map, m, 336 + Math.round(Math.cos(i) * 34), 336 + Math.round(Math.sin(i) * 34))));
+    const first = at(laid, shared);
+    expect(at(other, shared)).toEqual(at(other, marks()));
+    expect(at(other, shared)).not.toEqual(first);
+  });
+
+  it('holds every px of a piece that is not centred on a cell', () => {
+    const p: FloorPiece = { kind: 'circle', x: 10.5, z: 10.8, r: 1.5 }, marks: Marks = { ...noMarks(), pieces: [p] };
+    for (let z = 293; z < 398; z++) for (let x = 285; x < 390; x++) {
+      const b = floorBlockAt(laid, map, marks, x, z);
+      expect(b, `${x},${z}`).toBeTruthy();
+      expect(b!.piece?.of === p).toBe(Math.hypot(x + 0.5 - p.x * STONE_PX, z + 0.5 - p.z * STONE_PX) < p.r * STONE_PX);
+    }
+  });
+
   it('keeps its blocks for a seed', () => {
     const pin = (b: Block | null): string => (b ? `${b.id}:${b.u0},${b.v0},${b.u1},${b.v1}:${b.stone}${b.level}${b.frieze ? 'f' : ''}` : 'rock');
     expect([[40, 40], [300, 500], [1000, 77], [2222, 3111]].map(([x, z]) => pin(floorBlockAt(laid, map, none, x, z)))).toEqual(['65542:37,39,61,59:10', '393236:270,484,311,502:00', '81982:988,73,1031,87:20', '2343046:2207,3106,2232,3121:10']);

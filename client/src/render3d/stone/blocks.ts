@@ -38,8 +38,8 @@ const TILT = 0.0005;
 const BROWN = 0.5, GREY = 0.27;
 /** The floor's slabs: one per cell of this grid (px), whose corners are shifted by up to the jitter (below half a cell). */
 const SLAB_U = 34, SLAB_V = 22, SLAB_JU = 11, SLAB_JV = 7;
-/** A slab at least this long (px) is cut in two with this chance, at 35 to 65 % of its length. */
-const SPLIT_MIN = 26, SPLIT_SHARE = 0.4;
+/** A slab at least this long (px) is cut in two with this chance; the cut lies at `SPLIT_FROM` to `SPLIT_FROM + SPLIT_SPAN` of its length. */
+const SPLIT_MIN = 26, SPLIT_SHARE = 0.4, SPLIT_FROM = 0.35, SPLIT_SPAN = 0.3;
 /** The walls' courses: their edges in px down from the wall's top (64 px), and the one that is the frieze, just below the top third. */
 export const COURSES = [0, 10, 21, 29, 41, 52, 64];
 export const FRIEZE_COURSE = 2;
@@ -58,6 +58,8 @@ const MOSAIC_BAND = 2, MOSAIC_BORDER = 2;
 /** The ring number of a mosaic's border. */
 export const MOSAIC_BORDER_RING = 99;
 
+// The ids pack a block's place into bit fields (slab cell, wall plane, course and joint, piece and stone): they assume a map of fewer than
+// 1024 cells a side and px no lower than -64.
 const WALL_ID = 2 ** 29, PIECE_ID = 2 ** 30;
 const GREY_STONE = 1, SAND = 2;
 
@@ -74,7 +76,10 @@ const MADE_MAX = 20000;
  * the border up block by block. A frieze block is raised, level sandstone.
  */
 function block(f: StoneField, map: TileMap, id: number, u0: number, v0: number, u1: number, v1: number, x: number, z: number, frieze = false): Made {
-  if (madeF !== f || madeMap !== map || made.size >= MADE_MAX) { made = new Map(); madeF = f; madeMap = map; }
+  if (madeF !== f || madeMap !== map || made.size >= MADE_MAX) {
+    made = new Map(); madeF = f; madeMap = map;
+    lastFloor = lastWall = null; // they were made for the field and map before
+  }
   let m = made.get(id);
   if (m) return m;
   const s = hash(f.seed, id, 1, 31), l = hash(f.seed, id, 2, 31);
@@ -108,7 +113,7 @@ function slabAt(f: StoneField, map: TileMap, pu: number, pv: number): Made {
     let half = 0;
     const wide = u1 - u0 >= v1 - v0, long = wide ? u1 - u0 : v1 - v0;
     if (long >= SPLIT_MIN && hash(s, i, j, 13) < SPLIT_SHARE) {
-      const cut = (wide ? u0 : v0) + Math.round(long * (0.35 + 0.3 * hash(s, i, j, 14)));
+      const cut = (wide ? u0 : v0) + Math.round(long * (SPLIT_FROM + SPLIT_SPAN * hash(s, i, j, 14)));
       half = (wide ? pu : pv) < cut ? 0 : 1;
       if (wide) { if (half) u0 = cut; else u1 = cut; } else if (half) v0 = cut; else v1 = cut;
     }
@@ -118,7 +123,7 @@ function slabAt(f: StoneField, map: TileMap, pu: number, pv: number): Made {
 }
 
 // ---- floor pieces: every px of a piece's disc is worked out once, which also gives each stone's bounding box.
-interface PieceStones { u0: number; v0: number; n: number; at: Int16Array; blocks: Block[] }
+interface PieceStones { seed: number; salt: number; u0: number; v0: number; n: number; at: Int16Array; blocks: Block[] }
 const pieceStones = new WeakMap<FloorPiece, PieceStones>();
 
 /** Ring and index of the stone at (du, dv) px from a circle's centre, `k` the distance as a share of the radius. */
@@ -137,10 +142,11 @@ function mosaicStone(r: number, du: number, dv: number): [number, number] {
 
 function stonesOf(f: StoneField, marks: Marks, p: FloorPiece): PieceStones {
   let t = pieceStones.get(p);
-  if (t) return t;
-  const cx = p.x * STONE_PX, cz = p.z * STONE_PX, r = p.r * STONE_PX, salt = marks.pieces.indexOf(p);
-  const u0 = Math.floor(cx - r), v0 = Math.floor(cz - r), n = Math.ceil(cx + r) - u0;
-  t = { u0, v0, n, at: new Int16Array(n * n).fill(-1), blocks: [] };
+  const salt = marks.pieces.indexOf(p);
+  if (t && t.seed === f.seed && t.salt === salt) return t; // the stones follow the seed and the piece's place in the marks
+  const cx = p.x * STONE_PX, cz = p.z * STONE_PX, r = p.r * STONE_PX;
+  const u0 = Math.floor(cx - r), v0 = Math.floor(cz - r), n = Math.max(Math.ceil(cx + r) - u0, Math.ceil(cz + r) - v0);
+  t = { seed: f.seed, salt, u0, v0, n, at: new Int16Array(n * n).fill(-1), blocks: [] };
   const byKey = new Map<number, number>();
   for (let v = 0; v < n; v++) for (let u = 0; u < n; u++) {
     const du = u0 + u + 0.5 - cx, dv = v0 + v + 0.5 - cz, d = Math.hypot(du, dv);
