@@ -583,6 +583,29 @@ mod tests {
     }
 
     #[test]
+    fn a_charmed_hero_gets_through_a_door_its_body_only_just_fits_off_the_centre_line() {
+        // A wall column with a one-tile door; the hero and its foe share a y a few px off the door's centre line,
+        // so the centre line passes but the body (radius 5) would catch the jamb.
+        for off in [0.0, 3.0, 4.0, 5.0, 6.0, -4.0, -6.0] {
+            let mut run = arena(&[ClassId::Paladin, ClassId::Paladin]);
+            tough(&mut run, 0);
+            let (tx, ty) = Map::tile_of(run.players[0].pos());
+            for y in ty - 3..=ty + 3 {
+                run.layout.map.set(tx + 3, y, Tile::Wall);
+            }
+            run.layout.map.set(tx + 3, ty, Tile::Floor);
+            let (a, b) = (Map::center_of(tx + 7, ty) + Vec2::new(0.0, off), Map::center_of(tx - 1, ty) + Vec2::new(0.0, off));
+            put(&mut run, 0, a);
+            put(&mut run, 1, b);
+            let orc = held_orc(&mut run, -40.0);
+            charm_hero(&mut run, 1, orc, 30.0);
+            steps(&mut run, 360);
+            let d = run.players[1].pos().dist(run.players[0].pos());
+            assert!(d <= 32.0, "{off} px off the door row: still {d} px away");
+        }
+    }
+
+    #[test]
     fn a_charmed_hero_walks_round_a_barrel_in_its_way() {
         use crate::defs::kinds::EntityKind;
         use crate::run::objects::{Barrel, ObjState};

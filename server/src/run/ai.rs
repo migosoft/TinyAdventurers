@@ -235,7 +235,9 @@ pub fn plan_step(run: &Run, w: &Walker, path: &mut Vec<Vec2>, repath_t: &mut f64
     let wide = w.radius > TILE / 2.0;
     let side = (goal - pos).norm().perp() * w.radius;
     let map = &run.layout.map;
-    if (!w.eight || along_eight(goal - pos)) && walk_line(map, pos, goal, w.mover) && (w.mover == Mover::Incorporeal || object_free_line(run, pos, goal, w.radius)) && (!wide || terrain_line(map, pos + side, goal + side, w.mover) && terrain_line(map, pos - side, goal - side, w.mover)) {
+    // An 8-direction walker never slides along a wall, so its whole body must clear the line, not only its centre.
+    let body_clear = !w.eight || along_eight(goal - pos) && walk_line(map, pos + side, goal + side, w.mover) && walk_line(map, pos - side, goal - side, w.mover);
+    if body_clear && walk_line(map, pos, goal, w.mover) && (w.mover == Mover::Incorporeal || object_free_line(run, pos, goal, w.radius)) && (!wide || terrain_line(map, pos + side, goal + side, w.mover) && terrain_line(map, pos - side, goal - side, w.mover)) {
         path.clear();
         return Step::Straight(goal);
     }
