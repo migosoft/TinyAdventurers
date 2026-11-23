@@ -1060,7 +1060,8 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
     // A point it bursts at stops it, so it outlives its range a little.
     let mut life = a.range / a.speed + if target.is_some() { 0.1 } else { 0.0 };
     // The landing, not the life, ends an arcing shot.
-    let arc = land.map(|d| Arc { flight: super::arc::flight_time(d, a.speed), flown: 0.0, land: pos + dir * d });
+    // It lands `d` px from the user, so `d - 6` px from the spawn point.
+    let arc = land.map(|d| Arc { flight: super::arc::flight_time(d - 6.0, a.speed), flown: 0.0, land: pos + dir * (d - 6.0) });
     if let Some(arc) = &arc {
         life = arc.flight + 1.0 / TICK_HZ;
     }
@@ -1160,6 +1161,10 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         pr.pos = pr.pos + pr.vel * sdt;
         if let Some(arc) = &mut pr.arc {
             arc.flown += sdt;
+            // The landing substep ends at the landing point, not past it.
+            if arc.flown >= arc.flight - 1e-9 {
+                pr.pos = arc.land;
+            }
         }
         let pos = pr.pos;
         if aim_reached(pr, pos) {
@@ -2260,7 +2265,8 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
         let p = run.players[0].pos();
-        run.players[1].mv.x = p.x - 10.0;
+        // An arc lands on the Wizard it aims at, so the Paladin stands within reach of that landing point.
+        run.players[1].mv.x = p.x - 5.0;
         run.players[1].mv.y = p.y;
         run.players[0].hp = 1.0;
         let id = run.spawn_enemy(EnemyType::OrcArcher, p + Vec2::new(60.0, 0.0), None);
@@ -4152,7 +4158,7 @@ mod tests {
     #[test]
     fn an_arrow_lands_where_the_pointer_was() {
         let mut run = ranger_fires(100.0, 0.0);
-        let start = run.players[0].pos().x + 6.0;
+        let start = run.players[0].pos().x;
         shots_fly(&mut run, 60);
         let l = lands(&run);
         assert_eq!(l.len(), 1, "{l:?}");
@@ -4163,7 +4169,7 @@ mod tests {
     #[test]
     fn no_pointer_flies_the_full_range() {
         let mut run = ranger_fires(0.0, 0.0);
-        let (start, range) = (run.players[0].pos().x + 6.0, run.players[0].sheet.primary.range);
+        let (start, range) = (run.players[0].pos().x,run.players[0].sheet.primary.range);
         shots_fly(&mut run, 120);
         let l = lands(&run);
         assert!(l.len() == 1 && (l[0].0 - (start + range)).abs() < 0.5, "{l:?}");
@@ -4172,7 +4178,7 @@ mod tests {
     #[test]
     fn a_near_pointer_lands_at_24() {
         let mut run = ranger_fires(5.0, 0.0);
-        let start = run.players[0].pos().x + 6.0;
+        let start = run.players[0].pos().x;
         shots_fly(&mut run, 30);
         let l = lands(&run);
         assert!(l.len() == 1 && (l[0].0 - (start + 24.0)).abs() < 0.5, "{l:?}");
@@ -4205,8 +4211,23 @@ mod tests {
 
     #[test]
     fn an_arrow_at_the_feet_hits_before_landing() {
+        // The goblin stands exactly on the landing point: the arrow touches it on the way down.
         let (lost, landed) = arrow_at_goblin(70.0, 70.0, |_, _| {});
         assert!(lost > 0.0 && landed == 0, "lost {lost}, landed {landed}");
+    }
+
+    #[test]
+    fn a_creature_just_beyond_the_landing_point_is_not_hit() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let gi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 70.0, 1000.0);
+        // Its edge is 0.5 px out of the arrow's reach at the landing point.
+        run.monsters[gi].pos.x += run.monsters[gi].radius + run.players[0].sheet.primary.radius + 0.5;
+        run.players[0].aim = 0.0;
+        run.players[0].aim_dist = 70.0;
+        try_use(&mut run, 0, true, 1);
+        shots_fly(&mut run, 60);
+        assert_eq!((run.monsters[gi].hp, lands(&run).len()), (1000.0, 1));
     }
 
     #[test]
@@ -4222,7 +4243,7 @@ mod tests {
     #[test]
     fn a_fast_forwarded_near_shot_lands_at_once() {
         let run = ranger_fires(24.0, 0.3);
-        let start = run.players[0].pos().x + 6.0;
+        let start = run.players[0].pos().x;
         let l = lands(&run);
         assert!(l.len() == 1 && (l[0].0 - (start + 24.0)).abs() < 0.5, "{l:?}");
         assert!(run.projectiles.iter().all(|p| p.dead));
@@ -4236,11 +4257,11 @@ mod tests {
         run.players[0].aim_dist = 80.0;
         try_use(&mut run, 0, true, 1);
         shots_fly(&mut run, 90);
-        let start = run.players[0].pos() + Vec2::new(0.0, 0.0);
+        let start = run.players[0].pos();
         let dir = Vec2::from_angle(0.0);
         let l = lands(&run);
         assert_eq!(l.len(), VOLLEY_ARROWS as usize, "{l:?}");
-        let ds: Vec<f64> = l.iter().map(|&(x, y)| (Vec2::new(x, y) - (start + dir * 6.0)).len()).collect();
+        let ds: Vec<f64> = l.iter().map(|&(x, y)| (Vec2::new(x, y) - start).len()).collect();
         assert!(ds.iter().all(|d| (d - 80.0).abs() < 0.5), "{ds:?}");
         assert!(l.iter().all(|&(x, y)| (Vec2::new(x, y) - start).x * dir.x + (Vec2::new(x, y) - start).y * dir.y > 0.0));
     }
@@ -4249,12 +4270,20 @@ mod tests {
     fn magic_still_flies_flat() {
         let mut run = run_with_ability(ClassId::Wizard, AbilitySlot::Primary, AbilityId::MagicMissile, Attributes::default(), Equipment::starter(ClassId::Wizard));
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        run.players[0].aim = 0.0;
+        let start = run.players[0].pos();
+        // A direction with 150 px of open floor, so no wall stops the missile short.
+        let aim = (0..8).map(|k| k as f64 * std::f64::consts::FRAC_PI_4).find(|&a| line_of_sight(&run.layout.map, start, start + Vec2::from_angle(a) * 150.0)).expect("an open direction");
+        run.players[0].aim = aim;
         run.players[0].aim_dist = 100.0;
         try_use(&mut run, 0, true, 1);
         assert!(run.projectiles.len() == 1 && run.projectiles[0].arc.is_none(), "a flat shot");
-        shots_fly(&mut run, 20);
+        let mut furthest: f64 = 0.0;
+        for _ in 0..40 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            furthest = run.projectiles.iter().map(|p| p.pos.dist(start)).fold(furthest, f64::max);
+        }
         assert!(lands(&run).is_empty(), "a flat shot never lands");
+        assert!(furthest > 100.0, "it flies past the pointer's 100 px, reached {furthest}");
     }
 
     #[test]
@@ -4461,7 +4490,7 @@ mod monster_uses {
         assert_eq!(shot.side, Side::Hostile);
         let range = run.monsters[mi].kit.get(AbilityId::Shoot).unwrap().range;
         let speed = run.monsters[mi].kit.get(AbilityId::Shoot).unwrap().speed;
-        assert!(range > 60.0 && (shot.life - (60.0 / speed + 1.0 / TICK_HZ)).abs() < 1e-9, "it flies to the aimed point and lands a tick later at the latest");
+        assert!(range > 60.0 && (shot.life - ((60.0 - 6.0) / speed + 1.0 / TICK_HZ)).abs() < 1e-9, "it flies to the aimed point and lands a tick later at the latest");
     }
 
     #[test]
