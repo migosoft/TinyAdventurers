@@ -55,7 +55,7 @@ The keys sit in the same place on every keyboard layout: on a German (QWERTZ) ke
 
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3), and the **Quality** choice (see above). The keys and the checkboxes always agree.
 
-On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
+On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a barrel or a torch, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"; chests open when you walk into them). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
 
 ## The heroes
 
