@@ -10,7 +10,7 @@
 import { decode } from '../../client/node_modules/@msgpack/msgpack/dist.esm/index.mjs';
 import { tag, markDebug, login, createCharacter, deleteAccount, purge } from './account.mjs';
 import { launch, gpuOn, printGpu } from './gpu.mjs';
-import { VIEWPORT, watchPage, saveReadback, r3dState, backendQuery } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, saveReadback, r3dState, backendQuery, waitLoaded } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots';
@@ -91,6 +91,7 @@ try {
   }
   await page.click('#start');
   await page.waitForSelector('#game.active', { timeout: 10000 });
+  await waitLoaded(page);
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   if (gpuOn) await printGpu(page);
   const t0 = await page.evaluate(() => performance.now()); // the build window starts here

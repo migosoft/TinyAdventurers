@@ -5,7 +5,7 @@
 // charm-run-on.png (haze) and charm-run-off.png (after the end). Deletes its throwaway account.
 import { tag, login, createCharacter, markDebug, deleteAccount, purge } from './account.mjs';
 import { launch } from './gpu.mjs';
-import { VIEWPORT, watchPage, pageUrl, r3dState } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, pageUrl, r3dState, waitLoaded } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -31,6 +31,7 @@ try {
   await page.waitForSelector('.players li');
   await page.click('#start');
   await page.waitForSelector('#game.active', { timeout: 15000 });
+  await waitLoaded(page);
   // The 3D run starts late in software: F8 is dropped until the session knows it is a debug run (the badge) and is drawing frames.
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   await page.waitForSelector('.debug-badge', { timeout: 30000 });

@@ -11,6 +11,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 5. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined. Several players may play the same class.
 6. The host **chooses the level**, **Dungeon** or **Woodland**. For the Dungeon the host also **chooses the end boss**, or leaves it on **Random**. Everyone sees the choices.
 7. Everyone except the host clicks **Ready!**. When the whole party is ready, the host clicks **Enter the dungeon** (or **Enter the woodland**).
+8. A **loading screen** (logo, progress bar, a line saying what is being built) shows while your game prepares the level. When yours is ready it says **Waiting for players (2 of 3 ready)…**: the run starts for everybody together, so nobody is attacked while others still load. You cannot leave or pause while it shows. If a player's computer is slow, the others start after **60 seconds** without them; that player joins as soon as their level is ready, and cannot be hurt until then.
 
 ## Controls
 

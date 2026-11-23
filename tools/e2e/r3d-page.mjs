@@ -24,6 +24,11 @@ export function backendQuery() {
   return process.env.BACKEND === 'webgpu' ? '' : 'backend=webgl';
 }
 
+/** The loading screen (#322) is up from RunStarted until the party starts together: wait until it is hidden. */
+export async function waitLoaded(page, timeout = 90000) {
+  await page.waitForSelector('.loading-screen', { state: 'hidden', timeout });
+}
+
 /** What the run publishes as `window.__r3d`, the numbers the checks read. */
 export function r3dState(page) {
   return page.evaluate(() => {

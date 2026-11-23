@@ -9,7 +9,7 @@
 // The debug keys (F4, F8, F9, the rules log) are checked by r3d-run.mjs, which uses a debug account.
 import { PASSWORD, tag, login, deleteAccount, purge } from './account.mjs';
 import { launch } from './gpu.mjs';
-import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback, waitLoaded } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -98,6 +98,7 @@ try {
   if (level === 'woodland') await p2.waitForSelector('.level-card.level-woodland.selected'); // the guest sees the host's choice
   await p1.click('#start');
   await p1.waitForSelector('#game.active', { timeout: 10000 });
+  await p1.screenshot({ path: `${out}/Alice-loading.png` }); // the loading screen, as the host sees it
   const searchAtStart = await p1.evaluate(() => location.search);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
   const pages = [['Alice', p1]];
@@ -118,6 +119,7 @@ try {
 
   // The 3D view is up on every window that runs it.
   for (const [name, page] of pages) {
+    await waitLoaded(page).catch(() => errors.push(`${name}: the loading screen never went away`));
     await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 }).catch(() => errors.push(`${name}: window.__r3d.frames never passed 10`));
     if ((await page.locator('#game canvas.r3d').count()) !== 1) errors.push(`${name}: expected exactly one #game canvas.r3d`);
     if ((await page.locator('#game canvas.r3d-overlay').count()) !== 1) errors.push(`${name}: expected exactly one #game canvas.r3d-overlay`);
