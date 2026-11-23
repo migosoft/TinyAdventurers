@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHUNK } from '../stone/grid';
-import { FLAME_BASE_Y, FLAME_H, FLAME_R, FLAME_STAND, PLATE_SINK, buildTorchChunk, flameMesh, flameMid, flameTip, torchChunkOf, torchHolder, type TorchMark } from './torch';
+import { FLAME_BASE_Y, FLAME_FOOT_Y, FLAME_H, FLAME_R, FLAME_STAND, PLATE_SINK, buildTorchChunk, flameMesh, flameMid, flameTip, torchChunkOf, torchHolder, type TorchMark } from './torch';
 
 const finite = (a: ArrayLike<number>): boolean => Array.from(a).every(Number.isFinite);
 /** The mean of component `k` of an array `step` wide. */
@@ -100,7 +100,7 @@ describe('flameMesh', () => {
   it('flame: every vertex is on the axis, so the card is the same from every side: the foot for the card, the middle for the halo', () => {
     for (let i = 0; i < count; i++) {
       expect(Math.hypot(f.position[i * 3], f.position[i * 3 + 2])).toBe(0);
-      expect(f.position[i * 3 + 1]).toBeCloseTo(i < 4 ? 0 : flameMid({ x: 0, z: 0, nx: 0, nz: 1 })[1] - FLAME_BASE_Y, 6);
+      expect(f.position[i * 3 + 1]).toBeCloseTo(i < 4 ? 0 : flameMid({ x: 0, z: 0, nx: 0, nz: 1 })[1] - FLAME_FOOT_Y, 6);
     }
   });
 
@@ -136,7 +136,7 @@ describe('buildTorchChunk', () => {
     for (let i = 0; i < flame!.position.length / 3; i++) {
       expect(flame!.flame[i * 4 + 2]).toBeCloseTo(3.4, 5);
       expect([flame!.foot[i * 2], flame!.foot[i * 2 + 1]]).toEqual([5.5, 3.5]);
-      expect(flame!.position[i * 3 + 1]).toBeGreaterThanOrEqual(FLAME_BASE_Y - 1e-6);
+      expect(flame!.position[i * 3 + 1]).toBeGreaterThanOrEqual(FLAME_FOOT_Y - 1e-6);
     }
     expect(flame!.reach.length / 2).toBe(flame!.position.length / 3);
     expect(flame!.foot.length / 2).toBe(flame!.position.length / 3);
@@ -186,7 +186,9 @@ describe('buildTorchChunk', () => {
 
   it('flameMid / flameTip', () => {
     const close = (a: number[], b: number[]): void => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 9));
-    close(flameMid(north), [5.5, FLAME_BASE_Y + 0.4 * FLAME_H, 3 + FLAME_STAND]);
-    close(flameTip(north), [5.5, FLAME_BASE_Y + FLAME_H, 3 + FLAME_STAND]);
+    // the foot is in the fuel, under its top
+    expect(FLAME_FOOT_Y).toBeLessThan(FLAME_BASE_Y);
+    close(flameMid(north), [5.5, FLAME_FOOT_Y + 0.4 * FLAME_H, 3 + FLAME_STAND]);
+    close(flameTip(north), [5.5, FLAME_FOOT_Y + FLAME_H, 3 + FLAME_STAND]);
   });
 });

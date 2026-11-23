@@ -4,8 +4,10 @@
 import { faceNormal, outOfWall } from '../stone/crystals';
 import { CHUNK } from '../stone/grid';
 
-/** Tiles. The flame's axis stands this far in front of the wall cell's edge; its foot is at FLAME_BASE_Y, it is FLAME_H high and FLAME_R wide at size 1. */
-export const FLAME_STAND = 0.3, FLAME_BASE_Y = 1.14, FLAME_H = 0.44, FLAME_R = 0.115;
+/** Tiles. The flame's axis stands this far in front of the wall cell's edge; the fuel's top is at FLAME_BASE_Y; the flame is FLAME_H high and FLAME_R wide at size 1. */
+export const FLAME_STAND = 0.3, FLAME_BASE_Y = 1.14, FLAME_H = 0.52, FLAME_R = 0.135;
+/** The flame's foot lies this far under the fuel's top (the fuel hides that part): the fire comes out of the fuel at its full width, with no gap. */
+export const FLAME_SINK = 0.07, FLAME_FOOT_Y = FLAME_BASE_Y - FLAME_SINK;
 /** The plate: its middle's height, width along the wall, height, and how deep it is set into the stone. */
 export const PLATE_Y = 0.95, PLATE_W = 0.22, PLATE_H = 0.34, PLATE_SINK = 0.03;
 /** The plate stands this far out of the wall, and its front is this much smaller on every side (a bevel). */
@@ -176,7 +178,7 @@ export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: nu
     const f = flameMesh(1), [ax, , az] = flameTip(t), first = fp.length / 3;
     for (let i = 0; i < f.position.length / 3; i++) {
       // every vertex is on the axis, so nothing is turned out of the wall
-      fp.push(ax, FLAME_BASE_Y + f.position[i * 3 + 1], az);
+      fp.push(ax, FLAME_FOOT_Y + f.position[i * 3 + 1], az);
       // the phase of the light's flicker and the crystals' pulse
       fa.push(f.flame[i * 4], f.flame[i * 4 + 1], t.lightId * 1.7, f.flame[i * 4 + 3]);
       fr.push(f.reach[i * 2], f.reach[i * 2 + 1]);
@@ -192,8 +194,8 @@ export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: nu
 
 /** The flame's middle (where its light sits) and its tip (where its smoke starts), in world tiles. */
 export function flameMid(t: { x: number; z: number; nx: number; nz: number }): [x: number, y: number, z: number] {
-  return [t.x + t.nx * FLAME_STAND, FLAME_BASE_Y + FLAME_MID * FLAME_H, t.z + t.nz * FLAME_STAND];
+  return [t.x + t.nx * FLAME_STAND, FLAME_FOOT_Y + FLAME_MID * FLAME_H, t.z + t.nz * FLAME_STAND];
 }
 export function flameTip(t: { x: number; z: number; nx: number; nz: number }): [x: number, y: number, z: number] {
-  return [t.x + t.nx * FLAME_STAND, FLAME_BASE_Y + FLAME_H, t.z + t.nz * FLAME_STAND];
+  return [t.x + t.nx * FLAME_STAND, FLAME_FOOT_Y + FLAME_H, t.z + t.nz * FLAME_STAND];
 }
