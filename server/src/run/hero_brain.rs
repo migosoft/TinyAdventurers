@@ -5,16 +5,16 @@
 //! as for a player. Nothing here knows an ability by its id: the rule per ability is its `Shape`'s.
 
 use super::abilities::COOLDOWN_LEEWAY;
-use super::ai::astar;
+use super::ai::{plan_step, Step, Walker};
 use super::ai_shapes::{reach_of, worth_using};
 use super::effects::Creature;
 use super::entities::Brain;
 use super::{perception, targets, Run, DT};
-use crate::collision::walk_line;
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::companions::KNIGHT_ESCORT;
 use crate::defs::effects::EffectKind;
-use crate::dungeon::{Map, Mover};
+use crate::defs::classes::PLAYER_RADIUS;
+use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::InputMsg;
 use crate::sheet::ResolvedAbility;
@@ -22,18 +22,14 @@ use crate::sheet::ResolvedAbility;
 /// The first shot id of a charmed hero's shots. A client's own ids start at 1 and never reach it in a run, so
 /// the two never meet.
 pub const AI_SHOT_BASE: u16 = 0xF000;
-/// Seconds between two A* runs.
-const REPATH_EVERY: f64 = 0.6;
 /// The hero stops walking inside this share of its primary's reach.
 const STOP_SHARE: f64 = 0.85;
+/// A path's lane is a tile centre line: the hero steers back onto it when further off than this many px.
+const LANE_SLACK: f64 = 2.0;
 /// A waypoint is reached within this many px.
 const WAYPOINT_REACHED: f64 = 6.0;
 /// A place the foe was last seen is reached within this many px.
 const LAST_KNOWN_REACHED: f64 = 12.0;
-/// How far (px) ahead of its centre the hero looks for ground it must not walk onto.
-const LOOKAHEAD: f64 = 4.0;
-/// The most nodes an A* run expands.
-const ASTAR_NODES: usize = 2500;
 
 impl Brain {
     pub fn new() -> Brain {
@@ -73,39 +69,34 @@ fn quantize(d: Vec2) -> (i8, i8) {
     (q(d.x / len), q(d.y / len))
 }
 
-/// The step toward `goal`: straight when an enemy-mover could walk the line (never over a chasm, water or
-/// lava), else along an A* path made for that mover and remade every 0.6 s. No way: stand still.
-fn steer(run: &mut Run, pi: usize, goal: Vec2) -> (i8, i8) {
-    let pos = run.players[pi].pos();
-    let map = &run.layout.map;
-    let Some(c) = run.players[pi].charm.as_mut() else { return (0, 0) };
-    let brain = &mut c.brain;
-    let target = if walk_line(map, pos, goal, Mover::Enemy) {
-        brain.path.clear();
-        goal
-    } else {
-        brain.repath_t -= DT;
-        if brain.path.is_empty() || brain.repath_t <= 0.0 {
-            brain.path = astar(map, pos, goal, ASTAR_NODES, Mover::Enemy).unwrap_or_default();
-            brain.repath_t = REPATH_EVERY;
-        }
-        while brain.path.first().is_some_and(|w| pos.dist(*w) < WAYPOINT_REACHED) {
-            brain.path.remove(0);
-        }
-        match brain.path.first() {
-            Some(&w) => w,
-            None => return (0, 0),
-        }
-    };
-    free_step(map, pos, quantize(target - pos))
+/// The step along the path's axis toward `d`: the larger axis, plus the other one when the hero is off the
+/// lane (`LANE_SLACK`), so its body clears the corners. The waypoints lie tile centre to tile centre, so the
+/// way is along one axis at a time.
+fn quantize_path(d: Vec2) -> (i8, i8) {
+    let q = |v: f64| if v > LANE_SLACK { 1 } else if v < -LANE_SLACK { -1 } else { 0 };
+    let main = |v: f64| if v > 0.0 { 1 } else if v < 0.0 { -1 } else { 0 };
+    if d.x.abs() >= d.y.abs() { (main(d.x), q(d.y)) } else { (q(d.x), main(d.y)) }
 }
 
-/// `dir`, or the part of it that does not walk the hero's centre onto ground an enemy mover avoids (a chasm,
-/// deep water, lava; a wall): a hero falls as soon as its centre is over a chasm, and the sampled straight-line
-/// check can graze a corner. None of them: stand.
-fn free_step(map: &Map, pos: Vec2, dir: (i8, i8)) -> (i8, i8) {
-    let open = |(mx, my): (i8, i8)| (mx, my) != (0, 0) && !map.blocks_at(pos + Vec2::new(mx as f64, my as f64).norm() * LOOKAHEAD, Mover::Enemy);
-    [dir, (dir.0, 0), (0, dir.1)].into_iter().find(|&d| open(d)).unwrap_or((0, 0))
+/// The step toward `goal`: the monsters' pathfinding (`ai::plan_step`, for an enemy mover, an 8-direction
+/// walker) says where to go next, and this turns it into one of 8 directions. No way: stand still.
+fn steer(run: &mut Run, pi: usize, goal: Vec2) -> (i8, i8) {
+    let pos = run.players[pi].pos();
+    let walker = Walker { pos, mover: Mover::Enemy, radius: PLAYER_RADIUS, boss: false, eight: true };
+    let Some(c) = run.players[pi].charm.as_mut() else { return (0, 0) };
+    let (mut path, mut repath_t) = (std::mem::take(&mut c.brain.path), c.brain.repath_t);
+    let step = plan_step(run, &walker, &mut path, &mut repath_t, goal, DT);
+    while step != Step::Done && path.first().is_some_and(|w| pos.dist(*w) < WAYPOINT_REACHED) {
+        path.remove(0);
+    }
+    let first = path.first().copied();
+    let Some(c) = run.players[pi].charm.as_mut() else { return (0, 0) };
+    (c.brain.path, c.brain.repath_t) = (path, repath_t);
+    match step {
+        Step::Done => (0, 0),
+        Step::Straight(to) => quantize(to - pos),
+        Step::Waypoint(_) => first.map_or((0, 0), |w| quantize_path(w - pos)),
+    }
 }
 
 /// Where the hero goes and how near it needs to get: the foe (inside 0.85 of its primary's reach), the place the
@@ -540,6 +531,75 @@ mod tests {
         assert!(p.pos().dist(run.players[0].pos()) < d0 - 40.0, "and nearer the foe");
     }
 
+    /// The arena's floor turned to wall, with a one-tile corridor along row `ty` from `tx - 6` to `tx + 4`, then
+    /// down column `tx + 4` to row `ty + 3`: an L. Returns (tx, ty).
+    fn l_corridor(run: &mut Run) -> (i32, i32) {
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 8..=tx + 8 {
+                run.layout.map.set(x, y, Tile::Wall);
+            }
+        }
+        for x in tx - 6..=tx + 4 {
+            run.layout.map.set(x, ty, Tile::Floor);
+        }
+        for y in ty..=ty + 3 {
+            run.layout.map.set(tx + 4, y, Tile::Floor);
+        }
+        (tx, ty)
+    }
+
+    #[test]
+    fn a_charmed_hero_rounds_a_corner_to_its_caster() {
+        let mut run = arena(&[ClassId::Paladin]);
+        let (tx, ty) = l_corridor(&mut run);
+        let orc = held_orc(&mut run, 0.0);
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].pos = Map::center_of(tx + 4, ty + 3);
+        put(&mut run, 0, Map::center_of(tx - 6, ty));
+        charm_hero(&mut run, 0, orc, 30.0);
+        steps(&mut run, 420);
+        let d = run.players[0].pos().dist(run.monsters[oi].pos);
+        assert!(d <= KNIGHT_ESCORT.follow + 6.0, "the hero followed its caster round the corner: {d}");
+    }
+
+    #[test]
+    fn a_charmed_hero_does_not_stick_on_a_corner_in_sight_of_its_foe() {
+        // A pillar two tiles tall with the foe seen past it at every row: the hero must reach it each time.
+        for dy in -3..=3 {
+            let mut run = arena(&[ClassId::Paladin, ClassId::Paladin]);
+            tough(&mut run, 0);
+            let (tx, ty) = Map::tile_of(run.players[0].pos());
+            run.layout.map.set(tx + 3, ty, Tile::Wall);
+            run.layout.map.set(tx + 3, ty + 1, Tile::Wall);
+            put(&mut run, 0, Map::center_of(tx + 7, ty + dy));
+            put(&mut run, 1, Map::center_of(tx - 1, ty));
+            let orc = held_orc(&mut run, -40.0);
+            charm_hero(&mut run, 1, orc, 30.0);
+            steps(&mut run, 360);
+            let d = run.players[1].pos().dist(run.players[0].pos());
+            assert!(d <= 32.0, "foe {dy} rows off: still {d} px away");
+        }
+    }
+
+    #[test]
+    fn a_charmed_hero_walks_round_a_barrel_in_its_way() {
+        use crate::defs::kinds::EntityKind;
+        use crate::run::objects::{Barrel, ObjState};
+        let mut run = arena(&[ClassId::Paladin, ClassId::Paladin]);
+        tough(&mut run, 0);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        put(&mut run, 0, Map::center_of(tx + 6, ty));
+        put(&mut run, 1, Map::center_of(tx - 2, ty));
+        let mid = Map::center_of(tx + 2, ty);
+        run.spawn_object(EntityKind::Barrel, mid, ObjState::Barrel(Barrel::new()));
+        let orc = held_orc(&mut run, -40.0);
+        charm_hero(&mut run, 1, orc, 30.0);
+        steps(&mut run, 300);
+        let d = run.players[1].pos().dist(run.players[0].pos());
+        assert!(d <= 32.0, "the hero got past the barrel: {d}");
+    }
+
     #[test]
     fn a_charmed_hero_never_charges_over_a_chasm() {
         let build = build_with_ability(ClassId::Barbarian, AbilityId::Charge);
@@ -547,9 +607,9 @@ mod tests {
         crate::run::ai::tests::open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
         tough(&mut run, 1);
-        // A pit across the whole floor, two tiles wide, with the foe 48 px away across it: within the dash.
+        // A pit across the whole map, two tiles wide, with the foe 48 px away across it: within the dash.
         let (tx, ty) = Map::tile_of(run.players[0].pos());
-        for y in ty - 3..=ty + 3 {
+        for y in 0..run.layout.map.h {
             run.layout.map.set(tx + 1, y, Tile::Chasm);
             run.layout.map.set(tx + 2, y, Tile::Chasm);
         }
