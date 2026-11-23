@@ -15,6 +15,7 @@ function make(over: Partial<RunStartInfo> = {}, input: () => StepInput = () => N
   const hud = fakeHud();
   const info = startInfo(ROWS, over);
   const session = new RunSession({ info, net, hud, myClass: 'Wizard', input });
+  session.receive({ t: 'RunBegins' });
   return { net, hud, info, session };
 }
 
@@ -37,6 +38,37 @@ describe('RunStarted stone kinds (#380)', () => {
     const back = decode(encode(old)) as RunStartInfo;
     expect(back.stone ?? new Uint8Array(0)).toHaveLength(0);
     expect(() => make({ stone: back.stone })).not.toThrow();
+  });
+});
+
+describe('RunSession start (#322)', () => {
+  it('sends no Input and predicts nothing before RunBegins, then runs', () => {
+    const net = fakeNet();
+    const session = new RunSession({ info: startInfo(ROWS), net, hud: fakeHud(), myClass: 'Wizard', input: () => ({ ...NO_INPUT, mx: 1 }) });
+    session.receive({ t: 'Loading', ready: 0, total: 2 }); // not the start
+    const x0 = session['pred'].state.x;
+    session.frame(100);
+    expect(inputs(net)).toHaveLength(0);
+    expect(session['pred'].state.x).toBe(x0);
+    expect(session.started).toBe(false);
+    session.receive({ t: 'RunBegins' });
+    session.frame(100);
+    expect(session.started).toBe(true);
+    expect(inputs(net).length).toBeGreaterThan(0);
+  });
+
+  it('Loading sets waiting', () => {
+    const { session } = make();
+    expect(session.waiting).toBeNull();
+    session.receive({ t: 'Loading', ready: 1, total: 2 });
+    expect(session.waiting).toEqual({ ready: 1, total: 2 });
+  });
+
+  it('sendLoaded sends one Loaded', () => {
+    const { net, session } = make();
+    session.sendLoaded();
+    session.sendLoaded();
+    expect(net.sent.filter((m) => m.t === 'Loaded')).toHaveLength(1);
   });
 });
 
@@ -296,6 +328,7 @@ describe('RunSession frame', () => {
     const net = fakeNet();
     const hud = fakeHud();
     const session = new RunSession({ info: startInfo(ROWS, over), net, hud, myClass: 'Wizard', input, now: () => t });
+    session.receive({ t: 'RunBegins' });
     const view = fakeView();
     session.setView(view);
     return { net, hud, session, view, at: (s: number) => void (t = s) };

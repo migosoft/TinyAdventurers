@@ -43,6 +43,7 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
   const hud = fakeHud();
   const info = startInfo(rows, over);
   const run = newRun({ info, net, hud, myClass: 'Wizard' });
+  run.session.receive({ t: 'RunBegins' }); // the session steps and sends inputs only from then on (#322)
   let params: R3dParams = { ...DEFAULTS, yaw: startYaw };
   const host: Host = {
     get params() { return params; },

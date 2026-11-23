@@ -100,6 +100,11 @@ export class RunSession {
   /** The own predicted shots (the view draws them from the frame). */
   private readonly shots = new Shots();
   private acc = 0;
+  /** The server's `RunBegins` came: the fixed steps and inputs run only from then on (#322). */
+  started = false;
+  /** The latest `Loading` count (clients loaded of the party), for the loading screen. */
+  waiting: { ready: number; total: number } | null = null;
+  private loadedSent = false;
   private shotId = 0;
   private lastAim = 0;
   /** The last step's input (the own animation's "moving" and the drawn aim). */
@@ -219,7 +224,8 @@ export class RunSession {
       this.clock.begin();
     }
     const dt = Math.min(deltaMs / 1000, 0.1);
-    this.acc += dt;
+    // Before RunBegins nothing steps, sends or predicts.
+    this.acc = this.started ? this.acc + dt : 0;
     let steps = 0;
     while (this.acc >= CONST.DT && steps < 5) {
       this.acc -= CONST.DT;
@@ -511,8 +517,20 @@ export class RunSession {
     this.onMessage(m);
   }
 
+  /** Tells the server this client has loaded the level; once. */
+  sendLoaded(): void {
+    if (this.loadedSent) return;
+    this.loadedSent = true;
+    this.net.send({ t: 'Loaded' });
+  }
+
   private onMessage(m: ServerMsg): void {
     if (m.t === 'Snap') this.onSnapshot(m);
+    else if (m.t === 'Loading') this.waiting = { ready: m.ready, total: m.total };
+    else if (m.t === 'RunBegins') {
+      this.started = true;
+      this.acc = 0;
+    }
     else if (m.t === 'DebugPath') {
       if (m.on !== this.debug.on || m.immortal !== this.immortal) this.hud.setDebug(m.on, m.immortal, m.on !== this.debug.on);
       this.debug.on = m.on;
