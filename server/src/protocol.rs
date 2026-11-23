@@ -409,6 +409,9 @@ pub struct Snapshot {
     pub dark: Vec<u32>,
     /// The indices into this snapshot's `ev` of the positional events that happen in the dark.
     pub dark_ev: Vec<u16>,
+    /// The blocking objects near the viewer that `ents` does not carry (behind a wall, in the dark of a
+    /// Blind hero): (x, y, half-size) of each, for the client's prediction only; never drawn (#274).
+    pub solids: Vec<(f32, f32, f32)>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
     /// The rules log, for a player who turned it on.

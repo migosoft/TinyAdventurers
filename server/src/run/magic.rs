@@ -265,7 +265,7 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].traits.invisibility = true;
         let c = Creature::Monster(mi);
-        assert!(run.go_invisible(mi, 10.0, 3.0));
+        assert!(run.go_invisible(mi, &[crate::run::effects::invisible_for(10.0)], 3.0));
         assert!(run.has_effect(c, EffectKind::Invisible), "hidden from the heroes' snapshot");
         run.events.clear();
         run.set_anti_magic(c, true);

@@ -22,6 +22,7 @@ import type { Disabled, Hud } from '../ui/hud';
 import { aimAt } from './aim';
 import { NO_INPUT, type StepInput } from './input';
 import { Shots } from './shots';
+import { predictedSolids } from './solids';
 import { NO_STATS, type DebugDraw, type OwnCast, type OwnHero, type RunView, type RunViewInit } from './view';
 
 export type NetLike = Pick<Net, 'on' | 'send' | 'rtt' | 'lastSnapshotBytes'>;
@@ -64,9 +65,6 @@ export interface SessionDeps {
   /** Seconds; default `performance.now() / 1000`. */
   now?: () => number;
 }
-
-/** Half size of every solid object kind (server `defs/objects.rs`), by kind id. */
-const SOLID_HALF: Record<number, number> = CONST.SOLID_OBJECTS;
 
 export class RunSession {
   readonly map: TileMap;
@@ -536,7 +534,7 @@ export class RunSession {
   private onSnapshot(s: Snapshot): void {
     this.interp.push(s, this.now());
     this.lastSnap = s;
-    this.pred.solids = s.ents.filter((e) => e[1] in SOLID_HALF && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: SOLID_HALF[e[1]] }));
+    this.pred.solids = predictedSolids(s);
     // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
     const drawn = this.ents.get(this.runInfo.you);
     if (s.me.alive) this.pred.reconcile(s, drawn ? [drawn.x, drawn.y] : undefined);

@@ -190,49 +190,89 @@ pub(crate) fn chase_step(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f
     }
 }
 
-/// Follow an A* path to `goal`, recomputing it periodically. Figures wider
-/// than a tile (the demon, the dragon) prefer paths a tile clear of walls and
-/// terrain, so they rarely wedge into a pit corner, and skip a waypoint they
-/// cannot get any closer to. A boss that finds no path walks straight at the
-/// goal instead of giving up.
-pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
-    let (pos, need_repath) = {
-        let m = &mut run.monsters[mi];
-        m.ai.repath_t -= dt;
-        (m.pos, m.ai.path.is_empty() || m.ai.repath_t <= 0.0)
-    };
+/// The body a path is planned for: any creature, a monster or a charmed hero.
+#[derive(Clone, Copy)]
+pub struct Walker {
+    pub pos: Vec2,
+    pub mover: Mover,
+    pub radius: f64,
+    /// A boss that finds no path walks straight at the goal instead of giving up.
+    pub boss: bool,
+    /// Moves in 8 directions only (a hero's input): a straight line is used only along one of them, so the
+    /// walk never drifts off the line into a corner; any other way goes by the path's waypoints.
+    pub eight: bool,
+}
+
+/// Where a walker goes next.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Step {
+    /// There (within 4 px), or no way: stop.
+    Done,
+    /// Straight at the point (the goal; the path is cleared).
+    Straight(Vec2),
+    /// To the first waypoint of the path (the caller drops it once reached).
+    Waypoint(Vec2),
+}
+
+/// How far (px) off an axis or a diagonal a line may run for an 8-direction walker to take it straight.
+const EXACT_LINE: f64 = 1.0;
+
+fn along_eight(d: Vec2) -> bool {
+    let (x, y) = (d.x.abs(), d.y.abs());
+    x < EXACT_LINE || y < EXACT_LINE || (x - y).abs() < EXACT_LINE
+}
+
+/// The one pathfinding of every creature: straight at `goal` when the line is free, else along an A* path
+/// (kept in `path`, remade when empty or every `repath_t` run-out). Figures wider than a tile (the demon,
+/// the dragon) prefer paths a tile clear of walls and terrain. The path and its timer are the caller's.
+pub fn plan_step(run: &Run, w: &Walker, path: &mut Vec<Vec2>, repath_t: &mut f64, goal: Vec2, dt: f64) -> Step {
+    *repath_t -= dt;
+    let need_repath = path.is_empty() || *repath_t <= 0.0;
+    let pos = w.pos;
     if pos.dist(goal) < 4.0 {
-        return true;
+        return Step::Done;
     }
-    let (mover, radius, is_boss) = (run.monsters[mi].mover_now(), run.monsters[mi].radius, run.monsters[mi].is_boss);
-    let wide = radius > TILE / 2.0;
-    let side = (goal - pos).norm().perp() * radius;
+    let wide = w.radius > TILE / 2.0;
+    let side = (goal - pos).norm().perp() * w.radius;
     let map = &run.layout.map;
-    if walk_line(map, pos, goal, mover) && (mover == Mover::Incorporeal || object_free_line(run, pos, goal, radius)) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
-        run.monsters[mi].ai.path.clear();
-        return move_toward(run, mi, goal, speed, dt);
+    // An 8-direction walker never slides along a wall, so its whole body must clear the line, not only its centre.
+    let body_clear = !w.eight || along_eight(goal - pos) && walk_line(map, pos + side, goal + side, w.mover) && walk_line(map, pos - side, goal - side, w.mover);
+    if body_clear && walk_line(map, pos, goal, w.mover) && (w.mover == Mover::Incorporeal || object_free_line(run, pos, goal, w.radius)) && (!wide || terrain_line(map, pos + side, goal + side, w.mover) && terrain_line(map, pos - side, goal - side, w.mover)) {
+        path.clear();
+        return Step::Straight(goal);
     }
     if need_repath {
-        let blocked = run.object_tiles_for(mover);
-        let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide, &blocked).unwrap_or_default();
-        let m = &mut run.monsters[mi];
-        m.ai.path = path;
-        m.ai.repath_t = 0.6;
-        if m.ai.path.is_empty() {
-            if is_boss {
-                return move_toward(run, mi, goal, speed, dt);
-            }
-            return true; // unreachable: give up
+        let blocked = run.object_tiles_for(w.mover);
+        *path = astar_clear(map, pos, goal, 2500, w.mover, wide, &blocked).unwrap_or_default();
+        *repath_t = 0.6;
+        if path.is_empty() {
+            return if w.boss { Step::Straight(goal) } else { Step::Done };
         }
     }
-    let Some(&next) = run.monsters[mi].ai.path.first() else { return true };
-    let before = run.monsters[mi].pos;
-    let arrived = move_toward(run, mi, next, speed, dt);
-    let stuck = wide && run.monsters[mi].pos.dist(before) < speed * dt * 0.25;
-    if arrived || stuck {
-        run.monsters[mi].ai.path.remove(0);
+    path.first().map_or(Step::Done, |&next| Step::Waypoint(next))
+}
+
+/// Walk monster `mi` toward `goal` by `plan_step`. True when arrived or there is no way.
+pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
+    let m = &mut run.monsters[mi];
+    let walker = Walker { pos: m.pos, mover: m.mover_now(), radius: m.radius, boss: m.is_boss, eight: false };
+    let (mut path, mut repath_t) = (std::mem::take(&mut m.ai.path), m.ai.repath_t);
+    let step = plan_step(run, &walker, &mut path, &mut repath_t, goal, dt);
+    let m = &mut run.monsters[mi];
+    (m.ai.path, m.ai.repath_t) = (path, repath_t);
+    match step {
+        Step::Done => true,
+        Step::Straight(to) => move_toward(run, mi, to, speed, dt),
+        Step::Waypoint(next) => {
+            let before = run.monsters[mi].pos;
+            let arrived = move_toward(run, mi, next, speed, dt);
+            let stuck = walker.radius > TILE / 2.0 && run.monsters[mi].pos.dist(before) < speed * dt * 0.25;
+            if arrived || stuck {
+                run.monsters[mi].ai.path.remove(0);
+            }
+            false
+        }
     }
-    false
 }
 
 /// No solid object (a barrel) within a body's reach of the straight line.

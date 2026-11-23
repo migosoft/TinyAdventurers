@@ -35,6 +35,11 @@ dark: Array<number>,
  */
 dark_ev: Array<number>, 
 /**
+ * The blocking objects near the viewer that `ents` does not carry (behind a wall, in the dark of a
+ * Blind hero): (x, y, half-size) of each, for the client's prediction only; never drawn (#274).
+ */
+solids: Array<[number, number, number]>, 
+/**
  * Server simulation time spent per tick (ms, averaged).
  */
 srv_ms: number, 

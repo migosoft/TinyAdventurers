@@ -171,7 +171,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     let mut who = vec![record::seen_creature(run, f.target)];
     who.extend(f.dmg.why.by.map(|by| seen_by_id(run, by)));
     // A tick's bestower is named only to a viewer who sees it; the rest read the line without it (`plain`).
-    let plain = f.dmg.why.by.filter(|_| matches!(f.dmg.why.what, What::Tick(_))).map(|by| {
+    let plain = f.dmg.why.by.filter(|&by| matches!(f.dmg.why.what, What::Tick(_)) && by != target).map(|by| {
         let mut anon = f.clone();
         anon.dmg.why.by = None;
         (by, text::hit_head(run, &anon, target))

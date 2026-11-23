@@ -55,7 +55,7 @@ The keys sit in the same place on every keyboard layout: on a German (QWERTZ) ke
 
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3), and the **Quality** choice (see above). The keys and the checkboxes always agree.
 
-On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
+On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a barrel or a torch, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"; chests open when you walk into them). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
 
 ## The heroes
 
@@ -137,7 +137,7 @@ Every creature fights for a side: the monsters against you, you and your friends
 - **Nothing ends it early.** Nobody can free you with a key or by hitting you, and there is no button to mash. Your Willpower shortens it a little. Dispel Magic and anti-magic areas (not in the game yet) will pause it: you are yourself again and the haze goes, then it comes back if time is left.
 - **Deaths are real, both ways.** You can kill a friend, and your friends can kill you, and a fallen hero stays fallen. Nothing stops at 1 HP. A hero killed while charmed is counted as killed by whoever cast the charm.
 - **While you are on their side** enemies ignore you and your area abilities (Holy Light, Haste, War Cry) help them; your friends' hits, shots and traps hurt you, and yours hurt them.
-- **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero.
+- **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero, and with no hero of your side left he stays where he is and fights back against anyone who comes near.
 - **When it ends** you are yourself again where you stand, with your health and your cooldowns as they were, and the controls come back at once.
 - An enemy's Charm can also take your wolf or the knight to the enemy side, for the same few seconds.
 

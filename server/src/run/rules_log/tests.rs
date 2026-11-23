@@ -154,25 +154,25 @@ fn n1_rounds_to_one_decimal_and_drops_dot_zero() {
     assert_eq!(pct(-0.5), "-50 %");
 }
 
-/// The twelve fields as serialized without the log.
+/// The thirteen fields as serialized without the log.
 #[derive(Serialize)]
-struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>);
+struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>, Vec<u32>);
 
 fn a_snapw(log: Option<LogW>) -> SnapW {
     let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0, false)], 1.0, false, 1.0, 1.0, vec![], vec![], None);
-    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], log)
+    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], vec![], log)
 }
 
 #[test]
 fn nothing_is_recorded_or_sent_while_off() {
     let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
     assert!(!on(&run));
-    // The encoding without the log is the old twelve-field array, byte for byte.
+    // The encoding without the log is the thirteen-field array, byte for byte.
     let w = a_snapw(None);
-    let old = Legacy(w.0, w.1, w.2.clone(), w.3.clone(), w.4.clone(), w.5.clone(), w.6, w.7.clone(), w.8.clone(), w.9.clone(), w.10.clone(), w.11.clone());
+    let old = Legacy(w.0, w.1, w.2.clone(), w.3.clone(), w.4.clone(), w.5.clone(), w.6, w.7.clone(), w.8.clone(), w.9.clone(), w.10.clone(), w.11.clone(), w.12.clone());
     assert_eq!(rmp_serde::to_vec(&w).unwrap(), rmp_serde::to_vec(&old).unwrap());
     let with = rmp_serde::to_vec(&a_snapw(Some(LogW(vec![], vec![])))).unwrap();
-    assert_eq!(with[0], 0x9d, "thirteen fields with the log");
+    assert_eq!(with[0], 0x9e, "fourteen fields with the log");
     // A real tick: a twelve-field array, and no record kept.
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     run.players[0].tx = Some(tx);
@@ -185,8 +185,8 @@ fn nothing_is_recorded_or_sent_while_off() {
         bytes = Some(b);
     }
     let bytes = bytes.expect("a snapshot was sent");
-    assert_eq!(bytes[0], 0x9c, "fixarray of 12 fields");
-    assert_eq!(encode_snap(&crate::wire::sample_snapshots().remove(1))[0], 0x9c);
+    assert_eq!(bytes[0], 0x9d, "fixarray of 13 fields");
+    assert_eq!(encode_snap(&crate::wire::sample_snapshots().remove(1))[0], 0x9d);
 }
 
 fn rec(kind: LineKind, head: &str, who: Vec<Seen>) -> LogRec {
@@ -699,7 +699,7 @@ fn the_logged_duration_is_the_duration_applied() {
     run.log.forced = true;
     let _ = take(&mut run);
     let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain };
-    run.hit_effect(Creature::Player(0), sleep);
+    run.apply(Creature::Player(0), Apply::from_hit(sleep));
     let rec = only_rec(&mut run);
     let left = timer(&run, Creature::Player(0), EffectKind::Sleep).unwrap();
     assert_eq!(rec.secs, Some(left));
@@ -737,7 +737,7 @@ fn each_refusal_names_its_rule() {
     };
     let said = |rec: &LogRec, s: &str| assert!(rec.details.iter().any(|l| l.contains(s)), "want {s:?} in {:?}", rec.details);
     // StrongerOn: Chilled while Frozen.
-    run.apply_effect_from(c, EffectKind::Frozen, None, 14, true);
+    run.apply(c, Apply { power: Some(14), magical: true, ..Apply::plain(EffectKind::Frozen, None) });
     let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Chilled, None) });
     assert!(!r);
     said(&rec, "Chilled: refused (Frozen is on)");
@@ -748,7 +748,7 @@ fn each_refusal_names_its_rule() {
     said(&rec, "Singed: cancelled Frozen");
     assert!(!run.has_effect(c, EffectKind::Frozen));
     // replaced: Frozen over Chilled.
-    run.apply_effect_from(c, EffectKind::Chilled, None, 14, true);
+    run.apply(c, Apply { power: Some(14), magical: true, ..Apply::plain(EffectKind::Chilled, None) });
     let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Frozen, None) });
     assert!(r);
     said(&rec, "Frozen: replaced Chilled");
@@ -780,7 +780,7 @@ fn each_refusal_names_its_rule() {
     let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
     run.log.forced = true;
     let _ = take(&mut run);
-    run.hit_effect(Creature::Player(0), OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain });
+    run.apply(Creature::Player(0), Apply::from_hit(OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain }));
     said(&only_rec(&mut run), "elf resist Sleep 100 %");
     // Dead targets give no line.
     let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
@@ -1013,6 +1013,24 @@ fn a_tick_names_its_bestower() {
     let tick = tick.expect("a Poisoned tick landed");
     assert!(tick.head.starts_with(&format!("{name} ▸ Poisoned ▸ {goblin}")), "{}", tick.head);
     assert!(tick.who.iter().any(|s| s.id == hero), "the hero's log gets the line");
+}
+
+#[test]
+fn a_tick_on_its_own_bestower_is_not_optional() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1000.0));
+    let (id, pos) = (run.monsters[mi].id, run.monsters[mi].pos);
+    run.apply(Creature::Monster(mi), Apply { source: Some((id, pos)), ..Apply::plain(EffectKind::Poisoned, Some(3.0)) });
+    let _ = take(&mut run);
+    let mut tick = None;
+    for _ in 0..200 {
+        run.tick_effects();
+        tick = take(&mut run).into_iter().find(|r| r.head.contains("Poisoned"));
+        if tick.is_some() {
+            break;
+        }
+    }
+    assert!(tick.expect("a Poisoned tick landed").plain.is_none(), "a creature's own visibility is not what hides its tick");
 }
 
 #[test]

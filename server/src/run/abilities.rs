@@ -7,8 +7,7 @@ use crate::collision::{line_of_sight, move_box};
 use crate::dungeon::Mover;
 use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::{overkill_rest, Damage, DamageSplit, Mult, What};
-use crate::defs::damage::DamageType;
+use crate::defs::damage::{overkill_rest, Damage, DamageSplit, DamageType, Mult, What};
 use crate::defs::effects::{EffectKind, EffectLook, OnHit};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
@@ -315,7 +314,7 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     let Some(a) = run.monsters[mi].kit.get(id).cloned() else { return false };
     if id == AbilityId::Vanish {
         // Its cooldown is `invis_cd`, which pauses while Invisible, not the ability cooldowns.
-        return run.go_invisible(mi, a.duration, a.cooldown);
+        return run.go_invisible(mi, &a.effect, a.cooldown);
     }
     if !run.monsters[mi].cds.ready(id) {
         return false;
@@ -3188,6 +3187,55 @@ mod tests {
         run.tick_hazards(0.3);
         let m = Creature::Monster(g);
         assert!(run.has_effect(m, EffectKind::Entangled) && run.has_effect(m, EffectKind::Slowed));
+    }
+
+    #[test]
+    fn a_gaze_applies_every_own_effect() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        crate::run::ai::tests::open_floor(&mut run);
+        let bi = run.monsters.iter().position(|m| m.is_boss).expect("the lich");
+        let mut gaze = run.monsters[bi].kit.get(AbilityId::StoneGaze).cloned().expect("the lich gazes");
+        gaze.effect = vec![eff(EffectKind::Slowed), eff(EffectKind::Weakened)];
+        let hero = run.players[0].pos();
+        run.monsters[bi].pos = hero + Vec2::new(30.0, 0.0);
+        run.monsters[bi].aim = run.monsters[bi].pos.angle_to(hero);
+        run.monsters[bi].aim_dist = 30.0;
+        use_ability(&mut run, Creature::Monster(bi), &gaze, 0);
+        let c = Creature::Player(0);
+        assert!(run.has_effect(c, EffectKind::Slowed) && run.has_effect(c, EffectKind::Weakened));
+    }
+
+    #[test]
+    fn haste_purify_and_the_coat_apply_every_own_effect() {
+        let mut run = wizard_secondary(AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0));
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Accelerated), eff(EffectKind::Warded)];
+        try_use(&mut run, 0, false, 1);
+        let c = Creature::Player(0);
+        assert!(run.has_effect(c, EffectKind::Accelerated) && run.has_effect(c, EffectKind::Warded), "Haste");
+        let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin));
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Warded), eff(EffectKind::Accelerated)];
+        try_use(&mut run, 0, false, 1);
+        assert!(run.has_effect(c, EffectKind::Warded) && run.has_effect(c, EffectKind::Accelerated), "Purify");
+        let mut run = run_with_ability(ClassId::ElvenRanger, AbilitySlot::Secondary, AbilityId::PoisonCoat, Attributes::new(0, 0, 0, 0, 1, 0), Equipment::starter(ClassId::ElvenRanger));
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Coated), eff(EffectKind::Accelerated)];
+        try_use(&mut run, 0, false, 1);
+        assert!(run.has_effect(c, EffectKind::Coated) && run.has_effect(c, EffectKind::Accelerated), "Poison Coat");
+    }
+
+    #[test]
+    fn vanish_applies_its_own_effect_list() {
+        use crate::sheet::{monster_kit, Body};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 30.0, 10.0);
+        let d = crate::defs::enemies::def(EnemyType::SkeletonWarrior);
+        let kit = monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &run.monsters[mi].attrs, d.weapons, Body { radius: d.radius }, &[]);
+        let own = kit.get(AbilityId::Vanish).expect("Vanish in the kit").effect.first().copied().expect("Vanish's own effect");
+        assert_eq!(own.kind, EffectKind::Invisible, "Invisible stays its first entry");
+        run.monsters[mi].kit = kit.with_own_effects(AbilityId::Vanish, vec![own, eff(EffectKind::Accelerated)]);
+        run.monsters[mi].traits.invisibility = true;
+        assert!(monster_use(&mut run, mi, AbilityId::Vanish, Vec2::new(0.0, 0.0)));
+        let c = Creature::Monster(mi);
+        assert!(run.has_effect(c, EffectKind::Invisible) && run.has_effect(c, EffectKind::Accelerated));
     }
 
     // ---- Plan 3b: rings and party effects ----
