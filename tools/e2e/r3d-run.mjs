@@ -124,8 +124,11 @@ try {
     let n = await read();
     // On the real GPU all of it; in software (a unit or two a frame at 15-28 fps) the wait is only pacing: the first 40 units.
     const need = (m) => (gpuOn ? m[1] : Math.min(40, m[1])); // first guess: 40
-    while ((!n || n[0] < need(n)) && Date.now() < until) { await page.waitForTimeout(500); n = await read(); }
-    if (!n || n[0] < need(n)) errors.push(`the stone was not painted in time: ${n ? `${n[0]} of ${n[1]}` : 'no F3 stone line'}`);
+    // A server that sends no stone bytes never shows the line: give up after a few seconds instead of waiting WAIT_MS (#402).
+    const lineBy = Date.now() + 5000;
+    while ((!n || n[0] < need(n)) && Date.now() < until && (n || Date.now() < lineBy)) { await page.waitForTimeout(500); n = await read(); }
+    if (!n) console.log('no F3 stone line within 5 s: the server sent no stone, nothing to wait for');
+    else if (n[0] < need(n)) errors.push(`the stone was not painted in time: ${n[0]} of ${n[1]}`);
     const t1 = await page.evaluate(() => performance.now());
     const paint = await page.evaluate(([a, b]) => Math.max(0, ...window.__perf.dt.filter((_, i) => window.__perf.t[i] >= a && window.__perf.t[i] <= b)), [t0, t1]);
     await measure(false);

@@ -160,8 +160,8 @@ function stonePx(out: Uint8Array, at: number, seed: number, b: Block, pal: reado
 // may paint moss into joints under the grass, and the cover's options, so on a dev page that passes `everywhere` or `ignoreLava` paint
 // and cover disagree); share the cover job's source if the two disagree.
 let moss: { map: TileMap; marks: Marks; src: CoverSource | null; rows: Uint8Array } | null = null;
-/** Drops the moss source (6 bytes per map px): the paint job calls it when its last unit is done. */
-export const forgetMoss = (): void => { moss = null; };
+/** Drops the moss source (6 bytes per map px) and the last block's plain answer: the paint job calls it when its last unit is done. */
+export const forgetMoss = (): void => { moss = null; plainFor = null; };
 /** Whether moss grows at a map px (16 per tile). The source is made anew for other marks: a re-plan places new ones, and the map has changed then. */
 export function dampAt(map: TileMap, marks: Marks, mx: number, mz: number): boolean {
   if (!moss || moss.map !== map || moss.marks !== marks) moss = { map, marks, src: mossSource(map, null, marks), rows: new Uint8Array(map.h) };
@@ -184,6 +184,15 @@ const friezeWall = (x: number, y: number): number => (cut(FRIEZE, x, y) ? 0 : CA
 /** What the ground painter keeps for one page: the dip mesh's cells of the page and one cell round it, and the floor pieces. */
 export interface GroundCtx { f: StoneField; map: TileMap; marks: Marks; x0: number; z0: number; dip: Uint8Array }
 export const SPAN = CHUNK + 2;
+/** Whether the block's rectangle touches a cell of the dip mesh: such a slab is plain (no crack, no chips) as a whole, so a crack never stops on a tile line at a pool's rim. The last answer is kept: the painter asks px by px. */
+let plainFor: { b: Block; map: TileMap; plain: boolean } | null = null;
+export function touchesDip(map: TileMap, b: Block): boolean {
+  if (plainFor && plainFor.b === b && plainFor.map === map) return plainFor.plain;
+  let plain = false;
+  for (let z = b.v0 >> 5; z <= (b.v1 - 1) >> 5 && !plain; z++) for (let x = b.u0 >> 5; x <= (b.u1 - 1) >> 5 && !plain; x++) plain = inDipMesh(map, x, z);
+  plainFor = { b, map, plain };
+  return plain;
+}
 /** `keyAt`'s answers for the page being painted and the 2 px round it (0: not asked yet): a px beside a piece or a dip asks for six neighbours. */
 const KEYS_W = CHUNK * STONE_PX + 4, keys = new Int32Array(KEYS_W * KEYS_W);
 export function groundCtx(f: StoneField, map: TileMap, marks: Marks, cx: number, cz: number): GroundCtx {
@@ -262,7 +271,7 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
     // a slab away from pieces and dips: its rectangle says where its joints are (its left and top px)
     const dl = u - b.u0, dt = v - b.v0;
     if (dl === 0 || dt === 0) groove(out, at, seed, u, v, MORTAR, damp);
-    else stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, dl - 1, dt - 1, b.u1 - 1 - u, b.v1 - 1 - v, top ? 0 : b.level + 1, top, damp);
+    else stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, dl - 1, dt - 1, b.u1 - 1 - u, b.v1 - 1 - v, top ? 0 : b.level + 1, top || touchesDip(map, b), damp);
     return true;
   }
   // beside a floor piece or a dip the stones are not rectangles: the px round this one say where its stone ends
@@ -275,7 +284,7 @@ export function laidGroundPx(c: GroundCtx, u: number, v: number, out: Uint8Array
     return true;
   }
   const p = b.piece?.of;
-  if (!p) stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, kl, kt, kr, kb, top ? 0 : b.level + 1, top || dip, damp); // no block crack on a pool's bed
+  if (!p) stonePx(out, at, seed, b, top ? CAP : STONES[b.stone], u, v, kl, kt, kr, kb, top ? 0 : b.level + 1, top || touchesDip(map, b), damp); // no block crack or chip on a slab that touches a pool
   else if (p.kind === 'mosaic') {
     // tesserae with thin joints; each has its own tone and leans its own way, so a passing light glints on them
     const tu = u - p.x * STONE_PX, tv = v - p.z * STONE_PX, T = MOSAIC_TESSERA;

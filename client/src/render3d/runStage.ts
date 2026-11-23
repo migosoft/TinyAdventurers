@@ -291,7 +291,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       run.input.primary = run.input.secondary = () => false;
       run.clock.timer = null;
       runView.destroy();
-      paintDone(); // a level that ends before its paint job does would keep the painter's moss source and masks until the next dungeon paints
+      paintDone(); // a level that ends before its paint job does would keep the painter's moss source, masks and block memo until the next dungeon paints
       overlay.dispose();
     },
   };

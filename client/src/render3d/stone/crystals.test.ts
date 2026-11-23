@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BIG_SIZE, BROKEN_TOP, SMALL_SIZE, buildCrystalChunk, crystalChunkOf, crystalCluster, switchedChunks } from './crystals';
 import { noMarks, type Marks } from './place';
+
+// Heavy painting and meshing: well over vitest's 5 s default on a loaded machine (#402).
+vi.setConfig({ testTimeout: 30_000 });
 
 const maxY = (p: Float32Array): number => {
   let m = -Infinity;

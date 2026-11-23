@@ -77,6 +77,11 @@ interface Made { b: Block; rock: boolean }
 // The blocks made so far for one field and map: the painter asks px by px, so nearly every call finds its block here.
 // shortcut: a door that appears or goes within 2.5 tiles of a block made earlier does not change whether that block is rock; empty `made` on such a tile change if the game ever makes one
 let made = new Map<number, Made>(), madeF: StoneField | null = null, madeMap: TileMap | null = null, madeMarks: Marks | null = null;
+/** Lets go of the block memo (and with it the last level's field, map and marks): the paint job calls it when its last unit is done. */
+export function forgetBlocks(): void {
+  made = new Map(); madeF = null; madeMap = null; madeMarks = null;
+  lastFloor = lastWall = null;
+}
 /** `made` is emptied at this size, so it never grows with the map. */
 const MADE_MAX = 20000;
 

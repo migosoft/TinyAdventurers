@@ -1,15 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { CIRCLE_STONES, RUNE_RING, floorBlockAt, wallBlockAt } from './blocks';
 import { ROCK, stoneField } from './field';
 import { FACE_H, FACE_W, FLAG, FLAT_A, PAGE, decodeRelief } from './format';
 import { paintFace, paintGroundRows } from './paint';
-import { CRACK, MEAN_TOLERANCE, OLD_FLOOR, RUNES } from './paintLaid';
+import { CRACK, MEAN_TOLERANCE, OLD_FLOOR, RUNES, touchesDip } from './paintLaid';
 import { VEIN } from './paintRock';
 import { noMarks, placeMarks } from './place';
 import { planSheets } from './plan';
 import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
+
+// Heavy painting and meshing: well over vitest's 5 s default on a loaded machine (#402).
+vi.setConfig({ testTimeout: 30_000 });
 
 /** 32 by 32 cells of floor: four ground pages of laid stone. */
 const floorMap = (): TileMap => new TileMap(32, 32, new Uint8Array(32 * 32).fill(TILE_ID.Floor));
@@ -274,6 +277,24 @@ describe('the painter of natural rock', () => {
         if (p[i] === CRACK[0] && p[i + 1] === CRACK[1] && p[i + 2] === CRACK[2]) stray.push(`${seed}@${u},${v}`);
       }
     }
+    expect(stray).toEqual([]);
+  });
+
+  it('cracks no slab that lies on a pool\'s rim, so no crack stops on a tile line there', () => {
+    const map = floorMap();
+    for (let z = 10; z < 14; z++) for (let x = 10; x < 14; x++) map.set(x, z, TILE_ID.DeepWater);
+    const stray: string[] = [];
+    let touching = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const f = stoneField(map, null, seed), p = new Uint8Array(PAGE * PAGE * 4);
+      paintGroundRows(f, map, noMarks(), 0, 0, 8 * 32, 16 * 32, p);
+      for (let z = 8; z < 16; z++) for (let x = 8; x < 16; x++) if (touchesDip(map, floorBlockAt(f, map, noMarks(), x * 32 + 16, z * 32 + 16)!)) touching++;
+      for (let v = 8 * 32; v < 16 * 32; v++) for (let u = 8 * 32; u < 16 * 32; u++) {
+        const i = (v * PAGE + u) * 4;
+        if (p[i] === CRACK[0] && p[i + 1] === CRACK[1] && p[i + 2] === CRACK[2] && touchesDip(map, floorBlockAt(f, map, noMarks(), u, v)!)) stray.push(`${seed}@${u},${v}`);
+      }
+    }
+    expect(touching).toBeGreaterThan(0);
     expect(stray).toEqual([]);
   });
 

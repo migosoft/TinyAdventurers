@@ -186,7 +186,7 @@ function rockPx(out: Uint8Array, at: number, seed: number, u: number, v: number,
     out[at] = c[0]; out[at + 1] = c[1]; out[at + 2] = c[2]; out[at + 3] = a;
     return;
   }
-  let tone =FACET_TONE[Math.floor(fTone * 4)] - (edge ? EDGE_TONES : 0) - (mark >> 2);
+  let tone = FACET_TONE[Math.floor(fTone * 4)] - (edge ? EDGE_TONES : 0) - (mark >> 2);
   if (mark >= WET * 3) {
     // under a puddle's water: the darkest stone darker still, the facets only faint; the water's outline px darkest
     const k = mark >= WET * 4 ? SHORE : edge ? SUNK_EDGE : SUNK;

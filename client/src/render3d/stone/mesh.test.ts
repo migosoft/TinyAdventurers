@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { inDipMesh } from '../dips/shape';
@@ -14,6 +14,9 @@ import { noMarks, placeMarks, type Marks } from './place';
 import { planSheets } from './plan';
 import { floorHeight } from './shape';
 import { STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
+
+// Heavy painting and meshing: well over vitest's 5 s default on a loaded machine (#402).
+vi.setConfig({ testTimeout: 30_000 });
 
 /** The most triangles a chunk of 16 by 16 cells of laid floor may have (measured: 6 022, 24 a cell; the flat floor had 512). */
 const LAID_CHUNK_TRIS = 6600;

@@ -4,13 +4,14 @@ import type { TileMap } from '../../sim/map';
 import { FACE_H, FACE_W, PAGE } from './format';
 import { CHUNK } from './grid';
 import type { StoneField } from './field';
+import { forgetBlocks } from './blocks';
 import { faceDamp, forgetMoss, groundCtx, laidFacePx, laidGroundPx } from './paintLaid';
 import { forgetLines, pitAt, pitPx, rockFacePx, rockGroundPx, rockLines } from './paintRock';
 import type { Face } from './plan';
 import type { Marks } from './place';
 
-/** Drops what the painters keep of the level (the moss source, the rock's line masks): the paint job calls it when its last unit is done. */
-export const paintDone = (): void => { forgetMoss(); forgetLines(); };
+/** Drops what the painters keep of the level (the moss source, the rock's line masks, the block memo with its field, map and marks): the paint job calls it when its last unit is done. */
+export const paintDone = (): void => { forgetMoss(); forgetLines(); forgetBlocks(); };
 
 /**
  * Paints rows [row0, row1) of the ground page of chunk (cx, cz) into `out` (a whole page, PAGE by PAGE RGBA). The texel of world point

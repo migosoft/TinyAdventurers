@@ -62,7 +62,7 @@ describe('stoneJob', () => {
     expect(after).toEqual({ pages: [], faces: [] });
   });
 
-  it('the budget constant is the plan\'s 4 ms', () => {
+  it('the budget constant is 4 ms', () => {
     expect(STONE_BUDGET_MS).toBe(4);
   });
 });
