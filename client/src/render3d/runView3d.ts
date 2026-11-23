@@ -142,6 +142,8 @@ export class RunView3d implements RunView {
   private forest: Forest | null = null;
   /** Milliseconds of tree growing per frame; the stage raises it while the loading screen is up (#322). */
   treeBudgetMs = TREE_BUDGET_MS;
+  /** False while the loading screen covers a level still being built: the frame steps everything (trees too) but does not draw (#322). */
+  drawing = true;
   /** Trees grown of all, 0..1; null without a forest. */
   get treeProgress(): number | null {
     return this.forest ? (this.forest.total ? this.forest.built / this.forest.total : 1) : null;
@@ -503,6 +505,10 @@ export class RunView3d implements RunView {
     if (this.shakeAt.x !== 0 || this.shakeAt.y !== 0) {
       groundShift(pitch, yaw, this.shakeAt.x, this.shakeAt.y, ART * c.zoom, this.shakeGround);
       drawCam = { ...cam, x: cam.x + this.shakeGround.x, z: cam.z + this.shakeGround.z };
+    }
+    if (!this.drawing) {
+      this.drawCalls = 0;
+      return this.stats(c, view.meshes);
     }
     c.timer.renderStart();
     this.drawCalls = view.draw(

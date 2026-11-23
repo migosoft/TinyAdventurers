@@ -488,6 +488,27 @@ describe('the loading phase', () => {
     return { loading, ...setup(ROWS, { woodland: WOODLAND }, 0, loading) };
   };
 
+  it('draws nothing while the level is being built behind the screen, then the warm frames draw', () => {
+    let t = 0;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => (t += 100)); // every job unit overruns its slice: one per frame
+    try {
+      const { stage, frame } = start();
+      const view = fakeView();
+      stage.built!(view);
+      const draw = vi.mocked(view.draw);
+      let frames = 0;
+      while (!draw.mock.calls.length && frames < 500) {
+        frames++;
+        frame(view);
+        if (!draw.mock.calls.length) expect(frames).toBeLessThan(500);
+      }
+      expect(frames).toBeGreaterThan(1); // it took frames to build, none drawn
+      expect(stage.job.done).toBe(true); // the first draw came with the last job
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('keeps the screen up, swallows keys and sends Loaded once the jobs and the warm frames are done', () => {
     const { loading, net, stage, frame, host } = start();
     const view = fakeView();

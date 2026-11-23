@@ -208,6 +208,7 @@ export function createRunStage(
       run.input.free = c.params.free;
       if (session.ended) loading.hide();
       const loadingNow = loading.visible;
+      let building = false; // the screen covers a level still being built: nothing is drawn, so the jobs get the whole frame (#322)
       if (loadingNow) {
         runView.treeBudgetMs = LOAD_SLICE_MS;
         // The screen covers the canvas: clicks and E meanwhile must not fire at the first step after RunBegins.
@@ -224,6 +225,7 @@ export function createRunStage(
         const sp = stoneRun.progress;
         const trees = runView.treeProgress;
         const built = job.done && stoneRun.done && (trees === null || trees >= 1);
+        building = !built;
         if (built && c.view) warmFrames++;
         const s = loadState({
           assets: true, cover: job.progress, stone: world.stone ? (stoneRun.done ? 1 : sp ? sp.done / sp.total : 0) : null, trees, warmFrames,
@@ -238,6 +240,7 @@ export function createRunStage(
           }
         }
       }
+      runView.drawing = !building;
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
       const r = window.__r3d;

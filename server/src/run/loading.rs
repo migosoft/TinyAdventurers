@@ -17,9 +17,11 @@ impl Run {
         self.waiting = true;
     }
 
-    /// True when the hold ends: every connected hero has loaded, or `waited_s` reached `LOAD_TIMEOUT_S`.
+    /// True when the hold ends: every connected hero has loaded, or `waited_s` reached `LOAD_TIMEOUT_S` and at least one
+    /// has (with nobody loaded the hold goes on until the first `Loaded`: a run with no hero in it would end in defeat at once).
     pub fn hold_over(&self, waited_s: f64) -> bool {
-        self.waiting && (waited_s >= LOAD_TIMEOUT_S || self.players.iter().filter(|p| p.tx.is_some()).all(|p| !p.loading))
+        let mut heroes = self.players.iter().filter(|p| p.tx.is_some());
+        self.waiting && (heroes.clone().all(|p| !p.loading) || (waited_s >= LOAD_TIMEOUT_S && heroes.any(|p| !p.loading)))
     }
 
     /// Ends the hold: loaded heroes start; a slow hero stays `Neutral` (monsters ignore it) until its `Loaded`.
@@ -120,12 +122,23 @@ mod tests {
         let mut run = two();
         run.begin_loading();
         assert!(!run.hold_over(LOAD_TIMEOUT_S - 0.1));
-        assert!(run.hold_over(LOAD_TIMEOUT_S));
         send(&mut run, 0, ClientMsg::Loaded);
+        assert!(!run.hold_over(LOAD_TIMEOUT_S - 0.1));
+        assert!(run.hold_over(LOAD_TIMEOUT_S));
         run.release();
         assert_eq!(run.players[1].side, Side::Neutral);
         assert!(run.players[1].loading);
         assert_eq!(run.players[0].side, Side::Friendly);
+    }
+
+    #[test]
+    fn with_nobody_loaded_the_hold_goes_on_past_the_timeout() {
+        let mut run = two();
+        run.begin_loading();
+        assert!(!run.hold_over(LOAD_TIMEOUT_S));
+        assert!(!run.hold_over(10.0 * LOAD_TIMEOUT_S));
+        send(&mut run, 1, ClientMsg::Loaded);
+        assert!(run.hold_over(10.0 * LOAD_TIMEOUT_S));
     }
 
     #[test]
