@@ -5,7 +5,7 @@
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
 // the dragon frames built from its base sprite (see dragon-frames.ts), plus
 // the lich's own frames (see lich-frames.ts), plus the demon's frames
-// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see figure-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts), plus the explosions (see explosion-frames.ts), plus the cove's tree and plants (see cove-frames.ts), plus the knight (see figure-frames.ts), plus the 3D models' lamp outlines (see model-frames.ts).
+// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the dire wolf (see figure-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts), plus the explosions (see explosion-frames.ts), plus the cove's tree and plants (see cove-frames.ts), plus the knight (see figure-frames.ts), plus the 3D models' lamp outlines (see model-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,6 @@ import { buildDragon } from './dragon-frames';
 import { buildLich } from './lich-frames';
 import { buildDemon } from './demon-frames';
 import { buildBarrels } from './barrel-frames';
-import { buildTorches } from './torch-frames';
 import { buildFigure, buildSheetFigure } from './figure-frames';
 import { buildSpectres } from './spectre-frames';
 import { buildExplosions } from './explosion-frames';
@@ -75,7 +74,6 @@ const strips: { img: Image; frames: Record<string, { x: number; y: number; w: nu
   buildLich(src.w),
   buildDemon(path.join(root, 'assets-src', 'demon'), src.w),
   buildBarrels(src.w),
-  buildTorches(path.join(root, 'assets-src', 'torch'), src.w),
   buildFigure(path.join(root, 'assets-src', 'enchanted-forest', 'frames', 'Wolf'), 'Wolf', 'dire_wolf', src.w),
   buildSpectres(src.w),
   buildExplosions(path.join(root, 'assets-src', 'explosion'), src.w),

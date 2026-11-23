@@ -22,7 +22,7 @@ vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => nul
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
 for (const n of ['lich', 'knight_m', 'necromancer', 'imp', 'chort', 'wizzard_m']) for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`${n}_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
-for (let i = 0; i < 4; i++) { frames[`necromancer_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 }; frames[`torch_f${i}`] = { x: 0, y: 0, w: 16, h: 16 }; }
+for (let i = 0; i < 4; i++) { frames[`necromancer_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 }; }
 const assets = { image: {} as HTMLImageElement, frames };
 
 const made: Stage[] = [];
