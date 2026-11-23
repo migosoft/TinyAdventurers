@@ -47,14 +47,25 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
     let flies_through = matches!(pr.pierce, Pierce::Through { left, .. } if left > 0);
     for k in 1..=steps {
         let s = k as f64 * step;
-        let p = pr.pos + pr.vel * (s / speed);
+        let mut p = pr.pos + pr.vel * (s / speed);
+        // An arcing shot replays its height and ends at its landing point, like the real flight.
+        let arc = pr.arc.as_ref().map(|a| (a, a.flown + s / speed));
+        let landed = arc.is_some_and(|(a, t)| t >= a.flight - 1e-9);
+        if let (Some((a, _)), true) = (arc, landed) {
+            p = a.land;
+        }
+        let z = arc.map(|(a, t)| super::arc::shot_z(a.flight, t));
+        let touches = |body: Vec2, r: f64, top: f64, flat: f64| match z {
+            Some(z) => super::arc::arc_touches(body, r, top, p, z, pr.radius),
+            None => flat < r + pr.radius,
+        };
         if aim_reached(pr, p) || run.layout.map.opaque_at(p) || stopping_object(run, p, pr.radius).is_some() {
             return None;
         }
         // Who the real flight takes here: a shot of the enemies' side takes heroes first, then monsters in order; a
         // heroes' shot takes monsters in order, then a hero on the enemy side. `at` stands in for this monster.
-        let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && run.monsters[j].shot_dist(p) < run.monsters[j].radius + pr.radius;
-        let takes_hero = || run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && o.pos().dist(p) < PLAYER_RADIUS + pr.radius);
+        let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && touches(run.monsters[j].pos, run.monsters[j].radius, run.monsters[j].shot_top(), run.monsters[j].shot_dist(p));
+        let takes_hero = || run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && touches(o.pos(), PLAYER_RADIUS, o.kind().body_height(), o.pos().dist(p)));
         let heroes_first = pr.side != Side::Friendly;
         if !flies_through {
             if heroes_first && takes_hero() {
@@ -64,10 +75,17 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
                 return None;
             }
         }
-        if m.shot_dist_at(at, p) < m.radius + pr.radius + extra {
+        let hit = match z {
+            Some(z) => super::arc::arc_touches(at, m.radius, m.shot_top(), p, z, pr.radius + extra),
+            None => m.shot_dist_at(at, p) < m.radius + pr.radius + extra,
+        };
+        if hit {
             return Some(s);
         }
         if !flies_through && ((mi + 1..run.monsters.len()).any(takes_other) || (!heroes_first && takes_hero())) {
+            return None;
+        }
+        if landed {
             return None;
         }
     }
@@ -476,23 +494,53 @@ mod tests {
 
     #[test]
     fn the_capsule_matches_the_hit() {
+        // `arcs`: an arcing arrow meets a plain circle (the real hit does the same), a flat bolt the capsule.
+        for (class, ability, arcs) in [(ClassId::Wizard, AbilityId::MagicMissile, false), (ClassId::ElvenRanger, AbilityId::Shoot, true)] {
+            let (mut run, mi) = fixture(class, 60.0);
+            run.monsters[mi].kind = EntityKind::Lich;
+            run.monsters[mi].radius = 8.0;
+            run.monsters[mi].hp = 40.0; // the shot is a threat to it
+            // The shot flies level with the hero, 11 px north of the Lich's feet: outside a plain circle of radius
+            // 8 + the shot's, inside the capsule that reaches 12 px north.
+            run.monsters[mi].pos.y += 11.5;
+            fire(&mut run, ability, 0.0, 60.0);
+            let m = &run.monsters[mi];
+            assert_eq!(run.projectiles[0].arc.is_some(), arcs);
+            assert!(11.5 > m.radius + run.projectiles[0].radius, "a plain circle would miss");
+            assert_eq!(threats(&run, mi).len(), usize::from(!arcs), "{ability:?}: the replay");
+            let hp = run.monsters[mi].hp;
+            for _ in 0..60 {
+                run.step();
+            }
+            assert_eq!(run.monsters[mi].hp < hp, !arcs, "{ability:?}: the real hit agrees");
+        }
+    }
+
+    #[test]
+    fn the_replay_ends_where_the_arc_lands() {
+        // Landing short of the orc: the shot never reaches it, flat or not, and the replay agrees with the real flight.
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 60.0);
-        run.monsters[mi].kind = EntityKind::Lich;
-        run.monsters[mi].radius = 8.0;
-        run.monsters[mi].hp = 40.0; // the arrow is a threat to it
-        // The arrow flies level with the hero, 11 px north of the Lich's feet: outside a plain circle of radius
-        // 8 + 2 (the arrow's), inside the capsule that reaches 12 px north.
-        run.monsters[mi].pos.y += 11.0;
-        let m = &run.monsters[mi];
-        assert!(11.0 > m.radius + 2.0, "a plain circle would miss");
-        assert!(m.shot_dist(m.pos - Vec2::new(0.0, 11.0)) < m.radius + 2.0, "the capsule does not");
-        fire(&mut run, AbilityId::Shoot, 0.0, 60.0);
-        assert_eq!(threats(&run, mi).len(), 1, "the capsule is on course");
+        fire(&mut run, AbilityId::Shoot, 0.0, 30.0);
+        assert!(threats(&run, mi).is_empty(), "it lands short");
         let hp = run.monsters[mi].hp;
         for _ in 0..60 {
             run.step();
         }
-        assert!(run.monsters[mi].hp < hp, "and the arrow really hits it");
+        assert_eq!(run.monsters[mi].hp, hp);
+    }
+
+    #[test]
+    fn an_arrow_passing_overhead_is_no_threat() {
+        // Aimed 260 px far, the arrow is about 35 px up over an orc (16 px tall) 130 px out.
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 130.0);
+        run.smarts.notice.value = 300.0;
+        fire(&mut run, AbilityId::Shoot, 0.0, 260.0);
+        assert!(run.projectiles[0].arc.is_some(), "the arrow flies an arc");
+        assert!(threats(&run, mi).is_empty(), "it passes over");
+        // Aimed at its feet it comes down on it.
+        run.projectiles.clear();
+        fire(&mut run, AbilityId::Shoot, 0.0, 130.0);
+        assert_eq!(threats(&run, mi).len(), 1, "a near shot is a threat");
     }
 
     // ---- the step and the hook ----
