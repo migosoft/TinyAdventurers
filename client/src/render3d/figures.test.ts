@@ -1854,8 +1854,9 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const fg = dipFigs();
     let o = run(fg, () => [knight(6, 1)], 120);
     const lift = low(o.cards) - dryLow;
-    expect(lift).toBeGreaterThan(LAVA_LEVEL - 1.05);
-    expect(lift).toBeLessThan(LAVA_LEVEL - 0.5);
+    // after two seconds about two thirds of the way down (1 - exp(-1.1))
+    expect(lift).toBeGreaterThan(LAVA_LEVEL - LAVA_SINK);
+    expect(lift).toBeLessThan(LAVA_LEVEL - 0.5 * LAVA_SINK);
     expect(fg.anchors.get(10)!.y).toBeCloseTo(lift, 6);
     o = run(fg, () => [knight(8, 5)], 60, 1 / 60, 12);
     expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 8.5, 5.5), 6);

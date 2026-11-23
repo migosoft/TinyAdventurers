@@ -202,8 +202,9 @@ describe('descent', () => {
     let s = 0;
     const goal = LAVA_SINK;
     for (let i = 0; i < 60; i++) s = stepLavaSink(s, goal, 1 / 60);
-    expect(s).toBeGreaterThan(0.3);
-    expect(s).toBeLessThan(0.6);
+    // after a second about 42 % of the way down (1 - exp(-0.55))
+    expect(s / goal).toBeGreaterThan(0.3);
+    expect(s / goal).toBeLessThan(0.6);
     for (let i = 0; i < 300; i++) s = stepLavaSink(s, goal, 1 / 60);
     expect(Math.abs(s - goal)).toBeLessThan(0.05);
     for (let i = 0; i < 60; i++) s = stepLavaSink(s, 0, 1 / 60);
@@ -211,7 +212,7 @@ describe('descent', () => {
   });
 
   it('settles at LAVA_SINK', () => {
-    expect(LAVA_SINK).toBe(1.05);
+    expect(LAVA_SINK).toBe(0.7);
     let s = 0;
     for (let i = 0; i < 600; i++) s = stepLavaSink(s, LAVA_SINK, 1 / 60);
     expect(Math.abs(s - LAVA_SINK)).toBeLessThan(0.01);
