@@ -25,7 +25,7 @@ import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, viewRay, type Cam } from './camera';
 import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
-import { LAVA_SHARE } from './dips/descent';
+import { LAVA_SINK } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, SHADE_FADE, SPECTRE_FORM, SPECTRE_SINK, untinted, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
@@ -1177,14 +1177,13 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(dipFigs().frame(frame([sleeper(8, 5)]), cam(), look({ kit, ...all })).models[0].lift).toBeCloseTo(0, 6);
   });
 
-  it('a model figure in lava sinks the same share of its height as a card (#344)', () => {
+  it('a model figure in lava floats LAVA_SINK below the surface, as a card does (#404)', () => {
     for (const kind of [KIND.Paladin, KIND.Ogre]) {
       const fg = dipFigs();
       let out!: FigureOut;
       for (let i = 0; i < 600; i++) out = fg.frame(frame([ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) })], { dt: 1 / 60, now: 10 + i / 60 }), cam(), look({ kit, ...all }));
       expect(out.models.length, `${kind} is a model`).toBeGreaterThan(0);
-      const a = fg.anchors.get(10)!;
-      expect(Math.abs((LAVA_LEVEL - a.y) / (a.height / TILE) - LAVA_SHARE), `${kind}`).toBeLessThan(0.03);
+      expect(fg.anchors.get(10)!.y, `${kind}`).toBeCloseTo(LAVA_LEVEL - LAVA_SINK, 2);
     }
   });
 
@@ -1833,16 +1832,12 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(fly.anchors.get(10)!.y).toBe(0);
   });
 
-  it('a hero, a big figure and the demon in lava sink the same share of their height, but never below the bed (#344)', () => {
-    const bed = bedAt(dm, 6.5, 1.5);
-    // The Knight and the Ogre float at the share; the demon is so tall that the share would reach below this pool's bed, so it stands on it.
-    for (const [kind, onBed] of [[KIND.Knight, false], [KIND.Ogre, false], [KIND.Demon, true]] as const) {
+  it('a hero, a big figure and the demon all float LAVA_SINK below the surface: the pool has one depth (#404)', () => {
+    expect(bedAt(dm, 6.5, 1.5)).toBeLessThan(LAVA_LEVEL - LAVA_SINK);   // the pool is deeper than the sink: no one stands on its bed
+    for (const kind of [KIND.Knight, KIND.Ogre, KIND.Demon]) {
       const fg = dipFigs();
       run(fg, () => [ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) })], 600);
-      const a = fg.anchors.get(10)!;
-      const height = a.height / TILE;
-      expect(LAVA_LEVEL - LAVA_SHARE * height < bed, `${kind} reaches the bed`).toBe(onBed);
-      expect(Math.abs(a.y - Math.max(bed, LAVA_LEVEL - LAVA_SHARE * height)) / height, `${kind}`).toBeLessThan(0.03);
+      expect(fg.anchors.get(10)!.y, `${kind}`).toBeCloseTo(LAVA_LEVEL - LAVA_SINK, 2);
     }
   });
 

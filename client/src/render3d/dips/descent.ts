@@ -9,12 +9,8 @@ export const DROWN_SINK = 0.4;
 /** The faller's body radius in tiles (a card or model is about 0.6 wide): a falling figure keeps this far from a wall. */
 export const FALL_RADIUS = 0.3;
 export const LAVA_IN = 0.55, LAVA_OUT = 2.5;
-/** The share of its height a body sinks below the lava's level. */
-export const LAVA_SHARE = 0.6;
-/** How deep below the lava's level a body of `height` tiles floats. */
-export function lavaSinkOf(height: number): number {
-  return LAVA_SHARE * height;
-}
+/** How deep (tiles) below the lava's level every body floats: the pool has one depth, so a tall body sinks as far as a short one (the user, #404). */
+export const LAVA_SINK = 1.05;
 export interface Faller { x: number; z: number; y: number; vx: number; vz: number; vy: number; cx: number; cz: number; age: number }
 
 /** A fall starting at (x, z) tiles and height y with the figure's drawn speed (tiles/s, capped at SLIDE_MAX); cx, cz: the centre of the cell it sank in. */

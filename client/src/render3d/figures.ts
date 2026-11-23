@@ -21,7 +21,7 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
-import { drownY, lavaSinkOf, sinkCell, standY, stepLavaSink } from './dips/descent';
+import { drownY, LAVA_SINK, sinkCell, standY, stepLavaSink } from './dips/descent';
 import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
@@ -803,7 +803,7 @@ export class Figures3d {
     mo.px = x;
     mo.pz = z;
     const inLava = !o.skims && this.map.get(Math.floor(x), Math.floor(z)) === TILE_ID.Lava;
-    mo.lava = stepLavaSink(mo.lava, inLava ? lavaSinkOf(o.height) : 0, dt);
+    mo.lava = stepLavaSink(mo.lava, inLava ? LAVA_SINK : 0, dt);
     mo.y = o.skims ? 0 : standY(this.bedAt(x, z), inLava || mo.lava > 0.001 ? mo.lava : null);
     return { x, z, y: mo.y, d: undefined, started, gone: false };
   }
