@@ -89,6 +89,17 @@ describe('FigureStates.stateOf', () => {
     expect(b.started).toBe(false);
     expect(b.s.x).toBe(at(1));
   });
+  it('a predicted sink on a chasm falls, it does not drown (#320)', () => {
+    const fs = new FigureStates(map());
+    const a = fs.stateOf(ent(), frame({ x: at(2), sinking: true }), 5);
+    expect(a.started).toBe(true);
+    expect(a.drowning).toBe(false);
+    const b = fs.stateOf(ent(), frame({ x: at(0), sinking: true }), 5 + CONST.FALL_TIME / 2);
+    expect(b.drowning).toBe(false);
+    expect(b.s.fall).toBeCloseTo(0.5);
+    expect(b.s.drown).toBe(0);
+    expect(b.s.x).toBe(at(2));
+  });
 });
 
 describe('FigureStates.event', () => {
@@ -104,7 +115,7 @@ describe('FigureStates.event', () => {
     const fs = new FigureStates(map());
     fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 0);
     fs.event({ t: 'Sink', id: 7, x: at(2), y: 9, how: 0 }, 5);
-    expect(fs.stateOf(ent({ id: 7 }), frame(), 0.45).s.drown).toBeCloseTo(0.5);
+    expect(fs.stateOf(ent({ id: 7 }), frame(), CONST.DROWN_TIME / 2).s.drown).toBeCloseTo(0.5);
   });
   it('Invisible on then takeVanish is true once; off then takeReappear is true once', () => {
     const fs = new FigureStates(map());

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ANIM, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { FIGURES } from './defs';
-import { figurePose, newPoseMemory, type PoseInput, type PoseMemory } from './pose';
+import { figurePose, newPoseMemory, shade, type PoseInput, type PoseMemory } from './pose';
 import { SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 
 const bounds = () => ({ l: 3, r: 12, t: 4, w: 16, h: 16 });
@@ -24,6 +24,7 @@ const LICH = FIGURES[KIND.Lich];
 const KNIGHT = FIGURES[KIND.Knight];
 const PALADIN = FIGURES[KIND.Paladin];
 const SHADE = FIGURES[KIND.Shade];
+const DISCIPLE = FIGURES[KIND.Disciple]; // a def tint (0xff7070) and a staff
 
 const input = (o: Partial<PoseInput> = {}): PoseInput => ({ x: 0, y: 0, anim: ANIM.Idle, animT: 0, aim: 0, screenAim: o.aim ?? 0, flags: 0, ...o });
 const pose = (d = KNIGHT, o: Partial<PoseInput> = {}, dt = 0, m: PoseMemory = newPoseMemory()) => figurePose(d, input({ screenAim: o.aim ?? 0, ...o }), dt, m, bounds);
@@ -120,6 +121,50 @@ describe('figurePose', () => {
     expect(Math.abs(a.body.x)).toBe(1);
     expect(Math.abs(b.body.x)).toBe(1);
     expect(a.body.x).not.toBe(b.body.x);
+  });
+
+  it('the wind-up flash alternates the red with the def tint (#320)', () => {
+    const m = newPoseMemory();
+    const a = pose(DISCIPLE, { anim: ANIM.Windup }, 0.07, m);
+    const b = pose(DISCIPLE, { anim: ANIM.Windup }, 0.07, m);
+    expect([a.tint, b.tint]).toEqual([{ mode: 'mul', rgb: 0xff8080 }, { mode: 'mul', rgb: DISCIPLE.tint }]);
+  });
+
+  it('a status tint wins in the order poisoned, slowed, chilled, tainted, def tint (#320)', () => {
+    const fx = (...e: number[]) => e.reduce((n, k) => n | (1 << k), 0);
+    const rgb = (d: typeof KNIGHT, effects: number) => { const t = pose(d, { effects }).tint; return t.mode === 'mul' ? t.rgb : null; };
+    const all = fx(EFFECT.Poisoned, EFFECT.Slowed, EFFECT.Chilled, EFFECT.Tainted);
+    expect(rgb(DISCIPLE, all)).toBe(shade(1, 0x9be37a, 0.5));                                   // poisoned at clock 0
+    expect(rgb(DISCIPLE, fx(EFFECT.Slowed, EFFECT.Chilled, EFFECT.Tainted))).toBe(0xa0c8ff);
+    expect(rgb(DISCIPLE, fx(EFFECT.Chilled, EFFECT.Tainted))).toBe(0xd8ecff);
+    expect(rgb(DISCIPLE, fx(EFFECT.Tainted))).toBe(shade(1, 0x9be37a, 0.15));                    // tainted at clock 0
+    expect(rgb(DISCIPLE, 0)).toBe(DISCIPLE.tint);
+    expect(rgb(KNIGHT, 0)).toBeNull();
+  });
+
+  it('falling darkens the body and the weapon, drowning only the body, and neither shows the hurt flash (#320)', () => {
+    const fall = pose(PALADIN, { fall: 0.5, flags: FLAG.HURT });
+    expect(fall.tint).toEqual({ mode: 'mul', rgb: shade(1 - 0.5 * 0.95, 0, 0) });
+    expect(fall.weaponTint).toBe(shade(1 - 0.5 * 0.95, 0, 0));
+    const drown = pose(PALADIN, { drown: 0.5, flags: FLAG.HURT });
+    expect(drown.tint).toEqual({ mode: 'mul', rgb: shade(1, 0x243f4c, 0.75) });
+    expect(drown.weaponTint).toBe(PALADIN.weaponTint ?? null);
+    expect(pose(PALADIN, { drown: 1 }).tint).toEqual({ mode: 'mul', rgb: shade(1, 0x243f4c, 1) });   // the mix stops at 1
+  });
+
+  it('the weapon is hidden once drown reaches 0.4 (#320)', () => {
+    expect(pose(PALADIN, { drown: 0.39 }).weapon).not.toBeNull();
+    expect(pose(PALADIN, { drown: 0.4 }).weapon).toBeNull();
+  });
+
+  it('a frozen figure keeps its idle frame while it moves (#320)', () => {
+    const m = newPoseMemory();
+    const fx = 1 << EFFECT.Frozen;
+    const a = pose(KNIGHT, { effects: fx }, 0, m);
+    const b = pose(KNIGHT, { anim: ANIM.Move, effects: fx }, 0.5, m);
+    expect(b.frame).toBe(a.frame);
+    expect(b.frame).toMatch(/idle/);
+    expect(pose(KNIGHT, { anim: ANIM.Move }, 0.5).frame).toMatch(/run/);   // unfrozen it runs
   });
 
   it('melee step goes along the world aim', () => {
