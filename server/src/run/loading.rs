@@ -129,6 +129,19 @@ mod tests {
     }
 
     #[test]
+    fn a_slow_hero_does_not_keep_a_dead_party_alive() {
+        let mut run = two();
+        run.begin_loading();
+        send(&mut run, 0, ClientMsg::Loaded);
+        run.release();
+        run.step();
+        assert!(run.ended.is_none());
+        run.players[0].alive = false;
+        run.step();
+        assert_eq!(run.ended.map(|e| e.0), Some(false));
+    }
+
+    #[test]
     fn a_slow_hero_is_safe_until_loaded() {
         let mut run = two();
         run.begin_loading();

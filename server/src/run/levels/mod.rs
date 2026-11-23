@@ -34,7 +34,8 @@ pub trait LevelRules {
         true
     }
     fn failed(run: &Run) -> bool {
-        !run.players.iter().any(|p| p.alive)
+        // A hero still loading is untouchable (#322), so it must not keep a lost party alive.
+        !run.players.iter().any(|p| p.alive && !p.loading)
     }
     /// Where the debug path leads.
     fn debug_target(_run: &Run) -> Option<Vec2> {

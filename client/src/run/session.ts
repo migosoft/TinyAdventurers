@@ -102,6 +102,8 @@ export class RunSession {
   private acc = 0;
   /** The server's `RunBegins` came: the fixed steps and inputs run only from then on (#322). */
   started = false;
+  /** `RunEnded` came (a hero that never finished loading must still see the end screen). */
+  ended = false;
   /** The latest `Loading` count (clients loaded of the party), for the loading screen. */
   waiting: { ready: number; total: number } | null = null;
   private loadedSent = false;
@@ -546,7 +548,10 @@ export class RunSession {
       this.disabled = m.disabled;
       this.pred.setNumbers(m.speed, m.abilities, m.fallback);
       this.hud.setAbilities(m.abilities, m.disabled);
-    } else if (m.t === 'RunEnded') this.hud.showEnd(m);
+    } else if (m.t === 'RunEnded') {
+      this.ended = true;
+      this.hud.showEnd(m);
+    }
   }
 
   private onSnapshot(s: Snapshot): void {

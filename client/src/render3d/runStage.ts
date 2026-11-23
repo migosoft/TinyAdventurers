@@ -206,6 +206,7 @@ export function createRunStage(
       }
       run.input.yaw = (shown * Math.PI) / 180;
       run.input.free = c.params.free;
+      if (session.ended) loading.hide();
       const loadingNow = loading.visible;
       if (loadingNow) {
         runView.treeBudgetMs = LOAD_SLICE_MS;

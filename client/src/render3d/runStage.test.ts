@@ -522,6 +522,17 @@ describe('the loading phase', () => {
     expect(stage.key!({ code: 'KeyZ', repeat: false } as KeyboardEvent)).toBe(true);
   });
 
+  it('RunEnded hides the screen of a hero that never loaded', () => {
+    const { loading, run, stage, frame } = start();
+    const view = fakeView();
+    stage.built!(view);
+    frame(view);
+    expect(loading.visible).toBe(true);
+    run.session.receive({ t: 'RunEnded', victory: false, level: 'dungeon', boss: null, time: 1, stats: [] } as never);
+    frame(view);
+    expect(loading.visible).toBe(false);
+  });
+
   it('a RunBegins before the client is ready (the timeout) keeps the screen until it is', () => {
     const { loading, run, stage, frame, net } = start();
     const view = fakeView();
@@ -561,6 +572,18 @@ describe('startRun3d', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(loading.visible).toBe(false);
     run.stop();
+  });
+
+  it('a stopped start that resolves null leaves a newer run\'s screen alone', async () => {
+    const loading = new LoadingScreen(document.createElement('div'));
+    loading.show();
+    const run = startRun3d(document.createElement('div'), '', {
+      info: startInfo(ROWS), net: fakeNet() as unknown as Net, hud: fakeHud() as unknown as Hud, myClass: 'Wizard', dev: false, loading,
+      startHost: (async () => null) as unknown as typeof startHost,
+    });
+    run.stop();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loading.visible).toBe(true);
   });
 
   it('a host that fails to start hides the loading screen', async () => {

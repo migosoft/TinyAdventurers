@@ -125,7 +125,7 @@ export function startRun3d(
     if (stopped) h.stop(); // stopped while the atlas loaded: the host disposes the stage it gets and ends
     return createRunStage(run, deps.info, assets, h, el, clearTimer, deps.loading);
   }).then((h) => {
-    if (!h) deps.loading?.hide(); // the host showed its own error box (no GPU, no atlas) and resolved null
+    if (!h && !stopped) deps.loading?.hide(); // the host showed its own error box (no GPU, no atlas) and resolved null
   }).catch((e: unknown) => {
     deps.loading?.hide(); // the error box must not stay behind the screen
     console.error('The 3D run could not start:', e);
