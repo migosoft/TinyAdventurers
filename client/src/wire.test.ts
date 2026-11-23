@@ -20,7 +20,7 @@ function close(got: unknown, want: unknown, path: string): void {
     if (/^(ents\.\d+\.6|ev\.\d+\.aim)$/.test(path)) {
       d = Math.min(d, 2 * Math.PI - d);
       expect(d, path).toBeLessThanOrEqual(AIM_TOL);
-    } else if (/^(ents\.\d+\.[23]|ev\.\d+\.[xy]|drain\.\d+\.[01]|lights\.\d+\.[01])$/.test(path)) {
+    } else if (/^(ents\.\d+\.[23]|ev\.\d+\.[xy]|drain\.\d+\.[01]|solids\.\d+\.[012]|lights\.\d+\.[01])$/.test(path)) {
       expect(d, path).toBeLessThanOrEqual(POS_TOL);
     } else {
       expect(d, path).toBeLessThanOrEqual(1e-6 * Math.max(1, Math.abs(want)));
@@ -56,13 +56,13 @@ describe('wire', () => {
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1]], me, null, [], 0, null, [], [], [], [], null]);
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1]], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
   it('keeps the Attribute amount of an own effect', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5'], 'the Orc Warrior'];
-    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], [], [], null]);
+    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.me.effects).toEqual([[16, 12.5, -2, false], [4, 3, 0, true]]);
     expect(snap.me.paused_items).toEqual(['BandOfVigor']);
     expect(snap.me.paused_nodes).toEqual(['PU5']);
@@ -71,7 +71,7 @@ describe('wire', () => {
 
   it('unpacks moving lights with an optional colour', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], [], [], null]);
+    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], [], [], [], null]);
     expect(snap.lights).toEqual([[10, 20, 2, null], [1, 2, 3, 0x78c8ff]]);
   });
 

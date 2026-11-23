@@ -96,6 +96,20 @@ pub(crate) struct Sent {
     pub dark: Vec<u32>,
 }
 
+/// How near (px) a blocking object must be to the viewer to be sent for the prediction alone.
+const NEAR_SOLID: f64 = 3.0 * TILE;
+
+/// The blocking objects within `NEAR_SOLID` of `at` that `ents` lacks (unseen: behind a wall, or the viewer is
+/// Blind), as (x, y, half-size): the client predicts the hero's walk with them as it does with the sent ones
+/// and never draws them (#274). Only what is close, so a modified client learns little.
+pub(crate) fn near_solids(run: &Run, at: Vec2, ents: &[EntSnap]) -> Vec<(f32, f32, f32)> {
+    run.objects
+        .iter()
+        .filter(|o| o.blocks() && o.pos.dist(at) <= NEAR_SOLID && !ents.iter().any(|e| e.0 == o.id))
+        .map(|o| (o.pos.x as f32, o.pos.y as f32, o.radius as f32))
+        .collect()
+}
+
 /// Is an event sent: party-wide ones always, positional ones where the point is in sight.
 fn ev_sent(view: &View, at: Option<Vec2>) -> bool {
     at.map_or(true, |p| visible(view, p, 0.0))
@@ -281,6 +295,7 @@ pub fn send_snapshots(run: &mut Run) {
 
         let sent = snapshot_ents(run, pi, &view, &dark);
         let looks = looks_of(run, &sent.ents);
+        let solids = near_solids(run, view_pos, &sent.ents);
         let lights = &run.lights;
         let mut ev: Vec<Ev> = Vec::new();
         let mut dark_ev: Vec<u16> = Vec::new();
@@ -335,6 +350,7 @@ pub fn send_snapshots(run: &mut Run) {
             looks,
             dark: sent.dark,
             dark_ev,
+            solids,
             srv_ms: run.srv_ms,
         };
         run.players[pi].view = view;
@@ -408,6 +424,47 @@ mod tests {
         let from = Map::center_of(tx + 3, ty);
         crate::run::tests::enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         assert_eq!(mark(&mut run, id), Some(false), "a fire bolt lights it");
+    }
+
+    /// A barrel `dx` px east of hero 0.
+    fn barrel_east(run: &mut Run, dx: f64) -> u32 {
+        use crate::run::objects::{Barrel, ObjState};
+        let at = run.players[0].pos() + Vec2::new(dx, 0.0);
+        run.spawn_object(EntityKind::Barrel, at, ObjState::Barrel(Barrel::new()))
+    }
+
+    #[test]
+    fn a_barrel_on_unlit_floor_is_sent_in_the_dark_and_not_as_a_near_solid() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        dark_view(&mut run, 0.0);
+        let id = barrel_east(&mut run, 40.0);
+        assert_eq!(mark(&mut run, id), Some(true), "in sight but dark: sent, marked");
+        let dark = dark_of(&run);
+        let ents = snapshot_ents(&run, 0, &run.players[0].view, &dark).ents;
+        assert!(near_solids(&run, run.players[0].pos(), &ents).is_empty(), "the client has it from the entities");
+    }
+
+    #[test]
+    fn a_blind_hero_is_sent_the_barrels_it_cannot_see_but_would_bump_into() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        dark_view(&mut run, 0.0);
+        run.lights.fill();
+        let (near, far) = (barrel_east(&mut run, 20.0), barrel_east(&mut run, 80.0));
+        assert!(run.apply_effect(crate::run::effects::Creature::Player(0), EffectKind::Blind, Some(30.0)));
+        let (chan, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(chan);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let has = |id: u32| s[2].as_array().unwrap().iter().any(|e| e[0] == id as u64);
+        assert!(!has(near) && !has(far), "a blind hero sees neither barrel");
+        let at = run.players[0].pos() + Vec2::new(20.0, 0.0);
+        let sent: Vec<f64> = s[12].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+        assert_eq!(sent.len(), 3, "only the near one: x, y, half");
+        assert_eq!(sent[..2], [(at.x * 16.0).round(), (at.y * 16.0).round()]);
+        assert_eq!(sent[2] / 16.0, run.objects.iter().find(|o| o.id == near).unwrap().radius);
+        assert!(run.objects.iter().any(|o| o.id == far));
     }
 
     #[test]

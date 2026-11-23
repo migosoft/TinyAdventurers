@@ -72,20 +72,21 @@ pub enum EvW {
 #[ts(export)]
 pub struct LightW(pub u32, pub u32, pub u8, pub Option<u32>);
 
-/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
+/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev, solids]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
 /// `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects;
 /// `dark` lists the sent entities in sight but in the dark, `dark_ev` the indices into `ev` of the positional events in the dark;
-/// a thirteenth field `log` follows only for a player with the rules log on.
+/// `solids` is flat `[x0, y0, half0, x1, ...]` (scaled): the blocking objects near the viewer that `ents` lacks, collision only;
+/// a fourteenth field `log` follows only for a player with the rules log on.
 #[derive(Debug, Clone, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>, pub Vec<u32>, pub Vec<u16>, pub Option<crate::run::rules_log::LogW>);
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>, pub Vec<u32>, pub Vec<u16>, pub Vec<u32>, pub Option<crate::run::rules_log::LogW>);
 
-/// A bare array of 12 fields, or 13 when the rules log is on: the log is the last field and is left out
+/// A bare array of 13 fields, or 14 when the rules log is on: the log is the last field and is left out
 /// when `None`, so the bytes while it is off are what they always were.
 impl Serialize for SnapW {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeTuple;
-        let mut t = s.serialize_tuple(if self.12.is_some() { 13 } else { 12 })?;
+        let mut t = s.serialize_tuple(if self.13.is_some() { 14 } else { 13 })?;
         t.serialize_element(&self.0)?;
         t.serialize_element(&self.1)?;
         t.serialize_element(&self.2)?;
@@ -98,7 +99,8 @@ impl Serialize for SnapW {
         t.serialize_element(&self.9)?;
         t.serialize_element(&self.10)?;
         t.serialize_element(&self.11)?;
-        if let Some(log) = &self.12 {
+        t.serialize_element(&self.12)?;
+        if let Some(log) = &self.13 {
             t.serialize_element(log)?;
         }
         t.end()
@@ -145,8 +147,9 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul, m.cd_rate, m.paused_items.clone(), m.paused_nodes.clone(), m.charmed_by.clone());
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
+    let solids = s.solids.iter().flat_map(|&(x, y, half)| [q_pos(x as f64), q_pos(y as f64), q_pos(half as f64)]).collect();
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.dark.clone(), s.dark_ev.clone(), s.log.clone());
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.dark.clone(), s.dark_ev.clone(), solids, s.log.clone());
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -216,6 +219,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         looks: vec![(3, 11, 1)],
         dark: vec![300, 70001],
         dark_ev: vec![2, 3],
+        solids: vec![(210.03, 340.5, 6.0), (226.0, 340.5, 6.0)],
         srv_ms: 0.125,
         log: None,
     };
@@ -255,6 +259,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         looks: vec![],
         dark: vec![],
         dark_ev: vec![],
+        solids: vec![],
         srv_ms: 0.0,
         log: None,
     };
@@ -313,7 +318,7 @@ mod tests {
         for s in sample_snapshots() {
             let new = encode_snap(&s);
             let old = rmp_serde::to_vec_named(&ServerMsg::Snap(s)).unwrap();
-            assert_eq!(new[0], 0x9c, "fixarray of 12 fields");
+            assert_eq!(new[0], 0x9d, "fixarray of 13 fields");
             println!("snapshot: old {} B, new {} B", old.len(), new.len());
             assert!(new.len() * 10 <= old.len() * 7, "old {} B, new {} B", old.len(), new.len());
         }
@@ -324,7 +329,7 @@ mod tests {
         let mut s = sample_snapshots().remove(1);
         s.looks = vec![(7, 11, 1)];
         let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&s)).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 12);
+        assert_eq!(v.as_array().unwrap().len(), 13);
         assert_eq!(v[9], serde_json::json!([[7, 11, 1]]));
     }
 
@@ -340,11 +345,21 @@ mod tests {
     }
 
     #[test]
-    fn a_snapshot_with_a_log_has_it_thirteenth() {
+    fn snapshot_carries_the_near_solids_flat_and_scaled() {
+        let samples = sample_snapshots();
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&samples[0])).unwrap();
+        assert_eq!(v[12], serde_json::json!([3360, 5448, 96, 3616, 5448, 96]));
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&samples[1])).unwrap();
+        assert_eq!(v[12], serde_json::json!([]));
+        assert_eq!(v.as_array().unwrap().len(), 13);
+    }
+
+    #[test]
+    fn a_snapshot_with_a_log_has_it_fourteenth() {
         let mut s = sample_snapshots().remove(1);
         s.log = Some(crate::run::rules_log::LogW(vec![(1, 2, 3)], vec![]));
         let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&s)).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 13);
-        assert_eq!(v[12][0], serde_json::json!([[1, 2, 3]]));
+        assert_eq!(v.as_array().unwrap().len(), 14);
+        assert_eq!(v[13][0], serde_json::json!([[1, 2, 3]]));
     }
 }

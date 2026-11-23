@@ -104,7 +104,7 @@ function unpackEv(e: EvW): Ev {
 }
 
 export function unpackSnap(w: SnapW): Snapshot {
-  const [tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev] = w;
+  const [tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev, solids] = w;
   return {
     tick,
     ack,
@@ -141,8 +141,9 @@ export function unpackSnap(w: SnapW): Snapshot {
     looks,
     dark,
     dark_ev,
+    solids: Array.from({ length: solids.length / 3 }, (_, i): [number, number, number] => [pos(solids[3 * i]), pos(solids[3 * i + 1]), pos(solids[3 * i + 2])]),
     srv_ms,
-    log: w[12] ?? null,
+    log: w[13] ?? null,
   };
 }
 

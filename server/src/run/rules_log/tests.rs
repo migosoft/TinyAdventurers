@@ -154,25 +154,25 @@ fn n1_rounds_to_one_decimal_and_drops_dot_zero() {
     assert_eq!(pct(-0.5), "-50 %");
 }
 
-/// The twelve fields as serialized without the log.
+/// The thirteen fields as serialized without the log.
 #[derive(Serialize)]
-struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>);
+struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>, Vec<u32>);
 
 fn a_snapw(log: Option<LogW>) -> SnapW {
     let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0, false)], 1.0, false, 1.0, 1.0, vec![], vec![], None);
-    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], log)
+    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], vec![], log)
 }
 
 #[test]
 fn nothing_is_recorded_or_sent_while_off() {
     let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
     assert!(!on(&run));
-    // The encoding without the log is the old twelve-field array, byte for byte.
+    // The encoding without the log is the thirteen-field array, byte for byte.
     let w = a_snapw(None);
-    let old = Legacy(w.0, w.1, w.2.clone(), w.3.clone(), w.4.clone(), w.5.clone(), w.6, w.7.clone(), w.8.clone(), w.9.clone(), w.10.clone(), w.11.clone());
+    let old = Legacy(w.0, w.1, w.2.clone(), w.3.clone(), w.4.clone(), w.5.clone(), w.6, w.7.clone(), w.8.clone(), w.9.clone(), w.10.clone(), w.11.clone(), w.12.clone());
     assert_eq!(rmp_serde::to_vec(&w).unwrap(), rmp_serde::to_vec(&old).unwrap());
     let with = rmp_serde::to_vec(&a_snapw(Some(LogW(vec![], vec![])))).unwrap();
-    assert_eq!(with[0], 0x9d, "thirteen fields with the log");
+    assert_eq!(with[0], 0x9e, "fourteen fields with the log");
     // A real tick: a twelve-field array, and no record kept.
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     run.players[0].tx = Some(tx);
@@ -185,8 +185,8 @@ fn nothing_is_recorded_or_sent_while_off() {
         bytes = Some(b);
     }
     let bytes = bytes.expect("a snapshot was sent");
-    assert_eq!(bytes[0], 0x9c, "fixarray of 12 fields");
-    assert_eq!(encode_snap(&crate::wire::sample_snapshots().remove(1))[0], 0x9c);
+    assert_eq!(bytes[0], 0x9d, "fixarray of 13 fields");
+    assert_eq!(encode_snap(&crate::wire::sample_snapshots().remove(1))[0], 0x9d);
 }
 
 fn rec(kind: LineKind, head: &str, who: Vec<Seen>) -> LogRec {
