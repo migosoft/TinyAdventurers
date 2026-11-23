@@ -415,6 +415,8 @@ impl Monster {
 
 /// How far above their ground point projectiles are drawn (px; `GameScene`).
 pub const SHOT_HEIGHT: f64 = 8.0;
+/// The pull on an arcing weapon shot (px/s²; #321).
+pub const GRAVITY: f64 = 320.0;
 /// How far a flying monster is drawn above the ground (px; the dragon's `lift` at 1.2x scale).
 pub const DRAGON_LIFT: f64 = 17.0;
 

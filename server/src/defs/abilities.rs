@@ -259,6 +259,8 @@ pub struct AbilityDef {
     pub uses: Uses,
     /// A ranged ability: in melee a primary falls back to Strike and a secondary is blocked.
     pub ranged: bool,
+    /// The shot flies a gravity arc and hits only where its height meets a body (#321).
+    pub arcs: bool,
     pub req: &'static [Requirement],
     pub shape: Shape,
     pub own: OwnStats,
@@ -435,6 +437,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         category,
         uses,
         ranged,
+        arcs: matches!(id, Shoot | Hurl | Volley),
         req: &[],
         shape,
         own,
@@ -683,6 +686,17 @@ mod tests {
     fn every_ability_has_a_text() {
         for &id in AbilityId::ALL.iter() {
             assert!(!text(id).is_empty() && text(id).ends_with('.'), "{id:?}");
+        }
+    }
+
+    #[test]
+    fn only_weapon_shots_arc() {
+        for id in AbilityId::ALL {
+            let d = def(id);
+            assert_eq!(d.arcs, matches!(id, AbilityId::Shoot | AbilityId::Hurl | AbilityId::Volley), "{id:?}");
+            if d.arcs {
+                assert_eq!(d.uses, Uses::Ranged, "{id:?}");
+            }
         }
     }
 
