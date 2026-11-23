@@ -553,12 +553,6 @@ impl Run {
         self.apply(c, Apply::plain(kind, secs))
     }
 
-    /// `apply` from a source of `power`: the time is scaled by the target's save (see `apply`).
-    #[cfg(test)]
-    pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
-        self.apply(c, Apply { power: Some(power), magical, ..Apply::plain(kind, secs) })
-    }
-
     fn in_water(&self, pos: crate::math::Vec2) -> bool {
         let tile = self.layout.map.tile_at(pos);
         tile == Tile::ShallowWater as u8 || tile == Tile::DeepWater as u8
@@ -615,12 +609,6 @@ impl Run {
             let power = dmg.power.max(TYPE_EFFECT_POWER);
             self.apply(c, Apply { kind: k, secs: None, power: Some(power), magical: false, look: EffectLook::Plain, source, origin: None });
         }
-    }
-
-    /// A hit's effect: always applied (no roll); the target's save and resistance only shorten or refuse it.
-    #[cfg(test)]
-    pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
-        self.apply(c, Apply::from_hit(h));
     }
 
     /// The creature that made the hit, and where it is: what the effects the hit applies remember.
@@ -1274,7 +1262,7 @@ mod tests {
         assert!(run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Frozen));
         run.monsters[mi].res = Resistances::NONE;
         let con = run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Con);
-        assert!(!run.apply_effect_from(c, EffectKind::Frozen, None, con - 20, false), "a save 20 above the power: 0 s");
+        assert!(!run.apply(c, Apply { power: Some(con - 20), magical: false, ..Apply::plain(EffectKind::Frozen, None) }), "a save 20 above the power: 0 s");
         assert!(run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Frozen));
     }
 
@@ -1300,7 +1288,7 @@ mod tests {
         let Creature::Monster(mi) = c else { unreachable!() };
         run.apply_effect(c, EffectKind::Frozen, None);
         run.monsters[mi].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
-        run.hit_effect(c, OnHit { kind: EffectKind::Singed, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain });
+        run.apply(c, Apply::from_hit(OnHit { kind: EffectKind::Singed, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain }));
         assert!(!run.has_effect(c, EffectKind::Frozen) && !run.has_effect(c, EffectKind::Singed));
     }
 
@@ -1311,7 +1299,7 @@ mod tests {
         let mut twin = run.rng.clone();
         for _ in 0..20 {
             let c = fresh_ogre(&mut run);
-            run.hit_effect(c, OnHit { kind: EffectKind::Blind, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain });
+            run.apply(c, Apply::from_hit(OnHit { kind: EffectKind::Blind, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain }));
             assert!(run.has_effect(c, EffectKind::Blind));
         }
         assert_eq!(run.rng.next_u64(), twin.next_u64(), "no roll drew from the run's rng");
@@ -1514,7 +1502,7 @@ mod tests {
         let frozen_then_fire = |run: &mut crate::run::Run, how: &str| {
             run.apply_effect(me, EffectKind::Frozen, None);
             assert!(run.has_effect(me, EffectKind::Frozen));
-            assert!(!run.apply_effect_from(me, EffectKind::Burning, None, 10, false));
+            assert!(!run.apply(me, Apply { power: Some(10), magical: false, ..Apply::plain(EffectKind::Burning, None) }));
             assert!(!run.has_effect(me, EffectKind::Frozen), "{how}: the fire still thaws the ice");
             assert!(!run.has_effect(me, EffectKind::Burning), "{how}: and does not burn");
         };
@@ -1677,7 +1665,7 @@ mod tests {
         let wi = run.monster_idx(id).unwrap();
         run.hurt_player(0, Damage::physical(0.0).with_effect(lich_sleep()));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Sleep), "the elf");
-        run.hit_effect(Creature::Monster(wi), lich_sleep());
+        run.apply(Creature::Monster(wi), Apply::from_hit(lich_sleep()));
         assert!(!run.has_effect(Creature::Monster(wi), EffectKind::Sleep), "the wolf");
     }
 
@@ -1699,7 +1687,7 @@ mod tests {
             let b = Build { nodes: nodes.to_vec(), ..Build::start(ClassId::Barbarian) };
             let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, b)], BossId::Demon);
             open(&mut run);
-            assert!(run.apply_effect_from(Creature::Player(0), EffectKind::Burning, None, 15, false));
+            assert!(run.apply(Creature::Player(0), Apply { power: Some(15), magical: false, ..Apply::plain(EffectKind::Burning, None) }));
             left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning")
         };
         let (free, tough) = (burn(&[]), burn(&[NodeId::BD5]));
@@ -1717,11 +1705,11 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         let c = Creature::Monster(mi);
         run.monsters[mi].effect_res = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
-        assert!(!run.apply_effect_from(c, EffectKind::Sleep, None, 40, true));
+        assert!(!run.apply(c, Apply { power: Some(40), magical: true, ..Apply::plain(EffectKind::Sleep, None) }));
         assert!(!run.has_effect(c, EffectKind::Sleep));
         run.monsters[mi].effect_res = EffectResistances::of(&[(EffectKind::Sleep, 0.5)]);
         let wil = run.monsters[mi].attrs.get(Attr::Wil);
-        assert!(run.apply_effect_from(c, EffectKind::Sleep, None, 10, true));
+        assert!(run.apply(c, Apply { power: Some(10), magical: true, ..Apply::plain(EffectKind::Sleep, None) }));
         let want = scaled_secs(4.0, 10, wil) * 0.5;
         assert!((left_of(&run, c, EffectKind::Sleep).unwrap() - want).abs() < 1e-9);
     }
@@ -1730,7 +1718,7 @@ mod tests {
     fn dragon_haste_is_halved() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
         let c = Creature::Monster(boss(&run));
-        assert!(run.apply_effect_from(c, EffectKind::Accelerated, None, 0, true));
+        assert!(run.apply(c, Apply { power: Some(0), magical: true, ..Apply::plain(EffectKind::Accelerated, None) }));
         assert_eq!(left_of(&run, c, EffectKind::Accelerated), Some(crate::defs::effects::def(EffectKind::Accelerated).duration * 0.5));
     }
 
@@ -1739,7 +1727,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
         let bi = boss(&run);
         assert_eq!(run.monsters[bi].attrs.get(crate::defs::attributes::Attr::Wil), 18);
-        assert!(run.apply_effect_from(Creature::Monster(bi), EffectKind::Accelerated, None, 0, true));
+        assert!(run.apply(Creature::Monster(bi), Apply { power: Some(0), magical: true, ..Apply::plain(EffectKind::Accelerated, None) }));
         assert_eq!(left_of(&run, Creature::Monster(bi), EffectKind::Accelerated), Some(crate::defs::effects::def(EffectKind::Accelerated).duration));
     }
 
@@ -1779,14 +1767,14 @@ mod tests {
         use crate::defs::enemies::EnemyType;
         for magical in [false, true] {
             let goblin = spawn(&mut run, EnemyType::GoblinArcher);
-            assert!(run.apply_effect_from(goblin, EffectKind::Fear, None, 16, magical));
+            assert!(run.apply(goblin, Apply { power: Some(16), magical: magical, ..Apply::plain(EffectKind::Fear, None) }));
             assert!((left_of(&run, goblin, EffectKind::Fear).unwrap() - 3.0 * 1.4).abs() < 1e-9, "WIL 8 whatever `magical` says");
             let orc = spawn(&mut run, EnemyType::OrcWarrior);
-            assert!(run.apply_effect_from(orc, EffectKind::Fear, None, 16, magical));
+            assert!(run.apply(orc, Apply { power: Some(16), magical: magical, ..Apply::plain(EffectKind::Fear, None) }));
             assert!((left_of(&run, orc, EffectKind::Fear).unwrap() - 3.75).abs() < 1e-9, "WIL 11");
         }
         let ogre = spawn(&mut run, EnemyType::Ogre);
-        assert!(run.apply_effect_from(ogre, EffectKind::Entangled, None, 14, true));
+        assert!(run.apply(ogre, Apply { power: Some(14), magical: true, ..Apply::plain(EffectKind::Entangled, None) }));
         let want = 3.0 * (1.0 + (14.0 - 19.0) / 20.0);
         assert!((left_of(&run, ogre, EffectKind::Entangled).unwrap() - want).abs() < 1e-9, "STR 19");
     }
@@ -2083,7 +2071,7 @@ mod tests {
         assert!(!run.apply_effect(skel, EffectKind::Fear, Some(3.0)), "undead are never frightened");
         let id = run.spawn_enemy(EnemyType::Imp, at, None);
         let imp = Creature::Monster(run.monster_idx(id).unwrap());
-        assert!(run.apply_effect_from(imp, EffectKind::Fear, None, 16, false));
+        assert!(run.apply(imp, Apply { power: Some(16), magical: false, ..Apply::plain(EffectKind::Fear, None) }));
         let Creature::Monster(ii) = imp else { unreachable!() };
         let wil = run.monsters[ii].attrs.get(Attr::Wil);
         assert!((left_of(&run, imp, EffectKind::Fear).unwrap() - scaled_secs(3.0, 16, wil) * 0.5).abs() < 1e-9, "half the scaled time");

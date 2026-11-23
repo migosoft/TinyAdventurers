@@ -699,7 +699,7 @@ fn the_logged_duration_is_the_duration_applied() {
     run.log.forced = true;
     let _ = take(&mut run);
     let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain };
-    run.hit_effect(Creature::Player(0), sleep);
+    run.apply(Creature::Player(0), Apply::from_hit(sleep));
     let rec = only_rec(&mut run);
     let left = timer(&run, Creature::Player(0), EffectKind::Sleep).unwrap();
     assert_eq!(rec.secs, Some(left));
@@ -737,7 +737,7 @@ fn each_refusal_names_its_rule() {
     };
     let said = |rec: &LogRec, s: &str| assert!(rec.details.iter().any(|l| l.contains(s)), "want {s:?} in {:?}", rec.details);
     // StrongerOn: Chilled while Frozen.
-    run.apply_effect_from(c, EffectKind::Frozen, None, 14, true);
+    run.apply(c, Apply { power: Some(14), magical: true, ..Apply::plain(EffectKind::Frozen, None) });
     let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Chilled, None) });
     assert!(!r);
     said(&rec, "Chilled: refused (Frozen is on)");
@@ -748,7 +748,7 @@ fn each_refusal_names_its_rule() {
     said(&rec, "Singed: cancelled Frozen");
     assert!(!run.has_effect(c, EffectKind::Frozen));
     // replaced: Frozen over Chilled.
-    run.apply_effect_from(c, EffectKind::Chilled, None, 14, true);
+    run.apply(c, Apply { power: Some(14), magical: true, ..Apply::plain(EffectKind::Chilled, None) });
     let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Frozen, None) });
     assert!(r);
     said(&rec, "Frozen: replaced Chilled");
@@ -780,7 +780,7 @@ fn each_refusal_names_its_rule() {
     let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
     run.log.forced = true;
     let _ = take(&mut run);
-    run.hit_effect(Creature::Player(0), OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain });
+    run.apply(Creature::Player(0), Apply::from_hit(OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain }));
     said(&only_rec(&mut run), "elf resist Sleep 100 %");
     // Dead targets give no line.
     let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());

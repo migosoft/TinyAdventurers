@@ -393,14 +393,14 @@ mod tests {
     #[test]
     fn neutral_is_untouchable() {
         use crate::defs::effects::EffectKind;
-        use crate::run::effects::Creature as C;
+        use crate::run::effects::{Apply, Creature as C};
         let (mut run, _, _, ni) = fixture();
         let hp = run.monsters[ni].hp;
         let dmg = || Damage::physical(5.0);
         assert!(!run.hurt_monster(ni, dmg(), false, Some(0)));
         assert!(!run.hurt_monster(ni, dmg(), false, None));
         assert_eq!(run.monsters[ni].hp, hp);
-        assert!(!run.apply_effect_from(C::Monster(ni), EffectKind::Slowed, Some(5.0), 1, false));
+        assert!(!run.apply(C::Monster(ni), Apply { power: Some(1), magical: false, ..Apply::plain(EffectKind::Slowed, Some(5.0)) }));
         assert!(!run.monsters[ni].effects.has(EffectKind::Slowed));
         let from = run.monsters[ni].pos - Vec2::new(10.0, 0.0);
         run.knock_monster(ni, from, 30.0, 30);
@@ -556,9 +556,9 @@ mod tests {
     #[test]
     fn effects_and_pushes_reach_a_wild_animal_but_never_the_knight() {
         use crate::defs::effects::EffectKind;
-        use crate::run::effects::Creature as C;
+        use crate::run::effects::{Apply, Creature as C};
         let (mut run, _, _, ni) = wild_fixture();
-        assert!(run.apply_effect_from(C::Monster(ni), EffectKind::Slowed, Some(5.0), 1, false));
+        assert!(run.apply(C::Monster(ni), Apply { power: Some(1), magical: false, ..Apply::plain(EffectKind::Slowed, Some(5.0)) }));
         assert!(run.monsters[ni].effects.has(EffectKind::Slowed));
         let from = run.monsters[ni].pos - Vec2::new(10.0, 0.0);
         run.knock_monster(ni, from, 30.0, 30);
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(run.heal_monster(ni, 5.0, None), 0.0);
         // The knight beside it takes none of it (`neutral_is_untouchable` covers every source).
         let (mut run, _, _, ni) = fixture();
-        assert!(!run.apply_effect_from(C::Monster(ni), EffectKind::Slowed, Some(5.0), 1, false));
+        assert!(!run.apply(C::Monster(ni), Apply { power: Some(1), magical: false, ..Apply::plain(EffectKind::Slowed, Some(5.0)) }));
         let from = run.monsters[ni].pos - Vec2::new(10.0, 0.0);
         run.knock_monster(ni, from, 30.0, 30);
         assert_eq!(run.monsters[ni].knock, Vec2::ZERO);
