@@ -174,7 +174,6 @@ pub struct ItemProperty {
 #[derive(Debug, Clone, Copy)]
 pub enum PropKind {
     DamageShare(DamageType, f64),
-    #[allow(dead_code)] // no item has one since the Staff of Rot lost its; later gear and Poison Coat do
     OnHit(OnHit),
     Light(LightKind),
     Resist(DamageType, f64),

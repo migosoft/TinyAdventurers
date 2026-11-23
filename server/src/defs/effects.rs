@@ -1,6 +1,6 @@
 //! Status effects: data only (like `defs/lights.rs`). The timers live in
 //! `run/effects.rs`. Adding an effect: a new `EffectKind` (next id), its
-//! `def`, a client visual in `client/src/game/status.ts` and a HUD glyph. A damage-type
+//! `def`, a client look (`client/src/game/looks.ts`) and a HUD glyph (`client/src/ui/effectIcons.ts`). A damage-type
 //! effect (one a hit applies by its share of a damage type) also sets `resisted_by` (its
 //! type's damage resistance alone resists it), `replaces` (the weaker tier it ends) and
 //! gets a row in `TYPE_EFFECTS`.
@@ -524,11 +524,11 @@ mod tests {
     }
 
     #[test]
-    fn a_hit_applies_the_effect_of_each_damage_type_making_up_half_of_it() {
+    fn a_hit_applies_the_effect_of_each_damage_type_by_its_share() {
         use crate::defs::damage::DamageSplit;
         assert_eq!(type_effects(&DamageSplit::pure(Heat)), vec![EffectKind::Burning]);
         assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)])), vec![EffectKind::Burning], "fireball");
-        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.5)])), vec![EffectKind::Burning], "barrel blast: exactly half");
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.5)])), vec![EffectKind::Burning], "barrel blast: exactly the Burning share");
         assert!(type_effects(&DamageSplit::split(&[(Heat, 0.2)])).is_empty(), "claws");
         assert_eq!(type_effects(&DamageSplit::pure(Cold)), vec![EffectKind::Frozen]);
         assert_eq!(type_effects(&DamageSplit::pure(Poison)), vec![EffectKind::Poisoned]);
