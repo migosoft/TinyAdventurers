@@ -342,6 +342,15 @@ impl Kit {
         self.0.first()
     }
 
+    /// The kit with ability `id`'s own effects replaced (tests of the own-effect lists).
+    #[cfg(test)]
+    pub fn with_own_effects(mut self, id: AbilityId, effect: Vec<OnHit>) -> Kit {
+        if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {
+            a.effect = effect;
+        }
+        self
+    }
+
     /// The kit with `mods` applied to ability `id` (nothing changes if it has none such).
     pub fn modded(mut self, id: AbilityId, mods: &[AbilityMod]) -> Kit {
         if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {

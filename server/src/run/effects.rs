@@ -98,6 +98,11 @@ impl Apply {
     }
 }
 
+/// A magical Invisible of `secs`: what a debug Vanish and the tests hand to `go_invisible`.
+pub fn invisible_for(secs: f64) -> OnHit {
+    OnHit { kind: EffectKind::Invisible, secs, magical: true, power: 0, look: EffectLook::Plain }
+}
+
 /// The effects on one creature (a handful at most) and its stats through them. A magical and a
 /// non-magical application of one kind are separate entries; paused entries count for nothing.
 #[derive(Debug, Clone, Default)]
@@ -638,16 +643,22 @@ impl Run {
         }
     }
 
-    /// A monster with the Invisibility trait vanishes for `secs` and may do so again `cooldown` seconds after
-    /// it is visible again (a reveal, its own attack, or running out). False, and nothing happens, without the
-    /// trait, while the cooldown runs or while already Invisible.
-    pub fn go_invisible(&mut self, mi: usize, secs: f64, cooldown: f64) -> bool {
+    /// A monster with the Invisibility trait vanishes: it takes `own`, the ability's own effects (Invisible
+    /// first), and may do so again `cooldown` seconds after it is visible again (a reveal, its own attack, or
+    /// running out). False, and nothing happens, without the trait, while the cooldown runs, while already
+    /// Invisible, or when Invisible is refused.
+    pub fn go_invisible(&mut self, mi: usize, own: &[OnHit], cooldown: f64) -> bool {
         let m = &self.monsters[mi];
         if !m.alive || !m.traits.invisibility || m.invis_cd > 0.0 || m.effects.has(EffectKind::Invisible) {
             return false;
         }
-        if !self.apply(Creature::Monster(mi), Apply { magical: true, ..Apply::plain(EffectKind::Invisible, Some(secs)) }) {
+        let c = Creature::Monster(mi);
+        let Some((first, rest)) = own.split_first() else { return false };
+        if !self.apply(c, Apply::from_hit(*first)) {
             return false;
+        }
+        for &h in rest {
+            self.apply(c, Apply::from_hit(h));
         }
         self.monsters[mi].invis_cd = cooldown;
         true
@@ -838,7 +849,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
         run.monsters[mi].traits.invisibility = false;
-        assert!(!run.go_invisible(mi, 2.0, 3.0));
+        assert!(!run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
         assert_eq!(run.monsters[mi].invis_cd, 0.0);
     }
@@ -847,7 +858,7 @@ mod tests {
     fn vanish_makes_magic_invisibility() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
-        assert!(run.go_invisible(mi, 2.0, 3.0));
+        assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
         let e = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Invisible).expect("invisible");
         assert!(e.magical);
     }
@@ -857,29 +868,29 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
-        assert!(run.go_invisible(mi, 2.0, 3.0));
+        assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
         assert!(run.has_effect(c, EffectKind::Invisible));
-        assert!(!run.go_invisible(mi, 2.0, 3.0), "not again at once");
+        assert!(!run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "not again at once");
         secs(&mut run, 2.0);
         assert!(!run.has_effect(c, EffectKind::Invisible), "it has run out");
         secs(&mut run, 2.0);
-        assert!(!run.go_invisible(mi, 2.0, 3.0), "only 2 s of cooldown have passed");
+        assert!(!run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "only 2 s of cooldown have passed");
         secs(&mut run, 1.01);
-        assert!(run.go_invisible(mi, 2.0, 3.0), "5 s: ready");
+        assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "5 s: ready");
         // Revealed by a hit at 1 s: the cooldown starts then.
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
         run.monsters[mi].res = Resistances::NONE;
-        assert!(run.go_invisible(mi, 2.0, 3.0));
+        assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
         secs(&mut run, 1.0);
         assert!(run.has_effect(c, EffectKind::Invisible), "still invisible, no cooldown yet");
         run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
         assert!(!run.has_effect(c, EffectKind::Invisible));
         secs(&mut run, 2.9);
-        assert!(!run.go_invisible(mi, 2.0, 3.0), "3.9 s: 2.9 s of cooldown since the reveal");
+        assert!(!run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "3.9 s: 2.9 s of cooldown since the reveal");
         secs(&mut run, 0.11);
-        assert!(run.go_invisible(mi, 2.0, 3.0), "4.01 s: ready, 3 s after the reveal (not after the 2 s expiry)");
+        assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "4.01 s: ready, 3 s after the reveal (not after the 2 s expiry)");
     }
 
     #[test]
@@ -926,7 +937,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
-        assert!(run.go_invisible(mi, 5.0, 3.0));
+        assert!(run.go_invisible(mi, &[invisible_for(5.0)], 3.0));
         let (outcome, _, _) = run.apply_traced(c, Apply::plain(EffectKind::Sleep, Some(4.0)));
         assert!(matches!(outcome, EffectOutcome::Resisted | EffectOutcome::TypeImmune(_)), "{outcome:?}");
         assert!(!run.has_effect(c, EffectKind::Sleep));
