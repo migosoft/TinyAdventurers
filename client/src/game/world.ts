@@ -8,6 +8,7 @@ import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
+import { isProjectileKind } from './anim/defs';
 import { lookOf } from './looks';
 
 export interface EntState {
@@ -19,6 +20,8 @@ export interface EntState {
   anim: number;
   aim: number;
   animMs: number;
+  /** A projectile's height above the ground (px; the server sends it in `anim_ms` as tenths), interpolated; 0 for the rest. Optional so literals in dev stages need not set it. */
+  z?: number;
   flags: number;
   extra: number;
   effects: number;
@@ -114,7 +117,7 @@ export class Interpolator {
         out.set(id, toState(eb, eb[2], eb[3], eb[6], b.looks));
         continue;
       }
-      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f), b.looks));
+      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f), b.looks, ea[7], f));
     }
   }
 
@@ -123,8 +126,9 @@ export class Interpolator {
   }
 }
 
-function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks']): EntState {
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
+function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1): EntState {
+  const z = isProjectileKind(e[1]) ? (animMs0 + (e[7] - animMs0) * f) / 10 : 0;
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
 }
 
 // ------------------------------------------------------------ abilities

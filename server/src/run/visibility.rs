@@ -238,7 +238,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             marked.push(pr.id);
         }
         let extra = (pr.owner << 16) | pr.shot as u32;
-        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0, 0));
+        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, (pr.z() * 10.0).round() as u16, 0, extra, 0, 0));
     }
     for o in &run.objects {
         if o.gone || !visible(view, o.pos, 0.0) {
@@ -409,6 +409,30 @@ mod tests {
         let dark = dark_of(run);
         let sent = snapshot_ents(run, 0, &run.players[0].view, &dark);
         sent.ents.iter().any(|e| e.0 == id).then(|| sent.dark.contains(&id))
+    }
+
+    /// The `anim_ms` of the first projectile sent to hero 0, after the hero fired the primary and the shot flew 10 ticks.
+    fn shot_anim_ms(class: ClassId) -> (u16, f64) {
+        let mut run = test_run(&[class], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        run.players[0].aim_dist = 260.0;
+        crate::run::abilities::try_use(&mut run, 0, true, 1);
+        for _ in 0..10 {
+            crate::run::abilities::tick_projectiles(&mut run, 1.0 / crate::run::TICK_HZ);
+        }
+        let z = run.projectiles[0].z();
+        let sent = snapshot_ents(&run, 0, &run.players[0].view, &Dark { tile: (0, 0), range: f64::INFINITY });
+        let id = run.projectiles[0].id;
+        (sent.ents.iter().find(|e| e.0 == id).expect("the own shot is sent").7, z)
+    }
+
+    #[test]
+    fn a_shot_sends_its_height() {
+        let (ms, z) = shot_anim_ms(ClassId::ElvenRanger);
+        assert!(z > 8.0, "an arrow is up in its arc");
+        assert_eq!(ms, (z * 10.0).round() as u16);
+        assert_eq!(shot_anim_ms(ClassId::Wizard).0, 80, "a Magic Missile flies flat at 8");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONST, EFFECT, EFFECT_LOOK, TILE_ID } from '../generated/defs';
+import { CONST, EFFECT, EFFECT_LOOK, KIND, TILE_ID } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
@@ -242,6 +242,19 @@ describe('Interpolator looks', () => {
     // Render time is still at the first snapshot (the interpolation delay): its bitmask and its look.
     it.sample(it.delay, out);
     expect(out.get(7)?.entangled).toBe(EFFECT_LOOK.Vines);
+  });
+});
+
+describe('Interpolator shot height', () => {
+  it('interpolates a projectile\'s height (anim_ms / 10) between snapshots', () => {
+    const arrow = (ms: number) => [9, KIND.Arrow, 10, 10, 255, 0, 0, ms, 0, 0, 0, 2] as EntSnap;
+    const it = new Interpolator();
+    it.push({ ...snap(1, 0, 0), ents: [arrow(100)] }, 0);
+    it.push({ ...snap(2, 0, 0), ents: [arrow(300)] }, CONST.DT);
+    const out = new Map<number, EntState>();
+    // Render time halfway between the two snapshots.
+    it.sample(0.5 * CONST.DT + it.delay, out);
+    expect(out.get(9)?.z).toBeCloseTo(20, 6);
   });
 });
 
