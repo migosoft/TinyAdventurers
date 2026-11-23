@@ -22,7 +22,7 @@ import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
 import { drownY, lavaSinkOf, sinkCell, standY, stepLavaSink } from './dips/descent';
-import { bedAt, depthFade, hidingHeightAt, surfaceAt, walkBedAt } from './dips/shape';
+import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue } from './fx/types';
 import type { MV3 } from './fx/shapes';
@@ -764,6 +764,12 @@ export class Figures3d {
     return y * this.cp;
   }
 
+  /** The ground a lying body rests on (tiles): `ground`, but on a lava tile at least the surface, so it floats there and is not lost under it (#352). */
+  private lieGround(x: number, z: number, r: number): number {
+    const g = this.ground(x, z, r);
+    return isLava(this.map.get(Math.floor(x), Math.floor(z))) ? Math.max(g, LAVA_LEVEL) : g;
+  }
+
   /** The ground cover's height plus the bed, as a lift (the cover is a lift as it was, the bed a world height). */
   private groundLift(x: number, z: number, r: number): number {
     return this.ground(x, z, r) - (1 - this.cp) * this.bedAt(x, z);
@@ -890,7 +896,7 @@ export class Figures3d {
     }
     const body: FigureInst = {
       // A lying body rests on the ground cover, as the lying card does.
-      owner: e.id, model: key, x, z, lift: pose.lie ? this.groundLift(x, z, 0.3) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: bodyAlpha * k * bodyForm, dark,
+      owner: e.id, model: key, x, z, lift: pose.lie ? this.lieGround(x, z, 0.3) - (1 - this.cp) * this.bedAt(x, z) : this.lifted(y), scale: ms, pose: p3, bone: -1, boneScale: 1, tint, stone: pose.grey, alpha: bodyAlpha * k * bodyForm, dark,
       cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     };
     if (sp) {
@@ -1148,7 +1154,7 @@ export class Figures3d {
       const dark = this.dark.has(e.id);
       pushLying(out.decals, {
         frame: pose.frame, crop: { x: lie.cropX, y: 0, w: lie.cropW, h: pose.footY }, x, z, lift: 0, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
-        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark, base: this.ground(x, z, 0.3),
+        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark, base: this.lieGround(x, z, 0.3),
       }, this.frames, cam);
     } else {
       // The body sits 1 px below the shadow. A card lowered into the floor would lose its foot row, so the

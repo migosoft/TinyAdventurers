@@ -1170,6 +1170,13 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(kit.get('knight')!.size).toBe(0.87);
   });
 
+  it('a sleeping model in lava floats at the surface too (#352)', () => {
+    const sleeper = (tx: number, tz: number) => ent(10, KIND.ElvenRanger, { ...at2(tx, tz), effects: 1 << EFFECT.Sleep });
+    const body = dipFigs().frame(frame([sleeper(6, 1)]), cam(), look({ kit, ...all })).models[0];
+    expect(body.lift).toBeCloseTo(LAVA_LEVEL - (1 - Math.cos(cam().pitch)) * walkBedAt(dm, 6.5, 1.5), 6);
+    expect(dipFigs().frame(frame([sleeper(8, 5)]), cam(), look({ kit, ...all })).models[0].lift).toBeCloseTo(0, 6);
+  });
+
   it('tells the id pass what the world hides: 0 on the floor, the lava surface in lava, nothing in water or over the chasm (body and weapon alike)', () => {
     const groundOf = (tx: number, tz: number): number[] => {
       const out = dipFigs().frame(frame([ent(10, KIND.ElvenRanger, at2(tx, tz))]), cam(), look({ kit, ...all }));
@@ -2082,6 +2089,15 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(o.shadows.n).toBe(0);
     const away = fg.frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 6 * TILE, y: 4 * TILE })], { now: 11 }), cam());
     expect(away.shadows.n).toBe(1);
+  });
+
+  it('a sleeper in lava floats at the surface (card path); on the floor it lies at 0 (#352)', () => {
+    const sleeper = (tx: number, tz: number) => ent(10, KIND.ElvenRanger, { ...at2(tx, tz), effects: 1 << EFFECT.Sleep });
+    const card = dipFigs().frame(frame([sleeper(6, 1)]), cam());
+    expect(card.decals.n).toBe(1);
+    for (const y of ys(card.decals)) expect(y).toBeCloseTo(LIE_Y + LAVA_LEVEL, 6);
+    const dry = dipFigs().frame(frame([sleeper(8, 5)]), cam());
+    for (const y of ys(dry.decals)) expect(y).toBeCloseTo(LIE_Y, 6);
   });
 
   it('lifts a chest, a skull and a lying body onto the bed', () => {
