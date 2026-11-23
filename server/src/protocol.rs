@@ -386,6 +386,9 @@ pub enum Ev {
     /// the release (0: none), `primary` whether the ability is a primary one (the small front burst), `aim` the cast
     /// direction in radians. Positional: sent where the point is in sight.
     Cast { id: u32, x: f32, y: f32, look: u8, windup_ms: u16, primary: bool, aim: f32 },
+    /// Arcing shot `id` of entity kind `kind` lands at (x, y) and ends; `aim` is its flight direction in radians.
+    /// Positional: sent where the point is in sight.
+    Land { id: u32, x: f32, y: f32, kind: u8, aim: f32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

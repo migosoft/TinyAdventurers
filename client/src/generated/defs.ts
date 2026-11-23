@@ -1020,7 +1020,7 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "r": 4.0
   },
   "18": {
-    "h": 0.0,
+    "h": 14.0,
     "r": 6.0
   },
   "19": {
@@ -1098,6 +1098,7 @@ export const EV = {
   "Effect": 13,
   "Heal": 1,
   "Immune": 5,
+  "Land": 16,
   "Light": 10,
   "LightAdd": 11,
   "LightRemove": 12,

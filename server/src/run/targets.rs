@@ -581,6 +581,7 @@ mod tests {
         run.monsters[ni].pos = run.players[0].pos() + Vec2::new(120.0, 0.0);
         let hp = run.monsters[ni].hp;
         run.players[0].aim = 0.0;
+        run.players[0].aim_dist = 120.0;
         try_use(&mut run, 0, true, 1);
         for _ in 0..90 {
             tick_projectiles(&mut run, 1.0 / crate::run::TICK_HZ);

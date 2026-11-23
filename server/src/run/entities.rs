@@ -404,6 +404,11 @@ impl Monster {
         self.shot_dist_at(self.pos, p)
     }
 
+    /// The height of its top above the ground, where an arcing shot passes over it (the dragon is lifted).
+    pub fn shot_top(&self) -> f64 {
+        self.kind.body_height() + if self.airborne { DRAGON_LIFT } else { 0.0 }
+    }
+
     /// `shot_dist` as if this monster stood at `at`: the one hit capsule, shared by the real hit and the dodge.
     pub fn shot_dist_at(&self, at: Vec2, p: Vec2) -> f64 {
         let lift = if self.airborne { DRAGON_LIFT } else { 0.0 };
@@ -420,7 +425,15 @@ pub const GRAVITY: f64 = 320.0;
 /// How far a flying monster is drawn above the ground (px; the dragon's `lift` at 1.2x scale).
 pub const DRAGON_LIFT: f64 = 17.0;
 
+/// The flight of an arcing shot (#321): `flown` of `flight` seconds are over; it ends at `land`.
+pub struct Arc {
+    pub flight: f64,
+    pub flown: f64,
+    pub land: Vec2,
+}
+
 pub struct Projectile {
+    pub arc: Option<Arc>,
     pub id: u32,
     pub kind: EntityKind,
     pub owner: u32,
@@ -459,6 +472,13 @@ pub enum Pierce {
     /// It passes `left` creatures with full damage, killed or not, then becomes `Pierce::from_u8(then)`;
     /// `left == u8::MAX` passes every creature.
     Through { left: u8, then: u8 },
+}
+
+impl Projectile {
+    /// Its height above the ground: `SHOT_HEIGHT` for a flat shot, the arc's height otherwise.
+    pub fn z(&self) -> f64 {
+        self.arc.as_ref().map_or(SHOT_HEIGHT, |a| super::arc::shot_z(a.flight, a.flown))
+    }
 }
 
 impl Pierce {

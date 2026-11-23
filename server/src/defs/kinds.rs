@@ -167,6 +167,11 @@ impl EntityKind {
             Demon => 58.0,
             // 12 opaque rows plus the 1-px idle bob (client/scripts/spectre-frames.ts).
             Ghost | Shade => 13.0,
+            // Opaque rows of the pack's idle frame f0 (the Mimic: open frame f0), first guesses (#321).
+            Wizard | ElvenRanger => 19.0,
+            Paladin => 20.0,
+            Barbarian => 21.0,
+            Mimic => 14.0,
             _ => 0.0,
         }
     }
