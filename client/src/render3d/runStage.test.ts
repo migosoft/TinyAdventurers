@@ -9,6 +9,8 @@ import { FrameTimer } from '../game/frameTimer';
 import { fakeHud, fakeNet, snap, startInfo } from '../run/testing';
 import { startRun3d } from './boot';
 import { followClamp, keysToWorld } from './camera';
+import { LoadingScreen } from '../ui/loading';
+import { WARM_FRAMES } from './loadProgress';
 import { startHost, type Host, type StageCtx } from './host';
 import { DEFAULTS, type R3dParams } from './params';
 import { renderPlan } from './quality';
@@ -19,7 +21,7 @@ import { GroundTooLargeError, type Assets, type View } from './view';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 
 const ROWS = ['#####', '#...#', '#####'];
-const BIG = Array.from({ length: 40 }, () => '.'.repeat(40));
+const BIG =Array.from({ length: 40 }, () => '.'.repeat(40));
 const WOODLAND = { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as unknown as RunStartInfo['woodland'];
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
 const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
@@ -38,12 +40,12 @@ for (let i = 0; i < 4; i++) {
   assets.frames[`wizzard_m_run_anim_f${i}`] = { x: 50, y: 0, w: 16, h: 28 };
 }
 
-function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
+function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0, loading?: LoadingScreen) {
   const net = fakeNet();
   const hud = fakeHud();
   const info = startInfo(rows, over);
   const run = newRun({ info, net, hud, myClass: 'Wizard' });
-  run.session.receive({ t: 'RunBegins' }); // the session steps and sends inputs only from then on (#322)
+  if (!loading) run.session.receive({ t: 'RunBegins' }); // the session steps and sends inputs only from then on (#322); a loading test sends it itself
   let params: R3dParams = { ...DEFAULTS, yaw: startYaw };
   const host: Host = {
     get params() { return params; },
@@ -56,7 +58,7 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
   };
   const el = document.createElement('div');
   const onLoop = vi.fn();
-  const stage = createRunStage(run, info, assets, host, el, onLoop);
+  const stage = createRunStage(run, info, assets, host, el, onLoop, loading);
   const timer = new FrameTimer<(typeof R3D_SYSTEMS)[number]>(R3D_SYSTEMS);
   const mkCanvas = (): HTMLCanvasElement => {
     const c = document.createElement('canvas');
@@ -478,7 +480,84 @@ describe('the run stage and the quality', () => {
   });
 });
 
+describe('the loading phase', () => {
+  const loaded = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m) => m.t === 'Loaded');
+  const start = () => {
+    const loading = new LoadingScreen(document.createElement('div'));
+    loading.show();
+    return { loading, ...setup(ROWS, { woodland: WOODLAND }, 0, loading) };
+  };
+
+  it('keeps the screen up, swallows keys and sends Loaded once the jobs and the warm frames are done', () => {
+    const { loading, net, stage, frame, host } = start();
+    const view = fakeView();
+    stage.built!(view);
+    expect(stage.key!({ code: 'Escape', repeat: false } as KeyboardEvent)).toBe(true);
+    expect(host.setParams).not.toHaveBeenCalled();
+    let guard = 0;
+    while (!stage.job.done && guard++ < 100) frame(view);
+    expect(loaded(net)).toHaveLength(0); // the warm frames still to go
+    for (let i = 0; i < WARM_FRAMES + 1; i++) frame(view);
+    expect(loaded(net)).toHaveLength(1);
+    for (let i = 0; i < 3; i++) frame(view);
+    expect(loaded(net)).toHaveLength(1);
+    expect(loading.visible).toBe(true); // RunBegins has not come
+  });
+
+  it('hides the screen on the frame after RunBegins, and keys work again', () => {
+    const { loading, run, stage, frame } = start();
+    const view = fakeView();
+    stage.built!(view);
+    for (let i = 0; i < 20; i++) frame(view);
+    run.session.receive({ t: 'RunBegins' });
+    frame(view);
+    expect(loading.visible).toBe(false);
+    expect(stage.key!({ code: 'KeyZ', repeat: false } as KeyboardEvent)).toBe(true);
+  });
+
+  it('a RunBegins before the client is ready (the timeout) keeps the screen until it is', () => {
+    const { loading, run, stage, frame, net } = start();
+    const view = fakeView();
+    stage.built!(view);
+    run.session.receive({ t: 'RunBegins' });
+    frame(view);
+    expect(loading.visible).toBe(true);
+    expect(loaded(net)).toHaveLength(0);
+    for (let i = 0; i < 20; i++) frame(view);
+    expect(loading.visible).toBe(false);
+  });
+
+  it('a click or E during loading does not fire at the first step after RunBegins', () => {
+    const { run, stage, frame, net, canvas } = start();
+    const view = fakeView();
+    stage.built!(view);
+    canvas().dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { button: 0 }));
+    stage.key!({ code: 'KeyE', repeat: false } as KeyboardEvent);
+    for (let i = 0; i < 20; i++) frame(view);
+    run.session.receive({ t: 'RunBegins' });
+    for (let i = 0; i < 5; i++) frame(view);
+    const sent = inputs(net);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((m) => !m.primary && !m.act)).toBe(true);
+  });
+});
+
 describe('startRun3d', () => {
+  it('a host that fails to start hides the loading screen', async () => {
+    const loading = new LoadingScreen(document.createElement('div'));
+    loading.show();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const run = startRun3d(document.createElement('div'), '', {
+      info: startInfo(ROWS), net: fakeNet() as unknown as Net, hud: fakeHud() as unknown as Hud, myClass: 'Wizard', dev: false, loading,
+      startHost: (async () => { throw new Error('no gpu'); }) as unknown as typeof startHost,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loading.visible).toBe(false);
+    err.mockRestore();
+    run.stop();
+  });
+
   it('dev picks the host mode: run for a debug account, play otherwise', () => {
     const modes: string[] = [];
     for (const dev of [false, true]) {

@@ -28,6 +28,8 @@ export const COVER_BUDGET_MS = 4;
 
 export interface CoverJob {
   readonly done: boolean;
+  /** Units run of all, 0..1; 1 when done. */
+  readonly progress: number;
   /** Works for at most `budgetMs` (at least one unit of work); true on the call that finishes. */
   step(budgetMs: number, nowMs?: () => number): boolean;
   /** null until `done`. */
@@ -78,6 +80,9 @@ export function coverJob(sources: readonly CoverSource[], seed: number): CoverJo
   return {
     get done(): boolean {
       return finished;
+    },
+    get progress(): number {
+      return finished ? 1 : next / total;
     },
     step(budgetMs: number, nowMs: () => number = () => performance.now()): boolean {
       if (finished) return false;

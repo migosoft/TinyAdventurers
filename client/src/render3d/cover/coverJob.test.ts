@@ -53,6 +53,16 @@ describe('coverJob', () => {
     expect(a.bushels).toEqual(b.bushels);
   });
 
+  it('reports its progress from 0 to 1', () => {
+    const job = coverJob(wsrc(woodland()), 3);
+    expect(job.progress).toBe(0);
+    job.step(0, ticking()); // one unit at least
+    expect(job.progress).toBeGreaterThan(0);
+    expect(job.progress).toBeLessThan(1);
+    job.step(Infinity);
+    expect(job.progress).toBe(1);
+  });
+
   it('keeps its result after the last unit, and stepping again does nothing', () => {
     const job = coverJob(wsrc(woodland()), 3);
     expect(job.step(Infinity)).toBe(true);

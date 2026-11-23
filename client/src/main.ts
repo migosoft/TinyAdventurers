@@ -11,6 +11,7 @@ import { Hud, esc } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
+import { LoadingScreen } from './ui/loading';
 import { loadFonts } from './fonts';
 import { isR3dDemo, r3dPage } from './r3dFlag';
 import './style.css';
@@ -113,7 +114,9 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   let boot3d: Promise<typeof import('./render3d/boot')> | null = null; // the chunk, loaded at most once (browsers cache a failed module fetch of the same URL, so a retry would fail again: the player reloads)
   let run3dStarts = 0; // a second RunStarted while the import is pending drops the stale start
 
+  const loading = new LoadingScreen(document.body);
   const backToLobby = () => {
+    loading.hide();
     run3d?.stop();
     run3d = null;
     hud.hide();
@@ -165,6 +168,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         const mine = ++run3dStarts;
         lobby.hide();
         gameEl.classList.add('active');
+        loading.show(); // before the chunk import; the stage hides it once the level is built and the run begins
         run3d?.stop();
         run3d = null;
         // Messages that arrive while the chunk loads are buffered and replayed into the session.
@@ -185,7 +189,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         off();
         if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
         // `dev` (the host's run mode with the dev tools) only for a debug account that asked with `?r3d`.
-        run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early, dev: debugAccount && new URLSearchParams(location.search).has('r3d') });
+        run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early, loading, dev: debugAccount && new URLSearchParams(location.search).has('r3d') });
         break;
       }
     }

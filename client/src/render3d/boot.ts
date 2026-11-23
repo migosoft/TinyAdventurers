@@ -5,6 +5,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
+import type { LoadingScreen } from '../ui/loading';
 import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
 import { createFxStage } from './fxStage';
@@ -107,7 +108,7 @@ export interface Run3d {
 export function startRun3d(
   el: HTMLElement,
   search: string,
-  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; early?: ServerMsg[]; startHost?: typeof startHost; dev: boolean },
+  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; early?: ServerMsg[]; startHost?: typeof startHost; dev: boolean; loading?: LoadingScreen },
 ): Run3d {
   const run = newRun(deps);
   // Messages that came while this chunk loaded, replayed before any later one can arrive.
@@ -122,8 +123,11 @@ export function startRun3d(
   void (deps.startHost ?? startHost)(el, search, deps.dev ? 'run' : 'play', (assets, h) => {
     host = h; // stop() reaches the host from here on, at any point of its start
     if (stopped) h.stop(); // stopped while the atlas loaded: the host disposes the stage it gets and ends
-    return createRunStage(run, deps.info, assets, h, el, clearTimer);
-  }).catch((e: unknown) => console.error('The 3D run could not start:', e));
+    return createRunStage(run, deps.info, assets, h, el, clearTimer, deps.loading);
+  }).catch((e: unknown) => {
+    deps.loading?.hide(); // the error box must not stay behind the screen
+    console.error('The 3D run could not start:', e);
+  });
   return {
     stop(): void {
       if (stopped) return;

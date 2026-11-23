@@ -11,7 +11,7 @@ export interface StoneRun {
   /** The job's units done of all, null while there is no job (no stone, or no view yet). */
   readonly progress: { done: number; total: number } | null;
   /** One frame: works the job for `STONE_BUDGET_MS` into the view's sheets; a null view (being rebuilt) waits. */
-  frame(view: View | null): void;
+  frame(view: View | null, budgetMs?: number): void;
   /** A new view was built (the first one, or after a lost device): it takes over the painted pixels, or starts the job over when the layout changed. */
   built(view: View): void;
 }
@@ -55,7 +55,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
       seen = null; // a new view: its plan is new by identity whatever its layout
       attach(view);
     },
-    frame(view) {
+    frame(view, budgetMs = STONE_BUDGET_MS) {
       if (!view?.stone) return;
       if (view !== current) {
         // A stage without a `built` hook: the first frame of a rebuilt view is its start.
@@ -64,7 +64,7 @@ export function makeStoneRun(world: WorldInput, spawn: { x: number; z: number })
       }
       if (view.stone.plan !== seen) attach(view);
       if (!job || job.done) return;
-      view.setStonePages(job.step(STONE_BUDGET_MS));
+      view.setStonePages(job.step(budgetMs));
     },
   };
 }

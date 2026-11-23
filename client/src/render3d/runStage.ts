@@ -7,7 +7,9 @@ import { RunSession, type FrameClock, type HudLike, type NetLike } from '../run/
 import { RulesLog } from '../rulesLog';
 import type { Hud } from '../ui/hud';
 import type { StepInput } from '../run/input';
+import { LoadingScreen } from '../ui/loading';
 import { atlasBounds } from './atlasBounds';
+import { loadState } from './loadProgress';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { stoneField } from './stone/field';
@@ -20,6 +22,7 @@ import { MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './ho
 import { WOODLAND_CLEAR } from './light';
 import { Overlay3d } from './overlay';
 import { RunView3d, moveInput } from './runView3d';
+import { TREE_BUDGET_MS } from './trees/forest';
 import type { R3dSystem } from './stats';
 import type { FrameTimer } from '../game/frameTimer';
 import { wrapYaw } from './params';
@@ -91,6 +94,9 @@ export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: RunHud; my
   return { session, input, clock, hud: deps.hud, log };
 }
 
+/** Milliseconds per frame the cover, stone and tree jobs get while the loading screen is up. */
+export const LOAD_SLICE_MS = 50;
+
 export interface RunStage extends Stage {
   readonly runView: RunView3d;
   readonly job: CoverJob;
@@ -100,7 +106,10 @@ export interface RunStage extends Stage {
  * `el` shows the ground's error box; `onLoop` is called at the first frame (the host's loop has taken over from whatever
  * drove the session before).
  */
-export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, host: Host, el: HTMLElement, onLoop: () => void = () => {}): RunStage {
+export function createRunStage(
+  run: Run, info: RunStartInfo, assets: Assets, host: Host, el: HTMLElement, onLoop: () => void = () => {},
+  loading: LoadingScreen = new LoadingScreen(document.createElement('div')), // a hidden one: no loading phase (tests)
+): RunStage {
   const { session } = run;
   // The overlay canvas is the stage's, not the view's: it survives a lost device's rebuild (which replaces the 3D canvas).
   const overlay = new Overlay3d(el);
@@ -165,6 +174,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   turnKeyLabels().then((k) => { if (live) run.hud.setTurnHelp(k); }, () => {});
 
   let looped = false;
+  let warmFrames = 0; // frames drawn with a view once every job was done: the shaders are compiled by then
   // The stone paint job (#380), beside the cover job: nearest the spawn first.
   const stoneRun = makeStoneRun(world, spawn);
   return {
@@ -196,11 +206,37 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       }
       run.input.yaw = (shown * Math.PI) / 180;
       run.input.free = c.params.free;
-      if (!job.done && job.step(COVER_BUDGET_MS)) {
+      const loadingNow = loading.visible;
+      if (loadingNow) {
+        runView.treeBudgetMs = LOAD_SLICE_MS;
+        // The screen covers the canvas: clicks and E meanwhile must not fire at the first step after RunBegins.
+        mouse.takePrimary();
+        mouse.takeSecondary();
+        run.input.act = false;
+      }
+      if (!job.done && job.step(loadingNow ? LOAD_SLICE_MS : COVER_BUDGET_MS)) {
         if (c.view) upload(c.view);
       }
-      stoneRun.frame(c.view);
+      stoneRun.frame(c.view, loadingNow ? LOAD_SLICE_MS : undefined);
       runView.stoneProgress = stoneRun.progress;
+      if (loadingNow) {
+        const sp = stoneRun.progress;
+        const trees = runView.treeProgress;
+        const built = job.done && stoneRun.done && (trees === null || trees >= 1);
+        if (built && c.view) warmFrames++;
+        const s = loadState({
+          assets: true, cover: job.progress, stone: world.stone ? (stoneRun.done ? 1 : sp ? sp.done / sp.total : 0) : null, trees, warmFrames,
+          waiting: session.waiting,
+        });
+        loading.set(s.fraction, s.line);
+        if (s.ready) {
+          session.sendLoaded();
+          if (session.started) {
+            loading.hide();
+            runView.treeBudgetMs = TREE_BUDGET_MS;
+          }
+        }
+      }
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
       const r = window.__r3d;
@@ -221,6 +257,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       return runView.drawCalls;
     },
     key(e: KeyboardEvent): boolean {
+      if (loading.visible) return true; // no menu, no Escape, no keys while loading
       switch (e.code) {
         case 'Escape':
           if (!e.repeat) session.toggleMenu();

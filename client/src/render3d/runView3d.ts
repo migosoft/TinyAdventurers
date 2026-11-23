@@ -140,6 +140,12 @@ export class RunView3d implements RunView {
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
   private forest: Forest | null = null;
+  /** Milliseconds of tree growing per frame; the stage raises it while the loading screen is up (#322). */
+  treeBudgetMs = TREE_BUDGET_MS;
+  /** Trees grown of all, 0..1; null without a forest. */
+  get treeProgress(): number | null {
+    return this.forest ? (this.forest.total ? this.forest.built / this.forest.total : 1) : null;
+  }
   /** The stage's stone job progress, for the F3 line (#380); null without stone. */
   stoneProgress: { done: number; total: number } | null = null;
   private critters: Critters3d | null = null;
@@ -444,7 +450,7 @@ export class RunView3d implements RunView {
     const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: fillQuads(dq.decals, fo.decals), shadows: fillShadows(dq.shadows, fo.shadows), glows: fillGlows(dq.glows, fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
-    this.forest?.step(cam, TREE_BUDGET_MS);
+    this.forest?.step(cam, this.treeBudgetMs);
     c.timer.lap('plants');
     let lights: ReturnType<typeof selectLights>['list'] = [];
     let casters: ShadowCaster[] = [];
