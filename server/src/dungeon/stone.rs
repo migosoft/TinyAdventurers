@@ -87,7 +87,8 @@ pub fn crystals(seed: u64, d: &mut Dungeon) {
             d.torches = out;
             return;
         }
-        bare.into_iter().for_each(|ri| torch_cave[ri] = false);    }
+        bare.into_iter().for_each(|ri| torch_cave[ri] = false);
+    }
 }
 
 /// One kind per cell, row-major, `map.w * map.h` long.
