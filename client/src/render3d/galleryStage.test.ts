@@ -40,9 +40,8 @@ for (const d of Object.values(FIGURES)) {
   for (const a of Object.values(d.frames ?? {})) for (let i = 0; i < a.n; i++) add(`${a.prefix}${i}`, 86, 54);
 }
 for (const p of Object.values(PROJECTILES)) add(p.frame, 8, 16);
-for (const f of ['skull', 'barrel_explosive', 'chest_empty_open_anim_f2', 'torch_out']) add(f, 16, 16);
+for (const f of ['skull', 'barrel_explosive', 'chest_empty_open_anim_f2']) add(f, 16, 16);
 for (let i = 0; i < 3; i++) for (const p of ['chest_full_open_anim_f', 'chest_mimic_open_anim_f']) add(`${p}${i}`, 16, 16);
-for (let i = 0; i < 5; i++) add(`torch_f${i}`, 16, 16);
 // The stage's kit builds on the calling thread (no worker); jsdom has no canvas.
 vi.mock('./stageKit', async (orig) => ({
   ...(await orig<typeof import('./stageKit')>()),

@@ -70,8 +70,10 @@ describe('cards', () => {
   });
 
   it('builds no torch quad and no torch glow: the torches are the world\'s models', () => {
-    const d = buildDynamic(newScene(), frames, cam(0), 0.3, false);
+    const s = newScene();
+    const d = buildDynamic(s, frames, cam(0), 0.3, false);
     expect(d.glows.count).toBe(0);
+    expect(d.cards.count).toBe(s.ents.length + s.props.length);
   });
 
   it('spans each glow by the camera right and up axes, a square of side 2 size on screen, in front of its wall and floor', () => {

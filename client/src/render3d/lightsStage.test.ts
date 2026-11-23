@@ -11,7 +11,7 @@ import { CRACK_TILE, createLightsStage, lightsEnts, lightsKnight } from './light
 import type { FrameInput } from './view';
 import { SIGHT_MARGIN } from './sightmask';
 
-// Only the walking knight's frames: enough for its card (and so its shadow); the torch flames have none and draw nothing.
+// Only the walking knight's frames: enough for its card (and so its shadow); the torches are the world's models, not cards.
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const assets = { image: {} as HTMLImageElement, frames };
@@ -115,7 +115,7 @@ describe('the ?r3d=lights stage', () => {
     expect(f!.lava).not.toBeNull();
     expect(f!.lava!.length).toBe(W * H * 4);
     expect(f!.darkvision).toBeNull();
-    // the walking knight is the only figure with a shadow; the torch flames are not casters
+    // the walking knight is the only figure with a shadow; the torches are not casters
     expect(f!.casters.map((c) => c.id)).toEqual([100]);
   });
 
@@ -161,6 +161,10 @@ describe('the ?r3d=lights stage', () => {
     expect(ents.filter((e) => e.kind === KIND.Knight)).toHaveLength(1);
     // The torch with a figure each; the lava-side torch has none.
     expect(ents.filter((e) => e.kind === KIND.Torch)).toHaveLength(TORCHES.filter((t) => t.sprite).length);
+    // and its light is a free one (wall 0): no torch model hangs on a wall that is not there
+    const { stage } = drawn('?r3d=lights&t=0');
+    const lava = TORCHES.findIndex((t) => !t.sprite);
+    expect(stage.world.taken!.lights.find((l) => l.id === lava + 1)!.wall).toBe(0);
   });
 });
 

@@ -1,6 +1,6 @@
 // Every figure and every shot of a real run as cards (#303): the figures with their
 // weapons, tints and effects, and the shots. The look of a figure is `figurePose` (game/anim/pose.ts); this file turns the pose
-// into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
+// into cards in the 3D view's passes (render3d/cards.ts). The board objects (chests, barrels, mimics) and the coin
 // burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
 import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { ghostAlpha, ghostPhase, skimsTerrain, VANISH_SECS } from '../game/anim/entityAlpha';
@@ -89,7 +89,7 @@ export function screenAim(yaw: number, aim: number): number {
 
 /**
  * How a frame is lit, as the caller draws it: the `ambient` it uses, what a dark figure does (`fade` into the dark, or `shape`: keep its
- * shape, lit by the ambient only)
+ * shape, lit by the ambient only).
  */
 export interface FigureLook {
   ambient: [number, number, number]; dark: 'fade' | 'shape';
@@ -132,7 +132,7 @@ export interface FigureAnchor {
 export interface FigureOut {
   cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf;
   openers: Opener[];
-  /** The standing body card of every figure, chest, barrel and mimic as a shadow caster (id: the entity's); not lying, shots, flames or images. */
+  /** The standing body card of every figure, chest, barrel and mimic as a shadow caster (id: the entity's); not lying, shots or images. */
   casters: ShadowCaster[];
   /** Floating words born this frame (the mimic's wake cue): simulation px, `up` art px above the spot. */
   floats: Array<{ x: number; y: number; text: string; color: string; kind: WorldTextKind; up: number }>;

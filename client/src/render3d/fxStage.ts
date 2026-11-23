@@ -496,7 +496,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const frame = galleryFrame(ents, t, dt);
       if (extras.drain || extras.lights) frame.snap = snap({ drain: extras.drain ?? null, lights: extras.lights ?? [] }) as unknown as Snapshot;
-      const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is: (e) => e.kind !== KIND.Torch } });
+      const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is: () => true } });
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues, falls: fo.falls, fp: footprint(cam, c.plan.halfW, c.plan.halfH) }, fo.glows);
 
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };

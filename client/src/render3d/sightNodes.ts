@@ -30,7 +30,7 @@ export interface Sight {
   unseenAt(xz: N): N;
   /** The colour after the sight step: `mode` off unchanged; dark mix(c * (1 - SHADE * soft), clear, hard); mist per `mist.ts` with `P` the true world point (height P.y, drift at P.xz). */
   apply(colour: N, P: N, u: N): N;
-  /** The mask's texels per tile as a node (`sightOrigin.w`): the world's wall faces push their read point out by 1.5 / res (materials.ts); wall cards (torches) by the fixed WALL_SIGHT_PUSH, 0.25 tile (cards.ts). */
+  /** The mask's texels per tile as a node (`sightOrigin.w`): the world's wall faces push their read point out by 1.5 / res (materials.ts). */
   readonly res: N;
   /** `apply` discards a fragment whose P.y lies below this (the mirror pass's clip at the water level); -1e6: no clip. */
   readonly clipBelow: { value: number };

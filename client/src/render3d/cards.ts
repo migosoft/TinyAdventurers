@@ -1,4 +1,4 @@
-// Per-frame quads of the 3D view: figure and prop cards, floor decals, ground shadows, torch flames and glows.
+// Per-frame quads of the 3D view: figure and prop cards, floor decals, ground shadows and glows.
 import { facesLeft, snapGround, viewRay, type Cam } from './camera';
 import type { ShadowCaster } from './lights';
 import { frameOf, orbAt, type SceneState } from './scene';

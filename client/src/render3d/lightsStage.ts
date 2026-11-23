@@ -108,7 +108,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   let lightId = 1;
   let blueId = 0;
   for (const tc of TORCHES) {
-    field.add({ id: lightId, kind: LIGHT_KIND.Torch, colour: tc.colour, x: Math.floor(tc.x / TILE), y: Math.floor(tc.y / TILE), on: true, wall: tc.side + 1 });
+    field.add({ id: lightId, kind: LIGHT_KIND.Torch, colour: tc.colour, x: Math.floor(tc.x / TILE), y: Math.floor(tc.y / TILE), on: true, wall: tc.sprite ? tc.side + 1 : 0 });
     if (tc.blue) blueId = lightId;
     lightId++;
   }

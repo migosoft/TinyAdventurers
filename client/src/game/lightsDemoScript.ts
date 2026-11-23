@@ -36,7 +36,7 @@ export function buildMap(): TileMap {
 
 /**
  * The torches in the order their lights are added (ids from 1). `x`, `y` are the spot (px) a torch entity would have: the light
- * sits on the tile that spot lies in. `sprite`: whether a torch figure hangs there (the one beside the lava pool has only its light).
+ * sits on the tile that spot lies in. `sprite`: whether a torch hangs there on its wall (the one beside the lava pool is a free light, `wall` 0, with no model).
  */
 export interface DemoTorch { x: number; y: number; side: 0 | 1 | 2; colour: number; blue: boolean; sprite: boolean }
 export const TORCHES: DemoTorch[] = [
