@@ -227,12 +227,22 @@ describe('Figures3d', () => {
       const fg = make();
       fg.frame(frame([], { now: 10 }), cam());
       fg.shotEnded(landed, 'landed');
-      fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0 });
+      fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0, extra: 0 });
       expect(stuckAt(fg, 10.1).n).toBe(2);
       const other = make();
       other.frame(frame([], { now: 10 }), cam());
-      other.event({ t: 'Land', id: 21, x: at(2), y: 8, kind: KIND.Arrow, aim: 0 });
+      other.event({ t: 'Land', id: 21, x: at(2), y: 8, kind: KIND.Arrow, aim: 0, extra: 0 });
       expect(stuckAt(other, 11.75).look[4]).toBeCloseTo(0.5, 6);
+    });
+    it("a server Land waits the interpolation delay before it is drawn, then lives its 2 s from there", () => {
+      const fg = make();
+      fg.frame(frame([], { now: 10, interpDelay: 0.1 }), cam());
+      fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0, extra: 0 });
+      const at = (now: number) => fg.frame(frame([], { now, interpDelay: 0.1 }), cam()).ghosts.n;
+      expect(at(10.05)).toBe(0);
+      expect(at(10.15)).toBe(1);
+      expect(at(12.05)).toBe(1);
+      expect(at(12.15)).toBe(0);
     });
     it('is not made by a wall or enemy end', () => {
       const fg = make();

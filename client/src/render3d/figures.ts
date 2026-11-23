@@ -294,6 +294,8 @@ export class Figures3d {
   private readonly objectPoses = new Map<number, Pose3d>();
   /** The clock of the last frame (`f.now`), which stamps the events; null before the first frame, so an early event starts on that frame (#319). */
   private now: number | null = null;
+  /** The interpolator's delay (s) of the last frame. */
+  private interpDelay = 0;
   private cam: Cam | null = null;
   /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much. */
   private dark: ReadonlySet<number> = new Set();
@@ -333,7 +335,8 @@ export class Figures3d {
 
   /** Sink, Invisible and Died bookkeeping; a Died adds a skull unless the figure was lost to a chasm or the deep, or comes apart (Ghost, Shade) or is a shot. */
   event(ev: PictureEv): boolean {
-    if (ev.t === 'Land') { this.stick(ev.x, ev.y, ev.kind, ev.aim); return false; }
+    // Others' arrows are drawn from the interpolation, `interpDelay` behind the snapshot that carried this Land: stick when they land.
+    if (ev.t === 'Land') { this.stick(ev.x, ev.y, ev.kind, ev.aim, this.now === null ? null : this.now + this.interpDelay); return false; }
     if (ev.t === 'Coins') {
       // Like `fx.coins`: min(10, 3 + v / 4) coins, aimed up the screen within +-0.8 rad, 50..90 px/s, living 0.7..1 s.
       const n = Math.min(10, 3 + Math.floor(ev.v / 4));
@@ -372,12 +375,13 @@ export class Figures3d {
   }
 
   /** The session drops the server's `Land` of an own shot that already landed in prediction, so each call here is one arrow. */
-  private stick(x: number, y: number, kind: number, aim: number): void {
-    this.stuck.push({ x, y, kind, aim, born: this.now });
+  private stick(x: number, y: number, kind: number, aim: number, born: number | null = this.now): void {
+    this.stuck.push({ x, y, kind, aim, born });
   }
 
   frame(f: RunFrame, cam: Cam, look: FigureLook = DEFAULT_LOOK): FigureOut {
     this.now = f.now;
+    this.interpDelay = f.interpDelay ?? 0;
     this.cam = cam;
     this.cp = Math.cos(cam.pitch);
     this.dark = f.dark;
@@ -1245,7 +1249,7 @@ export class Figures3d {
     // shortcut: the stuck card stays upright (pushCard takes no pitch), so no tilt along the arc; upgrade if a look pass wants it.
     for (const s of this.stuck) s.born ??= f.now;
     this.stuck = this.stuck.filter((s) => s.born! + STUCK_SECS > f.now);
-    for (const s of this.stuck) this.shot(s.kind, s.x, s.y, s.aim, f.now, cam, out, 0, true, Math.min(1, (s.born! + STUCK_SECS - f.now) / STUCK_FADE));
+    for (const s of this.stuck) if (s.born! <= f.now) this.shot(s.kind, s.x, s.y, s.aim, f.now, cam, out, 0, true, Math.min(1, (s.born! + STUCK_SECS - f.now) / STUCK_FADE));
   }
 
   private shot(kind: number, px: number, py: number, aim: number, now: number, cam: Cam, out: FigureOut, lift: number, stuck = false, alpha = 1): void {

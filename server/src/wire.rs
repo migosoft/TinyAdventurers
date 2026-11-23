@@ -65,7 +65,7 @@ pub enum EvW {
     Effect(u8, u32, u8, bool, u8),
     Zap(u8, u32, u32, u32, u32),
     Cast(u8, u32, u32, u32, u8, u16, u8, u8),
-    Land(u8, u32, u32, u32, u8, u8),
+    Land(u8, u32, u32, u32, u8, u8, u32),
 }
 
 /// `[x, y, kind, colour]`, positions scaled, see `MovingLight`.
@@ -139,7 +139,7 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::Effect { id, kind, on, look } => EvW::Effect(13, *id, *kind, *on, *look),
         Ev::Zap { x, y, x2, y2 } => EvW::Zap(14, q(*x), q(*y), q(*x2), q(*y2)),
         Ev::Cast { id, x, y, look, windup_ms, primary, aim } => EvW::Cast(15, *id, q(*x), q(*y), *look, *windup_ms, *primary as u8, q_aim(*aim as f64)),
-        Ev::Land { id, x, y, kind, aim } => EvW::Land(16, *id, q(*x), q(*y), *kind, q_aim(*aim as f64)),
+        Ev::Land { id, x, y, kind, aim, extra } => EvW::Land(16, *id, q(*x), q(*y), *kind, q_aim(*aim as f64), *extra),
     }
 }
 
@@ -215,7 +215,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::Effect { id: 3, kind: 11, on: true, look: 1 },
             Ev::Zap { x: 100.03, y: 200.97, x2: 130.5, y2: 190.25 },
             Ev::Cast { id: 2, x: 130.03, y: 460.47, look: 1, windup_ms: 600, primary: true, aim: -1.2 },
-            Ev::Land { id: 70002, x: 140.03, y: 450.97, kind: 28, aim: 0.5 },
+            Ev::Land { id: 70002, x: 140.03, y: 450.97, kind: 28, aim: 0.5, extra: (1 << 16) | 42 },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],

@@ -78,6 +78,8 @@ export interface RunFrame {
   camera: { x: number; y: number }; // ground position, simulation px
   snap: Snapshot | undefined; // lights, looks, drain, me.vision, me.darkvision
   shots: readonly ShotView[];
+  /** The interpolator's delay (s): the others' shots are drawn this far behind the newest snapshot. */
+  interpDelay?: number;
   hiddenShots: ReadonlySet<number>; // entity ids of server projectiles not to draw
   useHint: UseHint | null;
   /** The own hero's latest predicted magical use (null before the first); a new `seq` is a new cast. */

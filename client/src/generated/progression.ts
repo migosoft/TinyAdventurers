@@ -2200,7 +2200,6 @@ export const ITEMS = {
 
 export const ABILITY_INFO = {
   "Bite": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [
       "a weapon of kind Bite"
@@ -2210,7 +2209,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "BlindingCurse": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "A slow orb that blinds what it hits.",
@@ -2218,7 +2216,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "ChainSpark": {
-    "arcs": false,
     "category": "Spell",
     "req": [
       "INT 18"
@@ -2228,7 +2225,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Charge": {
-    "arcs": false,
     "category": "Technique",
     "req": [],
     "text": "Dash toward the cursor, hitting everything in the way.",
@@ -2236,7 +2232,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Charm": {
-    "arcs": false,
     "category": "Spell",
     "req": [
       "INT 15",
@@ -2247,7 +2242,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Consecrate": {
-    "arcs": false,
     "category": "Innate",
     "req": [
       "CHA 15"
@@ -2257,7 +2251,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Entangle": {
-    "arcs": false,
     "category": "Innate",
     "req": [
       "CHA 14"
@@ -2267,7 +2260,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "FireBolt": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "A bolt of fire.",
@@ -2275,7 +2267,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "FireBreath": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "A cone of fire held for a moment, leaving burning patches on the ground.",
@@ -2283,7 +2274,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Fireball": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
@@ -2291,7 +2281,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "FlankingThrust": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [
       "DEX 16",
@@ -2302,7 +2291,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "FrostNova": {
-    "arcs": false,
     "category": "Spell",
     "req": [
       "INT 17"
@@ -2312,7 +2300,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "FrostShard": {
-    "arcs": false,
     "category": "Spell",
     "req": [
       "INT 14"
@@ -2322,7 +2309,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "GloomBolts": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "Five bolts of gloom in a fan.",
@@ -2330,7 +2316,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "GroundSlam": {
-    "arcs": false,
     "category": "Technique",
     "req": [
       "STR 17",
@@ -2341,7 +2326,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Haste": {
-    "arcs": false,
     "category": "Spell",
     "req": [
       "INT 15",
@@ -2352,7 +2336,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "HolyLight": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "Heals you and the allies close to you.",
@@ -2360,7 +2343,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Hurl": {
-    "arcs": true,
     "category": "WeaponAttack",
     "req": [
       "a weapon of kind Throwing Axe"
@@ -2370,7 +2352,6 @@ export const ABILITY_INFO = {
     "uses": "Ranged"
   },
   "Judgement": {
-    "arcs": false,
     "category": "Innate",
     "req": [
       "CHA 16"
@@ -2380,7 +2361,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "MagicMissile": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "Fast arcane bolts.",
@@ -2388,7 +2368,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Nova": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "A burst of dark power that hurts and pushes everything around the caster.",
@@ -2396,7 +2375,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "PoisonCoat": {
-    "arcs": false,
     "category": "Technique",
     "req": [
       "WIL 15"
@@ -2406,7 +2384,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Pounce": {
-    "arcs": false,
     "category": "Technique",
     "req": [],
     "text": "A leap that crosses chasms and hits the first enemy it reaches, hard.",
@@ -2414,7 +2391,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Purify": {
-    "arcs": false,
     "category": "Innate",
     "req": [
       "WIL 14"
@@ -2424,7 +2400,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "RaiseDead": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "Raises skeletons, half of them archers, that fight for the caster.",
@@ -2432,7 +2407,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "RingOfFire": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "Sixteen fire orbs flung out in a ring.",
@@ -2440,7 +2414,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "ShadowBolt": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "A slow bolt of shadow.",
@@ -2448,7 +2421,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Shoot": {
-    "arcs": true,
     "category": "WeaponAttack",
     "req": [],
     "text": "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
@@ -2456,7 +2428,6 @@ export const ABILITY_INFO = {
     "uses": "Ranged"
   },
   "SleepMist": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "A slow orb that puts what it hits to sleep.",
@@ -2464,7 +2435,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Smash": {
-    "arcs": false,
     "category": "Technique",
     "req": [],
     "text": "A blow all around the user that pushes everything away.",
@@ -2472,7 +2442,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Smite": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [
       "CHA 15",
@@ -2483,7 +2452,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "StoneGaze": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "A stare that turns the target to stone, if it still sees it when the gaze lands.",
@@ -2491,7 +2459,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Strike": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [],
     "text": "A sweeping blow with your melee weapon.",
@@ -2499,7 +2466,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "SummonImps": {
-    "arcs": false,
     "category": "Spell",
     "req": [],
     "text": "Summons imps that fight for the caster.",
@@ -2507,7 +2473,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "SummonWolf": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "Calls your Dire Wolf, or heals it while it lives.",
@@ -2515,7 +2480,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Swoop": {
-    "arcs": false,
     "category": "Technique",
     "req": [],
     "text": "A long rush that hurts each enemy it passes once and pushes it hard.",
@@ -2523,7 +2487,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "TailWhip": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [
       "a weapon of kind Tail"
@@ -2533,7 +2496,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Touch": {
-    "arcs": false,
     "category": "WeaponAttack",
     "req": [
       "a weapon of kind Touch"
@@ -2543,7 +2505,6 @@ export const ABILITY_INFO = {
     "uses": "Melee"
   },
   "Vanish": {
-    "arcs": false,
     "category": "Innate",
     "req": [],
     "text": "Fades from sight until it strikes.",
@@ -2551,7 +2512,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Volley": {
-    "arcs": true,
     "category": "WeaponAttack",
     "req": [
       "DEX 15",
@@ -2562,7 +2522,6 @@ export const ABILITY_INFO = {
     "uses": "Ranged"
   },
   "WarCry": {
-    "arcs": false,
     "category": "Technique",
     "req": [
       "STR 16"
@@ -2572,7 +2531,6 @@ export const ABILITY_INFO = {
     "uses": "Nothing"
   },
   "Whirl": {
-    "arcs": false,
     "category": "Technique",
     "req": [
       "DEX 14"

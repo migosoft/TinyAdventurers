@@ -201,7 +201,8 @@ export class Shots {
       for (let k = 1; k <= steps; k++) {
         const px = c.x + ((nx - c.x) * k) / steps;
         const py = c.y + ((ny - c.y) * k) / steps;
-        const hit = c.flight === undefined
+        // Objects have no body height (HITBOX h 0): they stop an arc at any height, as on the server.
+        const hit = c.flight === undefined || e.kind === KIND.Chest || e.kind === KIND.Barrel
           ? shotHits(e.kind, e.x, e.y, air, px, py, c.r)
           : arcHits(e.kind, e.x, e.y, air, px, py, shotZ(c.flight, c.flown + ((nflown - c.flown) * k) / steps), c.r);
         if (hit) return e;

@@ -122,6 +122,19 @@ describe('RunSession messages', () => {
     expect(hud.calls.filter((c) => c[0] === 'message' && c[1] === 'hi').length).toBe(1);
   });
 
+  it("a Land of an own landed shot is dropped even with no entity in ents; another's is drawn (#321)", () => {
+    const { net, session } = make();
+    const view = fakeView();
+    session.setView(view);
+    // An own shot that lands in prediction: shot id 7, landing 30 px ahead (the room is 3 tiles wide).
+    const shots = session['shots'];
+    shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 200, range: 260 }), 2, 1, { x: 24, y: 24 }, 0, undefined, 30);
+    for (let i = 0; i < 100 && shots.live.length > 0; i++) shots.update(0.01, i * 0.01, { map: session['map'], ents: session['ents'], rtt: 50, interpDelay: 0.1 }, () => {});
+    const land = (id: number, extra: number): Ev => ({ t: 'Land', id, x: 50, y: 24, kind: KIND.Arrow, aim: 0, extra });
+    net.emit(snap({ ev: [land(90, (1 << 16) | 7), land(91, (2 << 16) | 7)] }));
+    expect(view.events.filter((e) => e.t === 'Land').map((e) => (e as { id: number }).id)).toEqual([91]);
+  });
+
   it('the frame carries the dark ids of the snapshot it draws', () => {
     const { net, session } = make();
     const view = fakeView();

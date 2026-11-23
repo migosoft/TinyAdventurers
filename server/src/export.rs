@@ -359,7 +359,7 @@ fn export_progression() {
             (
                 format!("{id:?}"),
                 json!({
-                    "category": format!("{:?}", d.category), "uses": format!("{:?}", d.uses), "arcs": d.arcs,
+                    "category": format!("{:?}", d.category), "uses": format!("{:?}", d.uses),
                     "req": d.req.iter().map(requirement_text).collect::<Vec<_>>(), "text": ab::text(id), "tint": tint,
                 }),
             )

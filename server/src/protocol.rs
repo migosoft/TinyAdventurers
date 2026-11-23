@@ -387,8 +387,9 @@ pub enum Ev {
     /// direction in radians. Positional: sent where the point is in sight.
     Cast { id: u32, x: f32, y: f32, look: u8, windup_ms: u16, primary: bool, aim: f32 },
     /// Arcing shot `id` of entity kind `kind` lands at (x, y) and ends; `aim` is its flight direction in radians.
+    /// `extra` is the projectile's `(owner_id << 16) | shot_id`, so the owner's client can tell its own landed arrow.
     /// Positional: sent where the point is in sight.
-    Land { id: u32, x: f32, y: f32, kind: u8, aim: f32 },
+    Land { id: u32, x: f32, y: f32, kind: u8, aim: f32, extra: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

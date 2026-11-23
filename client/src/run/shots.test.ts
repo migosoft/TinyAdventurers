@@ -112,6 +112,13 @@ describe('Shots', () => {
       expect(fly(at, new Map([[5, orc(284)]]))[0][0]).toBe('enemy');
     });
 
+    it('an arc stops at a barrel (no body height) at any height', () => {
+      const shots = new Shots();
+      shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 290, range: 260 }), 2, 1, { x: 24, y: 24 }, 0, undefined, 260);
+      const barrel: EntState = { ...server(6, 0), kind: KIND.Barrel, x: 154, y: 24, side: SIDE.Hostile };
+      expect(fly(shots, new Map([[6, barrel]]))[0][0]).toBe('enemy');
+    });
+
     it('a flat shot is unchanged', () => {
       const shots = new Shots();
       shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 290, range: 260 }), 2, 1, { x: 24, y: 24 }, 0);

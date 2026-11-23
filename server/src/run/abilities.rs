@@ -401,7 +401,7 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
     // An arcing ability lands at the pointer (no pointer: its full range), the same distance for every arrow of a fan.
     let land = ab::def(a.id).arcs.then(|| match aim_dist_of(run, c) {
         d if d == 0.0 => a.range,
-        d => d.clamp(24.0, a.range),
+        d => d.max(24.0).min(a.range),
     });
     match a.id {
         AbilityId::MagicMissile => {
@@ -1236,10 +1236,10 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         let pr = &mut run.projectiles[i];
         if let Some(arc) = pr.arc.as_ref().filter(|a| a.flown >= a.flight - 1e-9) {
             let at = arc.land;
-            let (id, kind, aim) = (pr.id, pr.kind as u8, pr.vel.y.atan2(pr.vel.x));
+            let (id, kind, aim, extra) = (pr.id, pr.kind as u8, pr.vel.y.atan2(pr.vel.x), (pr.owner << 16) | pr.shot as u32);
             pr.pos = at;
             pr.dead = true;
-            run.event(Ev::Land { id, x: at.x as f32, y: at.y as f32, kind, aim: aim as f32 }, Some(at));
+            run.event(Ev::Land { id, x: at.x as f32, y: at.y as f32, kind, aim: aim as f32, extra }, Some(at));
             break;
         }
     }
