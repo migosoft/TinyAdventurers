@@ -42,6 +42,8 @@ import { Water3d } from './water/water';
 
 /** The free camera's speed in tiles per second. */
 const PAN_SPEED = 12;
+/** The seed of the page's air (the demo needs no real randomness; the ember test counts jumps, #400). */
+const AIR_SEED = 307;
 /** The seed of the page's lava bubbles. */
 const LAVA_SEED = 344;
 const KNIGHT_ID = 100;
@@ -131,7 +133,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
   const lava = new Float32Array(map.w * map.h * 4);
   lavaTexels(field, map, lava);
 
-  const air = new Air3d(map);
+  const air = new Air3d(map, rng(AIR_SEED));
   const water = new Water3d(map);
   // The pool's lava (#344): bubbles and rings only, no effects here, so its cues go unused.
   const lava3d = new Lava3d(map, rng(LAVA_SEED));
