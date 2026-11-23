@@ -23,11 +23,13 @@ const p = await b.newPage({ viewport: { width: Number(process.env.R3D_W) || 1280
 watchPage(p, '', errs, () => !!lose);
 await p.goto(`${base}?r3d=${page}${extra}`);
 let ok = true;
+// The gallery draws every figure kind in every state: about 0.4 frames a second under SwiftShader (#403), so 10 frames take ~25 s.
+const frameWait = page === 'gallery' ? 90000 : 20000;
 try {
-  await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 20000 });
+  await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: frameWait });
 } catch {
   ok = false;
-  errs.push('timeout: no frames drawn within 20 s');
+  errs.push(`timeout: no frames drawn within ${frameWait / 1000} s`);
 }
 console.log(`backend: ${await p.evaluate(() => window.__r3d?.backend)}`);
 if (gpuOn) await printGpu(p);
@@ -50,12 +52,12 @@ if (lose && ok) {
   if (ok) {
     try {
       const before = await p.evaluate(() => window.__r3d.frames);
-      await p.waitForFunction((n) => window.__r3d.frames >= n + 10, before, { timeout: 20000 });
+      await p.waitForFunction((n) => window.__r3d.frames >= n + 10, before, { timeout: frameWait });
       console.log(`backend after the loss: ${await p.evaluate(() => window.__r3d.backend)}`);
       await p.screenshot({ path: `${out}/r3d-after-loss.png` });
     } catch {
       ok = false;
-      errs.push('timeout: no 10 more frames within 20 s after the loss');
+      errs.push(`timeout: no 10 more frames within ${frameWait / 1000} s after the loss`);
     }
   }
 }
