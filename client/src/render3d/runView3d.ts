@@ -660,7 +660,7 @@ export class RunView3d implements RunView {
   }
 
   shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed'): void {
-    this.figures.shotEnded(shot);
+    this.figures.shotEnded(shot, how);
     this.fx.shotEnded(shot, how, this.clockNow);
   }
 

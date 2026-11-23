@@ -114,7 +114,7 @@ export const NO_STATS: ViewStats = {
   canvas: { w: 0, h: 0 },
 };
 
-export type PictureEv = Extract<Ev, { t: 'Dmg' | 'Heal' | 'Boom' | 'Zap' | 'Died' | 'Sink' | 'Raise' | 'Immune' | 'Effect' | 'Coins' | 'Cast' }>;
+export type PictureEv = Extract<Ev, { t: 'Dmg' | 'Heal' | 'Boom' | 'Zap' | 'Died' | 'Sink' | 'Raise' | 'Immune' | 'Effect' | 'Coins' | 'Cast' | 'Land' }>;
 
 export interface RunView {
   frame(f: RunFrame): ViewStats;

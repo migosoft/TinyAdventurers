@@ -203,6 +203,45 @@ describe('Figures3d', () => {
     expect(g.glows.n).toBe(0);
   });
 
+  it('draws arcing shots at their height z (own from ShotView.z, others from EntState.z)', () => {
+    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 24 };
+    const own_ = make().frame(frame([], { shots: [shot] }), cam());
+    expect(mid(ys(own_.cards))).toBeCloseTo(1.5, 6);
+    const other = make().frame(frame([ent(20, KIND.Arrow, { z: 16 })]), cam());
+    expect(mid(ys(other.cards))).toBeCloseTo(1, 6);
+  });
+
+  describe('an arrow stuck in the ground', () => {
+    const landed: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 0 };
+    const stuckAt = (fg: Figures3d, now: number) => fg.frame(frame([], { now }), cam()).ghosts;
+    it('stays 2 s, fading over the last 0.5 s, for an own landed shot', () => {
+      const fg = make();
+      fg.frame(frame([], { now: 10 }), cam());
+      fg.shotEnded(landed, 'landed');
+      expect(stuckAt(fg, 10.1).n).toBe(1);
+      expect(stuckAt(fg, 11.5).look[4]).toBeCloseTo(1, 6);
+      expect(stuckAt(fg, 11.75).look[4]).toBeCloseTo(0.5, 6);
+      expect(stuckAt(fg, 12.1).n).toBe(0);
+    });
+    it('is made by a Land event too, once: the server copy of an own landed shot adds none', () => {
+      const fg = make();
+      fg.frame(frame([], { now: 10 }), cam());
+      fg.shotEnded(landed, 'landed');
+      fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0 });
+      expect(stuckAt(fg, 10.1).n).toBe(1);
+      const other = make();
+      other.frame(frame([], { now: 10 }), cam());
+      other.event({ t: 'Land', id: 21, x: at(2), y: 8, kind: KIND.Arrow, aim: 0 });
+      expect(stuckAt(other, 11.75).look[4]).toBeCloseTo(0.5, 6);
+    });
+    it('is not made by a wall or enemy end', () => {
+      const fg = make();
+      fg.frame(frame([], { now: 10 }), cam());
+      fg.shotEnded(landed, 'wall');
+      expect(stuckAt(fg, 10.1).n).toBe(0);
+    });
+  });
+
   it('keeps the facing inside the dead zone when the aim runs into the screen', () => {
     const fg = make();
     const left = ent(10, KIND.Knight, { aim: Math.PI });

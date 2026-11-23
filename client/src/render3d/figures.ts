@@ -16,7 +16,7 @@ import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
-import { SHOT_LIFT, snapGround, viewRay, type Cam } from './camera';
+import { ART, snapGround, viewRay, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha } from './light';
 import type { ShadowCaster } from './lights';
@@ -77,6 +77,9 @@ const OBJ_SHADOW_ALPHA = 0.4;
 /** Coins thrown from a chest or a fallen enemy (`fx.coins`): gravity px/s^2, the most kept at once. */
 const COIN_GRAVITY = 220;
 const COIN_CAP = 128;
+/** A landed arrow stays stuck this long (s), fading over the last `STUCK_FADE` (first guesses, #321). */
+const STUCK_SECS = 2;
+const STUCK_FADE = 0.5;
 
 /**
  * The aim as it appears on screen (rad, y down). The camera's right vector is (cos yaw, sin yaw) and its ground-down vector
@@ -284,6 +287,8 @@ export class Figures3d {
   private models: FigureLook['models'] | null = null;
   private skulls: Skull[] = [];
   private coins: Coin[] = [];
+  /** Arrows stuck where an arcing shot landed (#321); `born` null until the next frame stamps it. */
+  private stuck: Array<{ x: number; y: number; kind: number; aim: number; born: number | null }> = [];
   private readonly mimics = new Map<number, MimicMem>();
   /** The pose of every chest, Mimic and barrel drawn as a model, rewritten each frame (by id). */
   private readonly objectPoses = new Map<number, Pose3d>();
@@ -328,6 +333,7 @@ export class Figures3d {
 
   /** Sink, Invisible and Died bookkeeping; a Died adds a skull unless the figure was lost to a chasm or the deep, or comes apart (Ghost, Shade) or is a shot. */
   event(ev: PictureEv): boolean {
+    if (ev.t === 'Land') { this.stick(ev.x, ev.y, ev.kind, ev.aim); return false; }
     if (ev.t === 'Coins') {
       // Like `fx.coins`: min(10, 3 + v / 4) coins, aimed up the screen within +-0.8 rad, 50..90 px/s, living 0.7..1 s.
       const n = Math.min(10, 3 + Math.floor(ev.v / 4));
@@ -360,8 +366,16 @@ export class Figures3d {
     return false;
   }
 
-  /** The 3D view has no picture for a shot's end yet (the sparks are a later task). */
-  shotEnded(_shot: ShotView): void {}
+  /** A landed shot sticks in the ground; a wall or enemy end leaves nothing here (the sparks are the effects'). */
+  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed'): void {
+    if (how === 'landed') this.stick(shot.x, shot.y, shot.kind, Math.atan2(shot.vy, shot.vx));
+  }
+
+  /** The own predicted landing and the server's `Land` of the same shot are one arrow: one already within 2 px is the same. */
+  private stick(x: number, y: number, kind: number, aim: number): void {
+    if (this.stuck.some((s) => Math.hypot(s.x - x, s.y - y) < 2)) return;
+    this.stuck.push({ x, y, kind, aim, born: this.now });
+  }
 
   frame(f: RunFrame, cam: Cam, look: FigureLook = DEFAULT_LOOK): FigureOut {
     this.now = f.now;
@@ -1226,20 +1240,23 @@ export class Figures3d {
   private drawShots(f: RunFrame, cam: Cam, out: FigureOut): void {
     for (const e of f.ents.values()) {
       if (!isProjectileKind(e.kind) || f.hiddenShots.has(e.id)) continue;
-      this.shot(e.kind, e.x, e.y, e.aim, f.now, cam, out);
+      this.shot(e.kind, e.x, e.y, e.aim, f.now, cam, out, (e.z ?? CONST.SHOT_HEIGHT) / ART);
     }
-    for (const c of f.shots) this.shot(c.kind, c.x, c.y, Math.atan2(c.vy, c.vx), f.now, cam, out);
+    for (const c of f.shots) this.shot(c.kind, c.x, c.y, Math.atan2(c.vy, c.vx), f.now, cam, out, c.z / ART);
+    // shortcut: the stuck card stays upright (pushCard takes no pitch), so no tilt along the arc; upgrade if a look pass wants it.
+    this.stuck = this.stuck.filter((s) => (s.born ??= f.now) + STUCK_SECS > f.now);
+    for (const s of this.stuck) this.shot(s.kind, s.x, s.y, s.aim, f.now, cam, out, 0, Math.min(1, (s.born! + STUCK_SECS - f.now) / STUCK_FADE), out.ghosts);
   }
 
-  private shot(kind: number, px: number, py: number, aim: number, now: number, cam: Cam, out: FigureOut): void {
+  private shot(kind: number, px: number, py: number, aim: number, now: number, cam: Cam, out: FigureOut, lift: number, alpha = 1, buf = out.cards): void {
     const pd = PROJECTILES[kind];
     if (!pd) return;
     const x = px / TILE;
     const z = py / TILE;
     if (pd.frame) {
       // Pack arrows point up; a spinning axe turns with the clock.
-      const angle = pd.spin ? now * 14 : screenAim(cam.yaw, aim) + Math.PI / 2;
-      pushCard(out.cards, { frame: pd.frame, x, z, lift: SHOT_LIFT, flip: false, originX: 0.5, footY: 0.5, scale: pd.scale, angle, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
+      const angle = pd.spin && buf === out.cards ? now * 14 : screenAim(cam.yaw, aim) + Math.PI / 2;
+      pushCard(buf, { frame: pd.frame, x, z, lift, flip: false, originX: 0.5, footY: 0.5, scale: pd.scale, angle, tint: [1, 1, 1], mode: 0, alpha }, this.frames, cam);
     }
     // glowing shots are drawn by the effects system (`fx/shots.ts`)
   }
