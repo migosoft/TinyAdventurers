@@ -51,7 +51,7 @@ import { makeCoverShared } from './cover/coverRead';
 import { bushelMaterial, coverSheetMaterial } from './cover/coverNodes';
 import { CoverLayer, type CoverFrame } from './cover/coverLayer';
 import type { CoverResult } from './cover/coverJob';
-import { GroundTooLargeError } from './groundError';
+import { GroundTooLargeError, limitOr } from './groundError';
 import { AIR_ORDER, airMaterials } from './air/airNodes';
 import { airQuads, hazeQuads, newAirBuffers } from './air/airQuads';
 import type { AirParts } from './air/airParts';
@@ -351,8 +351,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // The stone sheets (#380): one plan and one pair of array textures per map layout. A woodland has none (its stone cells read layer -1: the flat stone colour).
   const deviceLimits = (): { size: number; layers: number } => {
     const b = renderer.backend as { isWebGPUBackend?: boolean; device?: { limits?: { maxTextureDimension2D: number; maxTextureArrayLayers: number } }; gl?: WebGL2RenderingContext };
-    if (b.isWebGPUBackend) return { size: b.device?.limits?.maxTextureDimension2D ?? 8192, layers: b.device?.limits?.maxTextureArrayLayers ?? 256 };
-    return { size: b.gl ? (b.gl.getParameter(b.gl.MAX_TEXTURE_SIZE) as number) : 4096, layers: b.gl ? (b.gl.getParameter(b.gl.MAX_ARRAY_TEXTURE_LAYERS) as number) : 256 };
+    if (b.isWebGPUBackend) return { size: limitOr(b.device?.limits?.maxTextureDimension2D, 8192), layers: limitOr(b.device?.limits?.maxTextureArrayLayers, 256) };
+    return { size: limitOr(b.gl?.getParameter(b.gl.MAX_TEXTURE_SIZE), 4096), layers: limitOr(b.gl?.getParameter(b.gl.MAX_ARRAY_TEXTURE_LAYERS), 256) };
   };
   /** New sheets for a plan, uploaded in full at once: a later `setPage` then marks only its layer (a layer update before the first upload would upload only that layer). */
   const newSheets = (p: SheetPlan): Sheets => {
@@ -900,10 +900,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   let lastSize: [number, number] | null = null;
   let canvasBg = '';
   let groundTex: Texture[] = [];
-  const textureLimit = (): number => {
-    if (be.isWebGPUBackend) return be.device?.limits?.maxTextureDimension2D ?? 8192;
-    return be.gl ? (be.gl.getParameter(be.gl.MAX_TEXTURE_SIZE) as number) : 4096;
-  };
+  const rawLimit = (): unknown => (be.isWebGPUBackend ? be.device?.limits?.maxTextureDimension2D : be.gl?.getParameter(be.gl.MAX_TEXTURE_SIZE));
+  /** The texture limit for sizing (a safe default when the backend gives none) and for the ground checks (`Infinity`: unknown, try; #353). */
+  const textureLimit = (): number => limitOr(rawLimit(), be.isWebGPUBackend ? 8192 : 4096);
+  const groundLimit = (): number => limitOr(rawLimit(), Infinity);
 
   return {
     chunks,
@@ -947,7 +947,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     setGround(img) {
       if (disposed || lost) return;
-      const limit = textureLimit();
+      const limit = groundLimit();
       if (img.w > limit || img.h > limit) throw new GroundTooLargeError(img.w, img.h, limit);
       const data = new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.byteLength);
       const mk = (filter: typeof NearestFilter | typeof LinearFilter): Texture => {
@@ -965,7 +965,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     setCover(r) {
       if (disposed || lost) return;
-      coverLayer.set(r, textureLimit(), world.stone ? floorAt : undefined);
+      coverLayer.set(r, groundLimit(), world.stone ? floorAt : undefined);
     },
     get stone() {
       return world.stone ? { plan, sheets, marks: kit.marks } : null;

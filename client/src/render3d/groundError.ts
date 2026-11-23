@@ -5,3 +5,10 @@ export class GroundTooLargeError extends Error {
     this.name = 'GroundTooLargeError';
   }
 }
+
+/**
+ * A device limit as the backend reports it, or `fallback` when it is missing: a WebGL context that is lost (or not yet ready after a device
+ * loss) answers `getParameter` with null, a WebGPU device may have no `limits`. A missing limit is "unknown, try", never "too large" (#353):
+ * the ground check passes `Infinity`, the shaders' sizing a safe default.
+ */
+export const limitOr = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback);

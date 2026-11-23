@@ -258,6 +258,9 @@ try {
   // F: the free camera. D now moves the camera, not the hero.
   const before = await r3d();
   await page.keyboard.press('f');
+  // Let the free camera take over first: two drawn frames (software rendering can be slow, and a view that was just rebuilt draws none for a while; #353).
+  const frF = (await r3d()).frames;
+  await page.waitForFunction((n) => window.__r3d.frames >= n + 2, frF, { timeout: 15000 }).catch(() => {});
   await page.keyboard.down('d');
   // Hold D for 1 s and until two more frames were drawn: the far woodland takes about 1.7 s a frame in software, so a fixed second may hold no frame at all.
   const fr0 = (await r3d()).frames;
