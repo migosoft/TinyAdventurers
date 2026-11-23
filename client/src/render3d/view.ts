@@ -78,7 +78,7 @@ import { floorHeight } from './stone/shape';
 import { buildCrystalChunk, crystalChunkOf, switchedChunks } from './stone/crystals';
 import { crystalMaterial } from './stone/crystalNodes';
 import { buildTorchChunk, torchChunkOf } from './torch/torch';
-import { FLAME_REACH, flameMaterial, holderMaterial } from './torch/torchNodes';
+import { FLAME_ORDER, FLAME_REACH, flameMaterial, holderMaterial } from './torch/torchNodes';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -424,7 +424,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const crystalsOff = new Set<number>();
   // The wall torches (#391): the holder lit by the room, the flame by itself.
   const holder = holderMaterial(lighting, sight);
-  const flame = flameMaterial(sight);
+  const flame = flameMaterial(sight, toward);
   /** The torch lights that are off: their torches are built without a flame. */
   const torchesOff = new Set<number>();
   const shimmer = shimmerMaterial(sight, lighting.lavaTexture, map, toward);
@@ -542,14 +542,20 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     g.computeBoundingBox();
     return finishMesh(g, g.boundingBox!.expandByScalar(grow), mat);
   };
-  /** The wall torches of a chunk (#391): the holders, and the flames of those whose light is not in `torchesOff`; two opaque meshes in the opaque scene. */
+  /**
+   * The wall torches of a chunk (#391): the holders, an opaque mesh in the opaque scene, and the flames of those whose light is not in
+   * `torchesOff`: see-through, their light added to the picture, so with the translucent things (not in the shafts' depth pre-pass,
+   * after the scene copy the water reads) at `FLAME_ORDER`. Added light needs no sorting among the flames.
+   */
   const buildTorchesAt = (cx: number, cz: number): void => {
     const i = cz * nx + cx;
     dropChunk(torchChunks, i);
     dropChunk(flameChunks, i);
     const a = buildTorchChunk(kit.marks.torches, (id) => torchesOff.has(id), cx, cz);
-    if (a.holder) torchChunks[i] = wallMesh(a.holder, [['normal', 3], ['colour', 3]], holder, 0);
-    if (a.flame) flameChunks[i] = wallMesh(a.flame, [['flame', 3]], flame.material, FLAME_REACH);
+    if (a.holder) torchChunks[i] = wallMesh(a.holder, [['normal', 3], ['colour', 3], ['warm', 1]], holder, 0);
+    if (!a.flame) return;
+    const fm = (flameChunks[i] = wallMesh(a.flame, [['flame', 4], ['reach', 2]], flame.material, FLAME_REACH)).mesh;
+    skipInAirPrepass(fm).renderOrder = FLAME_ORDER;
   };
   const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial): ChunkMesh => {
     g.boundingBox = box;

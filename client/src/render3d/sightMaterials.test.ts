@@ -31,8 +31,8 @@ const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
 const LAVA_ATTRS: [string, number][] = [['position', 3], ['shore', 2]];
 const CRYSTAL_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['gem', 3], ['foot', 2]];
-const HOLDER_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['foot', 2]];
-const TORCH_FLAME_ATTRS: [string, number][] = [['position', 3], ['flame', 3], ['foot', 2]];
+const HOLDER_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['warm', 1], ['foot', 2]];
+const TORCH_FLAME_ATTRS: [string, number][] = [['position', 3], ['flame', 4], ['reach', 2], ['foot', 2]];
 const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
   if (!attrs) return undefined;
   const g = new BufferGeometry();
@@ -62,7 +62,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'crystal', m: crystalMaterial(l, sight).material, world: true, attrs: CRYSTAL_ATTRS },
     // The wall torch (#391): the holder lit by the room, the flame by itself; both end with the sight step.
     { name: 'torch holder', m: holderMaterial(l, sight), world: true, attrs: HOLDER_ATTRS },
-    { name: 'torch flame', m: flameMaterial(sight).material, world: true, attrs: TORCH_FLAME_ATTRS },
+    { name: 'torch flame', m: flameMaterial(sight, toward).material, world: true, attrs: TORCH_FLAME_ATTRS },
     // The lava's surface (#344) ends with the sight step.
     { name: 'lava', m: lavaMaterial(sight).material, world: true, attrs: LAVA_ATTRS },
     // The heat shimmer (#344) is the one material without the sight step: it shows the scene copy, which went through the step, and its

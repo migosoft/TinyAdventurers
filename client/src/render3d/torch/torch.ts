@@ -29,28 +29,23 @@ const CAGE_R = 0.085, RIM = 0.015, BAR = [0.012, 0.012], HOOP = [0.01, 0.012];
 /** The crown: a spike on every bar, this long along the axis, leaning this much further out, this wide at its base. */
 const SPIKE_L = 0.1, SPIKE_FLARE = 0.025, SPIKE = [0.017, 0.017];
 
-/** The flame's body, a twisted six-sided teardrop: per ring from the foot up its height share, its radius and its middle's shift off the axis (shares of FLAME_R), its heat. */
-const BODY = [
-  [0, 0.4, 0, 0.85],
-  [0.1, 0.62, 0.03, 1],
-  [0.22, 0.66, 0.06, 1],
-  [0.4, 0.52, 0.1, 0.75],
-  [0.56, 0.36, 0.1, 0.5],
-  [0.76, 0.18, 0.12, 0.25],
-];
-/** Each ring's shift points this much further round than the one below (rad), so the body winds; the tip's own shift (share of FLAME_R). */
-const SHIFT_TURN = 2.4, TIP_SHIFT = 0.1;
-/** The tongues that lick out of the body: where round the axis (rad) and how high the tip reaches (height share). */
-const TONGUES = [[0.5, 0.84], [2.7, 0.7], [4.7, 0.58]];
-/** A tongue's root and middle ring: how far under its tip (height share), how far out and how wide (shares of FLAME_R), its heat. Four-sided. */
-const TONGUE_ROOT = [0.45, 0.4, 0.3, 0.7], TONGUE_MID = [0.18, 0.7, 0.2, 0.4], TONGUE_SIDES = 4;
-/** How far out a tongue's tip is (share of FLAME_R). */
-const TONGUE_TIP = 0.82;
+/**
+ * The flame is painted on a card that stands on the flame's foot and turns round the axis to the camera (torchNodes.ts): the card's
+ * half-width in FLAME_R and its height in FLAME_H. It is wider and taller than the flame, for the licks that break off and the sparks.
+ */
+export const CARD_W = 1.7, CARD_H = 1.4;
+/** The flame's middle, where its light and its halo sit (height share). */
+const FLAME_MID = 0.4;
+/** The halo: a soft round glow that faces the camera, this wide (tiles, half) at size 1, drawn this far (tiles) in front of its own reach so no wall cuts it. */
+export const HALO_R = 0.6, HALO_GAP = 0.05;
+/** The fire's warm light on the holder: from a point this far above the flame's foot, reaching this far (tiles); a face turned away still gets this share. */
+const WARM_UP = 0.05, WARM_REACH = 0.2, WARM_BACK = 0.15;
 
 /** A torch of the level's marks: the point on the wall cell's edge, the wall's normal into the room, its light. */
 export interface TorchMark { x: number; z: number; nx: number; nz: number; lightId: number }
-export interface HolderArrays { position: Float32Array; normal: Float32Array; /** rgb 0..1 */ colour: Float32Array; /** the floor point the sight is read at */ foot: Float32Array; index: Uint32Array }
-export interface FlameArrays { position: Float32Array; /** height share 0..1, heat 0 (rim) .. 1 (core), phase */ flame: Float32Array; foot: Float32Array; index: Uint32Array }
+export interface HolderArrays { position: Float32Array; normal: Float32Array; /** rgb 0..1 */ colour: Float32Array; /** 0..1: the fire's own light on the vertex (0: out) */ warm: Float32Array; /** the floor point the sight is read at */ foot: Float32Array; index: Uint32Array }
+/** Two quads a flame, every vertex on its quad's anchor (the material spreads them): the card (anchor the foot) and the halo (anchor the middle). */
+export interface FlameArrays { position: Float32Array; /** the corner (x -1..1; y 0..1 on the card, -1..1 on the halo), phase, kind (0 card, 1 halo) */ flame: Float32Array; /** how far a corner's 1 is from the anchor (tiles): across, up */ reach: Float32Array; foot: Float32Array; index: Uint32Array }
 
 /** x, y, z and what the builder carries (the holder a colour, the flame its heat). */
 type V = number[];
@@ -81,15 +76,19 @@ const fan = (r: V[], p: V, top: boolean, tri: Tri): void => r.forEach((q, k) => 
 const arrays = (a: number[]): Float32Array => new Float32Array(a);
 const inOrder = (count: number): Uint32Array => Uint32Array.from({ length: count }, (_, i) => i);
 
-/** The holder round the origin: +x out of the wall, y up, x 0 the wall cell's edge, y 0 the floor. Plate, arm, shaft with two iron bands, basket with a crown of spikes. Out: the basket's inside is charred. */
-export function torchHolder(lit: boolean): { position: Float32Array; normal: Float32Array; colour: Float32Array; index: Uint32Array } {
-  const position: number[] = [], normal: number[] = [], colour: number[] = [];
+/** The holder round the origin: +x out of the wall, y up, x 0 the wall cell's edge, y 0 the floor. Plate, arm, shaft with two iron bands, basket with a crown of spikes. Out: the basket's inside is charred and nothing is `warm`. */
+export function torchHolder(lit: boolean): { position: Float32Array; normal: Float32Array; colour: Float32Array; warm: Float32Array; index: Uint32Array } {
+  const position: number[] = [], normal: number[] = [], colour: number[] = [], warm: number[] = [];
+  const fire = [FLAME_STAND, FLAME_BASE_Y + WARM_UP, 0];
   const tri: Tri = (a, b, c) => {
     const n = faceNormal(a, b, c);
     for (const v of [a, b, c]) {
       position.push(v[0], v[1], v[2]);
       normal.push(n[0], n[1], n[2]);
       colour.push((v[3] >> 16) / 255, ((v[3] >> 8) & 255) / 255, (v[3] & 255) / 255);
+      // the basket's inside and the spikes catch the fire's light: by the distance, and by how far the face is turned to the fire
+      const to = along(fire, v, -1), d = Math.hypot(to[0], to[1], to[2]), facing = Math.max(0, (n[0] * to[0] + n[1] * to[1] + n[2] * to[2]) / (d || 1));
+      warm.push(lit ? Math.max(0, 1 - d / WARM_REACH) ** 2 * (WARM_BACK + (1 - WARM_BACK) * facing) : 0);
     }
   };
   /** A straight piece from p to q with `n` flat sides: its half-widths (see `across`) at p and at q; no `r1`: it ends in a point. Capped where asked. */
@@ -129,38 +128,25 @@ export function torchHolder(lit: boolean): { position: Float32Array; normal: Flo
     piece(hi, out(along(rim, axis, SPIKE_L), k, CAGE_R + SPIKE_FLARE), SPIKE, null, 4, IRON_EDGE);
     piece(hi, out(rim, k + 1, CAGE_R), HOOP, HOOP, 4, IRON_EDGE);
   }
-  return { position: arrays(position), normal: arrays(normal), colour: arrays(colour), index: inOrder(position.length / 3) };
+  return { position: arrays(position), normal: arrays(normal), colour: arrays(colour), warm: arrays(warm), index: inOrder(position.length / 3) };
 }
 
 /**
- * A flame standing on the origin, `size` 1 the torch's (a candle is smaller, #382): a body with volume and several tongues, round its
- * axis. `flame` is three wide as the chunk's (height share, heat, phase 0): the builder of a chunk sets the phase.
+ * A flame standing on the origin, `size` 1 the torch's (a candle is smaller, #382): the card the fire is painted on and its halo, a
+ * quad each (see `FlameArrays`). `flame` is four wide as the chunk's, its phase 0: the builder of a chunk sets the phase.
  */
-export function flameMesh(size: number): { position: Float32Array; flame: Float32Array; index: Uint32Array } {
-  const position: number[] = [], flame: number[] = [], h = FLAME_H * size, r = FLAME_R * size;
-  const tri: Tri = (a, b, c) => {
-    for (const v of [a, b, c]) {
-      position.push(v[0], v[1], v[2]);
-      flame.push(Math.min(1, v[1] / h), v[3], 0);
+export function flameMesh(size: number): { position: Float32Array; flame: Float32Array; reach: Float32Array; index: Uint32Array } {
+  const position: number[] = [], flame: number[] = [], reach: number[] = [];
+  const quad = (anchorY: number, y0: number, across: number, up: number, kind: number): void => {
+    for (const [cx, cy] of [[-1, y0], [1, y0], [1, 1], [-1, 1]]) {
+      position.push(0, anchorY, 0);
+      flame.push(cx, cy, 0, kind);
+      reach.push(across, up);
     }
   };
-  /** The point at a height share, `out` from the axis toward `dir`. */
-  const at = (share: number, out: number, dir: number): V => [Math.sin(dir) * out * r, share * h, Math.cos(dir) * out * r];
-  /** A level ring round that point (z to x: its skin faces out with y as the axis). */
-  const level = (share: number, out: number, dir: number, rad: number, n: number, turn: number, heat: number): V[] =>
-    ring(at(share, out, dir), [0, 0, 1], [1, 0, 0], rad * r, rad * r, n, turn, heat);
-  // every ring is turned half a side against the one below: the facets zigzag as licks do
-  const body = BODY.map(([share, rad, shift, heat], k) => level(share, shift, k * SHIFT_TURN, rad, SIDES, (k * Math.PI) / SIDES, heat));
-  for (let k = 0; k + 1 < body.length; k++) band(body[k], body[k + 1], tri);
-  fan(body[0], [0, 0, 0, BODY[0][3]], false, tri);
-  fan(body[body.length - 1], [...at(1, TIP_SHIFT, BODY.length * SHIFT_TURN), 0], true, tri);
-  for (const [dir, tip] of TONGUES) {
-    // rooted inside the body, so it has no bottom
-    const [root, mid] = [TONGUE_ROOT, TONGUE_MID].map(([down, out, rad, heat]) => level(tip - down, out, dir, rad, TONGUE_SIDES, dir, heat));
-    band(root, mid, tri);
-    fan(mid, [...at(tip, TONGUE_TIP, dir), 0], true, tri);
-  }
-  return { position: arrays(position), flame: arrays(flame), index: inOrder(position.length / 3) };
+  quad(0, 0, CARD_W * FLAME_R * size, CARD_H * FLAME_H * size, 0);
+  quad(FLAME_MID * FLAME_H * size, -1, HALO_R * size, HALO_R * size, 1);
+  return { position: arrays(position), flame: arrays(flame), reach: arrays(reach), index: Uint32Array.of(0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7) };
 }
 
 /** The chunk a torch belongs to (its wall point's). */
@@ -170,7 +156,8 @@ export function torchChunkOf(t: TorchMark): [cx: number, cz: number] {
 
 /** The holders of the torches in chunk (cx, cz) and the flames of those whose light is not `off`, turned out of their wall, in world tiles; null for an empty part. */
 export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: number) => boolean, cx: number, cz: number): { holder: HolderArrays | null; flame: FlameArrays | null } {
-  const hp: number[] = [], hn: number[] = [], hc: number[] = [], hf: number[] = [], fp: number[] = [], fa: number[] = [], ff: number[] = [];
+  const hp: number[] = [], hn: number[] = [], hc: number[] = [], hw: number[] = [], hf: number[] = [];
+  const fp: number[] = [], fa: number[] = [], fr: number[] = [], ff: number[] = [], fi: number[] = [];
   for (const t of torches) {
     const [tx, tz] = torchChunkOf(t);
     if (tx !== cx || tz !== cz) continue;
@@ -182,27 +169,30 @@ export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: nu
       hp.push(t.x + px, m.position[i + 1], t.z + pz);
       hn.push(qx, m.normal[i + 1], qz);
       hc.push(m.colour[i], m.colour[i + 1], m.colour[i + 2]);
+      hw.push(m.warm[i / 3]);
       hf.push(sx, sz);
     }
     if (out) continue;
-    const f = flameMesh(1), [ax, , az] = flameTip(t);
-    for (let i = 0; i < f.position.length; i += 3) {
-      const [px, pz] = outOfWall(f.position[i], f.position[i + 2], t.nx, t.nz);
-      fp.push(ax + px, FLAME_BASE_Y + f.position[i + 1], az + pz);
+    const f = flameMesh(1), [ax, , az] = flameTip(t), first = fp.length / 3;
+    for (let i = 0; i < f.position.length / 3; i++) {
+      // every vertex is on the axis, so nothing is turned out of the wall
+      fp.push(ax, FLAME_BASE_Y + f.position[i * 3 + 1], az);
       // the phase of the light's flicker and the crystals' pulse
-      fa.push(f.flame[i], f.flame[i + 1], t.lightId * 1.7);
+      fa.push(f.flame[i * 4], f.flame[i * 4 + 1], t.lightId * 1.7, f.flame[i * 4 + 3]);
+      fr.push(f.reach[i * 2], f.reach[i * 2 + 1]);
       ff.push(sx, sz);
     }
+    for (const i of f.index) fi.push(first + i);
   }
   return {
-    holder: hp.length ? { position: arrays(hp), normal: arrays(hn), colour: arrays(hc), foot: arrays(hf), index: inOrder(hp.length / 3) } : null,
-    flame: fp.length ? { position: arrays(fp), flame: arrays(fa), foot: arrays(ff), index: inOrder(fp.length / 3) } : null,
+    holder: hp.length ? { position: arrays(hp), normal: arrays(hn), colour: arrays(hc), warm: arrays(hw), foot: arrays(hf), index: inOrder(hp.length / 3) } : null,
+    flame: fp.length ? { position: arrays(fp), flame: arrays(fa), reach: arrays(fr), foot: arrays(ff), index: Uint32Array.from(fi) } : null,
   };
 }
 
 /** The flame's middle (where its light sits) and its tip (where its smoke starts), in world tiles. */
 export function flameMid(t: { x: number; z: number; nx: number; nz: number }): [x: number, y: number, z: number] {
-  return [t.x + t.nx * FLAME_STAND, FLAME_BASE_Y + 0.4 * FLAME_H, t.z + t.nz * FLAME_STAND];
+  return [t.x + t.nx * FLAME_STAND, FLAME_BASE_Y + FLAME_MID * FLAME_H, t.z + t.nz * FLAME_STAND];
 }
 export function flameTip(t: { x: number; z: number; nx: number; nz: number }): [x: number, y: number, z: number] {
   return [t.x + t.nx * FLAME_STAND, FLAME_BASE_Y + FLAME_H, t.z + t.nz * FLAME_STAND];
