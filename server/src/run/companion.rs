@@ -185,11 +185,15 @@ pub fn follow(run: &mut Run, mi: usize, leader: Creature, e: &Escort, speed: f64
 }
 
 /// The first part of a companion's tick: the creature (hero or monster) it follows, or `None` when the tick is
-/// over. With no living leader it idles; lost, it reappears beside them (even mid-dash, which it drops).
+/// over. With no living leader a recruited one is its own leader (it fights back, else stands), a summoned one idles; lost, it reappears beside them (even mid-dash, which it drops).
 /// Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
 pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<Creature> {
     let side = run.monsters[mi].side;
     let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| leader_of(run, c, side)) else {
+        // A recruited one with no one to follow is its own leader: it defends itself, else stands (`act`).
+        if run.monsters[mi].companion.as_ref().is_some_and(|c| !c.summoned) {
+            return Some(Creature::Monster(mi));
+        }
         run.monsters[mi].ai.state = AiState::Idle;
         if let Some(c) = run.monsters[mi].companion.as_mut() {
             c.prey = None;

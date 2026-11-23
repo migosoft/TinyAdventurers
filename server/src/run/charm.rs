@@ -1126,12 +1126,32 @@ mod tests {
         run.step();
         assert_eq!(run.monsters[ki].companion.as_ref().unwrap().leader, h0, "it follows a hero on its side");
         run.players[0].side = Side::Hostile;
-        let at = run.monsters[ki].pos;
+        // Far from both heroes, with no hero on its side it stands.
+        let far = run.monsters[ki].pos + Vec2::new(100.0, 0.0);
+        run.monsters[ki].pos = far;
         steps(&mut run, 30);
         let k = &run.monsters[ki];
         assert!(k.alive && k.side == Side::Friendly);
-        assert_eq!(k.pos, at, "with no hero on its side it idles");
+        assert_eq!(k.pos, far, "with no hero on its side it stands");
         assert!(k.companion.as_ref().unwrap().prey.is_none());
+    }
+
+    #[test]
+    fn a_leaderless_knight_fights_back_then_follows_a_friendly_hero_again() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let ki = recruit_knight(&mut run, 0);
+        run.players[0].side = Side::Hostile; // a charmed lone hero
+        run.step();
+        assert!(companion::leader_of(&run, run.monsters[ki].companion.as_ref().unwrap(), Side::Friendly).is_none());
+        let hp = run.monsters[ki].hp;
+        steps(&mut run, 60);
+        let k = &run.monsters[ki];
+        assert!(k.companion.as_ref().unwrap().prey.is_some(), "the knight goes for the hero beside it");
+        assert!(run.players[0].hp < run.players[0].max_hp, "and hits it");
+        assert_eq!(k.hp, hp, "it was not hurt");
+        run.players[0].side = Side::Friendly;
+        run.step();
+        assert_eq!(run.monsters[ki].companion.as_ref().unwrap().leader, run.players[0].id, "the charm over, it follows the hero again");
     }
 
     #[test]
