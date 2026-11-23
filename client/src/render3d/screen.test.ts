@@ -27,6 +27,13 @@ describe('canvas and world', () => {
         expect(q.px).toBeCloseTo(c.px, 6);
         expect(q.py).toBeCloseTo(c.py, 6);
       });
+      it(`the ground reading has no lift (${tag})`, () => {
+        const fx = cam.x + 1.3, fz = cam.z - 1.5;
+        const p = toCanvas(cam, plan, zoom, fx, 0, fz);
+        const g = aimGround(cam, plan, zoom, p.px, p.py, 0);
+        expect(g.x).toBeCloseTo(fx, 6);
+        expect(g.z).toBeCloseTo(fz, 6);
+      });
       it(`aimGround inverts toCanvas at shot height (${tag})`, () => {
         const fx = cam.x + 1.3, fz = cam.z - 1.5;
         const p = toCanvas(cam, plan, zoom, fx, 0, fz);

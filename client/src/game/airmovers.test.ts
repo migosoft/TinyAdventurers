@@ -86,7 +86,7 @@ describe('collectAirMovers', () => {
 
   it('an own predicted shot is taken from f.shots only', () => {
     const tr = new MoverTracker();
-    const own = (x: number) => frame([ent(9, KIND.Arrow, x, 0, (1 << 16) | 3)], [{ shot: 3, kind: KIND.Arrow, x, y: 50, vx: 0, vy: 0 }]);
+    const own = (x: number) => frame([ent(9, KIND.Arrow, x, 0, (1 << 16) | 3)], [{ shot: 3, kind: KIND.Arrow, x, y: 50, vx: 0, vy: 0, z: 8 }]);
     run(tr, own(10));
     const out = run(tr, own(12));
     expect(out).toHaveLength(1);

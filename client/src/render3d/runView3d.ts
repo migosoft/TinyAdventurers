@@ -659,17 +659,17 @@ export class RunView3d implements RunView {
     this.v?.tileChanged(x, y);
   }
 
-  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void {
+  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed'): void {
     this.figures.shotEnded(shot);
     this.fx.shotEnded(shot, how, this.clockNow);
   }
 
-  pointerWorld(): { x: number; y: number } | null {
+  pointerWorld(ground = false): { x: number; y: number } | null {
     const { lastCam: cam, lastPlan: plan, lastCanvas: canvas, mouse } = this;
     if (!cam || !plan || !canvas || !mouse) return null;
     const p = mouse.at(canvas, this.lastSize.w, this.lastSize.h, this.lastRect ?? undefined);
     if (!p) return null;
-    const g = aimGround(cam, plan, this.lastZoom, p.px, p.py);
+    const g = aimGround(cam, plan, this.lastZoom, p.px, p.py, ground ? 0 : undefined);
     return { x: g.x * TILE, y: g.z * TILE };
   }
 

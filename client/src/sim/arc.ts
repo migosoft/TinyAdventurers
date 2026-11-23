@@ -13,5 +13,5 @@ export function shotZ(flight: number, t: number): number {
 }
 
 export function arcTouches(bx: number, by: number, bodyR: number, top: number, px: number, py: number, z: number, shotR: number): boolean {
-  return Math.hypot(px - bx, py - by) < bodyR + shotR && z < top;
+  return Math.sqrt((px - bx) * (px - bx) + (py - by) * (py - by)) <bodyR + shotR && z < top;
 }

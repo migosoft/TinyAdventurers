@@ -50,7 +50,7 @@ fn export_defs() {
         .iter()
         .map(|&a| {
             let d = ab::def(a);
-            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "classes": d.classes, "hero": d.for_heroes() }))
+            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "arcs": d.arcs, "classes": d.classes, "hero": d.for_heroes() }))
         })
         .collect();
     // The weapon items (the client's debug weapon selects): slot, kind and the classes that can hold them.

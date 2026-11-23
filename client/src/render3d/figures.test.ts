@@ -195,7 +195,7 @@ describe('Figures3d', () => {
     expect(hidden.glows.n).toBe(0);
     // glow shots leave the card glow list: the effects system draws them
     expect(make().frame(frame([server]), cam()).glows.n).toBe(0);
-    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0 };
+    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 8 };
     const out = make().frame(frame([ent(20, KIND.Arrow)], { hiddenShots: new Set([20]), shots: [shot] }), cam());
     expect(out.cards.n).toBe(1);
     expect(mid(ys(out.cards))).toBeCloseTo(0.5, 6);
@@ -584,7 +584,7 @@ describe('Figures3d casters (#304)', () => {
     }
   });
   it('gives none for a shot, a lying figure or a dead one, and none for the images left behind', () => {
-    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0 };
+    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 8 };
     const out = make().frame(frame([ent(20, KIND.Arrow), ent(21, KIND.Knight, { effects: 1 << EFFECT.Sleep }), ent(22, KIND.Knight, { flags: FLAG.DEAD })], { shots: [shot] }), cam());
     expect(out.casters).toEqual([]);
     const fg = make();

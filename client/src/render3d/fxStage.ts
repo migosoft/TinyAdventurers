@@ -61,7 +61,7 @@ export interface FxScene {
   ents: EntState[];
   events: Array<{ at: number; ev: PictureEv }>;
   /** Shots that end at `at` seconds (local px); the stage calls `Effects3d.shotEnded` for them. */
-  shotEnds?: Array<{ at: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }>;
+  shotEnds?: Array<{ at: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' | 'landed' }>;
   snapExtras?: SnapExtras;
   /** Tiles the row sets (local tiles): the stage changes the map when the cell differs, with `at` the second of the period it changed. */
   tiles?: Array<{ x: number; z: number; id: number; at: number }>;
@@ -136,7 +136,7 @@ function shotRows(): FxRow[] {
       return {
         ents: t < FLY ? [fxEnt(300, kind, x, CASTER.z, { aim: 0 })] : [],
         events: [],
-        shotEnds: [{ at: FLY, shot: { shot: 1, kind, x: px(X1), y: px(CASTER.z), vx: 1, vy: 0 }, how: 'wall' }],
+        shotEnds: [{ at: FLY, shot: { shot: 1, kind, x: px(X1), y: px(CASTER.z), vx: 1, vy: 0, z: 8 }, how: 'wall' }],
       };
     },
   });
@@ -371,8 +371,8 @@ export function eventsBetween(row: FxRow, scene: FxScene, from: number, to: numb
 }
 
 /** The shot ends of a row in (`from`, `to`] of the row's clock, like `eventsBetween`. */
-export function endsBetween(row: FxRow, scene: FxScene, from: number, to: number): Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }> {
-  const out: Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' }> = [];
+export function endsBetween(row: FxRow, scene: FxScene, from: number, to: number): Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' | 'landed' }> {
+  const out: Array<{ abs: number; shot: ShotView; how: 'wall' | 'enemy' | 'gone' | 'landed' }> = [];
   if (!scene.shotEnds) return out;
   const P = row.period;
   for (let k = Math.floor(from / P); k <= Math.floor(to / P); k++) {

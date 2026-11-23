@@ -2,14 +2,15 @@
 // fired, advanced each frame, ended at a wall, an enemy or when the server's shot
 // is gone. The server's copy of an own shot stays hidden (`hidden`).
 // A view only draws `live` and reacts to `ended`.
-import { ENEMY_KINDS, FLAG, HITBOX, KIND } from '../generated/defs';
+import { CONST, ENEMY_KINDS, FLAG, HITBOX, KIND } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { isProjectileKind } from '../game/anim/defs';
 import { shotPassesThrough } from '../game/shotTargets';
 import { cosmeticPierce, ownPredictedShot, unseenShotLimit, type EntState } from '../game/world';
 import { lineOfSight } from '../sim/collision';
-import { shotHits } from '../sim/hitbox';
+import { flightTime, shotZ } from '../sim/arc';
+import { arcHits, shotHits } from '../sim/hitbox';
 import type { TileMap } from '../sim/map';
 import type { ShotView } from './view';
 
@@ -31,6 +32,11 @@ export interface Shot extends ShotView {
   hit: Set<number>;
   /** When it was fired (s). */
   born: number;
+  z: number;
+  /** An arcing shot (#321): its flight time (s), the time flown and where it lands. Flat shots have none. */
+  flight?: number;
+  flown: number;
+  land?: [number, number];
 }
 
 /** Kind id -> name, to look up `ENEMY_KINDS`. */
@@ -51,13 +57,22 @@ export class Shots {
   private stoppedShots = new Map<number, { x: number; y: number; dx: number; dy: number; past: number }>();
   private readonly hiddenIds = new Set<number>();
 
-  spawn(kind: number, shot: number, aim: number, a: ResolvedAbility, r: number, life: number, from: { x: number; y: number }, now: number, target?: [number, number]): void {
+  spawn(kind: number, shot: number, aim: number, a: ResolvedAbility, r: number, life: number, from: { x: number; y: number }, now: number, target?: [number, number], landDist?: number): void {
     const speed = a.speed;
+    const x = from.x + Math.cos(aim) * 6;
+    const y = from.y + Math.sin(aim) * 6;
+    // An arcing shot lands `landDist` px from the shooter, so `landDist - 6` from here; the landing ends it (server `spawn_shot`).
+    const flight = landDist === undefined ? undefined : flightTime(landDist - 6, speed);
+    if (flight !== undefined) life = flight + CONST.DT;
     this.live.push({
       shot,
       kind,
-      x: from.x + Math.cos(aim) * 6,
-      y: from.y + Math.sin(aim) * 6,
+      x,
+      y,
+      z: CONST.SHOT_HEIGHT,
+      flight,
+      flown: 0,
+      land: landDist === undefined ? undefined : [x + Math.cos(aim) * (landDist - 6), y + Math.sin(aim) * (landDist - 6)],
       vx: Math.cos(aim) * speed,
       vy: Math.sin(aim) * speed,
       life,
@@ -109,7 +124,7 @@ export class Shots {
     now: number,
     // `rtt` in milliseconds, `interpDelay` in seconds (as `Net.rtt` and `Interpolator.delay`; `unseenShotLimit` expects them so).
     ctx: { map: TileMap; ents: ReadonlyMap<number, EntState>; rtt: number; interpDelay: number },
-    ended: (s: Shot, how: 'wall' | 'enemy' | 'gone') => void,
+    ended: (s: Shot, how: 'wall' | 'enemy' | 'gone' | 'landed') => void,
   ): void {
     for (const [shot, t] of this.endedShots) {
       if (now - t <= 2) continue;
@@ -121,8 +136,12 @@ export class Shots {
       const onServer = this.onServer.has(c.shot);
       if (onServer) c.seenOnServer = true;
       c.life -= dt;
-      const nx = c.x + c.vx * dt;
-      const ny = c.y + c.vy * dt;
+      let nx = c.x + c.vx * dt;
+      let ny = c.y + c.vy * dt;
+      const nflown = c.flown + dt;
+      // The landing step ends at the landing point, not past it.
+      const landing = c.flight !== undefined && c.land !== undefined && nflown >= c.flight - 1e-9;
+      if (landing) [nx, ny] = c.land!;
       const reachedTarget = c.target && (c.target[0] - nx) * c.vx + (c.target[1] - ny) * c.vy <= 0;
       const hitWall = !lineOfSight(ctx.map, c.x, c.y, nx, ny) || ctx.map.opaqueAt(nx, ny);
       // The server projectile hit something: ours ends too.
@@ -131,11 +150,16 @@ export class Shots {
       const neverSeen = !c.seenOnServer && c.hit.size > 0 && now - c.born > unseenShotLimit(ctx.rtt, ctx.interpDelay);
       // Shots stop at the first enemy they touch unless they are predicted to pierce it
       // (the server decides the damage), checked every 4 px like there.
-      const touched = hitWall ? null : this.touchesEnemy(c, nx, ny, ctx.ents);
+      const touched = hitWall ? null : this.touchesEnemy(c, nx, ny, nflown, ctx.ents);
       const hitEnemy = touched !== null && !this.passes(c, touched);
-      if (c.life <= 0 || hitWall || goneOnServer || neverSeen || reachedTarget || hitEnemy) {
+      if (c.life <= 0 || landing || hitWall || goneOnServer || neverSeen || reachedTarget || hitEnemy) {
         // The view draws a spark at a wall; a wrongly predicted pass needs none of its own: the server's `Dmg` draws one at that enemy.
-        ended(c, hitWall ? 'wall' : hitEnemy ? 'enemy' : 'gone');
+        if (landing && !hitWall && !hitEnemy) {
+          c.x = nx;
+          c.y = ny;
+          c.z = 0;
+        }
+        ended(c, hitWall ? 'wall' : hitEnemy ? 'enemy' : landing ? 'landed' : 'gone');
         this.live.splice(i, 1);
         this.endedShots.set(c.shot, now);
         // Predicted to stop: if the server's shot flies on past this enemy after all, it is drawn
@@ -148,11 +172,13 @@ export class Shots {
       }
       c.x = nx;
       c.y = ny;
+      c.flown = nflown;
+      if (c.flight !== undefined) c.z = shotZ(c.flight, nflown);
     }
   }
 
   /** The first thing the shot touches on its way to (nx, ny), skipping the enemies it passed. */
-  private touchesEnemy(c: Shot, nx: number, ny: number, ents: ReadonlyMap<number, EntState>): EntState | null {
+  private touchesEnemy(c: Shot, nx: number, ny: number, nflown: number, ents: ReadonlyMap<number, EntState>): EntState | null {
     const steps = Math.max(1, Math.ceil(Math.hypot(nx - c.x, ny - c.y) / 4));
     for (const e of ents.values()) {
       if (e.flags & FLAG.DEAD || c.hit.has(e.id)) continue;
@@ -162,7 +188,12 @@ export class Shots {
       if (shotPassesThrough(e)) continue;
       const air = (e.flags & FLAG.AIRBORNE) !== 0;
       for (let k = 1; k <= steps; k++) {
-        if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return e;
+        const px = c.x + ((nx - c.x) * k) / steps;
+        const py = c.y + ((ny - c.y) * k) / steps;
+        const hit = c.flight === undefined
+          ? shotHits(e.kind, e.x, e.y, air, px, py, c.r)
+          : arcHits(e.kind, e.x, e.y, air, px, py, shotZ(c.flight, c.flown + ((nflown - c.flown) * k) / steps), c.r);
+        if (hit) return e;
       }
     }
     return null;

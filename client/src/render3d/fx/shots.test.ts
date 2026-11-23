@@ -71,7 +71,7 @@ describe('shots', () => {
 
   it('wall hit sparks end', () => {
     const fx = new Effects3d(map);
-    fx.shotEnded({ shot: 1, kind: KIND.FireBolt, x: 40, y: 40, vx: 1, vy: 0 }, 'wall', 1);
+    fx.shotEnded({ shot: 1, kind: KIND.FireBolt, x: 40, y: 40, vx: 1, vy: 0, z: 8 }, 'wall', 1);
     const a = newOut(); fx.frame(frame(1.1), a);
     expect(a.tris.n).toBeGreaterThan(0);
     const b = newOut(); fx.frame(frame(1.5), b);
@@ -81,7 +81,7 @@ describe('shots', () => {
 
   it('a card shot hitting a wall leaves nothing', () => {
     const fx = new Effects3d(map);
-    fx.shotEnded({ shot: 1, kind: KIND.Arrow, x: 40, y: 40, vx: 1, vy: 0 }, 'wall', 1);
+    fx.shotEnded({ shot: 1, kind: KIND.Arrow, x: 40, y: 40, vx: 1, vy: 0, z: 8 }, 'wall', 1);
     const a = newOut(); fx.frame(frame(1.1), a);
     expect(a.tris.n).toBe(0);
     expect(fx.records).toBe(0);

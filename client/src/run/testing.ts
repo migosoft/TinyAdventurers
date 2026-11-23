@@ -161,7 +161,7 @@ export function fakeView(
       v.onTile?.(x, y, t);
       v.tiles.push([x, y, t]);
     },
-    shotEnded(s: ShotView, how: 'wall' | 'enemy' | 'gone') {
+    shotEnded(s: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed') {
       v.ended.push([s, how]);
     },
     pointerWorld: () => pointer,

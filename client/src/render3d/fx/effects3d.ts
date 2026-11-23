@@ -288,7 +288,7 @@ export class Effects3d {
   }
 
   /** A server or predicted shot ended; a wall hit leaves sparks. */
-  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone', now: number): void {
+  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed', now: number): void {
     if (how === 'wall') this.add(FX_KIND.ShotHit, now, shot.x / TILE, shot.y / TILE, -1, shot.kind);
   }
 

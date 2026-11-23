@@ -442,6 +442,34 @@ describe('RunSession frame', () => {
     expect(view.frames.at(-1)!.own.aim).toBeCloseTo(Math.PI / 2);
   });
 
+  describe('the aim reading (#321)', () => {
+    const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const magic = ability('MagicMissile', { projectile: KIND.Missile, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    // The ground reading is 60 px away, the shot-height reading 100 px.
+    const setup = (primary: boolean, secondary: boolean, abilities: [ReturnType<typeof ability>, ReturnType<typeof ability>]) => {
+      const r = running(() => ({ ...idle, primary, secondary }), { abilities });
+      const hero = r.session['pred'].state;
+      r.view.pointerWorld = (ground?: boolean) => ({ x: hero.x + (ground ? 60 : 100), y: hero.y });
+      r.session.frame(STEP_MS);
+      return inputs(r.net)[0];
+    };
+    it('an arcing primary sends the ground reading', () => expect(setup(true, false, [shoot, magic]).aim_dist).toBe(60));
+    it('a magic secondary alone sends the shot-height reading', () => expect(setup(false, true, [shoot, magic]).aim_dist).toBe(100));
+    it('both fire: the primary decides', () => {
+      expect(setup(true, true, [shoot, magic]).aim_dist).toBe(60);
+      expect(setup(true, true, [magic, shoot]).aim_dist).toBe(100);
+    });
+    it('an arcing shot lands at the ground reading', () => {
+      const r = running(() => ({ ...idle, primary: true }), { abilities: [shoot, magic] });
+      const hero = r.session['pred'].state;
+      r.view.pointerWorld = (ground?: boolean) => ({ x: hero.x + (ground ? 60 : 100), y: hero.y });
+      r.session.frame(STEP_MS);
+      const live = r.session['shots'].live[0];
+      expect(live.land![0]).toBeCloseTo(hero.x + 60, 6);
+      expect(live.land![1]).toBeCloseTo(hero.y, 6);
+    });
+  });
+
   it('the shots seen on the server end the predicted copy when they are gone', () => {
     const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 20, range: 150, ranged: true, cooldown: 5 });
     let fire = true;

@@ -26,6 +26,8 @@ export interface ShotView {
   readonly y: number;
   readonly vx: number;
   readonly vy: number;
+  /** Height above the ground (px); SHOT_HEIGHT for a flat shot. */
+  readonly z: number;
 }
 
 /** The own hero's predicted cast, as the view may read it (`RunFrame.ownCast`, set by the session):
@@ -122,10 +124,10 @@ export interface RunView {
   event(ev: PictureEv, own: { x: number; y: number }, server?: { x: number; y: number } | null, dark?: boolean): void;
   /** The session has already updated the map and the LightField. */
   tileChanged(x: number, y: number, v: number): void;
-  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void;
+  shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed'): void;
   /** The aimed point at the foot plane (simulation px): the point under the pointer moved `SHOT_LIFT_PX` art px down
-   *  the screen, then onto the ground. Null: no pointer (outside the canvas, before the first frame, during a
-   *  middle-mouse drag). */
-  pointerWorld(): { x: number; y: number } | null;
+   *  the screen, then onto the ground; with `ground` the true ground point under the pointer (arcing shots, #321).
+   *  Null: no pointer (outside the canvas, before the first frame, during a middle-mouse drag). */
+  pointerWorld(ground?: boolean): { x: number; y: number } | null;
   destroy(): void;
 }

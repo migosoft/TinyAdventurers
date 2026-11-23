@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KIND } from '../generated/defs';
+import { KIND, SIDE } from '../generated/defs';
 import { TileMap } from '../sim/map';
 import type { EntState } from '../game/world';
 import { Shots, type Shot } from './shots';
@@ -64,5 +64,43 @@ describe('Shots', () => {
     shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 200 }), 2, 5, { x: 24, y: 24 }, 0);
     const ents = new Map([[98, server(98, (2 << 16) | 7)]]);
     expect(shots.hidden(ents, undefined, 1).has(98)).toBe(false);
+  });
+
+  describe('arcing shots (#321)', () => {
+    const WIDE = ['#'.repeat(22), '#' + '.'.repeat(20) + '#', '#'.repeat(22)];
+    const wide = () => {
+      const info = startInfo(WIDE);
+      return new TileMap(info.width, info.height, info.tiles as Uint8Array);
+    };
+    const orc = (x: number): EntState => ({ ...server(5, 0), kind: KIND.OrcWarrior, x, y: 24, side: SIDE.Hostile });
+    const fly = (shots: Shots, ents: Map<number, EntState>) => {
+      const ended: [string, number, number][] = [];
+      for (let i = 0; i < 200 && shots.live.length > 0; i++) {
+        shots.update(0.01, i * 0.01, { map: wide(), ents, rtt: 50, interpDelay: 0.1 }, (s, how) => ended.push([how, s.x, s.y]));
+      }
+      return ended;
+    };
+
+    it("ends 'landed' at its landing point", () => {
+      const shots = new Shots();
+      shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 200, range: 260 }), 2, 1, { x: 24, y: 24 }, 0, undefined, 100);
+      expect(fly(shots, new Map())).toEqual([['landed', 124, 24]]);
+    });
+
+    it('flies over an enemy halfway on a far shot and hits one at the landing point', () => {
+      const a = ability('Shoot', { speed: 290, range: 260 });
+      const over = new Shots();
+      over.spawn(KIND.Arrow, 7, 0, a, 2, 1, { x: 24, y: 24 }, 0, undefined, 260);
+      expect(fly(over, new Map([[5, orc(154)]]))[0][0]).toBe('landed');
+      const at = new Shots();
+      at.spawn(KIND.Arrow, 7, 0, a, 2, 1, { x: 24, y: 24 }, 0, undefined, 260);
+      expect(fly(at, new Map([[5, orc(284)]]))[0][0]).toBe('enemy');
+    });
+
+    it('a flat shot is unchanged', () => {
+      const shots = new Shots();
+      shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 290, range: 260 }), 2, 1, { x: 24, y: 24 }, 0);
+      expect(fly(shots, new Map([[5, orc(154)]]))[0][0]).toBe('enemy');
+    });
   });
 });

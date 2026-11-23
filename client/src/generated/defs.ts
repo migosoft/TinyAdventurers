@@ -308,6 +308,7 @@ export const CLASSES = {
 
 export const ABILITIES = {
   "Bite": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Bite",
@@ -316,6 +317,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "BlindingCurse": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Blinding Curse",
@@ -324,6 +326,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "ChainSpark": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -334,6 +337,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "Charge": {
+    "arcs": false,
     "classes": [
       "Barbarian"
     ],
@@ -344,6 +348,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Charm": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -354,6 +359,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Consecrate": {
+    "arcs": false,
     "classes": [
       "Paladin"
     ],
@@ -364,6 +370,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Entangle": {
+    "arcs": false,
     "classes": [
       "ElvenRanger"
     ],
@@ -374,6 +381,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "FireBolt": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Fire Bolt",
@@ -382,6 +390,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "FireBreath": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Fire Breath",
@@ -390,6 +399,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Fireball": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -400,6 +410,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "FlankingThrust": {
+    "arcs": false,
     "classes": [
       "ElvenRanger"
     ],
@@ -410,6 +421,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "FrostNova": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -420,6 +432,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "FrostShard": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -430,6 +443,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "GloomBolts": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Gloom Bolts",
@@ -438,6 +452,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "GroundSlam": {
+    "arcs": false,
     "classes": [
       "Barbarian"
     ],
@@ -448,6 +463,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Haste": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -458,6 +474,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "HolyLight": {
+    "arcs": false,
     "classes": [
       "Paladin"
     ],
@@ -468,6 +485,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Hurl": {
+    "arcs": true,
     "classes": [
       "Barbarian"
     ],
@@ -478,6 +496,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "Judgement": {
+    "arcs": false,
     "classes": [
       "Paladin"
     ],
@@ -488,6 +507,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "MagicMissile": {
+    "arcs": false,
     "classes": [
       "Wizard"
     ],
@@ -498,6 +518,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "Nova": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Nova",
@@ -506,6 +527,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "PoisonCoat": {
+    "arcs": false,
     "classes": [
       "ElvenRanger"
     ],
@@ -516,6 +538,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Pounce": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Pounce",
@@ -524,6 +547,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Purify": {
+    "arcs": false,
     "classes": [
       "Paladin"
     ],
@@ -534,6 +558,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "RaiseDead": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Raise Dead",
@@ -542,6 +567,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "RingOfFire": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Ring of Fire",
@@ -550,6 +576,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "ShadowBolt": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Shadow Bolt",
@@ -558,6 +585,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "Shoot": {
+    "arcs": true,
     "classes": [
       "ElvenRanger"
     ],
@@ -568,6 +596,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "SleepMist": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Sleep Mist",
@@ -576,6 +605,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Smash": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Smash",
@@ -584,6 +614,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Smite": {
+    "arcs": false,
     "classes": [
       "Paladin"
     ],
@@ -594,6 +625,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "StoneGaze": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Stone Gaze",
@@ -602,6 +634,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Strike": {
+    "arcs": false,
     "classes": [
       "Paladin",
       "Barbarian"
@@ -613,6 +646,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "SummonImps": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Summon Imps",
@@ -621,6 +655,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "SummonWolf": {
+    "arcs": false,
     "classes": [
       "ElvenRanger"
     ],
@@ -631,6 +666,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Swoop": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Swoop",
@@ -639,6 +675,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "TailWhip": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Tail Whip",
@@ -647,6 +684,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Touch": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Touch",
@@ -655,6 +693,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "Vanish": {
+    "arcs": false,
     "classes": [],
     "hero": false,
     "name": "Vanish",
@@ -663,6 +702,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Volley": {
+    "arcs": true,
     "classes": [
       "ElvenRanger"
     ],
@@ -673,6 +713,7 @@ export const ABILITIES = {
     "slot": "Primary"
   },
   "WarCry": {
+    "arcs": false,
     "classes": [
       "Barbarian"
     ],
@@ -683,6 +724,7 @@ export const ABILITIES = {
     "slot": "Secondary"
   },
   "Whirl": {
+    "arcs": false,
     "classes": [
       "Barbarian"
     ],

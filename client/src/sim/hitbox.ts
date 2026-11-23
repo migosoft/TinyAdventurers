@@ -2,6 +2,7 @@
 // meets a monster. Shots are drawn SHOT_HEIGHT px above their ground point and
 // figures stand up from their feet, so a tall figure is a capsule reaching north.
 import { CONST, HITBOX } from '../generated/defs';
+import { arcTouches } from './arc';
 
 /** Distance from a shot at (px, py) to the body of a monster of `kind` standing at (x, y); null for kinds shots don't hit. */
 export function shotDist(kind: number, x: number, y: number, airborne: boolean, px: number, py: number): number | null {
@@ -11,6 +12,12 @@ export function shotDist(kind: number, x: number, y: number, airborne: boolean, 
   const reach = Math.max(0, hb.h + lift - CONST.SHOT_HEIGHT - hb.r);
   const cy = Math.min(Math.max(py, y - reach), y);
   return Math.hypot(px - x, py - cy);
+}
+
+/** Whether an arcing shot at (px, py) at height `z` meets the body of that monster (server `arc_touches` with `shot_top`). */
+export function arcHits(kind: number, x: number, y: number, airborne: boolean, px: number, py: number, z: number, shotR: number): boolean {
+  const hb = HITBOX[kind];
+  return !!hb && arcTouches(x, y, hb.r, hb.h + (airborne ? CONST.DRAGON_LIFT : 0), px, py, z, shotR);
 }
 
 /** Whether a shot of radius `shotR` at (px, py) touches that monster. */

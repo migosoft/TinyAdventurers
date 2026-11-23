@@ -22,9 +22,9 @@ export function toCanvas(cam: Cam, plan: RenderPlan, zoom: number, x: number, y:
   return { px: c.px + p.sx * ART * zoom, py: c.py - p.sy * ART * zoom };
 }
 
-/** The ground point (tiles) for a canvas point read at shot height: moved SHOT_LIFT_PX art px down, then onto the floor. */
-export function aimGround(cam: Cam, plan: RenderPlan, zoom: number, px: number, py: number): { x: number; z: number } {
+/** The ground point (tiles) for a canvas point read at shot height: moved `lift` (default SHOT_LIFT_PX) art px down, then onto the floor. Lift 0 is the true ground point. */
+export function aimGround(cam: Cam, plan: RenderPlan, zoom: number, px: number, py: number, lift = SHOT_LIFT_PX): { x: number; z: number } {
   const c = screenCentre(plan);
   const k = ART * zoom;
-  return groundAt(drawnCam(cam), (px - c.px) / k, -(py + SHOT_LIFT_PX * zoom - c.py) / k);
+  return groundAt(drawnCam(cam), (px - c.px) / k, -(py + lift * zoom - c.py) / k);
 }

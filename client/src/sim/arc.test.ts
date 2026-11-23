@@ -14,5 +14,6 @@ describe('arc', () => {
   it('touches only below the top', () => {
     expect(arcTouches(0, 0, 5, 20, 6, 0, 19.9, 3)).toBe(true);
     expect(arcTouches(0, 0, 5, 20, 6, 0, 20, 3)).toBe(false);
+    expect(arcTouches(0, 0, 5, 20, 8, 0, 10, 3)).toBe(false);
   });
 });

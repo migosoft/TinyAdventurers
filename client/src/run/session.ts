@@ -351,8 +351,8 @@ export class RunSession {
    * The aim at the pointer, and its distance (0 without one). Without a pointer the aim follows the movement
    * (`mx`, `my`), else it stays. Used by the step and by the drawn weapon.
    */
-  private aimInfo(mx: number, my: number): { aim: number; dist: number } {
-    const wp = this.view?.pointerWorld() ?? null;
+  private aimInfo(mx: number, my: number, ground = false): { aim: number; dist: number } {
+    const wp = this.view?.pointerWorld(ground) ?? null;
     if (wp) return aimAt(this.pred.state, wp);
     return { aim: mx !== 0 || my !== 0 ? Math.atan2(my, mx) : this.lastAim, dist: 0 };
   }
@@ -367,10 +367,6 @@ export class RunSession {
     const charmed = this.pred.charmed;
     const mx = charmed ? 0 : inp.mx;
     const my = charmed ? 0 : inp.my;
-    const { aim: pointerAim, dist } = this.aimInfo(mx, my);
-    // Petrified or asleep: the server keeps the old facing, so the client sends it too.
-    const aim = this.pred.noTurn ? this.lastAim : pointerAim;
-    this.lastAim = aim;
     // Falling, drowning or pushed heroes cannot attack (the server ignores it).
     const free = !charmed && !this.hud.menuOpen && mayAct(this.pred);
     const wantPrimary = inp.primary && free;
@@ -384,12 +380,19 @@ export class RunSession {
     const usable = [this.slotUsable(0), this.slotUsable(1)] as const;
     if (wantPrimary && !usable[0]) this.hud.needs(0, this.disabled[0]!);
     if (wantSecondary && !usable[1]) this.hud.needs(1, this.disabled[1]!);
-    if (wantPrimary && slotReady(this.pred, 0) && usable[0]) {
+    const fires = [wantPrimary && slotReady(this.pred, 0) && usable[0], wantSecondary && slotReady(this.pred, 1) && usable[1]] as const;
+    // The ability that fires decides the reading (the primary first): arcing shots read the true ground point, all else the shot height (#321).
+    const slot = fires[0] ? 0 : fires[1] ? 1 : null;
+    const { aim: pointerAim, dist } = this.aimInfo(mx, my, slot !== null && ABILITIES[this.runInfo.abilities[slot].id].arcs);
+    // Petrified or asleep: the server keeps the old facing, so the client sends it too.
+    const aim = this.pred.noTurn ? this.lastAim : pointerAim;
+    this.lastAim = aim;
+    if (fires[0]) {
       const ids = this.reserveShots(0);
       primary = ids[0];
       used[0] = this.predictAbility(0, ids, aim, dist);
     }
-    if (wantSecondary && slotReady(this.pred, 1) && usable[1]) {
+    if (fires[1]) {
       const ids = this.reserveShots(1);
       secondary = ids[0];
       used[1] = this.predictAbility(1, ids, aim, dist);
@@ -466,7 +469,9 @@ export class RunSession {
       case 'Projectile': {
         if (a.projectile !== null) {
           const angles = volleyAngles(aim, shots.length, CONST.VOLLEY_SPREAD);
-          shots.forEach((shot, i) => this.shots.spawn(a.projectile!, shot, angles[i], a, a.radius, a.range / a.speed, { x, y }, now));
+          // An arcing ability lands at the pointer (no pointer: its full range), the same distance for every arrow (server `use_projectile`); a player's shot has no scatter.
+          const land = ABILITIES[a.id].arcs ? (dist === 0 ? a.range : Math.min(Math.max(dist, 24), a.range)) : undefined;
+          shots.forEach((shot, i) => this.shots.spawn(a.projectile!, shot, angles[i], a, a.radius, a.range / a.speed, { x, y }, now, undefined, land));
         }
         anim = ANIM.Shoot;
         break;
