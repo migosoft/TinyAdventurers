@@ -23,9 +23,8 @@ const RIM = [0.4, 0.34, 0.33] as const;
 const TOP_WRAP = 0.5;
 const PX = 1 / 16;
 
-/** The demo's depth bias, in tiles toward the camera: cards 0.03, flames and glows 0.05 (the world has none). */
+/** The demo's depth bias, in tiles toward the camera: cards 0.03 (the world has none). */
 export const CARD_BIAS = 0.03;
-export const FLAME_BIAS = 0.05;
 
 /**
  * The unit vector from the target toward the camera, set by the view each frame. A vertex moved along it by `b` tiles
@@ -425,27 +424,6 @@ export function shadowMaterial(sight: Sight): MeshBasicNodeMaterial {
   m.transparent = true;
   m.depthWrite = false;
   m.forceSinglePass = true;
-  m.side = DoubleSide;
-  return m;
-}
-
-/**
- * Wall cards (torches): the atlas texel, self-lit while burning. A card flagged "by the light" (the third `sight` value, from
- * `pushWall`'s `byLight`: a torch that is out, #325) is lit by the light model like a figure's card instead.
- */
-export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward, sight: Sight): MeshBasicNodeMaterial {
-  const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
-  const m = new MeshBasicNodeMaterial();
-  const truePos = varying(positionGeometry, 'wallCardPos');
-  m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
-  // Sight (#305): gone on unseen ground (a stipple, as the opaque cards). Self-lit: no `apply`, dimmed behind a trunk on dark maps. By the light: the sight step of every lit surface.
-  const seen: N = attribute('sight', 'vec3');
-  const shown = sight.shown(seen.x, 0);
-  const selfLit = sight.dim(lighting.shoulder(texel.rgb.mul(1.15)), seen.y);
-  const byLight = sight.apply(lighting.finish(texel.rgb, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: float(-1), darkOnly: float(0) })), truePos, seen.xy);
-  const colour: N = select(seen.z.greaterThan(0.5), byLight, selfLit);
-  m.colorNode = vec4(colour, select(bayerAt().lessThan(shown), texel.a, float(0)));
-  m.alphaTest = 0.5;
   m.side = DoubleSide;
   return m;
 }

@@ -146,9 +146,9 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
 
       const ambient = dungeonAmbient(params.amb);
       const ground = coverField && params.cover ? (x: number, z: number, rad: number): number => coverField!.topAt(x, z, rad, params.gh) : undefined;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: false, oval: 1, ground });
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, oval: 1, ground });
       cove.push(seconds, cam, fo.glows, fo.ghosts, params.sight ? mask : null);
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       forest.step(cam, TREE_BUDGET_MS);
@@ -189,7 +189,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
         {
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight,
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
         },

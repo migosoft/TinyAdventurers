@@ -322,37 +322,22 @@ describe('Figures3d', () => {
   });
 
   it('draws the board objects (#303 Task 6)', () => {
-    const names = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4', 'torch_out', 'barrel_explosive', 'coin_anim_f0', 'coin_anim_f1', 'coin_anim_f2', 'coin_anim_f3',
+    const names = ['barrel_explosive', 'coin_anim_f0', 'coin_anim_f1', 'coin_anim_f2', 'coin_anim_f3',
       'chest_full_open_anim_f0', 'chest_full_open_anim_f1', 'chest_full_open_anim_f2', 'chest_empty_open_anim_f2',
       'chest_mimic_open_anim_f0', 'chest_mimic_open_anim_f1', 'chest_mimic_open_anim_f2'];
-    names.forEach((n, i) => { frames[n] = { x: 500 + i * 20, y: 20, w: n.startsWith('torch') ? 16 : 16, h: 16 }; });
+    names.forEach((n, i) => { frames[n] = { x: 500 + i * 20, y: 20, w: 16, h: 16 }; });
     const nameOf = (b: CardBuf, q = 0): string => {
       const u = Math.min(b.uv[q * 12], b.uv[q * 12 + 4]);
       return names.find((n) => frames[n].x === u) ?? '?';
     };
-    const zs = (b: CardBuf, q = 0): number[] => Array.from({ length: 6 }, (_, i) => b.position[(q * 6 + i) * 3 + 2]);
     const torch = (side: number, lit: boolean, x: number, y: number) => ent(30, KIND.Torch, { x, y, extra: side, anim: lit ? 1 : 0, side: SIDE.Neutral });
 
-    // side 0: the wall's south face at z = floor(y / 16), 0.02 into the room
-    const t0 = make().frame(frame([torch(0, true, 3 * 16 + 8, 2 * 16 + 0.5)]), cam());
-    expect(t0.emissive.n).toBe(1);
-    expect(t0.glows.n).toBe(1);
-    for (const z of zs(t0.emissive)) expect(z).toBeCloseTo(2 + 0.02, 6);
-    expect(nameOf(t0.emissive)).toMatch(/^torch_f\d$/);
-    expect(t0.openers).toEqual([]); // a torch never opens a wall
-    // side 1: the east face of the wall west of the floor
-    const t1 = make().frame(frame([torch(1, true, 4 * 16 + 0.5, 2 * 16 + 8)]), cam());
-    for (const x of xs(t1.emissive)) expect(x).toBeCloseTo(4 + 0.02, 6);
-    // side 2: the west face of the wall east of the floor
-    const t2 = make().frame(frame([torch(2, true, 4 * 16 - 0.5, 2 * 16 + 8)]), cam());
-    for (const x of xs(t2.emissive)) expect(x).toBeCloseTo(4 - 0.02, 6);
-    // unlit: burnt out and no glow
-    const t3 = make().frame(frame([torch(0, false, 24, 32.5)]), cam());
-    expect(nameOf(t3.emissive)).toBe('torch_out');
-    expect(t3.glows.n).toBe(0);
-    // #325: an unlit torch is lit by the room's light (the wall card's flag), a burning one is self-lit
-    expect(t3.emissive.foot[3]).toBe(1);
-    expect(t0.emissive.foot[3]).toBe(0);
+    // a torch is drawn by nothing here (its model is the world's: torch/torch.ts), as a crystal
+    for (const [side, lit] of [[0, true], [1, true], [2, true], [0, false]] as const) {
+      const o = make().frame(frame([torch(side, lit, 3 * 16 + 8, 2 * 16 + 0.5)]), cam());
+      expect(total(o) + o.glows.n + o.shadows.n).toBe(0);
+      expect([o.openers, o.casters, o.models, o.built, o.floats]).toEqual([[], [], [], [], []]);
+    }
 
     // chests: closed lid, then the lid over the gold, then empty
     const chest = (anim: number, animMs: number) => ent(31, KIND.Chest, { anim, animMs, side: SIDE.Neutral });
@@ -409,7 +394,7 @@ describe('Figures3d', () => {
   it('draws nothing for a crystal entity, whole or broken: the cluster is world geometry (#380)', () => {
     for (const anim of [1, 0]) {
       const o = make().frame(frame([ent(40, KIND.Crystal, { anim, hp: 1, side: SIDE.Neutral })]), cam());
-      expect(total(o) + o.emissive.n + o.glows.n + o.shadows.n).toBe(0);
+      expect(total(o) + o.glows.n + o.shadows.n).toBe(0);
       expect([o.openers, o.casters, o.models, o.built, o.floats]).toEqual([[], [], [], [], []]);
     }
   });
@@ -490,7 +475,7 @@ describe('Figures3d anchors (#311)', () => {
 });
 
 describe('Figures3d status looks (#308)', () => {
-  const look = { ambient: [1, 1, 1] as [number, number, number], dark: 'shape' as const, torchGlow: true, oval: 1 };
+  const look = { ambient: [1, 1, 1] as [number, number, number], dark: 'shape' as const, oval: 1 };
   it('frozen card is tinted', () => {
     const plain = make().frame(frame([ent(10, KIND.Knight)]), cam(), look);
     const iced = make().frame(frame([ent(10, KIND.Knight, { effects: 1 << EFFECT.Frozen })]), cam(), look);
@@ -511,10 +496,9 @@ describe('Figures3d status looks (#308)', () => {
 });
 
 describe('Figures3d in the dark (#304)', () => {
-  const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade', torchGlow = true) => ({ ambient, dark, torchGlow, oval: 1 });
+  const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade') => ({ ambient, dark, oval: 1 });
   const alphas = (b: CardBuf): number[] => b.look.filter((_, i) => i % 5 === 4);
   const monster = () => [ent(10, KIND.Knight)];
-  const torchFrames = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4', 'torch_out'];
   it('a dark monster fades to nothing at ambient 0 and shows fully at AMBIENT, with no shadow and no caster', () => {
     const dim = make().frame(frame(monster(), { dark: new Set([10]) }), cam(), look([0, 0, 0]));
     expect(dim.cards.n).toBe(0);
@@ -585,14 +569,6 @@ describe('Figures3d in the dark (#304)', () => {
     const d = make().frame(frame([ent(22, KIND.Barrel, { side: SIDE.Neutral })], { dark: new Set([22]) }), cam(), { ...look(AMBIENT), dark: 'fade' });
     expect(d.ghosts.n).toBe(1);
     expect(d.casters).toEqual([]);
-  });
-  it('a lit torch gives a glow quad with torchGlow and none without', () => {
-    for (const n of torchFrames) frames[n] = { x: 500, y: 20, w: 16, h: 16 };
-    const torch = ent(30, KIND.Torch, { x: 3 * 16 + 8, y: 2 * 16 + 0.5, extra: 0, anim: 1, side: SIDE.Neutral });
-    expect(make().frame(frame([torch]), cam(), look(AMBIENT, 'fade', true)).glows.n).toBe(1);
-    const off = make().frame(frame([torch]), cam(), look(AMBIENT, 'fade', false));
-    expect(off.glows.n).toBe(0);
-    expect(off.emissive.n).toBe(1);
   });
 });
 
@@ -665,7 +641,7 @@ describe('the sight attributes of the cards (#305)', () => {
 
 describe('Figures3d ground ovals (#306)', () => {
   const ents = () => [ent(10, KIND.Knight), ent(11, KIND.Chest, { side: SIDE.Neutral, x: at(2) }), ent(12, KIND.Barrel, { side: SIDE.Neutral, x: at(3) })];
-  const look = (oval: number) => ({ ambient: AMBIENT, dark: 'shape' as const, torchGlow: true, oval });
+  const look = (oval: number) => ({ ambient: AMBIENT, dark: 'shape' as const, oval });
   it('oval scales the alpha of every ground oval', () => {
     const full = make().frame(frame(ents()), cam(), look(1));
     const half = make().frame(frame(ents()), cam(), look(0.5));
@@ -732,7 +708,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   }, 120000);
   afterAll(() => kit.dispose());
 
-  const look = (models?: { kit: FigureKit; is(e: EntState): boolean }) => ({ ambient: AMBIENT, dark: 'shape' as const, torchGlow: true, oval: 1, models });
+  const look = (models?: { kit: FigureKit; is(e: EntState): boolean }) => ({ ambient: AMBIENT, dark: 'shape' as const, oval: 1, models });
   const all = { is: () => true };
   const ranger = (o: Partial<EntState> = {}) => ent(10, KIND.ElvenRanger, o);
   const owned = (b: CardBuf, id: number): number => b.owner.filter((v) => v === id).length;
@@ -1974,7 +1950,7 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     for (const mode of ['fade', 'shape'] as const) {
       const fg = dipFigs();
       const e = knight(2, 4);
-      const look = { ambient: [0, 0, 0] as [number, number, number], dark: mode, torchGlow: true, oval: 1 };
+      const look = { ambient: [0, 0, 0] as [number, number, number], dark: mode, oval: 1 };
       fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 0 });
       const dark = new Set([10]);
       run(fg, () => [e], 20, 1 / 60, 10, () => ({ dark }));

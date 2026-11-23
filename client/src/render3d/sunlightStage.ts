@@ -104,9 +104,9 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
   hardView.compute(map, SUNLIGHT_VIEWER.x, SUNLIGHT_VIEWER.y, CONST.FOV_RADIUS, 'hard');
   const mask = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
 
-  // The field: the alcove's torch, and the Daylight cracks (re-placed on a reroll or when the second one switches).
+  // The field: both torches (the sunlit room's is out), and the Daylight cracks (re-placed on a reroll or when the second one switches).
   const field = new LightField(map);
-  for (const tc of SUNLIGHT_TORCHES) if (tc.light) field.add({ id: tc.light.id, kind: LIGHT_KIND.Torch, colour: SUNLIGHT_WARM, x: tc.light.x, y: tc.light.y, on: true, wall: tc.side + 1 });
+  for (const tc of SUNLIGHT_TORCHES) field.add({ id: tc.light.id, kind: LIGHT_KIND.Torch, colour: SUNLIGHT_WARM, x: tc.light.x, y: tc.light.y, on: tc.lit, wall: tc.side + 1 });
   let sunIds: number[] = [];
   const placeSuns = (): void => {
     for (const id of sunIds) field.remove(id);
@@ -163,8 +163,8 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       if (!c.view) return 0; // the air pauses while the view is rebuilt after a device loss
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 });
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: c.params.dark, oval: 1 });
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       mask.update(hardView, null, 0);
@@ -209,7 +209,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null,
-          casters, sight, cracks, shafts: c.params.shafts, air: frameAir,
+          casters, sight, cracks, shafts: c.params.shafts, air: frameAir, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
         },
         c.timer,
       );

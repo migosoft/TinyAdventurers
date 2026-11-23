@@ -1,7 +1,7 @@
 // Every 3D material ends with the sight step (#305): the generated code of each carries the sight uniforms. #307 and #308 extend the list.
 import { describe, expect, it } from 'vitest';
 import { BufferAttribute, BufferGeometry, DataTexture, DoubleSide, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
-import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { fieldMaterial, fieldUniforms } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
 import { makeLighting } from './lightNodes';
@@ -73,7 +73,6 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },
     { name: 'card translucent', m: cardMaterial(t, 64, 64, l, toward, sight, { translucent: true }).material, world: false },
     { name: 'card flat', m: cardMaterial(t, 64, 64, l, toward, sight, { flat: true, translucent: true }).material, world: false },
-    { name: 'flame', m: emissiveMaterial(t, 64, 64, l, toward, sight), world: false },
     { name: 'glow', m: glowMaterial(sight), world: false },
     { name: 'shadow', m: shadowMaterial(sight), world: false },
     // The figures' effect triangles (#338): vertex colours, hidden like a glow.
@@ -105,16 +104,6 @@ describe('the sight step in the materials', () => {
           expect(code, name).toMatch(B === WGSLNodeBuilder ? /texture_2d<f32>/ : /uniform sampler2D/);
         }
       }
-    });
-  }
-});
-
-// #325: a wall card that is not burning (a torch that is out) is lit by the light model, so the flame material carries the lights.
-describe('the flame material', () => {
-  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
-    it(`${B.name}: reads the room's light`, () => {
-      const code = fragment(B, emissiveMaterial(new Texture(), 64, 64, lit(), viewTowardUniform(), makeSight()));
-      expect(code).toContain('lightAmbient');
     });
   }
 });

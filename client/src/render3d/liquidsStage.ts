@@ -173,7 +173,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       }
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const look = { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, ...(kit ? { models: { kit, is: (e: EntState) => opts.models !== null || e.kind === KIND.Barrel } } : {}) };
+      const look = { ambient, dark: c.params.dark, oval: 1, ...(kit ? { models: { kit, is: (e: EntState) => opts.models !== null || e.kind === KIND.Barrel } } : {}) };
       // A pinned page plays the seconds before its clock once, then holds still.
       let fdt = dt;
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
@@ -209,7 +209,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       const wo = water.step({ dt: fdt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE_IDS });
       const lo = lava3d.step(lavaStep(fdt, t, fo.figs, fp));
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, water: wo.cues, lava: lo.cues, fp }, fo.glows);
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
@@ -236,6 +236,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },
+          wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
           // The water (#345): the page's own clock, so a pinned page holds the waves still.
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },

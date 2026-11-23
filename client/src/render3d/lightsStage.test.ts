@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { CONST, KIND } from '../generated/defs';
+import { TILE } from '../sim/map';
 import { TORCHES, W, H, buildMap } from '../game/lightsDemoScript';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
@@ -51,6 +52,15 @@ describe('the ?r3d=lights stage', () => {
     expect(TORCHES).toHaveLength(7);
     const { f } = drawn('?r3d=lights&t=0');
     expect(f!.lights).toHaveLength(10);
+  });
+
+  it('gives every torch entity a field light on its tile, on its wall, lit as it is (#391)', () => {
+    const { stage } = drawn('?r3d=lights&t=0');
+    for (const e of lightsEnts(0).filter((x) => x.kind === KIND.Torch)) {
+      const l = stage.world.taken!.lights.find((x) => x.x === Math.floor(e.x / TILE) && x.y === Math.floor(e.y / TILE));
+      expect(l?.wall).toBe(e.extra + 1);
+      expect((l as { on?: boolean } | undefined)?.on).toBe(e.anim === 1);
+    }
   });
 
   it('misses the blue torch at t = 3.1', () => {

@@ -1,6 +1,5 @@
 // Per-frame quads of the 3D view: figure and prop cards, floor decals, ground shadows, torch flames and glows.
 import { facesLeft, snapGround, viewRay, type Cam } from './camera';
-import { torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { frameOf, orbAt, type SceneState } from './scene';
 import type { FrameRects } from './worldMesh';
@@ -11,12 +10,6 @@ export const GLOW_LIFT = 0.05;
 export const LIE_Y = 0.02;
 /** Tiles a held weapon is pushed toward the camera so it draws over its wielder. */
 export const WEAPON_BIAS = 0.01;
-/**
- * Tiles a wall card's sight point is pushed out of its face along the normal. The mask's texels are aligned to tile edges, so a wall's last
- * texel centre lies 0.5 / res inside the wall (0.125 tile at res 4, the coarsest); a read taps only texels within 1 / res (0.25 tile) of it.
- * At 0.25 (plus the card's own 0.02 offset) the nearest wall texel is 0.395 tile away: no wall texel is touched at either resolution.
- */
-export const WALL_SIGHT_PUSH = 0.25;
 /** Height of a ground shadow: above the floor, below the lying cards. */
 const SHADOW_Y = 0.01;
 
@@ -25,7 +18,7 @@ export interface Quads { position: Float32Array; uv: Float32Array; look: Float32
 export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; /** 2 per vertex: the centre (x, z). */ foot: Float32Array; count: number } // uv -1..1; color rgb already times strength
 export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; /** 2 per vertex: the centre (x, z). */ foot: Float32Array; count: number } // uv -1..1
 /** `ghosts` (translucent, no depth write) must be sorted with `sortBackToFront` by the producer before it is handed over. */
-export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; emissive: Quads; glows: Glows }
+export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; glows: Glows }
 
 /** The growing arrays one pass is built in; `n` counts quads. */
 export interface CardBuf { position: number[]; uv: number[]; look: number[]; /** One entity id per vertex of the looked quads (-1: none). */ owner: number[]; /** 1 per vertex of a dark card, else 0. */ dark: number[]; /** 4 per vertex: x, z, reach, scenery. */ foot: number[]; n: number }
@@ -180,24 +173,6 @@ export function casterOf(c: Card, id: number, frames: FrameRects, cam: Cam): Sha
   return { id, x: (lo[0] + hi[0]) / 2, z: (lo[2] + hi[2]) / 2, w, y0, y1, u0: tl[3], v0: tl[4], u1: br[3], v1: br[4] };
 }
 
-/**
- * A 1 x 1 tile card fixed to a wall face (not turned to the camera), for the emissive pass (no `look`): centre (x, y, z),
- * `nx`/`nz` the face's outward normal (+z, +x or -x here), the picture mirrored when `flip`.
- * `byLight`: the card is lit by the room's light like the wall it hangs on (a torch that is out, #325) instead of self-lit;
- * it is the foot's fourth value, which the emissive pass reads as this flag (a wall card is never hidden as scenery).
- */
-export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects, byLight = false): void {
-  const fr = frames[frame];
-  if (!fr) return;
-  // The viewer in front of the face looks along -normal; their right is (-nz, nx) on the ground rotated: normal +z -> right +x, +x -> -z, -x -> +z.
-  const rx = nz, rz = -nx;
-  const u0 = flip ? fr.x + fr.w : fr.x, u1 = flip ? fr.x : fr.x + fr.w;
-  const v0 = fr.y, v1 = fr.y + fr.h;
-  const at = (s: number, h: number, u: number, v: number): V => [x + rx * s * 0.5, y + h * 0.5, z + rz * s * 0.5, u, v];
-  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x + nx * WALL_SIGHT_PUSH, z + nz * WALL_SIGHT_PUSH, 0, byLight ? 1 : 0); });
-  b.n++;
-}
-
 /** A card lying flat on the floor (y = LIE_Y), its frame's foot-to-head axis along screen right (`headRight`) or left. */
 export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: FrameRects, cam: Cam): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
@@ -296,10 +271,7 @@ export function cardQuads(items: readonly CardItem[], frames: FrameRects, cam: C
 }
 
 export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: number, orb: boolean): Dynamic {
-  const ep: number[] = [], eu: number[] = [], ef: number[] = [];
   const glows = newGlowBuf();
-  let en = 0;
-
   const items: CardItem[] = [];
   for (const e of s.ents) {
     e.flip = facesLeft(cam.yaw, e.fx, e.fz, e.flip);
@@ -308,21 +280,6 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
   for (const p of s.props) items.push({ frame: p.frame, x: p.x, z: p.z, flip: false });
   const cards = cardQuads(items, frames, cam);
 
-  for (const tc of s.torches) {
-    const fr = frames[`torch_f${Math.floor(t * 8 + tc.ph) % 5}`];
-    const zz = tc.z - 0.14;
-    if (fr) {
-      pushQuad(ep, eu, [
-        [tc.x - 0.5, tc.y + 0.5, zz, fr.x, fr.y], [tc.x + 0.5, tc.y + 0.5, zz, fr.x + fr.w, fr.y],
-        [tc.x + 0.5, tc.y - 0.5, zz, fr.x + fr.w, fr.y + fr.h], [tc.x - 0.5, tc.y - 0.5, zz, fr.x, fr.y + fr.h],
-      ]);
-      // the demo's torches hang on a wall's south face (normal +z): the sight point is read in front of it, as `drawTorch` does
-      for (let i = 0; i < 6; i++) ef.push(tc.x, tc.z + WALL_SIGHT_PUSH, 0, 0);
-      en++;
-    }
-    const k = 0.5 * torchFlicker(t, tc.ph);
-    pushGlow(glows, tc.x, tc.y + 0.25, zz, 1.5, [1 * k, 0.6 * k, 0.28 * k], cam, [tc.x, tc.z + WALL_SIGHT_PUSH]);
-  }
   if (orb) {
     const o = orbAt(t);
     pushGlow(glows, o.x, o.y, o.z, 0.9, [0.4 * 0.9, 0.58 * 0.9, 1 * 0.9], cam);
@@ -334,7 +291,6 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
     ghosts: emptyQuads(),
     decals: emptyQuads(),
     shadows: emptyShadows(),
-    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), foot: new Float32Array(ef), count: en },
     glows: glowsOf(glows),
   };
 }

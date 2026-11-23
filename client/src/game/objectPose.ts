@@ -67,15 +67,6 @@ export function barrelPose(anim: number, animMs: number): BarrelPose {
   return p;
 }
 
-// ---- torch ----
-
-const TORCH_FPS = 8;
-
-/** The torch's atlas frame: a flame frame by time `t` (s) while lit, else `torch_out`. */
-export function torchFrame(lit: boolean, t: number, frames: readonly string[]): string {
-  return lit ? frames[Math.floor(t * TORCH_FPS) % frames.length] : 'torch_out';
-}
-
 // ---- mimic ----
 
 /** Peak height of a hop in pixels. */

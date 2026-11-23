@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ANIM, CONST, FLAG } from '../generated/defs';
-import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, chestLid, chestLoot, mimicPose, torchFrame } from './objectPose';
+import { BITE_T, HOP, HOP_H, MimicTracker, WAKE_T, barrelPose, chestFrame, chestLid, chestLoot, mimicPose } from './objectPose';
 
 const fresh = () => ({ lastHop: -1, wakeFx: false });
 
@@ -29,15 +29,6 @@ describe('barrelPose', () => {
     const p = barrelPose(3, CONST.DROWN_TIME * 1000);
     expect(p.dy).toBe(10);
     expect(p.alpha).toBe(0);
-  });
-});
-
-describe('torch', () => {
-  it('torchFrame cycles at 8 fps, or is out', () => {
-    const f = ['a', 'b', 'c'];
-    expect(torchFrame(true, 0, f)).toBe('a');
-    expect(torchFrame(true, 0.15, f)).toBe('b');
-    expect(torchFrame(false, 0.15, f)).toBe('torch_out');
   });
 });
 

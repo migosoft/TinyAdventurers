@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 import { newSmokeBuf } from './fx/smoke';
-import { describe, expect, it } from 'vitest';
-import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { describe, expect, it, vi } from 'vitest';
+import { ANIM, CONST, EFFECT, FLAG, KIND, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import type { FrameBounds } from '../game/anim/pose';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
@@ -8,7 +9,7 @@ import { seenOpeners } from './openers';
 import { SMOKE_TONES } from './models/tubeDesc';
 import { Figures3d } from './figures';
 import { CROWD_MAX, MODEL_EFFECT_COLS, MODEL_EFFECT_STRIDE, MODEL_KIND_ROW_PITCH, MODEL_PER_ROW, layoutOf } from './galleryMap';
-import { GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectrePassIn, spectreAt, spectreDiedBetween } from './galleryStage';
+import { createGalleryStage, GALLERY, ID, LINEUP_KEYS, SPECTRE_LIFE, STATES, circleOf, diedBetween, galleryEnts, galleryFrame, galleryInit, lineupCircles, lineupKind, modelsOf, parseGallery, spectrePassIn, spectreAt, spectreDiedBetween } from './galleryStage';
 import { Effects3d, clearFxRegistry } from './fx/effects3d';
 import { registerFigureFx } from './fx/figureFx';
 import { clearVeils, registerStatus } from './fx/status';
@@ -18,10 +19,11 @@ import { buildTubeFigure } from './models/tubeModel';
 import { restPose } from './models/pose3d';
 import type { DrawnFig, FxOut } from './fx/types';
 import type { EntState } from '../game/world';
-import { TileMap } from '../sim/map';
+import { TILE, TileMap } from '../sim/map';
 import { FxTris } from './fx/tris';
 import { LINEUP_MAX, OBJECT_PLACES, SPECTRE_PITCH, SPECTRE_PLACES } from './galleryMap';
 import { buildJob } from './models/build';
+import { createKit, directRunner } from './models/kit';
 import { MODEL_OF_KIND, OBJECT_MODEL, floats, modelKeyOf, objectModelOf } from './models/table';
 import type { FrameRects } from './worldMesh';
 import type { Cam } from './camera';
@@ -41,6 +43,12 @@ for (const p of Object.values(PROJECTILES)) add(p.frame, 8, 16);
 for (const f of ['skull', 'barrel_explosive', 'chest_empty_open_anim_f2', 'torch_out']) add(f, 16, 16);
 for (let i = 0; i < 3; i++) for (const p of ['chest_full_open_anim_f', 'chest_mimic_open_anim_f']) add(`${p}${i}`, 16, 16);
 for (let i = 0; i < 5; i++) add(`torch_f${i}`, 16, 16);
+// The stage's kit builds on the calling thread (no worker); jsdom has no canvas.
+vi.mock('./stageKit', async (orig) => ({
+  ...(await orig<typeof import('./stageKit')>()),
+  createStageKit: () => createKit(() => ({ w: 16, h: 16, data: new Uint8ClampedArray(16 * 16 * 4).fill(255) }), directRunner),
+}));
+vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => null);
 const bounds = (f: string): FrameBounds => {
   const r = frames[f] ?? { w: 16, h: 16 };
   return { l: 0, r: r.w - 1, t: 0, w: r.w, h: r.h };
@@ -105,6 +113,16 @@ describe('the gallery stage', () => {
     expect(ents.filter((e) => e.kind === KIND.Mimic && e.flags & FLAG.HIDING).length).toBeGreaterThan(0);
     expect(ents.filter((e) => e.kind === KIND.Mimic && !(e.flags & FLAG.HIDING)).length).toBeGreaterThan(0);
     expect(ents.filter((e) => e.kind === KIND.Torch && e.id < ID.model).map((e) => e.anim).sort()).toEqual([0, 1]);
+    // every torch, out ones too, has a field light on its tile (it places the torch model), in both light modes (#391)
+    for (const light of ['work', 'torch']) {
+      const stage = createGalleryStage({ image: {} as HTMLImageElement, frames }, { pitch: 45, yaw: 0 }, `?r3d=gallery&light=${light}`);
+      const lights = stage.world.taken!.lights;
+      for (const e of ents.filter((t) => t.kind === KIND.Torch)) {
+        const tx = Math.floor(e.x / TILE), tz = Math.floor(e.y / TILE);
+        expect(lights.some((l) => l.kind === LIGHT_KIND.Torch && l.x === tx && l.y === tz && l.wall === e.extra + 1 && (l as { on?: boolean }).on === (e.anim === 1)), `${light} ${e.id}`).toBe(true);
+      }
+      stage.dispose();
+    }
     const shots = ents.filter((e) => inRange(e.id, ID.shot, 100)).map((e) => e.kind).sort((a, b) => a - b);
     expect(shots).toEqual(Object.keys(PROJECTILES).map(Number).sort((a, b) => a - b));
   });

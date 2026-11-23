@@ -160,8 +160,8 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       if (!c.view) return 0;
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 });
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, oval: 1 });
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       const dv = dvOf(c.params);
@@ -208,7 +208,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion, lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters, sight, cracks, shafts: c.params.shafts,
+          casters, sight, cracks, shafts: c.params.shafts, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
         },
         c.timer,
       );

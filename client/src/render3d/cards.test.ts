@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ART, project, snapGround, viewRay, type Cam } from './camera';
-import { buildDynamic, casterOf, LIE_Y, newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, quadsOf, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
-import { newScene } from './scene';
+import { buildDynamic, casterOf, LIE_Y, newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, quadsOf, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { newScene, orbAt } from './scene';
 import type { FrameRects } from './worldMesh';
 
 const frames: FrameRects = {};
 for (const b of ['knight_m', 'wizzard_m', 'elf_f', 'orc_warrior', 'skelet', 'big_demon'])
   for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`${b}_${a}_anim_f${i}`] = { x: 100, y: 200, w: 16, h: 28 };
 frames.crate = { x: 10, y: 20, w: 16, h: 16 };
-for (let i = 0; i < 5; i++) frames[`torch_f${i}`] = { x: 300 + i * 16, y: 0, w: 16, h: 16 };
 
 const cam = (yaw: number): Cam => ({ x: 10, z: 6, pitch: Math.PI / 4, yaw });
 
@@ -64,18 +63,15 @@ describe('cards', () => {
     expect(Math.max(...[...Array(6).keys()].map((i) => right.cards.uv[i * 2 + 1]))).toBe(228);
   });
 
-  it('counts 6 glows, 8 with the orb', () => {
+  it('counts no glows, 2 with the orb', () => {
     const s = newScene();
-    expect(buildDynamic(s, frames, cam(0), 1, false).glows.count).toBe(6);
-    expect(buildDynamic(s, frames, cam(0), 1, true).glows.count).toBe(8);
+    expect(buildDynamic(s, frames, cam(0), 1, false).glows.count).toBe(0);
+    expect(buildDynamic(s, frames, cam(0), 1, true).glows.count).toBe(2);
   });
 
-  it('keeps torch quads in place whatever the yaw', () => {
-    const s = newScene();
-    const a = buildDynamic(s, frames, cam(0), 0.3, false);
-    const b = buildDynamic(s, frames, cam(Math.PI / 2), 0.3, false);
-    expect(a.emissive.count).toBe(s.torches.length);
-    expect(Array.from(b.emissive.position)).toEqual(Array.from(a.emissive.position));
+  it('builds no torch quad and no torch glow: the torches are the world\'s models', () => {
+    const d = buildDynamic(newScene(), frames, cam(0), 0.3, false);
+    expect(d.glows.count).toBe(0);
   });
 
   it('spans each glow by the camera right and up axes, a square of side 2 size on screen, in front of its wall and floor', () => {
@@ -83,15 +79,15 @@ describe('cards', () => {
     for (const deg of [30, 45, 60, 80]) for (const yd of [0, 45]) {
       const pitch = (deg * Math.PI) / 180, yaw = (yd * Math.PI) / 180;
       const cm: Cam = { x: 10, z: 6, pitch, yaw };
-      const d = buildDynamic(s, frames, cm, 0, false);
-      const size = 1.5; // the first glow is a torch glow
-      const t0 = s.torches[0];
+      const d = buildDynamic(s, frames, cm, 0, true);
+      const size = 0.9; // the first glow is the orb's wide one
+      const o = orbAt(0);
       const pts = corners(d.glows.position, 0);
       expect(pts.length).toBe(4);
       const sc = pts.map((p) => project(cm, p[0], p[1], p[2]));
       const sx = sc.map((p) => p.sx), sy = sc.map((p) => p.sy);
       // a square of side 2 size, centred on where the glow's own position projects
-      const home = project(cm, t0.x, t0.y + 0.25, t0.z - 0.14);
+      const home = project(cm, o.x, o.y, o.z);
       expect(Math.max(...sx) - Math.min(...sx)).toBeCloseTo(2 * size, 5);
       expect(Math.max(...sy) - Math.min(...sy)).toBeCloseTo(2 * size, 5);
       expect((Math.max(...sx) + Math.min(...sx)) / 2).toBeCloseTo(home.sx, 5);
@@ -429,20 +425,15 @@ describe('the foot of a quad (#305)', () => {
     pushCard(b, c0({ x: 5.123, z: 7.456, bias: 0.5 }), frames, cam(0.3));
     expect(b.foot.slice(0, 4)).toEqual([5.123, 7.456, 0, 0]);
   });
-  it('flat and lying cards and wall cards carry a foot too', () => {
+  it('flat and lying cards carry a foot too', () => {
     const b = newCardBuf();
     pushFlat(b, c0(), frames, cam(0));
     pushLying(b, { ...c0(), headRight: true }, frames, cam(0));
-    pushWall(b, 'crate', 3, 1, 4, 0, 1, false, frames);
-    expect(b.foot).toHaveLength(72);
+    expect(b.foot).toHaveLength(48);
     expect(b.foot.slice(0, 4)).toEqual([5, 7, 0, 0]);
     expect(b.foot.slice(24, 28)).toEqual([5, 7, 0, 0]);
-    expect(b.foot.slice(48, 52)).toEqual([3, 4.25, 0, 0]);
   });
-  it('a wall card reads its sight in front of the face, with the flag "lit by the room\'s light"', () => {
-    const b = newCardBuf();
-    pushWall(b, 'crate', 3, 1, 4, 1, 0, false, frames, true);
-    expect(b.foot.slice(0, 4)).toEqual([3.25, 4, 0, 1]);
+  it('a glow reads its sight at the point it is given', () => {
     const g = newGlowBuf();
     pushGlow(g, 1, 2, 3, 0.5, [1, 1, 1], cam(0), [1.5, 3]);
     expect(g.foot.slice(0, 2)).toEqual([1.5, 3]);
@@ -475,10 +466,9 @@ describe('the foot of a quad (#305)', () => {
     pushGlow(g, 1, 2, 3, 0.5, [0.1, 0.2, 0.3], cam(0));
     expect(Array.from(glowsOf(g).foot)).toEqual(g.foot);
   });
-  it('the demo gives its flames and glows a foot', () => {
-    const d = buildDynamic(newScene(), frames, cam(0), 0, false);
+  it('the demo gives its glows a foot', () => {
+    const d = buildDynamic(newScene(), frames, cam(0), 0, true);
     expect(d.cards.foot).toHaveLength(d.cards.count * 24);
-    expect(d.emissive.foot).toHaveLength(d.emissive.count * 24);
     expect(d.glows.foot).toHaveLength(d.glows.count * 12);
   });
 });

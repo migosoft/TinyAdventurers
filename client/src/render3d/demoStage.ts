@@ -1,5 +1,6 @@
 // The stage of the ?r3d=demo page (#301): a small walled room with a few figures and the player to walk around.
 
+import { LIGHT, LIGHT_KIND } from '../generated/defs';
 import { closeCam, keysToWorld } from './camera';
 import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
@@ -15,9 +16,11 @@ import { makeStoneRun } from './stone/stoneRun';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
   const map = parseMap(MAP_ROWS);
-  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map), taken: { lights: [], spawn: { x: map.w / 2, z: map.h / 2 } } };
-  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const scene = newScene();
+  // The demo's own torch lights are `sceneLights`; the field's are what places the torch models on the walls (#391).
+  const torchLights = scene.torches.map((tc, i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x: Math.floor(tc.x), y: Math.floor(tc.z), on: true, wall: 1 }));
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map), taken: { lights: torchLights, spawn: { x: map.w / 2, z: map.h / 2 } } };
+  const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const cam = { x: scene.player.x, z: scene.player.z, pitch: (initialParams.pitch * Math.PI) / 180, yaw: (initialParams.yaw * Math.PI) / 180 };
 
   // The dev scene's cover: moss in every room (`everywhere`), built whole at the first build and kept for the rebuilds.

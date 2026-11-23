@@ -55,7 +55,7 @@ import { GroundTooLargeError, limitOr } from './groundError';
 import { AIR_ORDER, airMaterials } from './air/airNodes';
 import { airQuads, hazeQuads, newAirBuffers } from './air/airQuads';
 import type { AirParts } from './air/airParts';
-import { cardMaterial, emissiveMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
@@ -661,12 +661,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   rebuildField();
 
-  // Cards share one vertex layout in four materials: opaque upright, translucent upright (sorted back to front by the caller), translucent flat (floor decals), and emissive (torch flames).
+  // Cards share one vertex layout in three materials: opaque upright, translucent upright (sorted back to front by the caller) and translucent flat (floor decals).
   const card = cardMaterial(atlas, aw, ah, lighting, toward, sight);
   const ghost = cardMaterial(atlas, aw, ah, lighting, toward, sight, { translucent: true });
   // Translucent too: a sleeping incorporeal figure and the skulls (0.85) have an alpha. No depth write, drawn after the shadows.
   const decal = cardMaterial(atlas, aw, ah, lighting, toward, sight, { flat: true, translucent: true });
-  const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward, sight);
   const glow = glowMaterial(sight);
   const shadow = shadowMaterial(sight);
   const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2], ['sight', 3], ['cardFoot', 2]];
@@ -732,7 +731,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
-  const flames = new DynMesh([['position', 3], ['uv', 2], ['sight', 3]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3], ['sight', 2]], glow);
   // The effects (#308): flat-coloured triangles, blended (`fxMat`) and lit (`fxLitMat`), each with its own growing upload arrays.
   const fxMat = fxMaterial(sight);
@@ -779,10 +777,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   let frameMask: SightMask | null = null;
   /** The caster slot of every entity id in this frame's list (set each frame before the cards go up). */
   const slotOf = new Map<number, number>();
-  /** Scratch for the shadows' and glows' (hard, soft) pairs (each set copies out of it at once) and for the flames' triples. */
+  /** Scratch for the shadows' and glows' (hard, soft) pairs (each set copies out of it at once). */
   const pairScratch = (count: number): Float32Array => (pairBuf.length < count * 12 ? (pairBuf = new Float32Array(count * 12)) : pairBuf);
-  let flameBuf = new Float32Array(0);
-  const cardScratch = (count: number): Float32Array => (flameBuf.length < count * 18 ? (flameBuf = new Float32Array(count * 18)) : flameBuf);
   const cardData = (q: Quads): Record<string, Float32Array> => {
     const n = q.count * 6;
     if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); shadeBuf = new Float32Array(n * 2); }
@@ -827,7 +823,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   }
 
   for (const d of [shadows, decals, ghosts, glows, smokeDyn, fxDyn, fxLitDyn]) skipInAirPrepass(d.mesh);
-  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh, smokeDyn.mesh, fxDyn.mesh, fxLitDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
+  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, glows.mesh, smokeDyn.mesh, fxDyn.mesh, fxLitDyn.mesh, airBlend.mesh, airAdd.mesh, hazeDyn.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
   camera.layers.enable(AIR_SKIP_LAYER);
@@ -1113,7 +1109,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       ghosts.set(cardData(d.ghosts), d.ghosts.count * 6);
       decals.set(cardData(d.decals), d.decals.count * 6);
       shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
-      flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
       fxUpload(fxDyn, f.fx?.tris, frameMask);   // the effects (#308): blended, then lit
       fxUpload(fxLitDyn, f.fx?.lit, frameMask);
@@ -1339,8 +1334,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         material.dispose();
         dm.material.dispose();
         sight.dispose();
-        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow, smokeMat, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
-        for (const dm of [cards, ghosts, decals, shadows, flames, glows, smokeDyn, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
+        for (const m of [card.material, ghost.material, decal.material, glow, shadow, smokeMat, fxMat, fxLitMat, air.add, air.blend, air.haze]) m.dispose();
+        for (const dm of [cards, ghosts, decals, shadows, glows, smokeDyn, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) dm.dispose();
         target?.dispose();
         if (shafts) {
           freeShaftTargets(shafts);

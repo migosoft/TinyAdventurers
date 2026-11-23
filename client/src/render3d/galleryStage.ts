@@ -447,15 +447,13 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   const at = opts.at ?? GALLERY.focus[opts.focus];
   const cam = { x: at.x, z: at.z, pitch: (initial.pitch * Math.PI) / 180, yaw: (initial.yaw * Math.PI) / 180 };
   let t = opts.start;
-  // `light=torch`: the torches (the lit one on the objects' wall and the pillars') light the gallery through the game's lights and casters.
+  // Every torch has its light, which places its model (#391); `light=torch`: the lit ones (on the objects' wall and the pillars') light the gallery through the game's lights and casters.
   const field = new LightField(map);
-  if (opts.light === 'torch') {
-    let id = 1;
-    for (const e of galleryEnts(0, null)) {
-      if (e.kind !== KIND.Torch || e.anim !== 1) continue;
-      const tc = torchOf(e);
-      field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.tz, on: true, wall: e.extra + 1 });
-    }
+  let lightId = 1;
+  for (const e of galleryEnts(0, null)) {
+    if (e.kind !== KIND.Torch) continue;
+    const tc = torchOf(e);
+    field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.tz, on: e.anim === 1, wall: e.extra + 1 });
   }
 
   // A caption with the state on show.
@@ -511,10 +509,10 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds);
       const torch = opts.light === 'torch';
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !torch, oval: 1, models: { kit, is } });
+      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is } });
       spectrePassIn(fo.figs, ents, specFigs, specEnts);
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: specFigs, ents: specEnts, shots: [], hiddenShots: NO_IDS, snap: undefined, hidden: NO_IDS, you: -1, ownCast: null, smokeTone: opts.smokeTone }, fo.glows);
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let casters: ReturnType<typeof selectCasters> = [];
@@ -551,6 +549,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, built: fo.built, kit },
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
           fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },
+          wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
         },
         c.timer,
       );

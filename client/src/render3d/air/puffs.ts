@@ -4,14 +4,11 @@ import { LIGHT_KIND } from '../../generated/defs';
 import { LAVA_LEVEL } from '../dips/shape';
 import { BurstOnce, LAVA_EMBER_EVERY, LAVA_SMOKE_EVERY, MAX_EMBERS, MAX_SMOKE, spawnCount } from '../../game/moodmath';
 import { SHOT_LIFT } from '../camera';
-import { TORCH_MID } from '../figures';
 import { EMBER_COLOURS, EMBER_WIND, PX, SMOKE_WIND, airAt, clamp, hidden, inView, rnd, type AirCtx } from './airCtx';
 import type { AirParts } from './airParts';
 import type { AirShot } from '../../game/airTypes';
+import { flameTip } from '../torch/torch';
 
-/** Where torch smoke starts: this far in front of the wall (tiles), at TORCH_MID + this (first guess: the flame's top). */
-export const SMOKE_STAND = 0.15;
-export const SMOKE_LIFT = 0.3;
 /** Lava smoke and sparks rise from the pool's surface, this high (tiles; first guess). */
 export const LAVA_Y = LAVA_LEVEL + 0.02;
 /** An ember is this wide at birth and at the end of its life (tiles): 1 art px going to 0.6. */
@@ -200,8 +197,9 @@ export class Puffs {
       if (tr.tx < 0 || tr.tz < 0 || tr.tx >= c.map.w || tr.tz >= c.map.h) continue;
       if (hidden(c, tr.tx + 0.5, tr.tz + 0.5)) continue;
       const soot = c.rng() < g.soot;
+      const [fx, fy, fz] = flameTip(tr);
       this.puff(
-        tr.x + tr.nx * SMOKE_STAND + (c.rng() - 0.5) * 2 * PX, TORCH_MID + SMOKE_LIFT + c.rng() * SMOKE_JITTER_Y, tr.z + tr.nz * SMOKE_STAND,
+        fx + (c.rng() - 0.5) * 2 * PX, fy + c.rng() * SMOKE_JITTER_Y, fz,
         (c.rng() - 0.5) * 3 * PX, rnd(c, 8, 15) * PX, (c.rng() - 0.5) * 3 * PX,
         rnd(c, 2.4, 4), soot ? rnd(c, 0.8, 1.2) : rnd(c, 0.6, 1), soot ? 0.34 : 0.26, rnd(c, 3, 6) * PX, soot ? SOOT : SMOKE_GREY, 0.3, tr.tx, tr.tz, tr.nx, tr.nz,
       );

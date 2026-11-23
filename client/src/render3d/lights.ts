@@ -9,9 +9,9 @@ import { cloudAt, lookFor, sunLook, type SunLook } from '../game/sunmath';
 import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import { groundAt, type Cam } from './camera';
-import { TORCH_MID } from './figures';
 import { WALL_H, wallOf } from './heights';
 import type { Light } from './light';
+import { flameMid } from './torch/torch';
 import { CRYSTAL_RATE, CRYSTAL_STAND, CRYSTAL_Y } from './stone/crystals';
 
 /** The swing of a crystal light's slow pulse (a torch's flicker swings by up to 0.16; first guess). */
@@ -30,8 +30,6 @@ export const FLASH_Y = 1;
 export const CARRY_PX = 2;
 /** The slots of the shader's caster list (first guess). */
 export const CASTER_CAP = 16;
-/** Where a torch's light sits in front of its wall, in tiles. */
-const TORCH_STAND = 0.1;
 /** Height of other static lights and of an uncarried moving light, in tiles. */
 const STATIC_Y = 1;
 const MOVING_Y = 0.5;
@@ -80,10 +78,9 @@ export function staticCands(field: LightField, t: number, sun: SunLook = sunLook
     let z = l.y + 0.5;
     let ph = l.id * 1.7;
     if (l.kind === LIGHT_KIND.Torch) {
-      const w = wallOf(l);
-      x = w.x + w.nx * TORCH_STAND + 0.03 * Math.sin(13 * t + ph);
-      z = w.z + w.nz * TORCH_STAND;
-      y = TORCH_MID + 0.03 * Math.sin(17 * t + ph);
+      [x, y, z] = flameMid(wallOf(l));
+      x += 0.03 * Math.sin(13 * t + ph);
+      y += 0.03 * Math.sin(17 * t + ph);
     } else if (l.kind === LIGHT_KIND.Crystal) {
       // at its cluster (stone/place.ts stands the big shard at the same wall), low at the wall's foot
       const w = wallOf(l);

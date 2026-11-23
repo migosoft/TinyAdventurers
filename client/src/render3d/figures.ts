@@ -8,7 +8,7 @@ import { smooth } from './fx/shapes';
 import type { SpectreSpec } from './models/tubeDesc';
 import { has } from '../game/effectBits';
 import { ACCEL_TINT } from '../game/fxLooks';
-import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
+import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isWindup, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { MELEE_T, figurePose, newPoseMemory, type FrameBounds, type Pose, type PoseMemory, type Tint, type ViewState } from '../game/anim/pose';
 import { FigureStates } from '../game/anim/figureState';
@@ -17,8 +17,8 @@ import type { TileMap } from '../sim/map';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, viewRay, type Cam } from './camera';
-import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WALL_SIGHT_PUSH, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
-import { AMBIENT, darkAlpha, torchFlicker } from './light';
+import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { AMBIENT, darkAlpha } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
 import { drownY, LAVA_SINK, sinkCell, standY, stepLavaSink } from './dips/descent';
@@ -70,12 +70,6 @@ export const SPECTRE_SINK = 3;
 const FLARE_RATE = 1.6;
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
-/** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
-const TORCH_FRAMES = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4'];
-const TORCH_OFF = 0.02;
-/** The flame card's centre height (tiles) and its glow's lift above that, size and colour (the demo's torch). */
-export const TORCH_MID = 1.0;
-const TORCH_GLOW = { lift: 0.25, size: 1.5, rgb: [0.5, 0.3, 0.14] as [number, number, number] };
 /** The chest, barrel and mimic shadow: an ellipse 13 x 5 px, strength 0.4. */
 const OBJ_SHADOW_RX = 6.5;
 const OBJ_SHADOW_RY = 2.5;
@@ -95,10 +89,10 @@ export function screenAim(yaw: number, aim: number): number {
 
 /**
  * How a frame is lit, as the caller draws it: the `ambient` it uses, what a dark figure does (`fade` into the dark, or `shape`: keep its
- * shape, lit by the ambient only) and whether a lit torch gets a glow quad (`light=work`; with the game's lights the flame card is all).
+ * shape, lit by the ambient only)
  */
 export interface FigureLook {
-  ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean;
+  ambient: [number, number, number]; dark: 'fade' | 'shape';
   /** Multiplies the alpha of every ground oval (figures, chests, barrels, mimics): 1 in the dungeon, `0.5 + 0.5 * night` on the woodland. */
   oval: number;
   /** The ground cover's top (tiles) under a spot with a reach `r`: ovals, lying bodies and skulls are lifted onto it (#330). Absent: 0. */
@@ -110,7 +104,7 @@ export interface FigureLook {
    */
   models?: { kit: FigureKit; is(e: EntState): boolean };
 }
-const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true, oval: 1 };
+const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', oval: 1 };
 
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
 export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }
@@ -136,7 +130,7 @@ export interface FigureAnchor {
 }
 
 export interface FigureOut {
-  cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf; emissive: CardBuf;
+  cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf;
   openers: Opener[];
   /** The standing body card of every figure, chest, barrel and mimic as a shadow caster (id: the entity's); not lying, shots, flames or images. */
   casters: ShadowCaster[];
@@ -296,11 +290,10 @@ export class Figures3d {
   /** The clock of the last frame (`f.now`), which stamps the events; null before the first frame, so an early event starts on that frame (#319). */
   private now: number | null = null;
   private cam: Cam | null = null;
-  /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much, and whether a torch has a glow quad. */
+  /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much. */
   private dark: ReadonlySet<number> = new Set();
   private darkFade = false;
   private fadeAlpha = 1;
-  private torchGlow = true;
   private oval = 1;
   /** The height of what stands at a spot: the ground cover's top (#330) plus the bed of a dip. */
   private ground: (x: number, z: number, r: number) => number = (x, z) => this.bedAt(x, z);
@@ -377,12 +370,11 @@ export class Figures3d {
     this.dark = f.dark;
     this.darkFade = look.dark === 'fade';
     this.fadeAlpha = darkAlpha(look.ambient);
-    this.torchGlow = look.torchGlow;
     this.oval = look.oval;
     const cover = look.ground ?? (() => 0);
     this.ground = (x, z, r) => cover(x, z, r) + this.bedAt(x, z);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [], models: [], built: [], figs: [], cues: [], falls: [], sinks: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), openers: [], casters: [], floats: [], models: [], built: [], figs: [], cues: [], falls: [], sinks: [] };
     this.falls = out.falls;
     this.sinks = out.sinks;
     this.figUsed = 0;
@@ -394,7 +386,6 @@ export class Figures3d {
     for (const e of f.ents.values()) {
       seen.add(e.id);
       if (isFigureKind(e.kind)) { if (this.figure(e, f, cam, out)) drawn++; }
-      else if (e.kind === KIND.Torch) this.drawTorch(e, f.now, cam, out);
       else if (e.kind === KIND.Chest) this.drawChest(e, cam, out);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e, f, cam, out);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, f, cam, out);
@@ -454,24 +445,6 @@ export class Figures3d {
       }
       pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true, base: this.ground(x, z, 0.3) }, this.frames, cam);
     }
-  }
-
-  /** The torch's foot is the wall's edge: its face plane is the tile line it sits on, and its card hangs `TORCH_OFF` in front. */
-  private drawTorch(e: EntState, now: number, cam: Cam, out: FigureOut): void {
-    const x = e.x / TILE;
-    const z = e.y / TILE;
-    const lit = e.anim === 1;
-    const ph = e.id * 1.7;
-    // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
-    const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
-    // Only a burning torch is self-lit: one that is out takes the room's light like the wall it hangs on (#325).
-    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames, !lit);
-    const sightAt: [number, number] = [cx + nx * WALL_SIGHT_PUSH, cz + nz * WALL_SIGHT_PUSH];
-    if (lit && this.torchGlow) {
-      const k = torchFlicker(now, ph);
-      pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam, sightAt);
-    }
-    this.opener(e, false, x, z, TORCH_MID, 'object', out);
   }
 
   /**

@@ -196,7 +196,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
     const frame = galleryFrame(ents, t, dt);
     if (drain) frame.snap = snap({ drain, lights: [] }) as unknown as Snapshot;
     const t0 = performance.now();
-    const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, models: { kit, is: () => true } });
+    const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is: () => true } });
     const ms = performance.now() - t0;
     const wo = water.step({ dt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE });
     const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
@@ -240,7 +240,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
       const { fo, wo, fp, ambient, game } = advance(c, clock, dt);
       // the first 30 frames (shader and picture start-up) are not counted; the mean is seeded with the 31st sample, then exponential
       if (++samples > 30) meanMs = samples === 31 ? lastMs : meanMs + (lastMs - meanMs) * 0.02;
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: Cand[] = [];
       if (game) lights = selectLights([...staticCands(field, clock), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
@@ -262,6 +262,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
           lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF,
           models: { insts: fo.models, built: fo.built, kit }, water: { ripples: wo.ripples, now: clock, reflect: reflects(c.params) },
           fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke }, field: { age: fx.fieldAge(clock), t: clock },
+          wallLights: { off: (i) => field.lights.get(i)?.on === false, now: clock },
         },
         c.timer,
       );

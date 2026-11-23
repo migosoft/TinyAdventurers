@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KIND } from '../generated/defs';
+import { KIND, LIGHT_KIND } from '../generated/defs';
 import { TILE } from '../sim/map';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
@@ -56,6 +56,13 @@ function make(search: string): { stage: Stage; buttons: PageButton[]; step: (n: 
 const built = (f: FrameInput): number => f.models?.built?.length ?? 0;
 
 describe('the ?r3d=lich stage', () => {
+  it('gives each of its four lit torches a field light on a wall (#391)', () => {
+    const { stage } = make('?r3d=lich');
+    const torches = stage.world.taken!.lights.filter((l) => l.kind === LIGHT_KIND.Torch);
+    expect(torches).toHaveLength(4);
+    for (const l of torches) { expect(l.wall).toBeGreaterThan(0); expect((l as { on?: boolean }).on).toBe(true); }
+  });
+
   it('is a dev page of its own', () => {
     expect(r3dPage('?r3d=lich')).toBe('lich');
     expect(isR3dDemo('?r3d=lich')).toBe(true);

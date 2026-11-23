@@ -107,7 +107,7 @@ export class RunView3d implements RunView {
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
   /** The frame's quads, grow-only and refilled in place (no new arrays per frame). */
-  private readonly dynQ: Dynamic = { cards: emptyQuads(), ghosts: emptyQuads(), decals: emptyQuads(), shadows: emptyShadows(), emissive: emptyQuads(), glows: emptyGlows() };
+  private readonly dynQ: Dynamic = { cards: emptyQuads(), ghosts: emptyQuads(), decals: emptyQuads(), shadows: emptyShadows(), glows: emptyGlows() };
   // The effects (#308): owned by the run (a lost device keeps them), drawn into these lists every frame, then flushed to the view's two buffers.
   private readonly fx: Effects3d;
   private readonly fxPass: FxPass;
@@ -404,7 +404,7 @@ export class RunView3d implements RunView {
     // What lies flat sits on the cover's top while the cover is drawn.
     this.groundGh = c.params.gh;
     const ground = this.coverField && c.params.cover ? this.groundOf : undefined;
-    const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval, ground });
+    const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, oval, ground });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
     if (skyNow && this.critters && this.fireflies) {
@@ -441,7 +441,7 @@ export class RunView3d implements RunView {
     // The effects (#308): their glows join the figures' before the glow quads are copied, their lights the candidates below.
     this.fxFrame(f, c, cam, fo, fp, wo.cues, lo.cues);
     const dq = this.dynQ;
-    const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: fillQuads(dq.decals, fo.decals), shadows: fillShadows(dq.shadows, fo.shadows), emissive: fillQuads(dq.emissive, fo.emissive), glows: fillGlows(dq.glows, fo.glows) };
+    const dynamic: Dynamic = { cards: cardsQ, ghosts: ghostsQ, decals: fillQuads(dq.decals, fo.decals), shadows: fillShadows(dq.shadows, fo.shadows), glows: fillGlows(dq.glows, fo.glows) };
     c.timer.lap('cards');
     // The trees: a few grown per frame, nearest to the camera first.
     this.forest?.step(cam, TREE_BUDGET_MS);

@@ -6,9 +6,9 @@ import { LightField } from '../game/light';
 import { sunLook } from '../game/sunmath';
 import { TileMap } from '../sim/map';
 import { project, type Cam } from './camera';
-import { WALL_H } from './heights';
+import { WALL_H, wallOf } from './heights';
+import { flameMid } from './torch/torch';
 import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, type Cand } from './lights';
-import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
   const w = rows[0].length;
@@ -57,9 +57,11 @@ describe('staticCands', () => {
     field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true, wall: 0 });
     field.add({ id: 3, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 8, y: 8, on: true, wall: 0 });
     const [torch, day, fire] = staticCands(field, 0);
-    expect(torch.x).toBeCloseTo(3.5, 1);
-    expect(torch.z).toBeCloseTo(5.1, 1);
-    expect(torch.y).toBeCloseTo(TORCH_MID, 1);
+    // the real flame, plus the two small wobbles (0.03 each)
+    const [fx, fy, fz] = flameMid(wallOf({ x: 3, y: 5, wall: 1 }));
+    expect(torch.x).toBeCloseTo(fx, 1);
+    expect(torch.z).toBeCloseTo(fz, 6);
+    expect(torch.y).toBeCloseTo(fy, 1);
     expect(torch.shadow).toBe(true);
     expect(torch.radius).toBe(LIGHT[0].radius);
     expect(torch.skip).toBe(-1);
@@ -80,7 +82,7 @@ describe('staticCands', () => {
     expect(crystal.x).toBeCloseTo(3.5, 6);
     expect(crystal.z).toBeGreaterThan(5);
     expect(crystal.z - 5).toBeLessThan(0.5);
-    expect(crystal.y).toBeLessThan(TORCH_MID);
+    expect(crystal.y).toBeLessThan(flameMid({ x: 0, z: 0, nx: 0, nz: 1 })[1]);
     expect(crystal.y).toBeGreaterThan(0);
     // the place does not move with the clock (a torch's flame does)
     expect([at(0.37)[0].x, at(0.37)[0].y, at(0.37)[0].z]).toEqual([crystal.x, crystal.y, crystal.z]);

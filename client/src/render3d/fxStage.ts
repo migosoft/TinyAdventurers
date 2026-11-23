@@ -496,10 +496,10 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const frame = galleryFrame(ents, t, dt);
       if (extras.drain || extras.lights) frame.snap = snap({ drain: extras.drain ?? null, lights: extras.lights ?? [] }) as unknown as Snapshot;
-      const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1, models: { kit, is: (e) => e.kind !== KIND.Torch } });
+      const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is: (e) => e.kind !== KIND.Torch } });
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues, falls: fo.falls, fp: footprint(cam, c.plan.halfW, c.plan.halfH) }, fo.glows);
 
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: Cand[] = [];
       if (game) {
@@ -517,6 +517,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, built: fo.built, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
+          wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
         },
         c.timer,
       );

@@ -184,8 +184,8 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       if (!c.view) return 0; // the air pauses while the view is rebuilt after a device loss
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !game, oval: 1 });
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, oval: 1 });
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       mask.update(hardView, null, 0);
@@ -237,7 +237,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0,
           darkvision: null,
-          casters, sight, cracks: [], shafts: c.params.shafts, air: frameAir,
+          casters, sight, cracks: [], shafts: c.params.shafts, air: frameAir, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
           lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
         },

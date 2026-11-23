@@ -187,7 +187,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
       const ground = field && params.cover ? (x: number, z: number, rad: number): number => field!.topAt(x, z, rad, params.gh) : undefined;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1, ground, ...(kit ? { models: { kit, is: () => true } } : {}) });
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, oval: game ? ovalOf(s) : 1, ground, ...(kit ? { models: { kit, is: () => true } } : {}) });
       // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const seenMask = params.sight ? mask : null;
@@ -195,7 +195,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       fireflies.step(c.dt, cam);
       fireflies.push(fo.glows, cam, s.night, seenMask);
       pixie.push(seconds, cam, fo.glows, fo.ghosts, assets.frames, seenMask);
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       // The trees: a few grown per frame, nearest to the knight first.

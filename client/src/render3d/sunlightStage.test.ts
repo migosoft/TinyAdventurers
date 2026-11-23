@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { KIND } from '../generated/defs';
+import { KIND, LIGHT_KIND } from '../generated/defs';
+import { TILE } from '../sim/map';
 import { SECOND, SUN, SUNLIGHT_H, SUNLIGHT_W, sunlightMap } from '../game/sunlightDemoScript';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
@@ -62,6 +63,15 @@ describe('the ?r3d=sunlight stage', () => {
     expect(e.filter((x) => x.kind === KIND.Knight)).toHaveLength(2);
     const t = e.filter((x) => x.kind === KIND.Torch);
     expect(t.map((x) => x.anim)).toEqual([0, 1]);
+  });
+
+  it('gives every torch entity a field light on its tile, on its wall, lit as it is (#391)', () => {
+    const { stage } = make('?r3d=sunlight');
+    for (const e of sunlightEnts().filter((x) => x.kind === KIND.Torch)) {
+      const l = stage.world.taken!.lights.find((x) => x.kind === LIGHT_KIND.Torch && x.x === Math.floor(e.x / TILE) && x.y === Math.floor(e.y / TILE));
+      expect(l?.wall).toBe(e.extra + 1);
+      expect((l as { on?: boolean } | undefined)?.on).toBe(e.anim === 1);
+    }
   });
 
   it('has one crack, two after 2 (the second at SECOND), one again after 2', () => {

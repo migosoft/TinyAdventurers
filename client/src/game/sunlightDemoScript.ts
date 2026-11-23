@@ -39,8 +39,8 @@ export const SUNLIGHT_PROPS: readonly { frame: string; x: number; y: number; fli
   { frame: 'skull', x: 2.5, y: 13.6, flip: false },
 ];
 
-/** The torches: the sunlit room's is out, the alcove's is lit. `light` is the light's tile when it has one. */
-export const SUNLIGHT_TORCHES: readonly { x: number; y: number; side: number; lit: boolean; light?: { id: number; x: number; y: number } }[] = [
-  { x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1, lit: false },
+/** The torches: the sunlit room's is out, the alcove's is lit. `light` is the torch's light and its tile (an out torch's light is off). */
+export const SUNLIGHT_TORCHES: readonly { x: number; y: number; side: number; lit: boolean; light: { id: number; x: number; y: number } }[] = [
+  { x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1, lit: false, light: { id: 4, x: 1, y: 9 } },
   { x: 14 * TILE - 0.5, y: 8.5 * TILE, side: 2, lit: true, light: { id: 2, x: 13, y: 8 } },
 ];

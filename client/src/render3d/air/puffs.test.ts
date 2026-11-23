@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../../generated/defs';
 import { MAX_EMBERS, MAX_SMOKE } from '../../game/moodmath';
 import { TERRAIN } from '../../game/terrain-layers';
-import { TORCH_MID } from '../figures';
+import { flameTip } from '../torch/torch';
 import { Air3d, type AirInput } from './air';
 import type { AirParts } from './airParts';
 import { floorMap, frame, maskAt, seeded } from './air.testutil';
@@ -17,17 +17,18 @@ function run(air: Air3d, secs: number, make: (t: number) => AirInput, t0 = 0): A
 }
 
 describe('smoke', () => {
-  it('rises from a lit torch, from the flame top', () => {
+  it('rises from a lit torch, from the flame tip', () => {
     const air = new Air3d(floorMap(), seeded(1));
     const parts = run(air, 4, (t) => frame({ t, torches: [torch(10, 10)] }));
     expect(parts.puffs.count).toBeGreaterThan(0);
+    const tipY = flameTip(torch(10, 10))[1];
     let top = 0;
     for (let i = 0; i < parts.puffs.count; i++) {
       const y = parts.puffs.pos[i * 3 + 1];
-      expect(y).toBeGreaterThanOrEqual(TORCH_MID + 0.3 - 0.1);
+      expect(y).toBeGreaterThanOrEqual(tipY - 0.1);
       top = Math.max(top, y);
     }
-    expect(top).toBeGreaterThan(TORCH_MID + 1);
+    expect(top).toBeGreaterThan(tipY + 1);
     // A puff is its own sight probe: the torch's floor tile.
     expect(parts.puffs.sight[0]).toBeCloseTo(10.5, 6);
     expect(parts.puffs.sight[1]).toBeCloseTo(10.5, 6);
@@ -36,18 +37,19 @@ describe('smoke', () => {
   it('keeps a gust per torch: two torches on one floor tile both smoke', () => {
     const north: Torch = { x: 10.5, z: 10, nx: 0, nz: 1, lit: true, tx: 10, tz: 10 };
     const west: Torch = { x: 10, z: 10.5, nx: 1, nz: 0, lit: true, tx: 10, tz: 10 };
+    const fa = flameTip(north), fb = flameTip(west), tipY = fa[1];
     const air = new Air3d(floorMap(), seeded(11));
     let a = 0, b = 0;
     for (let i = 0; i < 200; i++) {
       const p = air.step(frame({ t: i * 0.05, torches: [north, west] }));
       if (i < 20) continue;
-      // Young puffs sit at their flame: count those within a tile of each (they start 0.15 in front of their wall).
+      // Young puffs sit at their flame: count those within a tile of each.
       for (let k = 0; k < p.puffs.count; k++) {
         const y = p.puffs.pos[k * 3 + 1];
-        if (y > TORCH_MID + 0.6) continue;
+        if (y > tipY + 0.6) continue;
         const x = p.puffs.pos[k * 3], z = p.puffs.pos[k * 3 + 2];
-        if (Math.abs(x - 10.5) < 0.2 && Math.abs(z - 10.15) < 0.2) a++;
-        if (Math.abs(x - 10.15) < 0.2 && Math.abs(z - 10.5) < 0.2) b++;
+        if (Math.abs(x - fa[0]) < 0.2 && Math.abs(z - fa[2]) < 0.2) a++;
+        if (Math.abs(x - fb[0]) < 0.2 && Math.abs(z - fb[2]) < 0.2) b++;
       }
     }
     expect(a).toBeGreaterThan(0);
