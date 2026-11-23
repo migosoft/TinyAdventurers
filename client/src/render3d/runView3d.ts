@@ -619,7 +619,7 @@ export class RunView3d implements RunView {
       systems: R3D_SYSTEMS.map((s) => [s, c.timer.systems[s]] as const),
       objects,
       drawCalls: this.drawCalls,
-      canvas: { w: c.canvas.w, h: c.canvas.h, cssZoom: 1 },
+      canvas: { w: c.canvas.w, h: c.canvas.h },
       renderer: { backend: c.backend, w: c.plan.targetW, h: c.plan.targetH, quality: c.params.quality, zoom: c.zoom },
     };
   }

@@ -16,7 +16,7 @@ import { makeStoneRun } from './stone/stoneRun';
 import { QUALITIES, type Quality } from './quality';
 import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
-import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
+import { MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR } from './light';
 import { Overlay3d } from './overlay';
 import { RunView3d, moveInput } from './runView3d';
@@ -238,14 +238,14 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         case 'KeyZ':
         case 'KeyC':
         case 'KeyX':
-          if (isTextTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+C is a copy
+          if (e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+C is a copy
           if (!e.repeat) {
             if (e.code === 'KeyX') turn.north();
             else turn.step(e.code === 'KeyZ' ? 1 : -1);
           }
           return true;
         case 'KeyL':
-          if (isTextTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+L is the address bar
+          if (e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+L is the address bar
           run.log.key(e);
           return true;
         case 'KeyF':

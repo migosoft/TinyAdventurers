@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { read, specifiers, SRC } from '../testutil/importWalk';
 
 const listTs = (d: string) => readdirSync(join(SRC, d)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
@@ -42,5 +43,24 @@ describe('run and render3d imports', () => {
   it('main.ts has no static import of render3d', () => {
     const stat = [...read('main.ts').matchAll(/^\s*(?:import|export)\s[^;]*?from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);
     expect(stat.filter((s) => s.includes('render3d'))).toEqual([]);
+  });
+  it('the static import graph from main.ts never reaches three', () => {
+    // Static imports and re-exports only (the one `import()` is the render3d chunk); type imports are skipped by `specifiers`.
+    const staticSpecs = (f: string): string[] => [...read(f).matchAll(/^\s*(?:import|export)\s(?!type\b)[^;]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm)].map((m) => m[1] ?? m[2]);
+    const resolve = (from: string, s: string): string | null => {
+      const base = relative(SRC, join(SRC, dirname(from), s));
+      return [`${base}.ts`, `${base}/index.ts`].find((c) => existsSync(join(SRC, c))) ?? null;
+    };
+    const seen = new Set<string>(['main.ts']), todo = ['main.ts'], path = new Map<string, string>();
+    while (todo.length) {
+      const f = todo.pop()!;
+      for (const s of staticSpecs(f)) {
+        if (!s.startsWith('.')) { expect(s, `${path.get(f) ?? 'main.ts'} -> ${f} imports ${s}`).not.toMatch(/^three(\/|$)/); continue; }
+        const r = resolve(f, s);
+        if (r && !seen.has(r)) { seen.add(r); path.set(r, `${path.get(f) ?? 'main.ts'} -> ${f}`); todo.push(r); }
+      }
+    }
+    expect(seen.size).toBeGreaterThan(5);
+    expect([...seen].filter((f) => f.startsWith('render3d/'))).toEqual([]);
   });
 });

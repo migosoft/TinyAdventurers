@@ -102,15 +102,18 @@ describe('startHost', () => {
       el.appendChild(i);
       return i;
     };
-    for (const type of ['text', 'range']) {
-      key(make(type), 'Escape');
-      expect(stage.key).not.toHaveBeenCalled();
+    try {
+      for (const type of ['text', 'range']) {
+        key(make(type), 'Escape');
+        expect(stage.key).not.toHaveBeenCalled();
+      }
+      for (const [n, type] of ['radio', 'checkbox'].entries()) {
+        key(make(type), 'Escape');
+        expect(stage.key).toHaveBeenCalledTimes(n + 1);
+      }
+    } finally {
+      host!.stop();
     }
-    for (const [n, type] of ['radio', 'checkbox'].entries()) {
-      key(make(type), 'Escape');
-      expect(stage.key).toHaveBeenCalledTimes(n + 1);
-    }
-    host!.stop();
   });
 
   it('stop through the Host while the first view is pending leaves nothing behind', async () => {

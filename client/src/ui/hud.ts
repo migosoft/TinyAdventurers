@@ -32,7 +32,7 @@ export interface FrameStats {
   /** WebGL draw calls of the last frame. */
   drawCalls: number;
   /** The canvas's pixel size and its CSS upscale (1 in the 3D view). */
-  canvas: { w: number; h: number; cssZoom: number };
+  canvas: { w: number; h: number };
   /** Extra lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
   /** The 3D view's renderer (#314): printed after the canvas line. */
@@ -75,7 +75,7 @@ export function statsText(f: FrameStats): string {
     (f.lines ?? []).map((l) => `${l}\n`).join('') +
     `objects    ${f.objects}\n` +
     `draw calls ${f.drawCalls}\n` +
-    `canvas     ${f.canvas.w}x${f.canvas.h}${f.canvas.cssZoom === 1 ? '' : ` x${f.canvas.cssZoom} css`}\n` +
+    `canvas     ${f.canvas.w}x${f.canvas.h}\n` +
     (r ? `render     ${r.w}x${r.h} (${r.quality})\nzoom       ${r.zoom.toFixed(2)}\nbackend    ${r.backend}\n` : '') +
     `ping       ${f.rtt.toFixed(0)} ms\n` +
     `jitter     ${f.jitter.toFixed(1)} ms\n` +

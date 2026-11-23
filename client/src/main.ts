@@ -110,7 +110,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   const gameEl = document.getElementById('game')!;
   let debugAccount = false;
   let run3d: { stop(): void } | null = null; // the render3d `Run3d` (main.ts has no static render3d import)
-  let boot3d: Promise<typeof import('./render3d/boot')> | null = null; // the chunk, loaded at most once (a failed load is retried)
+  let boot3d: Promise<typeof import('./render3d/boot')> | null = null; // the chunk, loaded at most once (browsers cache a failed module fetch of the same URL, so a retry would fail again: the player reloads)
   let run3dStarts = 0; // a second RunStarted while the import is pending drops the stale start
 
   const backToLobby = () => {
@@ -139,12 +139,9 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         hub.setDebug(m.debug);
         debugAccount = m.debug;
         if (!boot3d) {
-          // so the chunk is usually there at RunStarted (a failed preload is retried then)
-          const p = import('./render3d/boot');
-          boot3d = p;
-          p.catch(() => {
-            if (boot3d === p) boot3d = null;
-          });
+          // so the chunk is usually there at RunStarted (a failed preload shows its error then)
+          boot3d = import('./render3d/boot');
+          boot3d.catch(() => {}); // the start below awaits it and reports the failure
         }
         break;
       case 'Lobby':
@@ -178,12 +175,11 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
           mod = await (boot3d ??= import('./render3d/boot'));
         } catch (e) {
           off();
-          boot3d = null;
           if (mine !== run3dStarts) break;
           console.error('The 3D view could not load:', e);
           net.send({ t: 'LeaveRun' }); // else the server keeps the hero in the run
           backToLobby();
-          lobby.error(`The 3D view could not load: ${String(e)}`);
+          lobby.error(`The 3D view could not load: ${String(e)}. Reload the page (F5).`);
           break;
         }
         off();

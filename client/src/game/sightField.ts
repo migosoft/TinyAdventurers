@@ -6,9 +6,9 @@ export const SHADE = 0.3;
 
 /** What unseen ground looks like. `blurPx` is in world pixels (the canvas is at screen resolution and the integer zoom lives on the camera). */
 export interface HazeLook {
-  /** Unseen strength beyond sight (0..1; read as `outside` by the sight mask). */
+  /** Unseen strength beyond sight (0..1; read as `outside` by the haze in `render3d/sightNodes.ts` and by `render3d/mist.ts`). */
   outside: number;
-  /** Unseen strength behind a soft blocker such as a trunk (read as `soft` by the sight mask). */
+  /** Unseen strength behind a soft blocker such as a trunk (read as `soft` by the haze in `render3d/sightNodes.ts` and by `render3d/mist.ts`). */
   soft: number;
   /** The wash colour, 0xRRGGBB. */
   colour: number;

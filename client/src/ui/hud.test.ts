@@ -359,7 +359,7 @@ describe('Hud.setAbilities', () => {
 });
 
 describe('statsText', () => {
-  const stats = { fps: 59.6, wholeMs: 12.345, renderMs: 9.5, frameMs: 2.1, systems: [['light', 0.42], ['woodland', 1]] as const, objects: 812, drawCalls: 37, canvas: { w: 2560, h: 1440, cssZoom: 1 }, rtt: 20, jitter: 1.25, interp: 80, snapBytes: 127, correction: 0, srvMs: 0.13, cd1: 0, cd2: 0, ents: 9, darkvision: 0.5, wolf: null };
+  const stats = { fps: 59.6, wholeMs: 12.345, renderMs: 9.5, frameMs: 2.1, systems: [['light', 0.42], ['woodland', 1]] as const, objects: 812, drawCalls: 37, canvas: { w: 2560, h: 1440 }, rtt: 20, jitter: 1.25, interp: 80, snapBytes: 127, correction: 0, srvMs: 0.13, cd1: 0, cd2: 0, ents: 9, darkvision: 0.5, wolf: null };
 
   it('lists the whole frame, render and update, the systems indented, then objects, draw calls, the canvas and the network', () => {
     const t = statsText(stats);
@@ -379,10 +379,6 @@ describe('statsText', () => {
 
   it('prints the view\'s extra lines after the systems', () => {
     expect(statsText({ ...stats, lines: ['lights     5 of 9 (cap 16)'] }).split('\n').slice(6, 8)).toEqual(['lights     5 of 9 (cap 16)', 'objects    812']);
-  });
-
-  it('shows the CSS upscale of a world-resolution canvas', () => {
-    expect(statsText({ ...stats, canvas: { w: 640, h: 360, cssZoom: 4 } }).split('\n')[8]).toBe('canvas     640x360 x4 css');
   });
 
   it('prints the 3D view\'s render size, zoom and backend after the canvas (#314)', () => {

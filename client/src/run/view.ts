@@ -95,7 +95,7 @@ export interface ViewStats {
   systems: readonly (readonly [name: string, ms: number])[];
   objects: number;
   drawCalls: number;
-  canvas: { w: number; h: number; cssZoom: number };
+  canvas: { w: number; h: number };
   /** Extra readout lines after the systems (the 3D view's lights and shadow cards). */
   lines?: readonly string[];
   /** The 3D view's backend, scene pass size, quality and zoom (#314). */
@@ -109,7 +109,7 @@ export const NO_STATS: ViewStats = {
   systems: [],
   objects: 0,
   drawCalls: 0,
-  canvas: { w: 0, h: 0, cssZoom: 1 },
+  canvas: { w: 0, h: 0 },
 };
 
 export type PictureEv = Extract<Ev, { t: 'Dmg' | 'Heal' | 'Boom' | 'Zap' | 'Died' | 'Sink' | 'Raise' | 'Immune' | 'Effect' | 'Coins' | 'Cast' }>;
