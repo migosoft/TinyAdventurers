@@ -50,7 +50,7 @@ export function lightRgb(kind: number, colour: number | null, k: number): [numbe
   return [((c >> 16) & 255) * m, ((c >> 8) & 255) * m, (c & 255) * m];
 }
 
-/** A torch entity's flame foot on its wall, the wall's normal (into the room) and the floor tile of its light. */
+/** The wall point a torch entity hangs at, the wall's normal (into the room) and the floor tile of its light. */
 export function torchOf(e: EntState): { x: number; z: number; nx: number; nz: number; tx: number; tz: number } {
   const x = e.x / TILE;
   const z = e.y / TILE;

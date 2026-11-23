@@ -1,6 +1,6 @@
 // The stage of the ?r3d=lights page (#304): the lights demo, no server, no login.
 // It plays the script of game/lightsDemoScript.ts: the board, seven torches (one a blue one that switches every 3 s, one
-// beside the lava pool without a flame figure), a lava pool, a fireball, a frost bolt and an explosion flash. The lights go through
+// beside the lava pool on a free light, without a torch model), a lava pool, a fireball, a frost bolt and an explosion flash. The lights go through
 // the run's own light-list functions (lights.ts): the static field, the moving lights, the choice for the shader's slots, the lava
 // texels. A knight walks a loop past the pillars so its shadow can be seen. V cycles the viewer's darkvision 0 / 50 / 100 %.
 import { ANIM, CONST, KIND, LIGHT, LIGHT_KIND, SIDE } from '../generated/defs';

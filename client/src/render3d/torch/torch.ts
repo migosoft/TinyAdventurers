@@ -1,5 +1,5 @@
 // The wall torch as geometry (#391): an iron holder (plate, arm, a leaning wooden shaft with bands, a basket with a crown of spikes) and
-// a flame with volume, built per chunk like the crystals (stone/crystals.ts). The flame's motion and both materials are the view's
+// the flame's two quads (a painted card and a halo), built per chunk like the crystals (stone/crystals.ts). The flame's motion and both materials are the view's
 // business; the `flame` attribute is what the motion reads. Pure numbers; every one a first guess until the look is judged.
 import { faceNormal, outOfWall } from '../stone/crystals';
 import { CHUNK } from '../stone/grid';

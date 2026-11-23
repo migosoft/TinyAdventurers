@@ -90,7 +90,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
     return job;
   };
 
-  // The two torches: a light on each torch's tile and a flame figure.
+  // The two torches: a light on each torch's tile and an entity.
   const field = new LightField(map);
   TORCHES.forEach((t, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true, wall: 1 }));
   const torchEnts = TORCHES.map((t, i) => ent(i + 1, KIND.Torch, t.x, t.y, { extra: 0, anim: 1 }));
