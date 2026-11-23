@@ -88,6 +88,7 @@ import { refreshWaterField, waterField } from './water/waterField';
 import { buildWaterChunk } from './water/waterMesh';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './water/passes';
+import { BUBBLE } from './lava/bubbles';
 import { buildLavaChunk, buildShimmerChunk, type LavaChunk } from './lava/lavaMesh';
 import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
 import { FIELD_OLD, buildField, fieldMaterial as makeFieldMaterial, fieldUniforms } from './fieldMesh';
@@ -107,8 +108,8 @@ export const marksOf = (world: WorldInput): Marks => (world.stone && world.taken
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 /** The sight step's clip height outside the mirror pass: nothing is clipped (the start value of `Sight.clipBelow`). */
 const NO_CLIP = -1e6;
-/** How far above `LAVA_LEVEL` a lava chunk's bounds reach (tiles): the room for the bubbles' domes. */
-const LAVA_DOME_ROOM = 0.1;
+/** How far above `LAVA_LEVEL` a lava chunk's bounds reach (tiles): the room for the biggest bubble's dome, with a little margin. */
+const LAVA_DOME_ROOM = BUBBLE.rise * BUBBLE.size[1] * 1.25;
 /** Whether the shadow lookup flips v (see the call in `draw`). */
 const SUN_FLIP_V = true;
 

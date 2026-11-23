@@ -8,18 +8,22 @@ import { burst, dot, lerp, PX, type BurstSpec } from './shapes';
 import type { LavaCues, LavaSpot } from '../lava/lava';
 import type { FxOut } from './types';
 
+/** The glow colours (hex), shared by the burst specs and the embers. */
+const HOT = 0xffcc68, ORANGE = 0xee8e2e, YELLOW = 0xfacb3e;
+const rgb = (c: number): [number, number, number] => [(c >> 16) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255];
+
 /** Motes of an entering and of a pop (before the detail setting). */
 const ENTER_N = 6, POP_N = 14;
-const ENTER: BurstSpec = { x: 0, y: 0, z: 0, n: ENTER_N, speed: [8 * PX, 30 * PX], up: [0.5, 1.3], life: [0.2, 0.35], g: 3, drag: 0, size: PX * 2, colours: [0xee8e2e], streak: false, floor: LAVA_Y };
+const ENTER: BurstSpec = { x: 0, y: 0, z: 0, n: ENTER_N, speed: [8 * PX, 30 * PX], up: [0.5, 1.3], life: [0.2, 0.35], g: 3, drag: 0, size: PX * 2, colours: [ORANGE], streak: false, floor: LAVA_Y };
 /** A pop's sparks land after about a second. */
-const POP: BurstSpec = { x: 0, y: 0, z: 0, n: POP_N, speed: [30 * PX, 65 * PX], up: [0.9, 1.4], life: [0.7, 1.2], g: 5, drag: 0, size: PX * 2, colours: [0xffcc68, 0xee8e2e], streak: false, floor: LAVA_Y };
-const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [0xfacb3e], streak: false, floor: LAVA_Y };
+const POP: BurstSpec = { x: 0, y: 0, z: 0, n: POP_N, speed: [30 * PX, 65 * PX], up: [0.9, 1.4], life: [0.7, 1.2], g: 5, drag: 0, size: PX * 2, colours: [HOT, ORANGE], streak: false, floor: LAVA_Y };
+const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [YELLOW], streak: false, floor: LAVA_Y };
 
 /** Embers of a burning hero: how many loop at once, how long each lives, how far from the hero it starts and how it rises (px). */
 export const EMBER_SLOTS = 6;
 export const EMBER_LIFE = 0.6, EMBER_SPREAD = 6 * PX, EMBER_LIFT = 10 * PX, EMBER_RISE: readonly [number, number] = [20 * PX, 32 * PX];
 const EMBER_SIZE = PX * 2;
-const EMBER_COLOURS: readonly [number, number, number][] = [[1, 0.8, 0.408], [0.933, 0.557, 0.18]];
+const EMBER_COLOURS = [rgb(HOT), rgb(ORANGE)];
 
 function emitAll(fx: Effects3d, hidden: ReadonlySet<number>, now: number, list: readonly LavaSpot[], kind: typeof FX_KIND.LavaBurst | typeof FX_KIND.LavaSpray, a: number): void {
   for (let i = 0; i < list.length; i++) {

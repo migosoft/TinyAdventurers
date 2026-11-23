@@ -60,7 +60,7 @@ describe('lava effects', () => {
         for (let k = 0; k < seed; k++) fx.frame(frameOf(0.5 + k * 0.01), newOut());
         const t0 = 1 + seed;
         fx.frame(frameOf(t0, cues(cu)), newOut());
-        for (const age of [0, life / 2 * 0.3, 0.1, life - 0.02]) {
+        for (const age of [0, 0.1, life / 2, life]) {
           const out = newOut();
           fx.frame(frameOf(t0 + age), out);
           expect(out.lit.n, name).toBe(0);

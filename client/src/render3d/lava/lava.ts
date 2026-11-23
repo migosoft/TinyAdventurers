@@ -10,6 +10,8 @@ import { hiddenAt, type SightMask } from '../sightmask';
 import { BUBBLE, BUBBLE_CAP, Bubbles } from './bubbles';
 
 export const STIR_CAP = 8;
+/** The seed of the dev pages' lava bubbles. */
+export const LAVA_SEED = 344;
 /** Seconds between a pool's bubbles; the least lava mask of a bubble's spot and the tries to find one; the depth (tiles) at which a figure's ring is full; cue rates per second. */
 export const LAVA = { every: [0.6, 2], mask: 0.95, tries: 8, ringDepth: 0.3, sprayRate: 30 } as const;
 /** How far outside the ground the screen shows a pool still counts as in view (tiles). */
@@ -177,8 +179,16 @@ export class Lava3d {
     if (this.states.size > 0) for (const [id, s] of this.states) if (s.seen !== frame) this.states.delete(id);
 
     // the nearest rings to the focus take the slots
-    const kept = this.rings.slice(0, rings);
-    if (rings > STIR_CAP) kept.sort((a, b) => a.d - b.d);
+    // (insertion sort of the first `rings` entries in place: no allocation, `rings` is small)
+    const kept = this.rings;
+    if (rings > STIR_CAP) {
+      for (let a = 1; a < rings; a++) {
+        const r = kept[a];
+        let b = a - 1;
+        for (; b >= 0 && kept[b].d > r.d; b--) kept[b + 1] = kept[b];
+        kept[b + 1] = r;
+      }
+    }
     this.stirs.fill(0);
     for (let k = 0; k < Math.min(rings, STIR_CAP); k++) {
       const o = k * 4;

@@ -29,7 +29,7 @@ import type { FigureKit } from './models/kit';
 import { MODEL_OF_KIND } from './models/table';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
-import { Lava3d, type LavaIn } from './lava/lava';
+import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { emitLavaCues } from './fx/lavaFx';
 import { rng } from './fx/rand';
 import { clearVeils } from './fx/status';
@@ -45,8 +45,6 @@ import { tilesSeed } from './cover/moss';
 import { TILE } from '../sim/map';
 
 const PAN_SPEED = 12;
-/** The seed of the page's lava bubbles. */
-const LAVA_SEED = 344;
 const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
 const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
 const NONE_IDS: ReadonlySet<number> = new Set();

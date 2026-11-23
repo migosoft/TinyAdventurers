@@ -106,9 +106,9 @@ describe('the lava light', () => {
       // The lava's own glow is its surface's (#344). The lava texture is the one filtered read of this shader (WGSL textureSample,
       // GLSL texture); the heights and the atlas are texel loads (WGSL textureLoad, GLSL texelFetch) of other textures.
       const c = code(B);
-      const sampled = [...c.matchAll(/\b(?:textureSample|texture)\( (\w+)/g)].map((m) => m[1]);
+      const sampled = [...c.matchAll(/\b(?:textureSample|texture)\(\s*(\w+)/g)].map((m) => m[1]);
       expect(new Set(sampled).size).toBe(1);
-      const loaded = [...c.matchAll(/\b(?:textureLoad|texelFetch)\( (\w+)/g)].map((m) => m[1]);
+      const loaded = [...c.matchAll(/\b(?:textureLoad|texelFetch)\(\s*(\w+)/g)].map((m) => m[1]);
       expect(loaded.length).toBeGreaterThan(0);
       expect(loaded).not.toContain(sampled[0]);
     });

@@ -16,7 +16,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { shimmers, type R3dParams } from './params';
-import { Lava3d, type LavaIn } from './lava/lava';
+import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { rng } from './fx/rand';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
@@ -94,7 +94,6 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
-  const LAVA_SEED = 344;
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;
   // The viewer's sight: `&at=x,y` (tiles) or the script's VIEWER (the middle of room 1's tile); the page's map has no soft tiles.
@@ -174,13 +173,14 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       let cracks: Crack[] = [];
+      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       if (game) {
         const cands = [...staticCands(field, pairs, map, t), ...movingCands(movingAt(t), [], () => null, t)];
-        const sel = selectLights(cands, lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(cands, lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
         // Only the cracks the viewer sees (as runView3d); the mask is up to date above.
-        cracks = selectCracks(field, footprint(cam, c.plan.halfW, c.plan.halfH), c.params.sight ? mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
+        cracks = selectCracks(field, fp, c.params.sight ? mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
         if (field.version !== lavaVersion) {
           lavaVersion = field.version;
           lava = new Float32Array(map.w * map.h * 4);
@@ -195,7 +195,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
         ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }
         : SIGHT_OFF;
       c.timer.lap('sight');
-      lavaIn.dt = dt; lavaIn.now = t; lavaIn.figs = fo.figs; lavaIn.fp = footprint(cam, c.plan.halfW, c.plan.halfH); lavaIn.mask = c.params.sight ? mask : null;
+      lavaIn.dt = dt; lavaIn.now = t; lavaIn.figs = fo.figs; lavaIn.fp = fp; lavaIn.mask = c.params.sight ? mask : null;
       const lo = lava3d.step(lavaIn);
       const r = window.__r3d;
       if (r) {

@@ -4,7 +4,7 @@ import { DataTexture, GLSLNodeBuilder, Matrix4, Texture, WGSLNodeBuilder, type N
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
-import { fragment, readsInBranches, type Builder } from '../shaderCode.testutil';
+import { fragment, loops, readsInBranches, type Builder } from '../shaderCode.testutil';
 import { OUTLINE_EDGE, WATER_LEVEL } from '../dips/shape';
 import { PUDDLE_LEVEL } from '../stone/shape';
 import { PUDDLE_GATE, ceilingMaterial, waterMaterial, type WaterMaterial } from './waterNodes';
@@ -12,28 +12,6 @@ import { PUDDLE_GATE, ceilingMaterial, waterMaterial, type WaterMaterial } from 
 const lighting = () => makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture());
 const water = (): WaterMaterial => waterMaterial(lighting(), makeSight(), new Texture(), { w: 4, h: 3 }, viewTowardUniform());
 const both = (): [string, NodeMaterial][] => [['water', water().material], ['ceiling', ceilingMaterial(lighting(), makeSight())]];
-
-/** Each `for` loop's index name and the names of the loops around it (by brace depth). */
-function loops(code: string): { name: string; outer: string[] }[] {
-  const out: { name: string; outer: string[] }[] = [];
-  const open: { name: string; depth: number }[] = [];
-  let depth = 0;
-  for (const line of code.split('\n')) {
-    const m = /\bfor\s*\(\s*(?:int|var)\s+(\w+)/.exec(line);
-    if (m) {
-      out.push({ name: m[1], outer: open.map((o) => o.name) });
-      open.push({ name: m[1], depth });
-    }
-    for (const ch of line) {
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        while (open.length && open[open.length - 1].depth >= depth) open.pop();
-      }
-    }
-  }
-  return out;
-}
 
 describe('the water and ceiling materials', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {

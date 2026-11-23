@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BufferAttribute, BufferGeometry, GLSLNodeBuilder, Texture, WGSLNodeBuilder, type NodeMaterial } from 'three/webgpu';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
-import { fragment, readsInBranches, vertex, type Builder } from '../shaderCode.testutil';
+import { fragment, loops, readsInBranches, vertex, type Builder } from '../shaderCode.testutil';
 import { OUTLINE_EDGE } from '../dips/shape';
 import { BUBBLE_CAP } from './bubbles';
 import { STIR_CAP } from './lava';
@@ -21,28 +21,6 @@ function lavaGeometry(): BufferGeometry {
 }
 const both = (): [string, NodeMaterial, BufferGeometry | undefined][] => [['lava', lava().material, lavaGeometry()], ['shimmer', shimmer().material, undefined]];
 const lavaCode = (B: Builder): string => fragment(B, lava().material, { geometry: lavaGeometry() });
-
-/** Each `for` loop's index name and the names of the loops around it (by brace depth), as in waterNodes.test.ts. */
-function loops(code: string): { name: string; outer: string[] }[] {
-  const out: { name: string; outer: string[] }[] = [];
-  const open: { name: string; depth: number }[] = [];
-  let depth = 0;
-  for (const line of code.split('\n')) {
-    const m = /\bfor\s*\(\s*(?:int|var)\s+(\w+)/.exec(line);
-    if (m) {
-      out.push({ name: m[1], outer: open.map((o) => o.name) });
-      open.push({ name: m[1], depth });
-    }
-    for (const ch of line) {
-      if (ch === '{') depth++;
-      else if (ch === '}') {
-        depth--;
-        while (open.length && open[open.length - 1].depth >= depth) open.pop();
-      }
-    }
-  }
-  return out;
-}
 
 /** How often each sampler is read in the code, most first. */
 function samples(code: string): number[] {

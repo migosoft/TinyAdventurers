@@ -82,7 +82,7 @@ describe('Lava3d bubbles', () => {
   });
 
   it('keeps bubbles away from the banks', () => {
-    const cells = [...block(3, 2, 5, 4), ...block(8, 2, 1, 4, T.Wall), ...block(3, 6, 5, 1, T.Chasm), ...block(0, 2, 2, 4, T.ShallowWater)];
+    const cells = [...block(3, 2, 5, 4), ...block(8, 2, 1, 4, T.Wall), ...block(3, 6, 5, 1, T.Chasm), ...block(0, 2, 3, 4, T.ShallowWater)];
     const map = room(12, 8, cells);
     const l = new Lava3d(map, seeded(3));
     const { spots } = run(l, 20);
@@ -136,11 +136,13 @@ describe('Lava3d bubbles', () => {
 
   it('starts at most one bubble per pool in a long frame', () => {
     const l = new Lava3d(poolRoom(), seeded(7));
-    l.step(inp(0, 1));
-    const r = l.step(inp(1, 1));
-    const r2 = l.step(inp(2, 1));
-    expect(Math.max(r.live, r2.live)).toBeLessThanOrEqual(2);
-    expect(r2.live).toBeLessThanOrEqual(2);
+    let prev = l.step(inp(0, 1)).live;
+    expect(prev).toBeLessThanOrEqual(1);
+    for (let k = 1; k <= 3; k++) {
+      const live = l.step(inp(k, 1)).live;   // the bubbles live 1.9 s: each frame's new ones are the rise
+      expect(live - prev).toBeLessThanOrEqual(1);
+      prev = live;
+    }
   });
 
   it('drops a bubble when its cell is no longer lava', () => {
@@ -171,7 +173,7 @@ describe('Lava3d bubbles', () => {
   it('cues a pop once, at the bubble, when it is seen', () => {
     const l = new Lava3d(poolRoom(), seeded(10));
     let t = 0, r = l.step(inp(t, 1 / 60));
-    while (r.live === 0) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
     const x = r.bubbles[0], z = r.bubbles[1], born = t;
     const pops: { id: number; x: number; z: number }[] = [];
     while (t < born + BUBBLE.swell + 0.2) {
@@ -187,7 +189,7 @@ describe('Lava3d bubbles', () => {
   it('still cues the pop of a bubble whose frame jumped past swell and pop while another started', () => {
     const l = new Lava3d(poolRoom(), seeded(12));
     let t = 0, r = l.step(inp(t, 1 / 60));
-    while (r.live === 0) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
     const x = r.bubbles[0], z = r.bubbles[1];
     t += BUBBLE.swell + BUBBLE.pop + 0.5;
     r = l.step(inp(t, 5));
@@ -200,7 +202,7 @@ describe('Lava3d bubbles', () => {
     // the pool is in view but its bubbles are behind the mask: only the view box says in view, the mask hides every tile
     // so no bubble starts; start them unmasked, then hide them
     let t = 0, r = l.step(inp(t, 1 / 60));
-    while (r.live === 0) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
     const m = mask(map);
     let pops = 0;
     for (let i = 0; i < 150; i++) { t += 1 / 60; pops += l.step(inp(t, 1 / 60, [], { mask: m })).cues.pops.length; }

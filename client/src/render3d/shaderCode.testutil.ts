@@ -70,3 +70,25 @@ export function readsInBranches(code: string): string[] {
   }
   return out;
 }
+
+/** Each `for` loop's index name and the names of the loops around it (by brace depth). */
+export function loops(code: string): { name: string; outer: string[] }[] {
+  const out: { name: string; outer: string[] }[] = [];
+  const open: { name: string; depth: number }[] = [];
+  let depth = 0;
+  for (const line of code.split('\n')) {
+    const m = /\bfor\s*\(\s*(?:int|var)\s+(\w+)/.exec(line);
+    if (m) {
+      out.push({ name: m[1], outer: open.map((o) => o.name) });
+      open.push({ name: m[1], depth });
+    }
+    for (const ch of line) {
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        while (open.length && open[open.length - 1].depth >= depth) open.pop();
+      }
+    }
+  }
+  return out;
+}

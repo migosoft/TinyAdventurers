@@ -30,7 +30,7 @@ import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, 
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
-import { Lava3d, type LavaIn } from './lava/lava';
+import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { rng } from './fx/rand';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
@@ -44,8 +44,6 @@ import { Water3d } from './water/water';
 const PAN_SPEED = 12;
 /** The seed of the page's air (the demo needs no real randomness; the ember test counts jumps, #400). */
 const AIR_SEED = 307;
-/** The seed of the page's lava bubbles. */
-const LAVA_SEED = 344;
 const KNIGHT_ID = 100;
 const ARROW_ID = 101;
 const FIRE_ID = 102;
