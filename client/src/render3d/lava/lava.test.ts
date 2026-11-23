@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { KIND, TILE_ID } from '../../generated/defs';
 import { FIGURES } from '../../game/anim/defs';
 import { TILE } from '../../sim/map';
@@ -7,7 +7,7 @@ import { View } from '../../sim/view';
 import type { DrawnFig } from '../fx/types';
 import { LAVA_LEVEL, isLava, maskAt } from '../dips/shape';
 import { SightMask, hiddenAt, type SightLook } from '../sightmask';
-import { BUBBLE, BUBBLE_CAP } from './bubbles';
+import { BUBBLE, BUBBLE_CAP, Bubbles } from './bubbles';
 import { LAVA, Lava3d, STIR_CAP, type LavaIn } from './lava';
 
 const T = TILE_ID;
@@ -136,13 +136,17 @@ describe('Lava3d bubbles', () => {
 
   it('starts at most one bubble per pool in a long frame', () => {
     const l = new Lava3d(poolRoom(), seeded(7));
-    let prev = l.step(inp(0, 1)).live;
-    expect(prev).toBeLessThanOrEqual(1);
-    for (let k = 1; k <= 3; k++) {
-      const live = l.step(inp(k, 1)).live;   // the bubbles live 1.9 s: each frame's new ones are the rise
-      expect(live - prev).toBeLessThanOrEqual(1);
-      prev = live;
-    }
+    const add = vi.spyOn(Bubbles.prototype, 'add');
+    try {
+      let started = 0;
+      for (let k = 0; k <= 3; k++) {
+        add.mockClear();
+        l.step(inp(k, 1));
+        expect(add.mock.calls.length).toBeLessThanOrEqual(1);
+        started += add.mock.calls.length;
+      }
+      expect(started).toBeGreaterThan(0);
+    } finally { add.mockRestore(); }
   });
 
   it('drops a bubble when its cell is no longer lava', () => {
@@ -174,6 +178,7 @@ describe('Lava3d bubbles', () => {
     const l = new Lava3d(poolRoom(), seeded(10));
     let t = 0, r = l.step(inp(t, 1 / 60));
     while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    expect(r.live).toBeGreaterThan(0);
     const x = r.bubbles[0], z = r.bubbles[1], born = t;
     const pops: { id: number; x: number; z: number }[] = [];
     while (t < born + BUBBLE.swell + 0.2) {
@@ -190,6 +195,7 @@ describe('Lava3d bubbles', () => {
     const l = new Lava3d(poolRoom(), seeded(12));
     let t = 0, r = l.step(inp(t, 1 / 60));
     while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    expect(r.live).toBeGreaterThan(0);
     const x = r.bubbles[0], z = r.bubbles[1];
     t += BUBBLE.swell + BUBBLE.pop + 0.5;
     r = l.step(inp(t, 5));
@@ -203,6 +209,7 @@ describe('Lava3d bubbles', () => {
     // so no bubble starts; start them unmasked, then hide them
     let t = 0, r = l.step(inp(t, 1 / 60));
     while (r.live === 0 && t < 5) { t += 1 / 60; r = l.step(inp(t, 1 / 60)); }
+    expect(r.live).toBeGreaterThan(0);
     const m = mask(map);
     let pops = 0;
     for (let i = 0; i < 150; i++) { t += 1 / 60; pops += l.step(inp(t, 1 / 60, [], { mask: m })).cues.pops.length; }
