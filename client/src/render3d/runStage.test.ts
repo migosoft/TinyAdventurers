@@ -21,7 +21,7 @@ import { GroundTooLargeError, type Assets, type View } from './view';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 
 const ROWS = ['#####', '#...#', '#####'];
-const BIG =Array.from({ length: 40 }, () => '.'.repeat(40));
+const BIG = Array.from({ length: 40 }, () => '.'.repeat(40));
 const WOODLAND = { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as unknown as RunStartInfo['woodland'];
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
 const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
@@ -504,6 +504,13 @@ describe('the loading phase', () => {
     expect(loading.visible).toBe(true); // RunBegins has not come
   });
 
+  it('leaves the browser its F-keys and Ctrl/Alt/Meta shortcuts while loading', () => {
+    const { stage } = start();
+    expect(stage.key!({ code: 'F5', repeat: false } as KeyboardEvent)).toBe(false);
+    expect(stage.key!({ code: 'KeyR', ctrlKey: true, repeat: false } as KeyboardEvent)).toBe(false);
+    expect(stage.key!({ code: 'Escape', repeat: false } as KeyboardEvent)).toBe(true);
+  });
+
   it('hides the screen on the frame after RunBegins, and keys work again', () => {
     const { loading, run, stage, frame } = start();
     const view = fakeView();
@@ -544,6 +551,18 @@ describe('the loading phase', () => {
 });
 
 describe('startRun3d', () => {
+  it('a host that resolves null (its own error box is up) hides the loading screen', async () => {
+    const loading = new LoadingScreen(document.createElement('div'));
+    loading.show();
+    const run = startRun3d(document.createElement('div'), '', {
+      info: startInfo(ROWS), net: fakeNet() as unknown as Net, hud: fakeHud() as unknown as Hud, myClass: 'Wizard', dev: false, loading,
+      startHost: (async () => null) as unknown as typeof startHost,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loading.visible).toBe(false);
+    run.stop();
+  });
+
   it('a host that fails to start hides the loading screen', async () => {
     const loading = new LoadingScreen(document.createElement('div'));
     loading.show();

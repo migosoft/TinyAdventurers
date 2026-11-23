@@ -257,7 +257,10 @@ export function createRunStage(
       return runView.drawCalls;
     },
     key(e: KeyboardEvent): boolean {
-      if (loading.visible) return true; // no menu, no Escape, no keys while loading
+      if (loading.visible) {
+        // No menu, no Escape, no game keys while loading; the browser keeps its shortcuts (F5, Ctrl+R, Ctrl+L, F11, F12).
+        return !(e.ctrlKey || e.metaKey || e.altKey || /^F\d+$/.test(e.code));
+      }
       switch (e.code) {
         case 'Escape':
           if (!e.repeat) session.toggleMenu();
