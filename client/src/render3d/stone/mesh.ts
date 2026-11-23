@@ -6,7 +6,7 @@ import type { TileMap } from '../../sim/map';
 import { inDipMesh } from '../dips/shape';
 import { WALL_H, heightAt } from '../heights';
 import { FACE_H, FACE_W } from './format';
-import { CHUNK, KIND, SIDE_STEP } from './grid';
+import { KIND, SIDE_STEP, chunkBounds } from './grid';
 import { STONE_PX, type StoneField } from './field';
 import { NONE, faceOf, laid, laidFace, laidFloor, type Corner, type Out, type Vec3 } from './laidMesh';
 import { grateBars } from './ornamentMesh';
@@ -38,7 +38,7 @@ const FOOT = 0.25;
 
 /** The stone cells of chunk (cx, cz). `skip` leaves cells to another mesh (the woodland's painted ground cells). */
 export function buildStoneChunk(map: TileMap, f: StoneField, plan: SheetPlan, marks: Marks, cx: number, cz: number, skip?: (x: number, z: number) => boolean): StoneArrays {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(map, cx, cz);
   const layer = plan.groundOf(cx, cz);
   // Typed arrays that double when full: plain arrays took most of a laid chunk's build time.
   let cap = 8192, count = 0, icap = 16384, icount = 0;

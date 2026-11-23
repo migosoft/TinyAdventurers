@@ -3,7 +3,7 @@
 import { CARD_BIAS } from '../materials';
 import { PITCH_MAX } from '../params';
 import { SWAY_WAVE_MAX } from '../wind';
-import { CHUNK } from '../worldMesh';
+import { CHUNK, chunkBounds } from '../stone/grid';
 import type { CoverResult } from './coverJob';
 import { COVER_KINDS, coverH, GH_MAX } from './kinds';
 
@@ -30,7 +30,7 @@ const BUSHEL_SWAY = Math.max(0, ...COVER_KINDS.map((k) => k.bushels?.sway ?? 0))
 export function buildCoverChunk(r: CoverResult, cx: number, cz: number, floorY?: (x: number, z: number) => number): CoverChunk | null {
   if (r.sheets <= 0) return null;
   const { image } = r, mapW = Math.floor(image.w / PX), mapH = Math.floor(image.h / PX);
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(mapW, x0 + CHUNK), z1 = Math.min(mapH, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds({ w: mapW, h: mapH }, cx, cz);
   const pos: number[] = [], layer: number[] = [];
   let cells = 0, low = 0; // `low`: the lowest floor under the chunk's cover, which the bounds reach down to
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {

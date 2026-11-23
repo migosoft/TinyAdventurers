@@ -1177,6 +1177,17 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     expect(dipFigs().frame(frame([sleeper(8, 5)]), cam(), look({ kit, ...all })).models[0].lift).toBeCloseTo(0, 6);
   });
 
+  it('a model figure in lava sinks the same share of its height as a card (#344)', () => {
+    for (const kind of [KIND.Paladin, KIND.Ogre]) {
+      const fg = dipFigs();
+      let out!: FigureOut;
+      for (let i = 0; i < 600; i++) out = fg.frame(frame([ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) })], { dt: 1 / 60, now: 10 + i / 60 }), cam(), look({ kit, ...all }));
+      expect(out.models.length, `${kind} is a model`).toBeGreaterThan(0);
+      const a = fg.anchors.get(10)!;
+      expect(Math.abs((LAVA_LEVEL - a.y) / (a.height / TILE) - LAVA_SHARE), `${kind}`).toBeLessThan(0.03);
+    }
+  });
+
   it('tells the id pass what the world hides: 0 on the floor, the lava surface in lava, nothing in water or over the chasm (body and weapon alike)', () => {
     const groundOf = (tx: number, tz: number): number[] => {
       const out = dipFigs().frame(frame([ent(10, KIND.ElvenRanger, at2(tx, tz))]), cam(), look({ kit, ...all }));
@@ -1822,15 +1833,16 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(fly.anchors.get(10)!.y).toBe(0);
   });
 
-  it('a big figure and a hero in lava both stand with the same share above the surface (#344)', () => {
-    for (const kind of [KIND.Knight, KIND.Ogre]) {
+  it('a hero, a big figure and the demon in lava sink the same share of their height, but never below the bed (#344)', () => {
+    const bed = bedAt(dm, 6.5, 1.5);
+    // The Knight and the Ogre float at the share; the demon is so tall that the share would reach below this pool's bed, so it stands on it.
+    for (const [kind, onBed] of [[KIND.Knight, false], [KIND.Ogre, false], [KIND.Demon, true]] as const) {
       const fg = dipFigs();
-      const mk = () => ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) });
-      run(fg, () => [mk()], 600);
+      run(fg, () => [ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) })], 600);
       const a = fg.anchors.get(10)!;
       const height = a.height / TILE;
-      expect((LAVA_LEVEL - a.y) / height).toBeGreaterThan(LAVA_SHARE - 0.03);
-      expect((LAVA_LEVEL - a.y) / height).toBeLessThan(LAVA_SHARE + 0.03);
+      expect(LAVA_LEVEL - LAVA_SHARE * height < bed, `${kind} reaches the bed`).toBe(onBed);
+      expect(Math.abs(a.y - Math.max(bed, LAVA_LEVEL - LAVA_SHARE * height)) / height, `${kind}`).toBeLessThan(0.03);
     }
   });
 

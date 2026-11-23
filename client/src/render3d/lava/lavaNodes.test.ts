@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BufferAttribute, BufferGeometry, GLSLNodeBuilder, Texture, WGSLNodeBuilder, type NodeMaterial } from 'three/webgpu';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
-import { fragment, loops, readsInBranches, vertex, type Builder } from '../shaderCode.testutil';
+import { fragment, fragmentTextures, loops, readsInBranches, vertex, type Builder } from '../shaderCode.testutil';
 import { OUTLINE_EDGE } from '../dips/shape';
 import { BUBBLE_CAP } from './bubbles';
 import { STIR_CAP } from './lava';
@@ -136,10 +136,15 @@ describe('the lava and shimmer materials', () => {
     l.stirs.forEach((v, i) => expect(v.z, `stir ${i}`).toBe(0));
   });
 
-  it('the shimmer takes the scene copy', () => {
-    const s = shimmer();
-    expect(() => s.setScene(new Texture())).not.toThrow();
-    s.time.value = 2;
-    expect(s.time.value).toBe(2);
+  it('the shimmer samples the scene copy setScene gives it, and the latest one', () => {
+    for (const B of [GLSLNodeBuilder, WGSLNodeBuilder]) {
+      const s = shimmer(), a = new Texture(), b = new Texture();
+      s.setScene(a);
+      expect(fragmentTextures(B, s.material), B.name).toContain(a);
+      s.setScene(b);
+      const now = fragmentTextures(B, s.material);
+      expect(now, B.name).toContain(b);
+      expect(now, B.name).not.toContain(a);
+    }
   });
 });

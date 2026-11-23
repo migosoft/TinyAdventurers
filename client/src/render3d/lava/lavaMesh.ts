@@ -1,6 +1,6 @@
 import type { TileMap } from '../../sim/map';
 import { DIP, LAVA_LEVEL, bedAt, isLava, liquidCell, maskAt } from '../dips/shape';
-import { CHUNK } from '../worldMesh';
+import { chunkBounds, pushFlatQuad } from '../stone/grid';
 
 /** Quads per tile side of the lava's surface (the bubbles' domes need it; the dip mesh's DIP_RES). */
 export const LAVA_RES = 12;
@@ -24,7 +24,7 @@ export interface LavaChunk {
 
 /** The surface of the lava cells of chunk (cx, cz); null when the chunk has none. Vertices are per cell: `maskAt` and `bedAt` are pure functions of the point, so a shared edge agrees. */
 export function buildLavaChunk(map: TileMap, cx: number, cz: number): LavaChunk | null {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(map, cx, cz);
   const R = LAVA_RES, N = R + 1;
   const position: number[] = [], shore: number[] = [], index: number[] = [];
   const box = { x0: Infinity, z0: Infinity, x1: -Infinity, z1: -Infinity };
@@ -51,14 +51,11 @@ export function buildLavaChunk(map: TileMap, cx: number, cz: number): LavaChunk 
 
 /** Two triangles per lavaCell and sheet at LAVA_LEVEL + SHIMMER_SHEETS[k], facing up; null when the chunk has no lavaCell. */
 export function buildShimmerChunk(map: TileMap, cx: number, cz: number): { position: Float32Array; count: number } | null {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(map, cx, cz);
   const p: number[] = [];
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     if (!lavaCell(map, x, z)) continue;
-    for (const h of SHIMMER_SHEETS) {
-      const y = LAVA_LEVEL + h;
-      p.push(x, y, z, x, y, z + 1, x + 1, y, z + 1, x, y, z, x + 1, y, z + 1, x + 1, y, z);
-    }
+    for (const h of SHIMMER_SHEETS) pushFlatQuad(p, x, LAVA_LEVEL + h, z);
   }
   if (p.length === 0) return null;
   return { position: new Float32Array(p), count: p.length / 3 };

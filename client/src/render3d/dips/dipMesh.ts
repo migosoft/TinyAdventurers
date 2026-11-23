@@ -1,6 +1,7 @@
 import type { TileMap } from '../../sim/map';
 import { cellHeight } from '../heights';
-import { CHUNK, KIND, flatSurface } from '../worldMesh';
+import { KIND, flatSurface } from '../worldMesh';
+import { chunkBounds } from '../stone/grid';
 import { STONE_PX } from '../stone/field';
 import type { SheetPlan } from '../stone/plan';
 import { TILE_ID } from '../../generated/defs';
@@ -48,7 +49,7 @@ export function dipClassChanged(a: number, b: number): boolean {
 
 /** The ground of the dip cells of chunk (cx, cz), or null when it has none. `plan` gives the chunk's ground page. */
 export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: number, plan: SheetPlan): DipChunk | null {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(map, cx, cz);
   const layer = plan.groundOf(cx, cz);
   const position: number[] = [], normal: number[] = [], uv: number[] = [], kind: number[] = [], sheet: number[] = [], dip: number[] = [], marks: number[] = [];
   const index: number[] = [];

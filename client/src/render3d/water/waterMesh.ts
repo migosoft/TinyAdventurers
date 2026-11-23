@@ -3,7 +3,7 @@ import { DIP, WATER_LEVEL, liquidCell } from '../dips/shape';
 import { heightAt } from '../heights';
 import type { Puddle } from '../stone/place';
 import { PUDDLE_LEVEL } from '../stone/shape';
-import { CHUNK } from '../worldMesh';
+import { chunkBounds, pushFlatQuad } from '../stone/grid';
 
 /** A height-0 cell that is water, or has a water tile among its eight neighbours (the rounded outline reaches into those). */
 export function waterCell(map: TileMap, x: number, z: number): boolean {
@@ -22,13 +22,11 @@ export interface WaterChunk { cx: number; cz: number; position: Float32Array; co
  * seen from above; null when the chunk has none.
  */
 export function buildWaterChunk(map: TileMap, cx: number, cz: number, puddles: readonly Puddle[] = []): WaterChunk | null {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(map.w, x0 + CHUNK), z1 = Math.min(map.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(map, cx, cz);
   const p: number[] = [];
   for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     const y = waterCell(map, x, z) ? WATER_LEVEL : puddleCell(map, x, z, puddles) ? PUDDLE_LEVEL : null;
-    if (y === null) continue;
-    // (x, z) -> (x, z + 1) -> (x + 1, z + 1) and (x, z) -> (x + 1, z + 1) -> (x + 1, z): normal +y
-    p.push(x, y, z, x, y, z + 1, x + 1, y, z + 1, x, y, z, x + 1, y, z + 1, x + 1, y, z);
+    if (y !== null) pushFlatQuad(p, x, y, z);
   }
   if (p.length === 0) return null;
   return { cx, cz, position: new Float32Array(p), count: p.length / 3 };

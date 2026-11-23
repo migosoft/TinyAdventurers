@@ -14,6 +14,12 @@ export function vertex(B: Builder, m: NodeMaterial, opts: { compare?: boolean; g
   return built(B, m, opts).vertexShader as string;
 }
 
+/** The textures the fragment shader of material `m` binds, as `fragment` builds it. */
+export function fragmentTextures(B: Builder, m: NodeMaterial, opts: { compare?: boolean; geometry?: BufferGeometry } = {}): unknown[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (built(B, m, opts).uniforms.fragment as any[]).filter((u) => u.node?.isTextureNode).map((u) => u.node.value);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function built(B: Builder, m: NodeMaterial, opts: { compare?: boolean; geometry?: BufferGeometry }): any {
   // Just what the builders read from a renderer to write the code; nothing is drawn.

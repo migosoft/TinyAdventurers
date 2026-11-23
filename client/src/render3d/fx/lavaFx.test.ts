@@ -75,8 +75,9 @@ describe('lava effects', () => {
   });
 
   it('is born at LAVA_Y and never goes below it', () => {
-    const SIZE = PX * 2 * 1.5;
-    for (const cu of [{ enters: [spot] }, { pops: [{ id: -1, x: 2, z: 2 }] }, { spray: [spot] }] as Partial<LavaCues>[]) {
+    // The test camera's up axis is +y, so a mote's square reaches exactly half its size (ENTER and POP 2 px, SPRAY 1.5 px) below its centre.
+    const cases: Array<[Partial<LavaCues>, number]> = [[{ enters: [spot] }, PX], [{ pops: [{ id: -1, x: 2, z: 2 }] }, PX], [{ spray: [spot] }, PX * 0.75]];
+    for (const [cu, half] of cases) {
       const fx = new Effects3d(map);
       fx.frame(frameOf(1, cues(cu)), newOut());
       for (const age of [0, 0.05, 0.15, 0.25, 0.6, 1.1]) {
@@ -85,7 +86,10 @@ describe('lava effects', () => {
         const o = newFxBuf();
         out.tris.flush(o, cam, false);
         const p = o.position;
-        for (let i = 1; i < p.length; i += 3) expect(p[i]).toBeGreaterThanOrEqual(LAVA_Y - SIZE);
+        let low = Infinity;
+        for (let i = 1; i < p.length; i += 3) low = Math.min(low, p[i]);
+        if (p.length > 0) expect(low).toBeGreaterThanOrEqual(LAVA_Y - half - 1e-6);
+        if (age === 0) expect(low).toBeCloseTo(LAVA_Y - half, 5);
       }
     }
   });
@@ -121,11 +125,19 @@ describe('lava effects', () => {
     const none = newOut();
     fx.frame(frameOf(1, cues()), none);
     expect(none.tris.n).toBe(0);
+    // Two triangles per ember; FxTris drops a triangle of alpha <= 0.004, so a slot at the very end of its loop draws none.
+    const drawn = (id: number, now: number): number => {
+      const e: [number, number, number] = [0, 0, 0];
+      let n = 0;
+      for (let s = 0; s < EMBER_SLOTS; s++) if (emberAt(id, s, now, e) > 0.004) n += 2;
+      return n;
+    };
+    expect(drawn(3, 1.05)).toBeGreaterThan(0);
     const one = newOut(), two = newOut();
     fx.frame(frameOf(1.05, cues({ burning: [spot] })), one);
     fx.frame(frameOf(1.05, cues({ burning: [spot, { id: 4, x: 1, z: 1 }] })), two);
-    expect(one.tris.n).toBeGreaterThan(0);
-    expect(two.tris.n).toBe(one.tris.n * 2);
+    expect(one.tris.n).toBe(drawn(3, 1.05));
+    expect(two.tris.n).toBe(drawn(3, 1.05) + drawn(4, 1.05));
     expect(one.lit.n).toBe(0);
     const hid = newOut();
     fx.frame(frameOf(1.05, cues({ burning: [spot] }), [3]), hid);

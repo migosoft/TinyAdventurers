@@ -2,7 +2,7 @@ import { WALL_H, heightAt } from './heights';
 import { isTerrain, type TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
-import { CHUNK, KIND, chunkGrid, chunksOfTile } from './stone/grid';
+import { CHUNK, KIND, chunkBounds, chunkGrid, chunksOfTile } from './stone/grid';
 import { buildStoneChunk } from './stone/mesh';
 import { GRATE_DEPTH } from './stone/laidMesh';
 import type { StoneField } from './stone/field';
@@ -75,7 +75,7 @@ export function flatSurface(m: TileMap, painted: boolean, x: number, z: number):
  * `painted`: the run has a woodland. One vertex layout for both, because one material draws them.
  */
 export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, kit: StoneKit): Chunk {
-  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(m.w, x0 + CHUNK), z1 = Math.min(m.h, z0 + CHUNK);
+  const { x0, z0, x1, z1 } = chunkBounds(m, cx, cz);
   const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [];
   const isGround = (x: number, z: number): boolean => flatSurface(m, painted, x, z).kind === KIND.ground;
 

@@ -11,6 +11,18 @@ export function chunkGrid(map: { w: number; h: number }): { nx: number; nz: numb
   return { nx: Math.ceil(map.w / CHUNK), nz: Math.ceil(map.h / CHUNK) };
 }
 
+/** The cells of chunk (cx, cz): x in [x0, x1), z in [z0, z1), cut at the map's edge. */
+export function chunkBounds(map: { w: number; h: number }, cx: number, cz: number): { x0: number; z0: number; x1: number; z1: number } {
+  const x0 = cx * CHUNK, z0 = cz * CHUNK;
+  return { x0, z0, x1: Math.min(map.w, x0 + CHUNK), z1: Math.min(map.h, z0 + CHUNK) };
+}
+
+/** Pushes the two triangles of the unit cell (x, z) at height y onto `p` (x, y, z per vertex), counter-clockwise seen from above, so the normal is +y. */
+export function pushFlatQuad(p: number[], x: number, y: number, z: number): void {
+  // (x, z) -> (x, z + 1) -> (x + 1, z + 1) and (x, z) -> (x + 1, z + 1) -> (x + 1, z)
+  p.push(x, y, z, x, y, z + 1, x + 1, y, z + 1, x, y, z, x + 1, y, z + 1, x + 1, y, z);
+}
+
 /**
  * The chunk of the cell and those of its eight neighbours (a face's `straight` flag and the terrain edges
  * read the diagonal cells) where they differ and lie inside the grid; no duplicates.
