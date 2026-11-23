@@ -23,6 +23,8 @@ pub struct Player {
     /// Whom the hero fights for: `Friendly`, unless an enemy's Charm turned it.
     pub side: Side,
     pub conn: u32,
+    /// The client has not yet reported `Loaded` (#322): the hero is `Neutral` and its inputs are dropped.
+    pub loading: bool,
     /// Resistances (races plus adjustments; the split of its hits is its weapons', in `sheet`).
     pub res: Resistances,
     pub tx: Option<UnboundedSender<Message>>,

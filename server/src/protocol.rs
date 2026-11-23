@@ -96,6 +96,8 @@ pub enum ClientMsg {
     /// Host only. Uses the room's chosen level and boss.
     StartRun,
     Input(InputMsg),
+    /// The client has built the level and can show it: the run waits for every client's `Loaded` (#322).
+    Loaded,
     Ping { time: f64 },
     Spectate { dir: i8 },
     /// Lobby or waiting room, not while ready: buy the next point of an Attribute with XP.
@@ -442,6 +444,10 @@ pub enum ServerMsg {
     /// The receiving player's selected character and its progress.
     Character(CharacterInfo),
     RunStarted(RunStartInfo),
+    /// While the run waits for the clients to load the level: how many of the `total` heroes have reported `Loaded`.
+    Loading { ready: u8, total: u8 },
+    /// The hold is over for this hero: the run is live (sent after `RunStarted` and `Loading`).
+    RunBegins,
     /// Never built: snapshots go out as a bare array (`wire::encode_snap`). The variant keeps the
     /// exported `ServerMsg` type complete for the client.
     #[allow(dead_code)]

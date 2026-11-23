@@ -16,6 +16,7 @@ pub mod hero_brain;
 pub mod keystones;
 pub mod levels;
 pub mod light;
+mod loading;
 pub mod magic;
 pub mod minions;
 pub mod modules;
@@ -166,6 +167,8 @@ pub struct Run {
     /// The INT tier rule and the dodge knobs (`defs/smarts.rs`).
     pub smarts: crate::defs::smarts::SmartsDef,
     pub srv_ms: f32,
+    /// The run is held until every client has loaded the level (#322), see `loading.rs`.
+    pub waiting: bool,
     pub log: rules_log::RulesLog,
     /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
     #[cfg(test)]
@@ -202,6 +205,7 @@ impl Run {
             debug: false,
             smarts: crate::defs::smarts::SMARTS,
             srv_ms: 0.0,
+            waiting: false,
             log: rules_log::RulesLog::default(),
             #[cfg(test)]
             last_hit: None,
@@ -218,6 +222,7 @@ impl Run {
                 side: Side::Friendly,
                 res: sheet.res,
                 conn: m.conn,
+                loading: false,
                 tx: Some(m.tx),
                 name: m.name,
                 class: m.class,
@@ -433,6 +438,8 @@ impl Run {
             RunCmd::Msg { conn, msg } => {
                 let Some(pi) = self.players.iter().position(|p| p.conn == conn) else { return };
                 match msg {
+                    ClientMsg::Loaded => self.loaded(pi),
+                    ClientMsg::Input(_) if self.players[pi].loading => {}
                     ClientMsg::Input(input) => {
                         let p = &mut self.players[pi];
                         // Only newer inputs: a repeated or replayed sequence number is dropped (#273).
@@ -467,6 +474,9 @@ impl Run {
                         self.event(Ev::Msg { text: format!("{name} left the dungeon") }, None);
                     }
                     rules_log::forget(self, self.players[pi].id);
+                    if self.waiting {
+                        self.send_loading();
+                    }
                 }
             }
         }
@@ -1494,6 +1504,8 @@ impl Run {
 #[tracing::instrument(name = "run", skip_all, fields(run = run.id, level = ?run.level.id(), boss = ?run.level.boss_id(), players = run.players.len(), outcome = tracing::field::Empty))]
 pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: SharedLobby) {
     let mut outcome = None;
+    run.begin_loading();
+    let held_since = Instant::now();
     for p in &run.players {
         run.send(p, &run.start_info(p));
     }
@@ -1509,6 +1521,16 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
         interval.tick().await;
         while let Ok(cmd) = rx.try_recv() {
             run.handle(cmd);
+        }
+        if run.waiting {
+            if run.hold_over(held_since.elapsed().as_secs_f64()) {
+                run.release();
+            } else {
+                if run.players.iter().all(|p| p.tx.is_none()) {
+                    break;
+                }
+                continue;
+            }
         }
         let t0 = Instant::now();
         run.step();
