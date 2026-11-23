@@ -31,7 +31,7 @@ const PUFF_EVERY = [0.05, 0.11] as const;
 /** In a gap a stray puff may start every so many seconds (least and most), with the chance STRAY each time. */
 const STRAY_EVERY = [0.6, 1.4] as const;
 const STRAY = 0.1;
-/** A torch puff's scale at birth (tiles; about the flame's tip) and at the end of its life, grey and soot (least and most). */
+/** A torch puff's radius in tiles (`puff()` doubles it to the drawn width) at birth, about the flame's tip, and at the end of its life, grey and soot (least and most). */
 const WISP_S0 = 0.07;
 const WISP_S1 = [0.14, 0.24] as const;
 const WISP_SOOT_S1 = [0.18, 0.28] as const;

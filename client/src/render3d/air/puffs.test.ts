@@ -19,6 +19,16 @@ function run(air: Air3d, secs: number, make: (t: number) => AirInput, t0 = 0): A
   return parts;
 }
 
+/** The most smoke puffs alive in any frame of WISP_S seconds: smoke comes and goes, so the last frame alone says nothing. */
+function peakSmoke(air: Air3d, make: (t: number) => AirInput): number {
+  let peak = 0;
+  for (let i = 0, n = Math.round(WISP_S / 0.05); i < n; i++) {
+    air.step(make(i * 0.05));
+    peak = Math.max(peak, air.counts.smoke);
+  }
+  return peak;
+}
+
 describe('smoke', () => {
   it('rises from a lit torch, from the flame tip', () => {
     const air = new Air3d(floorMap(), seeded(1));
@@ -46,7 +56,7 @@ describe('smoke', () => {
     const fa = flameTip(north), fb = flameTip(west), tipY = fa[1];
     const air = new Air3d(floorMap(), seeded(11));
     let a = 0, b = 0;
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0, n = Math.round(WISP_S / 0.05); i < n; i++) {
       const p = air.step(frame({ t: i * 0.05, torches: [north, west] }));
       if (i < 20) continue;
       // Young puffs sit at their flame: count those within a tile of each.
@@ -64,23 +74,16 @@ describe('smoke', () => {
 
   it('makes none from an unlit torch', () => {
     const air = new Air3d(floorMap(), seeded(2));
-    run(air, WISP_S, (t) => frame({ t, torches: [torch(10, 10, false)] }));
-    expect(air.counts.smoke).toBe(0);
+    expect(peakSmoke(air, (t) => frame({ t, torches: [torch(10, 10, false)] }))).toBe(0);
   });
 
   it('makes none from a torch on a hidden tile', () => {
     const map = floorMap();
     const mask = maskAt(map, 10, 10, 3);
     const air = new Air3d(map, seeded(3));
-    run(air, WISP_S, (t) => frame({ t, mask, torches: [torch(30, 30)] }));
-    expect(air.counts.smoke).toBe(0);
+    expect(peakSmoke(air, (t) => frame({ t, mask, torches: [torch(30, 30)] }))).toBe(0);
     const seen = new Air3d(map, seeded(3));
-    let peak = 0;
-    for (let i = 0, n = Math.round(WISP_S / 0.05); i < n; i++) {
-      seen.step(frame({ t: i * 0.05, mask, torches: [torch(10, 9)] }));
-      peak = Math.max(peak, seen.counts.smoke);
-    }
-    expect(peak).toBeGreaterThan(0);
+    expect(peakSmoke(seen, (t) => frame({ t, mask, torches: [torch(10, 9)] }))).toBeGreaterThan(0);
   });
 
   it('stays at or under MAX_SMOKE under a flood of torches', () => {
