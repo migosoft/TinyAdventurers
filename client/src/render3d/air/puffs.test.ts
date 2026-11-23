@@ -5,9 +5,12 @@ import { TERRAIN } from '../../game/terrain-layers';
 import { flameTip } from '../torch/torch';
 import { Air3d, type AirInput } from './air';
 import type { AirParts } from './airParts';
+import { GAP_S, GUST_S } from './puffs';
 import { floorMap, frame, maskAt, seeded } from './air.testutil';
 
 type Torch = AirInput['torches'][number];
+/** A torch smokes now and then: within its longest gap and gust, plus the seconds a puff takes to rise a tile, one wisp has risen. */
+const WISP_S = GAP_S[1] + GUST_S[1] + 3;
 const torch = (tx: number, tz: number, lit = true): Torch => ({ x: tx + 0.5, z: tz, nx: 0, nz: 1, lit, tx, tz });
 
 function run(air: Air3d, secs: number, make: (t: number) => AirInput, t0 = 0): AirParts {
@@ -19,19 +22,22 @@ function run(air: Air3d, secs: number, make: (t: number) => AirInput, t0 = 0): A
 describe('smoke', () => {
   it('rises from a lit torch, from the flame tip', () => {
     const air = new Air3d(floorMap(), seeded(1));
-    const parts = run(air, 4, (t) => frame({ t, torches: [torch(10, 10)] }));
-    expect(parts.puffs.count).toBeGreaterThan(0);
     const tipY = flameTip(torch(10, 10))[1];
-    let top = 0;
-    for (let i = 0; i < parts.puffs.count; i++) {
-      const y = parts.puffs.pos[i * 3 + 1];
-      expect(y).toBeGreaterThanOrEqual(tipY - 0.1);
-      top = Math.max(top, y);
+    let seen = 0, top = 0;
+    for (let i = 0, n = Math.round(WISP_S / 0.05); i < n; i++) {
+      const parts = air.step(frame({ t: i * 0.05, torches: [torch(10, 10)] }));
+      seen += parts.puffs.count;
+      for (let k = 0; k < parts.puffs.count; k++) {
+        const y = parts.puffs.pos[k * 3 + 1];
+        expect(y).toBeGreaterThanOrEqual(tipY - 0.1);
+        top = Math.max(top, y);
+        // A puff is its own sight probe: the torch's floor tile.
+        expect(parts.puffs.sight[k * 2]).toBeCloseTo(10.5, 6);
+        expect(parts.puffs.sight[k * 2 + 1]).toBeCloseTo(10.5, 6);
+      }
     }
+    expect(seen).toBeGreaterThan(0);
     expect(top).toBeGreaterThan(tipY + 1);
-    // A puff is its own sight probe: the torch's floor tile.
-    expect(parts.puffs.sight[0]).toBeCloseTo(10.5, 6);
-    expect(parts.puffs.sight[1]).toBeCloseTo(10.5, 6);
   });
 
   it('keeps a gust per torch: two torches on one floor tile both smoke', () => {
@@ -58,7 +64,7 @@ describe('smoke', () => {
 
   it('makes none from an unlit torch', () => {
     const air = new Air3d(floorMap(), seeded(2));
-    run(air, 10, (t) => frame({ t, torches: [torch(10, 10, false)] }));
+    run(air, WISP_S, (t) => frame({ t, torches: [torch(10, 10, false)] }));
     expect(air.counts.smoke).toBe(0);
   });
 
@@ -66,11 +72,15 @@ describe('smoke', () => {
     const map = floorMap();
     const mask = maskAt(map, 10, 10, 3);
     const air = new Air3d(map, seeded(3));
-    run(air, 10, (t) => frame({ t, mask, torches: [torch(30, 30)] }));
+    run(air, WISP_S, (t) => frame({ t, mask, torches: [torch(30, 30)] }));
     expect(air.counts.smoke).toBe(0);
     const seen = new Air3d(map, seeded(3));
-    run(seen, 10, (t) => frame({ t, mask, torches: [torch(10, 9)] }));
-    expect(seen.counts.smoke).toBeGreaterThan(0);
+    let peak = 0;
+    for (let i = 0, n = Math.round(WISP_S / 0.05); i < n; i++) {
+      seen.step(frame({ t: i * 0.05, mask, torches: [torch(10, 9)] }));
+      peak = Math.max(peak, seen.counts.smoke);
+    }
+    expect(peak).toBeGreaterThan(0);
   });
 
   it('stays at or under MAX_SMOKE under a flood of torches', () => {

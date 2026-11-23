@@ -21,6 +21,23 @@ const BLAST_LEAP0 = 10 * PX;
 const BLAST_LEAP = 25 * PX;
 /** Torch smoke starts up to this far above the flame's top (tiles; 1.5 px). */
 const SMOKE_JITTER_Y = 1.5 * PX;
+// Torch smoke is a thin wisp now and then (#391); every number here is a first guess until the user has judged it.
+/** A gust lasts this long (s, least and most): a handful of puffs that rise as one streak. */
+export const GUST_S = [0.5, 1.2] as const;
+/** The quiet gap between two gusts (s, least and most); a torch new in view starts somewhere inside one. */
+export const GAP_S = [4, 10] as const;
+/** In a gust a puff starts every so many seconds (least and most). */
+const PUFF_EVERY = [0.05, 0.11] as const;
+/** In a gap a stray puff may start every so many seconds (least and most), with the chance STRAY each time. */
+const STRAY_EVERY = [0.6, 1.4] as const;
+const STRAY = 0.1;
+/** A torch puff's scale at birth (tiles; about the flame's tip) and at the end of its life, grey and soot (least and most). */
+const WISP_S0 = 0.07;
+const WISP_S1 = [0.14, 0.24] as const;
+const WISP_SOOT_S1 = [0.18, 0.28] as const;
+/** A torch puff's opacity at its fullest, grey and soot: few puffs make a wisp, so each is denser than a cloud's. */
+const WISP_A = 0.6;
+const WISP_SOOT_A = 0.65;
 /** A blast throws this many embers, once. */
 const BLAST_EMBERS = 18;
 /** Seconds between a fire shot's embers. */
@@ -180,19 +197,20 @@ export class Puffs {
       // Keyed by the flame's position: two torches on one floor tile (a corner) keep their own gusts.
       const key = Math.round(tr.x / PX) * 65536 + Math.round(tr.z / PX);
       let g = this.gusts.get(key);
-      if (!g) this.gusts.set(key, (g = { burst: false, left: c.rng() * 1.5, next: 0, soot: 0, stamp }));
+      if (!g) this.gusts.set(key, (g = { burst: false, left: c.rng() * GAP_S[1], next: 0, soot: 0, stamp }));
       g.stamp = stamp;
       g.left -= dt;
       if (g.left <= 0) {
         g.burst = !g.burst;
-        g.left = g.burst ? rnd(c, 0.3, 1.1) : rnd(c, 0.5, 1.9);
+        g.left = g.burst ? rnd(c, GUST_S[0], GUST_S[1]) : rnd(c, GAP_S[0], GAP_S[1]);
         g.soot = c.rng() < 0.3 ? 0.65 : 0.12;
+        if (g.burst) g.next = 0; // a gust starts with a puff, whatever the stray timer had left
       }
       g.next -= dt;
       if (g.next > 0) continue;
-      g.next = g.burst ? rnd(c, 0.07, 0.19) : rnd(c, 0.6, 1.4);
+      g.next = g.burst ? rnd(c, PUFF_EVERY[0], PUFF_EVERY[1]) : rnd(c, STRAY_EVERY[0], STRAY_EVERY[1]);
       if (!c.on.smoke || !tr.lit || this.smoke.n >= MAX_SMOKE) continue;
-      if (!g.burst && c.rng() >= 0.4) continue; // only a stray wisp now and then between gusts
+      if (!g.burst && c.rng() >= STRAY) continue; // only a stray wisp now and then between gusts
       // The torch's floor tile must be seen: its smoke is drawn over the darkness (it rises into the dark wall top).
       if (tr.tx < 0 || tr.tz < 0 || tr.tx >= c.map.w || tr.tz >= c.map.h) continue;
       if (hidden(c, tr.tx + 0.5, tr.tz + 0.5)) continue;
@@ -201,7 +219,7 @@ export class Puffs {
       this.puff(
         fx + (c.rng() - 0.5) * 2 * PX, fy + c.rng() * SMOKE_JITTER_Y, fz,
         (c.rng() - 0.5) * 3 * PX, rnd(c, 8, 15) * PX, (c.rng() - 0.5) * 3 * PX,
-        rnd(c, 2.4, 4), soot ? rnd(c, 0.8, 1.2) : rnd(c, 0.6, 1), soot ? 0.34 : 0.26, rnd(c, 3, 6) * PX, soot ? SOOT : SMOKE_GREY, 0.3, tr.tx, tr.tz, tr.nx, tr.nz,
+        rnd(c, 2.4, 4), soot ? rnd(c, WISP_SOOT_S1[0], WISP_SOOT_S1[1]) : rnd(c, WISP_S1[0], WISP_S1[1]), soot ? WISP_SOOT_A : WISP_A, rnd(c, 3, 6) * PX, soot ? SOOT : SMOKE_GREY, WISP_S0, tr.tx, tr.tz, tr.nx, tr.nz,
       );
     }
     for (const [k, g] of this.gusts) if (g.stamp !== stamp) this.gusts.delete(k);
