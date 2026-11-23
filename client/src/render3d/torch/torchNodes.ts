@@ -53,7 +53,7 @@ export const FLAME = {
   halo: { colour: 0xff8a2a, strength: 0.55, swing: 0.3 },
 } as const;
 
-/** No corner of a flame's quads is further from its vertex than this (tiles, size 1): what a chunk's bounds are widened by. */
+/** An upper bound of how far a corner of a flame's quads is from its vertex (tiles, size 1): what a chunk's bounds are widened by. */
 export const FLAME_REACH = Math.max(CARD_H * FLAME_H, 2 * HALO_R + HALO_GAP);
 /** Flames draw after the translucent figures and the smoke puffs, just before the glows: their light lies over all of them. */
 export const FLAME_ORDER = 3.9;
@@ -131,10 +131,10 @@ export function flameMaterial(sight: Sight, toward: ViewToward): { material: Nod
   const H = FLAME.halo;
   const glow: N = rgb(H.colour).mul(g.mul(g).mul(g)).mul(float(H.strength).mul(float(1).sub(pulse.mul(H.swing))));
   const out: N = mix(fire, vec4(glow, 0), halo);
-  const W: N = positionWorld, u: N = sight.unseenAt(attribute('foot', 'vec2'));
-  // scenery: hidden by the dark, veiled (not hidden) by the mist
-  const shown: N = sight.shown(u.x, 1);
-  m.colorNode = vec4(sight.apply(out.xyz, W, u).mul(shown), out.w.mul(shown));
+  // Added light gets no `sight.apply` (it would add the dark's or the mist's colour over the whole quads): like a glow it is only
+  // dimmed and hidden, as scenery (the mist does not hide it).
+  const u: N = sight.unseenAt(attribute('foot', 'vec2')), shown: N = sight.shown(u.x, 1);
+  m.colorNode = vec4(sight.dim(out.xyz, u.y).mul(shown), out.w.mul(shown));
   // rgb is added whole and the alpha only says how much of the picture behind is hidden; the target's own alpha is left alone
   m.transparent = true;
   m.blending = CustomBlending;

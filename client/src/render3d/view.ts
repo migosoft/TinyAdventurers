@@ -182,6 +182,9 @@ export { GroundTooLargeError };
  */
 export const AIR_SKIP_LAYER = 1;
 
+/** A second layer of the torch flames (#391), which only the water's mirror camera adds: the pool reflects a torch with its flame, and none of the other translucent things. */
+const FLAME_MIRROR_LAYER = 4;
+
 /** Puts `mesh` on the skip layer only (it is drawn by the picture's camera, not by the pre-pass). */
 export function skipInAirPrepass<T extends Mesh>(mesh: T): T {
   mesh.layers.set(AIR_SKIP_LAYER);
@@ -433,6 +436,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   mirrorCam.up.set(0, -1, 0);
   mirrorCam.layers.set(0);
   mirrorCam.layers.enable(CEILING_LAYER);
+  mirrorCam.layers.enable(FLAME_MIRROR_LAYER);
   const mirrorMatrix = new Matrix4();
 
   const scene = new Scene();
@@ -556,6 +560,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (!a.flame) return;
     const fm = (flameChunks[i] = wallMesh(a.flame, [['flame', 4], ['reach', 2]], flame.material, FLAME_REACH)).mesh;
     skipInAirPrepass(fm).renderOrder = FLAME_ORDER;
+    fm.layers.enable(FLAME_MIRROR_LAYER);
   };
   const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial): ChunkMesh => {
     g.boundingBox = box;
