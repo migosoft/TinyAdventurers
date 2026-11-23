@@ -1,5 +1,5 @@
 // The stage of the ?r3d=stone page (#380): the stonework's own level on the real code, no server. A knight walks with WASD.
-// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate`, `&lamp=0` (the light that walks with the knight off),
+// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate|torch|rocktorch`, `&lamp=0` (the light that walks with the knight off),
 // `&break=1` (every crystal broken: its light is off and its cluster is stumps), `&t=<s>` shifts the clock of the lights' flicker and the puddles' drops; `&refl=0` turns the puddles' reflections off.
 import { LIGHT, LIGHT_KIND } from '../../generated/defs';
 import { LightField } from '../../game/light';
@@ -16,7 +16,7 @@ import { tilesSeed } from '../cover/moss';
 import { marksOf, type Assets, type View, type WorldInput } from '../view';
 import { Water3d } from '../water/water';
 import { ROCK, stoneField } from './field';
-import { CRYSTAL_TILES, PLACES, STONE_SEED, STONE_SPAWN, TORCH_TILES, stoneMap, zoneKinds } from './stoneMap';
+import { CRYSTAL_TILES, PLACES, STONE_SEED, STONE_SPAWN, STONE_TORCHES, stoneMap, zoneKinds } from './stoneMap';
 import { makeStoneRun } from './stoneRun';
 
 const TILE = 16;
@@ -41,9 +41,9 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
 
   const field = new LightField(map);
   let id = 1;
-  // the wall beside a lamp's tile: north, west, east (the stage's lamps stand at one)
+  for (const s of STONE_TORCHES) field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x: s.tx, y: s.ty, on: s.lit, wall: s.side + 1 });
+  // the wall beside a crystal's tile: north, west, east; none: a light on the floor
   const wall = (x: number, y: number): number => (map.opaque(x, y - 1) ? 1 : map.opaque(x - 1, y) ? 2 : map.opaque(x + 1, y) ? 3 : 0);
-  for (const [x, y] of TORCH_TILES) field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x, y, on: true, wall: wall(x, y) });
   for (const [x, y] of CRYSTAL_TILES) field.add({ id: id++, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x, y, on: q.get('break') !== '1', wall: wall(x, y) });
   world.taken = { lights: [...field.lights.values()], spawn: STONE_SPAWN };
   const lamp = q.get('lamp') !== '0';
@@ -93,7 +93,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
           see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters: [],
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
-          crystals: { off: (i) => field.lights.get(i)?.on === false, now: t },
+          wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },
           cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now },
         },
         c.timer,

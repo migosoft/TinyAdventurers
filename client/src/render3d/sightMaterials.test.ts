@@ -11,6 +11,7 @@ import { dipMaterial } from './dips/dipNodes';
 import { unplanned } from './stone/plan';
 import { makeSheets } from './stone/sheets';
 import { crystalMaterial } from './stone/crystalNodes';
+import { flameMaterial, holderMaterial } from './torch/torchNodes';
 import { airMaterials } from './air/airNodes';
 import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
@@ -30,6 +31,8 @@ const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
 const LAVA_ATTRS: [string, number][] = [['position', 3], ['shore', 2]];
 const CRYSTAL_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['gem', 3], ['foot', 2]];
+const HOLDER_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['foot', 2]];
+const TORCH_FLAME_ATTRS: [string, number][] = [['position', 3], ['flame', 3], ['foot', 2]];
 const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
   if (!attrs) return undefined;
   const g = new BufferGeometry();
@@ -57,6 +60,9 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     { name: 'ceiling', m: ceilingMaterial(l, sight), world: true },
     // The crystals (#380): gems lit by the room, then the sight step.
     { name: 'crystal', m: crystalMaterial(l, sight).material, world: true, attrs: CRYSTAL_ATTRS },
+    // The wall torch (#391): the holder lit by the room, the flame by itself; both end with the sight step.
+    { name: 'torch holder', m: holderMaterial(l, sight), world: true, attrs: HOLDER_ATTRS },
+    { name: 'torch flame', m: flameMaterial(sight).material, world: true, attrs: TORCH_FLAME_ATTRS },
     // The lava's surface (#344) ends with the sight step.
     { name: 'lava', m: lavaMaterial(sight).material, world: true, attrs: LAVA_ATTRS },
     // The heat shimmer (#344) is the one material without the sight step: it shows the scene copy, which went through the step, and its

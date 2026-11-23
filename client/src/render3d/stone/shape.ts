@@ -1,6 +1,6 @@
 // The shape of natural rock (#380 part 4): the stone's height at a point. A rock wall cell beside open ground rises from 0 on its open
 // edges to the wall's height within the slope's reach, gently at the foot and steeply above; the reach swings along the wall between a
-// tenth of the cell and most of it, and shrinks to 0 with the rock amount and toward a wall cell of masonry, where the face is upright. A wall cell with open ground on all four sides
+// tenth of the cell and most of it, and shrinks to 0 with the rock amount and toward a wall cell of masonry, where the face is upright; it is 0 too where a torch hangs (hewn flat). A wall cell with open ground on all four sides
 // is a column. A rock floor lies a little below 0, with a basin under each puddle and a groove along each crevice. The slope lies inside
 // the wall's own cell and no floor rises above 0, so open ground is exactly as wide as the server's. `rockMesh.ts` meshes all of it.
 // Pure: no three. Every number is a first guess.
@@ -49,6 +49,8 @@ export interface Shape {
 }
 /** A cell's or a corner's key; a ring of two beyond the map has keys of its own. */
 export const keyOf = (s: Shape, x: number, z: number): number => (z + 2) * (s.map.w + 4) + x + 2;
+/** The key of a point of the half-tile grid in `reach`. */
+const reachKey = (s: Shape, X2: number, Z2: number): number => (Z2 + 4) * (s.map.w * 2 + 8) + X2 + 4;
 
 export function shapeOf(c: Laid): Shape {
   const s: Shape = { f: c.f, map: c.map, marks: c.marks, laid: c, lean: new Map(), low: new Map(), rough: new Map(), walls: new Map(), reach: new Map(), puddles: new Map(), segs: new Map(), niches: new Map() };
@@ -63,6 +65,9 @@ export function shapeOf(c: Laid): Shape {
   };
   for (const p of c.marks.puddles) round(s.puddles, p.x, p.z, p.r, p);
   for (const b of c.marks.shards) if (b.big) round(s.niches, b.x, b.z, NICHE_OUT, b);
+  // Hewn flat behind a torch (#391): no reach at the three half-tile points of the wall cell's edge the torch hangs on, so that face
+  // stands upright in the edge, one tile wide, and runs into the natural slope within the cells beside it. `reachAt` finds them as asked before.
+  for (const t of c.marks.torches) for (const k of [-1, 0, 1]) s.reach.set(reachKey(s, Math.round(t.x * 2) + k * Math.abs(t.nz), Math.round(t.z * 2) + k * Math.abs(t.nx)), 0);
   for (const cr of c.marks.crevices) {
     for (const [x0, z0, x1, z1] of piecesOf(cr)) {
       const seg: Seg = { x0, z0, x1, z1, half: cr.width / 2, depth: cr.depth }, n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.05);
@@ -147,7 +152,7 @@ function touchesOpen(map: TileMap, X2: number, Z2: number): boolean {
  * open ground lies one tile on through the wall, the wall is thin there and the reach stops short of its middle.
  */
 function reachAt(s: Shape, X2: number, Z2: number): number {
-  const k = (Z2 + 4) * (s.map.w * 2 + 8) + X2 + 4;
+  const k = reachKey(s, X2, Z2);
   let r = s.reach.get(k);
   if (r === undefined) {
     r = Math.min(REACH_MAX, Math.max(REACH_MIN, REACH + REACH_SWING * wobble(s.f.seed, X2 / 2, Z2 / 2, 2) + REACH_WOBBLE * (hash(s.f.seed, X2, Z2, 72) * 2 - 1)));
@@ -172,7 +177,9 @@ const mix2 = (a: number, b: number, c: number, d: number, fx: number, fz: number
 /** How far the slope reaches into the wall from the point (x, z) of its foot, in the cell or on its edge. */
 function reach(w: Wall, x: number, z: number): number {
   const fx = (x - w.x) * 2, fz = (z - w.z) * 2, i = fx < 1 ? 0 : 1, j = fz < 1 ? 0 : 1, r = w.reach, k = j * 3 + i;
-  return mix2(r[k], r[k + 1], r[k + 3], r[k + 4], fx - i, fz - j);
+  // exact on the cell's edges (`mix2` leaves a rounding rest there): an edge without reach has exactly none between its points, or the upright face would tear
+  const tx = fx - i, tz = fz - j;
+  return (r[k] * (1 - tx) + r[k + 1] * tx) * (1 - tz) + (r[k + 3] * (1 - tx) + r[k + 4] * tx) * tz;
 }
 
 /** The reach of the slope that rises from an open side of the wall cell, taken where the point (px, pz) lies along that side. */

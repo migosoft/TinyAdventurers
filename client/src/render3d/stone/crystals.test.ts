@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BIG_SIZE, BROKEN_TOP, SMALL_SIZE, buildCrystalChunk, crystalChunkOf, crystalCluster, switchedChunks } from './crystals';
 import { noMarks, type Marks } from './place';
+import { torchChunkOf, type TorchMark } from '../torch/torch';
 
 // Heavy painting and meshing: well over vitest's 5 s default on a loaded machine (#402).
 vi.setConfig({ testTimeout: 30_000 });
@@ -92,9 +93,20 @@ describe('switchedChunks', () => {
 
   it('marks the chunk of a light that switched, once; a small shard (no light) marks nothing', () => {
     const built = new Set<number>();
-    expect(switchedChunks(marks.shards, () => false, built)).toEqual([]);
-    expect(switchedChunks(marks.shards, (id) => id === 7, built)).toEqual([crystalChunkOf(marks.shards[0])]);
-    expect(switchedChunks(marks.shards, (id) => id === 7, built)).toEqual([]);
-    expect(switchedChunks(marks.shards, () => false, built)).toEqual([crystalChunkOf(marks.shards[0])]);
+    expect(switchedChunks(marks.shards, () => false, built, crystalChunkOf)).toEqual([]);
+    expect(switchedChunks(marks.shards, (id) => id === 7, built, crystalChunkOf)).toEqual([crystalChunkOf(marks.shards[0])]);
+    expect(switchedChunks(marks.shards, (id) => id === 7, built, crystalChunkOf)).toEqual([]);
+    expect(switchedChunks(marks.shards, () => false, built, crystalChunkOf)).toEqual([crystalChunkOf(marks.shards[0])]);
+  });
+
+  it('marks a torch\'s chunk by torchChunkOf when its light goes out or is lit; two torches of one chunk mark it once', () => {
+    // the second hangs on a chunk's west edge: its wall point's chunk, not its floor tile's
+    const torches: TorchMark[] = [{ x: 3.5, z: 2, nx: 0, nz: 1, lightId: 4 }, { x: 16, z: 5.5, nx: -1, nz: 0, lightId: 5 }, { x: 20.5, z: 2, nx: 0, nz: 1, lightId: 6 }];
+    const built = new Set<number>();
+    expect(switchedChunks(torches, () => false, built, torchChunkOf)).toEqual([]);
+    expect(switchedChunks(torches, (id) => id === 4, built, torchChunkOf)).toEqual([[0, 0]]);
+    expect(switchedChunks(torches, (id) => id !== 6, built, torchChunkOf)).toEqual([[1, 0]]);
+    expect(switchedChunks(torches, () => false, built, torchChunkOf)).toEqual([[0, 0], [1, 0]]);
+    expect(switchedChunks(torches, () => false, built, torchChunkOf)).toEqual([]);
   });
 });

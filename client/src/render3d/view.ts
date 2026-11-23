@@ -75,8 +75,10 @@ import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type Stone
 import { noMarks, placeMarks, type Marks, type Taken } from './stone/place';
 import { layoutMoved, planKeys, planSheets, unplanned, type SheetPlan } from './stone/plan';
 import { floorHeight } from './stone/shape';
-import { buildCrystalChunk, switchedChunks } from './stone/crystals';
+import { buildCrystalChunk, crystalChunkOf, switchedChunks } from './stone/crystals';
 import { crystalMaterial } from './stone/crystalNodes';
+import { buildTorchChunk, torchChunkOf } from './torch/torch';
+import { FLAME_REACH, flameMaterial, holderMaterial } from './torch/torchNodes';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -167,8 +169,8 @@ export interface FrameInput {
   water?: { ripples: Float32Array | null; now: number; reflect: boolean };
   /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
   lavaPool?: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean };
-  /** The crystals (#380): a big cluster whose light `off` names is drawn broken (its chunk is rebuilt only when a light of it switched); `now` is the clock of the lights' pulse (s), which the gems' glow follows. Absent: every cluster as it was, clock `t`. */
-  crystals?: { off: (lightId: number) => boolean; now: number };
+  /** The crystals (#380) and wall torches (#391): a big cluster whose light `off` names is drawn broken, a torch without its flame (the chunk is rebuilt only when a light of it switched); `now` is the clock of the lights' pulse (s), which the gems' glow and the flames follow. Absent: every one as it was, clock `t`. */
+  wallLights?: { off: (lightId: number) => boolean; now: number };
 }
 
 export { GroundTooLargeError };
@@ -420,6 +422,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const crystal = crystalMaterial(lighting, sight);
   /** The crystal lights that are off: their clusters are built broken. */
   const crystalsOff = new Set<number>();
+  // The wall torches (#391): the holder lit by the room, the flame by itself.
+  const holder = holderMaterial(lighting, sight);
+  const flame = flameMaterial(sight);
+  /** The torch lights that are off: their torches are built without a flame. */
+  const torchesOff = new Set<number>();
   const shimmer = shimmerMaterial(sight, lighting.lavaTexture, map, toward);
   shimmer.setScene(sceneCopy.texture);
   const mirrorCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -441,6 +448,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const lavaChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const shimmerChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   const crystalChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const torchChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
+  const flameChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);
   type GroundBox = { x0: number; z0: number; x1: number; z1: number };
   /** The ground each water chunk's quads cover (tiles), for `poolInView`; null: rebuilt from the chunks at the next frame. */
   let waterBoxes: GroundBox[] | null = null;
@@ -521,14 +530,26 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     dropChunk(crystalChunks, i);
     const a = buildCrystalChunk(kit.marks, (id) => crystalsOff.has(id), cx, cz);
     if (!a) return;
+    crystalChunks[i] = wallMesh(a, [['normal', 3], ['gem', 3]], crystal.material, 0);
+  };
+  /** The mesh of a chunk's crystals or torches: its `position`, `foot` and index, and the attributes named. `grow`: the box is this much wider on every side (tiles), for what its material moves. */
+  const wallMesh = <A extends { position: Float32Array; foot: Float32Array; index: Uint32Array }>(a: A, attrs: [keyof A & string, number][], mat: NodeMaterial, grow: number): ChunkMesh => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(a.position, 3));
-    g.setAttribute('normal', new BufferAttribute(a.normal, 3));
-    g.setAttribute('gem', new BufferAttribute(a.gem, 3));
     g.setAttribute('foot', new BufferAttribute(a.foot, 2));
+    for (const [name, size] of attrs) g.setAttribute(name, new BufferAttribute(a[name] as Float32Array, size));
     g.setIndex(new BufferAttribute(a.index, 1));
     g.computeBoundingBox();
-    crystalChunks[i] = finishMesh(g, g.boundingBox!, crystal.material);
+    return finishMesh(g, g.boundingBox!.expandByScalar(grow), mat);
+  };
+  /** The wall torches of a chunk (#391): the holders, and the flames of those whose light is not in `torchesOff`; two opaque meshes in the opaque scene. */
+  const buildTorchesAt = (cx: number, cz: number): void => {
+    const i = cz * nx + cx;
+    dropChunk(torchChunks, i);
+    dropChunk(flameChunks, i);
+    const a = buildTorchChunk(kit.marks.torches, (id) => torchesOff.has(id), cx, cz);
+    if (a.holder) torchChunks[i] = wallMesh(a.holder, [['normal', 3], ['colour', 3]], holder, 0);
+    if (a.flame) flameChunks[i] = wallMesh(a.flame, [['flame', 3]], flame.material, FLAME_REACH);
   };
   const finishMesh = (g: BufferGeometry, box: Box3, mat: NodeMaterial): ChunkMesh => {
     g.boundingBox = box;
@@ -572,6 +593,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     if (s) shimmerChunks[i] = makeShimmerMesh(s.position);
     lavaBoxes = null;
     buildCrystals(cx, cz);
+    buildTorchesAt(cx, cz);
   };
   /** What the sheets' plan was made from (per chunk); `tileChanged` compares it (`layoutMoved`). Empty on the woodland. */
   let keys: string[] = world.stone ? planKeys(map) : [];
@@ -590,7 +612,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     keys = planKeys(map);
   };
   for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) buildAt(cx, cz);
-  const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks, crystalChunks];
+  const allChunks = [worldChunks, dipChunks, waterChunks, lavaChunks, shimmerChunks, crystalChunks, torchChunks, flameChunks];
   const chunkTotal = (): number => allChunks.reduce((n, list) => n + list.filter(Boolean).length, 0);
   const boxesOf = (list: (ChunkMesh | null)[]): GroundBox[] => {
     const out: GroundBox[] = [];
@@ -1054,12 +1076,14 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       water.time.value = f.water?.now ?? f.t;
       water.setRipples(f.water?.ripples ?? null);
       lava.time.value = shimmer.time.value = f.lavaPool?.now ?? f.t;
-      crystal.time.value = f.crystals?.now ?? f.t;
-      if (f.crystals) {
-        // A light that switched: its chunk's clusters are built again, broken or whole.
-        const dirty = switchedChunks(kit.marks.shards, f.crystals.off, crystalsOff);
+      crystal.time.value = flame.time.value = f.wallLights?.now ?? f.t;
+      if (f.wallLights) {
+        // A light that switched: its chunk's clusters are built again, broken or whole; its chunk's torches, with or without their flame.
+        const dirty = switchedChunks(kit.marks.shards, f.wallLights.off, crystalsOff, crystalChunkOf);
         for (const [cx, cz] of dirty) buildCrystals(cx, cz);
-        if (dirty.length) chunks.total = chunkTotal();
+        const relit = switchedChunks(kit.marks.torches, f.wallLights.off, torchesOff, torchChunkOf);
+        for (const [cx, cz] of relit) buildTorchesAt(cx, cz);
+        if (dirty.length || relit.length) chunks.total = chunkTotal();
       }
       lava.setBubbles(f.lavaPool?.bubbles ?? null);
       lava.setStirs(f.lavaPool?.stirs ?? null);
@@ -1302,6 +1326,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         water.material.dispose();
         lava.material.dispose();
         crystal.material.dispose();
+        holder.dispose();
+        flame.material.dispose();
         shimmer.material.dispose();
         sceneCopy.dispose();
         mirrorTarget.dispose();

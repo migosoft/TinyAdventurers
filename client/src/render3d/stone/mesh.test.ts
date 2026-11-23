@@ -430,6 +430,32 @@ describe('buildStoneChunk', () => {
     for (const v of vertices(rockBuild(m))) if (v.kind === KIND.floor) expect(v.p[1]).toBeLessThanOrEqual(0);
   });
 
+  it('builds a hewn face behind a torch: upright in the cell\'s edge, and no rock in front of the plate', () => {
+    // a torch on the north wall cell (5, 1) of the cave: its edge is z = 2; the seed moves the reach of the rock round it
+    const m = cave(), marks: Marks = { ...noMarks(), torches: [{ x: 5.5, z: 2, nx: 0, nz: 1, lightId: 1 }] };
+    for (let seed = 1; seed <= 12; seed++) hewn(buildStoneChunk(m, stoneField(m, new Uint8Array(m.w * m.h).fill(1), seed), planSheets(m), marks, 0, 0));
+  });
+  const hewn = (a: StoneArrays): void => {
+    expect(Array.from(a.position).every(Number.isFinite)).toBe(true);
+    const side = vertices(a).filter((v) => v.p[0] >= 5 && v.p[0] <= 6 && v.p[2] > 1.5 && v.p[2] < 3 && v.p[1] > 0);
+    expect(side.length).toBeGreaterThan(8);
+    for (const v of side) expect(v.p[2], `vertex ${v.p}`).toBeLessThanOrEqual(2.02);
+    // below the wall's top the cell's torch side is the face in the edge: nothing of a slope behind the plate
+    const face = side.filter((v) => v.p[1] < WALL_H && v.p[2] <= 2);
+    expect(face.length).toBeGreaterThan(4);
+    for (const v of face) expect(v.p[2], `vertex ${v.p}`).toBeGreaterThanOrEqual(2 - 0.02);
+    // and it is whole: every column of the cell's vertices has some between the foot and the top
+    for (const x of [5, 5.25, 5.5, 5.75, 6]) expect(face.filter((v) => v.p[0] === x && v.p[1] > 0).length, `column ${x}`).toBeGreaterThanOrEqual(3);
+    // no hole and no gap: along the hewn cell's edges to the wall cells beside it, both cells have the same vertices
+    for (const x of [5, 6]) {
+      const onEdge = (inCell: (px: number) => boolean): string[] =>
+        Array.from(new Set(triangles(a).filter((t) => t.every((v) => inCell(v.p[0]))).flat().filter((v) => v.p[0] === x && v.p[1] > 0 && v.p[2] > 1 && v.p[2] <= 2).map((v) => v.p.map((c) => Math.round(c * 1e4)).join(',')))).sort();
+      const mine = onEdge((px) => px >= 5 && px <= 6);
+      expect(mine.length).toBeGreaterThan(4);
+      expect(onEdge((px) => (x === 5 ? px <= 5 : px >= 6)), `edge x = ${x}`).toEqual(mine);
+    }
+  };
+
   it('builds the laid mesh where the rock amount is 0, and keeps the caves under their budgets', () => {
     const map = stoneMap(), plan = planSheets(map), lights = TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y, wall: 1 }));
     const levelOf = (kinds: Uint8Array | null) => {

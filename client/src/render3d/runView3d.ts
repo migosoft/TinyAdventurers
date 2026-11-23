@@ -502,7 +502,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, crystals: this.crystalsIn(c.now),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
       },
       c.timer,
     );
@@ -510,11 +510,11 @@ export class RunView3d implements RunView {
     return this.stats(c, view.meshes);
   }
 
-  /** The crystals of this frame (reused object): a crystal whose light is off is broken (#380); a rebuilt view learns it on its first frame. */
-  private readonly crystalFrame = { off: (id: number): boolean => this.field.lights.get(id)?.on === false, now: 0 };
-  private crystalsIn(now: number): { off: (id: number) => boolean; now: number } {
-    this.crystalFrame.now = now;
-    return this.crystalFrame;
+  /** The crystals and wall torches of this frame (reused object): a crystal whose light is off is broken (#380), a torch out (#391); a rebuilt view learns it on its first frame. */
+  private readonly wallLightFrame = { off: (id: number): boolean => this.field.lights.get(id)?.on === false, now: 0 };
+  private wallLightsIn(now: number): { off: (id: number) => boolean; now: number } {
+    this.wallLightFrame.now = now;
+    return this.wallLightFrame;
   }
 
   private readonly fieldFrame = { age: 10, t: 0 };

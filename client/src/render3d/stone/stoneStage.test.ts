@@ -6,7 +6,8 @@ import { renderPlan } from '../quality';
 import type { StageCtx } from '../host';
 import type { FrameInput } from '../view';
 import { LAID, ROCK } from './field';
-import { PLACES } from './stoneMap';
+import { kindAt, stoneField } from './field';
+import { PLACES, STONE_SEED, STONE_TORCHES, stoneMap, zoneKinds } from './stoneMap';
 import { createStoneStage } from './stoneStage';
 
 const assets = { image: {} as HTMLImageElement, frames: {} };
@@ -41,6 +42,21 @@ describe('the ?r3d=stone stage (#380)', () => {
   it('gives a field of only rock for &stone=rock, and only laid for &stone=laid', () => {
     expect(Array.from(new Set(drawn('?r3d=stone&stone=rock').world.stone!.kinds))).toEqual([ROCK]);
     expect(Array.from(new Set(drawn('?r3d=stone&stone=laid').world.stone!.kinds))).toEqual([LAID]);
+  });
+
+  it('STONE_TORCHES: torches on laid and on rock walls, a west and an east rock wall, one out; each on an opaque cell with open floor in front', () => {
+    const map = stoneMap(), f = stoneField(map, zoneKinds(map), STONE_SEED);
+    const kind = (t: (typeof STONE_TORCHES)[number]): number => kindAt(f, t.tx, t.ty);
+    expect(STONE_TORCHES.some((t) => kind(t) === LAID && t.lit)).toBe(true);
+    expect(STONE_TORCHES.some((t) => kind(t) === LAID && !t.lit)).toBe(true);
+    for (const side of [0, 1, 2]) expect(STONE_TORCHES.some((t) => kind(t) === ROCK && t.side === side && t.lit), `side ${side}`).toBe(true);
+    expect(STONE_TORCHES.some((t) => kind(t) === ROCK && !t.lit)).toBe(true);
+    for (const t of STONE_TORCHES) {
+      const [dx, dy] = [[0, -1], [-1, 0], [1, 0]][t.side];
+      expect(map.opaque(t.tx + dx, t.ty + dy), `wall of ${t.tx},${t.ty}`).toBe(true);
+      expect(map.opaque(t.tx, t.ty), `floor of ${t.tx},${t.ty}`).toBe(false);
+    }
+    expect(new Set(STONE_TORCHES.map((t) => `${t.tx},${t.ty},${t.side}`)).size).toBe(STONE_TORCHES.length);
   });
 
   it('starts the camera in the place asked for', () => {

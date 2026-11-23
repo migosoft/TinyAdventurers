@@ -132,16 +132,17 @@ export function crystalChunkOf(b: Marks['shards'][number]): [cx: number, cz: num
 
 const NONE: [number, number][] = [];
 /**
- * The chunks whose clusters must be built again: those of the shards whose light's `off` state differs from `built` (the lights the meshes
- * were built broken for). `built` is updated to match, so the same state asked twice marks nothing. Small shards have no light.
+ * The chunks whose clusters (or torches, #391) must be built again: those (by `chunkOf`) of the items whose light's `off` state differs from
+ * `built` (the lights the meshes were built broken or out for). `built` is updated to match, so the same state asked twice marks nothing.
+ * Small shards have no light.
  */
-export function switchedChunks(shards: readonly Marks['shards'][number][], off: (lightId: number) => boolean, built: Set<number>): [number, number][] {
+export function switchedChunks<T extends { lightId?: number }>(items: readonly T[], off: (lightId: number) => boolean, built: Set<number>, chunkOf: (item: T) => [number, number]): [number, number][] {
   let out = NONE;
-  for (const b of shards) {
+  for (const b of items) {
     if (b.lightId === undefined || off(b.lightId) === built.has(b.lightId)) continue;
     if (!built.delete(b.lightId)) built.add(b.lightId);
     if (out === NONE) out = [];
-    const c = crystalChunkOf(b);
+    const c = chunkOf(b);
     if (!out.some((o) => o[0] === c[0] && o[1] === c[1])) out.push(c);
   }
   return out;

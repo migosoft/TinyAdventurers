@@ -6,6 +6,7 @@ import { ROCK, stoneField } from './field';
 import { noMarks, placeMarks } from './place';
 import { REACH_MAX, floorHeight, stoneHeight } from './shape';
 import { CRYSTAL_TILES, STONE_SEED, STONE_SPAWN, stoneMap } from './stoneMap';
+import { PLATE_H, PLATE_W, PLATE_Y } from '../torch/torch';
 
 /** A cave of 8 by 6 cells in solid rock, with a lone wall cell at (4, 4) and a group of two at (7, 5) and (8, 5). */
 function cave(): TileMap {
@@ -47,6 +48,17 @@ describe('stoneHeight', () => {
       expect(up.filter((h) => h > 0.05 && h < WALL_H - 0.05).length).toBeGreaterThan(5); // a slope, not a step
       expect(up[up.length - 1]).toBe(WALL_H);
     }
+  });
+
+  it('the rock is hewn upright where a torch hangs', () => {
+    // a torch on the north wall cell (5, 1): its point on that cell's edge, the normal into the cave
+    const m = cave(), f = rock(m), none = noMarks(), hewn = { ...noMarks(), torches: [{ x: 5.5, z: 2, nx: 0, nz: 1, lightId: 1 }] };
+    for (const x of [5.5, 5.5 - PLATE_W / 2, 5.5 + PLATE_W / 2]) {
+      expect(stoneHeight(f, m, hewn, x, 2 - 0.02)).toBeGreaterThanOrEqual(PLATE_Y + PLATE_H / 2);
+      expect(stoneHeight(f, m, none, x, 2 - 0.02)).toBeLessThan(PLATE_Y - PLATE_H / 2);
+    }
+    // two tiles along the wall the rock is as it was
+    for (let d = 0.02; d < 1; d += 0.07) expect(stoneHeight(f, m, hewn, 7.5, 2 - d)).toBe(stoneHeight(f, m, none, 7.5, 2 - d));
   });
 
   it('is equal on both sides of every shared cell edge', () => {

@@ -183,6 +183,37 @@ describe('placement', () => {
     expect(placeMarks(c.map, c.f, taken).shards.filter((s) => s.big)).toEqual([]);
   });
 
+  it('a torch light becomes a torch mark at its wall', () => {
+    const c = cases[0];
+    for (const wall of [1, 2, 3]) {
+      const lights = [{ id: 40, kind: LIGHT_KIND.Torch, x: 5, y: 6, wall }, { id: 41, kind: LIGHT_KIND.Torch, x: 5, y: 6, wall: (wall % 3) + 1 }];
+      const w = wallOf(lights[0]), w2 = wallOf(lights[1]);
+      // two torches in front of one floor tile: two marks
+      expect(placeMarks(c.map, c.f, { ...c.taken, lights }).torches).toEqual([{ x: w.x, z: w.z, nx: w.nx, nz: w.nz, lightId: 40 }, { x: w2.x, z: w2.z, nx: w2.nx, nz: w2.nz, lightId: 41 }]);
+    }
+  });
+
+  it('a torch light with wall 0 gets no mark', () => {
+    const c = cases[0];
+    expect(placeMarks(c.map, c.f, { ...c.taken, lights: [{ id: 40, kind: LIGHT_KIND.Torch, x: 5, y: 6, wall: 0 }] }).torches).toEqual([]);
+  });
+
+  it('small shards keep clear of a rock torch', () => {
+    let small = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const c = generated(seed * 3 + 1); // all rock
+      const lights = c.taken.lights.map((l) => ({ ...l, kind: LIGHT_KIND.Torch }));
+      const m = placeMarks(c.map, c.f, { ...c.taken, lights });
+      expect(m.torches.length).toBe(lights.length);
+      for (const s of m.shards) {
+        expect(s.big).toBe(false);
+        small++;
+        for (const l of lights) expect(Math.hypot(s.x - l.x - 0.5, s.z - l.y - 0.5), `seed ${seed}`).toBeGreaterThanOrEqual(0.7);
+      }
+    }
+    expect(small).toBeGreaterThan(100);
+  });
+
   it('placement_is_deterministic', () => {
     cases.forEach((c, i) => expect(marksOf(c)).toEqual(all[i]));
   });

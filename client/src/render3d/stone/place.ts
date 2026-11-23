@@ -1,8 +1,9 @@
-// The marks the client places from a level's seed (#380 part 5): rooms, puddles, cracks, crevices, floor pieces, grates and crystal
-// shards. The painter and the mesh read them. Positions are tiles (x, z).
+// The marks the client places from a level's seed (#380 part 5): rooms, puddles, cracks, crevices, floor pieces, grates, crystal
+// shards and the wall torches (#391). The painter and the mesh read them. Positions are tiles (x, z).
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, type TileMap } from '../../sim/map';
 import { wallOf } from '../heights';
+import type { TorchMark } from '../torch/torch';
 import { hash, kindAt, LAID, ROCK, rockAmount, STONE_PX, type StoneField } from './field';
 
 export interface Room { cells: number[]; kind: 0 | 1; x0: number; z0: number; x1: number; z1: number }
@@ -12,7 +13,7 @@ export interface Crevice extends Crack { width: number; depth: number }
 export interface FloorPiece { kind: 'circle' | 'mosaic'; x: number; z: number; r: number }
 export interface Grate { x: number; z: number }
 export interface Shard { x: number; z: number; nx: number; nz: number; big: boolean; lightId?: number }
-export interface Marks { rooms: Room[]; puddles: Puddle[]; rockCracks: Crack[]; crevices: Crevice[]; pieces: FloorPiece[]; grates: Grate[]; shards: Shard[] }
+export interface Marks { rooms: Room[]; puddles: Puddle[]; rockCracks: Crack[]; crevices: Crevice[]; pieces: FloorPiece[]; grates: Grate[]; shards: Shard[]; torches: TorchMark[] }
 
 /** A crack's or a crevice's straight pieces, [x0, z0, x1, z1] each: its line, then its branches. */
 export const piecesOf = (c: Crack): number[][] => [...c.pts.slice(1).map((q, i) => [...c.pts[i], ...q]), ...c.branch];
@@ -26,7 +27,7 @@ export function onPiece(u: number, v: number, x0: number, z0: number, x1: number
 
 /** No marks at all: what every caller passes until the placement exists. */
 export function noMarks(): Marks {
-  return { rooms: [], puddles: [], rockCracks: [], crevices: [], pieces: [], grates: [], shards: [] };
+  return { rooms: [], puddles: [], rockCracks: [], crevices: [], pieces: [], grates: [], shards: [], torches: [] };
 }
 
 /** The static lights of RunStartInfo and the heroes' start: what no mark may cover. */
@@ -109,6 +110,8 @@ export function roomsOf(map: TileMap, f: StoneField): Room[] {
 export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
   const marks = noMarks();
   marks.rooms = roomsOf(map, f);
+  // a torch hangs on its wall whatever the rooms are (a corridor has none); wall 0 is a light without a torch
+  for (const l of taken.lights) if (l.kind === LIGHT_KIND.Torch && l.wall > 0) marks.torches.push({ ...wallOf(l), lightId: l.id });
   if (!marks.rooms.length) return marks;
   const used: Disc[] = [{ x: taken.spawn.x, z: taken.spawn.z, r: 1 }];
   const lights = taken.lights.filter((l) => l.kind === LIGHT_KIND.Torch || l.kind === LIGHT_KIND.Crystal);

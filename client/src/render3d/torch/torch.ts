@@ -5,7 +5,7 @@ import { faceNormal, outOfWall } from '../stone/crystals';
 import { CHUNK } from '../stone/grid';
 
 /** Tiles. The flame's axis stands this far in front of the wall cell's edge; its foot is at FLAME_BASE_Y, it is FLAME_H high and FLAME_R wide at size 1. */
-export const FLAME_STAND = 0.3, FLAME_BASE_Y = 1.14, FLAME_H = 0.34, FLAME_R = 0.085;
+export const FLAME_STAND = 0.3, FLAME_BASE_Y = 1.14, FLAME_H = 0.44, FLAME_R = 0.115;
 /** The plate: its middle's height, width along the wall, height, and how deep it is set into the stone. */
 export const PLATE_Y = 0.95, PLATE_W = 0.22, PLATE_H = 0.34, PLATE_SINK = 0.03;
 /** The plate stands this far out of the wall, and its front is this much smaller on every side (a bevel). */

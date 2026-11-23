@@ -63,8 +63,18 @@ export const STONE_SPAWN = { x: 10.5, z: 7.5 };
 /** The places `&at=` names (tile centres): the knight starts there and the camera looks at it. Circle and mosaic are where the seed laid them; `grate` is beside the grate (seen with `&yaw=180`: it lies at a south wall's foot). */
 export const PLACES = {
   cave: [10.5, 7.5], border: [24.5, 9.5], hall: [40.5, 7.5], circle: [37.5, 22.5], mosaic: [60.5, 9.5], cave2: [10.5, 24.5], door: [9.5, 16.5], grate: [53.3, 14.8],
+  // the hall's first two torches, a lit one and one that is out; the first cave's alcove with its four torches (#391)
+  torch: [36.5, 5.5], rocktorch: [12.5, 4.5],
 } as const;
 
 /** Lamp tiles: torches under a north wall of the laid rooms, crystals in the caves: on the floor, and the first at a wall's foot (its niche). */
 export const TORCH_TILES: [number, number][] = [[33, 3], [40, 3], [47, 3], [56, 3], [64, 3], [33, 17], [39, 17]];
+/**
+ * The wall torches (#391), each on the floor tile in front of its wall (side 0 the wall north of it, 1 west, 2 east): the laid rooms'
+ * under their north walls, the second of them out; and in the first cave's alcove a west, a north and an east rock wall torch, and one that is out.
+ */
+export const STONE_TORCHES: { tx: number; ty: number; side: 0 | 1 | 2; lit: boolean }[] = [
+  ...TORCH_TILES.map(([tx, ty], i) => ({ tx, ty, side: 0 as const, lit: i !== 1 })),
+  { tx: 10, ty: 2, side: 1, lit: true }, { tx: 11, ty: 2, side: 0, lit: false }, { tx: 13, ty: 2, side: 0, lit: true }, { tx: 15, ty: 2, side: 2, lit: true },
+];
 export const CRYSTAL_TILES: [number, number][] = [[8, 3], [14, 3], [15, 12], [5, 21], [13, 26]];
