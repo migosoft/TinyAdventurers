@@ -9,7 +9,7 @@
 // The debug keys (F4, F8, F9, the rules log) are checked by r3d-run.mjs, which uses a debug account.
 import { PASSWORD, tag, login, deleteAccount, purge } from './account.mjs';
 import { launch } from './gpu.mjs';
-import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback, waitLoaded } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback, waitLoaded, walkTile } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -135,20 +135,9 @@ try {
 
   // Hold D: the hero walks more than a tile.
   for (const [name, page] of pages) {
-    const h0 = (await r3dState(page)).hero;
     await page.mouse.move(900, 300);
-    await page.keyboard.down('d');
-    // Software frames are slow (two games share the machine): hold at least 900 ms, then until the hero has walked a tile (6 s at most).
-    await page.waitForTimeout(900);
-    let moved = 0;
-    for (let waited = 0; waited < 6000; waited += 250) {
-      const h1 = (await r3dState(page)).hero;
-      moved = h0 && h1 ? dist(h0, h1) : 0;
-      if (moved > 1) break;
-      await page.waitForTimeout(250);
-    }
-    await page.keyboard.up('d');
-    console.log(`${name}: hero moved ${moved.toFixed(2)} tiles holding D`);
+    const { moved, frames, secs } = await walkTile(page, 'd');
+    console.log(`${name}: hero moved ${moved.toFixed(2)} tiles holding D (${frames} frames, ${secs.toFixed(1)} s)`);
     if (!(moved > 1)) errors.push(`${name}: the hero moved only ${moved.toFixed(2)} tiles holding D`);
   }
   // Attack.

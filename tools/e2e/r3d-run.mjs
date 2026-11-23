@@ -10,7 +10,7 @@
 import { decode } from '../../client/node_modules/@msgpack/msgpack/dist.esm/index.mjs';
 import { tag, markDebug, login, createCharacter, deleteAccount, purge } from './account.mjs';
 import { launch, gpuOn, printGpu } from './gpu.mjs';
-import { VIEWPORT, watchPage, saveReadback, r3dState, backendQuery, waitLoaded } from './r3d-page.mjs';
+import { VIEWPORT, watchPage, saveReadback, r3dState, backendQuery, waitLoaded, walkTile } from './r3d-page.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const out = process.argv[3] ?? 'shots';
@@ -61,7 +61,7 @@ page.on('websocket', (ws) => ws.on('framesent', (f) => {
     if (Array.isArray(m) && typeof m[0] === 'number' && m.length >= 9) sentInputs.push(m);
   } catch { /* other messages are not read here */ }
 }));
-// The woodland's trees draw slowly in software (a few frames a second): the walk and the click get longer to be seen (the real GPU needs none of it).
+// The woodland's trees draw slowly in software (a few frames a second): the waits for the turn and the click get longer to be seen (the real GPU needs none of it).
 const slow = level === 'woodland' && !gpuOn ? 4 : 1;
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); // window.__r3d.hero / cam are {x, z} in tiles
 const r3d = () => r3dState(page);
@@ -216,15 +216,10 @@ try {
   if (!(figures >= 1)) errors.push(`no figure drawn (window.__r3d.figures = ${figures})`);
 
   // Hold D: the hero walks.
-  const h0 = (await r3d()).hero;
-  if (!h0) errors.push('window.__r3d.hero is not set in a run');
-  await page.keyboard.down('d');
-  await page.waitForTimeout(2000 * slow);
-  await page.keyboard.up('d');
-  const h1 = (await r3d()).hero;
-  if (h0 && h1) {
-    const moved = dist(h0, h1);
-    console.log(`hero moved ${moved.toFixed(2)} tiles`);
+  if (!(await r3d()).hero) errors.push('window.__r3d.hero is not set in a run');
+  else {
+    const { moved, frames, secs } = await walkTile(page, 'd');
+    console.log(`hero moved ${moved.toFixed(2)} tiles (${frames} frames, ${secs.toFixed(1)} s)`);
     if (!(moved > 1)) errors.push(`the hero moved only ${moved.toFixed(2)} tiles holding D`);
   }
 
