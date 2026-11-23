@@ -33,7 +33,7 @@ const LAST_KNOWN_REACHED: f64 = 12.0;
 
 impl Brain {
     pub fn new() -> Brain {
-        Brain { path: Vec::new(), repath_t: 0.0, last_known: None, shot: AI_SHOT_BASE }
+        Brain { path: Vec::new(), repath_t: 0.0, last_known: None, shot: AI_SHOT_BASE, aim: Default::default() }
     }
 }
 
@@ -162,9 +162,16 @@ pub fn input(run: &mut Run, pi: usize) -> InputMsg {
     let wants = |a: &ResolvedAbility, cd: f64, disabled: bool| foe.is_some_and(|f| !disabled && cd <= COOLDOWN_LEEWAY && worth_using(run, me, a, f, main_ready));
     let use_primary = wants(&p.sheet.primary, p.cd1, p.sheet.disabled[0].is_some());
     let use_secondary = wants(&p.sheet.secondary, p.cd2, p.sheet.disabled[1].is_some());
+    // An arcing slot that fires is aimed like a monster's shot: scatter, range finding, lead (`aim.rs`).
+    let arcing = [(use_primary, &p.sheet.primary), (use_secondary, &p.sheet.secondary)].into_iter().find(|(used, a)| *used && ab::def(a.id).arcs).map(|(_, a)| a.clone());
     let (n1, n2) = (shots_of(&p.sheet.primary), shots_of(&p.sheet.secondary));
     let (seq, view_lag, rtt) = (p.ack, (p.view_lag * 1000.0).round() as u16, (p.rtt * 1000.0).round() as u16);
     let (mut primary, mut secondary) = (None, None);
+    let (mut aim, mut aim_dist) = (aim, aim_dist);
+    if let (Some(a), Some(f)) = (arcing, foe) {
+        let at = super::aim::creature_aim(run, me, f, &a);
+        (aim, aim_dist) = (pos.angle_to(at), pos.dist(at));
+    }
     if let Some(c) = run.players[pi].charm.as_mut() {
         let b = &mut c.brain;
         if use_primary {

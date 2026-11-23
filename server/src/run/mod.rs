@@ -3,6 +3,7 @@
 pub mod abilities;
 pub mod ai;
 pub mod ai_shapes;
+pub mod aim;
 pub mod arc;
 pub mod ambush;
 pub mod behaviour;
@@ -584,6 +585,10 @@ impl Run {
             keystones::cool(m, DT);
         }
         self.monsters.retain(|m| m.alive);
+        let done: Vec<(u32, u32, bool)> = self.projectiles.iter().filter(|p| p.dead).filter_map(|p| p.aimed.map(|a| (p.owner, a, p.struck))).collect();
+        for (owner, aimed, struck) in done {
+            aim::shot_done(self, owner, aimed, struck);
+        }
         self.projectiles.retain(|p| !p.dead);
         self.hazards.retain(|h| h.life > 0.0);
         self.objects.retain(|o| !o.gone);

@@ -122,6 +122,16 @@ pub struct Brain {
     pub last_known: Option<Vec2>,
     /// The shot id of its next shot (`hero_brain::AI_SHOT_BASE` and up).
     pub shot: u16,
+    /// What its last arcing shots taught it (`aim.rs`).
+    pub aim: AimMemory,
+}
+
+/// A creature's aim memory (#321): its last target and the scatter factor range finding has earned against
+/// it. `factor` 0 means unset (1.0).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AimMemory {
+    pub target: u32,
+    pub factor: f64,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -214,6 +224,8 @@ pub struct Ai {
     pub wander_to: Option<Vec2>,
     /// Seconds the monster does nothing (mimic reveal).
     pub hold: f64,
+    /// What its last arcing shots taught it (`aim.rs`).
+    pub aim: AimMemory,
 }
 
 impl Ai {
@@ -233,6 +245,7 @@ impl Ai {
             wander_t: 2.0,
             wander_to: None,
             hold: 0.0,
+            aim: AimMemory::default(),
         }
     }
 }
@@ -434,6 +447,9 @@ pub struct Arc {
 
 pub struct Projectile {
     pub arc: Option<Arc>,
+    /// The creature (id) a creature aimed this arcing shot at, and whether the shot hit it (`aim::shot_done`).
+    pub aimed: Option<u32>,
+    pub struck: bool,
     pub id: u32,
     pub kind: EntityKind,
     pub owner: u32,

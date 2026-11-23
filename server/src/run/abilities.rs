@@ -1071,7 +1071,11 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
     let damage = weapon_hit_damage(run, c, a, true);
     let owner = run.creature_id(c);
     let id = run.alloc_id();
+    // A creature's arcing shot remembers whom it was aimed at (`aim::shot_done`).
+    let aimed = if arc.is_some() { super::aim::aimed_at(run, c) } else { None };
     run.projectiles.push(Projectile {
+        aimed,
+        struck: false,
         arc,
         id,
         kind,
@@ -1254,6 +1258,10 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
         return;
     }
     let Some(c) = target else { return };
+    let hit_id = run.creature_id(c);
+    if run.projectiles[i].aimed == Some(hit_id) {
+        run.projectiles[i].struck = true;
+    }
     // The rest after a kill, from the target's HP and resistances before the hit.
     let rest = match pierce {
         Pierce::Overkill { left } if left > 0 => overkill_left(run, c, &damage),

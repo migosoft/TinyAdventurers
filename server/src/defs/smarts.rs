@@ -11,6 +11,10 @@ super::enum_list::listed_enum! {
         Dodge = 0,
         AdvancedDodge = 1,
         KeepDistance = 2,
+        /// Arcing shots: each miss on the same target shrinks the next scatter (#321).
+        RangeFinding = 3,
+        /// Arcing shots aim where the target will be when the shot lands (#321).
+        Lead = 4,
     }
 }
 
@@ -28,15 +32,24 @@ pub struct SmartsDef {
     pub margin: f64,
     /// Dodge: share of current HP a shot's resolved damage must reach.
     pub threat_share: f64,
+    /// Aim: the scatter of an arcing shot as a share of the distance, from DEX (a higher DEX is tighter).
+    pub scatter: Scaled,
+    /// Range finding: the factor on the scatter after each miss on the same target, and its floor.
+    pub range_find_mult: f64,
+    pub range_find_floor: f64,
 }
 
 pub const SMARTS: SmartsDef = SmartsDef {
     tier_int: [6, 11, 16, 21],
-    needs: [0, 1, 1], // Dodge tier 0 (INT 6), AdvancedDodge tier 1 (INT 11), KeepDistance tier 1 (INT 11)
+    // Dodge tier 0 (INT 6), AdvancedDodge and KeepDistance tier 1 (INT 11), RangeFinding tier 2 (INT 16), Lead tier 3 (INT 21)
+    needs: [0, 1, 1, 2, 3],
     notice: Scaled { value: 80.0, attr: Attr::Dex, pct: 0.03, at: 10 },
     reaction: 0.0,
     margin: 2.0,
     threat_share: 0.05,
+    scatter: Scaled { value: 0.15, attr: Attr::Dex, pct: 0.03, at: 10 },
+    range_find_mult: 0.6,
+    range_find_floor: 0.25,
 };
 
 impl SmartsDef {
@@ -64,6 +77,14 @@ mod tests {
         assert!(SMARTS.can(11, KeepDistance));
         assert!(SMARTS.can(11, AdvancedDodge));
         assert!(!SMARTS.can(10, AdvancedDodge));
+    }
+
+    #[test]
+    fn aim_tiers_are_16_and_21() {
+        assert!(!SMARTS.can(15, RangeFinding));
+        assert!(SMARTS.can(16, RangeFinding));
+        assert!(!SMARTS.can(20, Lead));
+        assert!(SMARTS.can(21, Lead));
     }
 
     #[test]

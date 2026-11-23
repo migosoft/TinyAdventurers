@@ -604,7 +604,12 @@ const SHOT_PACE_JITTER: f64 = 0.3;
 /// a barrel). Either one also keeps the other back for a moment, so they never land at once.
 pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
     let id = run.monsters[mi].kit.iter().nth(alt as usize).expect("the kit holds the main and the alt ability").id;
-    let target = at.unwrap_or_else(|| run.creature_pos(foe));
+    let mut target = at.unwrap_or_else(|| run.creature_pos(foe));
+    // An arcing shot is aimed with scatter, range finding and lead (`aim.rs`); `spawn_shot` clamps the distance.
+    if ab::def(id).arcs && at.is_none() {
+        let a = run.monsters[mi].kit.get(id).expect("the kit holds it").clone();
+        target = super::aim::creature_aim(run, Creature::Monster(mi), foe, &a);
+    }
     if !monster_use(run, mi, id, target) {
         return;
     }
