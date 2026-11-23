@@ -87,6 +87,21 @@ describe('Shots', () => {
       expect(fly(shots, new Map())).toEqual([['landed', 124, 24]]);
     });
 
+    it("knows the server copy of an own shot that landed ('ownLanded'), not another's or one that was not landed", () => {
+      const shots = new Shots();
+      shots.spawn(KIND.Arrow, 7, 0, ability('Shoot', { speed: 200, range: 260 }), 2, 1, { x: 24, y: 24 }, 0, undefined, 100);
+      expect(shots.ownLanded((1 << 16) | 7, 1)).toBe(false); // still flying
+      fly(shots, new Map());
+      expect(shots.ownLanded((1 << 16) | 7, 1)).toBe(true);
+      expect(shots.ownLanded((2 << 16) | 7, 1)).toBe(false); // another hero's shot with the same number
+      expect(shots.ownLanded((1 << 16) | 8, 1)).toBe(false);
+      // a shot that ends at an enemy is not a landing
+      const hit = new Shots();
+      hit.spawn(KIND.Arrow, 9, 0, ability('Shoot', { speed: 290, range: 260 }), 2, 1, { x: 24, y: 24 }, 0, undefined, 260);
+      fly(hit, new Map([[5, orc(284)]]));
+      expect(hit.ownLanded((1 << 16) | 9, 1)).toBe(false);
+    });
+
     it('flies over an enemy halfway on a far shot and hits one at the landing point', () => {
       const a = ability('Shoot', { speed: 290, range: 260 });
       const over = new Shots();

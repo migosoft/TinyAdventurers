@@ -590,9 +590,15 @@ export class RunSession {
       case 'Immune':
       case 'Effect':
       case 'Cast':
-      case 'Land':
         this.view?.event(ev, this.pred.state, this.serverOwn, dark);
         break;
+      case 'Land': {
+        // The server copy of an own shot that landed in prediction is the same arrow; a missing entity lets the event through.
+        const e = this.ents.get(ev.id);
+        if (e && this.shots.ownLanded(e.extra, this.runInfo.you)) break;
+        this.view?.event(ev, this.pred.state, this.serverOwn, dark);
+        break;
+      }
       case 'Tile': {
         const was = this.map.get(ev.x, ev.y);
         this.map.set(ev.x, ev.y, ev.v);

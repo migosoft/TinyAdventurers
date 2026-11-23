@@ -49,6 +49,8 @@ export class Shots {
   private readonly onServer = new Set<number>();
   /** Own shots whose predicted copy has ended (shot id -> time, s): their server copy stays hidden. */
   private endedShots = new Map<number, number>();
+  /** The ended own shots that ended `'landed'` (shot ids), kept as long as `endedShots`: the server's `Land` of such a shot adds no second arrow. */
+  private landedShots = new Set<number>();
   /**
    * Own shots whose predicted copy was predicted to stop at an enemy (shot id -> the enemy's
    * position, the shot's direction and how far past the enemy's centre a shot has surely
@@ -118,7 +120,13 @@ export class Shots {
     return hidden;
   }
 
-  /** Advances the shots; `ended` is called for each that ends, with how. */
+  /** Whether the server projectile with this `extra` is an own predicted shot whose predicted copy already landed (its `Land` is then a duplicate). */
+  ownLanded(extra: number, you: number): boolean {
+    const shot = ownPredictedShot(extra, you);
+    return shot !== null && this.landedShots.has(shot);
+  }
+
+  /** Advances the shots;`ended` is called for each that ends, with how. */
   update(
     dt: number,
     now: number,
@@ -129,6 +137,7 @@ export class Shots {
     for (const [shot, t] of this.endedShots) {
       if (now - t <= 2) continue;
       this.endedShots.delete(shot);
+      this.landedShots.delete(shot);
       this.stoppedShots.delete(shot);
     }
     for (let i = this.live.length - 1; i >= 0; i--) {
@@ -162,6 +171,8 @@ export class Shots {
         ended(c, hitWall ? 'wall' : hitEnemy ? 'enemy' : landing ? 'landed' : 'gone');
         this.live.splice(i, 1);
         this.endedShots.set(c.shot, now);
+        if (landing && !hitWall && !hitEnemy) this.landedShots.add(c.shot);
+        else this.landedShots.delete(c.shot);
         // Predicted to stop: if the server's shot flies on past this enemy after all, it is drawn
         // (`hidden`).
         if (hitEnemy) {

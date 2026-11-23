@@ -223,12 +223,12 @@ describe('Figures3d', () => {
       expect(stuckAt(fg, 11.75).look[4]).toBeCloseTo(0.5, 6);
       expect(stuckAt(fg, 12.1).n).toBe(0);
     });
-    it('is made by a Land event too, once: the server copy of an own landed shot adds none', () => {
+    it('is made by every Land event: two arrows at the same spot are both drawn', () => {
       const fg = make();
       fg.frame(frame([], { now: 10 }), cam());
       fg.shotEnded(landed, 'landed');
       fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0 });
-      expect(stuckAt(fg, 10.1).n).toBe(1);
+      expect(stuckAt(fg, 10.1).n).toBe(2);
       const other = make();
       other.frame(frame([], { now: 10 }), cam());
       other.event({ t: 'Land', id: 21, x: at(2), y: 8, kind: KIND.Arrow, aim: 0 });

@@ -371,9 +371,8 @@ export class Figures3d {
     if (how === 'landed') this.stick(shot.x, shot.y, shot.kind, Math.atan2(shot.vy, shot.vx));
   }
 
-  /** The own predicted landing and the server's `Land` of the same shot are one arrow: one already within 2 px is the same. */
+  /** The session drops the server's `Land` of an own shot that already landed in prediction, so each call here is one arrow. */
   private stick(x: number, y: number, kind: number, aim: number): void {
-    if (this.stuck.some((s) => Math.hypot(s.x - x, s.y - y) < 2)) return;
     this.stuck.push({ x, y, kind, aim, born: this.now });
   }
 
@@ -1244,19 +1243,20 @@ export class Figures3d {
     }
     for (const c of f.shots) this.shot(c.kind, c.x, c.y, Math.atan2(c.vy, c.vx), f.now, cam, out, c.z / ART);
     // shortcut: the stuck card stays upright (pushCard takes no pitch), so no tilt along the arc; upgrade if a look pass wants it.
-    this.stuck = this.stuck.filter((s) => (s.born ??= f.now) + STUCK_SECS > f.now);
-    for (const s of this.stuck) this.shot(s.kind, s.x, s.y, s.aim, f.now, cam, out, 0, Math.min(1, (s.born! + STUCK_SECS - f.now) / STUCK_FADE), out.ghosts);
+    for (const s of this.stuck) s.born ??= f.now;
+    this.stuck = this.stuck.filter((s) => s.born! + STUCK_SECS > f.now);
+    for (const s of this.stuck) this.shot(s.kind, s.x, s.y, s.aim, f.now, cam, out, 0, true, Math.min(1, (s.born! + STUCK_SECS - f.now) / STUCK_FADE));
   }
 
-  private shot(kind: number, px: number, py: number, aim: number, now: number, cam: Cam, out: FigureOut, lift: number, alpha = 1, buf = out.cards): void {
+  private shot(kind: number, px: number, py: number, aim: number, now: number, cam: Cam, out: FigureOut, lift: number, stuck = false, alpha = 1): void {
     const pd = PROJECTILES[kind];
     if (!pd) return;
     const x = px / TILE;
     const z = py / TILE;
     if (pd.frame) {
       // Pack arrows point up; a spinning axe turns with the clock.
-      const angle = pd.spin && buf === out.cards ? now * 14 : screenAim(cam.yaw, aim) + Math.PI / 2;
-      pushCard(buf, { frame: pd.frame, x, z, lift, flip: false, originX: 0.5, footY: 0.5, scale: pd.scale, angle, tint: [1, 1, 1], mode: 0, alpha }, this.frames, cam);
+      const angle = pd.spin && !stuck ? now * 14 : screenAim(cam.yaw, aim) + Math.PI / 2;
+      pushCard(stuck ? out.ghosts : out.cards, { frame: pd.frame, x, z, lift, flip: false, originX: 0.5, footY: 0.5, scale: pd.scale, angle, tint: [1, 1, 1], mode: 0, alpha }, this.frames, cam);
     }
     // glowing shots are drawn by the effects system (`fx/shots.ts`)
   }
