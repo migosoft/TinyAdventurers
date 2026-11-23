@@ -25,7 +25,7 @@ import { registerShots } from './shots';
 import type { MV3 } from './shapes';
 import { newSmokeBuf, type SmokeBuf } from './smoke';
 import { FxTris } from './tris';
-import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
+import { FX_LIT_CAP, FX_TRI_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue, type StuckShot } from './types';
 
 export interface FxPassIn {
   cam: Cam;
@@ -52,6 +52,9 @@ export interface FxPassIn {
   fp?: Footprint;
   /** An override of every smoke's tone (the gallery's switch). */
   smokeTone?: readonly [number, number, number] | null;
+  /** The frame shots stuck in the ground (`FigureOut.stuck`) and the fx page's magic shots (`FxFrame`). */
+  stuck?: readonly StuckShot[];
+  shotMagic?: ReadonlyMap<number, number>;
 }
 
 export class FxPass {
@@ -110,6 +113,8 @@ export class FxPass {
     fin.water = p.water;
     fin.lava = p.lava;
     fin.fp = p.fp;
+    fin.stuck = p.stuck;
+    fin.shotMagic = p.shotMagic;
     const out = this.out, sm = this.smoke;
     sm.position.length = 0; sm.rgba.length = 0; sm.c.length = 0; sm.n = 0; sm.dropped = 0;
     fx.frame(fin, out);

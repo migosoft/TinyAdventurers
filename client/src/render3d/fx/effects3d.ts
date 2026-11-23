@@ -14,7 +14,8 @@ import type { LavaCues } from '../lava/lava';
 import { BURST_MAX, castMode, newChannel, newRune, WINK, type RuneRec } from './runes';
 import { drawShots } from './shots';
 import { ANIM } from '../../generated/defs';
-import { FX_CAST_CAP, FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue } from './types';
+import { FrameShots } from './frameShots';
+import { FX_CAST_CAP, FX_KIND_CAP, type DrawnFig, type FxCtx, type FxOut, type MimicCue, type StuckShot } from './types';
 
 /** Every kind of record. Boom is split by its `k`. */
 export const FX_KIND = {
@@ -129,6 +130,10 @@ export interface FxFrame {
   lava?: LavaCues;
   /** The ground the screen shows (tiles): the hazards draw only inside it. Undefined: no limit. */
   fp?: Footprint;
+  /** The frame shots stuck in the ground (`FigureOut.stuck`). */
+  stuck?: readonly StuckShot[];
+  /** A magic colour (0xrrggbb) for single shots by entity id: the fx page's magic arrows (no game shot is magic yet, #407). */
+  shotMagic?: ReadonlyMap<number, number>;
 }
 
 /** Draws one record at `age` seconds into its life. Returning `false` retires the record at once (it has nothing left to draw). */
@@ -187,6 +192,8 @@ export class Effects3d {
   /** The last one-shot action of each figure that was given its spark: its anim and when it began (the run's clock). */
   readonly actions = new Map<number, { anim: number; start: number; seen: number }>();
   private pruned = 0;
+  /** The arrows, bolts and axes in flight (#407): their short histories. */
+  readonly frameShots = new FrameShots();
 
   private pendDrop(i: number): void {
     for (let k = i + 1; k < this.pendN; k++) { this.pendLook[k - 1] = this.pendLook[k]; this.pendAt[k - 1] = this.pendAt[k]; }
@@ -325,6 +332,8 @@ export class Effects3d {
     const now = input.ctx.now, recs = this.recs;
     // the glowing shots in flight (hidden ones draw nothing)
     drawShots(out, input);
+    // arrows, bolts and the axe, flying and stuck
+    this.frameShots.draw(out, input);
     this.you = input.you;
     const oc = input.ownCast;
     if (oc && oc.seq !== this.ownSeq) {

@@ -1,7 +1,7 @@
 // The glowing shots in flight and their wall hits (#308, design §6): a fire bolt is a lumpy ball of fire with a trail of sparks, a frost
 // bolt a crystal with ice dust, every other glowing shot a pulsing core with a glow and a trail of motes (the lich's gloom shots trail
 // dark wisps). Shots carry the server's light, so none is added here. A shot's picture is a pure function of (clock, seed, place, aim);
-// its trail lies behind the drawn position along the flight, so no history is kept. Frame shots (arrows, the axe) stay cards.
+// its trail lies behind the drawn position along the flight, so no history is kept. Frame shots (arrows, bolts, the axe) are `frameShots.ts`.
 import { GLOOM } from '../../game/fxLooks';
 import { isProjectileKind, PROJECTILES } from '../../game/anim/defs';
 import { KIND, RUNE_LOOK } from '../../generated/defs';
@@ -18,7 +18,7 @@ const GLOOM_DARK = GLOOM.dark, GLOOM_MID = GLOOM.mid;
 
 export type ShotLook = 'fire' | 'cold' | 'glow';
 
-/** How a projectile kind is drawn in 3D, or null for a frame shot (a card) and unknown kinds. */
+/** How a glowing projectile kind is drawn in 3D, or null for a frame shot (`frameShots.ts`) and unknown kinds. */
 export function shotLook(kind: number): ShotLook | null {
   const pd = PROJECTILES[kind];
   if (!pd || pd.frame || pd.glow === undefined) return null;
@@ -99,7 +99,7 @@ const ICE_DUST = [0xb0e0ff, 0xffffff, 0x8cc8ff];
 const oneColour = [0xffffff];
 const hitSpec: BurstSpec = { x: 0, y: 0, z: 0, n: 0, speed: [1.5, 4], up: [0.1, 1.2], life: [0.25, 0.45], g: 9, drag: 0, size: 0.035, colours: FIRE_SPARKS, streak: true };
 
-/** The sparks of a shot that hit a wall (`rec.a` is the shot's kind). Retires the record for shots that are cards. */
+/** The sparks of a shot that hit a wall (`rec.a` is the shot's kind). Retires the record for frame shots (no sparks). */
 function drawHit(out: FxOut, f: FxFrame, rec: FxRec, age: number): void | boolean {
   const look = shotLook(rec.a);
   if (look === null) return false;

@@ -12,6 +12,10 @@ import type { Pose3d } from '../models/pose3d';
 /** What the effects write into each frame: blended triangles, lit triangles (stone, dust, smoke, floor marks), glow quads and client lights. */
 export interface FxOut { tris: FxTris; lit: FxTris; glows: GlowBuf; lights: Cand[]; /** The smoke quads of the smoke bodies (the pass's own buffer; the view draws it). */ smoke: SmokeBuf }
 
+/** A frame shot stuck where it landed (#321, #407): simulation px, the level aim (rad), its fade and the share of its life left
+ *  (1..0). The same object every frame: the shots' drawer writes the landing angle and the magic colour into it the first time. */
+export interface StuckShot { x: number; y: number; kind: number; aim: number; alpha: number; left: number; pitch?: number; magic?: number }
+
 export interface FxCtx {
   cam: Cam;
   ax: { right: V3; up: V3 };

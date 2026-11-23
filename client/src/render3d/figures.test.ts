@@ -189,56 +189,48 @@ describe('Figures3d', () => {
     expect(out.ghosts.look[4]).toBeCloseTo(INCORPOREAL_ALPHA, 6);
   });
 
-  it('draws a server shot unless hidden, and the own shots from f.shots at height 0.5', () => {
+  it('draws no card and no glow for a shot: the effects draw every shot', () => {
     const server = ent(20, KIND.Missile);
     const hidden = make().frame(frame([server], { hiddenShots: new Set([20]) }), cam());
     expect(hidden.glows.n).toBe(0);
     // glow shots leave the card glow list: the effects system draws them
     expect(make().frame(frame([server]), cam()).glows.n).toBe(0);
+    // arrows, bolts and the axe are the effects' too (#407): no card
     const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 8 };
-    const out = make().frame(frame([ent(20, KIND.Arrow)], { hiddenShots: new Set([20]), shots: [shot] }), cam());
-    expect(out.cards.n).toBe(1);
-    expect(mid(ys(out.cards))).toBeCloseTo(0.5, 6);
+    const out = make().frame(frame([ent(20, KIND.Arrow)], { shots: [shot] }), cam());
+    expect(out.cards.n).toBe(0);
     const g = make().frame(frame([], { shots: [{ ...shot, kind: KIND.Fireball }] }), cam());
     expect(g.glows.n).toBe(0);
   });
 
-  it('draws arcing shots at their height z (own from ShotView.z, others from EntState.z)', () => {
-    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 24 };
-    const own_ = make().frame(frame([], { shots: [shot] }), cam());
-    expect(mid(ys(own_.cards))).toBeCloseTo(1.5, 6);
-    const other = make().frame(frame([ent(20, KIND.Arrow, { z: 16 })]), cam());
-    expect(mid(ys(other.cards))).toBeCloseTo(1, 6);
-  });
-
   describe('an arrow stuck in the ground', () => {
     const landed: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0, z: 0 };
-    const stuckAt = (fg: Figures3d, now: number) => fg.frame(frame([], { now }), cam()).ghosts;
+    const stuckAt = (fg: Figures3d, now: number) => fg.frame(frame([], { now }), cam()).stuck;
     it('stays 2 s, fading over the last 0.5 s, for an own landed shot', () => {
       const fg = make();
       fg.frame(frame([], { now: 10 }), cam());
       fg.shotEnded(landed, 'landed');
-      expect(stuckAt(fg, 10.1).n).toBe(1);
-      expect(stuckAt(fg, 11.5).look[4]).toBeCloseTo(1, 6);
-      expect(stuckAt(fg, 11.75).look[4]).toBeCloseTo(0.5, 6);
-      expect(stuckAt(fg, 12.1).n).toBe(0);
+      expect(stuckAt(fg, 10.1).length).toBe(1);
+      expect(stuckAt(fg, 11.5)[0].alpha).toBeCloseTo(1, 6);
+      expect(stuckAt(fg, 11.75)[0].alpha).toBeCloseTo(0.5, 6);
+      expect(stuckAt(fg, 12.1).length).toBe(0);
     });
     it('is made by every Land event: two arrows at the same spot are both drawn', () => {
       const fg = make();
       fg.frame(frame([], { now: 10 }), cam());
       fg.shotEnded(landed, 'landed');
       fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0, extra: 0 });
-      expect(stuckAt(fg, 10.1).n).toBe(2);
+      expect(stuckAt(fg, 10.1).length).toBe(2);
       const other = make();
       other.frame(frame([], { now: 10 }), cam());
       other.event({ t: 'Land', id: 21, x: at(2), y: 8, kind: KIND.Arrow, aim: 0, extra: 0 });
-      expect(stuckAt(other, 11.75).look[4]).toBeCloseTo(0.5, 6);
+      expect(stuckAt(other, 11.75)[0].alpha).toBeCloseTo(0.5, 6);
     });
     it("a server Land waits the interpolation delay before it is drawn, then lives its 2 s from there", () => {
       const fg = make();
       fg.frame(frame([], { now: 10, interpDelay: 0.1 }), cam());
       fg.event({ t: 'Land', id: 20, x: landed.x, y: landed.y, kind: KIND.Arrow, aim: 0, extra: 0 });
-      const at = (now: number) => fg.frame(frame([], { now, interpDelay: 0.1 }), cam()).ghosts.n;
+      const at = (now: number) => fg.frame(frame([], { now, interpDelay: 0.1 }), cam()).stuck.length;
       expect(at(10.05)).toBe(0);
       expect(at(10.15)).toBe(1);
       expect(at(12.05)).toBe(1);
@@ -248,7 +240,7 @@ describe('Figures3d', () => {
       const fg = make();
       fg.frame(frame([], { now: 10 }), cam());
       fg.shotEnded(landed, 'wall');
-      expect(stuckAt(fg, 10.1).n).toBe(0);
+      expect(stuckAt(fg, 10.1).length).toBe(0);
     });
   });
 

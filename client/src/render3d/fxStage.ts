@@ -13,6 +13,7 @@ import { TILE, TileMap } from '../sim/map';
 import { atlasBounds } from './atlasBounds';
 import { closeCam, freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { flightTime, shotZ } from '../sim/arc';
 import { Effects3d } from './fx/effects3d';
 import { FxPass } from './fx/pass';
 import { Figures3d } from './figures';
@@ -72,6 +73,8 @@ export interface FxRow {
   name: string;
   /** Seconds before the row repeats. */
   period: number;
+  /** A magic colour (0xrrggbb) for the row's shot, entity 300 (#407). */
+  magic?: number;
   at(t: number): FxScene;
 }
 
@@ -140,8 +143,27 @@ function shotRows(): FxRow[] {
       };
     },
   });
+  // The frame shots (#407): an arrow or an axe flies #321's arc from the caster and lands 7.5 tiles on, where it stays stuck;
+  // a bolt flies level into the wall. `magic` gives the shot a colour (no game shot has one yet).
+  const SPEED = 220, LEAVE = 0.3;
+  const arc = (name: string, kind: number, magic?: number): FxRow => {
+    const x0 = px(CASTER.x + 0.6), dist = px(7.5), T = flightTime(dist, SPEED);
+    return {
+      group: 'shots', name, period: 3.6, magic,
+      at: (t) => {
+        const tau = t - LEAVE;
+        return {
+          ents: tau >= 0 && tau < T ? [fxEnt(300, kind, (x0 + SPEED * tau) / TILE, CASTER.z, { aim: 0, z: shotZ(T, tau) })] : [],
+          events: [{ at: LEAVE + T, ev: { t: 'Land', id: 300, x: x0 + dist, y: px(CASTER.z), kind, aim: 0, extra: 0 } }],
+        };
+      },
+    };
+  };
+  const bolt: FxRow = { ...one('bolt (level flight)', KIND.Bolt), period: 3.6 };
   return [one('fire bolt', KIND.FireBolt), one('fireball', KIND.Fireball), one('dragon fireball', KIND.DragonFireball), one('frost bolt', KIND.FrostBolt),
-    one('magic missile', KIND.Missile), one('gloom bolt', KIND.GloomBolt), one('shadow bolt', KIND.ShadowBolt), one('judgement', KIND.Judgement)];
+    one('magic missile', KIND.Missile), one('gloom bolt', KIND.GloomBolt), one('shadow bolt', KIND.ShadowBolt), one('judgement', KIND.Judgement),
+    arc('arrow', KIND.Arrow), bolt, arc('thrown axe', KIND.ThrownAxe),
+    arc('magic arrow: fire', KIND.Arrow, 0xff9926), arc('magic arrow: frost', KIND.Arrow, 0xb3e0ff), arc('magic arrow: arcane', KIND.Arrow, 0xb873ff), arc('magic arrow: holy', KIND.Arrow, 0xffdb6b)];
 }
 
 /** The rows. Each later task of #308 adds the ones of its group. */
@@ -400,6 +422,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
   const homeX = homeAt ? homeAt.x + 7.5 : 7.5, homeZ = homeAt ? homeAt.z + 7.6 : 7.6;
   const cam = { x: homeX, z: homeZ, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   const pass = new FxPass(NONE);
+  const shotMagic = new Map<number, number>();
   let fx = new Effects3d(map);
   let group = opts.group;
   let slow = opts.slow;
@@ -455,11 +478,13 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const rows = rowsOf(group);
       const ents: EntState[] = [];
       const extras: SnapExtras = {};
+      shotMagic.clear();
       rows.forEach((row, slot) => {
         const lt = ((rt % row.period) + row.period) % row.period;
         const scene = row.at(lt);
         ents.push(...slotEnts(slot, scene, t, torchesOn));
         const o = slotOrigin(slot);
+        if (row.magic !== undefined) shotMagic.set(slotId(slot, 300), row.magic);
         if (scene.snapExtras?.drain) (extras.drain ??= []).push(...scene.snapExtras.drain.map(([x, y]): [number, number] => [x + px(o.x), y + px(o.z)]));
         if (scene.snapExtras?.lights) (extras.lights ??= []).push(...scene.snapExtras.lights.map(([x, y, k, col]): [number, number, number, number | null] => [x + px(o.x), y + px(o.z), k, col]));
         for (const e of eventsBetween(row, scene, prev, rt)) {
@@ -497,7 +522,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       const frame = galleryFrame(ents, t, dt);
       if (extras.drain || extras.lights) frame.snap = snap({ drain: extras.drain ?? null, lights: extras.lights ?? [] }) as unknown as Snapshot;
       const fo = figures.frame(frame, cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is: () => true } });
-      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues, falls: fo.falls, fp: footprint(cam, c.plan.halfW, c.plan.halfH) }, fo.glows);
+      pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: frame.ents, shots: [], hiddenShots: NONE, snap: frame.snap, hidden: NONE, you: -1, ownCast: null, cues: fo.cues, falls: fo.falls, fp: footprint(cam, c.plan.halfW, c.plan.halfH), stuck: fo.stuck, shotMagic }, fo.glows);
 
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
