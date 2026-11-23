@@ -27,6 +27,17 @@ export interface CrystalArrays { position: Float32Array; normal: Float32Array; /
 
 type V = [x: number, y: number, z: number, glow: number];
 
+/** The unit normal of the triangle a, b, c, pointing the way its winding does (shared with the torch, #391). */
+export function faceNormal(a: ArrayLike<number>, b: ArrayLike<number>, c: ArrayLike<number>): [number, number, number] {
+  const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+  const l = Math.hypot(n[0], n[1], n[2]) || 1;
+  return [n[0] / l, n[1] / l, n[2] / l];
+}
+
+/** A point or direction (x, z) of a builder's frame, whose +x is out of the wall, turned by the wall's normal into the level's x and z. */
+export const outOfWall = (x: number, z: number, nx: number, nz: number): [number, number] => [x * nx - z * nz, x * nz + z * nx];
+
 /**
  * A cluster of six-sided shards with pointed tips round the origin, y up, fanning toward +x (the room; the wall is behind it); the
  * tallest is `size` high. `broken`: the same shards as short stumps with slanted break faces, and splinters lying round them.
@@ -40,12 +51,10 @@ export function crystalCluster(seed: number, size: number, broken: boolean): { p
     return s / 4294967296;
   };
   const tri = (a: V, b: V, c: V): void => {
-    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-    const l = Math.hypot(n[0], n[1], n[2]) || 1;
+    const n = faceNormal(a, b, c);
     for (const v of [a, b, c]) {
       position.push(v[0], v[1], v[2]);
-      normal.push(n[0] / l, n[1] / l, n[2] / l);
+      normal.push(n[0], n[1], n[2]);
       glow.push(v[3]);
     }
   };
@@ -157,9 +166,9 @@ export function buildCrystalChunk(marks: Marks, broken: (lightId: number) => boo
     // the sight is read on the floor in front of the wall, not at the wall's own cell
     const sx = fx + nx * (b.big ? 0.5 - CRYSTAL_STAND : 0.3), sz = fz + nz * (b.big ? 0.5 - CRYSTAL_STAND : 0.3);
     for (let i = 0; i < c.glow.length; i++) {
-      const [x, y, z] = [c.position[i * 3], c.position[i * 3 + 1], c.position[i * 3 + 2]];
-      position.push(fx + x * nx - z * nz, y, fz + x * nz + z * nx);
-      normal.push(c.normal[i * 3] * nx - c.normal[i * 3 + 2] * nz, c.normal[i * 3 + 1], c.normal[i * 3] * nz + c.normal[i * 3 + 2] * nx);
+      const [px, pz] = outOfWall(c.position[i * 3], c.position[i * 3 + 2], nx, nz), [qx, qz] = outOfWall(c.normal[i * 3], c.normal[i * 3 + 2], nx, nz);
+      position.push(fx + px, c.position[i * 3 + 1], fz + pz);
+      normal.push(qx, c.normal[i * 3 + 1], qz);
       gem.push(c.glow[i] * power, tint, phase);
       foot.push(sx, sz);
     }
