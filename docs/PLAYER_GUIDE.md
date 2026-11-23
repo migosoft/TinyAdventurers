@@ -137,7 +137,7 @@ Every creature fights for a side: the monsters against you, you and your friends
 - **Nothing ends it early.** Nobody can free you with a key or by hitting you, and there is no button to mash. Your Willpower shortens it a little. Dispel Magic and anti-magic areas (not in the game yet) will pause it: you are yourself again and the haze goes, then it comes back if time is left.
 - **Deaths are real, both ways.** You can kill a friend, and your friends can kill you, and a fallen hero stays fallen. Nothing stops at 1 HP. A hero killed while charmed is counted as killed by whoever cast the charm.
 - **While you are on their side** enemies ignore you and your area abilities (Holy Light, Haste, War Cry) help them; your friends' hits, shots and traps hurt you, and yours hurt them.
-- **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero.
+- **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero, and with no hero of your side left he stays where he is and fights back against anyone who comes near.
 - **When it ends** you are yourself again where you stand, with your health and your cooldowns as they were, and the controls come back at once.
 - An enemy's Charm can also take your wolf or the knight to the enemy side, for the same few seconds.
 
