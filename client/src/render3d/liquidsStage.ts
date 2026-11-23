@@ -22,7 +22,7 @@ import { emitWaterCues } from './fx/waterFx';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands } from './lights';
 import { LIQUIDS_TORCHES, liquidsMap } from './liquidsMap';
 import { BACK_TIME, SLIDE_TIME, liquidsScript, PUSHES, type Push } from './liquidsScript';
 import type { FigureKit } from './models/kit';
@@ -115,16 +115,14 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   // The field: the wall torches, then a light on every lava tile (ids from 1).
   const field = new LightField(map);
   let lightId = 1;
-  for (const tc of LIQUIDS_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.ty, on: true });
-  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (map.get(x, y) === TERRAIN.Lava) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
-  const pairs = new TorchPairs();
+  for (const tc of LIQUIDS_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.ty, on: true, wall: tc.side + 1 });
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (map.get(x, y) === TERRAIN.Lava) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true, wall: 0 });
   const lava = new Float32Array(map.w * map.h * 4);
   lavaTexels(field, map, lava);
   const torchEnts: EntState[] = LIQUIDS_TORCHES.map((tc, i) => ({
     id: 1 + i, kind: KIND.Torch, x: tc.side === 0 ? (tc.tx + 0.5) * TILE : tc.side === 1 ? tc.tx * TILE + 0.5 : (tc.tx + 1) * TILE - 0.5,
     y: tc.side === 0 ? tc.ty * TILE + 0.5 : (tc.ty + 0.5) * TILE, hp: 10, anim: 1, aim: 0, animMs: 0, flags: 0, extra: tc.side, effects: 0, side: 0, entangled: 0,
   }));
-  for (const e of torchEnts) pairs.see(e);
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -216,7 +214,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
-        const sel = selectLights(staticCands(field, pairs, map, t), lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(staticCands(field, t), lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
       }

@@ -22,7 +22,7 @@ import type { DrawnFig } from './fx/types';
 import { CROWD_MAX, EFFECT_GROUPS, LINEUP_MAX, OBJECT_PLACES, SPECTRE_PLACES, VARIETY_COLS, GROUP_CELLS, MODEL_EFFECT_STRIDE, OBJECT_Z, SHOT_Z, TORCH_Z, layoutOf } from './galleryMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf } from './lights';
 import type { FigureKit } from './models/kit';
 import { SMOKE_TONES } from './models/tubeDesc';
 import { MODEL_OF_KIND, OBJECT_MODEL, floats, objectModelOf, type ModelKey } from './models/table';
@@ -449,13 +449,12 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
   let t = opts.start;
   // `light=torch`: the torches (the lit one on the objects' wall and the pillars') light the gallery through the game's lights and casters.
   const field = new LightField(map);
-  const pairs = new TorchPairs();
   if (opts.light === 'torch') {
     let id = 1;
     for (const e of galleryEnts(0, null)) {
       if (e.kind !== KIND.Torch || e.anim !== 1) continue;
       const tc = torchOf(e);
-      field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.tz, on: true });
+      field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: tc.tx, y: tc.tz, on: true, wall: e.extra + 1 });
     }
   }
 
@@ -511,7 +510,6 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (diedAt !== null) for (const ev of spectreDiedBetween(from, t)) { figures.event(ev); fx.event(ev, diedAt, false); }
       const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds);
       const torch = opts.light === 'torch';
-      if (torch) for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !torch, oval: 1, models: { kit, is } });
       spectrePassIn(fo.figs, ents, specFigs, specEnts);
@@ -523,7 +521,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       let inView = 0;
       if (torch) {
         const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-        const sel = selectLights([...staticCands(field, pairs, map, t), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights([...staticCands(field, t), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
         casters = selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap));

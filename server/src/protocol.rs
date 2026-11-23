@@ -274,11 +274,11 @@ pub struct CoveInfo {
     pub seed: u32,
 }
 
-/// A static light at run start, as an array: `[id, kind, colour, x, y, on]`
+/// A static light at run start, as an array: `[id, kind, colour, x, y, on, wall]`
 /// (tile coordinates; colour 0xRRGGBB; kind = `LightKind` id).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool);
+pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool, pub u8);
 
 /// A moving light near the viewer: `[x, y, kind, colour]` (px; colour `None` = the kind's default).
 #[derive(Debug, Clone, Serialize, TS)]
@@ -373,7 +373,7 @@ pub enum Ev {
     /// A static light switched or recoloured; carries its current state.
     Light { id: u32, on: bool, colour: u32 },
     /// A static light created mid-run (tile coordinates).
-    LightAdd { id: u32, kind: u8, colour: u32, x: u16, y: u16, on: bool },
+    LightAdd { id: u32, kind: u8, colour: u32, x: u16, y: u16, on: bool, wall: u8 },
     LightRemove { id: u32 },
     /// A status effect started (on) or ended on entity id; kind = EffectKind id, look = EffectLook id
     /// (0 when it ended).

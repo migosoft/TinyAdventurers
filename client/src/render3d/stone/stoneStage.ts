@@ -7,7 +7,7 @@ import { closeCam, keysToWorld } from '../camera';
 import { buildDynamic } from '../cards';
 import { MOVE_KEYS, type Stage, type StageCtx } from '../host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from '../light';
-import { footprint, lightView, movingCands, selectLights, staticCands, TorchPairs } from '../lights';
+import { footprint, lightView, movingCands, selectLights, staticCands } from '../lights';
 import { reflects, type R3dParams } from '../params';
 import { newScene, stepScene } from '../scene';
 import { seeLook } from '../seeThrough';
@@ -41,11 +41,12 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
 
   const field = new LightField(map);
   let id = 1;
-  for (const [x, y] of TORCH_TILES) field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x, y, on: true });
-  for (const [x, y] of CRYSTAL_TILES) field.add({ id: id++, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x, y, on: q.get('break') !== '1' });
+  // the wall beside a lamp's tile: north, west, east (the stage's lamps stand at one)
+  const wall = (x: number, y: number): number => (map.opaque(x, y - 1) ? 1 : map.opaque(x - 1, y) ? 2 : map.opaque(x + 1, y) ? 3 : 0);
+  for (const [x, y] of TORCH_TILES) field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x, y, on: true, wall: wall(x, y) });
+  for (const [x, y] of CRYSTAL_TILES) field.add({ id: id++, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x, y, on: q.get('break') !== '1', wall: wall(x, y) });
   world.taken = { lights: [...field.lights.values()], spawn: STONE_SPAWN };
   const lamp = q.get('lamp') !== '0';
-  const pairs = new TorchPairs();
   const water = new Water3d(map);
   const NONE_IDS = new Set<number>();
   let t = Number(q.get('t')) > 0 ? Number(q.get('t')) : 0;
@@ -80,7 +81,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
       const game = c.params.light === 'game';
       const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const lights = game
-        ? selectLights([...staticCands(field, pairs, map, t), ...movingCands(lamp ? [[scene.player.x * TILE, scene.player.z * TILE, LIGHT_KIND.Torch, LIGHT[LIGHT_KIND.Torch].colour]] : [], [], () => null, t)], lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), cam, Math.min(LIGHT_CAP, c.params.lcap)).list
+        ? selectLights([...staticCands(field, t), ...movingCands(lamp ? [[scene.player.x * TILE, scene.player.z * TILE, LIGHT_KIND.Torch, LIGHT[LIGHT_KIND.Torch].colour]] : [], [], () => null, t)], lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), cam, Math.min(LIGHT_CAP, c.params.lcap)).list
         : [];
       c.timer.lap('lights');
       // The puddles' drops, on the page's clock `t`.

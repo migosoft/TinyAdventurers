@@ -67,7 +67,7 @@ describe('the blur', () => {
 });
 
 describe('shaftPlan', () => {
-  const crack = (ceil: number): Crack => ({ ...crackOf({ id: 1, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 5, y: 6, on: true }, sunLook, 0), ceil });
+  const crack = (ceil: number): Crack => ({ ...crackOf({ id: 1, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 5, y: 6, on: true, wall: 0 }, sunLook, 0), ceil });
 
   it('does not run without shafts or without cracks', () => {
     const plan = renderPlan('balanced', 4, 1280, 720);

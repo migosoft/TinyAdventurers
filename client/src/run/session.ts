@@ -581,7 +581,7 @@ export class RunSession {
         this.light.set(ev.id, ev.on, ev.colour);
         break;
       case 'LightAdd':
-        this.light.add({ id: ev.id, kind: ev.kind, colour: ev.colour, x: ev.x, y: ev.y, on: ev.on });
+        this.light.add({ id: ev.id, kind: ev.kind, colour: ev.colour, x: ev.x, y: ev.y, on: ev.on, wall: ev.wall });
         break;
       case 'LightRemove':
         this.light.remove(ev.id);

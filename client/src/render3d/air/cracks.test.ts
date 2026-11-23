@@ -8,7 +8,7 @@ import { SightMask, type SightLook } from '../sightmask';
 import { CHASM_BED } from '../dips/shape';
 import { CRACK_CAP, CRACK_Z_TILT, RAY_CAP, crackMask, crackOf, packCracks, selectCracks, type Crack } from './cracks';
 
-const sun = (id: number, x = 10, y = 10, on = true): StaticLight => ({ id, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x, y, on });
+const sun = (id: number, x = 10, y = 10, on = true): StaticLight => ({ id, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x, y, on, wall: 0 });
 
 /** A hand-made crack with one ray over the whole opening, so the shade is the same wherever the rim lets light through. */
 function plain(over: Partial<Crack> = {}): Crack {
@@ -137,7 +137,7 @@ describe('selectCracks', () => {
     expect(got.map((l) => l.id)).toEqual([2, 3, 1]);
   });
   it('drops a light that is off, a torch, one far outside the footprint and anything beyond cap', () => {
-    const torch: StaticLight = { id: 9, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 10, y: 10, on: true };
+    const torch: StaticLight = { id: 9, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 10, y: 10, on: true, wall: 0 };
     const f = field([sun(1, 10, 10, false), torch, sun(3, 35, 35), sun(4, 9, 10), sun(5, 11, 10), sun(6, 12, 10)]);
     expect(selectCracks(f, fp, null, 8).map((l) => l.id)).toEqual([4, 5, 6]);
     expect(selectCracks(f, fp, null, 2).map((l) => l.id)).toEqual([4, 5]);

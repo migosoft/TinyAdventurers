@@ -303,7 +303,7 @@ describe('the run stage', () => {
   });
 
   it('the level\'s lights reach the view with the game light, and none with the work light', () => {
-    const { stage, frame, setParams } = setup(ROWS, { lights: [[1, 0, 0xffa040, 2, 1, true]] });
+    const { stage, frame, setParams } = setup(ROWS, { lights: [[1, 0, 0xffa040, 2, 1, true, 1]] });
     const view = fakeView();
     stage.built!(view);
     frame(view);

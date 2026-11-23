@@ -19,7 +19,7 @@ const rock = (m: TileMap, seed = 7) => stoneField(m, new Uint8Array(m.w * m.h).f
 /** The stone page's level as all rock, with the marks of its crystals: puddles and crevices. */
 function rockLevel() {
   const map = stoneMap(), f = rock(map, STONE_SEED);
-  const marks = placeMarks(map, f, { lights: CRYSTAL_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Crystal, x, y })), spawn: STONE_SPAWN });
+  const marks = placeMarks(map, f, { lights: CRYSTAL_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Crystal, x, y, wall: 1 })), spawn: STONE_SPAWN });
   return { map, f, marks };
 }
 

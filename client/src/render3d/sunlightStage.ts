@@ -21,7 +21,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -106,24 +106,22 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
 
   // The field: the alcove's torch, and the Daylight cracks (re-placed on a reroll or when the second one switches).
   const field = new LightField(map);
-  for (const tc of SUNLIGHT_TORCHES) if (tc.light) field.add({ id: tc.light.id, kind: LIGHT_KIND.Torch, colour: SUNLIGHT_WARM, x: tc.light.x, y: tc.light.y, on: true });
+  for (const tc of SUNLIGHT_TORCHES) if (tc.light) field.add({ id: tc.light.id, kind: LIGHT_KIND.Torch, colour: SUNLIGHT_WARM, x: tc.light.x, y: tc.light.y, on: true, wall: tc.side + 1 });
   let sunIds: number[] = [];
   const placeSuns = (): void => {
     for (const id of sunIds) field.remove(id);
     sunIds = [];
     const at = (id: number, x: number, y: number): void => {
-      field.add({ id, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x, y, on: true });
+      field.add({ id, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x, y, on: true, wall: 0 });
       sunIds.push(id);
     };
     at(FIRST_ID + ROLL_STEP * roll, SUN.x, SUN.y);
     if (second) at(SECOND_ID + ROLL_STEP * roll, SECOND.x, SECOND.y);
   };
   placeSuns();
-  const pairs = new TorchPairs();
   const ents = sunlightEnts();
   const air = new Air3d(map);
   const torches = ents.filter((e) => e.kind === KIND.Torch).map((e) => ({ ...torchOf(e), lit: e.anim === 1 }));
-  for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -177,7 +175,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       if (game) {
         // The cracks the viewer sees (as runView3d), and the torch and the bounce fill of each crack as lights.
         cracks = selectCracks(field, fp, c.params.sight ? mask : null, CRACK_CAP, look).map((l) => crackOf(l, look, c.now));
-        const sel = selectLights(staticCands(field, pairs, map, c.now, look), lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        const sel = selectLights(staticCands(field, c.now, look), lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;
       }

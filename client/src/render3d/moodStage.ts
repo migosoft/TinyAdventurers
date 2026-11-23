@@ -26,7 +26,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { parseLights } from './lightsStage';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
-import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, torchOf } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
@@ -125,9 +125,8 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
   // The field: the warm torches on their tiles, then a light on every lava tile (ids from 1).
   const field = new LightField(map);
   let lightId = 1;
-  for (const tc of MOOD_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: MOOD_WARM, x: tc.tx, y: tc.ty, on: true });
-  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (map.get(x, y) === TERRAIN.Lava) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
-  const pairs = new TorchPairs();
+  for (const tc of MOOD_TORCHES) field.add({ id: lightId++, kind: LIGHT_KIND.Torch, colour: MOOD_WARM, x: tc.tx, y: tc.ty, on: true, wall: tc.side + 1 });
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (map.get(x, y) === TERRAIN.Lava) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true, wall: 0 });
   const lava = new Float32Array(map.w * map.h * 4);
   lavaTexels(field, map, lava);
 
@@ -178,7 +177,6 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       torches.length = 0;
       for (const e of ents) {
         if (e.kind !== KIND.Torch) continue;
-        pairs.see(e);
         torches.push({ ...torchOf(e), lit: e.anim === 1 });
       }
       c.timer.lap('sim');
@@ -196,7 +194,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
-        const cands = [...staticCands(field, pairs, map, t), ...movingCands(moving, [], () => null, t)];
+        const cands = [...staticCands(field, t), ...movingCands(moving, [], () => null, t)];
         const sel = selectLights(cands, lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;

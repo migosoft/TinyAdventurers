@@ -35,6 +35,8 @@ pub struct LightSource {
     pub colour: Colour,
     pub anchor: Anchor,
     pub on: bool,
+    /// The side of the wall it hangs on (`TorchSide as u8 + 1`), 0 for a free light.
+    pub wall: u8,
     /// Run time at which the sweep removes it. Only flashes (`Anchor::Point`, set by `Run::add_flash`) expire.
     pub expires: Option<f64>,
 }
@@ -97,7 +99,7 @@ impl Lights {
         let id = self.next_id;
         self.next_id += 1;
         let colour = colour.unwrap_or(lights::def(kind).colour);
-        self.sources.push(LightSource { id, kind, colour, anchor, on: true, expires: None });
+        self.sources.push(LightSource { id, kind, colour, anchor, on: true, wall: 0, expires: None });
         if matches!(anchor, Anchor::Tile(..)) {
             self.dirty = true;
         }
@@ -194,10 +196,21 @@ impl Run {
     /// announced with `Ev::LightAdd`; those added while the run is built go
     /// out in `RunStartInfo.lights` instead.
     pub fn add_light(&mut self, kind: LightKind, anchor: Anchor, colour: Option<Colour>) -> u32 {
+        self.add_light_on(kind, anchor, colour, 0)
+    }
+
+    /// A static light on the floor in front of a wall torch or crystal, which says which wall it hangs on.
+    pub fn add_wall_light(&mut self, kind: LightKind, t: &crate::dungeon::TorchSpawn) -> u32 {
+        let (x, y) = t.front();
+        self.add_light_on(kind, Anchor::Tile(x, y), None, t.side as u8 + 1)
+    }
+
+    fn add_light_on(&mut self, kind: LightKind, anchor: Anchor, colour: Option<Colour>, wall: u8) -> u32 {
         let id = self.lights.push(kind, anchor, colour);
+        self.lights.sources.last_mut().unwrap().wall = wall;
         if let (Anchor::Tile(x, y), true) = (anchor, self.tick > 0) {
             let colour = self.lights.get(id).unwrap().colour;
-            self.event(Ev::LightAdd { id, kind: kind as u8, colour, x: x as u16, y: y as u16, on: true }, None);
+            self.event(Ev::LightAdd { id, kind: kind as u8, colour, x: x as u16, y: y as u16, on: true, wall }, None);
         }
         id
     }
@@ -361,7 +374,7 @@ impl Run {
             .sources
             .iter()
             .filter_map(|s| match s.anchor {
-                Anchor::Tile(x, y) => Some(LightInfo(s.id, s.kind as u8, s.colour, x as u16, y as u16, s.on)),
+                Anchor::Tile(x, y) => Some(LightInfo(s.id, s.kind as u8, s.colour, x as u16, y as u16, s.on, s.wall)),
                 Anchor::Entity(_) | Anchor::Point(_) => None,
             })
             .collect()
@@ -409,6 +422,22 @@ mod tests {
         assert!(!run.is_lit(at(tx - 8, ty)), "beyond it");
         assert!(run.is_lit(at(tx + 3, ty)), "the wall itself is lit");
         assert!(!run.is_lit(at(tx + 4, ty)), "behind the wall is dark");
+    }
+
+    #[test]
+    fn a_wall_light_carries_its_side() {
+        use crate::dungeon::{TorchSide, TorchSpawn, WallLight};
+        let (mut run, tx, ty) = dark_run();
+        let spawn = |side| TorchSpawn { wall: (tx, ty), side, lit: true, kind: WallLight::Torch };
+        let ids: Vec<u32> = [TorchSide::Face, TorchSide::West, TorchSide::East].iter().map(|s| run.add_wall_light(LightKind::Torch, &spawn(*s))).collect();
+        let free = run.add_light(LightKind::Torch, Anchor::Tile(tx, ty), None);
+        let wall_of = |run: &Run, id| run.light_infos().iter().find(|l| l.0 == id).unwrap().6;
+        assert_eq!(ids.iter().map(|id| wall_of(&run, *id)).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(wall_of(&run, free), 0);
+        run.step();
+        run.events.clear();
+        run.add_light(LightKind::Torch, Anchor::Tile(tx, ty), None);
+        assert!(matches!(run.events[..], [(Ev::LightAdd { wall: 0, .. }, None)]));
     }
 
     #[test]

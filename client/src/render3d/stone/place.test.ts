@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, TileMap } from '../../sim/map';
-import { torchWall } from '../heights';
+import { wallOf } from '../heights';
 import { floorBlockAt } from './blocks';
 import { hash, kindAt, LAID, ROCK, STONE_PX, stoneField, type StoneField } from './field';
 import { noMarks, placeMarks, roomsOf, type Crack, type Marks, type Taken } from './place';
@@ -35,14 +35,14 @@ function generated(seed: number): Case {
   const mode = seed % 3; // all laid, all rock, or rock in the west
   const kinds = Uint8Array.from({ length: w * h }, (_, i) => (mode === 1 || (mode === 2 && i % w < w / 2) ? ROCK : LAID));
   // a crystal in every rock room, a torch in every laid one, at the room's north-west corner; and a door in the first room's west wall
-  const lights: Taken['lights'] = rooms.map(([x0, z0], i) => ({ id: i + 1, kind: kinds[z0 * w + x0] === ROCK ? LIGHT_KIND.Crystal : LIGHT_KIND.Torch, x: x0, y: z0 }));
+  const lights: Taken['lights'] = rooms.map(([x0, z0], i) => ({ id: i + 1, kind: kinds[z0 * w + x0] === ROCK ? LIGHT_KIND.Crystal : LIGHT_KIND.Torch, x: x0, y: z0, wall: 1 }));
   map.set(rooms[0][0] - 1, rooms[0][1] + 1, TILE_ID.DoorClosed);
   return { map, f: stoneField(map, kinds, seed), taken: { lights, spawn: { x: rooms[0][0] + 4.5, z: rooms[0][1] + 4.5 } } };
 }
 
 function stoneCase(): Case {
   const map = stoneMap();
-  return { map, f: stoneField(map, zoneKinds(map), 5), taken: { lights: [{ id: 1, kind: LIGHT_KIND.Crystal, x: 4, y: 9 }, { id: 2, kind: LIGHT_KIND.Torch, x: 40, y: 4 }], spawn: { x: 10.5, z: 7.5 } } };
+  return { map, f: stoneField(map, zoneKinds(map), 5), taken: { lights: [{ id: 1, kind: LIGHT_KIND.Crystal, x: 4, y: 9, wall: 1 }, { id: 2, kind: LIGHT_KIND.Torch, x: 40, y: 4, wall: 1 }], spawn: { x: 10.5, z: 7.5 } } };
 }
 
 const cases: Case[] = [...Array.from({ length: 20 }, (_, i) => generated(i + 1)), stoneCase()];
@@ -135,7 +135,7 @@ describe('placement', () => {
       for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) map.set(x, z, TILE_ID.Floor);
       map.set(w - 1, 6, TILE_ID.DoorOpen);
       const f = stoneField(map, new Uint8Array(w * h).fill(ROCK), seed);
-      const taken: Taken = { lights: [{ id: 1, kind: LIGHT_KIND.Crystal, x: 1, y: 1 }], spawn: { x: 2.5, z: 2.5 } };
+      const taken: Taken = { lights: [{ id: 1, kind: LIGHT_KIND.Crystal, x: 1, y: 1, wall: 1 }], spawn: { x: 2.5, z: 2.5 } };
       const marks = placeMarks(map, f, taken);
       for (const p of marks.puddles) for (let dz = -p.r; dz <= p.r; dz += 0.1) for (let dx = -p.r; dx <= p.r; dx += 0.1) {
         if (Math.hypot(dx, dz) <= p.r && floorBlockAt(f, map, marks, Math.floor((p.x + dx) * STONE_PX), Math.floor((p.z + dz) * STONE_PX))) laid.push(`${seed}@${(p.x + dx).toFixed(1)},${(p.z + dz).toFixed(1)}`);
@@ -170,11 +170,17 @@ describe('placement', () => {
       const big = all[i].shards.filter((s) => s.big);
       expect(big.length).toBe(crystals.length);
       for (const l of crystals) {
-        const w = torchWall(l.x, l.y, c.map);
+        const w = wallOf(l);
         expect(big.find((s) => s.lightId === l.id)).toMatchObject({ x: w.x, z: w.z, nx: w.nx, nz: w.nz });
       }
     });
     expect(all[all.length - 1].shards.some((s) => s.big)).toBe(true);
+  });
+
+  it('a_crystal_light_on_no_wall_gets_no_shard', () => {
+    const c = cases[0];
+    const taken: Taken = { ...c.taken, lights: c.taken.lights.map((l) => ({ ...l, wall: 0 })) };
+    expect(placeMarks(c.map, c.f, taken).shards.filter((s) => s.big)).toEqual([]);
   });
 
   it('placement_is_deterministic', () => {

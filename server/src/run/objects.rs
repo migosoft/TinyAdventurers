@@ -92,8 +92,7 @@ impl Run {
 
     /// A wall torch with its static light (lit unless `t.lit` is false).
     pub fn spawn_torch(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
-        let (fx, fy) = t.front();
-        let light = self.add_light(crate::defs::lights::LightKind::Torch, crate::run::light::Anchor::Tile(fx, fy), None);
+        let light = self.add_wall_light(crate::defs::lights::LightKind::Torch, t);
         if !t.lit {
             self.start_light_off(light);
         }
@@ -102,8 +101,7 @@ impl Run {
 
     /// A crystal cluster in a rock wall with its static light (always shining at spawn).
     pub fn spawn_crystal(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
-        let (fx, fy) = t.front();
-        let light = self.add_light(crate::defs::lights::LightKind::Crystal, crate::run::light::Anchor::Tile(fx, fy), None);
+        let light = self.add_wall_light(crate::defs::lights::LightKind::Crystal, t);
         self.spawn_object(EntityKind::Crystal, t.pos(), ObjState::Crystal { wall: t.wall, side: t.side, light })
     }
 
@@ -1007,6 +1005,16 @@ mod tests {
         run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true, kind: WallLight::Torch });
         let oi = run.objects.len() - 1;
         (run, oi)
+    }
+
+    #[test]
+    fn a_torch_and_a_crystal_light_know_their_wall() {
+        let (mut run, _) = torch_run();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::West, lit: true, kind: WallLight::Torch });
+        run.spawn_crystal(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::West, lit: true, kind: WallLight::Crystal });
+        let walls: Vec<u8> = run.light_infos().iter().rev().take(2).map(|l| l.6).collect();
+        assert_eq!(walls, vec![2, 2]);
     }
 
     fn torch_lit(run: &Run, oi: usize) -> bool {

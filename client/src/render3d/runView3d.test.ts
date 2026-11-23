@@ -70,8 +70,8 @@ function run(over: { water?: [number, number][]; lava?: [number, number][]; cove
   for (const [wx, wy] of over.water ?? []) map.set(wx, wy, TILE_ID.ShallowWater);
   for (const [lx, ly] of over.lava ?? []) map.set(lx, ly, TILE_ID.Lava);
   const light = new LightField(map);
-  if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
-  if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
+  if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true, wall: 0 });
+  if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true, wall: 0 });
   const init: RunViewInit = { info, map, light, myKind: KIND.Wizard, lavaRng: over.lavaRng };
   const overlay = over.paint ? ({ size() {}, measure: () => 10, paint: (items: OverlayItem[]) => over.paint!.splice(0, over.paint!.length, ...items) } as unknown as Overlay3d) : null;
   const v = new RunView3d(init, frames, bounds, overlay);
@@ -382,7 +382,7 @@ describe('what the picture hides has nothing over it (#305)', () => {
 });
 
 describe('the air in the run view (#307)', () => {
-  const sunny = (r: ReturnType<typeof run>): void => r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true });
+  const sunny = (r: ReturnType<typeof run>): void => r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true, wall: 0 });
   it('a dungeon frame passes the air parts, its haze, the shafts switch and the cracks of the Daylight lights in sight', () => {
     const r = run({ rows: ['#######', '#.....#', '#.....#', '#.....#', '#######'] });
     sunny(r);
@@ -403,7 +403,7 @@ describe('the air in the run view (#307)', () => {
   });
   it('a woodland frame has the pollen only: no smoke, embers or drips, no haze, no cracks', () => {
     const r = run({ woodland: true, torch: false });
-    r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 1, on: true });
+    r.light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 1, on: true, wall: 0 });
     const f = r.again();
     expect(f?.air).toBeTruthy();
     expect(f?.air?.haze.on).toBe(false);

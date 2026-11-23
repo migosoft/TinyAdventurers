@@ -34,7 +34,7 @@ import { MoverTracker, collectAirMovers } from '../game/airmovers';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips,footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs, torchOf, type Carrier, type ShadowCaster } from './lights';
+import { assignSkips,footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, torchOf, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, fxLine, lightLines, skyLines, stoneLine, treeLine } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
@@ -209,7 +209,6 @@ export class RunView3d implements RunView {
 
   // The game's lights (#304): the field of the static ones, the torch flames' walls, and the lava texels (refilled when the field changes).
   private readonly field: RunViewInit['light'];
-  private readonly pairs = new TorchPairs();
   private readonly lava: Float32Array;
   private lavaSeen = -1;
   private lavaVersion = 0;
@@ -455,9 +454,8 @@ export class RunView3d implements RunView {
     this.lightStat = null;
     if (!work) {
       const focus = { x: f.camera.x / TILE, z: f.camera.y / TILE };
-      for (const e of f.ents.values()) if (e.kind === KIND.Torch) this.pairs.see(e);
       const cands = [
-        ...staticCands(this.field, this.pairs, this.map, c.now),
+        ...staticCands(this.field, c.now),
         ...movingCands(f.snap?.lights ?? [], f.snap?.ents ?? [], (id) => this.carrier(f, id), c.now),
         ...(this.cove ? this.cove.lights(c.now) : []),
         ...this.fxPass.out.lights,

@@ -4,13 +4,13 @@
 import { LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { MovingLight } from '../generated/MovingLight';
-import type { LightField, StaticLight } from '../game/light';
+import type { LightField } from '../game/light';
 import { cloudAt, lookFor, sunLook, type SunLook } from '../game/sunmath';
 import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import { groundAt, type Cam } from './camera';
 import { TORCH_MID } from './figures';
-import { torchWall, WALL_H } from './heights';
+import { WALL_H, wallOf } from './heights';
 import type { Light } from './light';
 import { CRYSTAL_RATE, CRYSTAL_STAND, CRYSTAL_Y } from './stone/crystals';
 
@@ -52,33 +52,12 @@ export function lightRgb(kind: number, colour: number | null, k: number): [numbe
   return [((c >> 16) & 255) * m, ((c >> 8) & 255) * m, (c & 255) * m];
 }
 
-/** A torch's flame on its wall: the point on the wall face, the face's normal (into the room) and the flame's flicker phase. */
-export interface TorchWall { x: number; z: number; nx: number; nz: number; phase: number }
-
 /** A torch entity's flame foot on its wall, the wall's normal (into the room) and the floor tile of its light. */
 export function torchOf(e: EntState): { x: number; z: number; nx: number; nz: number; tx: number; tz: number } {
   const x = e.x / TILE;
   const z = e.y / TILE;
   const [wx, wz, nx, nz] = e.extra === 0 ? [x, Math.floor(z), 0, 1] : e.extra === 1 ? [Math.floor(x), z, 1, 0] : [Math.floor(x) + 1, z, -1, 0];
   return { x: wx, z: wz, nx, nz, tx: Math.floor(x), tz: Math.floor(z) };
-}
-
-/** Pairs the static torch lights with the torch entities the session has seen (the light only knows its tile, the entity its side). */
-export class TorchPairs {
-  private seen = new Map<string, TorchWall>();
-
-  /** Remembers a torch entity under its light tile, as `drawTorch` places its flame. */
-  see(e: EntState): void {
-    const t = torchOf(e);
-    this.seen.set(`${t.tx},${t.tz}`, { x: t.x, z: t.z, nx: t.nx, nz: t.nz, phase: e.id * 1.7 });
-  }
-
-  /** The remembered pair of a light, else a guess from the walls beside its tile (north, west, east; none: the tile centre). */
-  wallOf(l: StaticLight, map: TileMap): TorchWall {
-    const known = this.seen.get(`${l.x},${l.y}`);
-    if (known) return known;
-    return { ...torchWall(l.x, l.y, map), phase: l.id * 1.7 };
-  }
 }
 
 /** A figure that casts a shadow (Task 6 of #304 fills it): its box in the world (centre x, z, width, y range) and its frame in the atlas. */
@@ -92,7 +71,7 @@ export interface Cand extends Light { id: string; kind: number; /** The entity t
  * the **bounce fill**: the crack (air/cracks.ts) lights its own patch, this faint light at `BOUNCE_Y` is what that patch bounces
  * into the room. It dims with the crack's cloud, `base` is its unclouded brightness. `sun` is the sun look the cracks use.
  */
-export function staticCands(field: LightField, torches: TorchPairs, map: TileMap, t: number, sun: SunLook = sunLook): Cand[] {
+export function staticCands(field: LightField, t: number, sun: SunLook = sunLook): Cand[] {
   const out: Cand[] = [];
   for (const l of field.lights.values()) {
     if (!l.on || l.kind === LIGHT_KIND.Lava) continue;
@@ -101,14 +80,13 @@ export function staticCands(field: LightField, torches: TorchPairs, map: TileMap
     let z = l.y + 0.5;
     let ph = l.id * 1.7;
     if (l.kind === LIGHT_KIND.Torch) {
-      const w = torches.wallOf(l, map);
-      ph = w.phase;
+      const w = wallOf(l);
       x = w.x + w.nx * TORCH_STAND + 0.03 * Math.sin(13 * t + ph);
       z = w.z + w.nz * TORCH_STAND;
       y = TORCH_MID + 0.03 * Math.sin(17 * t + ph);
     } else if (l.kind === LIGHT_KIND.Crystal) {
       // at its cluster (stone/place.ts stands the big shard at the same wall), low at the wall's foot
-      const w = torchWall(l.x, l.y, map);
+      const w = wallOf(l);
       x = w.x + w.nx * CRYSTAL_STAND;
       z = w.z + w.nz * CRYSTAL_STAND;
       y = CRYSTAL_Y;

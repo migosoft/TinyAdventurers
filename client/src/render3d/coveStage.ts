@@ -19,7 +19,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, dungeonAmbient, stoneClear } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands } from './lights';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
@@ -92,10 +92,8 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
 
   // The two torches: a light on each torch's tile and a flame figure.
   const field = new LightField(map);
-  TORCHES.forEach((t, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true }));
-  const pairs = new TorchPairs();
+  TORCHES.forEach((t, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true, wall: 1 }));
   const torchEnts = TORCHES.map((t, i) => ent(i + 1, KIND.Torch, t.x, t.y, { extra: 0, anim: 1 }));
-  for (const e of torchEnts) pairs.see(e);
 
   // The sight, as a run in a dungeon has it.
   const hardView = new SightView(map.w, map.h);
@@ -157,7 +155,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       c.timer.lap('plants');
 
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-      const sel = selectLights([...staticCands(field, pairs, map, seconds), ...cove.lights(seconds)], lightView(fp, cam), { x: knight.x, z: knight.z }, Math.min(LIGHT_CAP, params.lcap));
+      const sel = selectLights([...staticCands(field, seconds), ...cove.lights(seconds)], lightView(fp, cam), { x: knight.x, z: knight.z }, Math.min(LIGHT_CAP, params.lcap));
       const lights = sel.list;
       // The cove's plants cast only where the knight sees them, as in a run.
       const shown = params.sight ? coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : coveCasters;

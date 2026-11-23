@@ -4,11 +4,10 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { MovingLight } from '../generated/MovingLight';
 import { LightField } from '../game/light';
 import { sunLook } from '../game/sunmath';
-import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import { project, type Cam } from './camera';
 import { WALL_H } from './heights';
-import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { CARRY_PX, BOUNCE_GAIN, BOUNCE_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, selectCasters, type ShadowCaster, footprint, lavaTexels, lightView, lightFlicker, lightRgb, movingCands, selectLights, staticCands, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -16,10 +15,6 @@ const mapOf = (rows: string[]): TileMap => {
   return new TileMap(w, rows.length, Uint8Array.from(rows.join('').split('').map((c) => (c === '#' ? TILE_ID.Wall : TILE_ID.Floor))));
 };
 const open = (): TileMap => mapOf(Array.from({ length: 12 }, () => '.'.repeat(12)));
-
-const torchEnt = (id: number, x: number, y: number, extra: number): EntState => ({
-  id, kind: 0, x, y, hp: 1, anim: 1, aim: 0, animMs: 0, flags: 0, extra, effects: 0, side: 0, entangled: 0,
-});
 
 describe('lightFlicker and lightRgb', () => {
   it('leaves daylight steady and gives lava a third of the torch swing', () => {
@@ -42,85 +37,26 @@ describe('lightFlicker and lightRgb', () => {
   });
 });
 
-describe('TorchPairs', () => {
-  it('remembers a seen Face torch', () => {
-    const tp = new TorchPairs();
-    const map = open();
-    tp.see(torchEnt(7, (3 + 0.5) * 16, (4 + 1) * 16 + 0.5, 0));
-    const w = tp.wallOf({ id: 1, kind: 0, colour: 0, x: 3, y: 5, on: true }, map);
-    expect(w.nz).toBe(1);
-    expect(w.nx).toBe(0);
-    expect(w.z).toBe(5);
-    expect(w.x).toBeCloseTo(3.5, 6);
-    expect(w.phase).toBeCloseTo(7 * 1.7, 9);
-  });
-  it('replaces a guess once the torch entity is seen', () => {
-    const tp = new TorchPairs();
-    const map = mapOf(['....', '.#..', '....']);
-    const light = { id: 3, kind: 0, colour: 0, x: 1, y: 2, on: true };
-    const guess = tp.wallOf(light, map);
-    expect(guess.phase).toBeCloseTo(3 * 1.7, 9);
-    tp.see(torchEnt(9, 1 * 16 + 0.5, 2.5 * 16, 1));
-    const seen = tp.wallOf(light, map);
-    expect(seen.nx).toBe(1);
-    expect(seen.phase).toBeCloseTo(9 * 1.7, 9);
-  });
-  it('remembers West and East sides', () => {
-    const tp = new TorchPairs();
-    const map = open();
-    tp.see(torchEnt(1, 3 * 16 + 0.5, 5.5 * 16, 1));
-    tp.see(torchEnt(2, 8 * 16 + 15.5, 5.5 * 16, 2));
-    const west = tp.wallOf({ id: 1, kind: 0, colour: 0, x: 3, y: 5, on: true }, map);
-    expect(west.nx).toBe(1);
-    expect(west.x).toBe(3);
-    const east = tp.wallOf({ id: 2, kind: 0, colour: 0, x: 8, y: 5, on: true }, map);
-    expect(east.nx).toBe(-1);
-    expect(east.x).toBe(9);
-  });
-  it('guesses from the walls when unseen', () => {
-    const tp = new TorchPairs();
-    const north = mapOf(['....', '.#..', '....']);
-    const a = tp.wallOf({ id: 3, kind: 0, colour: 0, x: 1, y: 2, on: true }, north);
-    expect(a.nz).toBe(1);
-    expect(a.z).toBe(2);
-    expect(a.phase).toBeCloseTo(3 * 1.7, 9);
-    const west = mapOf(['....', '#...', '....']);
-    const b = tp.wallOf({ id: 4, kind: 0, colour: 0, x: 1, y: 1, on: true }, west);
-    expect(b.nx).toBe(1);
-    expect(b.x).toBe(1);
-    const east = mapOf(['....', '..#.', '....']);
-    const c = tp.wallOf({ id: 5, kind: 0, colour: 0, x: 1, y: 1, on: true }, east);
-    expect(c.nx).toBe(-1);
-    expect(c.x).toBe(2);
-    const none = tp.wallOf({ id: 6, kind: 0, colour: 0, x: 1, y: 1, on: true }, open());
-    expect(none.x).toBeCloseTo(1.5, 6);
-    expect(none.z).toBeCloseTo(1.5, 6);
-  });
-});
-
 describe('staticCands', () => {
   it('skips lava and lights that are off, and brings a torch back when it is turned on', () => {
     const map = open();
     const field = new LightField(map);
-    field.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 4, y: 4, on: true });
-    field.add({ id: 2, kind: LIGHT_KIND.Lava, colour: LIGHT[1].colour, x: 6, y: 6, on: true });
-    field.add({ id: 3, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 8, y: 8, on: false });
-    const tp = new TorchPairs();
-    expect(staticCands(field, tp, map, 0).map((c) => c.id)).toEqual(['s1']);
+    field.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 4, y: 4, on: true, wall: 0 });
+    field.add({ id: 2, kind: LIGHT_KIND.Lava, colour: LIGHT[1].colour, x: 6, y: 6, on: true, wall: 0 });
+    field.add({ id: 3, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 8, y: 8, on: false, wall: 0 });
+    expect(staticCands(field, 0).map((c) => c.id)).toEqual(['s1']);
     field.set(1, false, LIGHT[0].colour);
-    expect(staticCands(field, tp, map, 0)).toEqual([]);
+    expect(staticCands(field, 0)).toEqual([]);
     field.set(1, true, LIGHT[0].colour);
-    expect(staticCands(field, tp, map, 0).map((c) => c.id)).toEqual(['s1']);
+    expect(staticCands(field, 0).map((c) => c.id)).toEqual(['s1']);
   });
   it('puts a torch at its flame and the other kinds at the tile centre', () => {
     const map = open();
     const field = new LightField(map);
-    field.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 3, y: 5, on: true });
-    field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true });
-    field.add({ id: 3, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 8, y: 8, on: true });
-    const tp = new TorchPairs();
-    tp.see(torchEnt(7, 3.5 * 16, 5 * 16 + 0.5, 0));
-    const [torch, day, fire] = staticCands(field, tp, map, 0);
+    field.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 3, y: 5, on: true, wall: 1 });
+    field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true, wall: 0 });
+    field.add({ id: 3, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 8, y: 8, on: true, wall: 0 });
+    const [torch, day, fire] = staticCands(field, 0);
     expect(torch.x).toBeCloseTo(3.5, 1);
     expect(torch.z).toBeCloseTo(5.1, 1);
     expect(torch.y).toBeCloseTo(TORCH_MID, 1);
@@ -137,10 +73,9 @@ describe('staticCands', () => {
     // a wall north of the tile (3, 5): the cluster stands at the wall's foot
     const map = mapOf(Array.from({ length: 12 }, (_, z) => (z === 4 ? '#'.repeat(12) : '.'.repeat(12))));
     const field = new LightField(map);
-    field.add({ id: 1, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x: 3, y: 5, on: true });
-    field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 8, y: 5, on: true });
-    const tp = new TorchPairs();
-    const at = (t: number): Cand[] => staticCands(field, tp, map, t);
+    field.add({ id: 1, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x: 3, y: 5, on: true, wall: 1 });
+    field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 8, y: 5, on: true, wall: 1 });
+    const at = (t: number): Cand[] => staticCands(field, t);
     const [crystal] = at(0);
     expect(crystal.x).toBeCloseTo(3.5, 6);
     expect(crystal.z).toBeGreaterThan(5);
@@ -162,14 +97,34 @@ describe('staticCands', () => {
   });
 });
 
+describe('staticCands: the wall a light hangs on', () => {
+  it('stands a crystal light at the wall its record names, not at the wall the map shows', () => {
+    // a wall north of tile (3, 5), but the light says west
+    const map = mapOf(Array.from({ length: 12 }, (_, z) => (z === 4 ? '#'.repeat(12) : '.'.repeat(12))));
+    const field = new LightField(map);
+    field.add({ id: 1, kind: LIGHT_KIND.Crystal, colour: LIGHT[LIGHT_KIND.Crystal].colour, x: 3, y: 5, on: true, wall: 2 });
+    const [c] = staticCands(field, 0);
+    expect(c.x).toBeGreaterThan(3);
+    expect(c.x).toBeLessThan(3.5);
+    expect(c.z).toBeCloseTo(5.5, 6);
+  });
+  it('gives two torches on one tile, one on each side wall, two places', () => {
+    const field = new LightField(open());
+    field.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 5, y: 5, on: true, wall: 2 });
+    field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: LIGHT[0].colour, x: 5, y: 5, on: true, wall: 3 });
+    const [a, b] = staticCands(field, 0);
+    expect(a.x).toBeLessThan(5.5);
+    expect(b.x).toBeGreaterThan(5.5);
+  });
+});
+
 describe('staticCands: the Daylight bounce fill', () => {
   it('is BOUNCE_GAIN of the old light, and dimmer inside a cloud', () => {
     const map = open();
     const field = new LightField(map);
-    field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true });
-    const tp = new TorchPairs();
+    field.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 6, y: 6, on: true, wall: 0 });
     const full = Math.max(...lightRgb(LIGHT_KIND.Daylight, 0xffffff, 1));
-    const sunny = staticCands(field, tp, map, 0, sunLook)[0];
+    const sunny = staticCands(field, 0, sunLook)[0];
     // Long before the first cloud (t < 0 is no cloud): the whole gain.
     expect(Math.max(sunny.r, sunny.g, sunny.b)).toBeCloseTo(BOUNCE_GAIN * full, 6);
     expect(sunny.base).toBeCloseTo(BOUNCE_GAIN * full, 6);
@@ -177,7 +132,7 @@ describe('staticCands: the Daylight bounce fill', () => {
     // Find a moment inside a cloud: the colour drops, the ranking base does not.
     let dimmest = sunny;
     for (let t = 0; t < 120; t += 0.25) {
-      const c = staticCands(field, tp, map, t, sunLook)[0];
+      const c = staticCands(field, t, sunLook)[0];
       if (c.r < dimmest.r) dimmest = c;
     }
     expect(dimmest.r).toBeLessThan(sunny.r);
@@ -292,12 +247,11 @@ describe('selectLights', () => {
   it('ranks by the unflickered brightness, so the cap does not flutter', () => {
     const map = open();
     const field = new LightField(map);
-    field.add({ id: 1, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 5, on: true });
-    field.add({ id: 2, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 7, on: true });
-    const tp = new TorchPairs();
+    field.add({ id: 1, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 5, on: true, wall: 0 });
+    field.add({ id: 2, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 7, on: true, wall: 0 });
     const picks = new Set<string>();
     for (const t of [0, 0.3, 0.9, 1.7, 2.9, 4.1]) {
-      const cands = staticCands(field, tp, map, t);
+      const cands = staticCands(field, t);
       expect(cands[0].base).toBe(cands[1].base);
       picks.add(selectLights(cands, fp, { x: 0, z: 0 }, 1).list[0].id);
     }
@@ -318,8 +272,8 @@ describe('lavaTexels', () => {
     tiles[5 * w + 5] = TILE_ID.Lava;
     const m = new TileMap(w, w, tiles);
     const f = new LightField(m);
-    f.add({ id: 1, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 5, y: 5, on: true });
-    f.add({ id: 2, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 10, y: 10, on: true });
+    f.add({ id: 1, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 5, y: 5, on: true, wall: 0 });
+    f.add({ id: 2, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 10, y: 10, on: true, wall: 0 });
     const out = new Float32Array(w * w * 4);
     lavaTexels(f, m, out);
     const at = (x: number, y: number) => (y * w + x) * 4;

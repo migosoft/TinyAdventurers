@@ -26,7 +26,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { parseMap } from './demoMap';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, type Cand } from './lights';
 import { actPeriod, LICH_ACTS, lichAct, type LichAct } from './lichScript';
 import { seenOpeners } from './openers';
 import { reflects, type R3dParams } from './params';
@@ -124,10 +124,8 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
   // The field: the four wall torches, and the wall torches' figures.
   const spots = TORCHES.map((t) => ({ tx: centre.x + t.dx, ty: centre.z + t.dz, side: t.side }));
   const field = new LightField(map);
-  spots.forEach((s, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: s.tx, y: s.ty, on: true }));
-  const pairs = new TorchPairs();
+  spots.forEach((s, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: s.tx, y: s.ty, on: true, wall: s.side + 1 }));
   const torches: EntState[] = spots.map((s, i) => fxEnt(TORCH_ID + i, KIND.Torch, s.side === 1 ? s.tx + 0.5 / TILE : s.side === 2 ? s.tx + 1 - 0.5 / TILE : s.tx + 0.5, s.side === 0 ? s.ty + 0.5 / TILE : s.ty + 0.5, { extra: s.side, anim: 1, side: SIDE.Neutral }));
-  for (const e of torches) pairs.see(e);
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -245,7 +243,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       let lights: Cand[] = [];
-      if (game) lights = selectLights([...staticCands(field, pairs, map, clock), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
+      if (game) lights = selectLights([...staticCands(field, clock), ...pass.out.lights], lightView(fp, cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
       assignSkips(lights, casters);
       c.timer.lap('lights');

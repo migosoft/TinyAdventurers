@@ -19,6 +19,8 @@ export interface StaticLight {
   x: number;
   y: number;
   on: boolean;
+  /** The wall it hangs on: 0 none, 1 north, 2 west, 3 east (`TorchSide + 1`). */
+  wall: number;
 }
 
 interface Cells {
@@ -67,7 +69,7 @@ export class LightField {
   }
 
   load(infos: LightInfo[]): void {
-    for (const [id, kind, colour, x, y, on] of infos) this.add({ id, kind, colour, x, y, on });
+    for (const [id, kind, colour, x, y, on, wall] of infos) this.add({ id, kind, colour, x, y, on, wall });
   }
 
   add(l: StaticLight): void {

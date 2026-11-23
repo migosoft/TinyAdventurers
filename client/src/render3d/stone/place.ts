@@ -2,7 +2,7 @@
 // shards. The painter and the mesh read them. Positions are tiles (x, z).
 import { LIGHT_KIND, TILE_ID } from '../../generated/defs';
 import { isTerrain, type TileMap } from '../../sim/map';
-import { torchWall } from '../heights';
+import { wallOf } from '../heights';
 import { hash, kindAt, LAID, ROCK, rockAmount, STONE_PX, type StoneField } from './field';
 
 export interface Room { cells: number[]; kind: 0 | 1; x0: number; z0: number; x1: number; z1: number }
@@ -30,7 +30,7 @@ export function noMarks(): Marks {
 }
 
 /** The static lights of RunStartInfo and the heroes' start: what no mark may cover. */
-export interface Taken { lights: { id: number; kind: number; x: number; y: number }[]; spawn: { x: number; z: number } }
+export interface Taken { lights: { id: number; kind: number; x: number; y: number; wall: number }[]; spawn: { x: number; z: number } }
 
 // First guesses, all of them.
 /** Open ground is eroded and grown back this many cells: corridors (3 wide) drop out. */
@@ -164,8 +164,8 @@ export function placeMarks(map: TileMap, f: StoneField, taken: Taken): Marks {
       break;
     }
   }
-  for (const l of lights.filter((l) => l.kind === LIGHT_KIND.Crystal)) {
-    const w = torchWall(l.x, l.y, map);
+  for (const l of lights.filter((l) => l.kind === LIGHT_KIND.Crystal && l.wall > 0)) {
+    const w = wallOf(l);
     marks.shards.push({ x: w.x, z: w.z, nx: w.nx, nz: w.nz, big: true, lightId: l.id });
     used.push({ x: w.x, z: w.z, r: SHARD_BIG_R });
   }

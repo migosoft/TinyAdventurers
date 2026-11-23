@@ -30,7 +30,7 @@ describe('makeCracks', () => {
 
   it('set writes the count and the slots as packCracks lays them out', () => {
     const cracks = makeCracks();
-    const list = [4, 9].map((id) => crackOf({ id, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 5, y: 6, on: true }, sunLook, 0));
+    const list = [4, 9].map((id) => crackOf({ id, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 5, y: 6, on: true, wall: 0 }, sunLook, 0));
     cracks.set(list);
     expect(cracks.count.value).toBe(2);
     const p = packCracks(list);

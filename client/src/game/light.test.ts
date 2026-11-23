@@ -42,7 +42,7 @@ describe('light field', () => {
   it('switches, recolours, removes and follows map changes', () => {
     const m = new TileMap(9, 3, new Uint8Array(27).fill(TILE_ID.Floor));
     const f = new LightField(m);
-    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: 1, y: 1, on: true });
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: 1, y: 1, on: true, wall: 0 });
     expect(f.isLit(5, 1)).toBe(true);
     f.set(1, false, 0xffaa5a);
     expect(f.isLit(5, 1)).toBe(false);
@@ -71,8 +71,8 @@ describe('light field', () => {
     const m = new TileMap(5, 1, new Uint8Array(5).fill(TILE_ID.Floor));
     m.set(4, 0, TILE_ID.Lava);
     const f = new LightField(m);
-    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x: 0, y: 0, on: true });
-    f.add({ id: 2, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 4, y: 0, on: true });
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: LIGHT[LIGHT_KIND.Torch].colour, x: 0, y: 0, on: true, wall: 0 });
+    f.add({ id: 2, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 4, y: 0, on: true, wall: 0 });
     const rgb = new Float32Array(5 * 3);
     f.accumulate(rgb, 0, 0, 5, 1, () => 1);
     const i = 3; // reached by both
@@ -133,7 +133,7 @@ describe('light field', () => {
   it('version rises on add, set, remove and mapChanged', () => {
     const f = new LightField(new TileMap(8, 8, new Uint8Array(64).fill(TILE_ID.Floor)));
     const seen = [f.version];
-    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true });
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true, wall: 0 });
     seen.push(f.version);
     f.set(1, false, 0xffffff);
     seen.push(f.version);
@@ -147,7 +147,7 @@ describe('light field', () => {
   it('accumulate with only = Lava leaves a torch\'s tiles at 0', () => {
     const m = new TileMap(8, 8, new Uint8Array(64).fill(TILE_ID.Floor));
     const f = new LightField(m);
-    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true });
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true, wall: 0 });
     const rgb = new Float32Array(64 * 3);
     f.accumulate(rgb, 0, 0, 8, 8, () => 1, () => 1, (l) => l.kind === LIGHT_KIND.Lava);
     expect(rgb.every((v) => v === 0)).toBe(true);

@@ -21,7 +21,7 @@ import { rng } from './fx/rand';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
-import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MIST } from './mist';
@@ -108,14 +108,13 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   let lightId = 1;
   let blueId = 0;
   for (const tc of TORCHES) {
-    field.add({ id: lightId, kind: LIGHT_KIND.Torch, colour: tc.colour, x: Math.floor(tc.x / TILE), y: Math.floor(tc.y / TILE), on: true });
+    field.add({ id: lightId, kind: LIGHT_KIND.Torch, colour: tc.colour, x: Math.floor(tc.x / TILE), y: Math.floor(tc.y / TILE), on: true, wall: tc.side + 1 });
     if (tc.blue) blueId = lightId;
     lightId++;
   }
   // One crack in room 1's ceiling (#307), its patch on the knight's walk: the west leg of the loop (x 7.5, z 8.5 to 14.5) passes tile (7, 9).
-  field.add({ id: lightId++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: CRACK_TILE[0], y: CRACK_TILE[1], on: true });
-  for (const l of lavaLights(map)) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x: l.x, y: l.y, on: true });
-  const pairs = new TorchPairs();
+  field.add({ id: lightId++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: CRACK_TILE[0], y: CRACK_TILE[1], on: true, wall: 0 });
+  for (const l of lavaLights(map)) field.add({ id: lightId++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x: l.x, y: l.y, on: true, wall: 0 });
   let lava = new Float32Array(map.w * map.h * 4);
   let lavaVersion = -1;
   // The pool's lava (#344): bubbles and rings only, no effects here, so its cues go unused.
@@ -156,7 +155,6 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const on = blueOn(t);
       if (field.lights.get(blueId)?.on !== on) field.set(blueId, on, BLUE);
       const ents = lightsEnts(t);
-      for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       c.timer.lap('sim');
       stoneRun.frame(c.view);
       if (!c.view) return 0;
@@ -175,7 +173,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       let cracks: Crack[] = [];
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       if (game) {
-        const cands = [...staticCands(field, pairs, map, t), ...movingCands(movingAt(t), [], () => null, t)];
+        const cands = [...staticCands(field, t), ...movingCands(movingAt(t), [], () => null, t)];
         const sel = selectLights(cands, lightView(fp, cam), viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;

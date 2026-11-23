@@ -19,7 +19,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, type Cand } from './lights';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
 import { seeLook } from './seeThrough';
@@ -415,9 +415,8 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
   const field = new LightField(map);
   for (let s = 0; s <= BAY; s++) {
     const o = slotOrigin(s);
-    TORCH_TILES.forEach((tx, i) => field.add({ id: s * 2 + i + 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: o.x + tx, y: o.z + 3, on: torchesOn }));
+    TORCH_TILES.forEach((tx, i) => field.add({ id: s * 2 + i + 1, kind: LIGHT_KIND.Torch, colour: 0xffaa5a, x: o.x + tx, y: o.z + 3, on: torchesOn, wall: 1 }));
   }
-  const pairs = new TorchPairs();
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -488,7 +487,6 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       // The boss corner and (when the group has no rows) a quiet bay.
       BOSSES.forEach(([kind, x, z], i) => ents.push(placeEnt(fxEnt(200 + i, kind, x, z, { aim: Math.PI, animMs: t * 1000 + i * 90 }), BAY)));
       TORCH_TILES.forEach((tx, i) => ents.push(placeEnt(fxEnt(500 + i, KIND.Torch, tx + 0.5, 3 + 0.5 / TILE, { extra: 0, anim: torchesOn ? 1 : 0 }), BAY)));
-      for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       label.textContent = `fx try-out (#308): ${group}${rows.length ? '' : ' (no rows yet)'}: ${rows.map((r) => r.name).join(', ')}; t ${t.toFixed(2)} s; WASD pans`;
       c.timer.lap('sim');
       stoneRun.frame(c.view);
@@ -505,7 +503,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       c.timer.lap('cards');
       let lights: Cand[] = [];
       if (game) {
-        const cands = [...staticCands(field, pairs, map, t), ...pass.out.lights];
+        const cands = [...staticCands(field, t), ...pass.out.lights];
         lights = selectLights(cands, lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), { x: cam.x, z: cam.z }, Math.min(LIGHT_CAP, c.params.lcap)).list as Cand[];
       }
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];

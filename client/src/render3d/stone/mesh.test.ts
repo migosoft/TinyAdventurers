@@ -62,7 +62,7 @@ const triangles = (a: StoneArrays): V[][] => Array.from({ length: a.index.length
 let level: ReturnType<typeof makeLevel> | undefined;
 function makeLevel() {
   const map = stoneMap(), f = stoneField(map, null, STONE_SEED);
-  const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y })), spawn: STONE_SPAWN });
+  const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y, wall: 1 })), spawn: STONE_SPAWN });
   const plan = planSheets(map);
   return { map, f, marks, chunk: (cx: number, cz: number): StoneArrays => buildStoneChunk(map, f, plan, marks, cx, cz) };
 }
@@ -431,7 +431,7 @@ describe('buildStoneChunk', () => {
   });
 
   it('builds the laid mesh where the rock amount is 0, and keeps the caves under their budgets', () => {
-    const map = stoneMap(), plan = planSheets(map), lights = TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y }));
+    const map = stoneMap(), plan = planSheets(map), lights = TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y, wall: 1 }));
     const levelOf = (kinds: Uint8Array | null) => {
       const f = stoneField(map, kinds, STONE_SEED), marks = placeMarks(map, f, { lights, spawn: STONE_SPAWN });
       return (cx: number, cz: number): StoneArrays => buildStoneChunk(map, f, plan, marks, cx, cz);

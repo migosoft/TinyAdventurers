@@ -21,10 +21,10 @@ export function heightBytes(map: TileMap): Uint8Array {
   return out;
 }
 
-/** The wall a light's tile fronts, guessed from the walls beside it (north, west, east; none: the tile centre): the point on the wall face and its normal into the room. */
-export function torchWall(x: number, y: number, map: TileMap): { x: number; z: number; nx: number; nz: number } {
-  if (map.opaque(x, y - 1)) return { x: x + 0.5, z: y, nx: 0, nz: 1 };
-  if (map.opaque(x - 1, y)) return { x, z: y + 0.5, nx: 1, nz: 0 };
-  if (map.opaque(x + 1, y)) return { x: x + 1, z: y + 0.5, nx: -1, nz: 0 };
-  return { x: x + 0.5, z: y + 0.5, nx: 0, nz: 0 };
+/** The wall a light hangs on: the point on the wall cell's edge and the normal into the room. wall 0: the tile's centre, normal 0. */
+export function wallOf(l: { x: number; y: number; wall: number }): { x: number; z: number; nx: number; nz: number } {
+  if (l.wall === 1) return { x: l.x + 0.5, z: l.y, nx: 0, nz: 1 };
+  if (l.wall === 2) return { x: l.x, z: l.y + 0.5, nx: 1, nz: 0 };
+  if (l.wall === 3) return { x: l.x + 1, z: l.y + 0.5, nx: -1, nz: 0 };
+  return { x: l.x + 0.5, z: l.y + 0.5, nx: 0, nz: 0 };
 }

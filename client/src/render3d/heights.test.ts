@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
-import { WALL_H, cellHeight, heightAt, heightBytes } from './heights';
+import { WALL_H, cellHeight, heightAt, heightBytes, wallOf } from './heights';
 import { parseMap } from './demoMap';
 
 describe('heights', () => {
@@ -19,6 +19,14 @@ describe('heights', () => {
     expect(heightAt(m, 1, 0)).toBe(0);
     expect(heightAt(m, 2, 0)).toBe(2);
     expect(heightAt(m, 1, 1)).toBe(2);
+  });
+
+  it('puts a light on the edge of the wall it hangs on', () => {
+    const at = { x: 4, y: 6 };
+    expect(wallOf({ ...at, wall: 1 })).toEqual({ x: 4.5, z: 6, nx: 0, nz: 1 });
+    expect(wallOf({ ...at, wall: 2 })).toEqual({ x: 4, z: 6.5, nx: 1, nz: 0 });
+    expect(wallOf({ ...at, wall: 3 })).toEqual({ x: 5, z: 6.5, nx: -1, nz: 0 });
+    expect(wallOf({ ...at, wall: 0 })).toEqual({ x: 4.5, z: 6.5, nx: 0, nz: 0 });
   });
 
   it('packs heights into bytes, row by row', () => {

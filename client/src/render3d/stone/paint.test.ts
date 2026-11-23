@@ -29,7 +29,7 @@ const flagAt = (p: Uint8Array, x: number, y: number): number => decodeRelief(p[(
 let level: ReturnType<typeof makeLevel> | undefined;
 function makeLevel() {
   const map = stoneMap(), f = stoneField(map, zoneKinds(map), STONE_SEED);
-  const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y })), spawn: STONE_SPAWN });
+  const marks = placeMarks(map, f, { lights: TORCH_TILES.map(([x, y], i) => ({ id: i + 1, kind: LIGHT_KIND.Torch, x, y, wall: 1 })), spawn: STONE_SPAWN });
   return { map, f, marks };
 }
 const stoneLevel = () => (level ??= makeLevel());

@@ -109,7 +109,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };
   const world: WorldInput = {
     map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
-    taken: { lights: info.lights.map(([id, kind, , x, y]) => ({ id, kind, x, y })), spawn },
+    taken: { lights: info.lights.map(([id, kind, , x, y, , wall]) => ({ id, kind, x, y, wall })), spawn },
   };
   // The cover of every level (the woodland's grass; a dungeon's moss and the cove's grass), built once and kept for the rebuilds after a lost device.
   const job: CoverJob = coverJob(

@@ -26,7 +26,7 @@ type MsgW = [number, string];
 type CoinsW = [number, number, number, number];
 type SinkW = [number, number, number, number, number];
 type LightEvW = [number, number, boolean, number];
-type LightAddW = [number, number, number, number, number, number, boolean];
+type LightAddW = [number, number, number, number, number, number, boolean, number];
 type LightRemoveW = [number, number];
 type EffectW = [number, number, number, boolean, number];
 type ZapW = [number, number, number, number, number];
@@ -79,8 +79,8 @@ function unpackEv(e: EvW): Ev {
       return { t: 'Light', id, on, colour };
     }
     case EV.LightAdd: {
-      const [, id, kind, colour, x, y, on] = e as LightAddW;
-      return { t: 'LightAdd', id, kind, colour, x, y, on };
+      const [, id, kind, colour, x, y, on, wall] = e as LightAddW;
+      return { t: 'LightAdd', id, kind, colour, x, y, on, wall };
     }
     case EV.LightRemove: {
       const [, id] = e as LightRemoveW;
