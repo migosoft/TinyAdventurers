@@ -1018,7 +1018,8 @@ impl Run {
         {
             self.last_hit = Some(dmg.clone());
         }
-        if !self.players[pi].alive {
+        // A hero still loading the level is safe from everything, not only from targeting (#322).
+        if !self.players[pi].alive || self.players[pi].loading {
             return;
         }
         if !dmg.from_effect {
@@ -1085,7 +1086,8 @@ impl Run {
     pub fn knock_player(&mut self, pi: usize, from: Vec2, fallback: f64, dist: f64, str: i32) {
         let p = &mut self.players[pi];
         let dist = push_dist(dist, str, p.sheet.weight);
-        if !p.alive || p.sinking.is_some() || p.mv.dash_t > 0.0 || dist <= 0.0 {
+        // A hero still loading the level is not pushed either (#322).
+        if !p.alive || p.loading || p.sinking.is_some() || p.mv.dash_t > 0.0 || dist <= 0.0 {
             return;
         }
         let dist = dist * p.effects.knock_taken();

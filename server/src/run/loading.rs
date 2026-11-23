@@ -17,6 +17,7 @@ impl Run {
         self.waiting = true;
     }
 
+    /// True when the hold ends: every connected hero has loaded, or `waited_s` reached `LOAD_TIMEOUT_S`.
     pub fn hold_over(&self, waited_s: f64) -> bool {
         self.waiting && (waited_s >= LOAD_TIMEOUT_S || self.players.iter().filter(|p| p.tx.is_some()).all(|p| !p.loading))
     }
@@ -152,6 +153,23 @@ mod tests {
             run.step();
         }
         assert!(run.players[1].hp < hp);
+    }
+
+    #[test]
+    fn a_slow_hero_is_not_hurt_or_pushed_by_a_barrel_blast() {
+        let mut run = two();
+        run.begin_loading();
+        send(&mut run, 0, ClientMsg::Loaded);
+        run.release();
+        without_neutrals(&mut run);
+        crate::run::ai::tests::open_floor(&mut run);
+        let (pos, hp) = (run.players[1].pos(), run.players[1].hp);
+        run.spawn_object(crate::defs::kinds::EntityKind::Barrel, pos + Vec2::new(20.0, 0.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        let oi = run.objects.len() - 1;
+        crate::run::objects::explode_barrel(&mut run, oi);
+        run.step();
+        assert_eq!(run.players[1].hp, hp);
+        assert_eq!(run.players[1].pos(), pos);
     }
 
     #[test]
