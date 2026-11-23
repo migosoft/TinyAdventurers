@@ -64,7 +64,7 @@ pub fn generate(seed: u64, theme: Theme) -> Dungeon {
     dungeon.haunts = place_haunts(&mut ChaCha8Rng::seed_from_u64(seed ^ HAUNT_SALT), &dungeon);
     // The stone kinds come last too, from their own stream (`stone::lay`).
     dungeon.stone = stone::lay(seed, theme.stone, &dungeon);
-    stone::crystals(&mut dungeon);
+    stone::crystals(seed, &mut dungeon);
     dungeon
 }
 
@@ -763,15 +763,9 @@ pub const TORCH_SPACING: i32 = 6;
 /// Share of rooms and corridor stretches left without torches (dark pockets).
 pub const DARK_SHARE: f64 = 0.2;
 
-/// Wall torches: on wall cells with plain floor in front (brick faces, and
-/// side walls as sconces), one about every `TORCH_SPACING` tiles along each
-/// straight run of wall, from a random offset; runs under 3 tiles get none.
-/// Each room and each corridor stretch (connected corridor floor between
-/// rooms) is dark with `DARK_SHARE`, except the start room and the boss hall.
-/// No two torches touch. The start room and the boss hall always get at least
-/// one torch (fallback: the middle of their longest candidate run).
-fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSpawn> {
-    // Region of a floor tile: its room, or its corridor stretch (flood fill).
+/// The region of every cell (`usize::MAX`: none) and the region count: a floor tile's room, or its
+/// corridor stretch (flood fill). Rooms come first, in order, so region `ri < rooms.len()` is room `ri`.
+pub(super) fn regions(map: &Map, rooms: &[Room]) -> (Vec<usize>, usize) {
     let n = (map.w * map.h) as usize;
     let mut region = vec![usize::MAX; n];
     for (ri, r) in rooms.iter().enumerate() {
@@ -802,6 +796,18 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
         }
         next += 1;
     }
+    (region, next)
+}
+
+/// Wall torches: on wall cells with plain floor in front (brick faces, and
+/// side walls as sconces), one about every `TORCH_SPACING` tiles along each
+/// straight run of wall, from a random offset; runs under 3 tiles get none.
+/// Each room and each corridor stretch (connected corridor floor between
+/// rooms) is dark with `DARK_SHARE`, except the start room and the boss hall.
+/// No two torches touch. The start room and the boss hall always get at least
+/// one torch (fallback: the middle of their longest candidate run).
+fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSpawn> {
+    let (region, next) = regions(map, rooms);
     let dark: Vec<bool> = (0..next)
         .map(|ri| {
             let keep_lit = ri < rooms.len() && (ri == 0 || rooms[ri].kind == RoomKind::Boss);
@@ -1064,6 +1070,27 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
 mod tests {
     use super::*;
     use crate::dungeon::is_terrain;
+
+    #[test]
+    fn regions_puts_rooms_first() {
+        for seed in 0..20 {
+            let d = generate(seed, Theme::WATER);
+            let (region, count) = regions(&d.map, &d.rooms);
+            for (ri, r) in d.rooms.iter().enumerate() {
+                for y in r.rect.y..r.rect.y + r.rect.h {
+                    for x in r.rect.x..r.rect.x + r.rect.w {
+                        assert_eq!(region[(y * d.map.w + x) as usize], ri, "seed {seed}: room {ri} at {x},{y}");
+                    }
+                }
+            }
+            for (i, &ri) in region.iter().enumerate() {
+                let (x, y) = (i as i32 % d.map.w, i as i32 / d.map.w);
+                if ri != usize::MAX && !d.rooms.iter().any(|r| r.rect.contains_tile(x, y)) {
+                    assert!(ri >= d.rooms.len() && ri < count, "seed {seed}: corridor cell {x},{y}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn torches_hang_on_walls_with_floor_in_front_spaced_and_never_adjacent() {

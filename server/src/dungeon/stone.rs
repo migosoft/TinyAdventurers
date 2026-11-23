@@ -1,8 +1,11 @@
 //! The stone layout of a level (#380): one stone kind per map cell. Crystals (instead of
 //! torches in rock) read the kinds, and the client gets them in `RunStartInfo.stone` for its stonework.
 
-use super::generate::bfs;
-use super::{Dungeon, Map, Rect, Tile, WallLight};
+use super::generate::{bfs, regions};
+use super::{Dungeon, Map, Rect, Tile, TorchSpawn, WallLight, TILE};
+use crate::collision::line_of_sight;
+use crate::defs::lights::{def, LightKind};
+use crate::math::Vec2;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
@@ -51,18 +54,41 @@ fn room_depths(d: &Dungeon) -> Vec<i32> {
     d.rooms.iter().map(|r| depth_of(&r.rect)).collect()
 }
 
-/// In rock, a lit torch becomes a crystal at the same spot and an unlit one (a sunlit room) is dropped.
-pub fn crystals(d: &mut Dungeon) {
-    let w = d.map.w;
-    let stone = &d.stone;
-    d.torches.retain_mut(|t| {
-        let (fx, fy) = t.front();
-        if stone[(fy * w + fx) as usize] != ROCK {
-            return true;
+/// Share of the regions (rooms and corridor stretches) whose rock is lit by torches, not crystals (a first guess for the balancing pass).
+pub const ROCK_TORCH_SHARE: f64 = 1.0 / 3.0;
+/// Mixed into the seed for the cave choice's own random stream ("CAVE").
+pub const CAVE_SALT: u64 = 0x43_4156_45;
+
+/// Every region is a crystal cave or, with `ROCK_TORCH_SHARE`, a torch cave. In rock a lit torch of
+/// a crystal cave becomes a crystal, and a torch of a torch cave or an unlit one (a sunlit room) stays;
+/// then no rock torch stays within a crystal's light. The start room and the boss hall keep a light:
+/// one that lost its lit rock torches becomes a crystal cave.
+pub fn crystals(seed: u64, d: &mut Dungeon) {
+    let (region, count) = regions(&d.map, &d.rooms);
+    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ CAVE_SALT);
+    let mut torch_cave: Vec<bool> = (0..count).map(|_| rng.gen_bool(ROCK_TORCH_SHARE)).collect();
+    let (w, reach) = (d.map.w, f64::from(def(LightKind::Crystal).radius) * TILE);
+    let input = std::mem::take(&mut d.torches);
+    let region_of = |t: &TorchSpawn| region[(t.front().1 * w + t.front().0) as usize];
+    let in_rock = |t: &TorchSpawn| d.stone[(t.front().1 * w + t.front().0) as usize] == ROCK;
+    loop {
+        let mut out = input.clone();
+        out.iter_mut().filter(|t| t.lit && in_rock(t) && !torch_cave[region_of(t)]).for_each(|t| t.kind = WallLight::Crystal);
+        let crystals: Vec<Vec2> = out.iter().filter(|t| t.kind == WallLight::Crystal).map(|t| Map::center_of(t.front().0, t.front().1)).collect();
+        out.retain(|t| {
+            let a = Map::center_of(t.front().0, t.front().1);
+            t.kind == WallLight::Crystal || !in_rock(t) || !crystals.iter().any(|&b| (a.x - b.x).hypot(a.y - b.y) <= reach && line_of_sight(&d.map, a, b))
+        });
+        let bare: Vec<usize> = [d.start, d.boss]
+            .into_iter()
+            .filter(|&ri| torch_cave[ri] && input.iter().any(|t| t.lit && in_rock(t) && region_of(t) == ri) && !out.iter().any(|t| region_of(t) == ri))
+            .collect();
+        if bare.is_empty() {
+            d.torches = out;
+            return;
         }
-        t.kind = WallLight::Crystal;
-        t.lit
-    });
+        bare.into_iter().for_each(|ri| torch_cave[ri] = false);
+    }
 }
 
 /// One kind per cell, row-major, `map.w * map.h` long.
@@ -148,8 +174,8 @@ pub fn lay(seed: u64, layout: StoneLayout, d: &Dungeon) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::generate::{generate, Theme};
-    use super::super::{Room, RoomKind, WallLight};
+    use super::super::generate::{generate, regions, Theme};
+    use super::super::{Room, RoomKind, TorchSpawn, WallLight};
     use super::*;
 
     const SEEDS: u64 = 40;
@@ -174,53 +200,119 @@ mod tests {
         generate(seed, Theme { stone, ..theme })
     }
 
+    fn is_rock(d: &Dungeon, t: &TorchSpawn) -> bool {
+        let (fx, fy) = t.front();
+        d.stone[(fy * d.map.w + fx) as usize] == ROCK
+    }
+
+    fn room_has_sun(d: &Dungeon, r: &Room) -> bool {
+        d.suns.iter().any(|&(sx, sy)| r.rect.contains_tile(sx, sy))
+    }
+
     #[test]
-    fn rock_has_crystals_and_laid_has_torches() {
-        let (mut crystals_seen, mut torches_seen) = (0, 0);
+    fn rock_has_crystal_caves_and_torch_caves() {
+        let (mut crystals_seen, mut rock_torches_seen) = (0, 0);
+        for (seed, theme) in seeds_and_themes() {
+            for t in &of_layout(seed, theme, StoneLayout::Laid).torches {
+                assert_eq!(t.kind, WallLight::Torch, "seed {seed} Laid");
+            }
+            let z = zones(seed, theme);
+            for t in z.torches.iter().filter(|t| !is_rock(&z, t)) {
+                assert_eq!(t.kind, WallLight::Torch, "seed {seed} Zones: laid stone");
+            }
+            let d = of_layout(seed, theme, StoneLayout::Rock);
+            crystals_seen += d.torches.iter().filter(|t| t.kind == WallLight::Crystal).count();
+            rock_torches_seen += d.torches.iter().filter(|t| t.kind == WallLight::Torch && t.lit).count();
+        }
+        assert!(crystals_seen > 100 && rock_torches_seen > 100, "{crystals_seen} crystals, {rock_torches_seen} lit rock torches");
+    }
+
+    #[test]
+    fn no_region_has_both() {
+        for (seed, theme) in seeds_and_themes() {
+            let d = of_layout(seed, theme, StoneLayout::Rock);
+            let (region, count) = regions(&d.map, &d.rooms);
+            let mut crystal = vec![false; count];
+            let mut torch = vec![false; count];
+            for t in d.torches.iter().filter(|t| t.lit) {
+                let (fx, fy) = t.front();
+                let ri = region[(fy * d.map.w + fx) as usize];
+                if t.kind == WallLight::Crystal { crystal[ri] = true } else { torch[ri] = true }
+            }
+            assert!((0..count).all(|ri| !(crystal[ri] && torch[ri])), "seed {seed}: a region with both");
+        }
+    }
+
+    #[test]
+    fn no_rock_torch_hangs_in_a_crystals_light() {
+        let reach = f64::from(crate::defs::lights::def(crate::defs::lights::LightKind::Crystal).radius);
+        for (seed, theme) in seeds_and_themes() {
+            let d = of_layout(seed, theme, StoneLayout::Rock);
+            for t in d.torches.iter().filter(|t| t.kind == WallLight::Torch && is_rock(&d, t)) {
+                let a = Map::center_of(t.front().0, t.front().1);
+                for c in d.torches.iter().filter(|c| c.kind == WallLight::Crystal) {
+                    let b = Map::center_of(c.front().0, c.front().1);
+                    let lit = (a.x - b.x).hypot(a.y - b.y) <= reach * super::super::TILE && crate::collision::line_of_sight(&d.map, a, b);
+                    assert!(!lit, "seed {seed}: torch {:?} in the light of crystal {:?}", t.wall, c.wall);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sunlit_rock_rooms_keep_unlit_torches_and_get_no_crystal() {
+        let mut unlit_seen = 0;
+        for (seed, theme) in seeds_and_themes() {
+            let d = of_layout(seed, theme, StoneLayout::Rock);
+            for t in &d.torches {
+                let (fx, fy) = t.front();
+                let sunlit = d.rooms.iter().any(|r| r.rect.contains_tile(fx, fy) && room_has_sun(&d, r));
+                assert!(!(sunlit && t.kind == WallLight::Crystal), "seed {seed}: crystal at {:?} in a sunlit room", t.wall);
+                if !t.lit {
+                    assert_eq!(t.kind, WallLight::Torch, "seed {seed}");
+                    unlit_seen += 1;
+                }
+            }
+        }
+        assert!(unlit_seen > 0, "the seeds hold unlit rock torches");
+    }
+
+    #[test]
+    fn wall_lights_sit_where_the_laid_torches_are() {
+        for (seed, theme) in seeds_and_themes() {
+            let laid: Vec<_> = of_layout(seed, theme, StoneLayout::Laid).torches.iter().map(|t| (t.wall, t.side)).collect();
+            for t in &of_layout(seed, theme, StoneLayout::Rock).torches {
+                assert!(laid.contains(&(t.wall, t.side)), "seed {seed}: {:?}", t.wall);
+            }
+        }
+    }
+
+    #[test]
+    fn start_room_and_boss_hall_keep_a_light() {
         for (seed, theme) in seeds_and_themes() {
             for layout in [StoneLayout::Laid, StoneLayout::Rock, StoneLayout::Zones] {
                 let d = of_layout(seed, theme, layout);
-                for t in &d.torches {
-                    let (fx, fy) = t.front();
-                    if d.stone[(fy * d.map.w + fx) as usize] == ROCK {
-                        assert_eq!(t.kind, WallLight::Crystal, "seed {seed} {layout:?}");
-                        assert!(t.lit, "seed {seed} {layout:?}: a crystal always shines");
-                        crystals_seen += 1;
-                    } else {
-                        assert_eq!(t.kind, WallLight::Torch, "seed {seed} {layout:?}");
-                        torches_seen += 1;
-                    }
-                }
-                match layout {
-                    StoneLayout::Rock => assert!(d.torches.iter().all(|t| t.kind == WallLight::Crystal), "seed {seed}"),
-                    StoneLayout::Laid => assert!(d.torches.iter().all(|t| t.kind == WallLight::Torch), "seed {seed}"),
-                    StoneLayout::Zones => {}
+                for ri in [d.start, d.boss] {
+                    let r = &d.rooms[ri];
+                    let lit = d.torches.iter().any(|t| t.lit && r.rect.contains_tile(t.front().0, t.front().1));
+                    assert!(lit || room_has_sun(&d, r), "seed {seed} {layout:?}: room {ri} has no light");
                 }
             }
         }
-        assert!(crystals_seen > 100 && torches_seen > 100, "{crystals_seen} crystals, {torches_seen} torches");
     }
 
     #[test]
-    fn sunlit_rock_rooms_get_no_crystal() {
-        let mut sunny_rooms = 0;
-        for (seed, theme) in seeds_and_themes() {
-            let d = of_layout(seed, theme, StoneLayout::Rock);
-            sunny_rooms += d.rooms.iter().filter(|r| d.suns.iter().any(|&(sx, sy)| r.rect.contains_tile(sx, sy))).count();
-            for t in &d.torches {
-                let (fx, fy) = t.front();
-                assert!(!d.rooms.iter().any(|r| r.rect.contains_tile(fx, fy) && d.suns.iter().any(|&(sx, sy)| r.rect.contains_tile(sx, sy))), "seed {seed}: crystal at {:?} in a sunlit room", t.wall);
-            }
-        }
-        assert!(sunny_rooms > 0, "the seeds hold sunlit rooms");
-    }
-
-    #[test]
-    fn crystals_sit_where_the_torches_were() {
-        for (seed, theme) in seeds_and_themes() {
-            let lit_torches: Vec<_> = of_layout(seed, theme, StoneLayout::Laid).torches.iter().filter(|t| t.lit).map(|t| (t.wall, t.side)).collect();
-            let crystals: Vec<_> = of_layout(seed, theme, StoneLayout::Rock).torches.iter().map(|t| (t.wall, t.side)).collect();
-            assert_eq!(crystals, lit_torches, "seed {seed}");
+    fn the_cave_choice_has_its_own_stream() {
+        for seed in 0..5 {
+            let (a, b) = (of_layout(seed, Theme::WATER, StoneLayout::Rock), of_layout(seed, Theme::WATER, StoneLayout::Laid));
+            assert_eq!(a.map.tiles, b.map.tiles, "seed {seed}");
+            assert_eq!(a.spawns.len(), b.spawns.len());
+            assert!(a.spawns.iter().zip(&b.spawns).all(|(p, q)| p.enemy == q.enemy && p.pos == q.pos), "seed {seed}: spawns");
+            assert_eq!(a.chests.len(), b.chests.len());
+            assert!(a.chests.iter().zip(&b.chests).all(|(p, q)| p.pos == q.pos && p.mimic == q.mimic), "seed {seed}: chests");
+            assert_eq!(a.barrels, b.barrels, "seed {seed}");
+            let c = of_layout(seed, Theme::WATER, StoneLayout::Rock);
+            assert_eq!(a.torches.iter().map(|t| (t.wall, t.side, t.lit)).collect::<Vec<_>>(), c.torches.iter().map(|t| (t.wall, t.side, t.lit)).collect::<Vec<_>>(), "seed {seed}: generate is deterministic");
         }
     }
 
