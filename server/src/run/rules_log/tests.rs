@@ -1016,6 +1016,24 @@ fn a_tick_names_its_bestower() {
 }
 
 #[test]
+fn a_tick_on_its_own_bestower_is_not_optional() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1000.0));
+    let (id, pos) = (run.monsters[mi].id, run.monsters[mi].pos);
+    run.apply(Creature::Monster(mi), Apply { source: Some((id, pos)), ..Apply::plain(EffectKind::Poisoned, Some(3.0)) });
+    let _ = take(&mut run);
+    let mut tick = None;
+    for _ in 0..200 {
+        run.tick_effects();
+        tick = take(&mut run).into_iter().find(|r| r.head.contains("Poisoned"));
+        if tick.is_some() {
+            break;
+        }
+    }
+    assert!(tick.expect("a Poisoned tick landed").plain.is_none(), "a creature's own visibility is not what hides its tick");
+}
+
+#[test]
 fn a_burn_kill_credits_the_hero() {
     let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
     let mi = goblin_near(&mut run, Some(1.0));
