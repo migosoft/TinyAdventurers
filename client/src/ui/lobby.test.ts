@@ -159,6 +159,17 @@ describe('Lobby', () => {
     expect(sent).toEqual([]);
     expect(dbg('secondary').value).toBe('Fireball');
   });
+  it("keeps the debug pick on an error without a refusal kind (another player's build)", () => {
+    const l = make(true);
+    inRoom(l, false);
+    const dbg = (slot: string) => document.querySelector<HTMLSelectElement>(`.debug-loadout [data-slot="${slot}"]`)!;
+    dbg('secondary').value = 'FrostNova';
+    dbg('secondary').dispatchEvent(new Event('change'));
+    sent.length = 0;
+    l.error('Bob: Frost Nova needs INT 20.', null);
+    expect(sent).toEqual([]);
+    expect(dbg('secondary').value).toBe('FrostNova');
+  });
 });
 
 describe('debug UI', () => {
