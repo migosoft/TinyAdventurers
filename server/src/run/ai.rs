@@ -5,7 +5,7 @@ use super::ai_shapes::{reach_of, worth_using};
 use super::targets;
 use super::abilities::{announce_cast, monster_use, tick_monster_slam};
 use super::effects::Creature;
-use super::entities::{AiState, Target, Windup};
+use super::entities::{AiState, Glance, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::attributes::Attr;
@@ -359,20 +359,53 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
         let ai = &mut run.monsters[mi].ai;
-        ai.target = Some(match foe {
+        let target = match foe {
             Creature::Player(_) => Target::Player(fid),
             Creature::Monster(_) => Target::Monster(fid),
-        });
+        };
+        // Its motion while seen, for leading the turn when it slips out of the cone.
+        ai.last_vel = if ai.target == Some(target) { (fpos - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
+        ai.target = Some(target);
         ai.last_known = fpos;
+        if ai.state != AiState::Chase {
+            ai.glance = None;
+            ai.idle_look = None;
+        }
         ai.state = AiState::Chase;
         ai.path.clear();
     } else if run.monsters[mi].ai.target.is_some() && run.monsters[mi].ai.windup.is_none() {
-        // A running wind-up is committed: the loss counts when it ends.
+        // A running wind-up is committed: the loss counts when it ends. A target that left the cone but is
+        // still in the open is turned toward (not walked to); a hidden one is searched.
         run.monsters[mi].announced = None;
+        let lost = match run.monsters[mi].ai.target {
+            // An invisible target is hidden, however open the ground between.
+            Some(Target::Player(id) | Target::Monster(id)) => run
+                .creature_by_id(id)
+                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible))
+                .map(|c| run.creature_pos(c)),
+            _ => None,
+        };
+        let open = lost.is_some_and(|p| super::perception::in_open(run, sight, pos, p));
         let ai = &mut run.monsters[mi].ai;
         ai.target = None;
-        ai.state = AiState::Search;
-        ai.search_t = 2.0;
+        let (last, vel) = (ai.last_known, ai.last_vel);
+        let g = Glance { wait: 0.0, dir: 0.0, hold: 0.0, around: false, body: false, search: None };
+        ai.path.clear();
+        if open {
+            ai.state = AiState::Look;
+            let lead = last + vel * super::facing::startle(&run.monsters[mi].attrs);
+            super::facing::glance(run, mi, Glance { dir: pos.angle_to(lead), hold: super::facing::SEARCH_TIME, around: true, body: true, ..g });
+        } else {
+            ai.state = AiState::Search;
+            ai.search_t = super::facing::SEARCH_TIME;
+            super::facing::glance(run, mi, Glance { dir: pos.angle_to(last), ..g });
+        }
+    }
+    if run.monsters[mi].ai.state == AiState::Look && run.monsters[mi].ai.glance.is_none() {
+        // The look is over: stationary creatures stand, the others go home.
+        let ai = &mut run.monsters[mi].ai;
+        ai.state = if base_ai == BaseAi::Stationary { AiState::Idle } else { AiState::Return };
+        ai.path.clear();
     }
 
     // The incorporeal ambushers (their kit holds Vanish) vanish, drift to the straggler and warn first.
@@ -515,21 +548,31 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 run.monsters[mi].ai.state = AiState::Idle;
                 return;
             }
+            // Startled: it stands until the glance's wait is over.
+            if run.monsters[mi].ai.glance.is_some_and(|g| g.wait > 0.0) {
+                set_anim(run, mi, Anim::Idle);
+                return;
+            }
             let goal = run.monsters[mi].ai.last_known;
             let speed = gait(run, mi, base_speed);
             let arrived = path_toward(run, mi, goal, speed, dt);
             if arrived {
                 set_anim(run, mi, Anim::Idle);
-                let ai = &mut run.monsters[mi].ai;
-                ai.search_t -= dt;
-                if ai.search_t <= 0.0 {
-                    ai.state = AiState::Return;
-                    ai.path.clear();
+                let m = &mut run.monsters[mi];
+                if m.ai.search_t > 0.0 {
+                    // At the spot: look where the target was heading, to one side and the other.
+                    m.ai.search_t = 0.0;
+                    let dir = if m.ai.last_vel.len() > 0.05 { m.ai.last_vel.angle() } else { m.aim };
+                    m.ai.glance = Some(Glance { wait: 0.0, dir, hold: super::facing::SEARCH_TIME, around: true, body: false, search: None });
+                } else if m.ai.glance.is_none() {
+                    m.ai.state = AiState::Return;
+                    m.ai.path.clear();
                 }
             } else {
                 set_anim(run, mi, Anim::Move);
             }
         }
+        AiState::Look => set_anim(run, mi, Anim::Idle),
         AiState::Return => {
             let home = run.monsters[mi].ai.home;
             let speed = gait(run, mi, base_speed * 0.7);

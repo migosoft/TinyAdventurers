@@ -2,7 +2,7 @@
 //! walk), and one pass per tick turns the body toward the wish at its turn speed (DEX, race). Walking off the
 //! facing is slower (`off_facing_mul`).
 
-use super::entities::Monster;
+use super::entities::{AiState, Glance, Monster};
 use super::{charm, Run};
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
@@ -52,9 +52,53 @@ pub fn head_speed(a: &Attributes) -> f64 {
 }
 
 /// The pause (s) before a creature reacts to a hit or a seen attack.
-#[allow(dead_code)] // the glance comes with a later task
 pub fn startle(a: &Attributes) -> f64 {
     STARTLE.per(a)
+}
+
+/// How long (s) a creature looks around, and how far (rad) to each side of the direction it turned to.
+pub const SEARCH_TIME: f64 = 2.0;
+const LOOK_AROUND: f64 = 60.0 * PI / 180.0;
+
+/// Monster `mi` starts glancing `g` after its startle.
+pub fn glance(run: &mut Run, mi: usize, mut g: Glance) {
+    g.wait = startle(&run.monsters[mi].attrs);
+    run.monsters[mi].ai.glance = Some(g);
+}
+
+/// Counts the glance of monster `mi` down and turns its wishes into what it looks at; none while it startles.
+/// Returns false while the creature is still startled (nothing turns then).
+fn glance_wishes(m: &mut Monster, dt: f64) -> bool {
+    let neck = m.sight_now().neck.to_radians();
+    let (aim, vel) = (m.aim, m.ai.last_vel);
+    let Some(g) = &mut m.ai.glance else { return true };
+    if g.wait > 0.0 {
+        g.wait -= dt;
+        return false;
+    }
+    let mut look = g.dir;
+    if g.around {
+        let lead = if vel.len() > WALK_MIN { angle_diff(vel.angle(), g.dir).signum() } else { 1.0 };
+        look += if g.hold > SEARCH_TIME / 2.0 { lead } else { -lead } * LOOK_AROUND;
+    }
+    let (dir, follow) = (g.dir, g.body && angle_diff(g.dir, aim).abs() > neck);
+    g.hold -= dt;
+    if g.hold <= 0.0 {
+        // A look that ends with somewhere to go (a hit's search, Task 6) walks there.
+        let search = g.search;
+        m.ai.glance = None;
+        if let (Some(p), AiState::Look) = (search, m.ai.state) {
+            m.ai.state = AiState::Search;
+            m.ai.last_known = p;
+            m.ai.search_t = SEARCH_TIME;
+            m.ai.path.clear();
+        }
+    }
+    m.look_to = Some(look);
+    if follow {
+        m.face_to = Some(dir);
+    }
+    true
 }
 
 /// How far (rad) off the target the body may be for an attack to start or be released: none for an
@@ -99,6 +143,9 @@ pub fn turn(run: &mut Run, mi: usize, moved: Vec2, dt: f64) {
     let m = &mut run.monsters[mi];
     // A boss's script still writes its own facing (until its task); every other creature wishes.
     if !m.alive || m.dormant || m.hiding || m.effects.no_act() || m.effects.no_turn() || (m.is_boss && !charm::is_on(m)) {
+        return;
+    }
+    if !glance_wishes(m, dt) {
         return;
     }
     let wish = m.face_to.or_else(|| (moved.len() > WALK_MIN).then(|| moved.angle()));
@@ -569,5 +616,170 @@ mod tests {
             hit |= run.players[0].hp < hp;
         }
         assert!(hit, "a hero circling at speed 80 is hit at least once in 6 s");
+    }
+
+    /// The orc (cone 150, neck 80) was chasing the hero, who now stands west of it at 100 px, out of its cone;
+    /// its body faces `aim` and it last saw the hero at `known`.
+    fn lost(aim: f64, known: Option<Vec2>) -> (Run, usize) {
+        let (mut run, mi) = duel(100.0);
+        let hero = run.players[0].pos();
+        let id = run.players[0].id;
+        let m = &mut run.monsters[mi];
+        m.aim = aim;
+        m.gaze = 0.0;
+        m.ai.state = AiState::Chase;
+        m.ai.target = Some(crate::run::entities::Target::Player(id));
+        m.ai.last_known = known.unwrap_or(hero);
+        m.ai.last_vel = Vec2::ZERO;
+        (run, mi)
+    }
+
+    /// Steps until the orc leaves `Look` (or `max` seconds); returns the states it went through.
+    fn run_look(run: &mut Run, mi: usize, max: f64) -> (Vec<AiState>, f64) {
+        let (mut seen, mut look_aim) = (Vec::new(), run.monsters[mi].aim);
+        for _ in 0..(max / DT) as usize {
+            run.step();
+            let s = run.monsters[mi].ai.state;
+            if seen.last() != Some(&s) {
+                seen.push(s);
+            }
+            if s == AiState::Look {
+                look_aim = run.monsters[mi].aim;
+            }
+            if s == AiState::Chase {
+                break;
+            }
+        }
+        (seen, look_aim)
+    }
+
+    #[test]
+    fn a_target_at_its_side_is_followed_by_the_head_alone() {
+        let (mut run, mi) = lost(PI - 78f64.to_radians(), None);
+        let aim = run.monsters[mi].aim;
+        let (states, look_aim) = run_look(&mut run, mi, 2.0);
+        assert_eq!(states, vec![AiState::Look, AiState::Chase], "it looked, found the hero and chased");
+        assert!(angle_diff(look_aim, aim).abs() < 5f64.to_radians(), "the body stayed: {look_aim}");
+    }
+
+    #[test]
+    fn a_target_behind_turns_the_body_too() {
+        let (mut run, mi) = lost(0.0, None);
+        let (states, _) = run_look(&mut run, mi, 2.0);
+        assert_eq!(states, vec![AiState::Look, AiState::Chase]);
+        assert!(angle_diff(run.monsters[mi].aim, PI).abs() < 80f64.to_radians(), "the body turned toward the hero: {}", run.monsters[mi].aim);
+    }
+
+    #[test]
+    fn it_turns_and_does_not_walk() {
+        let (mut run, mi) = lost(0.0, None);
+        let before = run.monsters[mi].pos;
+        run.step();
+        assert_eq!(run.monsters[mi].ai.state, AiState::Look);
+        loop {
+            run.step();
+            if run.monsters[mi].ai.state != AiState::Look {
+                break;
+            }
+            assert!(run.monsters[mi].pos.dist(before) < 0.5, "it stands");
+        }
+    }
+
+    #[test]
+    fn the_turn_leads_where_the_target_was_going() {
+        let (mut run, mi) = lost(0.0, None);
+        let vel = Vec2::new(0.0, 300.0);
+        run.monsters[mi].ai.last_vel = vel;
+        let (hero, attrs) = (run.players[0].pos(), run.monsters[mi].attrs);
+        run.step();
+        let g = run.monsters[mi].ai.glance.expect("a glance");
+        let want = run.monsters[mi].pos.angle_to(hero + vel * startle(&attrs));
+        assert!(angle_diff(g.dir, want).abs() < 1e-9 && angle_diff(g.dir, run.monsters[mi].pos.angle_to(hero)).abs() > 0.05);
+    }
+
+    /// Steps `secs`, each tick putting the hero straight behind the orc's gaze (never seen).
+    fn keep_behind(run: &mut Run, mi: usize, secs: f64, mut each: impl FnMut(&Run)) {
+        for _ in 0..(secs / DT).round() as usize {
+            let m = &run.monsters[mi];
+            let at = m.pos + Vec2::from_angle(m.gaze_dir() + PI) * 100.0;
+            hero_to(run, at);
+            run.step();
+            each(run);
+            assert!(run.monsters[mi].ai.target.is_none(), "it never sees the hero again");
+        }
+    }
+
+    #[test]
+    fn a_target_that_keeps_circling_is_given_up() {
+        let (mut run, mi) = lost(0.0, None);
+        let wait = startle(&run.monsters[mi].attrs);
+        let mut t = 0.0;
+        let mut back = None;
+        keep_behind(&mut run, mi, 3.0, |r| {
+            t += DT;
+            // Return is left for Idle in the same tick (it is at home), so "not Look" is the sign.
+            if back.is_none() && r.monsters[mi].ai.state != AiState::Look {
+                back = Some(t);
+            }
+        });
+        let back = back.expect("it gave up");
+        assert!((back - (wait + SEARCH_TIME)).abs() < 0.15, "after the startle and the search time: {back}");
+    }
+
+    #[test]
+    fn looking_around_goes_to_one_side_then_the_other() {
+        let (mut run, mi) = lost(0.0, Some(Vec2::new(0.0, 0.0)));
+        let ahead = run.monsters[mi].pos + Vec2::new(100.0, 0.0);
+        run.monsters[mi].ai.last_known = ahead; // straight ahead of the body
+        let aim = run.monsters[mi].aim;
+        let (mut hi, mut lo, mut first_hi) = (0.0f64, 0.0f64, None);
+        keep_behind(&mut run, mi, 2.4, |r| {
+            let rel = angle_diff(r.monsters[mi].gaze_dir(), aim);
+            hi = hi.max(rel);
+            lo = lo.min(rel);
+            if first_hi.is_none() && rel < -0.5 {
+                first_hi = Some(false);
+            }
+            if first_hi.is_none() && rel > 0.5 {
+                first_hi = Some(true);
+            }
+        });
+        assert!(hi > 55f64.to_radians() && lo < -55f64.to_radians(), "{hi} {lo}");
+        assert_eq!(first_hi, Some(true), "the lead side (left when it has no lead) first");
+        assert!(angle_diff(run.monsters[mi].aim, aim).abs() < 1f64.to_radians(), "the body stood");
+    }
+
+    #[test]
+    fn a_hidden_target_is_searched_where_it_was_last_seen() {
+        let (mut run, mi) = lost(0.0, None);
+        let spot = run.monsters[mi].pos + Vec2::new(120.0, 0.0);
+        run.monsters[mi].ai.last_known = spot;
+        run.monsters[mi].sight.vision = 0.0; // the hero is out of sight, not just out of the cone
+        let (mut states, mut near) = (Vec::new(), false);
+        for _ in 0..(8.0 / DT) as usize {
+            run.step();
+            let s = run.monsters[mi].ai.state;
+            if states.last() != Some(&s) {
+                states.push(s);
+            }
+            near |= run.monsters[mi].pos.dist(spot) < 20.0;
+        }
+        assert_eq!(&states[..2], &[AiState::Search, AiState::Return]);
+        assert!(near, "it walked to the spot");
+    }
+
+    #[test]
+    fn the_startle_comes_first() {
+        let (mut run, mi) = lost(0.0, None);
+        let wait = startle(&run.monsters[mi].attrs);
+        let (aim, gaze) = (run.monsters[mi].aim, run.monsters[mi].gaze);
+        for _ in 0..((wait / DT) as usize - 2) {
+            run.step();
+            assert_eq!((run.monsters[mi].aim, run.monsters[mi].gaze), (aim, gaze), "nothing turns yet");
+        }
+        steps(&mut run, 0.1);
+        assert_ne!(run.monsters[mi].aim, aim, "then it turns");
+        let wise = Attributes::new(0, 0, 0, 0, 10, 0);
+        assert!(startle(&BASELINE_ATTRS.with_delta(wise)) < wait, "more WIL is quicker");
     }
 }

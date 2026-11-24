@@ -178,7 +178,23 @@ pub enum AiState {
     Idle,
     Chase,
     Search,
+    /// Turned toward where a target left the cone and stands there looking (`Ai.glance`).
+    Look,
     Return,
+}
+
+/// Where a creature's head looks next (`run/facing.rs`): after `wait` (the startle) along `dir` until `hold` runs
+/// out. `around`: the first half of `hold` it looks `LOOK_AROUND` to the side `Ai.last_vel` points to (left when
+/// zero), the second half to the other side. `body`: the body follows when `dir` lies beyond the neck. `search`:
+/// where it walks afterwards.
+#[derive(Debug, Clone, Copy)]
+pub struct Glance {
+    pub wait: f64,
+    pub dir: f64,
+    pub hold: f64,
+    pub around: bool,
+    pub body: bool,
+    pub search: Option<Vec2>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -233,6 +249,9 @@ pub struct Ai {
     pub idle_look: Option<(f64, f64)>,
     /// Seconds until the next idle look.
     pub idle_look_t: f64,
+    pub glance: Option<Glance>,
+    /// The target's motion (px/s) while it was seen; zero for a new target.
+    pub last_vel: Vec2,
 }
 
 impl Ai {
@@ -257,6 +276,8 @@ impl Ai {
             turn_home: false,
             idle_look: None,
             idle_look_t: 3.0,
+            glance: None,
+            last_vel: Vec2::ZERO,
         }
     }
 }

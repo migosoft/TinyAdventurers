@@ -1362,7 +1362,8 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
     for x in tx + 2..=tx + 3 {
         run.layout.map.set(x, ty + 1, Tile::Wall);
     }
-    spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5000.0);
+    // (Two tiles off, so the Frost Nova reaches it even when the goblins stand startled where they were.)
+    spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 2, ty), 5000.0);
     let walled = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty + 2), 5000.0);
     let dark = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 10, ty + 3), 5000.0);
     let near: Vec<u32> = [(3, -2, 40.0), (4, -1, 5000.0), (2, -3, 40.0)].iter().map(|&(dx, dy, hp)| spawn_at(&mut run, EnemyType::GoblinArcher, (tx + dx, ty + dy), hp)).collect();
