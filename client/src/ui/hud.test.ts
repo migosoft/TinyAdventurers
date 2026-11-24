@@ -109,6 +109,33 @@ describe('Hud', () => {
     expect(menu.classList.contains('in-settings')).toBe(false);
     expect(settings.hidden).toBe(true);
   });
+  it('focuses the first Settings control on opening and the Settings item on Back', () => {
+    hud.setToggles([{ label: 'Rules log', key: 'L', get: () => false, set: () => {} }]);
+    hud.toggleMenu();
+    const menu = document.querySelector<HTMLElement>('.menu')!;
+    const open = [...menu.querySelectorAll<HTMLButtonElement>(':scope > button')].find((b) => b.textContent === 'Settings')!;
+    open.click();
+    expect(document.activeElement).toBe(menu.querySelector('.settings input'));
+    [...menu.querySelectorAll<HTMLButtonElement>('.settings button')].find((b) => b.textContent === 'Back')!.click();
+    expect(document.activeElement).toBe(open);
+  });
+  it('frame() re-syncs an open Settings view', () => {
+    let on = false;
+    hud.setToggles([{ label: 'Rules log', key: 'L', get: () => on, set: () => {} }]);
+    [...document.querySelectorAll<HTMLButtonElement>('.menu button')].find((b) => b.textContent === 'Settings')!.click();
+    const box = document.querySelector<HTMLInputElement>('.settings input[type=checkbox]')!;
+    expect(box.checked).toBe(false);
+    on = true; // changed by its key while the view is open
+    hud.frame({ cd1: 0, cd2: 0, wolf: null } as unknown as Parameters<Hud['frame']>[0]);
+    expect(box.checked).toBe(true);
+  });
+  it('F3 (toggleDebug) shows and hides the stats panel', () => {
+    expect(hud.statsOn).toBe(false);
+    hud.toggleDebug();
+    expect(hud.statsOn).toBe(true);
+    hud.toggleDebug();
+    expect(hud.statsOn).toBe(false);
+  });
   it('shows the choices in Settings and removes them again', () => {
     hud.setToggles([{ label: 'Rules log', key: 'L', get: () => false, set: () => {} }]);
     hud.setChoices([{ label: 'Quality', options: [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']], get: () => 'balanced', set: () => {} }]);

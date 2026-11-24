@@ -182,6 +182,7 @@ export class Hud {
   private choices: Choice[] = [];
   private view!: SettingsView;
   private inSettings = false;
+  private settingsBtn!: HTMLElement;
 
   constructor(
     host: HTMLElement,
@@ -210,6 +211,7 @@ export class Hud {
     resume.onclick = () => this.toggleMenu();
     const settings = el('button', '', 'Settings');
     settings.onclick = () => this.showSettings(true);
+    this.settingsBtn = settings;
     this.menu.append(resume, settings, leave);
     this.buildView();
     this.charm = new CharmView(this.root);
@@ -249,7 +251,10 @@ export class Hud {
     this.inSettings = on;
     this.menu.classList.toggle('in-settings', on);
     this.view.root.hidden = !on;
-    if (on) this.view.sync();
+    if (on) {
+      this.view.sync();
+      this.view.root.querySelector<HTMLElement>('input, button')?.focus();
+    } else if (this.menu.contains(document.activeElement)) this.settingsBtn.focus(); // Back: return to the item that opened it
   }
 
   startRun(info: RunStartInfo): void {
