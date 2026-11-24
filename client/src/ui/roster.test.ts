@@ -77,3 +77,17 @@ test('roster and Create show a pushed error on their own error line, and report 
   for (const el of host.querySelectorAll('.error')) expect(el.textContent).toBe('Connection lost.');
   expect(host.querySelectorAll('.error').length).toBe(2);
 });
+test('Change password sends both passwords, closes the form and says so', async () => {
+  const host = document.createElement('div');
+  const spy = vi.spyOn(api, 'changePassword').mockResolvedValue(undefined);
+  const roster = new Roster(host, atlas, () => {}, () => {});
+  await roster.show(me(1));
+  expect(host.querySelector('#change-form')).toBeNull();
+  host.querySelector<HTMLButtonElement>('#change-password')!.click();
+  host.querySelector<HTMLInputElement>('#old-password')!.value = 'old password';
+  host.querySelector<HTMLInputElement>('#new-password')!.value = 'new password';
+  host.querySelector('#change-form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  await vi.waitFor(() => expect(host.querySelector('#change-form')).toBeNull());
+  expect(spy).toHaveBeenCalledWith('old password', 'new password');
+  expect(host.querySelector('.error')!.textContent).toBe('Password changed.');
+});

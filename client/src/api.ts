@@ -46,6 +46,7 @@ export const api = {
   register: (name: string, password: string) => call<Me>('POST', 'register', { name, password }),
   login: (name: string, password: string) => call<Me>('POST', 'login', { name, password }),
   logout: () => call<void>('POST', 'logout'),
+  changePassword: (oldPassword: string, newPassword: string) => call<void>('POST', 'account/password', { old_password: oldPassword, new_password: newPassword }),
   deleteAccount: (password: string) => call<void>('DELETE', 'account', { password }),
   createCharacter: (name: string, cls: ClassId) => call<CharacterInfo>('POST', 'characters', { name, class: cls }),
   deleteCharacter: (id: number) => call<void>('DELETE', `characters/${id}`),

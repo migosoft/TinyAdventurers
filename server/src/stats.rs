@@ -634,10 +634,10 @@ mod tests {
         let a = db::create_account(&db, "Victim", "old-hash").await.unwrap();
         let c = db::create_character(&db, a, "Doomed", ClassId::Paladin).await.unwrap();
         db::create_session(&db, a, b"s1", WEEK).await.unwrap();
-        assert!(db::set_password(&db, a, "new-hash").await.unwrap());
+        assert!(db::set_password(&db, a, "new-hash", None).await.unwrap());
         assert_eq!(db::touch_session(&db, b"s1", WEEK).await.unwrap(), None, "sessions revoked");
         assert_eq!(db::account(&db, a).await.unwrap().unwrap().password_hash, "new-hash");
-        assert!(!db::set_password(&db, 424242, "x").await.unwrap());
+        assert!(!db::set_password(&db, 424242, "x", None).await.unwrap());
 
         assert_eq!(db::delete_character_any(&db, c.id).await.unwrap(), Some((a, "Doomed".to_string())));
         assert_eq!(db::delete_character_any(&db, c.id).await.unwrap(), None);

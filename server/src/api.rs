@@ -41,6 +41,13 @@ pub struct PasswordConfirm {
 
 #[derive(Deserialize, TS)]
 #[ts(export)]
+pub struct ChangePassword {
+    pub old_password: String,
+    pub new_password: String,
+}
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
 pub struct NewCharacter {
     pub name: String,
     pub class: ClassId,
@@ -123,6 +130,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
         .route("/api/account", delete(delete_account))
+        .route("/api/account/password", post(change_password))
         .route("/api/me", get(me))
         .route("/api/characters", post(create_character))
         .route("/api/characters/{id}", delete(delete_character))
@@ -250,15 +258,27 @@ async fn delete_account(State(state): State<AppState>, ClientIp(ip): ClientIp, s
     Ok(([(header::SET_COOKIE, state.auth.clear_cookie())], StatusCode::NO_CONTENT).into_response())
 }
 
+/// The account's password changes when the old one is right (throttled like a login); its other sessions end, this one stays.
+async fn change_password(State(state): State<AppState>, ClientIp(ip): ClientIp, session: Session, Json(c): Json<ChangePassword>) -> ApiResult<StatusCode> {
+    auth::check_password(&c.new_password).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
+    let account = db::account(&state.db, session.account).await?.ok_or_else(|| fail(StatusCode::UNAUTHORIZED, "Please log in."))?;
+    if check_login(&state, &ip.to_string(), &account.name, c.old_password).await?.is_none() {
+        return Err(fail(StatusCode::FORBIDDEN, "Wrong password."));
+    }
+    let hash = hash(c.new_password).await?;
+    db::set_password(&state.db, account.id, &hash, Some(&session.id_hash)).await?;
+    tracing::info!("account {} changed its password", account.id);
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn me(State(state): State<AppState>, session: Session) -> ApiResult<Json<Me>> {
     let account = db::account(&state.db, session.account).await?.ok_or_else(|| fail(StatusCode::UNAUTHORIZED, "Please log in."))?;
     Ok(Json(me_of(&state, account.id, account.name).await?))
 }
 
 async fn create_character(State(state): State<AppState>, session: Session, Json(c): Json<NewCharacter>) -> ApiResult<(StatusCode, Json<CharacterInfo>)> {
-    let name = c.name.trim();
-    auth::check_name(name).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
-    match db::create_character(&state.db, session.account, name, c.class).await {
+    let name = auth::character_name(&c.name).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
+    match db::create_character(&state.db, session.account, &name, c.class).await {
         Ok(ch) => Ok((StatusCode::CREATED, Json(ch.info()))),
         Err(DbError::NameTaken) => Err(fail(StatusCode::CONFLICT, "That name is already taken.")),
         Err(DbError::TooManyCharacters) => Err(fail(StatusCode::CONFLICT, format!("An account can have at most {} characters.", db::MAX_CHARACTERS))),

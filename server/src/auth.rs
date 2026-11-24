@@ -28,6 +28,8 @@ pub const DEFAULT_SESSION_IDLE_MINUTES: u64 = 7 * 24 * 60;
 
 pub const NAME_MIN: usize = 3;
 pub const NAME_MAX: usize = 16;
+/// Character names may be longer (two words fit) and hold single spaces.
+pub const CHARACTER_NAME_MAX: usize = 20;
 pub const PASSWORD_MIN: usize = 8;
 pub const PASSWORD_MAX: usize = 128;
 
@@ -251,6 +253,20 @@ pub fn check_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A character name as stored: trimmed, runs of spaces collapsed to one ("Bob  Smith" is "Bob Smith", which uniqueness
+/// then compares ignoring case), 3-20 of `A-Z a-z 0-9 _ -` and single spaces between words.
+pub fn character_name(name: &str) -> Result<String, String> {
+    let name = name.split(' ').filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
+    let len = name.chars().count();
+    if !(NAME_MIN..=CHARACTER_NAME_MAX).contains(&len) {
+        return Err(format!("Names need {NAME_MIN} to {CHARACTER_NAME_MAX} characters."));
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == ' ') {
+        return Err("Names may only use letters, digits, spaces, _ and -.".into());
+    }
+    Ok(name)
+}
+
 pub fn check_password(password: &str) -> Result<(), String> {
     let len = password.chars().count();
     if !(PASSWORD_MIN..=PASSWORD_MAX).contains(&len) {
@@ -404,6 +420,14 @@ mod tests {
         assert!(check_name("a".repeat(17).as_str()).is_err());
         assert!(check_name("bad name").is_err());
         assert!(check_name("Zoë123").is_err());
+        assert_eq!(character_name("  Bob   Smith "), Ok("Bob Smith".into()));
+        assert_eq!(character_name("Bob_the-2nd"), Ok("Bob_the-2nd".into()));
+        assert!(character_name("Sir Reginald Ironfist").is_err(), "21 characters");
+        assert!(character_name(&"a".repeat(20)).is_ok());
+        assert!(character_name("a  ").is_err(), "too short once trimmed");
+        assert!(character_name("Bob\tSmith").is_err(), "only plain spaces");
+        assert!(character_name("Zoë Smith").is_err());
+        assert!(check_name("bad name").is_err(), "account names keep their rule");
         assert!(check_password("1234567").is_err());
         assert!(check_password("12345678").is_ok());
         assert!(check_password(&"x".repeat(129)).is_err());

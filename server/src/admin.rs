@@ -233,7 +233,7 @@ async fn set_password(State(state): State<AppState>, admin: AdminSession, Path(i
     auth::check_password(&c.password).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
     let account = db::account(&state.db, id).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
     let hash = api::hash(c.password).await?;
-    if !db::set_password(&state.db, id, &hash).await? {
+    if !db::set_password(&state.db, id, &hash, None).await? {
         return Err(fail(StatusCode::NOT_FOUND, "No such player."));
     }
     state.lobby.lock().unwrap().kick_account(id, "Your password was changed by an admin. Please log in again.");
