@@ -48,6 +48,9 @@ function itemsLine(ctx: TabCtx): string {
   return parts.join(' · ');
 }
 
+/** Away from the doll's centre so a tip never covers the neighbours: the left column opens left, the right column right, the rings below. */
+const TIP_SIDE: Record<string, 'left' | 'right' | 'below'> = { Melee: 'left', Ranged: 'left', OffHand: 'left', Ring1: 'below', Ring2: 'below' };
+
 export function renderEquipment(ctx: TabCtx): HTMLElement {
   const { info, atlas, send } = ctx;
   const root = el('div', 'ui-split ui-equip');
@@ -70,7 +73,7 @@ export function renderEquipment(ctx: TabCtx): HTMLElement {
       s.draggable = true;
       s.ondragstart = (e) => e.dataTransfer?.setData('text/plain', `slot:${slot}`);
       s.onclick = () => send({ t: 'Equip', slot, item: null });
-      s.onmouseenter = () => showTip(s, tipHtml(ctx, id, slot), 'right');
+      s.onmouseenter = () => showTip(s, tipHtml(ctx, id, slot), TIP_SIDE[slot] ?? 'right');
       s.onmouseleave = () => clearTips();
     }
     if (!reserved) {
