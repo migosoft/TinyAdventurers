@@ -185,6 +185,8 @@ pub fn input(run: &mut Run, pi: usize) -> InputMsg {
             b.shot = b.shot.wrapping_add(n2);
         }
     }
+    // A charmed hero has no head: its body turns toward the wanted aim at the body turn speed, as a monster's does.
+    let aim = super::facing::turn_toward(run.players[pi].aim, aim, crate::defs::races::BODY_TURN.get(&run.players[pi].sheet.attrs) * DT);
     InputMsg { seq, mx, my, aim: aim as f32, aim_dist: aim_dist as f32, primary, secondary, view_lag, rtt, act: false }
 }
 
@@ -890,5 +892,41 @@ mod tests {
         assert_eq!((i.primary, i.secondary), (Some(before), None));
         assert_eq!(i.seq, run.players[0].ack);
         assert_eq!(run.players[0].charm.as_ref().unwrap().brain.shot, before + 1);
+    }
+    /// Hero 1 stands `dist` px from charmed hero 0 at `angle` from its aim (east); the held orc is the caster.
+    fn charmed_with_a_hero_at(angle: f64, dist: f64) -> Run {
+        let mut run = arena(&[ClassId::Paladin, ClassId::Paladin]);
+        let at = run.players[0].pos();
+        put(&mut run, 1, at + Vec2::new(angle.cos(), angle.sin()) * dist);
+        tough(&mut run, 1);
+        let orc = held_orc(&mut run, -40.0);
+        charm_hero(&mut run, 0, orc, 30.0);
+        run.step();
+        run.players[0].aim = 0.0;
+        run
+    }
+
+    #[test]
+    fn a_charmed_hero_turns_at_its_turn_speed() {
+        let mut run = charmed_with_a_hero_at(1.2, 60.0);
+        let step = crate::defs::races::BODY_TURN.get(&run.players[0].sheet.attrs) * DT;
+        let i = input(&mut run, 0);
+        assert!(step < 1.2, "the turn takes more than a tick");
+        assert!((f64::from(i.aim) - step).abs() < 1e-4, "it turns by one tick's worth: {} vs {}", i.aim, step);
+    }
+
+    #[test]
+    fn a_charmed_hero_sees_within_its_cone_plus_neck() {
+        let s = |run: &Run| {
+            let s = run.players[0].sight_now();
+            (s.cone + 2.0 * s.neck).min(360.0).to_radians() / 2.0
+        };
+        let run = charmed_with_a_hero_at(0.0, 60.0);
+        let half = s(&run);
+        assert!(half < std::f64::consts::PI - 0.3, "the test needs a blind spot");
+        let inside = charmed_with_a_hero_at(half - 0.1, 60.0);
+        assert_eq!(nearest_foe(&inside, 0), Some(Creature::Player(1)));
+        let outside = charmed_with_a_hero_at(half + 0.1, 60.0);
+        assert_eq!(nearest_foe(&outside, 0), None);
     }
 }

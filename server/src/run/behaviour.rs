@@ -215,6 +215,33 @@ mod tests {
     }
 
     #[test]
+    fn a_fleeing_bunny_faces_its_path() {
+        let (mut run, at) = arena();
+        let bunny = spawn(&mut run, EnemyType::Bunny, at + Vec2::new(20.0, 0.0));
+        hero_hit(&mut run, bunny, 1.0);
+        steps(&mut run, 40);
+        let before = run.monsters[bunny].pos;
+        steps(&mut run, 5);
+        // It runs away from the hero: its body faces where it goes, not back at the hero.
+        let heading = before.angle_to(run.monsters[bunny].pos);
+        assert!(before.dist(run.monsters[bunny].pos) > 1.0);
+        assert!(crate::math::angle_diff(run.monsters[bunny].aim, heading).abs() < 0.3, "aim {} heading {}", run.monsters[bunny].aim, heading);
+    }
+
+    #[test]
+    fn a_scared_deer_stays_scared_of_a_hero_behind_it_in_the_open() {
+        let (mut run, at) = arena();
+        let deer = spawn(&mut run, EnemyType::Deer, at + Vec2::new(30.0, 0.0));
+        hero_hit(&mut run, deer, 5.0);
+        // The deer looks away from the hero (east), the minimum flight is over, the hero is within calm range.
+        run.monsters[deer].aim = 0.0;
+        run.monsters[deer].gaze = 0.0;
+        run.monsters[deer].wild.as_mut().unwrap().min_flee = 0.0;
+        assert!(super::wildlife_flees(&mut run, deer, 1.0 / 30.0));
+        assert!(run.monsters[deer].wild.unwrap().scare.is_some(), "still scared: the hero is seen by line, not cone");
+    }
+
+    #[test]
     fn a_hit_bunny_flees_then_calms_down() {
         let (mut run, at) = arena();
         let bunny = spawn(&mut run, EnemyType::Bunny, at + Vec2::new(20.0, 0.0));

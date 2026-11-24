@@ -1217,3 +1217,22 @@ fn the_wolfs_bite_wait_runs_on_its_clock() {
     let left = wolf(&run, id).ai.cd;
     assert!((left - (1.0 - 1.25 * DT)).abs() < 1e-9, "{left}");
 }
+
+#[test]
+fn the_wolf_does_not_see_prey_behind_it() {
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+    run.monsters.retain(|m| m.is_boss);
+    let id = spawn_wolf(&mut run, 0);
+    lit_arena(&mut run);
+    let r = run.players[0].pos();
+    let oid = run.spawn_enemy(EnemyType::SkeletonWarrior, r + Vec2::new(30.0, 0.0), None);
+    let oi = run.monster_idx(oid).unwrap();
+    let wi = run.monster_idx(id).unwrap();
+    run.monsters[wi].aim = 0.0;
+    run.monsters[wi].gaze = 0.0;
+    let at = run.monsters[wi].pos;
+    run.monsters[oi].pos = at + Vec2::new(40.0, 0.0);
+    assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), Some(Creature::Monster(oi)), "control: in front of it");
+    run.monsters[wi].aim = std::f64::consts::PI;
+    assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), None, "behind it, out of the cone");
+}
