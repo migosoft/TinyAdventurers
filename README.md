@@ -14,6 +14,7 @@ A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-g
 |---|---|
 | [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md) | Players: how to join, controls, classes, enemies, bosses, tips |
 | [docs/TECHNICAL.md](docs/TECHNICAL.md) | Developers: architecture, protocol, simulation, netcode, rendering, how to extend |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Operators: running the game on a server with HTTPS, updates, backups |
 | [GitHub issues](https://github.com/migosoft/TinyAdventurers/issues) and the project board | Open work and follow-ups (see [CLAUDE.md](CLAUDE.md) "Work tracking") |
 | [CLAUDE.md](CLAUDE.md) | For whoever continues the work: which issue to pick, workflow, standing decisions, environment |
 
