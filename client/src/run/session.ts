@@ -196,7 +196,7 @@ export class RunSession {
   debugEffect(back = false): void {
     if (!this.debugKeyOk()) return;
     const n = Object.keys(EFFECT).length;
-    this.effectIx = (this.effectIx + (back ? n - 1 : 1)) % n;
+    this.effectIx = back && this.effectIx < 0 ? n - 1 : (this.effectIx + (back ? n - 1 : 1)) % n;
     this.net.send({ t: 'DebugEffect', kind: this.effectIx });
   }
 
