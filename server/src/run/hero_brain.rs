@@ -925,11 +925,12 @@ mod tests {
 
     #[test]
     fn a_charmed_hero_fires_only_once_it_faces_its_foe() {
-        let mut control = charmed_wizard_or_paladin(ClassId::Wizard, 0.0, 100.0);
+        // The foe stands 70 px off: at 100 px and 1.2 rad it was outside the test arena's floor (out of sight).
+        let mut control = charmed_wizard_or_paladin(ClassId::Wizard, 0.0, 70.0);
         control.players[0].cd1 = 0.0;
         control.players[0].cd2 = 99.0;
         assert!(input(&mut control, 0).primary.is_some(), "control: facing the foe it fires at once");
-        let mut run = charmed_wizard_or_paladin(ClassId::Wizard, 0.7, 100.0); // inside the cone plus neck, outside the 30 degree gate
+        let mut run = charmed_wizard_or_paladin(ClassId::Wizard, 1.2, 70.0); // inside the cone plus neck, far outside the 30 degree gate
         run.players[0].cd1 = 0.0;
         run.players[0].cd2 = 99.0;
         let before = run.players[0].charm.as_ref().unwrap().brain.shot;
@@ -943,7 +944,7 @@ mod tests {
             run.players[0].aim = f64::from(i.aim);
             if i.primary.is_some() {
                 fired = true;
-                assert!(crate::math::angle_diff(0.7, f64::from(i.aim)).abs() <= crate::run::facing::gate(&run.players[0].sheet.primary).unwrap() + 1e-6);
+                assert!(crate::math::angle_diff(1.2, f64::from(i.aim)).abs() <= crate::run::facing::gate(&run.players[0].sheet.primary).unwrap() + 1e-6);
                 break;
             }
         }
