@@ -157,8 +157,6 @@ fn leap_end(run: &mut Run, mi: usize, id: AbilityId, seen: Option<Creature>) {
     if let Some(foe) = seen {
         let at = run.creature_pos(foe);
         if lands_safely(run, mi, id, at) {
-            let gate = super::facing::gate(run.monsters[mi].kit.get(id).expect("the creature leaps with its kit"));
-            let at = super::facing::release_point(run, mi, at, gate);
             monster_use(run, mi, id, at);
             return;
         }

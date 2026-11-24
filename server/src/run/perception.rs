@@ -33,7 +33,7 @@ pub fn in_open(run: &Run, sight: Sight, from: Vec2, to: Vec2) -> bool {
 
 /// Whether a creature at `from` looking along `dir` (rad) sees `to`: in the open and in its cone.
 pub fn sees(run: &Run, sight: Sight, from: Vec2, dir: f64, to: Vec2) -> bool {
-    in_open(run, sight, from, to) && in_cone(sight.cone, dir, from, to)
+    in_cone(sight.cone, dir, from, to) && in_open(run, sight, from, to)
 }
 
 #[cfg(test)]

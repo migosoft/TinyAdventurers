@@ -92,7 +92,7 @@ pub fn notice(run: &mut Run, mi: usize, back: f64) {
     // An immune hit (0 damage) is still felt. A chaser mid-glance ignores further blows, or sustained fire would
     // restart the glance (and its startle) forever.
     let glancing = m.ai.glance.is_some_and(|g| g.wait > 0.0 || m.ai.target.is_some());
-    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || glancing || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
+    if !m.alive || m.hiding || busy || (m.ai.deaf_t > 0.0 && m.ai.target.is_some()) || glancing || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
         return;
     }
     let (chasing, stationary) = (m.ai.target.is_some(), m.base_ai == crate::defs::enemies::BaseAi::Stationary);
@@ -170,6 +170,10 @@ pub fn track_boss(run: &mut Run, bi: usize) {
     let (pos, sight) = (run.monsters[bi].pos, run.monsters[bi].sight_now());
     let m = &mut run.monsters[bi];
     if m.ai.acting {
+        // Mid-action the body keeps turning to the target, like a monster's wind-up (flying, it follows its path).
+        if m.ai.target.is_some() && !m.airborne {
+            m.face_to = Some(pos.angle_to(m.ai.last_known));
+        }
         return;
     }
     if let Some((id, p)) = seen {
@@ -275,6 +279,8 @@ pub fn off_facing_mul(walk_angle: f64, aim: f64) -> f64 {
 /// The turn pass for monster `mi`, which moved by `moved` this tick on its own accord.
 pub fn turn(run: &mut Run, mi: usize, moved: Vec2, dt: f64) {
     let m = &mut run.monsters[mi];
+    // Every creature passes here each tick, bosses too (their scripts never run the base AI).
+    m.ai.deaf_t = (m.ai.deaf_t - dt).max(0.0);
     if !m.alive || m.dormant || m.hiding || m.effects.no_act() || m.effects.no_turn() {
         return;
     }
@@ -353,6 +359,7 @@ pub fn at_home_facing(m: &Monster) -> bool {
 mod tests {
     use super::*;
     use crate::defs::attributes::BASELINE_ATTRS;
+    use crate::defs::abilities::AbilityId;
     use crate::defs::enemies::EnemyType;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
@@ -1204,6 +1211,37 @@ mod tests {
         assert_eq!(run.monsters[mi].ai.state, AiState::Look, "it gave the target up");
         assert!(t <= GLANCE_HOLD + 2.0 * DT, "no later than the hold: {t}");
         assert!(t >= GLANCE_HOLD - 2.0 * DT, "but the head's swing back is covered: {t}");
+    }
+
+    #[test]
+    fn a_boss_hears_blows_again_four_seconds_after_a_glance() {
+        let (mut run, bi) = crate::run::bosses::tests::arena(BossId::Lich, 0.0, Vec2::new(100.0, 0.0));
+        run.monsters[bi].ai.deaf_t = GLANCE_AGAIN; // a glance has just ended
+        steps(&mut run, GLANCE_AGAIN + 0.5);
+        assert_eq!(run.monsters[bi].ai.deaf_t, 0.0, "the boss's deafness runs out like any creature's");
+    }
+
+    #[test]
+    fn a_blow_from_behind_is_felt_once_the_target_is_lost() {
+        let (mut run, mi) = duel(100.0);
+        run.monsters[mi].ai.target = None;
+        run.monsters[mi].ai.state = AiState::Search;
+        run.monsters[mi].ai.deaf_t = 3.0; // left over from a glance in which it kept its target
+        blow(&mut run, mi, Vec2::new(-1.0, 0.0)); // from behind
+        assert!(run.monsters[mi].ai.glance.is_some(), "it reacts to the blow");
+    }
+
+    #[test]
+    fn a_cast_at_a_hero_behind_is_released_within_the_gate_and_a_ring_keeps_the_aim() {
+        let (mut run, bi) = crate::run::bosses::tests::arena(BossId::Lich, 0.0, Vec2::new(-100.0, 0.0));
+        let hero = run.players[0].pos();
+        let g = gate(&run.monsters[bi].kit.get(AbilityId::StoneGaze).unwrap().clone()).unwrap();
+        assert!(crate::run::abilities::monster_use(&mut run, bi, AbilityId::StoneGaze, hero));
+        let off = angle_diff(run.monsters[bi].aim, 0.0).abs(); // the body faced 0 rad before
+        assert!(off <= g + 1e-9 && off > 0.0, "released at the gate's edge, not at the hero: {}", off.to_degrees());
+        run.monsters[bi].aim = 0.0;
+        assert!(crate::run::abilities::monster_use(&mut run, bi, AbilityId::Nova, hero));
+        assert_eq!(run.monsters[bi].aim, 0.0, "a ring needs no facing and does not turn the body");
     }
 
     #[test]

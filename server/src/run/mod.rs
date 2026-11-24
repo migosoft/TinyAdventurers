@@ -1612,6 +1612,7 @@ pub mod tests {
             let m = &run.monsters[mi];
             run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius }, &[]);
         }
+        face(run, mi, to); // a release goes no further than the gate off the body
         assert!(abilities::monster_use(run, mi, id, to), "{id:?} is used");
         run.monsters[mi].dormant = true;
         owner

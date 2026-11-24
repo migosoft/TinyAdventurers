@@ -327,8 +327,13 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     if ab::def(id).own.minions.is_some() && super::minions::room(run, mi, &a) == 0 {
         return false;
     }
+    // Every release goes at most the ability's gate off the body's facing; an ungated shape does not turn the body.
+    let gate = super::facing::gate(&a);
+    let at = super::facing::release_point(run, mi, at, gate);
     let m = &mut run.monsters[mi];
-    m.aim = m.pos.angle_to(at);
+    if gate.is_some() {
+        m.aim = m.pos.angle_to(at);
+    }
     m.aim_dist = m.pos.dist(at);
     m.cds.start(id, a.cooldown);
     let anim = use_ability(run, Creature::Monster(mi), &a, 0);
@@ -1849,6 +1854,7 @@ mod tests {
         let (power, push_str) = (run.monsters[mi].attrs.get(Attr::Cha), run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Str));
         assert!(power > 0 && push_str > 0 && bolt.damage > 0.0, "numbers worth keeping");
         let target = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, target);
         assert!(monster_use(&mut run, mi, AbilityId::FireBolt, target));
         let spawned = &run.projectiles[0];
         assert_eq!((spawned.damage.amount, spawned.damage.power, spawned.push, spawned.push_str), (bolt.damage, power, bolt.push, push_str));
@@ -1884,6 +1890,7 @@ mod tests {
         let (pushed, boss_push) = (push_dist(ball.push, str, run.players[0].sheet.weight), push_dist(ball.push, 30, run.players[0].sheet.weight));
         assert!(pushed > 0.0 && pushed < boss_push, "{pushed} < {boss_push}");
         // It bursts a little east of the hero, so the push is west.
+        crate::run::tests::face(&mut run, bi, hero);
         assert!(monster_use(&mut run, bi, AbilityId::Fireball, hero + Vec2::new(12.0, 0.0)));
         assert_eq!((run.projectiles[0].push, run.projectiles[0].push_str), (ball.push, str));
         // The user is gone before the shot lands.
@@ -2485,6 +2492,7 @@ mod tests {
             let d = crate::defs::enemies::def(t);
             run.monsters[mi].kit = crate::sheet::monster_kit(d.abilities, &run.monsters[mi].attrs, d.weapons, crate::sheet::Body { radius: d.radius }, &[]);
         }
+        crate::run::tests::face(&mut run, mi, p);
         assert!(monster_use(&mut run, mi, AbilityId::FireBolt, p));
         for _ in 0..60 {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
