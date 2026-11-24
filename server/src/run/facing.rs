@@ -74,7 +74,9 @@ pub fn search_point(run: &Run, mi: usize, back: f64) -> Vec2 {
     let m = &run.monsters[mi];
     let dir = Vec2::from_angle(back);
     let (max, mut d) = (SEARCH_BACK * TILE, 0.0);
-    while d < max && !run.layout.map.blocks_at(m.pos + dir * (d + FREE_STEP).min(max), m.mover) {
+    // The whole body fits there: the point and its four edge points (the body's radius) are free of what its mover avoids.
+    let free = |p: Vec2| [Vec2::ZERO, Vec2::new(m.radius, 0.0), Vec2::new(-m.radius, 0.0), Vec2::new(0.0, m.radius), Vec2::new(0.0, -m.radius)].iter().all(|&o| !run.layout.map.blocks_at(p + o, m.mover));
+    while d < max && free(m.pos + dir * (d + FREE_STEP).min(max)) {
         d = (d + FREE_STEP).min(max);
     }
     m.pos + dir * d
@@ -87,11 +89,14 @@ pub fn notice(run: &mut Run, mi: usize, back: f64) {
     let m = &run.monsters[mi];
     // A boss's script owns its facing until its task; a hidden mimic, a companion and a fleeing animal have their own rules.
     let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some();
-    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || m.ai.glance.is_some_and(|g| g.wait > 0.0) || (m.is_boss && !charm::is_on(m)) || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
+    // An immune hit (0 damage) is still felt. A chaser mid-glance ignores further blows, or sustained fire would
+    // restart the glance (and its startle) forever.
+    let glancing = m.ai.glance.is_some_and(|g| g.wait > 0.0 || m.ai.target.is_some());
+    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || glancing || (m.is_boss && !charm::is_on(m)) || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
         return;
     }
     let (chasing, stationary) = (m.ai.target.is_some(), m.base_ai == crate::defs::enemies::BaseAi::Stationary);
-    let search = (!stationary).then(|| search_point(run, mi, back));
+    let search = (!stationary && !m.is_boss).then(|| search_point(run, mi, back));
     let inside = crate::run::perception::in_cone(sight.cone, gaze, pos, pos + Vec2::from_angle(back) * TILE);
     let ai = &mut run.monsters[mi].ai;
     let g = Glance { wait: 0.0, dir: back, hold: GLANCE_HOLD, around: false, body: false, search: None };
@@ -936,7 +941,6 @@ mod tests {
         let d = run.players[0].hurt_dir.expect("a direction");
         assert!(angle_diff(d, PI).abs() < 0.3, "west, along the flight: {d}");
         assert_eq!(run.last_hit.as_ref().unwrap().dir.map(|v| v.len().round()), Some(1.0), "a unit vector");
-        let _ = mi;
     }
 
     #[test]
@@ -1072,21 +1076,32 @@ mod tests {
 
     #[test]
     fn a_fighting_orc_shot_from_behind_keeps_swinging() {
+        shot_from_behind(30);
+    }
+
+    #[test]
+    fn sustained_fire_from_behind_does_not_keep_restarting_the_glance() {
+        shot_from_behind(12); // an arrow every 0.2 s: faster than startle plus hold
+    }
+
+    /// The ranger's arrow in the fighting orc's back every `every` ticks for 6 s.
+    fn shot_from_behind(every: usize) {
         let (mut run, mi) = two_foes(20.0, Vec2::new(80.0, 0.0));
         let g = gate(run.monsters[mi].kit.first().unwrap()).unwrap();
         steps(&mut run, 0.1);
         assert!(run.monsters[mi].ai.target.is_some(), "it fights the paladin");
-        let (mut glances, mut had, mut hits, mut hp) = (0, false, 0, run.players[0].hp);
+        let (mut glances, mut prev_wait, mut deaf, mut hits, mut hp) = (0, 0.0, false, 0, run.players[0].hp);
         for i in 0..(6.0 / DT) as usize {
-            if i % 30 == 0 {
-                // The ranger's arrow in its back, twice a second.
+            if i % every == 0 {
                 run.hurt_monster(mi, Damage::physical(1.0).along(Vec2::new(-1.0, 0.0)), false, Some(1));
             }
             run.step();
             let m = &run.monsters[mi];
-            let has = m.ai.glance.is_some();
-            glances += (has && !had) as usize;
-            had = has;
+            // A glance starts when its startle wait is set afresh (it only falls otherwise).
+            let wait = m.ai.glance.map_or(0.0, |g| g.wait.max(0.0));
+            glances += (wait > prev_wait) as usize;
+            prev_wait = wait;
+            deaf |= m.ai.deaf_t > 0.0;
             let off = angle_diff(m.pos.angle_to(run.players[0].pos()), m.aim).abs();
             assert!(off <= g + 0.1, "the body stays on the paladin: {}", off.to_degrees());
             if run.players[0].hp < hp {
@@ -1096,6 +1111,7 @@ mod tests {
         }
         assert!(hits >= 2, "the paladin was hit {hits} times");
         assert!(glances >= 1 && glances <= 2, "{glances} glances in 6 s");
+        assert!(deaf, "a finished glance makes it ignore blows for a while");
     }
 
     #[test]

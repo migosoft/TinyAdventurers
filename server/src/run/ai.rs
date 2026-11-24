@@ -358,8 +358,10 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     };
     run.monsters[mi].ai.deaf_t = (run.monsters[mi].ai.deaf_t - dt).max(0.0);
     // A chaser whose head glances at a blow keeps the target it is engaged with while it is in the open; a closer
-    // foe the gaze sees takes its place and the head comes back.
-    if run.monsters[mi].ai.state == AiState::Chase && run.monsters[mi].ai.glance.is_some() {
+    // foe the gaze sees takes its place and the head comes back. That goes on while the head swings back after a
+    // glance (it is deaf for a while then, and its gaze not yet forward).
+    let m = &run.monsters[mi];
+    if m.ai.state == AiState::Chase && (m.ai.glance.is_some() || m.ai.deaf_t > 0.0 && m.gaze != 0.0) {
         let held = match run.monsters[mi].ai.target {
             Some(Target::Player(id) | Target::Monster(id)) => run
                 .creature_by_id(id)
