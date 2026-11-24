@@ -8,7 +8,7 @@ export interface SlotView {
 export function slotView(cd: number, max: number): SlotView {
   if (cd <= 0) return { fill: 1, ready: true, label: '' };
   const fill = Math.min(1, Math.max(0, 1 - cd / max));
-  return { fill, ready: false, label: cd.toFixed(1) };
+  return { fill, ready: false, label: Math.max(0.1, cd).toFixed(1) }; // never "0.0" while still cooling
 }
 
 /** Learns the slot's maximum cooldown from the values it sees (a new use, the Berserker speed-up). */

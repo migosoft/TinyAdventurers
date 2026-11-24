@@ -18,6 +18,10 @@ describe('effect icons', () => {
     const strong = Object.values(EFFECT).filter((id) => !EFFECT_ICON[id].weak && !drains.includes(id)).map((id) => EFFECT_ICON[id].body);
     expect(new Set(strong).size).toBe(strong.length);
   });
+  it('falls back to a question mark for an unknown id', () => {
+    expect(() => effectIconSvg(9999, 14)).not.toThrow();
+    expect(effectIconSvg(9999, 14)).toContain('<svg');
+  });
   it('renders an outline for a weak fill symbol', () => {
     expect(effectIconSvg(EFFECT.Tainted, 14)).toContain('fill="none"');
     expect(effectIconSvg(EFFECT.Poisoned, 14)).toContain('fill="#6ad04a"');
