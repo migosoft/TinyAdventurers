@@ -179,8 +179,13 @@ pub struct Run {
 
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
+    spawn_fire_patch_of(run, pos, radius, life, damage, Side::Hostile, None);
+}
+
+/// A fire patch of `side` (what the ground hurts follows it), made by the hero `owner` (an entity id) if any.
+pub fn spawn_fire_patch_of(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
     let kind = EntityKind::FirePatch;
-    run.spawn_hazard(kind, pos, radius, life, Side::Hostile, None, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
+    run.spawn_hazard(kind, pos, radius, life, side, owner,HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
 impl Run {

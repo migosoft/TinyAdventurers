@@ -530,8 +530,9 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = weapon_damage(run, c, a);
             let aim = aim_of(run, c);
+            let by = hero_of(c).map(|pi| run.players[pi].id);
             for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
-                crate::run::objects::hurt_object(run, oi, dmg.clone(), None);
+                crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
             }
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, skip_calm: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
@@ -548,7 +549,10 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = damage_of(run.creature_id(c), a);
-            crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg.clone());
+            let by = hero_of(c).map(|pi| run.players[pi].id);
+            for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
+                crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
+            }
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, skip_calm: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, &targets::stance(run, c), &rule, &[], log, |t| run.creature_pos(t));
@@ -617,7 +621,8 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
     if run.rng.gen_bool(ab::BREATH_PATCH_CHANCE) {
         let at = pos + Vec2::from_angle(aim + run.rng.gen_range(-half..half)) * run.rng.gen_range(ab::BREATH_PATCH_NEAREST..a.range);
         if !run.layout.map.opaque_at(at) {
-            super::spawn_fire_patch(run, at, ab::BREATH_PATCH_RADIUS, ab::BREATH_PATCH_SECS, ab::BREATH_PATCH_DAMAGE);
+            let owner = hero_of(c).map(|pi| run.players[pi].id);
+            super::spawn_fire_patch_of(run, at, ab::BREATH_PATCH_RADIUS, ab::BREATH_PATCH_SECS, ab::BREATH_PATCH_DAMAGE, side(run, c), owner);
         }
     }
 }
@@ -1810,6 +1815,19 @@ mod tests {
     }
 
     #[test]
+    fn a_breath_patch_belongs_to_the_side_of_the_one_who_breathed() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].side = Side::Friendly;
+        run.monsters[bi].channel = Some((AbilityId::FireBreath, 1000.0, 0.0));
+        for _ in 0..400 {
+            tick_channel(&mut run, bi, ab::BREATH_PULSE);
+        }
+        assert!(!run.hazards.is_empty(), "a patch came");
+        assert!(run.hazards.iter().all(|h| h.side == Side::Friendly), "a friendly breather's fire spares the heroes");
+    }
+
+    #[test]
     fn a_shot_keeps_its_users_numbers_after_the_user_dies() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         run.monsters.retain(|m| m.is_boss);
@@ -1950,7 +1968,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fireball_never_pushes_an_ally_of_its_users_side() {
+    fn a_fireball_never_pushes_an_ally_of_its_casters_side() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);

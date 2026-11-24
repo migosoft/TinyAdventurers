@@ -76,7 +76,7 @@ impl Change {
     }
 }
 
-fn equip_message(e: EquipError) -> &'static str {
+pub fn equip_message(e: EquipError) -> &'static str {
     match e {
         EquipError::WrongSlot => "That item does not fit that slot.",
         EquipError::ClassNotListed => "Your class cannot use that item.",
