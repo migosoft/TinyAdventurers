@@ -225,6 +225,12 @@ fn pct(v: f64) -> String {
     }
 }
 
+/// A number with its sign: "+5", "-5".
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+fn signed(v: f64) -> String {
+    if v < 0.0 { format!("-{}", -v) } else { format!("+{v}") }
+}
+
 /// A base's numbers as the tooltip reads them ("" for rings, shoes and belts).
 #[allow(dead_code)] // read by the progression.ts export (a test) only
 pub fn base_text(b: &ItemBase) -> String {
@@ -258,14 +264,14 @@ pub fn base_text(b: &ItemBase) -> String {
 pub fn prop_text(p: &ItemProperty) -> String {
     match p.kind {
         PropKind::DamageShare(t, v) => format!("{} % {} share", pct(v), t.name().to_lowercase()),
-        PropKind::OnHit(h) => format!("On hit: {:?}", h.kind),
+        PropKind::OnHit(h) => format!("On hit: {}", crate::run::rules_log::text::effect_name(h.kind)),
         PropKind::Light(k) => format!("Gives light ({k:?})"),
         PropKind::Resist(t, v) => format!("{} % {} resistance", pct(v), t.name().to_lowercase()),
-        PropKind::Attr(a, n) => format!("+{n} {}", a.short()),
+        PropKind::Attr(a, n) => format!("{} {}", signed(n as f64), a.short()),
         PropKind::EffectResist(k, v) => format!("{k:?} resistance {} %", pct(v)),
-        PropKind::Weight(w) => format!("Weight +{w}"),
+        PropKind::Weight(w) => format!("Weight {}", signed(w)),
         PropKind::MoveSpeed(f) => format!("Move speed {} %", pct(f)),
-        PropKind::MaxHp(hp) => format!("+{hp} HP"),
+        PropKind::MaxHp(hp) => format!("{} HP", signed(hp)),
         PropKind::GrantAbility { id, waive_attrs, .. } => {
             format!("Grants {}{}", super::abilities::def(id).name, if waive_attrs { " (ignores its Attribute needs)" } else { "" })
         }
@@ -532,6 +538,16 @@ mod tests {
     use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
     use EquipSlot as S;
     use ItemId as I;
+
+    #[test]
+    fn negative_numbers_and_on_hits_read_plainly() {
+        let text = |kind| prop_text(&ItemProperty { kind, magical: false });
+        assert_eq!(text(PropKind::MaxHp(-5.0)), "-5 HP");
+        assert_eq!(text(PropKind::Weight(-2.0)), "Weight -2");
+        assert_eq!(text(PropKind::Attr(Attr::Con, -1)), "-1 CON");
+        let h = OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain };
+        assert_eq!(text(PropKind::OnHit(h)), "On hit: Weakened");
+    }
 
     #[test]
     fn item_texts_read_like_the_tooltip() {
