@@ -2,9 +2,10 @@
 
 /**
  * Compact entity state, serialized as an array:
- * `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side]`.
+ * `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side, hurt_dir, head]`.
  * `extra` for projectiles is `(owner_id << 16) | shot_id`.
  * `effects`: bitmask of `EffectKind` ids (creatures only).
  * `side`: a `Side` (0 Neutral, 1 Hostile, 2 Friendly) for creatures, 0 for everything else.
+ * `hurt_dir`: the direction of the last blow, `wire::hurt_byte` (0 = none); `head`: the head's angle, `wire::head_byte` (128 = ahead).
  */
-export type EntSnap = [number, number, number, number, number, number, number, number, number, number, number, number];
+export type EntSnap = [number, number, number, number, number, number, number, number, number, number, number, number, number, number];
