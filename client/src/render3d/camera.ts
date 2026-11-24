@@ -46,6 +46,22 @@ export function snapGround(pitch: number, yaw: number, x: number, z: number): { 
   return unrotate(yaw, sx / ART, sy / (ART * sp), 0, 0);
 }
 
+/**
+ * The foot of the figure the camera follows, snapped relative to the snapped camera: its screen offset from the camera is whole art px
+ * and stays steady while the camera eases after it. Snapping both on their own (`snapGround`) lets the offset flip between two whole
+ * values as their fractions drift (#349). The result is already on the grid, so `snapGround` leaves it where it is.
+ */
+export function snapFollowed(pitch: number, yaw: number, camX: number, camZ: number, x: number, z: number): { x: number; z: number } {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const sp = Math.sin(pitch);
+  const cu = Math.round((camX * c + camZ * s) * ART);
+  const cv = Math.round((camZ * c - camX * s) * sp * ART);
+  const du = Math.round(((x - camX) * c + (z - camZ) * s) * ART);
+  const dv = Math.round(((z - camZ) * c - (x - camX) * s) * sp * ART);
+  return unrotate(yaw, (cu + du) / ART, (cv + dv) / (ART * sp), 0, 0);
+}
+
 /** Turns the movement keys (ix right, iz down) into a world direction. */
 export function keysToWorld(yaw: number, ix: number, iz: number): { x: number; z: number } {
   const c = Math.cos(yaw);

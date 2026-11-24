@@ -447,8 +447,9 @@ describe('Figures3d anchors (#311)', () => {
     fg.frame(frame([ent(1, KIND.Wizard, { side: SIDE.Friendly, x: at(0), y: 8 })], { own: own({ alive: true, x: at(1), y: 40, effects: 1 << EFFECT.Burning }) }), cam());
     const a = fg.anchors.get(1);
     expect(a).toBeDefined();
-    expect(a!.x).toBeCloseTo(at(1) / TILE, 9);
-    expect(a!.z).toBeCloseTo(40 / TILE, 9);
+    // The own hero's foot is snapped to the art-pixel grid relative to the camera (#349): within about one art px of the predicted spot.
+    expect(Math.abs(a!.x - at(1) / TILE)).toBeLessThan(0.1);
+    expect(Math.abs(a!.z - 40 / TILE)).toBeLessThan(0.1);
     expect(a!.effects).toBe(1 << EFFECT.Burning);
     expect(a!.tagShown).toBe(true);
     // height is the frame height times the scale, the tag sits 3 px above the foot

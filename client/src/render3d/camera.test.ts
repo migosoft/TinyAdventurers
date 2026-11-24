@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OrthographicCamera, Vector3 } from 'three/webgpu';
 import { HUMAN_HEIGHT } from './models/tubeDesc';
-import { ART, closeCam, facesLeft, followClamp, freeClamp, groundAt, keysToWorld, project, snapGround, viewRay } from './camera';
+import { ART, closeCam, facesLeft, followClamp, freeClamp, groundAt, keysToWorld, project, snapFollowed, snapGround, viewRay } from './camera';
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -155,5 +155,42 @@ describe('closeCam (the dev pages\' close zoom keeps the figure in the picture, 
     const c = closeCam(cam, 30, 5);
     expect(project(c, cam.x, 0, cam.z).sx).toBeCloseTo(0, 9);
     expect(project(c, cam.x, 0, cam.z).sy).toBeCloseTo(-5 / ART, 9);
+  });
+});
+
+describe('the followed hero on the art-pixel grid (#349)', () => {
+  // A hero walking at a steady speed, the camera easing after it (runView3d's FOLLOW_RATE 6); the hero's screen offset from the drawn
+  // (snapped) camera, in art px, over the frames after the camera has caught up to its steady lag.
+  const offsets = (snapHero: (cam: { x: number; z: number }, hx: number, hz: number, pitch: number, yaw: number) => { x: number; z: number }, yaw: number) => {
+    const pitch = rad(48.6);
+    const dt = 1 / 60;
+    let hx = 10.3, hz = 7.1;
+    const cam = { x: hx, z: hz };
+    const seen = new Set<string>();
+    for (let i = 0; i < 600; i++) {
+      hx += 4.3 * dt * Math.cos(rad(25));
+      hz += 4.3 * dt * Math.sin(rad(25));
+      const k = 1 - Math.exp(-dt * 6);
+      cam.x += (hx - cam.x) * k;
+      cam.z += (hz - cam.z) * k;
+      if (i < 300) continue;
+      const g = snapGround(pitch, yaw, cam.x, cam.z);
+      const f = snapHero(cam, hx, hz, pitch, yaw);
+      const p = project({ x: g.x, z: g.z, pitch, yaw }, f.x, 0, f.z);
+      seen.add(`${Math.round(p.sx * ART)},${Math.round(p.sy * ART)}`);
+    }
+    return seen.size;
+  };
+  for (const yaw of [0, rad(45)]) {
+    it(`wobbles when hero and camera snap alone, and stands still when snapped to the camera (yaw ${Math.round((yaw * 180) / Math.PI)})`, () => {
+      expect(offsets((_c, x, z, p, y) => snapGround(p, y, x, z), yaw)).toBeGreaterThan(1);
+      expect(offsets((c, x, z, p, y) => snapFollowed(p, y, c.x, c.z, x, z), yaw)).toBe(1);
+    });
+  }
+  it('is already on the grid', () => {
+    const f = snapFollowed(rad(48.6), rad(37), 3.37, -8.91, 4.1, -8.2);
+    const g = snapGround(rad(48.6), rad(37), f.x, f.z);
+    expect(g.x).toBeCloseTo(f.x, 9);
+    expect(g.z).toBeCloseTo(f.z, 9);
   });
 });
