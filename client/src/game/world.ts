@@ -105,7 +105,7 @@ export class Interpolator {
       for (const [id, e] of b.ents) {
         const p = prev.ents.get(id);
         const k = p ? ext / span : 0;
-        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6], b.looks));
+        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6], b.looks, p ? p[7] : e[7], 1 + k));
       }
       return;
     }
@@ -127,7 +127,8 @@ export class Interpolator {
 }
 
 function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1): EntState {
-  const z = isProjectileKind(e[1]) ? (animMs0 + (e[7] - animMs0) * f) / 10 : 0;
+  // f > 1 extrapolates (a late snapshot); a shot's height never goes below the ground.
+  const z = isProjectileKind(e[1]) ? Math.max(0, animMs0 + (e[7] - animMs0) * f) / 10 : 0;
   return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
 }
 

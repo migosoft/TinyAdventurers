@@ -256,6 +256,18 @@ describe('Interpolator shot height', () => {
     it.sample(0.5 * CONST.DT + it.delay, out);
     expect(out.get(9)?.z).toBeCloseTo(20, 6);
   });
+  it('extrapolates the height like x and y when snapshots run late, within the 0.1 s limit', () => {
+    const arrow = (x: number, ms: number) => [9, KIND.Arrow, x, 10, 255, 0, 0, ms, 0, 0, 0, 2] as EntSnap;
+    const it = new Interpolator();
+    it.push({ ...snap(1, 0, 0), ents: [arrow(0, 100)] }, 0);
+    it.push({ ...snap(1 + CONST.TICK_HZ / CONST.SNAPSHOT_HZ, 0, 0), ents: [arrow(10, 300)] }, 1 / CONST.SNAPSHOT_HZ);
+    const out = new Map<number, EntState>();
+    it.sample(1 / CONST.SNAPSHOT_HZ + it.delay + 0.5, out); // far past: capped at 0.1 s
+    const s = out.get(9)!;
+    const k = (s.x - 10) / 10; // the extrapolated share of one snapshot span
+    expect(k).toBeGreaterThan(0);
+    expect(s.z).toBeCloseTo((300 + 200 * k) / 10, 6);
+  });
 });
 
 describe('Interpolator hazard radius', () => {
