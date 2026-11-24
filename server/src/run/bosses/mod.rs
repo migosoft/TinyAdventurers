@@ -142,6 +142,29 @@ pub(crate) mod tests {
         }
     }
 
+    #[test]
+    fn a_boss_held_mid_action_reacts_like_any_monster() {
+        let (mut run, bi) = arena(BossId::Demon, 0.0, Vec2::new(100.0, 0.0));
+        run.monsters[bi].ai.acting = true; // its script was mid-action when the hold began
+        run.monsters[bi].effects.add(EffectKind::Petrified, 5.0);
+        run.step();
+        assert!(!run.monsters[bi].ai.acting, "a held boss is not acting");
+    }
+
+    #[test]
+    fn a_flying_boss_that_loses_a_hero_only_looks() {
+        let (mut run, bi) = arena(BossId::Dragon, 0.0, Vec2::new(100.0, 0.0));
+        run.monsters[bi].airborne = true;
+        steps(&mut run, 0.3);
+        assert!(run.monsters[bi].ai.target.is_some());
+        let at = run.monsters[bi].pos;
+        run.players[0].mv.x = at.x - 100.0;
+        run.players[0].mv.y = at.y;
+        run.step();
+        let g = run.monsters[bi].ai.glance.expect("it looks to where it lost the hero");
+        assert!(!g.body, "the body follows the flight, only the head looks");
+    }
+
     /// Hit from behind with no hero seen: the head turns first, then the body; it does not move.
     pub(crate) fn hit_from_behind(boss: BossId) {
         let (mut run, bi) = arena(boss, std::f64::consts::PI, Vec2::new(300.0, 0.0));

@@ -591,6 +591,20 @@ mod tests {
 
     #[test]
     fn the_dragon_does_not_breathe_at_a_hero_behind_it() {
+        // Far behind it (out of its cone) and out of tail reach: nothing at all.
+        let (mut run, bi) = stepped(150.0, 100.0, &[AbilityId::FireBreath]);
+        let mut d = Dragon::default();
+        d.opening = Vec::new();
+        d.flight.t = 99.0;
+        for _ in 0..(3.0 / DT) as usize {
+            drive(&mut run, &mut d, bi, DT);
+            assert_ne!(run.monsters[bi].anim, Anim::Breath);
+        }
+        assert!(run.monsters[bi].channel.is_none());
+    }
+
+    #[test]
+    fn the_dragon_turns_to_a_hero_beyond_the_gate_before_it_breathes() {
         // The hero is 70 degrees off: the body must turn within the gate first.
         let (mut run, bi) = stepped(70.0, 100.0, &[AbilityId::FireBreath]);
         let mut d = Dragon::default();

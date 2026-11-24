@@ -147,6 +147,20 @@ pub fn notice_shots(run: &mut Run, mi: usize) {
     }
 }
 
+/// A creature sees `target` at `at` this tick: it becomes its target and last known place. Its motion while seen
+/// (for leading the turn when it slips out of the cone) is sampled only from the tick before (`last_known` is
+/// that tick's position), and never faster than a plausible runner.
+pub fn see_target(ai: &mut super::entities::Ai, tick: u32, dt: f64, target: super::entities::Target, at: Vec2) {
+    let sampled = ai.target == Some(target) && ai.seen_tick.is_some_and(|t| t.wrapping_add(1) == tick);
+    ai.last_vel = if sampled { (at - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
+    if ai.last_vel.len() > LEAD_SPEED_MAX {
+        ai.last_vel = ai.last_vel.norm() * LEAD_SPEED_MAX;
+    }
+    ai.seen_tick = Some(tick);
+    ai.target = Some(target);
+    ai.last_known = at;
+}
+
 /// Boss `bi`'s perception for this tick, before its script: the hero it sees (`bosses::target`) is its target and
 /// its motion; one that left the cone makes the head and body turn to where it was (no search), and the look
 /// ends in Idle. Nothing changes while the script is in an action.
@@ -160,15 +174,7 @@ pub fn track_boss(run: &mut Run, bi: usize) {
     }
     if let Some((id, p)) = seen {
         let ai = &mut m.ai;
-        let target = super::entities::Target::Player(id);
-        let sampled = ai.target == Some(target) && ai.seen_tick.is_some_and(|t| t.wrapping_add(1) == tick);
-        ai.last_vel = if sampled { (p - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
-        if ai.last_vel.len() > LEAD_SPEED_MAX {
-            ai.last_vel = ai.last_vel.norm() * LEAD_SPEED_MAX;
-        }
-        ai.seen_tick = Some(tick);
-        ai.target = Some(target);
-        ai.last_known = p;
+        see_target(ai, tick, dt, super::entities::Target::Player(id), p);
         if ai.state != AiState::Chase {
             ai.enter(AiState::Chase);
         }
@@ -182,8 +188,10 @@ pub fn track_boss(run: &mut Run, bi: usize) {
         ai.target = None;
         let (last, vel) = (ai.last_known, ai.last_vel);
         ai.enter(AiState::Look);
+        // Flying, the body follows the flight path: only the head looks.
+        let airborne = run.monsters[bi].airborne;
         let lead = last + vel * startle(&run.monsters[bi].attrs);
-        glance(run, bi, Glance { wait: 0.0, dir: pos.angle_to(if open { lead } else { last }), hold: SEARCH_TIME, around: open, body: true, search: None });
+        glance(run, bi, Glance { wait: 0.0, dir: pos.angle_to(if open { lead } else { last }), hold: SEARCH_TIME, around: open, body: !airborne, search: None });
     } else if m.ai.state == AiState::Look && m.ai.glance.is_none() {
         m.ai.enter(AiState::Idle);
     }

@@ -385,16 +385,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             Creature::Player(_) => Target::Player(fid),
             Creature::Monster(_) => Target::Monster(fid),
         };
-        // Its motion while seen, for leading the turn when it slips out of the cone: only from a sample of the
-        // tick before (`last_known` is that tick's position), and never faster than a plausible runner.
-        let sampled = ai.target == Some(target) && ai.seen_tick.is_some_and(|t| t.wrapping_add(1) == tick);
-        ai.last_vel = if sampled { (fpos - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
-        if ai.last_vel.len() > super::facing::LEAD_SPEED_MAX {
-            ai.last_vel = ai.last_vel.norm() * super::facing::LEAD_SPEED_MAX;
-        }
-        ai.seen_tick = Some(tick);
-        ai.target = Some(target);
-        ai.last_known = fpos;
+        super::facing::see_target(ai, tick, dt, target, fpos);
         if ai.state != AiState::Chase {
             ai.glance = None;
             ai.search = None;

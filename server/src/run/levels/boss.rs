@@ -136,6 +136,7 @@ pub fn tick(run: &mut Run, dt: f64) {
     } else if held {
         if let Some(bi) = bosses::boss_idx(run) {
             run.monsters[bi].dodge = None;
+            run.monsters[bi].ai.acting = false; // charmed or frozen mid-action: it reacts as any monster
         }
     }
 }
