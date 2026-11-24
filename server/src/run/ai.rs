@@ -69,12 +69,18 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
     }
     let (tx, ty) = Map::tile_of(pos);
     let mut best: Option<(f64, Vec2)> = None;
-    for dy in -3..=3 {
-        for dx in -3..=3 {
-            let c = Map::center_of(tx + dx, ty + dy);
-            if !run.layout.map.blocks(tx + dx, ty + dy, mover) && best.map_or(true, |(d, _)| c.dist(pos) < d) {
-                best = Some((c.dist(pos), c));
+    // The nearest walkable tile within 3 tiles; none there (a wide lava field), then a wider search.
+    for reach in [3, 12] {
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                let c = Map::center_of(tx + dx, ty + dy);
+                if !run.layout.map.blocks(tx + dx, ty + dy, mover) && best.map_or(true, |(d, _)| c.dist(pos) < d) {
+                    best = Some((c.dist(pos), c));
+                }
             }
+        }
+        if best.is_some() {
+            break;
         }
     }
     if let Some((_, to)) = best {
@@ -400,7 +406,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             Some(Target::Object(id)) => run
                 .objects
                 .iter()
-                .find(|o| o.id == id && !o.gone && matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_none()))
+                .find(|o| o.id == id && !o.gone && matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_none() && b.sinking.is_none()))
                 .map(|o| o.pos),
             _ => None,
         };
@@ -703,8 +709,8 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
             if map.blocks(nb.0, nb.1, mover) || (blocked.contains(&nb) && nb != goal) {
                 continue;
             }
-            // Tiles beside a barrel are a tight squeeze for a body: go around when there is room.
-            let squeeze = nb != goal && (-1..=1).any(|dy| (-1..=1).any(|dx| blocked.contains(&(nb.0 + dx, nb.1 + dy))));
+            // Tiles beside a barrel are a tight squeeze for a wide body only: go around when there is room.
+            let squeeze = clear && nb != goal && (-1..=1).any(|dy| (-1..=1).any(|dx| blocked.contains(&(nb.0 + dx, nb.1 + dy))));
             let ng = cg + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
             if g.get(&nb).map_or(true, |&old| ng < old) {
                 g.insert(nb, ng);
@@ -1474,6 +1480,89 @@ pub(crate) mod tests {
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert!(run.monsters[mi].ai.windup.is_some(), "it still attacks");
         assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None, "but shoots the hero");
+    }
+
+    /// The archer winds up at the barrel, `change` happens to the barrel, and the shot that leaves is aimed at the hero.
+    fn shot_after_the_barrel_changes(change: impl Fn(&mut crate::run::objects::WorldObject)) {
+        let (mut run, mi, b) = archer_and_barrel(Vec2::new(-16.0, 12.0));
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), Some(crate::run::entities::Target::Object(b)), "control: it aims at the barrel");
+        change(run.objects.iter_mut().find(|o| o.id == b).unwrap());
+        for _ in 0..90 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            if !run.projectiles.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(run.projectiles.first().map(|p| p.aimed), Some(Some(run.players[0].id)), "it shoots the hero instead");
+    }
+
+    #[test]
+    fn a_barrel_lit_sunk_or_gone_during_the_wind_up_is_not_shot() {
+        use crate::run::objects::ObjState;
+        shot_after_the_barrel_changes(|o| {
+            if let ObjState::Barrel(x) = &mut o.state {
+                x.fuse = Some(1.0);
+            }
+        });
+        shot_after_the_barrel_changes(|o| {
+            if let ObjState::Barrel(x) = &mut o.state {
+                x.sinking = Some((1.0, crate::run::entities::Sink::Fall, 0.0));
+            }
+        });
+        shot_after_the_barrel_changes(|o| o.gone = true);
+    }
+
+    #[test]
+    fn a_boss_never_shoots_a_barrel() {
+        let (mut run, mi, _) = archer_and_barrel(Vec2::new(-16.0, 12.0));
+        run.monsters[mi].is_boss = true;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.windup.is_some(), "control: it still attacks");
+        assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None);
+    }
+
+    #[test]
+    fn a_push_breaks_a_wind_up() {
+        let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.windup.is_some(), "control: winding up");
+        run.monsters[mi].weight = 1.0;
+        run.knock_monster(mi, run.monsters[mi].pos + Vec2::new(10.0, 0.0), 40.0, 30);
+        assert!(run.monsters[mi].knock != Vec2::ZERO, "pushed");
+        assert!(run.monsters[mi].ai.windup.is_none() && run.monsters[mi].ai.cast.is_none());
+    }
+
+    #[test]
+    fn a_monster_in_a_wide_lava_field_walks_out() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(8.0 * TILE, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        for y in ty - 7..=ty + 7 {
+            for x in tx - 7..=tx + 7 {
+                run.layout.map.set(x, y, Tile::Lava);
+            }
+        }
+        let before = run.monsters[mi].pos;
+        escape_terrain(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].pos != before, "no walkable tile within 3: it still heads for the nearest one");
+    }
+
+    #[test]
+    fn a_barrels_squeeze_costs_only_a_wide_body() {
+        let mut m = Map::new(12, 12);
+        for y in 1..11 {
+            for x in 1..11 {
+                m.set(x, y, Tile::Floor);
+            }
+        }
+        let blocked: std::collections::HashSet<(i32, i32)> = [(5, 5)].into_iter().collect();
+        let beside = |clear: bool| astar_clear(&m, Map::center_of(2, 5), Map::center_of(8, 5), 1000, Mover::Enemy, clear, &blocked).unwrap().iter().any(|w| Map::tile_of(*w) == (5, 4) || Map::tile_of(*w) == (5, 6));
+        assert!(beside(false), "an ordinary body takes the short way past the barrel");
+        assert!(!beside(true), "a wide body goes around it");
     }
 
     #[test]

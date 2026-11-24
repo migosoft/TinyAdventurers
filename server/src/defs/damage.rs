@@ -51,7 +51,11 @@ impl DamageSplit {
             s[t as usize] += share;
         }
         let listed: f64 = s.iter().sum();
-        debug_assert!(listed <= 1.0 + 1e-9, "damage split over 100 %: {parts:?}");
+        if listed > 1.0 + 1e-9 {
+            // Over 100 %: keep the proportions, scaled to exactly 100 %.
+            s.iter_mut().for_each(|x| *x /= listed);
+            return DamageSplit(s);
+        }
         s[DamageType::Physical as usize] += (1.0 - listed).max(0.0);
         DamageSplit(s)
     }
@@ -344,6 +348,14 @@ pub fn kind_split(kind: EntityKind) -> DamageSplit {
 mod tests {
     use super::DamageType::*;
     use super::*;
+
+    #[test]
+    fn a_split_over_100_percent_is_scaled_to_exactly_100() {
+        let s = DamageSplit::split(&[(Heat, 0.8), (Cold, 0.8)]);
+        assert!((s.share(Heat) - 0.5).abs() < 1e-12 && (s.share(Cold) - 0.5).abs() < 1e-12 && s.share(Physical) == 0.0);
+        let under = DamageSplit::split(&[(Heat, 0.3)]);
+        assert!((under.share(Physical) - 0.7).abs() < 1e-12, "under 100 %: the rest is physical");
+    }
 
     #[test]
     fn strongest_takes_the_larger_absolute_value() {

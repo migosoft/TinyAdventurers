@@ -736,6 +736,11 @@ impl Run {
             return; // a dashing monster is in the air, like a dashing hero
         }
         let dist = dist * m.effects.knock_taken();
+        // A push breaks what it was doing, like a hero's (Ground Slam, a wind-up).
+        // A push breaks what it was doing, like a hero's (Ground Slam, a wind-up).
+        m.ai.windup = None;
+        m.ai.cast = None;
+        m.slam = None;
         let d = m.pos - from;
         let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
         m.knock = dir * crate::collision::knock_speed(dist, DT);
