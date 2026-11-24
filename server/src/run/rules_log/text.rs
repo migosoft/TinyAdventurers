@@ -100,7 +100,6 @@ pub(super) fn hit_head(run: &Run, f: &HitFacts, target: u32) -> String {
     match f.outcome {
         HitOutcome::Dealt => format!("{lead}: {} damage (HP {} → {})", n1(f.dealt), n1(f.hp_before), n1(f.hp_after)),
         HitOutcome::Immune => format!("{lead}: no damage (immune)"),
-        HitOutcome::Healed(h) => format!("{lead}: healed {} (resistance over 100 %)", n1(h)),
         HitOutcome::Shielded => format!("{lead}: no damage ({target} cannot be hurt now)"),
         HitOutcome::DebugNoLoss => format!("{lead}: {} damage (debug: no HP lost)", n1(f.taken)),
     }

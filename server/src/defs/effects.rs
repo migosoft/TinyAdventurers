@@ -286,7 +286,13 @@ impl EffectResistances {
 /// An effect's seconds after an effect resistance `r`: `secs × (1 − r)`, with `r`
 /// floored at `MIN_RESISTANCE`; `None` (refused) at `r >= 1`.
 pub fn effect_secs(secs: f64, r: f64) -> Option<f64> {
-    (r < 1.0).then(|| secs * (1.0 - r.max(super::damage::MIN_RESISTANCE)))
+    (r < 1.0).then(|| secs * (1.0 - cap_effect_res(r)))
+}
+
+/// An effect resistance as the game uses it, and as the Sheet and the rules log show it: within
+/// [`MIN_RESISTANCE`, `MAX_RESISTANCE`], like a damage resistance.
+pub fn cap_effect_res(r: f64) -> f64 {
+    r.clamp(super::damage::MIN_RESISTANCE, super::damage::MAX_RESISTANCE)
 }
 
 /// An effect a hit applies after its damage (see `Damage::on_hit`).
@@ -397,6 +403,14 @@ mod tests {
             assert_eq!(k.bit(), 1 << k as u8);
         }
         assert_eq!(EffectKind::from_u8(EffectKind::COUNT as u8), None);
+    }
+
+    #[test]
+    fn shown_effect_resistance_is_capped_like_the_game_uses_it() {
+        assert_eq!(cap_effect_res(1.7), 1.0);
+        assert_eq!(cap_effect_res(-3.0), -1.0);
+        assert_eq!(cap_effect_res(0.4), 0.4);
+        assert_eq!(effect_secs(10.0, -3.0), Some(20.0));
     }
 
     #[test]

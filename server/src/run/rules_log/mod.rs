@@ -117,8 +117,6 @@ pub use send::{for_viewer, LogW};
 pub enum HitOutcome {
     Dealt,
     Immune,
-    /// A resistance over 100 % turned the hit into healing: the HP it gave.
-    Healed(f64),
     /// A boss that cannot be hurt right now.
     Shielded,
     /// A hero in debug mode: the hit shows, nothing is subtracted.
@@ -186,13 +184,13 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
         let shown = match f.outcome {
             HitOutcome::Dealt => f.dealt,
             HitOutcome::DebugNoLoss => f.taken,
-            HitOutcome::Immune | HitOutcome::Healed(_) | HitOutcome::Shielded => return None,
+            HitOutcome::Immune | HitOutcome::Shielded => return None,
         };
         Some(Unseen { viewer, head: format!("{} took {} from something unseen", tag_of(run, target), text::n1(shown)), details: text::part_lines(&f) })
     });
     let rec = LogRec {
         t: run.time,
-        kind: if matches!(f.outcome, HitOutcome::Healed(_)) { LineKind::Heal } else { LineKind::Hit },
+        kind: LineKind::Hit,
         head: text::hit_head(run, &f, target),
         details: text::hit_details(run, &f),
         who,

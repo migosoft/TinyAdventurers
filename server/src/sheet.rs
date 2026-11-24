@@ -1014,7 +1014,7 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
         save_con: sheet.save(Attr::Con),
         save_wil: sheet.save(Attr::Wil),
         res: DamageType::ALL.iter().map(|&t| (t, sheet.res.capped(t))).filter(|r| r.1 != 0.0).collect(),
-        effect_res: EffectKind::ALL.iter().map(|&k| (k, sheet.effect_res.get(k))).filter(|r| r.1 != 0.0).collect(),
+        effect_res: EffectKind::ALL.iter().map(|&k| (k, crate::defs::effects::cap_effect_res(sheet.effect_res.get(k)))).filter(|r| r.1 != 0.0).collect(),
         profs,
         keystones: sheet.keystones.iter().collect(),
         loadout_error,
