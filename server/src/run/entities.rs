@@ -229,6 +229,10 @@ pub struct Ai {
     /// The facing it was placed with, and whether it is turning back to it after returning home.
     pub home_aim: f64,
     pub turn_home: bool,
+    /// An idle look in progress: the angle off the body (rad) and the seconds left.
+    pub idle_look: Option<(f64, f64)>,
+    /// Seconds until the next idle look.
+    pub idle_look_t: f64,
 }
 
 impl Ai {
@@ -251,6 +255,8 @@ impl Ai {
             aim: AimMemory::default(),
             home_aim: 0.0,
             turn_home: false,
+            idle_look: None,
+            idle_look_t: 3.0,
         }
     }
 }
@@ -325,6 +331,8 @@ pub struct Monster {
     pub turn: f64,
     /// Where its body wants to face this tick (`None`: where it walks); cleared before each tick (`facing.rs`).
     pub face_to: Option<f64>,
+    /// Where its head wants to look this tick, a world direction (`None`: straight ahead); cleared like `face_to`.
+    pub look_to: Option<f64>,
     /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_use`.
     pub aim_dist: f64,
     pub anim: Anim,

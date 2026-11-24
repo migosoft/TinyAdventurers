@@ -11,6 +11,11 @@ use crate::math::{angle_diff, Vec2};
 use rand::Rng;
 use std::f64::consts::{PI, TAU};
 
+/// Seconds between idle looks and how long one lasts (min, max; `run.rng`), and how far of the neck they reach.
+const IDLE_LOOK_EVERY: (f64, f64) = (3.0, 7.0);
+const IDLE_LOOK_FOR: (f64, f64) = (1.0, 2.0);
+const IDLE_LOOK_SPAN: f64 = 0.8;
+
 /// A step shorter than this (px) is no walk: the body keeps its facing.
 const WALK_MIN: f64 = 0.05;
 /// How far (px) and in what steps the placement rays look for the longest free line.
@@ -38,7 +43,6 @@ pub fn body_speed(m: &Monster) -> f64 {
 }
 
 /// How fast the head turns (rad/s).
-#[allow(dead_code)] // the head comes with the next task
 pub fn head_speed(a: &Attributes) -> f64 {
     HEAD_TURN.get(a)
 }
@@ -69,6 +73,36 @@ pub fn turn(run: &mut Run, mi: usize, moved: Vec2, dt: f64) {
     let wish = m.face_to.or_else(|| (moved.len() > WALK_MIN).then(|| moved.angle()));
     if let Some(w) = wish {
         m.aim = turn_toward(m.aim, w, body_speed(m) * dt);
+    }
+    // The head: straight ahead while an attack winds up or runs, else toward the wish within the neck.
+    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some();
+    let neck = m.sight_now().neck.to_radians();
+    let want = match m.look_to {
+        Some(l) if !busy => angle_diff(l, m.aim).clamp(-neck, neck),
+        _ => 0.0,
+    };
+    m.gaze = turn_toward(m.gaze, want, head_speed(&m.attrs) * dt);
+}
+
+/// An idle creature now and then looks to one side (`look_to`), within most of its neck; neck 0 never looks.
+pub fn idle_look(run: &mut Run, mi: usize, dt: f64) {
+    let neck = run.monsters[mi].sight_now().neck.to_radians();
+    if neck <= 0.0 {
+        return;
+    }
+    let ai = &mut run.monsters[mi].ai;
+    if let Some((rel, left)) = ai.idle_look {
+        ai.idle_look = (left > dt).then_some((rel, left - dt));
+        run.monsters[mi].look_to = Some(run.monsters[mi].aim + rel);
+        return;
+    }
+    ai.idle_look_t -= dt;
+    if ai.idle_look_t <= 0.0 {
+        let rel = run.rng.gen_range(-IDLE_LOOK_SPAN..IDLE_LOOK_SPAN) * neck;
+        let (every, long) = (run.rng.gen_range(IDLE_LOOK_EVERY.0..IDLE_LOOK_EVERY.1), run.rng.gen_range(IDLE_LOOK_FOR.0..IDLE_LOOK_FOR.1));
+        let ai = &mut run.monsters[mi].ai;
+        ai.idle_look = Some((rel, long));
+        ai.idle_look_t = every;
     }
 }
 
@@ -266,5 +300,84 @@ mod tests {
         steps(&mut run, 1.0);
         assert_eq!(run.monsters[mi].ai.state, AiState::Idle);
         assert!(angle_diff(run.monsters[mi].aim, 1.2).abs() < 5f64.to_radians(), "{}", run.monsters[mi].aim);
+    }
+
+    /// Runs `secs` and returns the largest per-tick change of the gaze (rad) and the largest |gaze| seen.
+    fn watch(run: &mut Run, mi: usize, secs: f64) -> (f64, f64) {
+        let (mut jump, mut wide) = (0.0f64, 0.0f64);
+        for _ in 0..(secs / DT).round() as usize {
+            let before = run.monsters[mi].gaze;
+            run.step();
+            jump = jump.max(angle_diff(run.monsters[mi].gaze, before).abs());
+            wide = wide.max(run.monsters[mi].gaze.abs());
+        }
+        (jump, wide)
+    }
+
+    #[test]
+    fn the_head_reaches_a_side_target_before_the_body() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].aim = PI - 70f64.to_radians(); // the hero lies 70 degrees to the side
+        let (jump, _) = watch(&mut run, mi, 0.1);
+        let m = &run.monsters[mi];
+        assert!(angle_diff(m.gaze_dir(), PI).abs() < 5f64.to_radians(), "head on it: {}", m.gaze_dir().to_degrees());
+        assert!(angle_diff(m.aim, PI).abs() > 20f64.to_radians(), "body still off");
+        assert!(jump <= head_speed(&m.attrs) * DT + 1e-9, "never jumps");
+    }
+
+    #[test]
+    fn the_head_stops_at_its_neck() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].aim = 0.0; // the hero is straight behind
+        let neck = run.monsters[mi].sight_now().neck.to_radians();
+        let (jump, wide) = watch(&mut run, mi, 0.3);
+        assert!(wide <= neck + 1e-9 && wide > neck - 0.05, "{wide} of {neck}");
+        assert!(jump <= head_speed(&run.monsters[mi].attrs) * DT + 1e-9);
+    }
+
+    #[test]
+    fn a_mimic_has_no_neck() {
+        let (mut run, mi) = arena(EnemyType::Mimic);
+        run.monsters[mi].hiding = false;
+        run.monsters[mi].dormant = false;
+        run.monsters[mi].aim = 0.0;
+        let (_, wide) = watch(&mut run, mi, 0.5);
+        assert_eq!(wide, 0.0);
+    }
+
+    #[test]
+    fn the_head_is_forward_during_a_wind_up() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].gaze = 1.0;
+        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 5.0, aim: 0.0, alt: false, at: None, id: None });
+        let (jump, _) = watch(&mut run, mi, 0.3);
+        assert_eq!(run.monsters[mi].gaze, 0.0);
+        assert!(jump <= head_speed(&run.monsters[mi].attrs) * DT + 1e-9);
+    }
+
+    #[test]
+    fn an_idle_creature_looks_about() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].sight.vision = 0.0;
+        run.monsters[mi].wanders = false;
+        let aim = run.monsters[mi].aim;
+        let (mut left, mut back) = (false, false);
+        for _ in 0..(10.0 / DT) as usize {
+            run.step();
+            let g = run.monsters[mi].gaze.abs();
+            left |= g > 0.1;
+            back |= left && g < 1e-9;
+        }
+        assert!(left && back, "it looked and came back");
+        assert_eq!(run.monsters[mi].aim, aim, "the body did not turn");
+    }
+
+    #[test]
+    fn the_head_never_jumps_while_idle() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].sight.vision = 0.0;
+        run.monsters[mi].wanders = false;
+        let (jump, _) = watch(&mut run, mi, 12.0);
+        assert!(jump <= head_speed(&run.monsters[mi].attrs) * DT + 1e-9);
     }
 }

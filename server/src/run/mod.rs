@@ -357,6 +357,7 @@ impl Run {
             gaze: 0.0,
             turn: prof.turn,
             face_to: None,
+            look_to: None,
             aim_dist: 0.0,
             anim: Anim::Idle,
             anim_start: self.time,
@@ -527,6 +528,7 @@ impl Run {
         let before: Vec<Vec2> = self.monsters.iter().map(|m| m.pos).collect();
         for m in &mut self.monsters {
             m.face_to = None;
+            m.look_to = None;
         }
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];

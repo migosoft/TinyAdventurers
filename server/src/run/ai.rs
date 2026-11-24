@@ -436,6 +436,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let aim = pos.angle_to(ppos);
             let rest = can_rest(run, mi, pos);
             run.monsters[mi].face_to = Some(aim);
+            run.monsters[mi].look_to = Some(aim);
             // Movement follows the main ability's reach (`reach_of`).
             let main = run.monsters[mi].kit.first().expect("a creature has its main ability").clone();
             let range = reach_of(&main, foe_radius);
@@ -538,6 +539,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     run.monsters[mi].face_to = Some(run.monsters[mi].ai.home_aim);
                 }
             }
+            super::facing::idle_look(run, mi, dt);
             // The Disciple stands still; an awake mimic waits where it was found.
             if base_ai == BaseAi::Stationary || !wanders {
                 return;

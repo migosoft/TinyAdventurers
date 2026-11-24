@@ -69,6 +69,7 @@ pub fn spawn(run: &mut Run) {
         gaze: 0.0,
         turn: prof.turn,
         face_to: None,
+        look_to: None,
         aim_dist: 0.0,
         anim: Anim::Idle,
         anim_start: 0.0,
