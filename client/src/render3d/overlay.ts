@@ -122,7 +122,12 @@ export class Overlay3d {
     }
     if (!img.complete || img.naturalWidth === 0) return; // decoding; drawn from the next frame
     ctx.globalAlpha = 1;
+    // A 1 px dark drop-shadow so pale symbols read on a lit floor (#65).
+    ctx.shadowColor = '#000000';
+    ctx.shadowOffsetY = Math.max(1, Math.round(zoom));
     ctx.drawImage(img, it.x, Math.round(it.y - px / 2), px, px);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowOffsetY = 0;
   }
 
   dispose(): void {
