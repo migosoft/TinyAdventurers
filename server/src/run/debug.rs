@@ -171,15 +171,14 @@ pub fn notice_circles(run: &Run) -> Vec<(u32, f32)> {
 }
 
 /// Every living creature's vision cone: (entity id, full angle in radians after WIL and effects, vision radius px).
+/// Charmed heroes see along their body (no head) in the cone `hero_brain::nearest_foe` uses. Things without sight (objects) are skipped.
 pub fn cones(run: &Run) -> Vec<(u32, f32, f32)> {
-    run.monsters
-        .iter()
-        .filter(|m| m.alive)
-        .map(|m| {
-            let s = m.sight_now();
-            (m.id, s.cone.to_radians() as f32, s.vision_px() as f32)
-        })
-        .collect()
+    let monsters = run.monsters.iter().filter(|m| m.alive).map(|m| (m.id, m.sight_now()));
+    let heroes = run.players.iter().filter(|p| p.alive && p.charm.is_some()).map(|p| {
+        let s = p.sight_now();
+        (p.id, crate::defs::races::Sight { cone: (s.cone + 2.0 * s.neck).min(360.0), ..s })
+    });
+    monsters.chain(heroes).filter(|(_, s)| s.vision > 0.0).map(|(id, s)| (id, s.cone.to_radians() as f32, s.vision_px() as f32)).collect()
 }
 
 /// A dodge was planned: every debug hero of a debug run sees the line from `from` to `to`.
@@ -359,7 +358,7 @@ mod tests {
 
     #[test]
     fn debug_cones_list_every_living_creature_with_its_cone() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
         crate::run::ai::tests::open_floor(&mut run);
         run.monsters.clear();
         run.debug = true;
@@ -375,10 +374,24 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.players[0].debug = true;
+        let (tx2, mut rx2) = tokio::sync::mpsc::unbounded_channel();
+        run.players[1].tx = Some(tx2);
         send_paths(&run);
         let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!("a message") };
         let msg: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
         assert_eq!(msg["cones"].as_array().map(Vec::len), Some(1), "the debug hero gets the cones");
+        assert!(rx2.try_recv().is_err(), "a player who is not in debug mode gets nothing");
+
+        // A charmed hero sees along its body in the cone plus the neck; an object has no sight and is left out.
+        run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        run.debug_effect(0, crate::defs::effects::EffectKind::Charmed as u8);
+        run.step();
+        let p = &run.players[0];
+        assert!(p.charm.is_some(), "the hero is charmed");
+        let h = p.sight_now();
+        let want = (p.id, (h.cone + 2.0 * h.neck).min(360.0).to_radians() as f32, h.vision_px() as f32);
+        assert!(cones(&run).contains(&want), "the charmed hero's cone is listed: {want:?}");
+        assert!(cones(&run).iter().all(|&(_, cone, vision)| cone > 0.0 && vision > 0.0));
     }
 
     #[test]
