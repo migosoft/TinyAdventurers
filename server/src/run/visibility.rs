@@ -10,6 +10,7 @@
 //! events).
 
 use super::targets::Side;
+use crate::collision::line_of_sight;
 use super::levels::Level;
 use super::Run;
 use crate::defs::enemies::EnemyType;
@@ -120,13 +121,13 @@ fn ev_dark(view: &View, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero:
     at.is_some_and(|p| !on_hero && !seen(view, lights, dark, p, 0.0))
 }
 
-/// Moving lights whose light can reach the viewer's sight; the colour only
-/// when it is not the kind's default.
-fn lights_for(view: Vec2, vision: i32, moving: &[Lit]) -> Vec<MovingLight> {
+/// Moving lights in range and in line of sight of the viewer (the glow of a shot behind a wall is not sent);
+/// the colour only when it is not the kind's default.
+fn lights_for(map: &Map, view: Vec2, vision: i32, moving: &[Lit]) -> Vec<MovingLight> {
     let range = (vision as f64 + 1.0) * TILE;
     moving
         .iter()
-        .filter(|l| l.pos.dist(view) <= range + l.reach())
+        .filter(|l| l.pos.dist(view) <= range + l.reach() && line_of_sight(map, view, l.pos))
         .map(|l| MovingLight(l.pos.x as f32, l.pos.y as f32, l.kind as u8, (l.colour != lights::def(l.kind).colour).then_some(l.colour)))
         .collect()
 }
@@ -346,7 +347,7 @@ pub fn send_snapshots(run: &mut Run) {
             boss: boss_bar.clone(),
             ev,
             drain,
-            lights: lights_for(view_pos, vision, &moving),
+            lights: lights_for(&run.layout.map, view_pos, vision, &moving),
             looks,
             dark: sent.dark,
             dark_ev,
@@ -612,14 +613,23 @@ mod tests {
 
     #[test]
     fn moving_lights_near_the_viewer_are_listed_with_their_colour_only_when_custom() {
+        let mut map = Map::new(20, 20);
+        for y in 0..20 {
+            for x in 0..20 {
+                map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
         let view = Vec2::new(100.0, 100.0);
         let fire = Lit::new(view + Vec2::new(40.0, 0.0), LightKind::Fire, 0xff8c3c);
         let frost = Lit::new(view + Vec2::new(0.0, 30.0), LightKind::Magic, 0x78c8ff);
         let far = Lit::new(view + Vec2::new(2000.0, 0.0), LightKind::Fire, 0xff8c3c);
-        let out = lights_for(view, PLAYER_FOV_RADIUS, &[fire, frost, far]);
+        let out = lights_for(&map, view, PLAYER_FOV_RADIUS, &[fire, frost, far]);
         assert_eq!(out.len(), 2);
         assert_eq!((out[0].2, out[0].3), (LightKind::Fire as u8, None));
         assert_eq!((out[1].2, out[1].3), (LightKind::Magic as u8, Some(0x78c8ff)));
+        let (wx, wy) = Map::tile_of(fire.pos);
+        map.set(wx - 1, wy, crate::dungeon::Tile::Wall);
+        assert_eq!(lights_for(&map, view, PLAYER_FOV_RADIUS, &[fire, frost]).len(), 1, "the glow behind a wall is not sent");
     }
 
     #[test]
