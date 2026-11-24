@@ -163,6 +163,23 @@ describe('Lobby', () => {
     p.dispatchEvent(new Event('change'));
     expect(dbg().value).toBe('FrostShard');
   });
+  it('lets the debug row follow the secondary too, and a real SetLoadout clears the debug pick', () => {
+    const l = make(true);
+    inRoom(l, false);
+    const dbg = (slot: string) => document.querySelector<HTMLSelectElement>(`.debug-loadout [data-slot="${slot}"]`)!;
+    // a debug pick, then a real SetLoadout: the debug row shows the real abilities, and a later refusal resends nothing
+    dbg('secondary').value = 'FrostNova';
+    dbg('secondary').dispatchEvent(new Event('change'));
+    expect(sent.at(-1)).toMatchObject({ t: 'DebugLoadout', secondary: { ability: 'FrostNova' } });
+    const s = sel('Secondary')!;
+    s.dispatchEvent(new Event('change'));
+    expect(sent.at(-1)).toEqual({ t: 'SetLoadout', primary: own('MagicMissile'), secondary: own('Fireball') });
+    expect(dbg('primary').value).toBe('MagicMissile');
+    expect(dbg('secondary').value).toBe('Fireball');
+    sent.length = 0;
+    l.error('Frost Nova needs INT 20.');
+    expect(sent).toEqual([]);
+  });
 });
 
 describe('debug UI', () => {

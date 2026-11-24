@@ -25,4 +25,7 @@ test('the figure holds the ranged weapon for a Ranger, else the melee one', () =
   expect(figureWeapon(fixtureInfo('ElvenRanger', { slots: { Ranged: 'ElvenBow' } }))).toBe('weapon_bow');
   expect(figureWeapon(fixtureInfo('ElvenRanger'))).toBe('weapon_duel_sword'); // no ranged weapon: the melee sprite
   expect(figureWeapon(fixtureInfo('Paladin', { slots: { Melee: 'WarHammer' } }))).toBe('weapon_hammer');
+  // An item without art (ChainMail) falls back to the class's own weapon frame.
+  expect(figureWeapon(fixtureInfo('Paladin', { slots: { Melee: 'ChainMail' } }))).toBe('weapon_knight_sword');
+  expect(figureWeapon(fixtureInfo('ElvenRanger', { slots: { Ranged: 'ChainMail', Melee: 'ChainMail' } }))).toBe('weapon_bow');
 });
