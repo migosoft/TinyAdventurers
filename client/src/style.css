@@ -1,28 +1,5 @@
 @import './fonts.css';
-
-:root {
-  --bg: #0f090e;
-  --panel: #221620;
-  --panel-edge: #5a3a4a;
-  --text: #f0e6d8;
-  --muted: #b3a3a8;
-  --gold: #e8c040;
-  --red: #e05050;
-  --green: #5cc870;
-  --faint: #847379;
-  --well: #150d13;
-  --gold-deep: #9a7420;
-  --gold-ink: #2a1806;
-  --edge-soft: #3d2834;
-  --brass-hi: #f1cf63;
-  --brass-mid: #c9962c;
-  --brass-lo: #a97a1c;
-  --card-hover: #1c121a;
-  --card-selected: linear-gradient(180deg, #33222f, #2a1b26);
-  --focus-ring: 0 0 0 3px rgba(232, 192, 64, 0.2);
-  --font-text: 'Inter', system-ui, sans-serif;
-  --font-head: 'IM Fell English SC', Georgia, serif;
-}
+@import './tokens.css';
 
 * {
   box-sizing: border-box;

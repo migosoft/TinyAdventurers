@@ -108,6 +108,7 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F7', 'nearest enemy incorporeal'],
   ['F8', 'next effect on you'],
   ['Shift+F7', 'anti-magic on/off'],
+  ['Ctrl+F8', 'previous effect (from the start: the last)'],
   ['Shift+F8', 'dispel on you'],
   ['F9', 'immortal on/off'],
 ];

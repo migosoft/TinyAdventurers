@@ -8,7 +8,7 @@ import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
-import { isProjectileKind } from './anim/defs';
+import { isHazardKind, isProjectileKind } from './anim/defs';
 import { lookOf } from './looks';
 
 export interface EntState {
@@ -117,7 +117,7 @@ export class Interpolator {
         out.set(id, toState(eb, eb[2], eb[3], eb[6], b.looks));
         continue;
       }
-      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f), b.looks, ea[7], f));
+      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, isHazardKind(eb[1]) ? ea[6] + (eb[6] - ea[6]) * f : lerpAngle(ea[6], eb[6], f), b.looks, ea[7], f));
     }
   }
 

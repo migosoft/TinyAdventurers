@@ -200,6 +200,19 @@ describe('RunSession messages', () => {
     expect(on.net.sent).toEqual([{ t: 'DebugImmortal', on: false }]);
   });
 
+  it('F8 steps forward from the first effect; Ctrl+F8 from the start reaches the last, Charmed, and wraps (#287)', () => {
+    const fwd = make({ debug: true });
+    fwd.session.debugEffect();
+    const back = make({ debug: true });
+    back.session.debugEffect(true);
+    back.session.debugEffect(true);
+    back.session.debugEffect();
+    back.session.debugEffect();
+    const n = Object.keys(EFFECT).length;
+    expect(fwd.net.sent).toEqual([{ t: 'DebugEffect', kind: 0 }]);
+    expect(back.net.sent.map((m) => (m as { kind: number }).kind)).toEqual([EFFECT.Charmed, n - 2, n - 1, 0]);
+  });
+
   it('destroy unsubscribes', () => {
     const { net, hud, session } = make();
     session.destroy();

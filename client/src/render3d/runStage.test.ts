@@ -352,6 +352,10 @@ describe('the run stage', () => {
       expect(press(code, shift, true)).toBe(true); // a held key: no second call, still not the browser's (F7 is caret browsing)
     }
     for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalledTimes(1);
+    expect(spies.effect).toHaveBeenLastCalledWith(false);
+    expect(stage.key!({ code: 'F8', ctrlKey: true, repeat: false } as KeyboardEvent)).toBe(true);
+    expect(spies.effect).toHaveBeenLastCalledWith(true);
+    expect(spies.dispel).toHaveBeenCalledTimes(1);
   });
 
   const click = (target: Element, button = 0): void => {

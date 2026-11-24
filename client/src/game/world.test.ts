@@ -258,6 +258,18 @@ describe('Interpolator shot height', () => {
   });
 });
 
+describe('Interpolator hazard radius', () => {
+  it('interpolates a hazard\'s radius (element 6) as a number, not as an angle', () => {
+    const fire = (r: number) => [9, KIND.FirePatch, 10, 10, 255, 0, r, 0, 0, 0, 0, 2] as EntSnap;
+    const it = new Interpolator();
+    it.push({ ...snap(1, 0, 0), ents: [fire(2)] }, 0);
+    it.push({ ...snap(2, 0, 0), ents: [fire(10)] }, CONST.DT);
+    const out = new Map<number, EntState>();
+    it.sample(0.5 * CONST.DT + it.delay, out);
+    expect(out.get(9)?.aim).toBeCloseTo(6, 6);
+  });
+});
+
 describe('Volley', () => {
   it('volleyShotIds never contains 0 and wraps', () => {
     expect(volleyShotIds(5, 3)).toEqual([5, 6, 7]);

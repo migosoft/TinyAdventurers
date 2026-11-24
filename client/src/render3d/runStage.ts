@@ -310,7 +310,7 @@ export function createRunStage(
         case 'F8':
           if (!e.repeat) {
             if (e.shiftKey) session.debugDispel();
-            else session.debugEffect();
+            else session.debugEffect(!!e.ctrlKey);
           }
           return true;
         case 'F9':
