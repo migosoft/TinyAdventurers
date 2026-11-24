@@ -258,7 +258,7 @@ export class RunSession {
     const hiddenShots = this.shots.hidden(this.ents, this.interp.latest(), this.runInfo.you);
     this.shots.update(dt, now, { map: this.map, ents: this.ents, rtt: this.net.rtt, interpDelay: this.interp.delay }, (s, how) => this.view?.shotEnded(s, how));
     const own = this.ownHero(px, py, now);
-    const useHint = this.isAlive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.runInfo.you, px, py) : null;
+    const useHint = this.isAlive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.runInfo.you, this.pred.state.x, this.pred.state.y) : null;
     this.hud.setAsleep(this.isAlive && has(this.myEffects(), EFFECT.Sleep));
     // Dodge lines fade over 0.6 s; none while debug is off or the hero is dead. The session owns the array, so it prunes it.
     const dodges = this.debug.dodges;

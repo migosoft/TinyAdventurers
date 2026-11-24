@@ -482,6 +482,21 @@ describe('the run view and the effects (#308)', () => {
     expect(f?.fx?.lit.n).toBe(0);
   });
 
+  it('a barrel blast shakes the camera near the own hero and not far away', () => {
+    const shifted = (bx: number): boolean => {
+      const r = run();
+      const steady = r.f!.cam;
+      r.v.event({ t: 'Boom', x: bx, y: 24, r: 20, k: 7 } as never, { x: 56, y: 24 });
+      for (let i = 0; i < 4; i++) {
+        r.ctx.now += 0.016;
+        const c = r.again()!.cam;
+        if (c.x !== steady.x || c.z !== steady.z) return true;
+      }
+      return false;
+    };
+    expect(shifted(60)).toBe(true);
+    expect(shifted(56 + 5000)).toBe(false);
+  });
   it('a hit on the own hero shakes only the drawn camera, and the shake ends', () => {
     const r = run();
     const steady = r.f!.cam;

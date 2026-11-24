@@ -48,7 +48,7 @@ import { Cove3d } from './cove3d';
 import type { FrameInput, SunFrame, View } from './view';
 import { Effects3d } from './fx/effects3d';
 import { FxPass } from './fx/pass';
-import { Shake, groundShift } from './fx/shake';
+import { Shake, blastFalloff, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
 import { reflects, shimmers } from './params';
@@ -79,6 +79,9 @@ export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 |
   const w = keysToWorld(yawRad, ix, iz);
   return dir8(w.x, w.z);
 }
+
+/** A Boom kind's camera shake near the own hero: [ms, intensity]. */
+const BLAST_SHAKE: Record<number, readonly [number, number]> = { 0: [120, 0.004], 4: [120, 0.004], 7: [120, 0.004], 6: [200, 0.007], 10: [200, 0.007], 5: [140, 0.005] };
 
 export class RunView3d implements RunView {
   /** Draw calls of the last frame. */
@@ -640,9 +643,11 @@ export class RunView3d implements RunView {
     this.fx.event(ev, this.clockNow, dark);
     // The camera shakes on a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
-    else if (ev.t === 'Boom' && (ev.k === 0 || ev.k === 4 || ev.k === 7)) this.shake.kick(120, 0.004);
-    else if (ev.t === 'Boom' && (ev.k === 6 || ev.k === 10)) this.shake.kick(200, 0.007);
-    else if (ev.t === 'Boom' && ev.k === 5) this.shake.kick(140, 0.005);
+    else if (ev.t === 'Boom' && BLAST_SHAKE[ev.k]) {
+      // Full near the own hero, none beyond about half a screen's width.
+      const near = blastFalloff(Math.hypot(ev.x - own.x, ev.y - own.y), this.c ? this.c.canvas.w / this.c.zoom / 2 : 0);
+      if (near > 0) this.shake.kick(BLAST_SHAKE[ev.k][0], BLAST_SHAKE[ev.k][1] * near);
+    }
     else if (ev.t === 'Died' && isBossKind(ev.kind)) this.shake.kick(120, 0.004);
     else if (ev.t === 'Boom' && ev.k === 11 && Math.hypot(ev.x - own.x, ev.y - own.y) < CONST.PLAYER_RADIUS * 2) this.shake.kick(100, 0.003);
     // A hit on the own hero is born at the predicted foot (#281).
