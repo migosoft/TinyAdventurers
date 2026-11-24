@@ -133,19 +133,18 @@ fn read_equipment(value: Option<&Value>, class: ClassId) -> Equipment {
         return starter();
     };
     // Slots are stored by position. A document from before a slot was appended to `EquipSlot::ALL` is shorter:
-    // the zip below leaves the missing slots empty and keeps every stored item.
+    // the zip below keeps every stored slot as stored; a slot not stored keeps the class starter.
     if slots.len() != EquipSlot::COUNT {
         tracing::warn!("progress: {} equipment slots stored, {} known", slots.len(), EquipSlot::COUNT);
     }
-    let mut e = Equipment::default();
+    let mut e = starter();
     for (slot, v) in EquipSlot::ALL.iter().zip(slots) {
-        if v.is_null() {
-            continue;
-        }
-        match serde_json::from_value::<ItemId>(v.clone()) {
-            Ok(item) => e.set(*slot, Some(item)),
-            Err(_) => tracing::warn!("progress: unknown item id {v} in the equipment dropped"),
-        }
+        let item = if v.is_null() {
+            None
+        } else {
+            serde_json::from_value::<ItemId>(v.clone()).map_err(|_| tracing::warn!("progress: unknown item id {v} in the equipment dropped")).ok()
+        };
+        e.set(*slot, item);
     }
     e
 }
@@ -474,6 +473,13 @@ mod tests {
             assert_eq!(q.equipment.get(*s), p.equipment.get(*s), "{s:?}");
         }
         assert_eq!(q.equipment.get(last), None);
+    }
+
+    #[test]
+    fn a_slot_not_stored_falls_back_to_its_starter() {
+        let mut v = Progress::new(W).to_json();
+        v["equipment"]["slots"] = json!([]);
+        assert_eq!(Progress::from_json(v, W).equipment, Equipment::starter(W));
     }
 
     #[test]

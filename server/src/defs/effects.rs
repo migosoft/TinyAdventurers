@@ -59,6 +59,30 @@ impl EffectKind {
     pub fn bit(self) -> u32 {
         1 << self as u32
     }
+    pub fn name(self) -> &'static str {
+        match self {
+            EffectKind::Blind => "Blind",
+            EffectKind::Sleep => "Sleep",
+            EffectKind::Petrified => "Petrified",
+            EffectKind::Slowed => "Slowed",
+            EffectKind::Accelerated => "Accelerated",
+            EffectKind::Burning => "Burning",
+            EffectKind::Frozen => "Frozen",
+            EffectKind::Poisoned => "Poisoned",
+            EffectKind::Chilled => "Chilled",
+            EffectKind::Singed => "Singed",
+            EffectKind::Tainted => "Tainted",
+            EffectKind::Entangled => "Entangled",
+            EffectKind::Fear => "Fear",
+            EffectKind::Warded => "Warded",
+            EffectKind::Coated => "Coated",
+            EffectKind::Invisible => "Invisible",
+            EffectKind::Weakened => "Weakened",
+            EffectKind::Clumsy => "Clumsy",
+            EffectKind::Frail => "Frail",
+            EffectKind::Charmed => "Charmed",
+        }
+    }
     pub fn from_u8(v: u8) -> Option<EffectKind> {
         EffectKind::ALL.get(v as usize).copied()
     }
@@ -577,10 +601,9 @@ mod tests {
     #[test]
     fn effect_names_are_unique() {
         use crate::defs::abilities::same_name;
-        let name = crate::run::rules_log::text::effect_name;
         for (i, a) in EffectKind::ALL.iter().enumerate() {
             for b in &EffectKind::ALL[i + 1..] {
-                assert!(!same_name(name(*a), name(*b)), "{a:?} and {b:?} share a name");
+                assert!(!same_name(a.name(), b.name()), "{a:?} and {b:?} share a name");
             }
         }
     }

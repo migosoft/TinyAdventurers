@@ -228,7 +228,7 @@ fn pct(v: f64) -> String {
 /// A number with its sign: "+5", "-5".
 #[allow(dead_code)] // read by the progression.ts export (a test) only
 fn signed(v: f64) -> String {
-    if v < 0.0 { format!("-{}", -v) } else { format!("+{v}") }
+    if v < 0.0 { format!("-{}", -v) } else { format!("+{}", v.abs()) } // abs: -0.0 reads "+0"
 }
 
 /// A base's numbers as the tooltip reads them ("" for rings, shoes and belts).
@@ -264,11 +264,11 @@ pub fn base_text(b: &ItemBase) -> String {
 pub fn prop_text(p: &ItemProperty) -> String {
     match p.kind {
         PropKind::DamageShare(t, v) => format!("{} % {} share", pct(v), t.name().to_lowercase()),
-        PropKind::OnHit(h) => format!("On hit: {}", crate::run::rules_log::text::effect_name(h.kind)),
+        PropKind::OnHit(h) => format!("On hit: {}", h.kind.name()),
         PropKind::Light(k) => format!("Gives light ({k:?})"),
         PropKind::Resist(t, v) => format!("{} % {} resistance", pct(v), t.name().to_lowercase()),
         PropKind::Attr(a, n) => format!("{} {}", signed(n as f64), a.short()),
-        PropKind::EffectResist(k, v) => format!("{k:?} resistance {} %", pct(v)),
+        PropKind::EffectResist(k, v) => format!("{} resistance {} %", k.name(), pct(v)),
         PropKind::Weight(w) => format!("Weight {}", signed(w)),
         PropKind::MoveSpeed(f) => format!("Move speed {} %", pct(f)),
         PropKind::MaxHp(hp) => format!("{} HP", signed(hp)),
@@ -540,7 +540,7 @@ mod tests {
     use ItemId as I;
 
     #[test]
-    fn negative_numbers_and_on_hits_read_plainly() {
+    fn negative_numbers_read_plainly() {
         let text = |kind| prop_text(&ItemProperty { kind, magical: false });
         assert_eq!(text(PropKind::MaxHp(-5.0)), "-5 HP");
         assert_eq!(text(PropKind::Weight(-2.0)), "Weight -2");

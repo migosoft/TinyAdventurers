@@ -58,28 +58,7 @@ fn hazard_name(k: EntityKind) -> &'static str {
 }
 
 pub fn effect_name(k: EffectKind) -> &'static str {
-    match k {
-        EffectKind::Blind => "Blind",
-        EffectKind::Sleep => "Sleep",
-        EffectKind::Petrified => "Petrified",
-        EffectKind::Slowed => "Slowed",
-        EffectKind::Accelerated => "Accelerated",
-        EffectKind::Burning => "Burning",
-        EffectKind::Frozen => "Frozen",
-        EffectKind::Poisoned => "Poisoned",
-        EffectKind::Chilled => "Chilled",
-        EffectKind::Singed => "Singed",
-        EffectKind::Tainted => "Tainted",
-        EffectKind::Entangled => "Entangled",
-        EffectKind::Fear => "Fear",
-        EffectKind::Warded => "Warded",
-        EffectKind::Coated => "Coated",
-        EffectKind::Invisible => "Invisible",
-        EffectKind::Weakened => "Weakened",
-        EffectKind::Clumsy => "Clumsy",
-        EffectKind::Frail => "Frail",
-        EffectKind::Charmed => "Charmed",
-    }
+    k.name()
 }
 
 pub fn type_name(t: DamageType) -> &'static str {

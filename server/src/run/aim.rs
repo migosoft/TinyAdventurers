@@ -81,9 +81,13 @@ impl Run {
     /// A creature's velocity (px/s) over its last `LEAD_TICKS` ticks (fewer while its history is short), from its
     /// position history: one tick is jittery for a hero, whose speed changes with every input.
     pub fn creature_vel(&self, c: Creature) -> Vec2 {
-        let (len, ago): (usize, Box<dyn Fn(usize) -> Vec2>) = match c {
-            Creature::Player(pi) => (self.players[pi].history.len(), Box::new(move |t| self.players[pi].pos_ago(t))),
-            Creature::Monster(mi) => (self.monsters[mi].history.len(), Box::new(move |t| self.monsters[mi].pos_ago(t))),
+        let len = match c {
+            Creature::Player(pi) => self.players[pi].history.len(),
+            Creature::Monster(mi) => self.monsters[mi].history.len(),
+        };
+        let ago = |t| match c {
+            Creature::Player(pi) => self.players[pi].pos_ago(t),
+            Creature::Monster(mi) => self.monsters[mi].pos_ago(t),
         };
         let n = LEAD_TICKS.min(len.saturating_sub(1)).max(1);
         (ago(1) - ago(1 + n)) * (1.0 / (n as f64 * DT))

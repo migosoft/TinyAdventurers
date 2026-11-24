@@ -421,10 +421,9 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
                 spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i as u8), Vec2::from_angle(aim + off), None, 0.0, land);
             }
             // Range finding learns once per volley: from the middle arrow, not from every side arrow.
-            for (i, p) in run.projectiles[first..].iter_mut().enumerate() {
-                if i != offsets.len() / 2 {
-                    p.aimed = None;
-                }
+            let mid = ab::volley_shot(shot, (offsets.len() / 2) as u8);
+            for p in run.projectiles[first..].iter_mut().filter(|p| p.shot != mid) {
+                p.aimed = None;
             }
         }
         // The demon's ring: `count` orbs spread over the full circle, starting at the aim, and a burst where it stands.
