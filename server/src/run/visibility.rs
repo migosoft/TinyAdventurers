@@ -288,7 +288,9 @@ pub fn send_snapshots(run: &mut Run) {
         let me = &run.players[pi];
         let viewed = if me.alive { me } else { me.spectating.and_then(|s| run.players.iter().find(|q| q.id == s)).unwrap_or(me) };
         let (view_pos, sight, viewed_id) = (viewed.pos(), viewed.sight_now(), viewed.id);
-        let mut view = std::mem::replace(&mut run.players[pi].view, View::new(0, 0));
+        // A spectator shares the viewed hero's view (`View::compute` is a no-op while nothing changed), so it is computed once.
+        let vi = run.players.iter().position(|q| q.id == viewed_id).expect("the viewed hero is a player");
+        let mut view = std::mem::replace(&mut run.players[vi].view, View::new(0, 0));
         let (tx, ty) = Map::tile_of(view_pos);
         let vision = sight.vision.round() as i32;
         view.compute(&run.layout.map, view_pos, vision);
@@ -354,7 +356,7 @@ pub fn send_snapshots(run: &mut Run) {
             solids,
             srv_ms: run.srv_ms,
         };
-        run.players[pi].view = view;
+        run.players[vi].view = view;
         if let Some(tx) = &run.players[pi].tx {
             let _ = tx.send(axum::extract::ws::Message::Binary(encode_snap(&snap).into()));
         }

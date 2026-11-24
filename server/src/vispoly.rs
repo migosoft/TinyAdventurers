@@ -58,6 +58,77 @@ pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64, b: Blocker) -> Vec<Seg
     segs
 }
 
+/// The map's wall edges merged once (`wall_segments` for the whole map, `Blocker::All`), per line of tile edges:
+/// `h[y]` holds the runs `(x0, x1)` on the line between rows y-1 and y, `v[x]` the runs `(y0, y1)` between columns x-1 and x.
+/// `segments` clips them to the window `wall_segments` scans, so it returns exactly the same list.
+pub struct WallRuns {
+    rev: u32,
+    h: Vec<Vec<(i32, i32)>>,
+    v: Vec<Vec<(i32, i32)>>,
+}
+
+impl WallRuns {
+    fn build(map: &Map) -> Self {
+        let runs = |lines: i32, len: i32, side_at: &dyn Fn(i32, i32) -> u8| -> Vec<Vec<(i32, i32)>> {
+            (0..=lines)
+                .map(|l| {
+                    let mut out = Vec::new();
+                    let (mut start, mut side) = (0, 0);
+                    for i in 0..=len {
+                        let s = if i < len { side_at(l, i) } else { 0 };
+                        if s != side {
+                            if side != 0 {
+                                out.push((start, i));
+                            }
+                            start = i;
+                            side = s;
+                        }
+                    }
+                    out
+                })
+                .collect()
+        };
+        let b = Blocker::All;
+        let h = runs(map.h, map.w, &|y, x| match (map.blocks_sight(x, y - 1, b), map.blocks_sight(x, y, b)) {
+            (true, false) => 1,
+            (false, true) => 2,
+            _ => 0,
+        });
+        let v = runs(map.w, map.h, &|x, y| match (map.blocks_sight(x - 1, y, b), map.blocks_sight(x, y, b)) {
+            (true, false) => 1,
+            (false, true) => 2,
+            _ => 0,
+        });
+        WallRuns { rev: map.rev, h, v }
+    }
+
+    /// The same segments, in the same order, as `wall_segments(map, px, py, r, Blocker::All)`.
+    fn segments(&self, px: f64, py: f64, r: f64) -> Vec<Segment> {
+        let x0 = ((px - r) / TILE).floor() as i32 - 1;
+        let y0 = ((py - r) / TILE).floor() as i32 - 1;
+        let x1 = ((px + r) / TILE).floor() as i32 + 1;
+        let y1 = ((py + r) / TILE).floor() as i32 + 1;
+        let mut segs = Vec::new();
+        for y in y0.max(0)..=(y1 + 1).min(self.h.len() as i32 - 1) {
+            for &(a, b) in &self.h[y as usize] {
+                let (a, b) = (a.max(x0), b.min(x1 + 1));
+                if a < b {
+                    segs.push([a as f64 * TILE, y as f64 * TILE, b as f64 * TILE, y as f64 * TILE]);
+                }
+            }
+        }
+        for x in x0.max(0)..=(x1 + 1).min(self.v.len() as i32 - 1) {
+            for &(a, b) in &self.v[x as usize] {
+                let (a, b) = (a.max(y0), b.min(y1 + 1));
+                if a < b {
+                    segs.push([x as f64 * TILE, a as f64 * TILE, x as f64 * TILE, b as f64 * TILE]);
+                }
+            }
+        }
+        segs
+    }
+}
+
 /// Distance along the unit ray (dx, dy) from (ox, oy) to the nearest segment, at most `max`.
 fn cast(ox: f64, oy: f64, dx: f64, dy: f64, segs: &[Segment], max: f64) -> f64 {
     let mut best = max;
@@ -88,8 +159,11 @@ pub struct SightPolygon {
 /// The visibility polygon from (px, py) within `r` px: rays at `steps` even angles and to every
 /// segment end (and just beside it), each stopping at the nearest segment or at `r`.
 pub fn sight_polygon(map: &Map, px: f64, py: f64, r: f64, steps: usize, b: Blocker) -> SightPolygon {
+    polygon_from(wall_segments(map, px, py, r, b), px, py, r, steps)
+}
+
+fn polygon_from(segs: Vec<Segment>, px: f64, py: f64, r: f64, steps: usize) -> SightPolygon {
     use std::f64::consts::PI;
-    let segs = wall_segments(map, px, py, r, b);
     let mut angles: Vec<f64> = (0..steps).map(|i| (i as f64 / steps as f64) * PI * 2.0 - PI).collect();
     for &[ax, ay, bx, by] in &segs {
         for (x, y) in [(ax, ay), (bx, by)] {
@@ -145,25 +219,45 @@ pub struct View {
     h: i32,
     stamp: Vec<u32>,
     gen: u32,
+    /// What the stamps were computed for by `compute`: the position (bits), the vision and the map's `rev`.
+    key: Option<(u64, u64, i32, u32)>,
+    walls: Option<WallRuns>,
 }
 
 impl View {
     pub fn new(w: i32, h: i32) -> Self {
-        View { fov: Fov::new(w, h), w, h, stamp: vec![0; (w * h).max(0) as usize], gen: 0 }
+        View { fov: Fov::new(w, h), w, h, stamp: vec![0; (w * h).max(0) as usize], gen: 0, key: None, walls: None }
     }
 
-    /// The view from `p` (px) with `vision` tiles.
+    /// The view from `p` (px) with `vision` tiles, seeing every opaque tile. It is not recomputed while the position,
+    /// the vision and the map's tiles are unchanged (the result is the same), and takes the wall edges from a per-view
+    /// cache of the map's merged edges, rebuilt when a tile changed. Use one `View` with one map.
     pub fn compute(&mut self, map: &Map, p: Vec2, vision: i32) {
-        self.compute_with(map, p, vision, Blocker::All);
+        let key = (p.x.to_bits(), p.y.to_bits(), vision, map.rev);
+        if self.key == Some(key) {
+            return;
+        }
+        if self.walls.as_ref().map_or(true, |w| w.rev != map.rev) {
+            self.walls = Some(WallRuns::build(map));
+        }
+        let r = sight_radius(vision);
+        let segs = self.walls.as_ref().expect("built above").segments(p.x, p.y, r);
+        self.fill(map, p, vision, Blocker::All, polygon_from(segs, p.x, p.y, r, 96));
+        self.key = Some(key);
     }
 
     /// The view when only `b` blockers stop sight (`Hard`: trunks and thickets let it through).
     pub fn compute_with(&mut self, map: &Map, p: Vec2, vision: i32, b: Blocker) {
+        self.key = None;
+        let poly = sight_polygon(map, p.x, p.y, sight_radius(vision), 96, b);
+        self.fill(map, p, vision, b, poly);
+    }
+
+    fn fill(&mut self, map: &Map, p: Vec2, vision: i32, b: Blocker, poly: SightPolygon) {
         let r = sight_radius(vision);
         self.gen = self.gen.wrapping_add(1).max(1);
         let (tx, ty) = Map::tile_of(p);
         self.fov.compute(map, tx, ty, vision, b);
-        let poly = sight_polygon(map, p.x, p.y, r, 96, b);
         let x0 = (((p.x - r) / TILE).floor() as i32).max(0);
         let y0 = (((p.y - r) / TILE).floor() as i32).max(0);
         let x1 = (((p.x + r) / TILE).floor() as i32).min(self.w - 1);
@@ -295,5 +389,32 @@ mod tests {
         let s = sight_polygon(&map, 24.0, 24.0, 160.0, 96, Blocker::All);
         let far = s.points.iter().map(|p| p.0).fold(f64::MIN, f64::max);
         assert!((far - 64.0).abs() < 1e-6);
+    }
+
+    fn same_view(a: &View, b: &View, map: &Map) -> bool {
+        (0..map.h).all(|y| (0..map.w).all(|x| a.is_visible(x, y) == b.is_visible(x, y)))
+    }
+
+    #[test]
+    fn the_cached_view_and_merged_walls_equal_a_fresh_compute_after_moves_and_a_door_change() {
+        let mut map = room(30, 24, &[(10, 10), (11, 10), (12, 10), (20, 5), (20, 6), (5, 18)]);
+        map.set(15, 0, Tile::DoorClosed);
+        let mut cached = View::new(map.w, map.h);
+        let spots = [(100.0, 100.0), (100.0, 100.0), (101.5, 100.25), (300.0, 200.0), (20.0, 20.0), (460.0, 370.0), (150.0, 90.0)];
+        for step in 0..2 {
+            for &(x, y) in &spots {
+                let p = Vec2::new(x, y);
+                for vision in [3, 8] {
+                    cached.compute(&map, p, vision);
+                    let mut fresh = View::new(map.w, map.h);
+                    fresh.compute_with(&map, p, vision, Blocker::All);
+                    assert!(same_view(&cached, &fresh, &map), "step {step} at {x},{y} vision {vision}");
+                    let walls = cached.walls.as_ref().unwrap().segments(x, y, sight_radius(vision));
+                    assert_eq!(walls, wall_segments(&map, x, y, sight_radius(vision), Blocker::All));
+                }
+            }
+            map.set(12, 10, Tile::Floor); // a tile changes (an opening door): the cache must follow
+            map.set(15, 0, Tile::DoorOpen);
+        }
     }
 }
