@@ -127,12 +127,7 @@ impl BossBehaviour for Dragon {
             return;
         }
 
-        let Some((_pi, ppos, dist)) = target(run, bi) else {
-            set_anim(run, bi, Anim::Idle);
-            return;
-        };
-        let to_target = pos.angle_to(ppos);
-        // Tail whip when someone sneaks behind (not in the air).
+        // Tail whip when someone sneaks behind (not in the air). It feels the foe behind it, so it needs no sight of it.
         let tail = kit(run, bi, AbilityId::TailWhip);
         // A kit range is measured to the target's edge: the centre distance adds the hero's radius.
         let someone_behind = foe_behind(run, bi, tail.range + PLAYER_RADIUS - TAIL_SLACK);
@@ -140,6 +135,11 @@ impl BossBehaviour for Dragon {
             self.start(run, bi, Action::Tail, tail.windup, Anim::Tail);
             return;
         }
+        let Some((_pi, ppos, dist)) = target(run, bi) else {
+            set_anim(run, bi, Anim::Idle);
+            return;
+        };
+        let to_target = pos.angle_to(ppos);
         run.monsters[bi].aim = to_target;
         let (breath, bite, claw) = (kit(run, bi, AbilityId::FireBreath), kit(run, bi, AbilityId::Bite), kit(run, bi, AbilityId::Strike));
         if ready(run, bi, &self.opening, AbilityId::FireBreath) && dist < breath.range {

@@ -42,6 +42,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         sight: prof.sight,
         alive: true,
         aim: 0.0,
+        gaze: 0.0,
+        turn: prof.turn,
         aim_dist: 0.0,
         anim: Anim::Idle,
         anim_start: run.time,

@@ -87,7 +87,7 @@ impl Lich {
     /// visible hero the lich sees and who does not already suffer its effect. Returns (spell, hero index).
     fn ready_spell(&self, run: &Run, bi: usize) -> Option<(AbilityId, usize)> {
         let m = &run.monsters[bi];
-        let (sight, at) = (m.sight_now(), m.pos);
+        let (sight, at, dir) = (m.sight_now(), m.pos, m.gaze_dir());
         SPELLS.iter().find_map(|&s| {
             if !self.ready(run, bi, s) {
                 return None;
@@ -96,7 +96,7 @@ impl Lich {
             run.players
                 .iter()
                 .enumerate()
-                .filter(|(pi, p)| crate::run::targets::foes(m.side, p.side) && p.alive && !run.has_effect(Creature::Player(*pi), effect) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .filter(|(pi, p)| crate::run::targets::foes(m.side, p.side) && p.alive && !run.has_effect(Creature::Player(*pi), effect) && crate::run::perception::sees(run, sight, at, dir, p.pos()))
                 .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
                 .map(|(pi, _)| (s, pi))
         })
@@ -662,7 +662,7 @@ pub(crate) mod tests {
         run.players[0].mv.y = 4.0;
         let bi = boss_idx(&run).unwrap();
         let (sight, at) = (run.monsters[bi].sight_now(), run.monsters[bi].pos);
-        assert!(!crate::run::perception::sees(&run, sight, at, run.players[0].pos()), "precondition: out of sight");
+        assert!(!crate::run::perception::in_open(&run, sight, at, run.players[0].pos()), "precondition: out of sight");
         let w = windup(&run, AbilityId::StoneGaze);
         ticks(&mut run, &mut l, w);
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));

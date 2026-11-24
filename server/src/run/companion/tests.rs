@@ -199,7 +199,7 @@ fn knight_keeps_its_leash() {
     run.monsters[orc].pos = hero + Vec2::new(far, 0.0);
     run.monsters[orc].ai.hold = 1e9;
     let sight = run.monsters[mi].sight_now();
-    assert!(crate::run::perception::sees(&run, sight, run.monsters[mi].pos, run.monsters[orc].pos), "the orc is in sight");
+    assert!(crate::run::perception::sees(&run, sight, run.monsters[mi].pos, run.monsters[mi].gaze_dir(), run.monsters[orc].pos), "the orc is in sight");
     let hp = run.monsters[orc].hp;
     for _ in 0..120 {
         run.step();
@@ -416,6 +416,7 @@ fn monsters_ignore_the_neutral_knight_then_attack_it() {
     assert!(recruit(&mut run, 0));
     move_player(&mut run, 0, k + Vec2::new(-(vision * 0.9), 0.0));
     move_player(&mut run, 1, k + Vec2::new(-(vision * 0.9), 10.0));
+    crate::run::tests::face(&mut run, oi, k);
     let mut targeted = false;
     for _ in 0..30 {
         run.step();

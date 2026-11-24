@@ -3,7 +3,7 @@
 //! effects; an entity can have several races, plus its own
 //! adjustments (`Adjust`). Balancing edits only this data.
 
-use super::attributes::{Attr, AttrSources, Attributes, BASELINE, BASELINE_ATTRS};
+use super::attributes::{Attr, AttrSources, Attributes, Scaled, BASELINE, BASELINE_ATTRS};
 use super::damage::{DamageType, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 
@@ -33,16 +33,28 @@ super::enum_list::listed_enum! {
 }
 
 /// How far an entity sees, in tiles (fractions allowed): `vision` in the
-/// light, `darkvision` into the dark.
+/// light, `darkvision` into the dark. `cone` is the full angle it sees in, on its gaze (degrees, 360 = all round);
+/// `neck` is how far its head turns to each side of the body (degrees).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sight {
     pub vision: f64,
     pub darkvision: f64,
+    pub cone: f64,
+    pub neck: f64,
 }
+
+/// A creature's cone widens by this share per WIL point above the baseline (capped at 360 degrees).
+pub const CONE_WIL_PCT: f64 = 0.04;
 
 impl Sight {
     #[cfg(test)]
-    pub const NONE: Sight = Sight { vision: 0.0, darkvision: 0.0 };
+    pub const NONE: Sight = Sight { vision: 0.0, darkvision: 0.0, cone: 0.0, neck: 0.0 };
+
+    /// The cone widened by WIL (the neck stays).
+    pub fn widened(self, a: &Attributes) -> Sight {
+        let cone = Scaled { value: self.cone, attr: Attr::Wil, pct: CONE_WIL_PCT, at: BASELINE }.get(a);
+        Sight { cone: cone.min(360.0), ..self }
+    }
 
     /// Vision radius in px.
     pub fn vision_px(&self) -> f64 {
@@ -75,6 +87,11 @@ pub struct RaceDef {
     /// Vision and darkvision (tiles).
     pub vision: f64,
     pub darkvision: f64,
+    /// The full angle it sees in (degrees), how far its head turns to each side (degrees) and the factor on its
+    /// body's turn speed.
+    pub cone: f64,
+    pub neck: f64,
+    pub turn: f64,
     /// Attribute bonus of the race (only the Elf and the Magical Beast have one).
     pub attrs: Attributes,
     /// Its effect resistances (elves and magical beasts never fall asleep).
@@ -88,16 +105,17 @@ pub fn race_def(r: Race) -> RaceDef {
     let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
     let fear = |r| EffectResistances::of(&[(EffectKind::Fear, r)]);
     let charm = |r| EffectResistances::of(&[(EffectKind::Charmed, r)]);
-    let plain = |res, vision, darkvision| RaceDef { res, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE, traits: Traits::default() };
+    let plain = |res, vision, darkvision| RaceDef { res, vision, darkvision, cone: 150.0, neck: 80.0, turn: 1.0, attrs: none, effect_res: EffectResistances::NONE, traits: Traits::default() };
     match r {
         Race::Human => plain(Resistances::NONE, 9.0, 0.0),
-        Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
-        Race::Mimic => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
-        Race::Animal => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
+        Race::Goblin | Race::Orc => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
+        Race::Ogre => RaceDef { turn: 0.6, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
+        Race::Mimic => RaceDef { neck: 0.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
+        Race::Animal => RaceDef { cone: 270.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
         Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)).strongest(charm(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
         Race::Demon => RaceDef { effect_res: fear(0.5).strongest(charm(0.5)), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), 9.0, 1.0) },
-        Race::Dragon => RaceDef { effect_res: charm(0.5), ..plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0) },
-        Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), 0.0, 0.0),
+        Race::Dragon => RaceDef { neck: 120.0, turn: 0.5, effect_res: charm(0.5), ..plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0) },
+        Race::Object => RaceDef { cone: 0.0, neck: 0.0, ..plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), 0.0, 0.0) },
         Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), 18.0, 1.0 / 3.0) },
         Race::Incorporeal => {
             // No `_` arm: a new damage type must be decided here before it compiles.
@@ -136,10 +154,14 @@ pub struct Adjust {
     /// Replace the vision and darkvision (tiles) of the races.
     pub vision: Option<f64>,
     pub darkvision: Option<f64>,
+    /// Replace the cone, the neck and the turn factor of the races.
+    pub cone: Option<f64>,
+    pub neck: Option<f64>,
+    pub turn: Option<f64>,
 }
 
 impl Adjust {
-    pub const NONE: Adjust = Adjust { res: Resistances::NONE, effect_res: EffectResistances::NONE, vision: None, darkvision: None };
+    pub const NONE: Adjust = Adjust { res: Resistances::NONE, effect_res: EffectResistances::NONE, vision: None, darkvision: None, cone: None, neck: None, turn: None };
 }
 
 /// What an entity takes and deals: stored on it at spawn.
@@ -148,17 +170,23 @@ pub struct Profile {
     pub res: Resistances,
     pub effect_res: EffectResistances,
     pub sight: Sight,
+    /// The factor on its body's turn speed (the smallest of its races).
+    pub turn: f64,
     pub traits: Traits,
 }
 
-/// Resistances (damage and effect): per type the strongest (largest absolute value) of its races, then the adjustment added on top. Sight: the best of the races, else the adjustment's. Traits: merged over the races.
+/// Resistances (damage and effect): per type the strongest (largest absolute value) of its races, then the adjustment added on top. Sight (cone and neck too): the best of the races, else the adjustment's; the turn factor the smallest. Traits: merged over the races.
 pub fn profile(races: &[Race], adj: Adjust) -> Profile {
     let res = races.iter().fold(Resistances::NONE, |r, &t| r.strongest(race_def(t).res)).plus(adj.res);
     let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.strongest(race_def(t).effect_res)).plus(adj.effect_res);
     let best = |f: fn(&RaceDef) -> f64| races.iter().map(|&t| f(&race_def(t))).fold(0.0, f64::max);
-    let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)) };
+    let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)),
+        cone: adj.cone.unwrap_or_else(|| best(|d| d.cone)),
+        neck: adj.neck.unwrap_or_else(|| best(|d| d.neck)),
+    };
+    let turn = adj.turn.unwrap_or_else(|| races.iter().map(|&t| race_def(t).turn).fold(1.0, f64::min));
     let traits = races.iter().fold(Traits::default(), |t, &r| t.merge(race_def(r).traits));
-    Profile { res, effect_res, sight, traits }
+    Profile { res, effect_res, sight, turn, traits }
 }
 
 #[cfg(test)]
@@ -224,12 +252,12 @@ mod tests {
         use crate::defs::effects::{EffectKind, EffectResistances};
         let r = classes::profile(ClassId::ElvenRanger);
         assert!((r.res.get(Poison) - 0.1).abs() < 1e-12);
-        assert_eq!(r.sight, Sight { vision: 18.0, darkvision: 1.0 / 3.0 });
+        assert_eq!(r.sight, Sight { vision: 18.0, darkvision: 1.0 / 3.0, cone: 150.0, neck: 80.0 });
         assert_eq!(r.effect_res.get(EffectKind::Sleep), 1.0);
         assert_eq!(classes::profile(ClassId::Wizard).effect_res, EffectResistances::NONE);
         let b = profile(&[Race::MagicalBeast], Adjust::NONE);
         assert_eq!((b.res.get(Poison), b.res.get(Magical)), (0.1, 0.1));
-        assert_eq!(b.sight, Sight { vision: 18.0, darkvision: 1.0 });
+        assert_eq!(b.sight, Sight { vision: 18.0, darkvision: 1.0, cone: 150.0, neck: 80.0 });
         assert_eq!(profile(&[Race::Human, Race::MagicalBeast], Adjust::NONE).effect_res.get(EffectKind::Sleep), 1.0);
     }
 
@@ -263,19 +291,45 @@ mod tests {
     #[test]
     fn every_race_has_a_sight_and_several_take_the_best() {
         let s = |t| profile(&[t], Adjust::NONE).sight;
-        assert_eq!(s(Race::Human), Sight { vision: 9.0, darkvision: 0.0 });
+        assert_eq!(s(Race::Human), Sight { vision: 9.0, darkvision: 0.0, cone: 150.0, neck: 80.0 });
         for r in [Race::Goblin, Race::Orc, Race::Ogre, Race::Mimic] {
             let p = profile(&[r], Adjust::NONE);
-            assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0 / 3.0 }, "{r:?}");
+            let neck = if r == Race::Mimic { 0.0 } else { 80.0 };
+            assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0 / 3.0, cone: 150.0, neck }, "{r:?}");
             assert_eq!(p.res, Resistances::NONE, "{r:?}");
         }
         assert_eq!(s(Race::Undead).darkvision, 1.0);
         assert_eq!(s(Race::Dragon).vision, 25.0);
-        assert_eq!(s(Race::Object), Sight { vision: 0.0, darkvision: 0.0 });
+        assert_eq!(s(Race::Object), Sight { vision: 0.0, darkvision: 0.0, cone: 0.0, neck: 0.0 });
         let both = profile(&[Race::Human, Race::Undead], Adjust::NONE).sight;
-        assert_eq!(both, Sight { vision: 9.0, darkvision: 1.0 });
+        assert_eq!(both, Sight { vision: 9.0, darkvision: 1.0, cone: 150.0, neck: 80.0 });
         let adj = Adjust { vision: Some(12.5), darkvision: Some(0.5), ..Adjust::NONE };
-        assert_eq!(profile(&[Race::Undead], adj).sight, Sight { vision: 12.5, darkvision: 0.5 });
+        assert_eq!(profile(&[Race::Undead], adj).sight, Sight { vision: 12.5, darkvision: 0.5, cone: 150.0, neck: 80.0 });
+    }
+
+    #[test]
+    fn every_race_has_its_cone_neck_and_turn() {
+        for r in Race::ALL {
+            let p = profile(&[r], Adjust::NONE);
+            let (cone, neck, turn) = match r {
+                Race::Animal => (270.0, 80.0, 1.0),
+                Race::Object => (0.0, 0.0, 1.0),
+                Race::Mimic => (150.0, 0.0, 1.0),
+                Race::Dragon => (150.0, 120.0, 0.5),
+                Race::Ogre => (150.0, 80.0, 0.6),
+                _ => (150.0, 80.0, 1.0),
+            };
+            assert_eq!((p.sight.cone, p.sight.neck, p.turn), (cone, neck, turn), "{r:?}");
+        }
+        // Several races: the best cone and neck, the smallest turn factor; the adjustment replaces each.
+        let p = profile(&[Race::Animal, Race::Dragon], Adjust::NONE);
+        assert_eq!((p.sight.cone, p.sight.neck, p.turn), (270.0, 120.0, 0.5));
+        let adj = Adjust { cone: Some(200.0), neck: Some(10.0), turn: Some(0.9), ..Adjust::NONE };
+        let p = profile(&[Race::Ogre], adj);
+        assert_eq!((p.sight.cone, p.sight.neck, p.turn), (200.0, 10.0, 0.9));
+        assert_eq!(bosses::profile(BossId::Demon).turn, 0.5);
+        assert_eq!(bosses::profile(BossId::Dragon).turn, 0.5, "the Dragon race");
+        assert_eq!(bosses::profile(BossId::Lich).turn, 1.0);
     }
 
     #[test]
@@ -306,7 +360,7 @@ mod tests {
         assert!((p.res.get(Magical) + 0.1).abs() < 1e-12);
         assert_eq!(p.effect_res.get(EffectKind::Entangled), 1.0);
         assert_eq!(p.effect_res.get(EffectKind::Fear), 1.0, "from Undead");
-        assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0 }, "Undead's sight");
+        assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0, cone: 150.0, neck: 80.0 }, "Undead's sight");
         assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true });
         assert_eq!(profile(&[Race::Undead], Adjust::NONE).traits, Traits::default());
     }

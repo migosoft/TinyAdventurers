@@ -96,6 +96,10 @@ pub enum Stat {
     Vision,
     /// Share of vision.
     Darkvision,
+    /// Degrees: the full angle it sees in.
+    Cone,
+    /// Degrees: how far its head turns to each side.
+    Neck,
     Resist(DamageType),
     /// An effect resistance (see `EffectResistances`).
     ResistEffect(EffectKind),

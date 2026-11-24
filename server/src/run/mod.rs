@@ -351,6 +351,8 @@ impl Run {
             sight: prof.sight,
             alive: true,
             aim: 0.0,
+            gaze: 0.0,
+            turn: prof.turn,
             aim_dist: 0.0,
             anim: Anim::Idle,
             anim_start: self.time,
@@ -1569,6 +1571,14 @@ pub mod tests {
     use crate::defs::items::{EquipSlot, Equipment, ItemId};
     use tokio::sync::mpsc::unbounded_channel;
 
+    /// Turns monster `mi`'s body towards `at`, its head straight ahead: a creature sees in a cone, so a test that
+    /// wants it to see a hero first has it look there.
+    pub fn face(run: &mut Run, mi: usize, at: Vec2) {
+        let m = &mut run.monsters[mi];
+        m.aim = m.pos.angle_to(at);
+        m.gaze = 0.0;
+    }
+
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
         let with: Vec<(ClassId, Build)> = classes.iter().map(|&c| (c, Build::start(c))).collect();
         test_run_with(&with, boss)
@@ -2451,6 +2461,8 @@ pub mod tests {
         run.monsters.retain(|m| m.is_boss);
         let start = run.layout.player_spawns[0];
         let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        tests::face(&mut run, mi, start);
         assert!(!run.layout.map.blocks_at(start + Vec2::new(50.0, 0.0), Mover::Enemy));
         run.players[0].debug = true; // keep the target standing
         let mut moved_on_ground = false;

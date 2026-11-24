@@ -755,7 +755,7 @@ fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
 fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Gaze);
     let Creature::Monster(mi) = c else { unreachable!("only a monster gazes") };
-    let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
+    let (pos, sight, dir) = (run.monsters[mi].pos, run.monsters[mi].sight_now(), run.monsters[mi].gaze_dir());
     let at = pos + Vec2::from_angle(aim_of(run, c)) * aim_dist_of(run, c);
     debug_assert!(!a.effect.is_empty(), "a gaze has its own effects");
     let source = Some((run.creature_id(c), pos));
@@ -763,7 +763,7 @@ fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     let rule = targets::Rule { at, reach: GAZE_AIM_SLACK, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, skip_calm: true, passes: None };
     let (stared_at, _) = targets::select(run, &targets::stance(run, c), &rule, &[], false, |t| run.creature_pos(t));
     for t in stared_at {
-        if super::perception::sees(run, sight, pos, run.creature_pos(t)) {
+        if super::perception::sees(run, sight, pos, dir, run.creature_pos(t)) {
             for &own in &a.effect {
                 run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
             }

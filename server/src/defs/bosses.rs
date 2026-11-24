@@ -92,13 +92,13 @@ pub fn profile(id: BossId) -> Profile {
     use super::effects::{EffectKind::*, EffectResistances as Fx};
     // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
     let adj = match id {
-        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: BOSS_VISION, darkvision: None },
-        BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Blind, 1.0), (Petrified, 0.5)]), vision: BOSS_VISION, darkvision: None },
+        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: BOSS_VISION, turn: Some(0.5), ..Adjust::NONE },
+        BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Blind, 1.0), (Petrified, 0.5)]), vision: BOSS_VISION, ..Adjust::NONE },
         BossId::Dragon => Adjust {
             res: Resistances::of(&[(Heat, 1.0)]),
             effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
             vision: BOSS_VISION,
-            darkvision: None,
+            ..Adjust::NONE
         },
     };
     races::profile(races(id), adj)

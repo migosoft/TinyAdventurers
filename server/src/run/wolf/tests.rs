@@ -343,6 +343,8 @@ fn an_orc_attacks_the_wolf_when_it_is_the_nearest_foe() {
     let mi = wolf_idx(&run, id);
     run.monsters[mi].pos = far;
     let orc = run.spawn_enemy(EnemyType::OrcWarrior, far + Vec2::new(20.0, 0.0), None);
+    let oi = run.monster_idx(orc).unwrap();
+    crate::run::tests::face(&mut run, oi, far);
     for _ in 0..120 {
         // Held there: the wolf would follow its ranger (out of its leash, the orc is no prey).
         let wi = wolf_idx(&run, id);
@@ -698,6 +700,8 @@ fn the_wolf_winds_up_for_its_pounce_with_the_kits_windup() {
     let oi = run.monster_idx(orc).unwrap();
     run.monsters[oi].ai.hold = 99.0;
     run.monsters[oi].hp = 500.0;
+    let (wi, op) = (wolf_idx(&run, id), run.monsters[oi].pos);
+    crate::run::tests::face(&mut run, wi, op);
     let windup = wolf(&run, id).kit.get(AbilityId::Pounce).unwrap().windup;
     assert!((windup - 0.2).abs() < 1e-9, "own 0 + Beast Bite's 0.2: {windup}");
     let (mut wound, mut leapt) = (None, None);
@@ -763,6 +767,8 @@ fn the_wolf_opens_with_a_dash_and_then_bites() {
     let oi = run.monster_idx(orc).unwrap();
     run.monsters[oi].ai.hold = 99.0;
     run.monsters[oi].hp = 500.0;
+    let (wi, op) = (wolf_idx(&run, id), run.monsters[oi].pos);
+    crate::run::tests::face(&mut run, wi, op);
     let mut hits: Vec<(usize, f64)> = Vec::new();
     let mut dashed = false;
     for t in 0..5 * 60 {
@@ -795,6 +801,8 @@ fn a_pounce_that_hurts_holds_the_next_bite_one_cooldown_in_the_ai() {
     let oi = run.monster_idx(orc).unwrap();
     run.monsters[oi].ai.hold = 99.0;
     run.monsters[oi].hp = 500.0;
+    let (wi, op) = (wolf_idx(&run, id), run.monsters[oi].pos);
+    crate::run::tests::face(&mut run, wi, op);
     for _ in 0..30 {
         run.step();
         if run.monsters[oi].hp < 500.0 {

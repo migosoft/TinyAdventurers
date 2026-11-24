@@ -309,7 +309,12 @@ impl Effects {
     }
     pub fn sight(&self, base: Sight) -> Sight {
         let k = self.kinds();
-        Sight { vision: resolve_stat(base.vision, Stat::Vision, &k), darkvision: resolve_stat(base.darkvision, Stat::Darkvision, &k) }
+        Sight {
+            vision: resolve_stat(base.vision, Stat::Vision, &k),
+            darkvision: resolve_stat(base.darkvision, Stat::Darkvision, &k),
+            cone: resolve_stat(base.cone, Stat::Cone, &k),
+            neck: resolve_stat(base.neck, Stat::Neck, &k),
+        }
     }
     pub fn res(&self, base: Resistances) -> Resistances {
         let k = self.kinds();
@@ -1116,10 +1121,10 @@ mod tests {
         assert_eq!(e.speed_mul(), 0.0, "no_move stops even an accelerated creature");
         assert!(e.no_act() && e.no_turn() && !e.has(EffectKind::Blind));
         assert_eq!(e.bits(), EffectKind::Slowed.bit() | EffectKind::Accelerated.bit() | EffectKind::Petrified.bit());
-        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5 });
+        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5, cone: 150.0, neck: 80.0 });
         assert_eq!(s.vision, 9.0);
         e.add(EffectKind::Blind, 1.0);
-        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5 });
+        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5, cone: 150.0, neck: 80.0 });
         assert_eq!((s.vision, s.darkvision), (0.0, 0.0));
     }
 
@@ -1199,6 +1204,8 @@ mod tests {
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::OrcArcher, at, None);
         let mi = run.monster_idx(id).unwrap();
+        let hero = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, hero);
         run.apply_effect(Creature::Monster(mi), EffectKind::Blind, Some(5.0));
         crate::run::ai::tick_monster(&mut run, mi, DT);
         assert_ne!(run.monsters[mi].ai.state, AiState::Chase, "blind: the hero 40 px away is not seen");

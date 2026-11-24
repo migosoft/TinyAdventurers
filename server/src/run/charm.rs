@@ -875,6 +875,8 @@ mod tests {
             assert!(!kit.is_empty());
             let oi = spawn(&mut run, EnemyType::OrcWarrior, 90.0);
             let (orc, hp) = (run.monsters[oi].id, run.monsters[oi].hp);
+            let at = run.monsters[oi].pos;
+            crate::run::tests::face(&mut run, bi, at);
             charm(&mut run, bi, 0, 10.0);
             let mut hit_by = None;
             for _ in 0..60 {
@@ -947,6 +949,8 @@ mod tests {
         let c = w.companion.as_ref().expect("a companion");
         assert_eq!((c.leader, c.recruiter, c.summoned), (orc, orc, false));
         let hp = run.players[0].hp;
+        let hero_pos = run.players[0].pos();
+        crate::run::tests::face(&mut run, wi, hero_pos);
         let mut bit = false;
         for _ in 0..180 {
             run.step();
@@ -1024,6 +1028,8 @@ mod tests {
         run.monsters[wi].pos = at + Vec2::new(-20.0, 0.0);
         run.monsters[wi].ai.hold = 1e9;
         let wolf_hp = run.monsters[wi].hp;
+        let wolf_pos = run.monsters[wi].pos;
+        crate::run::tests::face(&mut run, bi, wolf_pos);
         run.step();
         let m = &run.monsters[idx(&run, charmed)];
         assert!(m.companion.is_none(), "no leader left: a plain hunter");
@@ -1157,6 +1163,8 @@ mod tests {
         let mut run = arena(&[ClassId::Wizard]);
         let ki = recruit_knight(&mut run, 0);
         run.players[0].side = Side::Hostile; // a charmed lone hero
+        let hero_pos = run.players[0].pos();
+        crate::run::tests::face(&mut run, ki, hero_pos);
         run.step();
         assert!(companion::leader_of(&run, run.monsters[ki].companion.as_ref().unwrap(), Side::Friendly).is_none());
         let hp = run.monsters[ki].hp;

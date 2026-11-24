@@ -1333,6 +1333,8 @@ fn spawn_at(run: &mut Run, t: EnemyType, tile: (i32, i32), hp: f64) -> u32 {
     let mi = run.monster_idx(id).unwrap();
     run.monsters[mi].hp = hp;
     run.monsters[mi].max_hp = hp;
+    let hero = run.players[0].pos();
+    crate::run::tests::face(run, mi, hero);
     id
 }
 

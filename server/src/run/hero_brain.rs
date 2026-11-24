@@ -41,7 +41,9 @@ impl Brain {
 /// visible and on the ground, as for a companion's prey.
 fn nearest_foe(run: &Run, pi: usize) -> Option<Creature> {
     let p = &run.players[pi];
-    let (from, sight) = (p.pos(), p.sight_now());
+    // A charmed hero has no head: it sees along its body, in a cone that takes in what a head would sweep.
+    let (from, sight, dir) = (p.pos(), p.sight_now(), p.aim);
+    let sight = crate::defs::races::Sight { cone: (sight.cone + 2.0 * sight.neck).min(360.0), ..sight };
     let me = targets::stance(run, Creature::Player(pi));
     let heroes = (0..run.players.len()).filter(|&i| i != pi && run.players[i].alive && run.players[i].sinking.is_none()).map(Creature::Player);
     let monsters = (0..run.monsters.len())
@@ -54,7 +56,7 @@ fn nearest_foe(run: &Run, pi: usize) -> Option<Creature> {
         .chain(monsters)
         .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
-        .filter(|&(_, at)| perception::sees(run, sight, from, at))
+        .filter(|&(_, at)| perception::sees(run, sight, from, dir, at))
         .min_by(|a, b| a.1.dist(from).total_cmp(&b.1.dist(from)))
         .map(|(c, _)| c)
 }

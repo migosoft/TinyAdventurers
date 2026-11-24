@@ -24,12 +24,12 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 
 /// Nearest living hero the monster can see right now, among those a creature of `side` fights (a hero an
 /// enemy's Charm turned is no foe of the enemies).
-pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, side: targets::Side) -> Option<usize> {
+pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, dir: f64, side: targets::Side) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
         .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !p.effects.has(EffectKind::Invisible))
-        .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
+        .filter(|(_, p)| super::perception::sees(run, sight, from, dir, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
@@ -38,7 +38,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, side: targets::Sid
 /// Nearest living creature that monster `mi` fights (`targets::fights`: the heroes and their allies for an
 /// enemy, plus its grudges) and can see right now; a hero wins a tie.
 pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
-    let (from, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
+    let (from, sight, dir) = (run.monsters[mi].pos, run.monsters[mi].sight_now(), run.monsters[mi].gaze_dir());
     let me = targets::stance(run, Creature::Monster(mi));
     let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
     let others = (0..run.monsters.len()).filter(|&i| run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
@@ -46,7 +46,7 @@ pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
         .chain(others)
         .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
-        .filter(|&(_, p)| super::perception::sees(run, sight, from, p))
+        .filter(|&(_, p)| super::perception::sees(run, sight, from, dir, p))
         .map(|(c, p)| (c, p.dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(c, _)| c)
@@ -346,13 +346,13 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
     let (base_ai, base_speed, wanders) = (run.monsters[mi].base_ai, run.monsters[mi].base.speed, run.monsters[mi].wanders);
-    let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
+    let (pos, sight, dir) = (run.monsters[mi].pos, run.monsters[mi].sight_now(), run.monsters[mi].gaze_dir());
     count_cooldowns(run, mi, dt);
 
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).
     let seen = match &run.monsters[mi].companion {
-        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, run.creature_pos(pc))),
+        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
         None => find_visible_foe(run, mi),
     };
     if let Some(foe) = seen {
@@ -868,23 +868,25 @@ pub(crate) mod tests {
 
     #[test]
     fn enemy_ignores_player_without_line_of_sight() {
-        const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0 };
+        const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0, cone: 150.0, neck: 80.0 };
+        // The viewer stands east of the hero, looking west.
+        const WEST: f64 = std::f64::consts::PI;
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
-        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_some());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, WEST, Side::Hostile).is_some());
         // A hero on the enemies' own side is no foe: not looked for.
         run.players[0].side = Side::Hostile;
-        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, WEST, Side::Hostile).is_none());
         run.players[0].side = Side::Friendly;
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
             run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
-        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, WEST, Side::Hostile).is_none());
         // Out of sight radius: not seen.
-        assert!(find_visible_hero(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT, Side::Hostile).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(-200.0, 0.0), SIGHT, 0.0, Side::Hostile).is_none());
     }
 
     #[test]
@@ -947,6 +949,7 @@ pub(crate) mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.cd = 0.0;
         run.monsters[mi].ai.alt_cd = 0.0;
+        crate::run::tests::face(&mut run, mi, ppos);
         tick_monster(&mut run, mi, 1.0 / 60.0);
         run.monsters[mi].ai.windup.map(|w| w.alt)
     }
@@ -1066,6 +1069,7 @@ pub(crate) mod tests {
         let id = run.spawn_enemy(EnemyType::Chort, ppos + Vec2::new(80.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.alt_cd = 0.0;
+        crate::run::tests::face(&mut run, mi, ppos);
         for _ in 0..60 {
             tick_monster(&mut run, mi, 1.0 / 60.0);
             if !run.projectiles.is_empty() {
@@ -1087,6 +1091,7 @@ pub(crate) mod tests {
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let id = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, ppos);
         (run, id, mi)
     }
 
@@ -1203,6 +1208,7 @@ pub(crate) mod tests {
         let hero = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(30.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, hero);
         // The wolf's kit with Pounce taken out.
         let (attrs, radius) = (run.monsters[mi].base.sources.total(), run.monsters[mi].radius);
         let m = &mut run.monsters[mi];
@@ -1268,6 +1274,8 @@ pub(crate) mod tests {
         run.monsters.retain(|m| m.is_boss);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(60.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        let hero = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, hero);
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
     }
@@ -1389,6 +1397,7 @@ pub(crate) mod tests {
         let mi = run.monster_idx(id).unwrap();
         make_phantom(&mut run, mi);
         run.monsters[mi].ai.cd = 0.0;
+        crate::run::tests::face(&mut run, mi, ppos);
         let mut attacked = false;
         for tick in 0..120 {
             tick_monster(&mut run, mi, 1.0 / 60.0);
@@ -1587,6 +1596,7 @@ pub(crate) mod tests {
         let ppos = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(4.0 * TILE, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, ppos);
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert!(run.monsters[mi].ai.target.is_some(), "a hero in clear sight is seen");
         // Invisible: the chase becomes a search of the last known spot.
@@ -1634,6 +1644,7 @@ pub(crate) mod tests {
         let ppos = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::OrcWarrior, ppos + Vec2::new(5.0 * TILE, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, ppos);
         run.step();
         assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");
         // A fire shot (moving light) beside the hero lights them within this very step.
@@ -1683,6 +1694,7 @@ pub(crate) mod tests {
         let (hero, hid) = (run.players[0].pos(), run.players[0].id);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(20.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, hero);
         run.step();
         assert_eq!(run.monsters[mi].ai.state, AiState::Chase, "it chases the hero first");
         scared_of(&mut run, mi, Some((hid, hero)));
@@ -1751,6 +1763,7 @@ pub(crate) mod tests {
         let hero = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::GoblinArcher, hero + Vec2::new(60.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, hero);
         assert!(run.apply_effect(Creature::Monster(mi), EffectKind::Entangled, Some(3.0)));
         let pos = run.monsters[mi].pos;
         for _ in 0..60 {

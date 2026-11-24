@@ -146,17 +146,18 @@ impl BossBehaviour for Demon {
             return;
         }
 
-        let Some((_pi, ppos, dist)) = target(run, bi) else {
-            set_anim(run, bi, Anim::Idle);
-            return;
-        };
-        // Tail whip when someone sneaks behind (not in the air), before turning to the target.
+        // Tail whip when someone sneaks behind (not in the air), before turning to the target. It feels the foe
+        // behind it, so it needs no sight of it.
         let tail = kit(run, bi, AbilityId::TailWhip);
         // A kit range is measured to the target's edge: the centre distance adds the hero's radius.
         if !air && foe_behind(run, bi, tail.range + PLAYER_RADIUS - TAIL_SLACK) && ready(run, bi, &self.opening, AbilityId::TailWhip) {
             self.start(run, bi, Action::Tail, AbilityId::TailWhip, tail.windup, Anim::Tail);
             return;
         }
+        let Some((_pi, ppos, dist)) = target(run, bi) else {
+            set_anim(run, bi, Anim::Idle);
+            return;
+        };
         let to_target = pos.angle_to(ppos);
         run.monsters[bi].aim = to_target;
         let cleave_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLEAVE_SLACK;

@@ -314,6 +314,10 @@ pub struct Monster {
     pub sight: Sight,
     pub alive: bool,
     pub aim: f64,
+    /// Its head's angle relative to `aim` (rad), within its neck; the cone sits on `aim + gaze`.
+    pub gaze: f64,
+    /// The factor on its body's turn speed (from its profile).
+    pub turn: f64,
     /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_use`.
     pub aim_dist: f64,
     pub anim: Anim,
@@ -385,9 +389,13 @@ pub struct Monster {
 }
 
 impl Monster {
-    /// What it sees now: its sight through its effects (blindness).
+    /// What it sees now: its sight, its cone widened by WIL, through its effects (blindness).
     pub fn sight_now(&self) -> Sight {
-        self.effects.sight(self.sight)
+        self.effects.sight(self.sight.widened(&self.attrs))
+    }
+    /// The world direction its head points in.
+    pub fn gaze_dir(&self) -> f64 {
+        self.aim + self.gaze
     }
     /// Position `ticks` simulation steps ago (lag compensation).
     pub fn pos_ago(&self, ticks: usize) -> Vec2 {

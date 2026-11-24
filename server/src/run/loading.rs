@@ -166,6 +166,7 @@ mod tests {
         run.players[0].mv.x = here.x + 900.0;
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(20.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
+        crate::run::tests::face(&mut run, mi, here);
         let hp = run.players[1].hp;
         for _ in 0..200 {
             run.step();
@@ -175,6 +176,7 @@ mod tests {
         send(&mut run, 1, ClientMsg::Loaded);
         assert_eq!(run.players[1].side, Side::Friendly);
         assert!(!run.players[1].loading);
+        crate::run::tests::face(&mut run, mi, here); // it has wandered off its watch meanwhile
         for _ in 0..200 {
             run.step();
         }

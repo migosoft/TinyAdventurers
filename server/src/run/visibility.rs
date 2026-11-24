@@ -1000,11 +1000,11 @@ mod tests {
 
     #[test]
     fn the_filter_range_is_the_quantised_darkvision_the_client_gets() {
-        let s = crate::defs::races::Sight { vision: 9.0, darkvision: 1.0 / 3.0 };
+        let s = crate::defs::races::Sight { vision: 9.0, darkvision: 1.0 / 3.0, cone: 150.0, neck: 80.0 };
         assert_eq!(darkvision_pct(&s), 33);
         assert_eq!(dark_range(&s), 9.0 * 0.33);
-        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 1.0 }), 9.0);
-        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 0.0 }), 0.0);
+        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 1.0, cone: 150.0, neck: 80.0 }), 9.0);
+        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 0.0, cone: 150.0, neck: 80.0 }), 0.0);
     }
 
     #[test]

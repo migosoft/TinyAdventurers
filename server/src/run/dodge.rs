@@ -99,7 +99,7 @@ pub fn threats(run: &Run, mi: usize) -> Vec<Threat> {
         if pr.dead || pr.owner == m.id || pr.hit.contains(&m.id) {
             continue;
         }
-        if !targets::may_hit(run, pr.side, Creature::Monster(mi)) || pr.pos.dist(m.pos) > notice || !perception::sees(run, m.sight_now(), m.pos, pr.pos) {
+        if !targets::may_hit(run, pr.side, Creature::Monster(mi)) || pr.pos.dist(m.pos) > notice || !perception::sees(run, m.sight_now(), m.pos, m.gaze_dir(), pr.pos) {
             continue;
         }
         let Some(d) = course_hit(run, pi, mi, m.pos, 0.0) else { continue };
@@ -297,6 +297,8 @@ mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.cd = 1e9;
+        let hero = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, hero);
         (run, mi)
     }
 
@@ -368,12 +370,15 @@ mod tests {
         let from = run.monsters[mi].pos + Vec2::new(60.0, 0.0);
         let to = run.monsters[mi].pos;
         enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
+        crate::run::tests::face(&mut run, mi, from);
         run.refresh_lights();
         assert_eq!(threats(&run, mi).len(), 1, "a Fire Bolt lights itself");
         // A wall between the arrow and the orc.
         run.projectiles.clear();
         run.monsters[mi].side = Side::Hostile;
         run.lights.fill();
+        let hero = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, hero);
         fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
         assert_eq!(threats(&run, mi).len(), 1, "lit, seen, on course");
         let (wx, wy) = Map::tile_of(run.players[0].pos() + Vec2::new(28.0, 0.0));
@@ -436,6 +441,7 @@ mod tests {
         let at = run.monsters[mi].pos;
         run.monsters[mi].side = Side::Friendly;
         enemy_use(&mut run, EnemyType::Imp, at + Vec2::new(60.0, 0.0), AbilityId::SleepMist, at);
+        crate::run::tests::face(&mut run, mi, at + Vec2::new(60.0, 0.0));
         assert_eq!(run.projectiles[0].damage.amount, 0.0, "no damage");
         assert!(threats(&run, mi).is_empty(), "below the AdvancedDodge tier");
         run.smarts.needs[Smart::AdvancedDodge as usize] = 0;
@@ -762,6 +768,8 @@ mod tests {
         let start = at;
         let mi2 = run.monster_idx(id).unwrap();
         run.monsters[mi2].ai.cd = 1e9;
+        let hero1 = run.players[1].pos();
+        crate::run::tests::face(&mut run, mi2, hero1);
         for _ in 0..12 {
             run.step();
         }
@@ -776,6 +784,7 @@ mod tests {
             let p = run.monsters[mi].pos;
             let lead = p + Vec2::new(east * 3.0, 0.0);
             let from = run.players[0].pos();
+            crate::run::tests::face(&mut run, mi, from); // the arrow comes from the side; it must see it
             fire(&mut run, AbilityId::Shoot, from.angle_to(lead), from.dist(lead));
             assert!(!threats(&run, mi).is_empty(), "a threat");
             run.step();
@@ -1041,6 +1050,7 @@ mod tests {
         run.projectiles.clear();
         let at = run.monsters[mi].pos;
         enemy_use(&mut run, EnemyType::Imp, at + Vec2::new(60.0, 0.0), AbilityId::FireBolt, at);
+        crate::run::tests::face(&mut run, mi, at + Vec2::new(60.0, 0.0));
         assert_eq!(threats(&run, mi).len(), 1, "an enemy's bolt is");
     }
 }

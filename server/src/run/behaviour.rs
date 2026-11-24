@@ -81,7 +81,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, active: bool) {
 fn wildlife_flees(run: &mut Run, mi: usize, dt: f64) -> bool {
     let Some(w) = run.monsters[mi].wild.filter(|w| w.scare.is_some()) else { return false };
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
-    let attacker = ai::living_pos(run, w.scare.expect("filtered")).filter(|&p| perception::sees(run, sight, pos, p));
+    let attacker = ai::living_pos(run, w.scare.expect("filtered")).filter(|&p| perception::in_open(run, sight, pos, p));
     let from = attacker.unwrap_or(w.scare_from);
     let min_flee = w.min_flee - dt;
     let calm = min_flee <= 0.0 && (attacker.is_none() || pos.dist(from) > w.calm_dist);
@@ -160,7 +160,10 @@ mod tests {
 
     fn spawn(run: &mut Run, t: EnemyType, at: Vec2) -> usize {
         let id = run.spawn_enemy(t, at, None);
-        run.monster_idx(id).unwrap()
+        let mi = run.monster_idx(id).unwrap();
+        let hero = run.players[0].pos();
+        crate::run::tests::face(run, mi, hero); // it looks at the hero, as a creature that has noticed one
+        mi
     }
 
     fn steps(run: &mut Run, n: usize) {
@@ -270,7 +273,7 @@ mod tests {
         run.players[0].mv.x = at.x - 100.0;
         let hero = run.players[0].pos();
         let deer = spawn(&mut run, EnemyType::Deer, hero + Vec2::new(110.0, 0.0));
-        run.monsters[deer].sight = crate::defs::races::Sight { vision: 20.0, darkvision: 1.0 };
+        run.monsters[deer].sight = crate::defs::races::Sight { vision: 20.0, darkvision: 1.0, cone: 150.0, neck: 80.0 };
         hero_hit(&mut run, deer, 5.0);
         let d0 = run.monsters[deer].pos.dist(hero);
         assert!(d0 > crate::defs::enemies::WILD_CALM_DIST);
@@ -365,6 +368,8 @@ mod tests {
         run.monsters[orc].dormant = true;
         orc_hit(&mut run, boar, orc, 1.0);
         assert!(run.monsters[boar].grudge.enemies && !run.monsters[boar].grudge.heroes);
+        let orc_pos = run.monsters[orc].pos;
+        crate::run::tests::face(&mut run, boar, orc_pos);
         // The hero is nearer, yet the boar picks the orc.
         assert_eq!(crate::run::ai::find_visible_foe(&run, boar), Some(Creature::Monster(orc)));
         let (hero_hp, orc_hp) = (run.players[0].hp, run.monsters[orc].hp);

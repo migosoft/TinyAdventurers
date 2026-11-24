@@ -638,6 +638,10 @@ mod tests {
         run.players[0].alive = false;
         run.monsters[oi].pos = run.monsters[ni].pos + Vec2::new(8.0, 0.0);
         let find = |run: &Run, mi| super::super::ai::find_visible_foe(run, mi);
+        // They stand 8 px apart, looking at each other.
+        let (op, np) = (run.monsters[oi].pos, run.monsters[ni].pos);
+        crate::run::tests::face(&mut run, oi, np);
+        crate::run::tests::face(&mut run, ni, op);
         assert_eq!(find(&run, oi), None);
         run.monsters[ni].grudge.heroes = true;
         assert_eq!(find(&run, oi), None, "a grudge against the heroes is no quarrel with the enemies");
@@ -650,6 +654,8 @@ mod tests {
         run.monsters[ni].grudge.enemies = false;
         assert_eq!(find(&run, ni), None);
         run.monsters[ni].grudge.heroes = true;
+        let hero = run.players[0].pos();
+        crate::run::tests::face(&mut run, ni, hero);
         assert_eq!(find(&run, ni), Some(Creature::Player(0)));
     }
 

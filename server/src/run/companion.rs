@@ -152,7 +152,7 @@ pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<Creat
             let (to_l, to_w) = (p.dist(leader), p.dist(w.pos));
             (to_l <= e.guard + radius || to_w <= e.defend + radius) && to_l <= e.leash
         })
-        .filter(|&(_, p, _)| perception::sees(run, sight, w.pos, p))
+        .filter(|&(_, p, _)| perception::sees(run, sight, w.pos, w.gaze_dir(), p))
         .min_by(|a, b| a.1.dist(leader).total_cmp(&b.1.dist(leader)))
         .map(|(c, _, _)| c)
 }
