@@ -2311,6 +2311,7 @@ mod tests {
         let id = run.spawn_enemy(EnemyType::OrcArcher, p + Vec2::new(60.0, 0.0), None);
         let oi = run.monster_idx(id).unwrap();
         let hp = run.players[1].hp;
+        crate::run::tests::face(&mut run, oi, p);
         crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), false, None);
         assert_eq!(run.projectiles.last().unwrap().pierce, super::super::entities::Pierce::Overkill { left: u8::MAX });
         for _ in 0..60 {
@@ -2775,6 +2776,7 @@ mod tests {
         let gid = run.spawn_enemy(EnemyType::GoblinArcher, at + Vec2::new(40.0, 0.0), None);
         let gi = run.monster_idx(gid).unwrap();
         run.last_hit = None;
+        crate::run::tests::face(&mut run, gi, at);
         crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), false, None);
         for _ in 0..60 {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);

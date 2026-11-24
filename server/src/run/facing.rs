@@ -478,7 +478,13 @@ mod tests {
     /// A duel where the hero steps `deg` degrees around the orc once its wind-up runs; returns the run, the orc,
     /// the orc's aim before the tick that released the blow and the hero's hp before.
     fn step_aside(deg: f64) -> (Run, usize, f64, f64) {
+        step_aside_seen(deg, 150.0)
+    }
+
+    /// `step_aside` for an orc with a `cone` (degrees) wide.
+    fn step_aside_seen(deg: f64, cone: f64) -> (Run, usize, f64, f64) {
         let (mut run, mi) = duel(14.0);
+        run.monsters[mi].sight.cone = cone;
         let (hero, hp) = (run.players[0].pos(), run.players[0].hp);
         for _ in 0..30 {
             run.step();
@@ -506,7 +512,40 @@ mod tests {
         let (run, mi, before, _) = step_aside(100.0);
         let m = &run.monsters[mi];
         assert!(m.ai.cd > 0.0, "the swing was released: its cooldown runs");
-        assert!(angle_diff(m.aim, before).abs() <= ATTACK_FACING + body_speed(m) * DT, "no jump: {}", angle_diff(m.aim, before).to_degrees());
+        let g = gate(m.kit.first().unwrap()).unwrap();
+        assert!(angle_diff(m.aim, before).abs() <= g + body_speed(m) * DT, "no jump: {}", angle_diff(m.aim, before).to_degrees());
+    }
+
+    #[test]
+    fn a_seen_hero_outside_the_gate_is_swung_at_no_further_than_the_gate() {
+        let (run, mi, before, _) = step_aside_seen(60.0, 360.0);
+        let m = &run.monsters[mi];
+        let g = gate(m.kit.first().unwrap()).unwrap();
+        assert!(m.ai.cd > 0.0, "released");
+        assert!(angle_diff(m.aim, before).abs() <= g + body_speed(m) * DT, "no jump: {}", angle_diff(m.aim, before).to_degrees());
+    }
+
+    #[test]
+    fn a_led_shot_at_a_strafing_target_stays_within_the_gate() {
+        let (mut run, mi) = arena(EnemyType::OrcArcher);
+        run.monsters[mi].ai.cd = 0.0;
+        let hero = run.players[0].pos();
+        run.monsters[mi].pos = hero + Vec2::new(80.0, 0.0);
+        crate::run::tests::face(&mut run, mi, hero);
+        let g = gate(run.monsters[mi].kit.first().unwrap()).unwrap();
+        let (mut released, mut y) = (0, 0.0);
+        for _ in 0..(8.0 / DT) as usize {
+            y += 120.0 * DT;
+            hero_to(&mut run, hero + Vec2::new(0.0, 40.0 * (y / 40.0).sin()));
+            let (was, before) = (run.monsters[mi].ai.windup.is_some(), run.monsters[mi].aim);
+            run.step();
+            if was && run.monsters[mi].ai.windup.is_none() {
+                released += 1;
+                let m = &run.monsters[mi];
+                assert!(angle_diff(m.aim, before).abs() <= g + body_speed(m) * DT, "no jump: {}", angle_diff(m.aim, before).to_degrees());
+            }
+        }
+        assert!(released > 0, "it shot");
     }
 
     #[test]

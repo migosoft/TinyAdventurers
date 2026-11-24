@@ -424,10 +424,9 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             _ => None,
         });
         if let Some(foe) = foe {
-            let gate = super::facing::gate(run.monsters[mi].kit.iter().nth(w.alt as usize).expect("the kit holds the main and the alt ability"));
-            let want = barrel.unwrap_or(if seen.is_some() { run.creature_pos(foe) } else { run.monsters[mi].ai.last_known });
-            let release = super::facing::release_point(run, mi, want, gate);
-            perform_attack(run, mi, foe, w.alt, (barrel.is_some() || seen.is_none() || release != want).then_some(release));
+            // An unseen foe is shot at exactly the remembered spot, on purpose: no scatter, no lead.
+            let at = barrel.or_else(|| seen.is_none().then(|| run.monsters[mi].ai.last_known));
+            perform_attack(run, mi, foe, w.alt, at);
         }
         return;
     }
@@ -638,6 +637,9 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
         let a = run.monsters[mi].kit.get(id).expect("the kit holds it").clone();
         target = super::aim::creature_aim(run, Creature::Monster(mi), foe, &a);
     }
+    // The blow goes at most the ability's gate off the body's facing, whatever the scatter or lead did.
+    let gate = super::facing::gate(run.monsters[mi].kit.get(id).expect("the kit holds it"));
+    target = super::facing::release_point(run, mi, target, gate);
     // A shot at a barrel is no shot at the foe: it must not count as a miss for range finding.
     let kept = at.map(|_| std::mem::take(&mut run.monsters[mi].ai.aim.target));
     let used = monster_use(run, mi, id, target);
