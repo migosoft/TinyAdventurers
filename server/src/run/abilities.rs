@@ -1166,7 +1166,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         if let Some(arc) = &mut pr.arc {
             arc.flown += sdt;
             // The landing substep ends at the landing point, not past it.
-            if arc.flown >= arc.flight - 1e-9 {
+            if super::arc::has_landed(arc.flight, arc.flown) {
                 pr.pos = arc.land;
             }
         }
@@ -1203,7 +1203,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
                 .enumerate()
                 .position(|(mi, m)| {
                     shot_takes(run, pr, Creature::Monster(mi))
-                        && if pr.arc.is_some() { super::arc::arc_touches(m.pos, m.radius, m.shot_top(), pos, z, pr.radius) } else { m.shot_dist(pos) < m.radius + pr.radius }
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), m.pos, m.radius, m.shot_top(), pos, pr.radius, m.shot_dist(pos))
                 })
                 .map(Creature::Monster)
         };
@@ -1213,7 +1213,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
                 .enumerate()
                 .position(|(pi, p)| {
                     shot_takes(run, pr, Creature::Player(pi))
-                        && if pr.arc.is_some() { super::arc::arc_touches(p.pos(), PLAYER_RADIUS, p.kind().body_height(), pos, z, pr.radius) } else { p.pos().dist(pos) < PLAYER_RADIUS + pr.radius }
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), p.pos(), PLAYER_RADIUS, p.kind().body_height(), pos, pr.radius, p.pos().dist(pos))
                 })
                 .map(Creature::Player)
         };
@@ -1234,7 +1234,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         }
         // The arc ends on the ground at its landing point, with no impact.
         let pr = &mut run.projectiles[i];
-        if let Some(arc) = pr.arc.as_ref().filter(|a| a.flown >= a.flight - 1e-9) {
+        if let Some(arc) = pr.arc.as_ref().filter(|a| super::arc::has_landed(a.flight, a.flown)) {
             let at = arc.land;
             let (id, kind, aim, extra) = (pr.id, pr.kind as u8, pr.vel.y.atan2(pr.vel.x), (pr.owner << 16) | pr.shot as u32);
             pr.pos = at;
