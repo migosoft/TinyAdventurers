@@ -34,6 +34,12 @@ export interface ViewState {
   party?: boolean;
   /** The look of its Entangled effect (`lookOf`); Plain when absent. */
   entangled?: number;
+  /** The way the last blow travelled (world rad); `null`: a hit without direction (no jolt); absent (dev pages): the jolt goes straight back. */
+  hurtDir?: number | null;
+  /** The head's angle relative to the body (rad, within ±π); 0 or absent: straight ahead. */
+  head?: number;
+  /** A creature that faces its `aim` whenever it is awake (the server's facing); heroes and dev figures keep the facing of heading and attack. */
+  faces?: boolean;
   /** Pixels the figure stands below a surface (wading in water or lava). */
   sink?: number;
   /** Falling into a chasm, 0..1: the figure shrinks a little and vanishes into the dark. */

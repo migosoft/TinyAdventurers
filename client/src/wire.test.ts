@@ -8,7 +8,7 @@ import type { Ev } from './generated/Ev';
 import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
 import fixtures from './generated/wire-fixtures.json';
-import { packInput, unpackSnap } from './wire';
+import { headOf, hurtDirOf, packInput, unpackSnap } from './wire';
 
 const POS_TOL = 0.5 / CONST.POS_SCALE + 1e-6;
 const AIM_TOL = Math.PI / 256 + 1e-6;
@@ -56,7 +56,7 @@ describe('wire', () => {
 
   it('reads a hazard\'s element 6 as a radius in px, not an angle', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0]];
+    const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0, 0, 128], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0, 0, 128], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0, 0, 128]];
     const snap = unpackSnap([1, 0, hazards, me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents.map((e) => e[6])).toEqual([40, 48, 64]);
     // The wire fixture's hazards (case 1) agree.
@@ -66,8 +66,27 @@ describe('wire', () => {
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1]], me, null, [], 0, null, [], [], [], [], [], null]);
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1, 0, 128]], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
+  });
+
+  it('reads the hit direction: 0 is none, 1..255 an angle in (-pi, pi]', () => {
+    expect(hurtDirOf(0)).toBeNull();
+    expect(hurtDirOf(1)).toBe(0);
+    for (let b = 1; b <= 255; b++) {
+      const a = hurtDirOf(b)!;
+      expect(a).toBeGreaterThan(-Math.PI);
+      expect(a).toBeLessThanOrEqual(Math.PI);
+    }
+    // 1 + round(a / 2π × 255): a quarter turn is byte 65 (a right angle to within half a step).
+    expect(Math.abs(hurtDirOf(65)! - Math.PI / 2)).toBeLessThan(0.0125);
+    expect(Math.abs(hurtDirOf(192)! + Math.PI / 2)).toBeLessThan(0.0125);
+  });
+
+  it('reads the head angle: 128 is straight ahead, 1 and 255 are -pi and +pi', () => {
+    expect(headOf(128)).toBe(0);
+    expect(headOf(255)).toBeCloseTo(Math.PI, 9);
+    expect(headOf(1)).toBeCloseTo(-Math.PI, 9);
   });
 
   it('keeps the Attribute amount of an own effect', () => {

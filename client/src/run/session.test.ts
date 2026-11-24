@@ -346,7 +346,7 @@ describe('RunSession fixed step', () => {
 });
 
 describe('RunSession frame', () => {
-  const entity = (id: number, x: number, y: number): [number, number, number, number, number, number, number, number, number, number, number, number] => [id, KIND.Wizard, x, y, 255, 0, 0, 0, 0, 0, 0, 1];
+  const entity = (id: number, x: number, y: number): [number, number, number, number, number, number, number, number, number, number, number, number, number, number] => [id, KIND.Wizard, x, y, 255, 0, 0, 0, 0, 0, 0, 1, 0, 128];
 
   /** A session on a fake clock, with a view; `at(s)` moves the clock. */
   function running(input: () => StepInput = () => NO_INPUT, over: Partial<RunStartInfo> = {}) {
@@ -506,7 +506,7 @@ describe('RunSession frame', () => {
     session.frame(STEP_MS);
     fire = false;
     const sent = net.sent.find((m) => m.t === 'Input' && m.primary !== null) as Extract<ClientMsg, { t: 'Input' }>;
-    const arrow = (extra: number) => [99, KIND.Arrow, 40, 24, 255, 0, 0, 0, 0, extra, 0, 2] as ReturnType<typeof entity>;
+    const arrow = (extra: number) => [99, KIND.Arrow, 40, 24, 255, 0, 0, 0, 0, extra, 0, 2, 0, 128] as ReturnType<typeof entity>;
     at(10.1);
     net.emit(snap({ tick: 1, ents: [arrow((1 << 16) | sent.primary!)] }));
     at(10.15);

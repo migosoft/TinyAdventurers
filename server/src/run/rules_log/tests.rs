@@ -33,7 +33,7 @@ fn run_with_a_mimic() -> Run {
 }
 
 fn ent(id: u32, kind: EntityKind) -> EntSnap {
-    EntSnap(id, kind as u8, 0.0, 0.0, 0, 0, 0.0, 0, 0, 0, 0, 0)
+    EntSnap(id, kind as u8, 0.0, 0.0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 128)
 }
 
 /// What was sent: these entities, none of them in the dark.
@@ -160,7 +160,7 @@ struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<V
 
 fn a_snapw(log: Option<LogW>) -> SnapW {
     let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0, false)], 1.0, false, 1.0, 1.0, vec![], vec![], None);
-    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], vec![], log)
+    SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], vec![], log)
 }
 
 #[test]

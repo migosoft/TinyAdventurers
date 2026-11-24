@@ -10,6 +10,7 @@ import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/c
 import type { TileMap } from '../sim/map';
 import { isHazardKind, isProjectileKind } from './anim/defs';
 import { lookOf } from './looks';
+import { headOf, hurtDirOf } from '../wire';
 
 export interface EntState {
   id: number;
@@ -29,6 +30,10 @@ export interface EntState {
   side: number;
   /** The look of its Entangled effect in the same snapshot as `effects`. */
   entangled: number;
+  /** The way the last blow travelled (world rad), from the newer snapshot like `flags`; `null` for a hit without direction. Absent in dev literals. */
+  hurtDir?: number | null;
+  /** The head's angle relative to the body (rad), interpolated; absent in dev literals (straight ahead). */
+  head?: number;
 }
 
 interface TimedSnap {
@@ -117,7 +122,7 @@ export class Interpolator {
         out.set(id, toState(eb, eb[2], eb[3], eb[6], b.looks));
         continue;
       }
-      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, isHazardKind(eb[1]) ? ea[6] + (eb[6] - ea[6]) * f : lerpAngle(ea[6], eb[6], f), b.looks, ea[7], f));
+      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, isHazardKind(eb[1]) ? ea[6] + (eb[6] - ea[6]) * f : lerpAngle(ea[6], eb[6], f), b.looks, ea[7], f, headOf(ea[13]) + (headOf(eb[13]) - headOf(ea[13])) * f));   // not lerpAngle: the head's angle is relative to the body and never wraps
     }
   }
 
@@ -126,10 +131,10 @@ export class Interpolator {
   }
 }
 
-function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1): EntState {
+function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1, head = headOf(e[13])): EntState {
   // f > 1 extrapolates (a late snapshot); a shot's height never goes below the ground.
   const z = isProjectileKind(e[1]) ? Math.max(0, animMs0 + (e[7] - animMs0) * f) / 10 : 0;
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled), hurtDir: hurtDirOf(e[12]), head };
 }
 
 // ------------------------------------------------------------ abilities

@@ -417,7 +417,7 @@ pub fn snap(run: &Run, o: &WorldObject) -> EntSnap {
         ObjState::Torch { side, .. } | ObjState::Crystal { side, .. } => *side as u32,
         _ => 0,
     };
-    EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, extra, 0, 0)
+    EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, extra, 0, 0, 0, 128)
 }
 
 impl Run {

@@ -43,7 +43,7 @@ export interface BuiltInst {
 }
 
 /** What a built figure reads of its entity this frame. `x`, `z`: the foot, tiles; `aim`, `look`: world rad (`look`: what the head follows, or null). */
-export interface BuiltIn { anim: number; animT: number; effects: number; flags: number; aim: number; look: number | null; /** Foot, tiles. */ x: number; z: number }
+export interface BuiltIn { anim: number; animT: number; effects: number; flags: number; aim: number; look: number | null; /** The way the last blow travelled (world rad); null: none (no flinch); undefined: not told (the plain flinch). */ hurtDir?: number | null; /** Foot, tiles. */ x: number; z: number }
 
 /** What a built figure hands back: its buffers (owned by its memory, valid until its next `draw`), levels, yaw and the points the view lights and tags. */
 export interface BuiltDrawn {

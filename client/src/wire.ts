@@ -15,6 +15,14 @@ import { isHazardKind } from './game/anim/defs';
 const pos = (v: number): number => v / CONST.POS_SCALE;
 /** 0-255 → (-π, π], the range of atan2 on the server (128 = exactly left = +π). */
 const angle = (a: number): number => ((a > 128 ? a - 256 : a) / 256) * (2 * Math.PI);
+/** The hit-direction byte of an entity (`hurt_byte` on the server): null = no direction, else 1..255 → (-π, π]. */
+export const hurtDirOf = (b: number): number | null => {
+  if (b === 0) return null;
+  const a = ((b - 1) / 255) * 2 * Math.PI;
+  return a > Math.PI ? a - 2 * Math.PI : a;
+};
+/** The head-angle byte (`head_byte`): 128 = straight ahead, 1 and 255 = ∓π. */
+export const headOf = (b: number): number => ((b - 128) / 127) * Math.PI;
 
 type DmgW = [number, number, number, number, boolean, boolean, number, boolean];
 type HealW = [number, number, number, number, boolean];
@@ -115,7 +123,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     tick,
     ack,
     // Element 6 is the aim in 1/256 turns, but a hazard's radius in whole px (no angle to wrap).
-    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], isHazardKind(e[1]) ? e[6] : angle(e[6]), e[7], e[8], e[9], e[10], e[11]]),
+    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], isHazardKind(e[1]) ? e[6] : angle(e[6]), e[7], e[8], e[9], e[10], e[11], e[12], e[13]]),
     me: {
       alive: me[0],
       hp: me[1],

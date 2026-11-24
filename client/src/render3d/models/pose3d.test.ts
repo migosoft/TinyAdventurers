@@ -984,6 +984,63 @@ describe('hit', () => {
     expect(poseFigure(m, d, view({ flags: FLAG.HURT }), 1 / 60, mem).root.x).toBeLessThan(0);
     expect(HIT_SECS).toBeLessThan(0.3);
   }, SLOW);
+
+  /** The world direction (rad) and size the root shifts at the top of the jolt, for a blow that travelled `dir` (undefined: not told) at a figure that faces 0.7. */
+  const joltOf = (dir: number | null | undefined): { angle: number; size: number; pose: Pose3d } => {
+    const m = model('skelet'), d = def('skelet'), mem = settled({ yaw: 0.7 });
+    const v = (): ViewState => view({ aim: 0.7, flags: FLAG.HURT, hurtDir: dir });
+    poseFigure(m, d, v(), 1 / 60, mem);
+    const p = poseFigure(m, d, v(), 0.2 * HIT_SECS, mem);
+    const wx = p.root.x * Math.cos(p.yaw) - p.root.z * Math.sin(p.yaw), wz = p.root.x * Math.sin(p.yaw) + p.root.z * Math.cos(p.yaw);
+    return { angle: Math.atan2(wz, wx), size: Math.hypot(wx, wz), pose: p };
+  };
+  const apart = (a: number, b: number): number => Math.abs(((a - b + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
+
+  it('a hit from the left jolts the figure right', () => {
+    for (const dir of [0, Math.PI / 2, -2.4, 2.9]) {
+      const j = joltOf(dir);
+      expect(j.size).toBeGreaterThan(0.5);
+      expect(apart(j.angle, dir)).toBeLessThan((5 * Math.PI) / 180);
+    }
+  }, SLOW);
+
+  it('a hit without direction does not jolt', () => {
+    const j = joltOf(null);
+    expect(j.pose.root.x).toBe(0);
+    expect(j.pose.root.z).toBe(0);
+  }, SLOW);
+
+  it('an unset direction jolts back as before', () => {
+    const unset = joltOf(undefined).pose.root, back = joltOf(0.7 + Math.PI).pose.root;
+    expect(unset.x).toBeLessThan(-0.5);
+    expect(unset.z).toBe(0);
+    expect(back.x).toBeCloseTo(unset.x, 9);
+    expect(back.z).toBeCloseTo(0, 9);
+  }, SLOW);
+});
+
+describe('a facing creature', () => {
+  it('walking backwards keeps facing its aim', () => {
+    const m = model('skelet'), d = def('skelet'), mem = settled();
+    let x = 0;
+    for (let i = 0; i < 60; i++) { x -= 0.5; poseFigure(m, d, view({ anim: ANIM.Move, x, aim: 0, faces: true }), 1 / 60, mem); }
+    expect(mem.yaw).toBeCloseTo(0, 6);
+    // Without `faces` it turns to its heading.
+    const other = settled();
+    x = 0;
+    for (let i = 0; i < 60; i++) { x -= 0.5; poseFigure(m, d, view({ anim: ANIM.Move, x, aim: 0 }), 1 / 60, other); }
+    expect(Math.abs(other.yaw)).toBeGreaterThan(1);
+  }, SLOW);
+
+  it('turns to its aim while idle, but a sleeper keeps its heading', () => {
+    const m = model('skelet'), d = def('skelet');
+    const mem = settled();
+    for (let i = 0; i < 120; i++) poseFigure(m, d, view({ aim: 1.2, faces: true }), 1 / 60, mem);
+    expect(mem.yaw).toBeCloseTo(1.2, 3);
+    const sleeper = settled();
+    for (let i = 0; i < 120; i++) poseFigure(m, d, view({ aim: 1.2, faces: true, effects: 1 << EFFECT.Sleep }), 1 / 60, sleeper);
+    expect(sleeper.yaw).toBe(0);
+  }, SLOW);
 });
 
 describe('held and lying states', () => {

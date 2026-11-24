@@ -65,6 +65,8 @@ export const SLAM_DEFAULT_SECS = 0.4;
 const SLAM_UP_AT = 0.75;
 
 export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: number; faced: boolean; lastX: number; lastY: number; speed: number; turn: number; hitT: number; wasHurt: boolean; held: Pose3d | null;
+  /** The way the blow of the running jolt travelled (world rad); undefined: straight back (a dev page's hit). */
+  hitDir?: number | null;
   /** The pose `poseFigure` returns (written anew each call), and its attack object. */
   out: Pose3d | null; atk: { style: AttackStyle; u: number };
   /** A Windup came before this attack (the figure already holds the wound-up pose): no blend-in. */
@@ -613,11 +615,12 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
 
   // ---- the clocks ----
   const anim = s.anim, animT = Math.max(0, num(s.animT));
-  if (hurt && !mem.wasHurt) mem.hitT = 0;
+  // A blow without a direction (`null`) is not told by a jolt; an unset direction (dev pages) jolts straight back.
+  if (hurt && !mem.wasHurt) { mem.hitT = s.hurtDir === null ? -1 : 0; mem.hitDir = s.hurtDir; }
   mem.wasHurt = hurt;
   if (mem.hitT >= 0) { mem.hitT += dt; if (mem.hitT > HIT_SECS) mem.hitT = -1; }
   const hu = mem.hitT < 0 ? -1 : mem.hitT / HIT_SECS;
-  const HJ = hu < 0 ? 0 : hu < 0.2 ? ease(hu / 0.2) : Math.cos((hu - 0.2) / 0.8 * Math.PI * 1.5) * (1 - (hu - 0.2) / 0.8);   // the page's jolt (HS = 1: back from the heading)
+  const HR = hu < 0 ? 0 :hu < 0.2 ? ease(hu / 0.2) : Math.cos((hu - 0.2) / 0.8 * Math.PI * 1.5) * (1 - (hu - 0.2) / 0.8);   // the page's jolt (HS = 1: back from the heading)
 
   const moving = anim === ANIM.Move || anim === ANIM.Dash || mem.speed > 8;
   const go = moving && !asleep && !entangled;
@@ -630,7 +633,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   const aim = num(s.aim, mem.yaw);
   let target: number | null = null;
   if (first) mem.yaw = aim;
-  else if (!asleep && FACE_AIM.has(anim)) target = aim;
+  else if (!asleep && (s.faces || FACE_AIM.has(anim))) target = aim;
   else if (!asleep && go && dt > 0 && moved > 1e-4) target = Math.atan2(dy, dx);
   let step = 0;
   if (target !== null) {
@@ -640,6 +643,11 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   }
   mem.turn += (step / Math.max(dt, 1e-3) - mem.turn) * Math.min(1, dt * 12);
   mem.faced = true;
+
+  // The jolt along the blow: `jx`, `jz` are its unit direction in the figure's frame (forward, sideways); the tilts use `HJ`, the rock backwards.
+  const hd = mem.hitDir, rel = typeof hd === 'number' ? hd - mem.yaw : 0;
+  const jx = typeof hd === 'number' ? Math.cos(rel) : -1, jz = typeof hd === 'number' ? Math.sin(rel) : 0;
+  const HJ = -jx * HR;
 
   // ---- the attack ----
   // A sleeper does not attack. Stone and ice are posed like anything else on the frame they begin (that frame is then held).
@@ -711,7 +719,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       head.rz = -0.75 * pitch + 0.04 * cos2 * w + 0.02 * breath * idle + AP.head + 0.25 * HJ - 0.3 * AP.back + 0.45 * AP.fwd;   // the head stays level (a butt tilts it)
       head.ty = 0.1 * breath * idle;
     }
-    body.sy *= 1 - 0.1 * Math.abs(HJ);
+    body.sy *= 1 - 0.1 * Math.abs(HR);
   } else if (floating) {
     // Floating: nothing steps. The legs hang from the hips and trail behind when it moves, bent a little more at the knee; the arms hang and trail less;
     // the head droops; the body leans into its movement. The trailing and the lean follow the speed late.
@@ -738,7 +746,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       if (!asleep) { floatY = FLOAT.hover; for (const b of FLOAT.bob) floatY += b[0] * Math.sin(b[1] * t + b[2] * ph); }
       // The swipe: the body twists and leans into the blow, the head keeps looking at the target.
       if (m.swipe && k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }
-      if (HJ) body.sy *= 1 - 0.1 * Math.abs(HJ);
+      if (HR) body.sy *= 1 - 0.1 * Math.abs(HR);
     }
   } else {
     if (walking) {
@@ -769,7 +777,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     }
     if (k > 0) { body.ry += AP.twist * k; body.rz -= AP.lean * k; head.ry -= 0.8 * AP.twist * k; }   // the body twists and leans, the head keeps looking at the target
     body.rz += leanBack;
-    if (HJ) { body.rz += 0.32 * HJ; head.rz += 0.22 * HJ; body.sy *= 1 - 0.1 * Math.abs(HJ); }
+    if (HR) { body.rz += 0.32 * HJ; head.rz += 0.22 * HJ; body.sy *= 1 - 0.1 * Math.abs(HR); }
   }
 
   // ---- the arms and what they hold ----
@@ -818,9 +826,10 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   if (!asleep && anim === ANIM.Dash) { R.sx *= 1.25; R.sy *= 0.9; }
   // The steps (lunge, jolt, shiver) are the game's px, scaled by the game's figure scale and the fall shrink as the card scales its own.
   const gameScale = (d.scale ?? 1) * fallK;
-  R.x = (num(d.lunge) * lunge - 1.6 * HJ - 1.5 * AP.back - (apart ? APART.body.back * BLOW.W : 0)) * gameScale;   // the butt rears back, the lunge goes forward; a wind-up draws the floating body back
+  R.x = (num(d.lunge) * lunge + 1.6 * HR * jx - 1.5 * AP.back - (apart ? APART.body.back * BLOW.W : 0)) * gameScale;   // the butt rears back, the lunge goes forward; a wind-up draws the floating body back
   R.y = floating ? floatY : bob * m.scale;   // the hover is the game's px, as the lunge is
   if (windup && !apart) R.z = (Math.floor(t * 40) % 2 ? 1 : -1) * gameScale;   // the shiver of a wind-up: 1 px to either side at 20 Hz
+  R.z += 1.6 * HR * jz * gameScale;
   if (asleep && !apart) {
     R.roll = Math.PI / 2;
     R.y = sideReach(m) * m.scale * (1 - LIE_SINK) * R.sy;   // on its side, sunk a little into the ground

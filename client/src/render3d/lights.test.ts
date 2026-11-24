@@ -143,7 +143,7 @@ describe('staticCands: the Daylight bounce fill', () => {
 });
 
 describe('movingCands', () => {
-  const ent = (id: number, px: number, py: number): EntSnap => [id, 2, px, py, 255, 0, 0, 0, 0, 0, 0, 0];
+  const ent = (id: number, px: number, py: number): EntSnap => [id, 2, px, py, 255, 0, 0, 0, 0, 0, 0, 0, 0, 128];
   it('moves a carried light with its entity', () => {
     const snap: MovingLight[] = [[100 + 1, 100, LIGHT_KIND.Magic, null]];
     const ents = [ent(9, 100, 100)];

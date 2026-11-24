@@ -233,7 +233,7 @@ describe('cosmeticPierce', () => {
 
 describe('Interpolator looks', () => {
   it('the look follows the sampled snapshot, not the newest', () => {
-    const ent = [7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled, 1] as EntSnap;
+    const ent = [7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled, 1, 0, 128] as EntSnap;
     const it = new Interpolator();
     it.push({ ...snap(1, 0, 0), ents: [ent], looks: [[7, EFFECT.Entangled, EFFECT_LOOK.Vines]] }, 0);
     // The newest snapshot no longer has the look (the entangle ended there).
@@ -247,7 +247,7 @@ describe('Interpolator looks', () => {
 
 describe('Interpolator shot height', () => {
   it('interpolates a projectile\'s height (anim_ms / 10) between snapshots', () => {
-    const arrow = (ms: number) => [9, KIND.Arrow, 10, 10, 255, 0, 0, ms, 0, 0, 0, 2] as EntSnap;
+    const arrow = (ms: number) => [9, KIND.Arrow, 10, 10, 255, 0, 0, ms, 0, 0, 0, 2, 0, 128] as EntSnap;
     const it = new Interpolator();
     it.push({ ...snap(1, 0, 0), ents: [arrow(100)] }, 0);
     it.push({ ...snap(2, 0, 0), ents: [arrow(300)] }, CONST.DT);
@@ -257,7 +257,7 @@ describe('Interpolator shot height', () => {
     expect(out.get(9)?.z).toBeCloseTo(20, 6);
   });
   it('extrapolates the height like x and y when snapshots run late, within the 0.1 s limit', () => {
-    const arrow = (x: number, ms: number) => [9, KIND.Arrow, x, 10, 255, 0, 0, ms, 0, 0, 0, 2] as EntSnap;
+    const arrow = (x: number, ms: number) => [9, KIND.Arrow, x, 10, 255, 0, 0, ms, 0, 0, 0, 2, 0, 128] as EntSnap;
     const it = new Interpolator();
     it.push({ ...snap(1, 0, 0), ents: [arrow(0, 100)] }, 0);
     it.push({ ...snap(1 + CONST.TICK_HZ / CONST.SNAPSHOT_HZ, 0, 0), ents: [arrow(10, 300)] }, 1 / CONST.SNAPSHOT_HZ);
@@ -272,7 +272,7 @@ describe('Interpolator shot height', () => {
 
 describe('Interpolator hazard radius', () => {
   it('interpolates a hazard\'s radius (element 6) as a number, not as an angle', () => {
-    const fire = (r: number) => [9, KIND.FirePatch, 10, 10, 255, 0, r, 0, 0, 0, 0, 2] as EntSnap;
+    const fire = (r: number) => [9, KIND.FirePatch, 10, 10, 255, 0, r, 0, 0, 0, 0, 2, 0, 128] as EntSnap;
     const it = new Interpolator();
     it.push({ ...snap(1, 0, 0), ents: [fire(2)] }, 0);
     it.push({ ...snap(2, 0, 0), ents: [fire(10)] }, CONST.DT);
@@ -465,7 +465,7 @@ describe('Interpolator clock', () => {
     for (let k = 0; k < 90; k++) {
       tick = k * every;
       now = tick * CONST.DT + 0.2 + (k === 40 ? 0.08 : 0); // one late arrival
-      it.push({ ...snap(tick, 0, 0), ents: [[1, 1, xAt(tick), 0, 255, 0, 0, 0, 0, 0, 0, 0] as EntSnap] }, now);
+      it.push({ ...snap(tick, 0, 0), ents: [[1, 1, xAt(tick), 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 128] as EntSnap] }, now);
       expect(it.delay).toBeGreaterThanOrEqual(0.05);
       expect(it.delay).toBeLessThanOrEqual(0.3);
       it.sample(now, out);

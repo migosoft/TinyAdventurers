@@ -179,10 +179,20 @@ describe('the gallery stage', () => {
   });
 
   it('reads the URL: state, slow and focus', () => {
-    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null, circles: false, smokeTone: null };
+    const d = { state: null, slow: 1, focus: 'figures', start: 0, crowd: 0, crowdAs: 'models', crowdKinds: null, light: 'work', at: null, aim: null, look: null, circles: false, smokeTone: null };
     expect(parseGallery('?r3d=gallery')).toEqual(d);
     expect(parseGallery('?r3d=gallery&state=melee&slow=8&focus=corridor&t=1.5')).toEqual({ ...d, state: 'melee', slow: 8, focus: 'corridor', start: 1.5 });
     expect(parseGallery('?r3d=gallery&state=nope&slow=0&focus=x&t=-2')).toEqual(d);
+  });
+
+  it('&hit=<deg> and &head=<deg>|sweep reach the figure and model rows', () => {
+    expect(parseGallery('?hit=90&head=sweep').look).toEqual({ hit: Math.PI / 2, head: 'sweep' });
+    expect(parseGallery('?head=60').look).toEqual({ hit: null, head: Math.PI / 3 });
+    expect(parseGallery('?hit=nope').look).toBeNull();
+    const e = galleryEnts(1, 'hurt', 0, null, null, { hit: 1, head: 0.5 }).find((x) => x.id === ID.model)!;
+    expect(e.hurtDir).toBe(1);
+    expect(e.head).toBe(0.5);
+    expect(galleryEnts(1, null).find((x) => x.id === ID.model)!.hurtDir).toBeUndefined();
   });
 
   it('&tone=grey gives the Shades the grey smoke; absent or any other value leaves the description\'s tone', () => {
@@ -195,7 +205,7 @@ describe('the gallery stage', () => {
 
   it('reads the model options: focus=models, crowd, crowdAs, light and at', () => {
     expect(parseGallery('?focus=models&crowd=40&crowdAs=cards&light=torch&at=12.5,60')).toEqual({
-      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null, circles: false, smokeTone: null,
+      state: null, slow: 1, focus: 'models', start: 0, crowd: 40, crowdAs: 'cards', crowdKinds: null, light: 'torch', at: { x: 12.5, z: 60 }, aim: null, look: null, circles: false, smokeTone: null,
     });
     expect(parseGallery('?at=model:3').at).toEqual(GALLERY.model(3));
     expect(parseGallery('?at=effect:2,4').at).toEqual(GALLERY.modelEffect(2, 4));

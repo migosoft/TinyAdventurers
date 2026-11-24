@@ -9,7 +9,7 @@ import { ANIM, CONST, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import { CLOTH } from './cloth';
 
-export interface LichIn { anim: number; animT: number; effects: number; flags: number; /** World rad. */ aim: number; /** World rad toward what the head looks at, or null. */ look: number | null; /** 0..1, the cloth's. */ glide: number }
+export interface LichIn { anim: number; animT: number; effects: number; flags: number; /** World rad. */ aim: number; /** World rad toward what the head looks at, or null. */ look: number | null; /** The way the last blow travelled (world rad); null: none, so no flinch; undefined: not told. */ hurtDir?: number | null; /** 0..1, the cloth's. */ glide: number }
 
 export interface LichPose {
   t: number; face: number; headYaw: number; glide: number;
@@ -159,7 +159,7 @@ export function lichPose(s: LichIn, dt: number, mem: LichMem): LichPose {
 
   // hurt: a rising flag starts a clock
   const hurtNow = (s.flags & FLAG.HURT) !== 0;
-  if (hurtNow && !mem.lastHurt) mem.hurtT = 0; else if (mem.hurtT >= 0 && !first) mem.hurtT += dt;
+  if (hurtNow && !mem.lastHurt) mem.hurtT = s.hurtDir === null ? -1 : 0; else if (mem.hurtT >= 0 && !first) mem.hurtT += dt;
   if (mem.hurtT >= LICH_TIMES.hurt) mem.hurtT = -1;
   p.hurt = mem.hurtT < 0 ? 0 : Math.sin(Math.PI * Math.min(1, mem.hurtT / LICH_TIMES.hurt));
   mem.lastHurt = hurtNow;

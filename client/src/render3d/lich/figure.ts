@@ -41,7 +41,7 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
   const cdt = held ? 0 : dt;
   clothMove(m.cloth, (s.x * TILE) / LICH.unit, (s.z * TILE) / LICH.unit, cdt);
   const i = m.inp;
-  i.anim = s.anim; i.animT = s.animT; i.effects = s.effects; i.flags = s.flags; i.aim = s.aim; i.look = s.look; i.glide = m.cloth.glide;
+  i.anim = s.anim; i.animT = s.animT; i.effects = s.effects; i.flags = s.flags; i.aim = s.aim; i.look = s.look; i.hurtDir = s.hurtDir; i.glide = m.cloth.glide;
   const pose = lichPose(i, dt, m.mem);
   ringLean(pose, m.lean);
   clothFollow(m.cloth, pose.face, cdt, m.lean);

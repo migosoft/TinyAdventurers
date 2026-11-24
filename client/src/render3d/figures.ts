@@ -602,7 +602,7 @@ export class Figures3d {
     const hiding = !!(e.flags & FLAG.HIDING);
     m.yaw = hiding ? SOUTH : turnTo(m.yaw, e.aim, f.dt);
     const hurt = !!(e.flags & FLAG.HURT);
-    if (hurt && !m.hurt) m.hitT = 0;
+    if (hurt && !m.hurt) m.hitT = e.hurtDir === null ? -1 : 0;   // a blow without a direction is not told by a jolt
     m.hurt = hurt;
     if (m.hitT >= 0) { m.hitT += f.dt; if (m.hitT > HIT_SECS) m.hitT = -1; }
     // The aim is read as it appears on screen (as the figures' is), so the facing and the lunge follow the camera.
@@ -1005,14 +1005,14 @@ export class Figures3d {
     if (falling) { const t = depthFade(y); tint[0] *= t; tint[1] *= t; tint[2] *= t; }
 
     // The head follows what the gaze looks at: the entity named in `extra` (the stone gaze's target), else the aim.
-    let look: number | null = s.aim;
+    let look: number | null = s.aim + (s.head ?? 0);   // the server's body facing plus its head angle
     if (s.anim === ANIM.Gaze) {
       const t = f.ents.get(e.extra);
       if (t) look = Math.atan2(t.y - e.y, t.x - e.x);
     }
     const mem = (fig.built ??= b.newMem());
     const bin = this.builtIn;
-    bin.anim = s.anim; bin.animT = s.animT; bin.effects = s.effects ?? 0; bin.flags = s.flags ?? 0; bin.aim = s.aim; bin.look = look; bin.x = x; bin.z = z;
+    bin.anim = s.anim; bin.animT = s.animT; bin.effects = s.effects ?? 0; bin.flags = s.flags ?? 0; bin.aim = s.aim; bin.look = look; bin.hurtDir = s.hurtDir; bin.x = x; bin.z = z;
     const dr = b.draw(bin, f.dt, mem);
 
     const scale = (b.unit * sc) / TILE;
@@ -1062,7 +1062,7 @@ export class Figures3d {
   }
 
   /** The scratch input of a built figure's draw (reused: the figure reads it before the next figure is drawn). */
-  private readonly builtIn = { anim: 0, animT: 0, effects: 0, flags: 0, aim: 0, look: null as number | null, x: 0, z: 0 };
+  private readonly builtIn = { anim: 0, animT: 0, effects: 0, flags: 0, aim: 0, look: null as number | null, hurtDir: undefined as number | null | undefined, x: 0, z: 0 };
 
   /**
    * What an attack or a channel adds round a model figure (#338): the swoosh of a melee swing at the shoulder, the wolf's fangs in front

@@ -40,6 +40,15 @@ const TILE = 16;
 const PAN_SPEED = 12;
 
 /** The figure states the rows cycle through. */
+/** The URL's `&hit` (rad) and `&head` (rad, or a sweep from side to side) of the gallery's figures. */
+export interface GalleryLook { hit: number | null; head: number | 'sweep' | null }
+/** Parses `&hit=<deg>` and `&head=<deg>|sweep`; null when neither is a usable value. */
+export function lookOf(hit: string | null, head: string | null): GalleryLook | null {
+  const deg = (v: string | null): number | null => (v !== null && v !== '' && Number.isFinite(Number(v)) ? (Number(v) * Math.PI) / 180 : null);
+  const h = deg(hit), d = head === 'sweep' ? 'sweep' : deg(head);
+  return h === null && d === null ? null : { hit: h, head: d };
+}
+
 export const STATES: [string, number][] = [
   ['idle', ANIM.Idle],
   ['move', ANIM.Move],
@@ -101,6 +110,8 @@ export interface GalleryOpts {
   at: { x: number; z: number } | null;
   /** `&aim=<deg>` (radians here): pins the aim of the figure rows and the model rows (90 faces the camera). */
   aim: number | null;
+  /** `&hit=<deg>` (the way the blow travelled) and `&head=<deg>` or `&head=sweep` (the head's angle) of the figure and model rows; null: neither given. */
+  look: GalleryLook | null;
   /** `&circles=1`: a ring on the ground under every figure of the line-up, the server's hit circle of its kind. */
   circles: boolean;
   /** `&tone=grey`: every smoke body is drawn in the grey tone (null: the description's own tone). */
@@ -149,6 +160,7 @@ export function parseGallery(search: string): GalleryOpts {
     light: q.get('light') === 'torch' ? 'torch' : 'work',
     at: at ?? (xz.length === 2 && xz.every(Number.isFinite) ? { x: xz[0], z: xz[1] } : null),
     aim: q.get('aim') !== null && Number.isFinite(Number(q.get('aim'))) ? (Number(q.get('aim')) * Math.PI) / 180 : null,
+    look: lookOf(q.get('hit'), q.get('head')),
     circles: q.get('circles') === '1',
     smokeTone: q.get('tone') === 'grey' ? SMOKE_TONES.grey : null,
   };
@@ -311,24 +323,28 @@ function barrelAt(t: number): { anim: number; animMs: number } {
 }
 
 /** Every entity of the stage at gallery time `t` (s); `state` pins a state (else the 1.2 s cycle); `crowd` walking model figures are added. */
-export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: number | null = null, crowdKinds: readonly number[] | null = null): EntState[] {
+export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: number | null = null, crowdKinds: readonly number[] | null = null, look: GalleryLook | null = null): EntState[] {
   const crowdCycle = crowdKinds ?? MODEL_KINDS;
   const out: EntState[] = [];
-  // Figure rows: the state cycle, the hurt flash every 3 s, the aim swinging and turning every 4 s.
-  const only = STATES.findIndex(([n]) => n === state);
+  // Figure rows: the state cycle (`hurt` stands idle), the hurt flash every 3 s, the aim swinging and turning every 4 s.
+  const only = STATES.findIndex(([n]) => n === (state === 'hurt' ? 'idle' : state));
   const [, anim] = STATES[only >= 0 ? only : Math.floor(t / 1.2) % STATES.length];
+  // `&hit` and `&head`: the way the blow travelled and the head's angle of the figure and model rows.
+  const dirs: Partial<EntState> = {};
+  if (look?.hit != null) dirs.hurtDir = look.hit;
+  if (look?.head != null) dirs.head = look.head === 'sweep' ? 0.9 * Math.sin(t * 1.2) : look.head;
   const animMs = ((t % 1.2) % 0.5) * 1000;
   const aim = aimPin ?? Math.sin(t * 0.7) * 0.6 + (Math.floor(t / 4) % 2 ? Math.PI : 0);
   const hurt = Math.floor(t * 2) % 6 === 0 ? FLAG.HURT : 0;
   Object.keys(FIGURES).map(Number).forEach((k, i) => {
     const p = GALLERY.figure(i);
-    out.push(ent(ID.figure + i, k, p.x + (anim === ANIM.Move ? (Math.sin(t * 3) * 6) / TILE : 0), p.z, { anim, animMs, aim, flags: hurt }));
+    out.push(ent(ID.figure + i, k, p.x + (anim === ANIM.Move ? (Math.sin(t * 3) * 6) / TILE : 0), p.z, { anim, animMs, aim, flags: hurt, ...dirs }));
   });
 
   // The model block: a row of the kinds with a model, cycling like the card rows; the effect rows; the figures that die; the pillars' torches; the crowd.
   MODEL_KINDS.forEach((k, i) => {
     const p = GALLERY.model(i);
-    out.push(ent(ID.model + i, k, p.x + (anim === ANIM.Move ? (Math.sin(t * 3) * 6) / TILE : 0), p.z, { anim, animMs, aim, flags: hurt }));
+    out.push(ent(ID.model + i, k, p.x + (anim === ANIM.Move ? (Math.sin(t * 3) * 6) / TILE : 0), p.z, { anim, animMs, aim, flags: hurt, ...dirs }));
   });
   const swapM = Math.floor(t / 4) % 2;
   MODEL_EFFECT_ROW_LIST.forEach((row, r) => MODEL_EFFECT_KINDS.forEach((kind, c) => {
@@ -506,7 +522,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       first = false;
       const diedAt = spectreDeathIn(from, t);
       if (diedAt !== null) for (const ev of spectreDiedBetween(from, t)) { figures.event(ev); fx.event(ev, diedAt, false); }
-      const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds);
+      const ents = galleryEnts(t, opts.state, opts.crowd, opts.aim, opts.crowdKinds, opts.look);
       const torch = opts.light === 'torch';
       const ambient = torch ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, oval: 1, models: { kit, is } });
