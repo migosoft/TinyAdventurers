@@ -174,6 +174,12 @@ pub fn input(run: &mut Run, pi: usize) -> InputMsg {
         let at = super::aim::creature_aim(run, me, f, &a);
         (aim, aim_dist) = (pos.angle_to(at), pos.dist(at));
     }
+    // A charmed hero has no head: its body turns toward the wanted aim at the body turn speed, as a monster's does,
+    // and a slot fires only once the body faces the aim within its ability's gate (as for every creature).
+    let turned = super::facing::turn_toward(run.players[pi].aim, aim, crate::defs::races::BODY_TURN.get(&run.players[pi].sheet.attrs) * DT);
+    let faces = |a: &ResolvedAbility| super::facing::gate(a).map_or(true, |g| crate::math::angle_diff(aim, turned).abs() <= g);
+    let (use_primary, use_secondary) = (use_primary && faces(&run.players[pi].sheet.primary), use_secondary && faces(&run.players[pi].sheet.secondary));
+    let aim = turned;
     if let Some(c) = run.players[pi].charm.as_mut() {
         let b = &mut c.brain;
         if use_primary {
@@ -185,8 +191,6 @@ pub fn input(run: &mut Run, pi: usize) -> InputMsg {
             b.shot = b.shot.wrapping_add(n2);
         }
     }
-    // A charmed hero has no head: its body turns toward the wanted aim at the body turn speed, as a monster's does.
-    let aim = super::facing::turn_toward(run.players[pi].aim, aim, crate::defs::races::BODY_TURN.get(&run.players[pi].sheet.attrs) * DT);
     InputMsg { seq, mx, my, aim: aim as f32, aim_dist: aim_dist as f32, primary, secondary, view_lag, rtt, act: false }
 }
 
@@ -895,7 +899,11 @@ mod tests {
     }
     /// Hero 1 stands `dist` px from charmed hero 0 at `angle` from its aim (east); the held orc is the caster.
     fn charmed_with_a_hero_at(angle: f64, dist: f64) -> Run {
-        let mut run = arena(&[ClassId::Paladin, ClassId::Paladin]);
+        charmed_wizard_or_paladin(ClassId::Paladin, angle, dist)
+    }
+
+    fn charmed_wizard_or_paladin(class: ClassId, angle: f64, dist: f64) -> Run {
+        let mut run = arena(&[class, ClassId::Paladin]);
         let at = run.players[0].pos();
         put(&mut run, 1, at + Vec2::new(angle.cos(), angle.sin()) * dist);
         tough(&mut run, 1);
@@ -913,6 +921,33 @@ mod tests {
         let i = input(&mut run, 0);
         assert!(step < 1.2, "the turn takes more than a tick");
         assert!((f64::from(i.aim) - step).abs() < 1e-4, "it turns by one tick's worth: {} vs {}", i.aim, step);
+    }
+
+    #[test]
+    fn a_charmed_hero_fires_only_once_it_faces_its_foe() {
+        let mut control = charmed_wizard_or_paladin(ClassId::Wizard, 0.0, 100.0);
+        control.players[0].cd1 = 0.0;
+        control.players[0].cd2 = 99.0;
+        assert!(input(&mut control, 0).primary.is_some(), "control: facing the foe it fires at once");
+        let mut run = charmed_wizard_or_paladin(ClassId::Wizard, 0.7, 100.0); // inside the cone plus neck, outside the 30 degree gate
+        run.players[0].cd1 = 0.0;
+        run.players[0].cd2 = 99.0;
+        let before = run.players[0].charm.as_ref().unwrap().brain.shot;
+        let i = input(&mut run, 0);
+        assert_eq!(i.primary, None, "it is far from facing the foe");
+        assert_eq!(run.players[0].charm.as_ref().unwrap().brain.shot, before, "no shot id used up");
+        let mut fired = false;
+        for _ in 0..40 {
+            run.players[0].cd1 = 0.0;
+            let i = input(&mut run, 0);
+            run.players[0].aim = f64::from(i.aim);
+            if i.primary.is_some() {
+                fired = true;
+                assert!(crate::math::angle_diff(0.7, f64::from(i.aim)).abs() <= crate::run::facing::gate(&run.players[0].sheet.primary).unwrap() + 1e-6);
+                break;
+            }
+        }
+        assert!(fired, "it fires once it has turned to the foe");
     }
 
     #[test]

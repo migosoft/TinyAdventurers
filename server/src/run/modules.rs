@@ -141,6 +141,10 @@ pub fn leap_start(run: &mut Run, mi: usize, foe: Creature) -> bool {
     if d <= reach + 8.0 || d > leap.range + radii || !line_of_sight(&run.layout.map, pos, fpos) || !lands_safely(run, mi, id, fpos) {
         return false;
     }
+    // Like every attack, it starts only with the body facing the foe.
+    if !super::facing::faces(run, mi, fpos, super::facing::gate(&leap)) {
+        return false;
+    }
     let aim = pos.angle_to(fpos);
     run.start_windup(mi, Windup { t: leap.windup, aim, alt: true, at: None, id: Some(id) });
     run.monsters[mi].ai.path.clear();
@@ -153,6 +157,8 @@ fn leap_end(run: &mut Run, mi: usize, id: AbilityId, seen: Option<Creature>) {
     if let Some(foe) = seen {
         let at = run.creature_pos(foe);
         if lands_safely(run, mi, id, at) {
+            let gate = super::facing::gate(run.monsters[mi].kit.get(id).expect("the creature leaps with its kit"));
+            let at = super::facing::release_point(run, mi, at, gate);
             monster_use(run, mi, id, at);
             return;
         }
@@ -324,6 +330,23 @@ mod tests {
         run.step();
         assert!(run.monsters[mi].dash.is_none());
         assert_eq!(run.monsters[mi].hp, hp - LAVA_DAMAGE, "the first touch burns at once");
+    }
+
+    #[test]
+    fn a_leaper_does_not_start_a_pounce_until_it_faces_its_foe() {
+        let (mut run, mi) = leaper(0);
+        run.players[0].mv.x = run.monsters[mi].pos.x + 40.0;
+        run.players[0].mv.y = run.monsters[mi].pos.y;
+        let foe = Creature::Player(0);
+        run.monsters[mi].aim = std::f64::consts::PI; // the foe is behind it
+        assert!(!leap_start(&mut run, mi, foe));
+        run.monsters[mi].aim = 0.0;
+        assert!(leap_start(&mut run, mi, foe));
+        // Released after the body turned away: the leap goes no further off than the gate.
+        let gate = crate::run::facing::gate(run.monsters[mi].kit.get(AbilityId::Pounce).unwrap()).unwrap();
+        run.monsters[mi].aim = 2.0;
+        leap_end(&mut run, mi, AbilityId::Pounce, Some(foe));
+        assert!(crate::math::angle_diff(run.monsters[mi].aim, 2.0).abs() <= gate + 1e-6, "aim {}", run.monsters[mi].aim);
     }
 
     #[test]
