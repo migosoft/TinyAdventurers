@@ -41,8 +41,13 @@ pub fn finish_cove(d: &mut Dungeon, seed: u32) {
     d.cove = Some(Cove { rect, tree, seed });
 }
 
-/// How many animals the cove holds: the boar, the stag, three deer and ten bunnies.
-pub const ANIMALS: usize = 15;
+/// The cove's animals in spawn order, matching `animal_spots`: the boar, the stag, three deer and ten bunnies.
+pub const ANIMAL_KINDS: [crate::defs::enemies::EnemyType; 15] = {
+    use crate::defs::enemies::EnemyType as E;
+    [E::Boar, E::Stag, E::Deer, E::Deer, E::Deer, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny, E::Bunny]
+};
+/// How many animals the cove holds.
+pub const ANIMALS: usize = ANIMAL_KINDS.len();
 /// Salt for the animals' own random stream, so the animal spots stay apart from any other use of `cove.seed`.
 const ANIMAL_SALT: u64 = 0xA41_3A15;
 

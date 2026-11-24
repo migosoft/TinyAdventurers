@@ -132,7 +132,10 @@ impl Map {
         if self.opaque(x, y) {
             return true;
         }
-        let t = self.get(x, y);
+        Map::terrain_blocks(self.get(x, y), mover)
+    }
+    /// The movement rules for terrain: the terrain a walker of this kind cannot enter. A hero is blocked only by deep water (a chasm is deadly to it but not blocked); monsters are blocked by what would kill or hurt them.
+    pub fn terrain_blocks(t: u8, mover: Mover) -> bool {
         match mover {
             Mover::Dash | Mover::Incorporeal => false,
             Mover::Hero => t == Tile::DeepWater as u8,

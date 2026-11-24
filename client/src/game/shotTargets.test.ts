@@ -15,6 +15,10 @@ describe('shotPassesThrough', () => {
     expect(shotPassesThrough({ kind: KIND.DireWolf, side: SIDE.Friendly, flags: 0 })).toBe(true);
     expect(shotPassesThrough({ kind: KIND.Paladin, side: SIDE.Friendly, flags: 0 })).toBe(true);
   });
+  it('the WILD flag alone stops it, whatever the kind', () => {
+    expect(shotPassesThrough({ kind: KIND.Knight, side: SIDE.Neutral, flags: 0 })).toBe(true);
+    expect(shotPassesThrough({ kind: KIND.Knight, side: SIDE.Neutral, flags: FLAG.WILD })).toBe(false);
+  });
   it('a calm animal and a boar with a grudge stop it', () => {
     for (const kind of [KIND.Bunny, KIND.Deer, KIND.Stag, KIND.Boar]) expect(shotPassesThrough({ kind, side: SIDE.Neutral, flags: FLAG.WILD })).toBe(false);
     expect(shotPassesThrough({ kind: KIND.Boar, side: SIDE.Hostile, flags: 0 })).toBe(false);

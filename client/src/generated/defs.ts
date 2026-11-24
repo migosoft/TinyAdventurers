@@ -1535,6 +1535,14 @@ export const LEAF_PALETTE = {
   "Summer": 0
 } as const;
 
+export const PLANT_KIND = {
+  "Bush": 4,
+  "Conifer": 3,
+  "Round": 0,
+  "Tall": 2,
+  "Wide": 1
+} as const;
+
 export const ENEMY_KINDS = {
   "Boar": {
     "max_hp": 40.0,

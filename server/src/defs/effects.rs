@@ -59,6 +59,30 @@ impl EffectKind {
     pub fn bit(self) -> u32 {
         1 << self as u32
     }
+    pub fn name(self) -> &'static str {
+        match self {
+            EffectKind::Blind => "Blind",
+            EffectKind::Sleep => "Sleep",
+            EffectKind::Petrified => "Petrified",
+            EffectKind::Slowed => "Slowed",
+            EffectKind::Accelerated => "Accelerated",
+            EffectKind::Burning => "Burning",
+            EffectKind::Frozen => "Frozen",
+            EffectKind::Poisoned => "Poisoned",
+            EffectKind::Chilled => "Chilled",
+            EffectKind::Singed => "Singed",
+            EffectKind::Tainted => "Tainted",
+            EffectKind::Entangled => "Entangled",
+            EffectKind::Fear => "Fear",
+            EffectKind::Warded => "Warded",
+            EffectKind::Coated => "Coated",
+            EffectKind::Invisible => "Invisible",
+            EffectKind::Weakened => "Weakened",
+            EffectKind::Clumsy => "Clumsy",
+            EffectKind::Frail => "Frail",
+            EffectKind::Charmed => "Charmed",
+        }
+    }
     pub fn from_u8(v: u8) -> Option<EffectKind> {
         EffectKind::ALL.get(v as usize).copied()
     }
@@ -286,7 +310,13 @@ impl EffectResistances {
 /// An effect's seconds after an effect resistance `r`: `secs × (1 − r)`, with `r`
 /// floored at `MIN_RESISTANCE`; `None` (refused) at `r >= 1`.
 pub fn effect_secs(secs: f64, r: f64) -> Option<f64> {
-    (r < 1.0).then(|| secs * (1.0 - r.max(super::damage::MIN_RESISTANCE)))
+    (r < 1.0).then(|| secs * (1.0 - cap_effect_res(r)))
+}
+
+/// An effect resistance as the game uses it, and as the Sheet and the rules log show it: within
+/// [`MIN_RESISTANCE`, `MAX_RESISTANCE`], like a damage resistance.
+pub fn cap_effect_res(r: f64) -> f64 {
+    r.clamp(super::damage::MIN_RESISTANCE, super::damage::MAX_RESISTANCE)
 }
 
 /// An effect a hit applies after its damage (see `Damage::on_hit`).
@@ -397,6 +427,14 @@ mod tests {
             assert_eq!(k.bit(), 1 << k as u8);
         }
         assert_eq!(EffectKind::from_u8(EffectKind::COUNT as u8), None);
+    }
+
+    #[test]
+    fn shown_effect_resistance_is_capped_like_the_game_uses_it() {
+        assert_eq!(cap_effect_res(1.7), 1.0);
+        assert_eq!(cap_effect_res(-3.0), -1.0);
+        assert_eq!(cap_effect_res(0.4), 0.4);
+        assert_eq!(effect_secs(10.0, -3.0), Some(20.0));
     }
 
     #[test]
@@ -563,10 +601,9 @@ mod tests {
     #[test]
     fn effect_names_are_unique() {
         use crate::defs::abilities::same_name;
-        let name = crate::run::rules_log::text::effect_name;
         for (i, a) in EffectKind::ALL.iter().enumerate() {
             for b in &EffectKind::ALL[i + 1..] {
-                assert!(!same_name(name(*a), name(*b)), "{a:?} and {b:?} share a name");
+                assert!(!same_name(a.name(), b.name()), "{a:?} and {b:?} share a name");
             }
         }
     }

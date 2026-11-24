@@ -385,6 +385,16 @@ mod tests {
     }
 
     #[test]
+    fn the_dragon_never_picks_a_charmed_hero() {
+        let (mut run, _, bi) = dragon_with(&[Vec2::new(40.0, 0.0), Vec2::new(90.0, 0.0)]);
+        assert_eq!(target(&run, bi).map(|t| t.0), Some(0), "control: the nearer hero");
+        run.players[0].side = crate::run::targets::Side::Hostile; // charmed by an enemy: on the dragon's side
+        assert_eq!(target(&run, bi).map(|t| t.0), Some(1), "the dragon fights the other hero");
+        run.players[1].side = crate::run::targets::Side::Hostile;
+        assert_eq!(target(&run, bi), None, "and nobody when every hero is charmed");
+    }
+
+    #[test]
     fn the_breath_is_heat() {
         use crate::defs::damage::{DamageType, Resistances};
         let breathe = |res: Resistances| {

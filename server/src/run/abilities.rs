@@ -416,8 +416,14 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
         }
         AbilityId::Volley | AbilityId::GloomBolts => {
             let own = ab::def(a.id).own;
-            for (i, off) in ab::shot_offsets(own.count, own.spread).into_iter().enumerate() {
+            let (first, offsets) = (run.projectiles.len(), ab::shot_offsets(own.count, own.spread));
+            for (i, off) in offsets.iter().enumerate() {
                 spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i as u8), Vec2::from_angle(aim + off), None, 0.0, land);
+            }
+            // Range finding learns once per volley: from the middle arrow, not from every side arrow.
+            let mid = ab::volley_shot(shot, (offsets.len() / 2) as u8);
+            for p in run.projectiles[first..].iter_mut().filter(|p| p.shot != mid) {
+                p.aimed = None;
             }
         }
         // The demon's ring: `count` orbs spread over the full circle, starting at the aim, and a burst where it stands.
@@ -444,7 +450,7 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
     let dir = Vec2::from_angle(aim);
     match a.id {
         AbilityId::Fireball => {
-            let target = pos + dir * aim_dist.clamp(24.0, a.range);
+            let target = pos + dir * aim_dist.max(24.0).min(a.range);
             spawn_shot(run, c, a, EntityKind::Fireball, shot, dir, Some(target), a.radius, None);
         }
         AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -523,8 +529,9 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = weapon_damage(run, c, a);
             let aim = aim_of(run, c);
+            let by = hero_of(c).map(|pi| run.players[pi].id);
             for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
-                crate::run::objects::hurt_object(run, oi, dmg.clone(), None);
+                crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
             }
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, skip_calm: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
@@ -541,7 +548,10 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = damage_of(run.creature_id(c), a);
-            crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg.clone());
+            let by = hero_of(c).map(|pi| run.players[pi].id);
+            for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
+                crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
+            }
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, skip_calm: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, &targets::stance(run, c), &rule, &[], log, |t| run.creature_pos(t));
@@ -610,7 +620,8 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
     if run.rng.gen_bool(ab::BREATH_PATCH_CHANCE) {
         let at = pos + Vec2::from_angle(aim + run.rng.gen_range(-half..half)) * run.rng.gen_range(ab::BREATH_PATCH_NEAREST..a.range);
         if !run.layout.map.opaque_at(at) {
-            super::spawn_fire_patch(run, at, ab::BREATH_PATCH_RADIUS, ab::BREATH_PATCH_SECS, ab::BREATH_PATCH_DAMAGE);
+            let owner = hero_of(c).map(|pi| run.players[pi].id);
+            super::spawn_fire_patch_of(run, at, ab::BREATH_PATCH_RADIUS, ab::BREATH_PATCH_SECS, ab::BREATH_PATCH_DAMAGE, side(run, c), owner);
         }
     }
 }
@@ -834,7 +845,7 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
         AbilityId::Entangle => {
             // Aimed like the Fireball, but it stops short of the first wall on the way.
             let dir = Vec2::from_angle(aim);
-            let want = aim_dist.clamp(24.0, a.range);
+            let want = aim_dist.max(24.0).min(a.range);
             let mut d = 0.0;
             while d + 2.0 <= want && !run.layout.map.opaque_at(pos + dir * (d + 2.0)) {
                 d += 2.0;
@@ -1166,7 +1177,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         if let Some(arc) = &mut pr.arc {
             arc.flown += sdt;
             // The landing substep ends at the landing point, not past it.
-            if arc.flown >= arc.flight - 1e-9 {
+            if super::arc::has_landed(arc.flight, arc.flown) {
                 pr.pos = arc.land;
             }
         }
@@ -1203,7 +1214,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
                 .enumerate()
                 .position(|(mi, m)| {
                     shot_takes(run, pr, Creature::Monster(mi))
-                        && if pr.arc.is_some() { super::arc::arc_touches(m.pos, m.radius, m.shot_top(), pos, z, pr.radius) } else { m.shot_dist(pos) < m.radius + pr.radius }
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), m.pos, m.radius, m.shot_top(), pos, pr.radius, m.shot_dist(pos))
                 })
                 .map(Creature::Monster)
         };
@@ -1213,7 +1224,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
                 .enumerate()
                 .position(|(pi, p)| {
                     shot_takes(run, pr, Creature::Player(pi))
-                        && if pr.arc.is_some() { super::arc::arc_touches(p.pos(), PLAYER_RADIUS, p.kind().body_height(), pos, z, pr.radius) } else { p.pos().dist(pos) < PLAYER_RADIUS + pr.radius }
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), p.pos(), PLAYER_RADIUS, p.kind().body_height(), pos, pr.radius, p.pos().dist(pos))
                 })
                 .map(Creature::Player)
         };
@@ -1234,7 +1245,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         }
         // The arc ends on the ground at its landing point, with no impact.
         let pr = &mut run.projectiles[i];
-        if let Some(arc) = pr.arc.as_ref().filter(|a| a.flown >= a.flight - 1e-9) {
+        if let Some(arc) = pr.arc.as_ref().filter(|a| super::arc::has_landed(a.flight, a.flown)) {
             let at = arc.land;
             let (id, kind, aim, extra) = (pr.id, pr.kind as u8, pr.vel.y.atan2(pr.vel.x), (pr.owner << 16) | pr.shot as u32);
             pr.pos = at;
@@ -1803,6 +1814,19 @@ mod tests {
     }
 
     #[test]
+    fn a_breath_patch_belongs_to_the_side_of_the_one_who_breathed() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].side = Side::Friendly;
+        run.monsters[bi].channel = Some((AbilityId::FireBreath, 1000.0, 0.0));
+        for _ in 0..400 {
+            tick_channel(&mut run, bi, ab::BREATH_PULSE);
+        }
+        assert!(!run.hazards.is_empty(), "a patch came");
+        assert!(run.hazards.iter().all(|h| h.side == Side::Friendly), "a friendly breather's fire spares the heroes");
+    }
+
+    #[test]
     fn a_shot_keeps_its_users_numbers_after_the_user_dies() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         run.monsters.retain(|m| m.is_boss);
@@ -1943,7 +1967,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fireball_never_pushes_an_ally_of_its_users_side() {
+    fn a_fireball_never_pushes_an_ally_of_its_casters_side() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
@@ -4003,6 +4027,22 @@ mod tests {
     }
 
     #[test]
+    fn a_chain_spark_cast_skips_a_calm_animal() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let bunny = put_enemy(&mut run, 0, EnemyType::Bunny, 60.0, 1000.0);
+        run.monsters[bunny].pos = run.monsters[first].pos + Vec2::new(0.0, 20.0);
+        assert!(run.monsters[bunny].wild.is_some(), "control: a wild animal");
+        let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        run.monsters[far].pos = run.monsters[first].pos + Vec2::new(0.0, -40.0);
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0, "the first target is hit");
+        assert_eq!(run.monsters[bunny].hp, 1000.0, "the calm bunny is passed over");
+        assert!(run.monsters[far].hp < 1000.0, "the spark jumps on to the next foe");
+    }
+
+    #[test]
     fn frost_nova_flashes_icy_blue() {
         let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
         try_use(&mut run, 0, false, 1);
@@ -4912,6 +4952,24 @@ mod hero_sides {
     }
 
     #[test]
+    fn a_shot_cast_for_the_heroes_pays_nobody_when_its_hero_turned_before_it_lands() {
+        // A Fireball: its blast is credited through the shot's owner (a plain hit goes through `credit_of`).
+        let mut run = crowd(&[ClassId::Wizard]);
+        assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Fireball);
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 70.0, 1000.0);
+        run.players[0].aim_dist = 70.0;
+        run.monsters[orc].hp = 1.0; // the blast kills it
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.projectiles[0].side, Side::Friendly);
+        run.players[0].side = Side::Hostile; // an enemy's Charm took the hero while the fireball flew
+        let before = (run.players[0].kills, run.players[0].damage);
+        fly(&mut run);
+        assert!(!run.monsters[orc].alive, "the blast still kills the orc");
+        // (The kill's XP goes to the whole party either way.)
+        assert_eq!(before, (run.players[0].kills, run.players[0].damage), "but the charmed hero gets no kill or damage");
+    }
+
+    #[test]
     fn a_shot_cast_for_the_enemies_stays_theirs_when_its_hero_turns_back() {
         // Magic Missile at the wolf, cast while hero 0 is hostile; hero 0 is Friendly again before it lands.
         let mut run = crowd(&[ClassId::Wizard, ClassId::ElvenRanger]);
@@ -4919,14 +4977,14 @@ mod hero_sides {
         let wi = run.monster_idx(wolf).unwrap();
         stand(&mut run, 1, -60.0); // out of the missile's way
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(60.0, 0.0);
-        let hp = run.monsters[wi].hp;
+        run.monsters[wi].hp = 1.0; // the hit kills it: a kill is what the credit rule must refuse
         run.players[0].side = Side::Hostile;
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].side, Side::Hostile);
         run.players[0].side = Side::Friendly;
         let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
         fly(&mut run);
-        assert!(run.monsters[wi].hp < hp, "the wolf still takes the hit");
+        assert!(!run.monsters[wi].alive, "the wolf still takes the hit, and falls");
         assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage), "and the hero is credited with none of it");
     }
 
@@ -4937,14 +4995,14 @@ mod hero_sides {
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 1);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(90.0, 0.0);
-        let hp = run.monsters[wi].hp;
+        run.monsters[wi].hp = 1.0; // the jump kills it: a kill is what the credit rule must refuse
         run.players[0].side = Side::Hostile;
         try_use(&mut run, 0, true, 1);
         run.players[0].side = Side::Friendly;
         let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
         fly(&mut run);
         assert!(run.players[1].hp < run.players[1].max_hp, "the spark hit hero 1");
-        assert!(run.monsters[wi].hp < hp, "the jump hit the wolf");
+        assert!(!run.monsters[wi].alive, "the jump hit the wolf, and it fell");
         assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage));
     }
 

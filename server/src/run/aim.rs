@@ -12,6 +12,9 @@ use crate::math::Vec2;
 use crate::sheet::ResolvedAbility;
 use rand::Rng;
 
+/// Lead reads the target's speed over this many ticks.
+const LEAD_TICKS: usize = 4;
+
 fn attrs_of(run: &Run, c: Creature) -> Attributes {
     match c {
         Creature::Player(pi) => run.players[pi].sheet.attrs,
@@ -75,13 +78,19 @@ pub fn shot_done(run: &mut Run, owner: u32, aimed: u32, struck: bool) {
 }
 
 impl Run {
-    /// A creature's velocity (px/s) over its last whole tick, from its position history.
+    /// A creature's velocity (px/s) over its last `LEAD_TICKS` ticks (fewer while its history is short), from its
+    /// position history: one tick is jittery for a hero, whose speed changes with every input.
     pub fn creature_vel(&self, c: Creature) -> Vec2 {
-        let (a, b) = match c {
-            Creature::Player(pi) => (self.players[pi].pos_ago(1), self.players[pi].pos_ago(2)),
-            Creature::Monster(mi) => (self.monsters[mi].pos_ago(1), self.monsters[mi].pos_ago(2)),
+        let len = match c {
+            Creature::Player(pi) => self.players[pi].history.len(),
+            Creature::Monster(mi) => self.monsters[mi].history.len(),
         };
-        (a - b) * (1.0 / DT)
+        let ago = |t| match c {
+            Creature::Player(pi) => self.players[pi].pos_ago(t),
+            Creature::Monster(mi) => self.monsters[mi].pos_ago(t),
+        };
+        let n = LEAD_TICKS.min(len.saturating_sub(1)).max(1);
+        (ago(1) - ago(1 + n)) * (1.0 / (n as f64 * DT))
     }
 }
 
@@ -171,6 +180,38 @@ mod tests {
         let n = 500;
         let mean_x = (0..n).map(|_| creature_aim(&mut run, Creature::Monster(mi), Creature::Player(0), &a).x).sum::<f64>() / n as f64;
         assert!((mean_x - (pos.x + s * t)).abs() < 2.0, "mean {mean_x} want {}", pos.x + s * t);
+    }
+
+    #[test]
+    fn lead_smooths_the_speed_over_several_ticks() {
+        let (mut run, _, _) = fixture(1, 21, 10, 100.0);
+        // Three steps of 30 px over four ticks, the last tick standing still: one tick alone would read 0.
+        let x0 = run.players[0].pos().x;
+        run.players[0].history = [0.0, 30.0, 60.0, 90.0, 90.0].into_iter().map(|d| Vec2::new(x0 + d, 0.0)).collect();
+        let v = run.creature_vel(Creature::Player(0));
+        assert!((v.x - 90.0 / (4.0 * DT)).abs() < 1e-6, "{v:?}");
+    }
+
+    #[test]
+    fn a_barrel_shot_is_not_tagged_with_the_last_foe() {
+        let (mut run, mi, a) = fixture(1, 16, 10, 100.0);
+        creature_aim(&mut run, Creature::Monster(mi), Creature::Player(0), &a);
+        let fid = run.players[0].id;
+        let barrel = run.monsters[mi].pos - Vec2::new(40.0, 0.0);
+        crate::run::ai::perform_attack(&mut run, mi, Creature::Player(0), false, Some(barrel));
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].aimed, None, "a miss at a barrel teaches nothing");
+        assert_eq!(run.monsters[mi].ai.aim.target, fid, "the memory of the foe stays");
+    }
+
+    #[test]
+    fn a_volley_teaches_range_finding_once() {
+        let (mut run, mi, _) = fixture(1, 16, 10, 100.0);
+        let m = &mut run.monsters[mi];
+        m.kit = crate::sheet::monster_kit(&[crate::defs::abilities::AbilityId::Volley], &m.attrs, &[crate::defs::items::ItemId::GoblinShortbow], crate::sheet::Body { radius: m.radius }, &[]);
+        crate::run::ai::perform_attack(&mut run, mi, Creature::Player(0), false, None);
+        assert_eq!(run.projectiles.len(), 3);
+        assert_eq!(run.projectiles.iter().filter(|p| p.aimed.is_some()).count(), 1, "the middle arrow stands for the volley");
     }
 
     #[test]

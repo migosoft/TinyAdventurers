@@ -50,15 +50,12 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
         let mut p = pr.pos + pr.vel * (s / speed);
         // An arcing shot replays its height and ends at its landing point, like the real flight.
         let arc = pr.arc.as_ref().map(|a| (a, a.flown + s / speed));
-        let landed = arc.is_some_and(|(a, t)| t >= a.flight - 1e-9);
+        let landed = arc.is_some_and(|(a, t)| super::arc::has_landed(a.flight, t));
         if let (Some((a, _)), true) = (arc, landed) {
             p = a.land;
         }
         let z = arc.map(|(a, t)| super::arc::shot_z(a.flight, t));
-        let touches = |body: Vec2, r: f64, top: f64, flat: f64| match z {
-            Some(z) => super::arc::arc_touches(body, r, top, p, z, pr.radius),
-            None => flat < r + pr.radius,
-        };
+        let touches = |body: Vec2, r: f64, top: f64, flat: f64| super::arc::shot_touches(z, body, r, top, p, pr.radius, flat);
         if aim_reached(pr, p) || run.layout.map.opaque_at(p) || stopping_object(run, p, pr.radius).is_some() {
             return None;
         }
@@ -75,10 +72,7 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
                 return None;
             }
         }
-        let hit = match z {
-            Some(z) => super::arc::arc_touches(at, m.radius, m.shot_top(), p, z, pr.radius + extra),
-            None => m.shot_dist_at(at, p) < m.radius + pr.radius + extra,
-        };
+        let hit = super::arc::shot_touches(z, at, m.radius, m.shot_top(), p, pr.radius + extra, m.shot_dist_at(at, p));
         if hit {
             return Some(s);
         }

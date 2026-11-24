@@ -179,8 +179,13 @@ pub struct Run {
 
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
+    spawn_fire_patch_of(run, pos, radius, life, damage, Side::Hostile, None);
+}
+
+/// A fire patch of `side` (what the ground hurts follows it), made by the hero `owner` (an entity id) if any.
+pub fn spawn_fire_patch_of(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
     let kind = EntityKind::FirePatch;
-    run.spawn_hazard(kind, pos, radius, life, Side::Hostile, None, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
+    run.spawn_hazard(kind, pos, radius, life, side, owner, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
 impl Run {
@@ -770,7 +775,7 @@ impl Run {
                 let m = &mut self.monsters[mi];
                 // The unrecruited knight and a calm wild animal are no kill; a boar with a grudge against the heroes is.
                 let by_hero = m.last_hit_by;
-                let counts = m.side != Side::Neutral || m.wild.is_some() && m.grudge.heroes;
+                let counts = targets::kill_counts(m);
                 if let Some(pi) = by_hero.filter(|_| counts) {
                     self.players[pi].kills += 1;
                 }
@@ -1038,13 +1043,6 @@ impl Run {
         let res = keystones::hurt_res(&self.players[pi], self.players[pi].effects.res(self.players[pi].res));
         let parts = resolve_parts(&dmg, &res);
         let raw: f64 = parts.iter().sum();
-        if raw < 0.0 {
-            let hp_before = self.players[pi].hp;
-            let healed = self.mend_player(pi, -raw);
-            let hp_after = self.players[pi].hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
-            return;
-        }
         let p = &mut self.players[pi];
         let v = raw;
         let imm = raw == 0.0 && dmg.amount > 0.0;
@@ -1112,7 +1110,7 @@ impl Run {
         healed
     }
 
-    /// The heal itself. A resistance over 100 % heals through this, with no line of its own: its hit's record tells it.
+    /// The heal itself.
     fn mend_player(&mut self, pi: usize, amount: f64) -> f64 {
         let p = &mut self.players[pi];
         if !p.alive {
@@ -1302,23 +1300,6 @@ impl Run {
         let seen_by = src_player.is_none().then_some(pos);
         // Only a tick of an effect can reach an invisible enemy now (a hit revealed it): no number at its spot.
         let hidden = !ally && self.monsters[mi].effects.has(crate::defs::effects::EffectKind::Invisible);
-        if raw < 0.0 {
-            let m = &mut self.monsters[mi];
-            let hp_before = m.hp;
-            let healed = (-raw).min(m.max_hp - m.hp);
-            m.hp += healed;
-            let hp_after = m.hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
-            if healed > 0.0 && !hidden {
-                let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
-                if ally {
-                    self.event_on_hero(ev, pos);
-                } else {
-                    self.event(ev, seen_by);
-                }
-            }
-            return true;
-        }
         let imm = raw == 0.0 && dmg.amount > 0.0;
         let m = &mut self.monsters[mi];
         let hp_before = m.hp;
@@ -1365,11 +1346,11 @@ impl Run {
             // The kill goes to the hero who struck, or whose effect ticked it down.
             let credit = if src_player.is_some() { src_player } else if dmg.from_effect { last_hit_by } else { None };
             // A calm wild animal is no kill; a boar with a grudge against the heroes is.
-            let counts = self.monsters[mi].wild.is_none() || self.monsters[mi].grudge.heroes;
+            let counts = targets::kill_counts(&self.monsters[mi]);
             if let Some(pi) = credit.filter(|_| counts) {
                 self.players[pi].kills += 1;
             }
-            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Monster(mi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit });
+            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Monster(mi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit: credit.filter(|_| counts) });
             // Killed on the heroes' side: a hero, or an ally of theirs (the wolf, a recruit).
             let by_ally = dmg.why.by.and_then(|id| self.monster_idx(id)).is_some_and(|bi| self.monsters[bi].side == Side::Friendly);
             self.kill_monster_by(mi, credit.is_some() || by_ally);

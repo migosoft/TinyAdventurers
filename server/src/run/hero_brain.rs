@@ -720,6 +720,35 @@ mod tests {
     }
 
     #[test]
+    fn a_charmed_hero_walks_up_to_a_far_foe_and_charges_it() {
+        let build = build_with_ability(ClassId::Barbarian, AbilityId::Charge);
+        let mut run = test_run_with(&[(ClassId::Barbarian, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Lich);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let range = run.players[0].sheet.secondary.range;
+        let at = run.players[0].pos();
+        put(&mut run, 1, at + Vec2::new(range * 3.0, 0.0));
+        tough(&mut run, 0);
+        tough(&mut run, 1);
+        let orc = held_orc(&mut run, -60.0);
+        charm_hero(&mut run, 0, orc, 60.0);
+        let start = run.players[0].pos();
+        let hp = run.players[1].hp;
+        let mut charged = false;
+        for _ in 0..600 {
+            run.step();
+            charged |= run.players[0].cd2 > 0.0;
+            if charged {
+                break;
+            }
+        }
+        assert!(charged, "it closed in until the Charge could reach and used it");
+        steps(&mut run, 60); // the dash lands
+        assert!(run.players[0].pos().dist(start) > 1.0, "it walked first: the foe was out of the dash's range at the start");
+        assert!(run.players[1].hp < hp, "and the Charge hurt the foe");
+    }
+
+    #[test]
     fn every_hero_ability_is_used_by_a_charmed_hero() {
         let mut checked = 0;
         for id in AbilityId::ALL {
@@ -765,6 +794,26 @@ mod tests {
         assert_eq!(run.players[1].spectating, Some(hero0), "permadeath: it watches");
         assert!(run.players[1].charm.is_none() && run.players[1].side == Side::Friendly);
         assert_eq!((run.players[0].kills, run.players[0].xp), (kills, xp));
+    }
+
+    #[test]
+    fn a_ranger_who_dies_charmed_loses_the_wolf_and_nobody_is_credited() {
+        let mut run = arena(&[ClassId::ElvenRanger, ClassId::Paladin]);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let orc = held_orc(&mut run, -40.0);
+        charm_hero(&mut run, 0, orc, 30.0);
+        run.step();
+        assert_eq!(run.players[0].side, Side::Hostile);
+        let hero1 = run.players[1].id;
+        let before = [(run.players[0].kills, run.players[0].xp, run.players[0].damage), (run.players[1].kills, run.players[1].xp, run.players[1].damage)];
+        let blow = Damage { why: Why { by: Some(hero1), what: What::Unknown, ..Why::NONE }, ..Damage::physical(1e6) };
+        run.hurt_player(0, blow);
+        assert!(!run.players[0].alive);
+        steps(&mut run, 3);
+        assert!(run.monster_idx(wolf).map_or(true, |i| !run.monsters[i].alive), "the wolf is gone with its ranger");
+        assert_eq!(run.players[0].wolf, None);
+        let after = [(run.players[0].kills, run.players[0].xp, run.players[0].damage), (run.players[1].kills, run.players[1].xp, run.players[1].damage)];
+        assert_eq!(before, after, "no kill, XP or damage for anyone");
     }
 
     #[test]

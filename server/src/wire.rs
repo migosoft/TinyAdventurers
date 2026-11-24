@@ -28,10 +28,21 @@ pub fn q_aim(a: f64) -> u8 {
     ((a / TAU * 256.0).round() as i64).rem_euclid(256) as u8
 }
 
-/// `[id, kind, x, y, hp, anim, aim, anim_ms, flags, extra, effects, side]`, see `EntSnap`.
+/// Element 6 of an entity: a hazard's radius in whole px (a plain number), else the aim as `q_aim`.
+/// The client's `isHazardKind` (`anim/defs.ts`) must name the same kinds.
+fn q_aim_or_radius(kind: u8, v: f64) -> u16 {
+    use crate::defs::kinds::EntityKind::{FirePatch, HolyGround, Roots};
+    if [FirePatch, HolyGround, Roots].iter().any(|&k| k as u8 == kind) {
+        v.round().clamp(0.0, u16::MAX as f64) as u16
+    } else {
+        q_aim(v) as u16
+    }
+}
+
+/// `[id, kind, x, y, hp, anim, aim (a hazard: radius px), anim_ms, flags, extra, effects, side]`, see `EntSnap`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u32, pub u8);
+pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u16, pub u16, pub u8, pub u32, pub u32, pub u8);
 
 /// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
@@ -144,7 +155,7 @@ fn ev_w(e: &Ev) -> EvW {
 }
 
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
-    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9, e.10, e.11)).collect();
+    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim_or_radius(e.1, e.6 as f64), e.7, e.8, e.9, e.10, e.11)).collect();
     let m = &s.me;
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul, m.cd_rate, m.paused_items.clone(), m.paused_nodes.clone(), m.charmed_by.clone());
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
@@ -229,7 +240,8 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
     let spectator = Snapshot {
         tick: 99,
         ack: 0,
-        ents: vec![],
+        // Two hazards: element 6 is the radius in px, not an angle (40 and 48 would wrap as angles).
+        ents: vec![EntSnap(500, 71, 160.0, 320.0, 255, 0, 40.0, 0, 0, 4000, 0, 0), EntSnap(501, 70, 176.0, 336.0, 255, 0, 48.0, 0, 0, 2500, 0, 0)],
         me: SelfState {
             alive: false,
             hp: 0.0,
@@ -276,6 +288,15 @@ mod tests {
     use std::f64::consts::PI;
 
     #[test]
+    fn only_hazard_kinds_carry_a_radius() {
+        use crate::defs::kinds::EntityKind::{FirePatch, HolyGround, Missile, Roots};
+        for k in [FirePatch, HolyGround, Roots] {
+            assert_eq!(q_aim_or_radius(k as u8, 300.0), 300, "{k:?} is a radius");
+        }
+        assert_eq!(q_aim_or_radius(Missile as u8, 300.0), q_aim(300.0) as u16, "a missile is an aim");
+    }
+
+    #[test]
     fn positions_round_to_sixteenths() {
         assert_eq!(q_pos(123.47), 1976); // 1975.52
         assert_eq!(q_pos(0.0), 0);
@@ -291,6 +312,14 @@ mod tests {
         assert_eq!(q_aim(PI), 128);
         assert_eq!(q_aim(-PI), 128);
         assert_eq!(q_aim(TAU - 0.001), 0);
+    }
+
+    #[test]
+    fn a_hazard_sends_its_radius_as_a_plain_number_and_a_creature_its_aim_as_a_byte() {
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&sample_snapshots()[1])).unwrap();
+        assert_eq!((v[2][0][6].clone(), v[2][1][6].clone()), (serde_json::json!(40), serde_json::json!(48)), "radii in px");
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&sample_snapshots()[0])).unwrap();
+        assert_eq!(v[2][0][6], serde_json::json!(q_aim(-1.2)), "a creature's aim stays q_aim");
     }
 
     #[test]

@@ -10,6 +10,7 @@ import type { InputW } from './generated/InputW';
 import type { MovingLight } from './generated/MovingLight';
 import type { SnapW } from './generated/SnapW';
 import type { Snapshot } from './generated/Snapshot';
+import { isHazardKind } from './game/anim/defs';
 
 const pos = (v: number): number => v / CONST.POS_SCALE;
 /** 0-255 → (-π, π], the range of atan2 on the server (128 = exactly left = +π). */
@@ -113,7 +114,8 @@ export function unpackSnap(w: SnapW): Snapshot {
   return {
     tick,
     ack,
-    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], angle(e[6]), e[7], e[8], e[9], e[10], e[11]]),
+    // Element 6 is the aim in 1/256 turns, but a hazard's radius in whole px (no angle to wrap).
+    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], isHazardKind(e[1]) ? e[6] : angle(e[6]), e[7], e[8], e[9], e[10], e[11]]),
     me: {
       alive: me[0],
       hp: me[1],

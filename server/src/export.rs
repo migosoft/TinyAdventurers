@@ -211,6 +211,7 @@ fn export_defs() {
         })
         .collect();
     let leaf_palette: serde_json::Map<_, _> = crate::defs::foliage::LeafPalette::ALL.iter().map(|k| (format!("{k:?}"), json!(*k as u8))).collect();
+    let plant_kind: serde_json::Map<_, _> = crate::dungeon::woodland::PlantKind::ALL.iter().map(|k| (format!("{k:?}"), json!(*k as u8))).collect();
     assert_eq!(anims.get("Summon"), Some(&json!(16)));
     assert_eq!(consts["MINION_WINDUP"], json!(0.7));
     assert_eq!(consts["LICH_GLOOM_WINDUP"], json!(0.5));
@@ -238,6 +239,7 @@ fn export_defs() {
          export const RUNE_LOOK = {} as const;\n\n\
          export const ABILITY_RUNES: Partial<Record<AbilityId, {{ look: number; primary: boolean }}>> = {};\n\n\
          export const LEAF_PALETTE = {} as const;\n\n\
+         export const PLANT_KIND = {} as const;\n\n\
          export const ENEMY_KINDS = {} as const;\n\n{}",
         p(&json!(kinds)),
         p(&json!(anims)),
@@ -259,6 +261,7 @@ fn export_defs() {
         p(&json!(rune_look)),
         p(&json!(ability_runes)),
         p(&json!(leaf_palette)),
+        p(&json!(plant_kind)),
         p(&json!(enemy_kinds())),
         crate::run::rules_log::tags::export_tag_names(),
     );

@@ -570,6 +570,18 @@ mod tests {
     }
 
     #[test]
+    fn kit_for_keeps_the_order_for_bosses_and_the_wolf() {
+        use crate::sheet::{kit_for, KitSource, WolfMods};
+        for b in crate::protocol::BossId::ALL {
+            let kit = kit_for(KitSource::Boss(b), &crate::defs::bosses::attr_sources(b).total(), &[]);
+            let ids: Vec<_> = kit.iter().map(|a| a.id).collect();
+            assert_eq!(ids, crate::defs::bosses::def(b).abilities, "{b:?}");
+        }
+        let wolf = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::attributes::Attributes::default(), &[]);
+        assert_eq!(wolf.iter().map(|a| a.id).collect::<Vec<_>>(), [AbilityId::Bite, AbilityId::Pounce]);
+    }
+
+    #[test]
     fn every_enemy_has_its_base_ai() {
         for t in EnemyType::ALL {
             let want = match t {

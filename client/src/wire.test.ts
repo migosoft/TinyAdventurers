@@ -3,7 +3,7 @@
 // the wire by design; everything else must match.
 import { decode } from '@msgpack/msgpack';
 import { describe, expect, it } from 'vitest';
-import { CONST, EFFECT, EFFECT_LOOK } from './generated/defs';
+import { CONST, EFFECT, EFFECT_LOOK, KIND } from './generated/defs';
 import type { Ev } from './generated/Ev';
 import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
@@ -52,6 +52,16 @@ describe('wire', () => {
       expect(e[6]).toBeGreaterThan(-Math.PI);
       expect(e[6]).toBeLessThanOrEqual(Math.PI);
     }
+  });
+
+  it('reads a hazard\'s element 6 as a radius in px, not an angle', () => {
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
+    const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0]];
+    const snap = unpackSnap([1, 0, hazards, me, null, [], 0, null, [], [], [], [], [], null]);
+    expect(snap.ents.map((e) => e[6])).toEqual([40, 48, 64]);
+    // The wire fixture's hazards (case 1) agree.
+    const fx = unpackSnap(decode(Uint8Array.from(fixtures.cases[1].bytes)) as SnapW);
+    expect(fx.ents.map((e) => e[6])).toEqual([40, 48]);
   });
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {

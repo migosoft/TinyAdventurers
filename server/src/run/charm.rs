@@ -1045,6 +1045,22 @@ mod tests {
     }
 
     #[test]
+    fn a_charm_by_a_monster_is_in_the_rules_log_too() {
+        let mut run = arena(&[ClassId::Wizard]);
+        run.log.forced = true;
+        let wi = wolf_of(&mut run, 0);
+        let ci = held_orc(&mut run, 80.0);
+        let caster = run.monsters[ci].id;
+        charm_by(&mut run, wi, caster, 1.0);
+        run.step();
+        let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
+        assert!(heads.iter().any(|h| h.contains("is charmed and follows Orc Warrior")), "{heads:?}");
+        steps(&mut run, 70);
+        let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
+        assert!(heads.iter().any(|h| h.contains("turns back")), "{heads:?}");
+    }
+
+    #[test]
     fn a_refresh_by_the_other_side_keeps_before() {
         let mut run = arena(&[ClassId::Wizard]);
         let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);

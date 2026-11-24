@@ -58,28 +58,7 @@ fn hazard_name(k: EntityKind) -> &'static str {
 }
 
 pub fn effect_name(k: EffectKind) -> &'static str {
-    match k {
-        EffectKind::Blind => "Blind",
-        EffectKind::Sleep => "Sleep",
-        EffectKind::Petrified => "Petrified",
-        EffectKind::Slowed => "Slowed",
-        EffectKind::Accelerated => "Accelerated",
-        EffectKind::Burning => "Burning",
-        EffectKind::Frozen => "Frozen",
-        EffectKind::Poisoned => "Poisoned",
-        EffectKind::Chilled => "Chilled",
-        EffectKind::Singed => "Singed",
-        EffectKind::Tainted => "Tainted",
-        EffectKind::Entangled => "Entangled",
-        EffectKind::Fear => "Fear",
-        EffectKind::Warded => "Warded",
-        EffectKind::Coated => "Coated",
-        EffectKind::Invisible => "Invisible",
-        EffectKind::Weakened => "Weakened",
-        EffectKind::Clumsy => "Clumsy",
-        EffectKind::Frail => "Frail",
-        EffectKind::Charmed => "Charmed",
-    }
+    k.name()
 }
 
 pub fn type_name(t: DamageType) -> &'static str {
@@ -100,7 +79,6 @@ pub(super) fn hit_head(run: &Run, f: &HitFacts, target: u32) -> String {
     match f.outcome {
         HitOutcome::Dealt => format!("{lead}: {} damage (HP {} → {})", n1(f.dealt), n1(f.hp_before), n1(f.hp_after)),
         HitOutcome::Immune => format!("{lead}: no damage (immune)"),
-        HitOutcome::Healed(h) => format!("{lead}: healed {} (resistance over 100 %)", n1(h)),
         HitOutcome::Shielded => format!("{lead}: no damage ({target} cannot be hurt now)"),
         HitOutcome::DebugNoLoss => format!("{lead}: {} damage (debug: no HP lost)", n1(f.taken)),
     }

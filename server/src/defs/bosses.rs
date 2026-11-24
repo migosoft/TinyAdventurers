@@ -50,6 +50,9 @@ pub const DEMON_LAND: f64 = 0.6;
 pub const DEMON_FLIGHT_FIRST: f64 = 10.0;
 pub const DEMON_FLIGHT_EVERY: (f64, f64) = (10.0, 14.0);
 
+/// How far (tiles) every boss sees.
+const BOSS_VISION: Option<f64> = Some(25.0);
+
 pub const LICH_DISCIPLES: usize = 6;
 /// After a nova the lich waits up to this many seconds (random) on top of the Nova's cooldown, so the
 /// next one is not on the beat.
@@ -89,12 +92,12 @@ pub fn profile(id: BossId) -> Profile {
     use super::effects::{EffectKind::*, EffectResistances as Fx};
     // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
     let adj = match id {
-        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: Some(25.0), darkvision: None },
-        BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Blind, 1.0), (Petrified, 0.5)]), vision: Some(25.0), darkvision: None },
+        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: BOSS_VISION, darkvision: None },
+        BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Blind, 1.0), (Petrified, 0.5)]), vision: BOSS_VISION, darkvision: None },
         BossId::Dragon => Adjust {
             res: Resistances::of(&[(Heat, 1.0)]),
             effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
-            vision: Some(25.0),
+            vision: BOSS_VISION,
             darkvision: None,
         },
     };

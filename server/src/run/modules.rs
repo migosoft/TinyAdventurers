@@ -11,20 +11,22 @@ use super::Run;
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId, Module, Shape};
 use crate::defs::kinds::Anim;
-use crate::dungeon::{Mover, Tile};
+use crate::dungeon::{Map, Mover};
 use crate::math::Vec2;
 
 /// The dash that just ended (what `tick_monster_dash` returns).
 pub type DashDone = MonsterDash;
 
-/// The modules of monster `mi`'s kit, in kit order.
-fn kit_modules(run: &Run, mi: usize) -> Vec<Module> {
-    run.monsters[mi].kit.iter().filter_map(|a| ab::def(a.id).module).collect()
+/// The module of the `i`th kit ability of monster `mi` (None past the end or without one); the hooks walk the
+/// kit by index because they change the run while they go.
+fn module_at(run: &Run, mi: usize, i: usize) -> Option<Module> {
+    run.monsters[mi].kit.iter().nth(i).and_then(|a| ab::def(a.id).module)
 }
 
 /// A foe may be in sight (`seen`): Ambush vanishes, drifts and strikes.
 pub fn on_sight(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
-    for module in kit_modules(run, mi) {
+    for i in 0..run.monsters[mi].kit.iter().count() {
+        let Some(module) = module_at(run, mi, i) else { continue };
         let claimed = match module {
             Module::Ambush => super::ambush::tick(run, mi, dt, seen),
             Module::Leap | Module::Minions => false,
@@ -38,7 +40,8 @@ pub fn on_sight(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bo
 
 /// Where the base AI would choose its attack: Minions run a cast or start one.
 pub fn on_act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
-    for module in kit_modules(run, mi) {
+    for i in 0..run.monsters[mi].kit.iter().count() {
+        let Some(module) = module_at(run, mi, i) else { continue };
         let claimed = match module {
             Module::Minions => super::minions::act(run, mi, dt, seen),
             Module::Leap => seen.is_some_and(|foe| leap_start(run, mi, foe)),
@@ -94,9 +97,9 @@ pub fn on_danger(run: &mut Run, mi: usize, tile: u8) -> bool {
     if m.effects.no_act() || m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
         return false;
     }
-    let deadly = tile == Tile::Chasm as u8 || tile == Tile::DeepWater as u8 || tile == Tile::Lava as u8 && m.mover != Mover::Demon;
     let Some(id) = leap_ability(run, mi) else { return false };
-    if !deadly || !m.cds.ready(id) {
+    // Ground the movement rules refuse this mover (a lava walker may stand in lava).
+    if !Map::terrain_blocks(tile, m.mover) || !m.cds.ready(id) {
         return false;
     }
     run.monsters[mi].knock = Vec2::ZERO;
@@ -195,7 +198,7 @@ mod tests {
     use crate::defs::abilities::AbilityId;
     use crate::defs::effects::EffectKind;
     use crate::defs::enemies::{self, EnemyType};
-    use crate::dungeon::{Map, LAVA_DAMAGE};
+    use crate::dungeon::{Map, Tile, LAVA_DAMAGE};
     use crate::run::entities::Sink;
     use crate::protocol::{BossId, ClassId};
     use crate::run::ai::tests::open_floor;
@@ -340,6 +343,52 @@ mod tests {
         }
         assert!(!leap_start(&mut run, mi, foe), "over a chasm it does not");
         assert!(run.monsters[mi].ai.windup.is_none());
+    }
+
+    /// The leaper with the hero 40 px east, stepping until the leap's wind-up has started.
+    fn leaper_winding_up() -> (Run, usize) {
+        let (mut run, mi) = leaper(0);
+        run.monsters[mi].ai.hold = 0.0;
+        run.players[0].mv.x = run.monsters[mi].pos.x + 40.0;
+        run.players[0].mv.y = run.monsters[mi].pos.y;
+        for _ in 0..120 {
+            run.step();
+            if run.monsters[mi].ai.windup.is_some() {
+                return (run, mi);
+            }
+        }
+        panic!("the leaper never wound up");
+    }
+
+    #[test]
+    fn a_landing_that_turns_unsafe_during_the_wind_up_cancels_the_leap() {
+        let (mut run, mi) = leaper_winding_up();
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        for y in ty - 1..=ty + 1 {
+            for x in tx + 2..=tx + 5 {
+                run.layout.map.set(x, y, Tile::Chasm);
+            }
+        }
+        while run.monsters[mi].ai.windup.is_some() {
+            run.step();
+            assert!(run.monsters[mi].dash.is_none(), "no leap over a chasm");
+        }
+        assert_eq!(run.monsters[mi].anim, Anim::Idle, "it stops");
+        assert!(run.monsters[mi].cds.ready(AbilityId::Pounce), "the leap was never used");
+    }
+
+    #[test]
+    fn a_leap_that_hits_nothing_sets_no_hold() {
+        let (mut run, mi) = leaper_winding_up();
+        while run.monsters[mi].dash.is_none() {
+            run.step();
+        }
+        run.players[0].mv.x += 300.0; // out of the leap's way
+        while run.monsters[mi].dash.is_some() {
+            run.step();
+        }
+        let main = run.monsters[mi].kit.first().unwrap().cooldown;
+        assert!(run.monsters[mi].ai.cd < main - 1e-9, "a miss holds nothing back: {}", run.monsters[mi].ai.cd);
     }
 
     #[test]

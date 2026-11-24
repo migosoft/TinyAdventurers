@@ -591,6 +591,16 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_lich_never_picks_a_charmed_hero() {
+        let (mut run, bi) = lich_with(&[Vec2::new(40.0, 0.0), Vec2::new(90.0, 0.0)]);
+        assert_eq!(target(&run, bi).map(|t| t.0), Some(0), "control: the nearer hero");
+        run.players[0].side = crate::run::targets::Side::Hostile; // charmed by an enemy: on the lich's side
+        assert_eq!(target(&run, bi).map(|t| t.0), Some(1), "the lich fights the other hero");
+        run.players[1].side = crate::run::targets::Side::Hostile;
+        assert_eq!(target(&run, bi), None, "and nobody when every hero is charmed");
+    }
+
+    #[test]
     fn the_stone_gaze_petrifies_a_seen_hero_and_marks_its_target() {
         let (mut run, mut l) = only(AbilityId::StoneGaze, Vec2::new(60.0, 0.0));
         ticks(&mut run, &mut l, 0.1);

@@ -12,6 +12,13 @@ type Slot = 'Primary' | 'Secondary';
 type Info = { category: string; uses: string; req: readonly string[]; text: string };
 const USES: Record<string, string> = { Melee: 'melee weapon', Ranged: 'ranged weapon', Nothing: 'no weapon' };
 
+/** The weapon an ability needs, in words; an unknown `uses` is a missing entry in `USES`, so it is logged. */
+function usesOf(uses: string): string {
+  const text = USES[uses];
+  if (text === undefined) console.warn(`loadout: no text for ability uses "${uses}"`);
+  return text ?? 'no weapon';
+}
+
 function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): string {
   const id = c.pick.ability;
   const a = ABILITY_INFO[id] as unknown as Info;
@@ -25,7 +32,7 @@ function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): strin
       : c.error
         ? `<em class="bad">${esc(c.error)}</em>`
         : `<small class="muted">Requires: ${a.req.length ? esc(a.req.join(', ')) : 'none'}</small>`;
-  return `${abilityIcon(id, true)}<div><b>${esc(pickLabel(c.pick, info))}${unavailable ? ' (unavailable)' : ''}</b><small>${spaced(a.category)} · ${USES[a.uses] ?? 'no weapon'}${ranged}</small>
+  return `${abilityIcon(id, true)}<div><b>${esc(pickLabel(c.pick, info))}${unavailable ? ' (unavailable)' : ''}</b><small>${spaced(a.category)} · ${usesOf(a.uses)}${ranged}</small>
     <span>${esc(a.text)}</span><small class="muted">${esc(numbers)}</small>${steps.includes('→') ? `<small class="muted">${esc(steps)}</small>` : ''}${last}</div>`;
 }
 

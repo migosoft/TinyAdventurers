@@ -221,7 +221,7 @@ export function isPlayerKind(k: number): boolean {
 export function isProjectileKind(k: number): boolean {
   return k >= KIND.Missile && k < KIND.FirePatch;
 }
-/** Ground hazards: burning ground, consecrated ground, entangling roots. */
+/** Ground hazards: burning ground, consecrated ground, entangling roots. Keep in step with the server's `q_aim_or_radius` (`wire.rs`). */
 export function isHazardKind(k: number): boolean {
   return k === KIND.FirePatch || k === KIND.HolyGround || k === KIND.Roots;
 }

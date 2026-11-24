@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COVE_TREE_FOOT, COVE_TREE_SCALE, DEFAULT_LIGHT, PLANT_KINDS, type Drawn, type PlantKind, type Rgba, coveTree, drawPlant, drawTree, lightVector, plantLook } from './vegetation';
+import { PLANT_KIND } from '../generated/defs';
 import type { PlantInfo } from '../generated/PlantInfo';
 
 /** Every picture a plant can take: the wire kinds, and the bare tree a dead plant is drawn as. */
@@ -410,5 +411,13 @@ describe('vegetation', () => {
       expect(drawPlant('bare', 3, 100).shape!.clumps).toEqual([]);
       for (const kind of PLANT_KINDS) if (kind !== 'bare') expect(drawPlant(kind, 3, 100).shape!.cast).toBe('parts');
     });
+  });
+});
+
+describe('PLANT_KINDS', () => {
+  // The server's `PlantKind` ids, written by export.rs; adding a kind on one side fails this until the other follows.
+  it('lists the server\'s plant kinds at their wire ids', () => {
+    const byId = Object.entries(PLANT_KIND).sort((a, b) => a[1] - b[1]).map(([name]) => name.toLowerCase());
+    expect(byId).toEqual([...PLANT_KINDS]);
   });
 });

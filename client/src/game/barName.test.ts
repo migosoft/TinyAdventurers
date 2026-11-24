@@ -47,6 +47,10 @@ describe('showsBar', () => {
     expect(showsBar(e(KIND.Bunny, SIDE.Neutral, FLAG.WILD, 0.5))).toBe(true);
     expect(barName({ kind: KIND.Bunny, extra: 0 }, names)).toBeUndefined();
   });
+  it('the WILD flag alone keeps a Neutral creature to the hurt-only bar', () => {
+    expect(showsBar(e(KIND.Knight, SIDE.Neutral, 0, 1))).toBe(true);
+    expect(showsBar(e(KIND.Knight, SIDE.Neutral, FLAG.WILD, 1))).toBe(false);
+  });
   it('the knight and the wolf always show a bar; an enemy only when hurt', () => {
     expect(showsBar(e(KIND.Knight, SIDE.Neutral, 0, 1))).toBe(true);
     expect(showsBar(e(KIND.DireWolf, SIDE.Friendly, 0, 1))).toBe(true);

@@ -20,6 +20,20 @@ pub fn arc_touches(body: Vec2, body_r: f64, top: f64, p: Vec2, z: f64, shot_r: f
     p.dist(body) < body_r + shot_r && z < top
 }
 
+/// Whether a shot touches a body: an arcing shot (`z` is its height) by `arc_touches`, a flat one by the capsule
+/// distance `flat` (to the body's nearest point). The real flight and the dodge's replay share it.
+pub fn shot_touches(z: Option<f64>, body: Vec2, body_r: f64, top: f64, p: Vec2, shot_r: f64, flat: f64) -> bool {
+    match z {
+        Some(z) => arc_touches(body, body_r, top, p, z, shot_r),
+        None => flat < body_r + shot_r,
+    }
+}
+
+/// Whether an arc of `flight` seconds has landed after `flown` seconds.
+pub fn has_landed(flight: f64, flown: f64) -> bool {
+    flown >= flight - 1e-9
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

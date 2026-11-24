@@ -455,6 +455,13 @@ impl Lobby {
                 return self.error_as(id, "Only weapons.", Some(Refusal::Guard));
             }
         }
+        // The same wear check Ready runs: an item the class cannot wear (a monster's club) never gets stored.
+        let refused = item.zip(self.conns.get(&id).and_then(|c| c.character.as_ref())).and_then(|(item, ch)| {
+            items::check_wear(ch.class, &crate::sheet::profs(ch.class, &ch.progress.nodes), slot, item).err()
+        });
+        if let Some(e) = refused {
+            return self.error_as(id, crate::progress::equip_message(e), Some(Refusal::Guard));
+        }
         if let Some(c) = self.conns.get_mut(&id) {
             c.debug_equipment.set(slot, item);
             c.debug_touched[slot as usize] = true;
@@ -1100,6 +1107,9 @@ mod tests {
         l.debug_equip_if(n, EquipSlot::Armor, None);
         assert_eq!(errors(&mut nrx), ["Debug is off."], "the guards come before Only weapons");
         assert!(none(&l) && l.conns[&n].debug_equipment == Equipment::starter(ClassId::Barbarian));
+        l.debug_equip_if(a, EquipSlot::Melee, Some(ItemId::OgreClub));
+        assert_eq!(errors(&mut rx), ["Your class cannot use that item."]);
+        assert!(none(&l), "a monster-only weapon is not stored");
         l.debug_equip_if(a, EquipSlot::Armor, Some(ItemId::PlateArmor));
         assert_eq!(refusals(&mut rx), [("Only weapons.".to_string(), Some("Guard".to_string()))]);
         l.handle(a, ClientMsg::SetReady { ready: true });
@@ -1445,7 +1455,7 @@ mod tests {
         l.debug_equip_if(n, EquipSlot::Ranged, Some(ItemId::ElvenBow));
         assert!(l.conns[&n].loadout.is_none() && !l.conns[&n].debug_loadout && l.conns[&n].debug_touched == [false; EquipSlot::COUNT]);
         l.debug_loadout_if(d, p, s);
-        l.debug_equip_if(d, EquipSlot::Ranged, Some(ItemId::ElvenBow));
+        l.debug_equip_if(d, EquipSlot::Ranged, None); // a Wizard wears no bow
         assert!(l.conns[&d].loadout.is_some() && l.conns[&d].debug_loadout && l.conns[&d].debug_touched[EquipSlot::Ranged as usize]);
         assert!(l.is_debug(d) && !l.is_debug(n) && !l.is_debug(999));
     }

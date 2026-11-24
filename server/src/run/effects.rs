@@ -2,10 +2,10 @@
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
 use super::targets::Side;
-use crate::defs::damage::{Damage, DamageType, Resistances, What, Why, MIN_RESISTANCE};
+use crate::defs::damage::{Damage, DamageType, Resistances, What, Why};
 use crate::dungeon::Tile;
 use crate::defs::attributes::{Attr, Attributes};
-use crate::defs::effects::{attr_amount, def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
+use crate::defs::effects::{attr_amount, cap_effect_res, def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
 use crate::math::Vec2;
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
@@ -468,10 +468,10 @@ impl Run {
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.effect_res(m.effect_res).get(kind)),
             };
             let Some(r) = r else { return Err((EffectOutcome::NotThere, d)) };
-            d.resist = Some((r.max(MIN_RESISTANCE), 0.0));
+            d.resist = Some((cap_effect_res(r), 0.0));
             let Some(left) = effect_secs(secs, r) else { return Err((EffectOutcome::Resisted, d)) };
             secs = left;
-            d.resist = Some((r.max(MIN_RESISTANCE), left));
+            d.resist = Some((cap_effect_res(r), left));
             d.secs = secs;
         }
         if secs <= 0.0 {
