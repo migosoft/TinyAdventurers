@@ -262,6 +262,8 @@ pub struct Ai {
     pub deaf_t: f64,
     /// Ids of the shots it has already reacted to (`facing::notice_shots`).
     pub noticed: Vec<u32>,
+    /// A boss's script is in the middle of an action (set by `levels/boss.rs` each tick): head forward, no glances.
+    pub acting: bool,
 }
 
 impl Ai {
@@ -299,6 +301,7 @@ impl Ai {
             search: None,
             deaf_t: 0.0,
             noticed: Vec::new(),
+            acting: false,
         }
     }
 }

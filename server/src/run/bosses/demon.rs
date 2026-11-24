@@ -7,7 +7,7 @@
 //! strike and recovery frames.
 
 use super::flight::{Flight, FlightTimes};
-use super::{ahead, boss_idx, foe_behind, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
+use super::{ahead, boss_idx, face_for, foe_behind, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::bosses::*;
 use crate::defs::classes::PLAYER_RADIUS;
@@ -88,6 +88,9 @@ impl BossBehaviour for Demon {
     fn busy(&self) -> bool {
         self.action.is_some() || !self.flight.grounded()
     }
+    fn acting(&self) -> bool {
+        self.action.is_some()
+    }
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
         let cdt = run.monsters[bi].effects.cooldown_dt(dt);
@@ -159,7 +162,8 @@ impl BossBehaviour for Demon {
             return;
         };
         let to_target = pos.angle_to(ppos);
-        run.monsters[bi].aim = to_target;
+        // The head follows the hero; the body turns only for an attack it wants to start.
+        run.monsters[bi].look_to = Some(to_target);
         let cleave_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLEAVE_SLACK;
         let breath = kit(run, bi, AbilityId::FireBreath);
         let usable = |id: AbilityId| ready(run, bi, &self.opening, id);
@@ -179,6 +183,7 @@ impl BossBehaviour for Demon {
         if !air && usable(AbilityId::RingOfFire) {
             picks.push(AbilityId::RingOfFire);
         }
+        picks.retain(|&id| face_for(run, bi, ppos, id));
         if !picks.is_empty() {
             let id = picks[run.rng.gen_range(0..picks.len())];
             let cast_time = kit(run, bi, AbilityId::RingOfFire).windup;
@@ -600,5 +605,15 @@ mod tests {
         assert_eq!(full.0, low.0, "the same cleave ticks");
         assert_eq!(full.1, low.1);
         assert!(full.2 > 10.0 && (full.2 - low.2).abs() < 1e-9, "walks equally far: {} vs {}", full.2, low.2);
+    }
+
+    #[test]
+    fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
+        crate::run::bosses::tests::hit_from_behind(BossId::Demon);
+    }
+
+    #[test]
+    fn a_boss_looks_to_where_it_lost_a_hero() {
+        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::Demon);
     }
 }

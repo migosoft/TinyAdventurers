@@ -123,6 +123,8 @@ pub fn tick(run: &mut Run, dt: f64) {
             // The boss dodges by the same rule as any monster, unless its script is mid-action; the script's
             // timers wait out the dodge (a fraction of a second).
             if let Some(bi) = bosses::boss_idx(run) {
+                run.monsters[bi].ai.acting = b.acting();
+                crate::run::facing::track_boss(run, bi);
                 crate::run::facing::notice_shots(run, bi);
             }
             let dodged = bosses::boss_idx(run).is_some_and(|bi| crate::run::dodge::tick(run, bi, dt, b.busy()));

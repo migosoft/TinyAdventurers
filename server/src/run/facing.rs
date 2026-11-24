@@ -3,7 +3,7 @@
 //! facing is slower (`off_facing_mul`).
 
 use super::entities::{AiState, Glance, Monster};
-use super::{charm, Run};
+use super::Run;
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
 use crate::sheet::ResolvedAbility;
@@ -87,12 +87,12 @@ pub fn search_point(run: &Run, mi: usize, back: f64) -> Vec2 {
 pub fn notice(run: &mut Run, mi: usize, back: f64) {
     let (pos, sight, gaze) = (run.monsters[mi].pos, run.monsters[mi].sight_now(), run.monsters[mi].gaze_dir());
     let m = &run.monsters[mi];
-    // A boss's script owns its facing until its task; a hidden mimic, a companion and a fleeing animal have their own rules.
-    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some();
+    // A hidden mimic, a companion and a fleeing animal have their own rules.
+    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some() || m.ai.acting;
     // An immune hit (0 damage) is still felt. A chaser mid-glance ignores further blows, or sustained fire would
     // restart the glance (and its startle) forever.
     let glancing = m.ai.glance.is_some_and(|g| g.wait > 0.0 || m.ai.target.is_some());
-    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || glancing || (m.is_boss && !charm::is_on(m)) || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
+    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || glancing || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
         return;
     }
     let (chasing, stationary) = (m.ai.target.is_some(), m.base_ai == crate::defs::enemies::BaseAi::Stationary);
@@ -144,6 +144,48 @@ pub fn notice_shots(run: &mut Run, mi: usize) {
     for (id, back) in seen {
         run.monsters[mi].ai.noticed.push(id);
         notice(run, mi, back);
+    }
+}
+
+/// Boss `bi`'s perception for this tick, before its script: the hero it sees (`bosses::target`) is its target and
+/// its motion; one that left the cone makes the head and body turn to where it was (no search), and the look
+/// ends in Idle. Nothing changes while the script is in an action.
+pub fn track_boss(run: &mut Run, bi: usize) {
+    let seen = super::bosses::target(run, bi).map(|(pi, p, _)| (run.players[pi].id, p));
+    let (tick, dt) = (run.tick, super::DT);
+    let (pos, sight) = (run.monsters[bi].pos, run.monsters[bi].sight_now());
+    let m = &mut run.monsters[bi];
+    if m.ai.acting {
+        return;
+    }
+    if let Some((id, p)) = seen {
+        let ai = &mut m.ai;
+        let target = super::entities::Target::Player(id);
+        let sampled = ai.target == Some(target) && ai.seen_tick.is_some_and(|t| t.wrapping_add(1) == tick);
+        ai.last_vel = if sampled { (p - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
+        if ai.last_vel.len() > LEAD_SPEED_MAX {
+            ai.last_vel = ai.last_vel.norm() * LEAD_SPEED_MAX;
+        }
+        ai.seen_tick = Some(tick);
+        ai.target = Some(target);
+        ai.last_known = p;
+        if ai.state != AiState::Chase {
+            ai.enter(AiState::Chase);
+        }
+    } else if m.ai.target.is_some() {
+        let lost = match m.ai.target {
+            Some(super::entities::Target::Player(id)) => run.players.iter().find(|p| p.id == id && p.alive && !p.effects.has(crate::defs::effects::EffectKind::Invisible)).map(|p| p.pos()),
+            _ => None,
+        };
+        let open = lost.is_some_and(|p| super::perception::in_open(run, sight, pos, p));
+        let ai = &mut run.monsters[bi].ai;
+        ai.target = None;
+        let (last, vel) = (ai.last_known, ai.last_vel);
+        ai.enter(AiState::Look);
+        let lead = last + vel * startle(&run.monsters[bi].attrs);
+        glance(run, bi, Glance { wait: 0.0, dir: pos.angle_to(if open { lead } else { last }), hold: SEARCH_TIME, around: open, body: true, search: None });
+    } else if m.ai.state == AiState::Look && m.ai.glance.is_none() {
+        m.ai.enter(AiState::Idle);
     }
 }
 
@@ -225,8 +267,7 @@ pub fn off_facing_mul(walk_angle: f64, aim: f64) -> f64 {
 /// The turn pass for monster `mi`, which moved by `moved` this tick on its own accord.
 pub fn turn(run: &mut Run, mi: usize, moved: Vec2, dt: f64) {
     let m = &mut run.monsters[mi];
-    // A boss's script still writes its own facing (until its task); every other creature wishes.
-    if !m.alive || m.dormant || m.hiding || m.effects.no_act() || m.effects.no_turn() || (m.is_boss && !charm::is_on(m)) {
+    if !m.alive || m.dormant || m.hiding || m.effects.no_act() || m.effects.no_turn() {
         return;
     }
     if !glance_wishes(m, dt) {
@@ -237,7 +278,7 @@ pub fn turn(run: &mut Run, mi: usize, moved: Vec2, dt: f64) {
         m.aim = turn_toward(m.aim, w, body_speed(m) * dt);
     }
     // The head: straight ahead while an attack winds up or runs, else toward the wish within the neck.
-    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some();
+    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some() || m.ai.acting;
     let neck = m.sight_now().neck.to_radians();
     let want = match m.look_to {
         Some(l) if !busy => angle_diff(l, m.aim).clamp(-neck, neck),

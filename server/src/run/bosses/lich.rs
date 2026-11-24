@@ -4,7 +4,7 @@
 //! and Stone Gaze (a beam that petrifies a hero the lich still sees when the wind-up ends). It also casts Raise Dead
 //! (skeletons, half of them archers). The numbers (damage, radius, push, wind-up, cooldown) are the kit's.
 
-use super::{ahead, boss_idx, set_anim, target, BossBehaviour};
+use super::{ahead, boss_idx, face_for, set_anim, target, BossBehaviour};
 use crate::defs::abilities::{windup_anim, AbilityId};
 use crate::defs::bosses::{LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_RAISE_FIRST, LICH_SLEEP_FIRST};
 use crate::defs::effects::EffectKind;
@@ -194,17 +194,20 @@ impl BossBehaviour for Lich {
             set_anim(run, bi, Anim::Idle);
             return;
         };
-        run.monsters[bi].aim = pos.angle_to(ppos);
+        // The head follows the hero; the body turns for a cast that needs it, and while it keeps its distance.
+        run.monsters[bi].look_to = Some(pos.angle_to(ppos));
         let raise = kit(run, bi, AbilityId::RaiseDead);
-        if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 {
+        if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 && face_for(run, bi, ppos, AbilityId::RaiseDead) {
             self.begin(run, bi, AbilityId::RaiseDead, raise.windup);
             set_anim(run, bi, windup_anim(AbilityId::RaiseDead));
-        } else if self.ready(run, bi, AbilityId::Nova) {
+        } else if self.ready(run, bi, AbilityId::Nova) && face_for(run, bi, ppos, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
             self.begin(run, bi, AbilityId::Nova, kit(run, bi, AbilityId::Nova).windup);
             set_anim(run, bi, Anim::Slam);
-        } else if let Some((s, pi)) = self.ready_spell(run, bi) {
-            run.monsters[bi].aim = pos.angle_to(run.players[pi].pos());
+        } else if let Some((s, pi)) = self.ready_spell(run, bi).filter(|&(s, pi)| {
+            let at = run.players[pi].pos();
+            face_for(run, bi, at, s)
+        }) {
             self.begin(run, bi, s, kit(run, bi, s).windup);
             if s == AbilityId::StoneGaze {
                 self.gaze = Some(run.players[pi].id);
@@ -214,12 +217,15 @@ impl BossBehaviour for Lich {
                 self.aim_at = Some(run.players[pi].id);
                 set_anim(run, bi, windup_anim(s));
             }
-        } else if self.ready(run, bi, AbilityId::GloomBolts) {
+        } else if self.ready(run, bi, AbilityId::GloomBolts) && face_for(run, bi, ppos, AbilityId::GloomBolts) {
             self.begin(run, bi, AbilityId::GloomBolts, kit(run, bi, AbilityId::GloomBolts).windup);
             set_anim(run, bi, windup_anim(AbilityId::GloomBolts));
         } else {
             let speed = run.monsters[bi].speed;
             // Keep a casting distance.
+            if dist < 90.0 {
+                run.monsters[bi].face_to.get_or_insert(pos.angle_to(ppos)); // backing off, it still faces the hero
+            }
             let to = if dist < 90.0 { pos + (pos - ppos).norm() * 16.0 } else if dist > 140.0 { ppos } else { pos };
             if to == ppos {
                 path_toward(run, bi, to, speed, dt);
@@ -283,6 +289,7 @@ pub(crate) mod tests {
         let mut run = test_run(classes, BossId::Lich);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].dormant = false;
+        run.monsters[bi].aim = 0.0;
         let at = run.monsters[bi].pos;
         for (p, off) in run.players.iter_mut().zip(offs) {
             p.mv.x = at.x + off.x;
@@ -691,10 +698,14 @@ pub(crate) mod tests {
             }
         }
         let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, 99.0)], ..Lich::default() };
+        let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());
+        let want = pos.angle_to(to);
+        l.tick(&mut run, DT);
+        assert_ne!(run.monsters[bi].anim, Anim::Windup, "the orb waits for the body to face its hero");
+        assert_eq!(run.monsters[bi].face_to, Some(want), "the body turns to the hero the orb is aimed at");
+        run.monsters[bi].aim = want; // the turn pass
         l.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::Windup);
-        let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());
-        assert!((run.monsters[bi].aim - pos.angle_to(to)).abs() < 1e-9, "faces the hero the orb is aimed at");
     }
 
     #[test]
@@ -712,5 +723,15 @@ pub(crate) mod tests {
         assert!((l.not_before[0].1 - (LICH_RAISE_FIRST - fall)).abs() < 1e-9, "{:?}", l.not_before);
         assert!((l.not_before[1].1 - (50.0 - fall)).abs() < 1e-9);
         assert!((run.monsters[bi].cds.left(AbilityId::Nova) - (50.0 - fall)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
+        crate::run::bosses::tests::hit_from_behind(BossId::Lich);
+    }
+
+    #[test]
+    fn a_boss_looks_to_where_it_lost_a_hero() {
+        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::Lich);
     }
 }

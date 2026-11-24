@@ -29,6 +29,10 @@ pub trait BossBehaviour: Send {
     fn busy(&self) -> bool {
         false
     }
+    /// The script is in an attack's wind-up or recovery (not only flying): the head looks ahead, no glances.
+    fn acting(&self) -> bool {
+        self.busy()
+    }
     fn tick(&mut self, run: &mut Run, dt: f64);
 }
 
@@ -63,6 +67,17 @@ pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
     })
 }
 
+/// Boss `bi` looks at `at`; true when its body faces it within the gate of `id`. When it does not, the body
+/// turns toward it (the script then keeps moving or stands).
+pub(crate) fn face_for(run: &mut Run, bi: usize, at: Vec2, id: AbilityId) -> bool {
+    let gate = super::facing::gate(&kit(run, bi, id));
+    let ok = super::facing::faces(run, bi, at, gate);
+    if !ok {
+        run.monsters[bi].face_to = Some(run.monsters[bi].pos.angle_to(at));
+    }
+    ok
+}
+
 /// A point straight ahead of boss `bi`: a use "at" it keeps the aim.
 pub(crate) fn ahead(run: &Run, bi: usize) -> Vec2 {
     let m = &run.monsters[bi];
@@ -92,4 +107,79 @@ pub(crate) fn ready(run: &Run, bi: usize, opening: &[(AbilityId, f64)], id: Abil
 pub(crate) fn foe_behind(run: &Run, bi: usize, reach: f64) -> bool {
     let (pos, aim, side) = (run.monsters[bi].pos, run.monsters[bi].aim, run.monsters[bi].side);
     run.players.iter().any(|p| crate::run::targets::foes(side, p.side) && p.alive && !p.effects.has(crate::defs::effects::EffectKind::Invisible) && p.pos().dist(pos) < reach && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0)
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::defs::damage::Damage;
+    use crate::defs::effects::EffectKind;
+    use crate::protocol::ClassId;
+    use crate::run::entities::AiState;
+    use crate::run::tests::test_run;
+    use crate::run::DT;
+
+    /// A awake boss alone on open floor facing `aim`, one Paladin `off` px from it.
+    pub(crate) fn arena(boss: BossId, aim: f64, off: Vec2) -> (Run, usize) {
+        let mut run = test_run(&[ClassId::Paladin], boss);
+        let bi = boss_idx(&run).unwrap();
+        let at = run.monsters[bi].pos;
+        run.players[0].mv.x = at.x + off.x;
+        run.players[0].mv.y = at.y + off.y;
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let bi = boss_idx(&run).unwrap();
+        run.monsters[bi].dormant = false;
+        run.monsters[bi].aim = aim;
+        run.monsters[bi].gaze = 0.0;
+        run.level.boss_mut().unwrap().awake = true;
+        (run, bi)
+    }
+
+    fn steps(run: &mut Run, secs: f64) {
+        for _ in 0..(secs / DT).round() as usize {
+            run.step();
+        }
+    }
+
+    /// Hit from behind with no hero seen: the head turns first, then the body; it does not move.
+    pub(crate) fn hit_from_behind(boss: BossId) {
+        let (mut run, bi) = arena(boss, std::f64::consts::PI, Vec2::new(300.0, 0.0));
+        run.players[0].effects.add(EffectKind::Invisible, 60.0);
+        let (pos, aim0) = (run.monsters[bi].pos, run.monsters[bi].aim);
+        run.hurt_monster(bi, Damage::physical(1.0).along(Vec2::new(-1.0, 0.0)), false, Some(0));
+        let (mut head_at, mut body_at) = (None, None);
+        for i in 0..(3.0 / DT) as usize {
+            run.step();
+            let m = &run.monsters[bi];
+            if head_at.is_none() && m.gaze.abs() > 0.01 {
+                head_at = Some(i);
+            }
+            if body_at.is_none() && angle_diff(m.aim, aim0).abs() > 0.01 {
+                body_at = Some(i);
+            }
+        }
+        let m = &run.monsters[bi];
+        assert!(head_at.is_some() && head_at <= body_at, "the gaze moves first: {head_at:?} {body_at:?}");
+        // The body turns only as far as the head cannot reach: the blow ends up within the neck.
+        assert!(angle_diff(m.aim, 0.0).abs() <= m.sight_now().neck.to_radians() + 0.05, "the body turned toward the blow: {}", m.aim);
+        assert_eq!(m.pos, pos, "it did not walk or search");
+        assert_ne!(m.ai.state, AiState::Search);
+    }
+
+    /// A hero it saw slips out of its cone: it looks (head and body) to where it was, and does not search.
+    pub(crate) fn looks_to_where_it_lost_a_hero(boss: BossId) {
+        let (mut run, bi) = arena(boss, 0.0, Vec2::new(100.0, 0.0));
+        steps(&mut run, 0.3);
+        assert!(run.monsters[bi].ai.target.is_some(), "it sees the hero");
+        let at = run.monsters[bi].pos;
+        run.players[0].mv.x = at.x - 100.0; // behind it, out of the cone
+        run.players[0].mv.y = at.y;
+        run.step();
+        let ai = &run.monsters[bi].ai;
+        assert!(ai.target.is_none());
+        assert_eq!(ai.state, AiState::Look);
+        assert!(ai.glance.is_some_and(|g| g.body), "head and body look to where it was");
+        assert!(ai.search.is_none(), "a boss never searches");
+    }
 }

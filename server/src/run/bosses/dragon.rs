@@ -7,7 +7,7 @@
 //! script waits the ability's own wind-up (`kit.get(id).windup`) and uses it when that ends.
 
 use super::flight::{Flight, FlightTimes};
-use super::{ahead, boss_idx, foe_behind, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
+use super::{ahead, boss_idx, face_for, foe_behind, kit, ready, set_anim, target, use_in_pose, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
@@ -75,6 +75,9 @@ impl BossBehaviour for Dragon {
     fn busy(&self) -> bool {
         self.action.is_some() || !self.flight.grounded()
     }
+    fn acting(&self) -> bool {
+        self.action.is_some()
+    }
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
         let cdt = run.monsters[bi].effects.cooldown_dt(dt);
@@ -140,9 +143,10 @@ impl BossBehaviour for Dragon {
             return;
         };
         let to_target = pos.angle_to(ppos);
-        run.monsters[bi].aim = to_target;
+        // The head follows the hero; the body turns only for a strike or a breath it wants to start.
+        run.monsters[bi].look_to = Some(to_target);
         let (breath, bite, claw) = (kit(run, bi, AbilityId::FireBreath), kit(run, bi, AbilityId::Bite), kit(run, bi, AbilityId::Strike));
-        if ready(run, bi, &self.opening, AbilityId::FireBreath) && dist < breath.range {
+        if ready(run, bi, &self.opening, AbilityId::FireBreath) && dist < breath.range && face_for(run, bi, ppos, AbilityId::FireBreath) {
             self.start(run, bi, Action::BreathWindup, breath.windup, Anim::Breath);
             announce_cast(run, Creature::Monster(bi), AbilityId::FireBreath, breath.windup, to_target);
         } else if air {
@@ -154,11 +158,11 @@ impl BossBehaviour for Dragon {
             } else {
                 set_anim(run, bi, Anim::Idle);
             }
-        } else if ready(run, bi, &self.opening, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if ready(run, bi, &self.opening, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK && face_for(run, bi, ppos, AbilityId::Bite) {
             self.start(run, bi, Action::Bite, bite.windup, Anim::Bite);
-        } else if ready(run, bi, &self.opening, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if ready(run, bi, &self.opening, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK && face_for(run, bi, ppos, AbilityId::Strike) {
             self.start(run, bi, Action::Claw, claw.windup, Anim::Melee);
-        } else if ready(run, bi, &self.opening, AbilityId::Fireball) {
+        } else if ready(run, bi, &self.opening, AbilityId::Fireball) && face_for(run, bi, ppos, AbilityId::Fireball) {
             self.start(run, bi, Action::Fireball, FIREBALL_POSE, Anim::Windup);
             announce_cast(run, Creature::Monster(bi), AbilityId::Fireball, FIREBALL_POSE, to_target);
         } else if dist > 60.0 {
@@ -551,5 +555,93 @@ mod tests {
         breathe_once(&mut run, bi);
         let left = run.players[0].effects.list().iter().find(|a| a.kind == EffectKind::Burning).map(|a| a.left);
         assert_eq!(left, Some(scaled_secs(def(EffectKind::Burning).duration, 20, 13)), "CHA 20 against the Paladin's CON 13");
+    }
+
+    #[test]
+    fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
+        crate::run::bosses::tests::hit_from_behind(BossId::Dragon);
+    }
+
+    #[test]
+    fn a_boss_looks_to_where_it_lost_a_hero() {
+        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::Dragon);
+    }
+
+    /// A dragon run (full `Run::step`), facing east, a hero `deg` degrees off at `dist` px; only `ready` abilities are ready.
+    fn stepped(deg: f64, dist: f64, ready: &[AbilityId]) -> (Run, usize) {
+        let (mut run, bi) = crate::run::bosses::tests::arena(BossId::Dragon, 0.0, Vec2::from_angle(deg.to_radians()) * dist);
+        for id in [AbilityId::Strike, AbilityId::Bite, AbilityId::TailWhip, AbilityId::FireBreath, AbilityId::Fireball] {
+            if !ready.contains(&id) {
+                run.monsters[bi].cds.start(id, 99.0);
+            }
+        }
+        (run, bi)
+    }
+
+    #[test]
+    fn the_dragon_turns_its_head_not_its_body_to_a_hero_at_its_flank() {
+        let (mut run, bi) = stepped(72.0, 50.0, &[]);
+        for _ in 0..(1.0 / DT) as usize {
+            run.step();
+        }
+        let m = &run.monsters[bi];
+        assert!(m.gaze.abs() > 60f64.to_radians(), "the head looks at it: {}", m.gaze.to_degrees());
+        assert!(m.aim.abs() < 10f64.to_radians(), "the body stays: {}", m.aim.to_degrees());
+    }
+
+    #[test]
+    fn the_dragon_does_not_breathe_at_a_hero_behind_it() {
+        // The hero is 70 degrees off: the body must turn within the gate first.
+        let (mut run, bi) = stepped(70.0, 100.0, &[AbilityId::FireBreath]);
+        let mut d = Dragon::default();
+        d.opening = Vec::new();
+        d.flight.t = 99.0;
+        drive(&mut run, &mut d, bi, DT);
+        assert_ne!(run.monsters[bi].anim, Anim::Breath, "not while it faces away");
+        let mut started = None;
+        for _ in 0..(4.0 / DT) as usize {
+            drive(&mut run, &mut d, bi, DT);
+            if run.monsters[bi].anim == Anim::Breath {
+                started = Some(run.monsters[bi].aim);
+                break;
+            }
+        }
+        let aim = started.expect("it turns, then breathes");
+        assert!((aim.to_degrees() - 70.0).abs() <= 31.0, "within the gate: {}", aim.to_degrees());
+        // And it still whips its tail at a hero in reach behind it.
+        let (mut run, bi) = stepped(180.0, 30.0, &[AbilityId::TailWhip]);
+        let mut d = Dragon::default();
+        d.opening = Vec::new();
+        d.flight.t = 99.0;
+        drive(&mut run, &mut d, bi, DT);
+        assert_eq!(run.monsters[bi].anim, Anim::Tail);
+    }
+
+    /// One tick of the dragon's script and the turn pass, as `Run::step` does them.
+    fn drive(run: &mut Run, d: &mut Dragon, bi: usize, dt: f64) {
+        let b = run.monsters[bi].pos;
+        run.monsters[bi].face_to = None;
+        run.monsters[bi].look_to = None;
+        run.monsters[bi].ai.acting = d.acting();
+        crate::run::facing::track_boss(run, bi);
+        d.tick(run, dt);
+        let moved = run.monsters[bi].pos - b;
+        crate::run::facing::turn(run, bi, moved, dt);
+    }
+
+    #[test]
+    fn a_flying_boss_faces_its_flight() {
+        let (mut run, bi) = stepped(60.0, 200.0, &[]);
+        let mut d = Dragon::default();
+        d.flight.phase = crate::run::bosses::flight::Phase::Air;
+        d.flight.t = 99.0;
+        d.opening = Vec::new();
+        run.monsters[bi].airborne = true;
+        for _ in 0..(1.5 / DT) as usize {
+            drive(&mut run, &mut d, bi, DT);
+        }
+        let m = &run.monsters[bi];
+        let flight = m.pos.angle_to(run.players[0].pos());
+        assert!(crate::math::angle_diff(m.aim, flight).abs() < 20f64.to_radians(), "it faces where it flies: {} vs {}", m.aim.to_degrees(), flight.to_degrees());
     }
 }

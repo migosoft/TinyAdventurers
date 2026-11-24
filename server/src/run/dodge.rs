@@ -1019,6 +1019,7 @@ mod tests {
         floor_around(&mut run, at, 14);
         run.level.boss_mut().unwrap().awake = true;
         run.monsters[bi].hp = hp;
+        run.monsters[bi].aim = std::f64::consts::PI; // it faces the Ranger
         run.smarts.notice.value = 300.0;
         (run, bi)
     }
