@@ -192,10 +192,11 @@ export class RunSession {
     this.net.send({ t: 'DebugAntiMagic' });
   }
 
-  /** Puts the next effect on your own hero. */
-  debugEffect(): void {
+  /** Puts the next effect on your own hero (the previous one with `back`: from the start, the last effect). */
+  debugEffect(back = false): void {
     if (!this.debugKeyOk()) return;
-    this.effectIx = (this.effectIx + 1) % Object.keys(EFFECT).length;
+    const n = Object.keys(EFFECT).length;
+    this.effectIx = (this.effectIx + (back ? n - 1 : 1)) % n;
     this.net.send({ t: 'DebugEffect', kind: this.effectIx });
   }
 
