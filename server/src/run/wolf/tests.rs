@@ -226,11 +226,18 @@ fn no_hero_attack_hurts_the_wolf() {
 
     // A bolt flies straight through it.
     let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 40.0);
+    lit_arena(&mut run);
+    // A goblin behind the wolf on the line: the bolt must reach it.
+    let behind = run.spawn_enemy(EnemyType::GoblinArcher, run.players[0].pos() + Vec2::new(80.0, 0.0), None);
+    let bi = run.monster_idx(behind).unwrap();
+    run.monsters[bi].hp = 1000.0;
+    run.players[0].aim_dist = 80.0;
     try_use(&mut run, 0, true, 1);
     for _ in 0..30 {
         tick_projectiles(&mut run, DT);
     }
     untouched(&run, id, "bolt");
+    assert!(run.monsters[bi].hp < 1000.0, "the bolt flew past the wolf and hit the goblin behind it");
 
     // Sword and axe swings.
     let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger, ClassId::Paladin, ClassId::Barbarian], 1, 10.0);
