@@ -42,15 +42,17 @@ pub struct Sun {
     pub elevation_deg: u8,
 }
 
-/// Wire ids match the client's PLANT_KINDS order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum PlantKind {
-    Round = 0,
-    Wide = 1,
-    Tall = 2,
-    Conifer = 3,
-    Bush = 4,
+crate::defs::enum_list::listed_enum! {
+    /// Wire ids match the client's `PLANT_KINDS` order; `export.rs` writes them to `PLANT_KIND` in the generated
+    /// defs, and a client test checks the order.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum PlantKind: u8 {
+        Round = 0,
+        Wide = 1,
+        Tall = 2,
+        Conifer = 3,
+        Bush = 4,
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
