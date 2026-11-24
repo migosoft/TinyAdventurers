@@ -1895,7 +1895,8 @@ pub mod tests {
         // 2026-11-20, the demon's new fight (#379): its kit and script changed (tail, Fireball, breath, flight, a random pick), so the demon's value (the first) differs; lich and dragon unchanged. Re-recorded once, on purpose.
         // 2026-11-21, crystals (#380): the demon's (first) and dragon's (third) values differ. Those dungeons are rock or part rock, where the server drops a torch of a sunlit room instead of keeping it unlit; the cove's animal spots keep 16 px clear of every torch in `layout.torches`, so the wild animals (in the hash) stand elsewhere. Proved before re-recording: with the drop switched off, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
+        // 2026-11-24, facing vision (#341): creatures see in a cone on their head's direction and turn at limited speeds, so all three fights play out differently. Re-recorded once, on purpose.
+        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294]);
     }
 
     #[test]
@@ -1916,7 +1917,8 @@ pub mod tests {
         }
         // Same re-recording as in the test without the log (crystals, #380).
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![11205741794443117246, 5858418345972872518, 9281230261363955240]);
+        // Same re-recording as in the test without the log (facing vision, #341).
+        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
@@ -1958,7 +1960,8 @@ pub mod tests {
         }
         // 2026-11-21, crystals (#380): dragon dungeons are all rock, where the server drops a torch of a sunlit room; the cove's animals (in the fingerprint) stand elsewhere. The flight is unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old value comes back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): dragon dungeons are all rock; the cove's animals (in the fingerprint) stand elsewhere, the flight is unchanged. Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old value comes back. Re-recorded once, on purpose.
-        assert_eq!(got, [2575310725276619299, 2575310725276619299]); // log off, log on: the same value
+        // 2026-11-24, facing vision (#341): the dragon sees in a cone, turns its head and body at limited speeds and gates its attacks by facing, so the flight's hash differs. The flight itself still happens (the asserts above). Re-recorded once, on purpose.
+        assert_eq!(got, [12658122597790055329, 12658122597790055329]); // log off, log on: the same value
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -1983,6 +1986,9 @@ pub mod tests {
             let id = run.spawn_enemy(t, p + Vec2::new(d, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].hp = hp;
+            // The enemies face the hero (west), as the fights were written before creatures had a facing (#341).
+            run.monsters[mi].aim = std::f64::consts::PI;
+            run.monsters[mi].ai.home_aim = std::f64::consts::PI;
         }
         for i in 0..120u16 {
             let seq = run.players[0].ack + 1;
@@ -2016,6 +2022,7 @@ pub mod tests {
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
         // 2026-11-21, crystals (#380): `fight` runs in a demon dungeon, partly rock, where the server drops a torch of a sunlit room; the cove's animal spots keep clear of torches, so the wild animals in the hash stand elsewhere. The fights themselves are unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): `fight` runs in a demon dungeon, partly rock; the cove's animals in the hash stand elsewhere, the fights themselves are unchanged (the asserts above). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
+        // 2026-11-24, facing vision (#341): values unchanged. `fight` now turns its enemies to face the hero (they would otherwise face east, away from it and unable to see it); with that the fights play out as before.
         assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
     }
 
