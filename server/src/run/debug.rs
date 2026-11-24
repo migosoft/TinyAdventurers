@@ -138,8 +138,8 @@ impl Run {
             let name = self.players[pi].name.clone();
             self.event(Ev::Msg { text: format!("{name} entered debug mode (immortal)") }, None);
         }
-        let (points, ogre, cove, notice) = if on { (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self)) } else { Default::default() };
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre, cove, notice });
+        let (points, ogre, cove, notice, cones) = if on { (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self), cones(self)) } else { Default::default() };
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre, cove, notice, cones });
     }
 
     /// Debug cheat (F9): immortality on or off. Only in debug mode; the run stays a debug run.
@@ -151,8 +151,8 @@ impl Run {
         p.mortal = !on;
         let name = p.name.clone();
         self.event(Ev::Msg { text: format!("{name} is {} (debug)", if on { "immortal" } else { "mortal" }) }, None);
-        let (points, ogre, cove, notice) = (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self));
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre, cove, notice });
+        let (points, ogre, cove, notice, cones) = (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self), cones(self));
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre, cove, notice, cones });
     }
 }
 
@@ -167,6 +167,18 @@ pub fn notice_circles(run: &Run) -> Vec<(u32, f32)> {
         .iter()
         .filter(|m| m.alive && run.smarts.can(m.attrs.get(Attr::Int), Smart::Dodge))
         .map(|m| (m.id, run.smarts.notice_px(&m.attrs) as f32))
+        .collect()
+}
+
+/// Every living creature's vision cone: (entity id, full angle in radians after WIL and effects, vision radius px).
+pub fn cones(run: &Run) -> Vec<(u32, f32, f32)> {
+    run.monsters
+        .iter()
+        .filter(|m| m.alive)
+        .map(|m| {
+            let s = m.sight_now();
+            (m.id, s.cone.to_radians() as f32, s.vision_px() as f32)
+        })
         .collect()
 }
 
@@ -236,8 +248,8 @@ fn shortest_path(run: &Run, pi: usize, to: Vec2) -> Vec<(f32, f32)> {
 pub fn send_paths(run: &Run) {
     for (pi, p) in run.players.iter().enumerate() {
         if p.debug && p.alive && p.tx.is_some() {
-            let (points, ogre, cove, notice) = (boss_path(run, pi), ogre_path(run, pi), cove_path(run, pi), notice_circles(run));
-            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre, cove, notice });
+            let (points, ogre, cove, notice, cones) = (boss_path(run, pi), ogre_path(run, pi), cove_path(run, pi), notice_circles(run), cones(run));
+            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre, cove, notice, cones });
         }
     }
 }
@@ -343,6 +355,30 @@ mod tests {
         let o = run.monsters[run.monster_idx(orc).unwrap()].attrs.clone();
         assert_eq!(list, vec![(orc, run.smarts.notice_px(&o) as f32)]);
         assert!(!list.iter().any(|&(id, _)| id == skel));
+    }
+
+    #[test]
+    fn debug_cones_list_every_living_creature_with_its_cone() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.clear();
+        run.debug = true;
+        let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let dead = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
+        let di = run.monster_idx(dead).unwrap();
+        run.kill_monster(di);
+        let s = run.monsters[run.monster_idx(orc).unwrap()].sight_now();
+        let list = cones(&run);
+        assert_eq!(list, vec![(orc, s.cone.to_radians() as f32, s.vision_px() as f32)]);
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.players[0].debug = true;
+        send_paths(&run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!("a message") };
+        let msg: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(msg["cones"].as_array().map(Vec::len), Some(1), "the debug hero gets the cones");
     }
 
     #[test]

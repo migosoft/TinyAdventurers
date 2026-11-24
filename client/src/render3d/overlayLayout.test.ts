@@ -9,7 +9,7 @@ import { BODY_RISE } from '../game/damage';
 import type { PictureEv } from '../run/view';
 import { renderPlan } from './quality';
 import { toCanvas } from './screen';
-import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, floatSpot, layoutBars, layoutCones, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
 const TILE = 16;
@@ -39,6 +39,41 @@ const hint = (i: LayoutIn): OverlayItem[] => {
 };
 type Of<T extends OverlayItem['t']> = Extract<OverlayItem, { t: T }>;
 const only = <T extends OverlayItem['t']>(items: OverlayItem[], t: T): Of<T>[] => items.filter((i): i is Of<T> => i.t === t);
+
+describe('layoutCones (#341)', () => {
+  const cones = (i: LayoutIn): OverlayItem[] => {
+    const out: OverlayItem[] = [];
+    layoutCones(i, out);
+    return out;
+  };
+  const NINETY = Math.PI / 2;
+  const deg = (p: readonly [number, number], o: readonly [number, number]) => (Math.atan2(p[1] - o[1], p[0] - o[0]) * 180) / Math.PI;
+
+  it('a 90 degree cone, body east, head +30 degrees: the centre and arc points from -15 to +75 degrees at the vision radius', () => {
+    const e = ent(7, KIND.SkeletonWarrior, { aim: 0, head: Math.PI / 6 });
+    const items = only(cones(input([e], [], { cones: [[7, NINETY, 160]], showCones: true })), 'poly');
+    expect(items).toHaveLength(1);
+    const pts = items[0].pts;
+    expect(pts).toHaveLength(13);
+    expect(pts[0]).toEqual([507, 511]); // (5 tiles, 5 tiles) on the test map
+    const arc = pts.slice(1);
+    expect(deg(arc[0], pts[0])).toBeCloseTo(-15, 5);
+    expect(deg(arc[arc.length - 1], pts[0])).toBeCloseTo(75, 5);
+    for (const p of arc) expect(Math.hypot(p[0] - pts[0][0], p[1] - pts[0][1])).toBeCloseTo(1000, 5);
+  });
+
+  it('a full circle has only arc points', () => {
+    const e = ent(7, KIND.SkeletonWarrior);
+    const pts = only(cones(input([e], [], { cones: [[7, Math.PI * 2, 160]], showCones: true })), 'poly')[0].pts;
+    expect(pts).toHaveLength(12);
+  });
+
+  it('skips an entity not in the frame, and shows nothing while showCones is off', () => {
+    const e = ent(7, KIND.SkeletonWarrior);
+    expect(cones(input([e], [], { cones: [[8, NINETY, 160]], showCones: true }))).toEqual([]);
+    expect(cones(input([e], [], { cones: [[7, NINETY, 160]], showCones: false }))).toEqual([]);
+  });
+});
 
 describe('anchor height (#324)', () => {
   it('a bar of an anchor with y = -0.5 sits lower on the canvas than the same anchor at y = 0, by the projection of 0.5 tile', () => {
@@ -123,6 +158,7 @@ describe('layoutBars', () => {
     const items = bars(input([ent(7, KIND.Knight, { side: SIDE.Friendly, hp: 0.4 })], [[7, anchor({ height: 19.5 })]], { at: odd, zoom: 2.5 }));
     expect(items.length).toBeGreaterThan(1);
     for (const i of items) {
+      if (i.t === 'poly') continue;
       expect(Number.isInteger(i.x), JSON.stringify(i)).toBe(true);
       expect(Number.isInteger(i.y), JSON.stringify(i)).toBe(true);
     }

@@ -96,6 +96,8 @@ export class RunSession {
   /** Entrance tiles of the boss hall that are closed now: the first one announces the force field. */
   private sealedCells = 0;
   private readonly debug: DebugDraw;
+  /** The creatures' vision cones the server last sent to this debug hero (#341). */
+  private cones: readonly (readonly [number, number, number])[] = [];
   private immortal = true;
   private effectIx = -1;
   private unsub: (() => void) | null;
@@ -285,6 +287,8 @@ export class RunSession {
           ownCast: this.ownCast,
           dark: this.interp.drawnDark,
           debug: this.debug,
+          cones: this.cones,
+          showCones: this.debug.on,
         })
       : NO_STATS;
 
@@ -551,6 +555,7 @@ export class RunSession {
       this.debug.ogre = m.ogre;
       this.debug.cove = m.cove;
       this.debug.notice = m.notice;
+      this.cones = m.cones;
     } else if (m.t === 'DebugDodge') {
       if (this.debug.on) this.debug.dodges.push({ x0: m.from[0], y0: m.from[1], x1: m.to[0], y1: m.to[1], at: this.now() });
     } else if (m.t === 'HeroChanged') {

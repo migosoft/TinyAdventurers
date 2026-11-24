@@ -53,11 +53,24 @@ export class Overlay3d {
       switch (it.t) {
         case 'bar': this.bar(ctx, it, zoom); break;
         case 'text': this.text(ctx, it, zoom); break;
+        case 'poly': this.poly(ctx, it); break;
         case 'cap': this.cap(ctx, it, zoom); break;
         case 'icon': this.icon(ctx, it, zoom); break;
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  private poly(ctx: CanvasRenderingContext2D, it: Extract<OverlayItem, { t: 'poly' }>): void {
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    it.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,220,80,0.10)';
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,220,80,0.5)';
+    ctx.stroke();
   }
 
   private bar(ctx: CanvasRenderingContext2D, it: Extract<OverlayItem, { t: 'bar' }>, zoom: number): void {

@@ -92,6 +92,10 @@ export interface RunFrame {
    */
   dark: ReadonlySet<number>;
   debug: DebugDraw;
+  /** Each creature's vision cone: [entity id, full angle (rad), vision radius (px)] (#341). */
+  cones: readonly (readonly [number, number, number])[];
+  /** Draw the cones (the session sets it from debug mode; the view never reads `debug` for this). */
+  showCones: boolean;
 }
 
 export interface ViewStats {

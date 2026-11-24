@@ -44,6 +44,7 @@ const FILL = { hero: HERO_FILL, neutral: NEUTRAL_FILL, enemy: ENEMY_FILL } as co
 export type OverlayItem =
   | { t: 'bar'; x: number; y: number; w: number; frac: number; color: string }
   | { t: 'text'; x: number; y: number; text: string; kind: WorldTextKind; color: string; stroke: string; alpha: number; scale: number; align: 'center' | 'left'; base: 'bottom' | 'middle' }
+  | { t: 'poly'; pts: [number, number][] }
   | { t: 'cap'; x: number; y: number }
   | { t: 'icon'; x: number; y: number; id: number };
 
@@ -63,6 +64,31 @@ export interface LayoutIn {
   label: number;
   /** The width in art px of `text` in style `kind`; optional (a rough estimate when missing). */
   measure?: (text: string, kind: WorldTextKind) => number;
+  /** Vision cones [entity id, full angle (rad), radius (px)] and whether to draw them (`RunFrame.cones`, `showCones`, #341). */
+  cones?: readonly (readonly [number, number, number])[];
+  showCones?: boolean;
+}
+
+/** Points on a cone's arc (the whole cone is the centre plus these; a full circle has no centre). */
+const CONE_ARC = 12;
+
+/** Each creature's vision cone as a polygon: its interpolated position and `CONE_ARC` points at `aim + head ± cone/2`. */
+export function layoutCones(i: LayoutIn, out: OverlayItem[]): void {
+  if (!i.showCones || !i.cones) return;
+  for (const [id, cone, radius] of i.cones) {
+    const e = i.ents.get(id);
+    if (!e) continue;
+    const full = cone >= Math.PI * 2 - 1e-6;
+    const mid = e.aim + (e.head ?? 0);
+    const c = i.at(e.x / TILE, e.y / TILE, 0);
+    const pts: [number, number][] = full ? [] : [[c.px, c.py]];
+    for (let k = 0; k < CONE_ARC; k++) {
+      const a = mid - cone / 2 + (cone * k) / (full ? CONE_ARC : CONE_ARC - 1);
+      const p = i.at((e.x + Math.cos(a) * radius) / TILE, (e.y + Math.sin(a) * radius) / TILE, 0);
+      pts.push([p.px, p.py]);
+    }
+    out.push({ t: 'poly', pts });
+  }
 }
 
 /** A foot point as whole canvas px, at the foot's height `y`. */
