@@ -257,7 +257,7 @@ fn a_creature_in_the_dark_is_sent_but_neither_tagged_nor_logged() {
     let r = rec(LineKind::Hit, "hit", vec![record::seen_creature(&run, Creature::Monster(mi))]);
     let one_pass = |run: &mut Run| {
         let (view, dark) = view_of(run, 0);
-        let sent = crate::run::visibility::snapshot_ents(run,&view, &dark);
+        let sent = crate::run::visibility::snapshot_ents(run, &view, &dark);
         let log = for_viewer(run, 0, hero, &view, &dark, &sent, &[r.clone()]).unwrap();
         (sent, log)
     };
@@ -1278,7 +1278,7 @@ fn sent_to_all(run: &mut Run) -> Vec<ToViewer> {
         let viewed = if me.alive { pi } else { me.spectating.and_then(|s| run.players.iter().position(|q| q.id == s)).unwrap_or(pi) };
         let viewed_id = run.players[viewed].id;
         let (view, dark) = view_of(run, viewed);
-        let sent = crate::run::visibility::snapshot_ents(run,&view, &dark);
+        let sent = crate::run::visibility::snapshot_ents(run, &view, &dark);
         let log = for_viewer(run, pi, viewed_id, &view, &dark, &sent, &records).expect("log is on");
         out.push(ToViewer { log, ents: sent.ents.iter().map(|e| e.0).collect(), dark: sent.dark.clone() });
     }
