@@ -58,7 +58,7 @@ async function main(): Promise<void> {
         starting = null;
         return false;
       }
-      session = await startGame(ui, net, atlas, toRoster);
+      session = await startGame(ui, net, atlas, toRoster, [roster, create]);
       return true;
     })());
   const open = async (c: CharacterInfo) => {
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
 }
 
 /** Connected: the hub, the lobby and the 3D view of a run. */
-async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void): Promise<{ net: Net; lobby: Lobby; hub: Hub }> {
+async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void, outer: [Roster, Create]): Promise<{ net: Net; lobby: Lobby; hub: Hub }> {
   const hub = new Hub(ui, atlas, (m) => net.send(m), onRoster, () => {
     hub.hide();
     lobby.show();
@@ -105,6 +105,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     hudForClose?.message(msg);
     lobby.error(msg);
     hub.error(msg);
+    for (const s of outer) s.error(msg);
   };
 
   await loadFonts();
@@ -160,6 +161,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
       case 'Error':
         lastError = { msg: m.msg, at: performance.now() };
         if (hub.visible) hub.error(m.msg);
+        else if (outer.some((s) => s.visible)) outer.forEach((s) => s.visible && s.error(m.msg));
         else lobby.error(m.msg, m.refused);
         break;
       case 'RunStarted': {

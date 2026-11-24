@@ -79,6 +79,15 @@ export class Create {
     return card;
   }
 
+  get visible(): boolean {
+    return !this.root.classList.contains('hidden');
+  }
+
+  error(msg: string): void {
+    const e = this.root.querySelector('.error');
+    if (e) e.textContent = msg;
+  }
+
   private render(): void {
     this.root.innerHTML = `
       <div class="ui-bar ui-w"><button id="create-back" class="ghost">&lt; Roster</button><h1 class="ui-title">New character</h1><span></span></div>
@@ -100,7 +109,7 @@ export class Create {
         const c = await api.createCharacter(this.root.querySelector<HTMLInputElement>('#char-name')!.value.trim(), this.cls);
         this.onCreated(c);
       } catch (err) {
-        this.root.querySelector('.error')!.textContent = err instanceof ApiFail ? err.message : String(err);
+        this.error(err instanceof ApiFail ? err.message : String(err));
         button.disabled = false;
       }
     };

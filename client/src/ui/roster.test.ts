@@ -64,3 +64,16 @@ test('the create screen shows start values and creates the chosen class', async 
   host.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
   expect(spy).toHaveBeenCalledTimes(1);
 });
+test('roster and Create show a pushed error on their own error line, and report whether they are visible', async () => {
+  const host = document.createElement('div');
+  const roster = new Roster(host, atlas, () => {}, () => {});
+  const create = new Create(host, atlas, () => {}, () => {});
+  expect([roster.visible, create.visible]).toEqual([false, false]);
+  await roster.show(me(1));
+  create.show();
+  expect([roster.visible, create.visible]).toEqual([true, true]);
+  roster.error('Connection lost.');
+  create.error('Connection lost.');
+  for (const el of host.querySelectorAll('.error')) expect(el.textContent).toBe('Connection lost.');
+  expect(host.querySelectorAll('.error').length).toBe(2);
+});

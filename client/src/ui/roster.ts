@@ -44,8 +44,14 @@ export class Roster {
     this.root.classList.add('hidden');
   }
 
-  private error(msg: string): void {
-    this.root.querySelector('.error')!.textContent = msg;
+  get visible(): boolean {
+    return !this.root.classList.contains('hidden');
+  }
+
+  /** Writes the error line (the screen may show its load error instead, which has none). */
+  error(msg: string): void {
+    const e = this.root.querySelector('.error');
+    if (e) e.textContent = msg;
   }
 
   private render(): void {
