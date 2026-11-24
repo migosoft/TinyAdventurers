@@ -128,10 +128,15 @@ fn read_ids<T: serde::de::DeserializeOwned>(value: Option<&Value>, what: &str) -
 /// back to the class starters.
 fn read_equipment(value: Option<&Value>, class: ClassId) -> Equipment {
     let starter = || Equipment::starter(class);
-    let Some(slots) = value.and_then(|v| v.get("slots")).and_then(Value::as_array).filter(|s| s.len() == EquipSlot::COUNT) else {
+    let Some(slots) = value.and_then(|v| v.get("slots")).and_then(Value::as_array) else {
         tracing::warn!("progress: unreadable equipment; using the class starters");
         return starter();
     };
+    // Slots are stored by position. A document from before a slot was appended to `EquipSlot::ALL` is shorter:
+    // the zip below leaves the missing slots empty and keeps every stored item.
+    if slots.len() != EquipSlot::COUNT {
+        tracing::warn!("progress: {} equipment slots stored, {} known", slots.len(), EquipSlot::COUNT);
+    }
     let mut e = Equipment::default();
     for (slot, v) in EquipSlot::ALL.iter().zip(slots) {
         if v.is_null() {
@@ -455,6 +460,20 @@ mod tests {
         assert_eq!(q.equipment, Equipment::starter(W));
         assert_eq!(q.loadout, Loadout::start(W));
         assert_eq!((q.xp, q.coins), (100, 1));
+    }
+
+    #[test]
+    fn a_document_stored_before_a_new_slot_keeps_its_worn_items() {
+        let p = Progress::new(W);
+        let mut v = p.to_json();
+        let slots = v["equipment"]["slots"].as_array_mut().unwrap();
+        slots.pop(); // as if the last slot did not exist when it was saved
+        let q = Progress::from_json(v, W);
+        let last = *EquipSlot::ALL.last().unwrap();
+        for s in EquipSlot::ALL.iter().filter(|&&s| s != last) {
+            assert_eq!(q.equipment.get(*s), p.equipment.get(*s), "{s:?}");
+        }
+        assert_eq!(q.equipment.get(last), None);
     }
 
     #[test]
