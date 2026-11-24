@@ -7,7 +7,7 @@
 // The page gets `backend=webgl` appended (BACKEND=webgpu: nothing). READBACK=1 saves r3d-readback.png (Alice's frame read back).
 // NOCHUNK=1: Bob's page cannot load the 3D chunk; his run must end and the lobby must say "The 3D view could not load".
 // The debug keys (F4, F8, F9, the rules log) are checked by r3d-run.mjs, which uses a debug account.
-import { PASSWORD, tag, login, deleteAccount, purge } from './account.mjs';
+import { PASSWORD, tag, letters, login, deleteAccount, purge } from './account.mjs';
 import { launch } from './gpu.mjs';
 import { VIEWPORT, watchPage, pageUrl as urlOf, r3dState, saveReadback, waitLoaded, walkTile } from './r3d-page.mjs';
 
@@ -44,7 +44,7 @@ async function player(name, cls, shots, errs = errors) {
   await login(page, account, true);
   if (shots) await page.screenshot({ path: `${out}/0-roster.png` });
   await page.click('#new-char');
-  await page.fill('#char-name', `${name}${tag()}`);
+  await page.fill('#char-name', letters(`${name}${tag()}`));
   await page.click(`.ui-class.c-${cls.toLowerCase()}`);
   if (shots) await page.screenshot({ path: `${out}/0-create.png` });
   await page.click('#char-create');

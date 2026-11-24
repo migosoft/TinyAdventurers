@@ -254,15 +254,15 @@ pub fn check_name(name: &str) -> Result<(), String> {
 }
 
 /// A character name as stored: trimmed, runs of spaces collapsed to one ("Bob  Smith" is "Bob Smith", which uniqueness
-/// then compares ignoring case), 3-20 of `A-Z a-z 0-9 _ -` and single spaces between words.
+/// then compares ignoring case), 3-20 ASCII letters and single spaces between words.
 pub fn character_name(name: &str) -> Result<String, String> {
     let name = name.split(' ').filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
     let len = name.chars().count();
     if !(NAME_MIN..=CHARACTER_NAME_MAX).contains(&len) {
         return Err(format!("Names need {NAME_MIN} to {CHARACTER_NAME_MAX} characters."));
     }
-    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == ' ') {
-        return Err("Names may only use letters, digits, spaces, _ and -.".into());
+    if !name.chars().all(|c| c.is_ascii_alphabetic() || c == ' ') {
+        return Err("Character names may only use letters and spaces.".into());
     }
     Ok(name)
 }
@@ -421,7 +421,8 @@ mod tests {
         assert!(check_name("bad name").is_err());
         assert!(check_name("Zoë123").is_err());
         assert_eq!(character_name("  Bob   Smith "), Ok("Bob Smith".into()));
-        assert_eq!(character_name("Bob_the-2nd"), Ok("Bob_the-2nd".into()));
+        assert!(character_name("Bob_the-2nd").is_err());
+        assert!(character_name("Bob2").is_err(), "no digits");
         assert!(character_name("Sir Reginald Ironfist").is_err(), "21 characters");
         assert!(character_name(&"a".repeat(20)).is_ok());
         assert!(character_name("a  ").is_err(), "too short once trimmed");

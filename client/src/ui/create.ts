@@ -95,7 +95,7 @@ export class Create {
       <form class="panel ui-w ui-createbar">
         <input id="char-name" maxlength="20" placeholder="Character name" required>
         <button type="submit" id="char-create" class="primary">Create ${className(this.cls)}</button>
-        <small class="hint">Names: 3 to 20 letters, digits, spaces, _ or -. The class cannot be changed later. Each class has its own skill tree.</small>
+        <small class="hint">Names: 3 to 20 letters and spaces. The class cannot be changed later. Each class has its own skill tree.</small>
       </form>
       <div class="error ui-w"></div>`;
     this.root.querySelector('.ui-classes')!.append(...CLASSES.map((c) => this.card(c)));

@@ -1837,7 +1837,7 @@ The database, statistics, telemetry and the admin page take the level as text (`
 
 **Accounts (`auth.rs`, `api.rs`).**
 - An account is a name and an Argon2id hash (19 MiB, 2 passes, 1 lane, run in `spawn_blocking`). At most four hashes or checks run at once (the semaphore `ARGON2_SLOTS` in `api::hash`/`verify`, which also serves the admin's password reset); more wait, so a burst of parallel logins cannot use up the memory (#392). No e-mail and no other personal data are stored, so a lost password cannot be recovered.
-- Account names are 3–16 of `A-Z a-z 0-9 _ -` (`auth::check_name`); character names are 3–20 of the same and single spaces (`auth::character_name`, #73: it trims and collapses runs of spaces, and returns the name as stored; `create_character` stores that), so "Bob  Smith" is "Bob Smith". Both are unique ignoring case. Hero tags and the rules log take the name as it is (no fixed width found; not checked in a browser). Passwords are 8–128 characters.
+- Account names are 3–16 of `A-Z a-z 0-9 _ -` (`auth::check_name`); character names are 3–20 ASCII letters and single spaces (`auth::character_name`, #73: it trims and collapses runs of spaces, and returns the name as stored; `create_character` stores that), so "Bob  Smith" is "Bob Smith". Both are unique ignoring case. Hero tags and the rules log take the name as it is (no fixed width found; not checked in a browser). Passwords are 8–128 characters.
 - A login for an unknown name still checks a dummy hash, so the timing does not reveal which names exist.
 - **Throttling** (in-memory `Limiter`):
   - 5 failed logins per account name in 30 s, and 20 per IP in 5 min, give a 429.

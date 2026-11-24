@@ -6,7 +6,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 1. Open the game in your browser. Your host will give you the address, for example `http://192.168.1.20:8080`.
 2. **Create an account**: a name and a password, nothing else. No e-mail is stored, so **a forgotten password cannot be recovered**. Write it down or use a password manager. Next time, just log in. You can change the password on the roster screen ("Change password": the old one and the new one); you stay logged in there, and your logins on other devices end.
-3. **Create a character**: give it a name (3 to 20 letters, digits, spaces, _ or -; extra spaces are squeezed to one) and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP and coins and has its own Attributes, skill tree and items.
+3. **Create a character**: give it a name (3 to 20 letters and spaces; extra spaces are squeezed to one) and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP and coins and has its own Attributes, skill tree and items.
 4. Click a character card to open its **character screen**. "To the dungeon" there takes you to the runs. "< Character" brings you back, and "< Roster" in the character screen brings you back to the list.
 5. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined. Several players may play the same class.
 6. The host **chooses the level**, **Dungeon** or **Woodland**. For the Dungeon the host also **chooses the end boss**, or leaves it on **Random**. Everyone sees the choices.
