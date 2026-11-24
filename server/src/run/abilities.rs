@@ -2904,7 +2904,10 @@ mod tests {
         let wolf_hp = run.monsters[wi].hp;
         let chest = run.spawn_object(EntityKind::Chest, at + Vec2::new(0.0, -20.0), crate::run::objects::ObjState::Chest { opened: None });
         // A barrel, which a hit would light: the chest alone could not show the spark leaves objects be.
-        let barrel = run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, 40.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        // Within reach and in sight, nearer than any enemy: a jump to objects would take it first.
+        let barrel_at = at + Vec2::new(20.0, 0.0);
+        let barrel = run.spawn_object(EntityKind::Barrel, barrel_at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        assert!(barrel_at.dist(at) <= CHAIN_REACH && line_of_sight(&run.layout.map, at, barrel_at), "in reach and in sight");
         // A goblin within reach, behind a wall tile.
         let (tx, ty) = crate::dungeon::Map::tile_of(at);
         for x in tx - 1..=tx + 1 {
