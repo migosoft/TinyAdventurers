@@ -25,6 +25,18 @@ describe('FigureStates.stateOf', () => {
     const b = fs.stateOf(ent(), frame({ anim: ANIM.Melee }), 0);
     expect(b.s.swingArc).toBe(1.1);
   });
+  it('takes the own hero\'s hit direction from the newest snapshot (OwnHero), not the interpolated entity', () => {
+    const fs = new FigureStates(map());
+    const r = fs.stateOf(ent({ hurtDir: 1 }), frame({ hurtDir: 2 }), 0);
+    expect(r.s.hurtDir).toBe(2);
+    expect(fs.stateOf(ent({ hurtDir: 1 }), frame({ hurtDir: null }), 0).s.hurtDir).toBeNull();
+  });
+  it('a run creature faces its aim, a dev entity and a hero keep the heading-facing', () => {
+    const fs = new FigureStates(map());
+    expect(fs.stateOf(ent({ id: 7, kind: KIND.GoblinArcher, faces: true }), frame(), 0).s.faces).toBe(true);
+    expect(fs.stateOf(ent({ id: 7, kind: KIND.GoblinArcher }), frame(), 0).s.faces).toBe(false);
+    expect(fs.stateOf(ent({ id: 7, kind: KIND.Paladin, faces: true }), frame(), 0).s.faces).toBe(false);
+  });
   it('draws a charmed own hero from the interpolated entity', () => {
     const fs = new FigureStates(map());
     const r = fs.stateOf(ent({ x: at(0) }), frame({ charmed: true, x: at(3) }), 0);

@@ -32,6 +32,8 @@ export interface EntState {
   entangled: number;
   /** The way the last blow travelled (world rad), from the newer snapshot like `flags`; `null` for a hit without direction. Absent in dev literals. */
   hurtDir?: number | null;
+  /** Set by the run's snapshots (`toState`): the creature is drawn facing its aim. Absent on dev pages, which keep the heading-facing. */
+  faces?: boolean;
   /** The head's angle relative to the body (rad), interpolated; absent in dev literals (straight ahead). */
   head?: number;
 }
@@ -134,7 +136,7 @@ export class Interpolator {
 function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1, head = headOf(e[13])): EntState {
   // f > 1 extrapolates (a late snapshot); a shot's height never goes below the ground.
   const z = isProjectileKind(e[1]) ? Math.max(0, animMs0 + (e[7] - animMs0) * f) / 10 : 0;
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled), hurtDir: hurtDirOf(e[12]), head };
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled), hurtDir: hurtDirOf(e[12]), head, faces: true };
 }
 
 // ------------------------------------------------------------ abilities

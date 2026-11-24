@@ -54,7 +54,6 @@ pub fn head_byte(gaze: f64) -> u8 {
 #[ts(export)]
 pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u16, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8);
 
-
 /// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -252,7 +251,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         tick: 99,
         ack: 0,
         // Two hazards: element 6 is the radius in px, not an angle (40 and 48 would wrap as angles).
-        ents: vec![EntSnap(500, 71, 160.0, 320.0, 255, 0, 40.0, 0, 0, 4000, 0, 0, 0, 128),EntSnap(501, 70, 176.0, 336.0, 255, 0, 48.0, 0, 0, 2500, 0, 0, 0, 128)],
+        ents: vec![EntSnap(500, 71, 160.0, 320.0, 255, 0, 40.0, 0, 0, 4000, 0, 0, 0, 128), EntSnap(501, 70, 176.0, 336.0, 255, 0, 48.0, 0, 0, 2500, 0, 0, 0, 128)],
         me: SelfState {
             alive: false,
             hp: 0.0,

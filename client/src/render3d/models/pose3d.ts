@@ -620,7 +620,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   mem.wasHurt = hurt;
   if (mem.hitT >= 0) { mem.hitT += dt; if (mem.hitT > HIT_SECS) mem.hitT = -1; }
   const hu = mem.hitT < 0 ? -1 : mem.hitT / HIT_SECS;
-  const HR = hu < 0 ? 0 :hu < 0.2 ? ease(hu / 0.2) : Math.cos((hu - 0.2) / 0.8 * Math.PI * 1.5) * (1 - (hu - 0.2) / 0.8);   // the page's jolt (HS = 1: back from the heading)
+  const HR = hu < 0 ? 0 : hu < 0.2 ? ease(hu / 0.2) : Math.cos((hu - 0.2) / 0.8 * Math.PI * 1.5) * (1 - (hu - 0.2) / 0.8);   // the page's jolt (HS = 1: back from the heading)
 
   const moving = anim === ANIM.Move || anim === ANIM.Dash || mem.speed > 8;
   const go = moving && !asleep && !entangled;

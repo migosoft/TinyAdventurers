@@ -18,6 +18,7 @@ import { LightField } from '../game/light';
 import { abilityChoice, cosmeticCount, Interpolator, mayAct, Predictor, slotReady, slotUsable, volleyAngles, volleyShotIds, type EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Net } from '../net';
+import { hurtDirOf } from '../wire';
 import type { Disabled, Hud } from '../ui/hud';
 import { aimAt } from './aim';
 import { NO_INPUT, type StepInput } from './input';
@@ -87,6 +88,7 @@ export class RunSession {
   private spectating: number | null = null;
   private lastSnap?: Snapshot;
   private myFlags = 0;
+  private myHurtDir: number | null | undefined;
   /** The own hero's server position in the snapshot being dispatched (the 3D view places hits on the hero from it). */
   private serverOwn: { x: number; y: number } | null = null;
   /** Which picks an Attribute drain disabled (from `HeroChanged`). */
@@ -314,6 +316,7 @@ export class RunSession {
     o.alive = this.isAlive;
     o.charmed = this.pred.charmed;
     o.flags = this.myFlags;
+    o.hurtDir = this.myHurtDir;
     // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
     o.effects = this.myEffects();
     o.entangled = lookOf(this.lastSnap?.looks ?? [], this.runInfo.you, EFFECT.Entangled);
@@ -573,6 +576,7 @@ export class RunSession {
     this.spectating = s.me.spectating;
     const mine = s.ents.find((e) => e[0] === this.runInfo.you);
     this.myFlags = mine ? mine[8] : 0;
+    this.myHurtDir = mine ? hurtDirOf(mine[12]) : undefined;
     this.serverOwn = mine ? { x: mine[2], y: mine[3] } : null;
     const darkEv = new Set(s.dark_ev);
     s.ev.forEach((ev, i) => this.onEvent(ev, darkEv.has(i)));

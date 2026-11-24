@@ -50,6 +50,8 @@ export interface OwnHero {
   aimFromX: number;
   aimFromY: number;
   flags: number;
+  /** The way the last blow travelled, from the newest snapshot like `flags` (`null`: none; absent: not told). */
+  hurtDir?: number | null;
   effects: number;
   entangled: number;
   dashing: boolean;

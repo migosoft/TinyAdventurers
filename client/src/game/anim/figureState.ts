@@ -35,9 +35,9 @@ export class FigureStates {
     let s: ViewState;
     if (predicted) {
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: f.own.x, y: f.own.y, anim: f.own.anim, animT: f.own.animT, aim: f.own.aim, flags: f.own.flags, effects: f.own.effects, entangled: e.entangled, party: isPlayerKind(e.kind), hurtDir: e.hurtDir, swingArc: f.own.anim === ANIM.Melee ? f.own.arc : undefined };
+      s = { x: f.own.x, y: f.own.y, anim: f.own.anim, animT: f.own.animT, aim: f.own.aim, flags: f.own.flags, effects: f.own.effects, entangled: e.entangled, party: isPlayerKind(e.kind), hurtDir: f.own.hurtDir, swingArc: f.own.anim === ANIM.Melee ? f.own.arc : undefined };
     } else {
-      s = { id: e.id, x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind), hurtDir: e.hurtDir, head: e.head, faces: !isPlayerKind(e.kind) };
+      s = { id: e.id, x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind), hurtDir: e.hurtDir, head: e.head, faces: e.faces === true && !isPlayerKind(e.kind) };
     }
     const tile = this.map.tileAt(s.x, s.y);
     let started = false;
