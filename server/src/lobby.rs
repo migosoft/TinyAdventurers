@@ -12,7 +12,7 @@ use crate::defs::requirements::Requirement;
 use crate::defs::abilities::{self, AbilityId};
 use crate::sheet::hero_sheet;
 use crate::progress::Progress;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, LevelId, RoomPlayer, RunSummary, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, LevelId, Refusal, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
 use crate::telemetry;
 use axum::extract::ws::Message;
@@ -192,7 +192,7 @@ impl Lobby {
         let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.account == account).map(|(id, _)| *id).collect();
         for id in ids {
             if let Some(c) = self.conns.get(&id) {
-                send(&c.tx, &ServerMsg::Error { msg: why.into() });
+                send(&c.tx, &ServerMsg::Error { msg: why.into(), refused: None });
                 let _ = c.tx.send(Message::Close(None));
             }
             self.disconnect(id);
@@ -383,7 +383,7 @@ impl Lobby {
             ClientMsg::SetReady { ready } => {
                 if ready {
                     if let Err(e) = self.check_build(id) {
-                        return self.error(id, &e);
+                        return self.error_as(id, &e, Some(Refusal::Build));
                     }
                 }
                 if let Some(c) = self.conns.get_mut(&id) {
@@ -415,14 +415,19 @@ impl Lobby {
     fn has_character(&self, id: u32) -> bool {
         let ok = self.conns.get(&id).map_or(false, |c| c.character.is_some());
         if !ok {
-            self.error(id, "Choose a character first.");
+            self.error_as(id, "Choose a character first.", Some(Refusal::Guard));
         }
         ok
     }
 
     pub fn error(&self, id: u32, msg: &str) {
+        self.error_as(id, msg, None);
+    }
+
+    /// An error that tells the client what kind of refusal it is (the client never matches the text).
+    pub fn error_as(&self, id: u32, msg: &str, refused: Option<Refusal>) {
         if let Some(c) = self.conns.get(&id) {
-            send(&c.tx, &ServerMsg::Error { msg: msg.into() });
+            send(&c.tx, &ServerMsg::Error { msg: msg.into(), refused });
         }
     }
 
@@ -447,7 +452,7 @@ impl Lobby {
         match slot {
             EquipSlot::Melee | EquipSlot::Ranged => {}
             EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => {
-                return self.error(id, "Only weapons.");
+                return self.error_as(id, "Only weapons.", Some(Refusal::Guard));
             }
         }
         if let Some(c) = self.conns.get_mut(&id) {
@@ -461,11 +466,11 @@ impl Lobby {
     fn debug_allowed(&self, id: u32) -> bool {
         let Some(c) = self.conns.get(&id) else { return false };
         if !c.debug {
-            self.error(id, "Debug is off.");
+            self.error_as(id, "Debug is off.", Some(Refusal::Guard));
             return false;
         }
         let Some(room) = c.room.and_then(|r| self.rooms.get(&r)) else {
-            self.error(id, "Join a dungeon first.");
+            self.error_as(id, "Join a dungeon first.", Some(Refusal::Guard));
             return false;
         };
         let msg = if room.run_tx.is_some() {
@@ -477,7 +482,7 @@ impl Lobby {
         } else {
             return true;
         };
-        self.error(id, msg);
+        self.error_as(id, msg, Some(Refusal::Guard));
         false
     }
 
@@ -558,8 +563,13 @@ impl Lobby {
         // The Ready check can be stale (a character changed since), so check everyone again.
         for m in &room.members {
             if let Err(e) = self.check_build(*m) {
-                let who = if *m == id { e } else { format!("{}: {e}", self.conns.get(m).and_then(|c| c.character.as_ref()).map_or("A player", |ch| ch.name.as_str())) };
-                self.error(id, &who);
+                // Only my own refused build is a refusal of my picks; another player's is just a message.
+                if *m == id {
+                    self.error_as(id, &e, Some(Refusal::Build));
+                } else {
+                    let who = self.conns.get(m).and_then(|c| c.character.as_ref()).map_or("A player", |ch| ch.name.as_str());
+                    self.error(id, &format!("{who}: {e}"));
+                }
                 return;
             }
         }
@@ -935,12 +945,17 @@ mod tests {
 
     /// The server messages a connection received, errors only.
     fn errors(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>) -> Vec<String> {
+        refusals(rx).into_iter().map(|(m, _)| m).collect()
+    }
+
+    /// The errors with their `refused` kind on the wire ("Guard", "Build" or none).
+    fn refusals(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>) -> Vec<(String, Option<String>)> {
         let mut out = Vec::new();
         while let Ok(m) = rx.try_recv() {
             if let Message::Binary(b) = m {
                 if let Ok(v) = rmp_serde::from_slice::<serde_json::Value>(&b) {
                     if v["t"] == "Error" {
-                        out.push(v["msg"].as_str().unwrap_or_default().to_string());
+                        out.push((v["msg"].as_str().unwrap_or_default().to_string(), v["refused"].as_str().map(String::from)));
                     }
                 }
             }
@@ -1029,8 +1044,8 @@ mod tests {
         l.debug_loadout_if(guest, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
         l.handle(guest, ClientMsg::SetReady { ready: true });
         assert!(!l.conns[&guest].ready);
-        let e = errors(&mut guest_rx);
-        assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
+        let e = refusals(&mut guest_rx);
+        assert!(e.iter().any(|(m, k)| m.contains("Fireball") && k.as_deref() == Some("Build")), "{e:?}");
 
         // A valid one is accepted.
         l.debug_loadout_if(guest, pick(AbilityId::MagicMissile), pick(AbilityId::Fireball));
@@ -1040,8 +1055,8 @@ mod tests {
         l.debug_loadout_if(host, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
         l.handle(host, ClientMsg::StartRun);
         assert!(l.rooms[&rid].run_tx.is_none(), "no run");
-        let e = errors(&mut host_rx);
-        assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
+        let e = refusals(&mut host_rx);
+        assert!(e.iter().any(|(m, k)| m.contains("Fireball") && k.as_deref() == Some("Build")), "{e:?}");
     }
 
     #[tokio::test]
@@ -1086,7 +1101,7 @@ mod tests {
         assert_eq!(errors(&mut nrx), ["Debug is off."], "the guards come before Only weapons");
         assert!(none(&l) && l.conns[&n].debug_equipment == Equipment::starter(ClassId::Barbarian));
         l.debug_equip_if(a, EquipSlot::Armor, Some(ItemId::PlateArmor));
-        assert_eq!(errors(&mut rx), ["Only weapons."]);
+        assert_eq!(refusals(&mut rx), [("Only weapons.".to_string(), Some("Guard".to_string()))]);
         l.handle(a, ClientMsg::SetReady { ready: true });
         errors(&mut rx);
         l.debug_equip_if(a, slot, axes);

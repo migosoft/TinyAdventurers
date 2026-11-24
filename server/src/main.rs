@@ -227,7 +227,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, debug_c
             ClientMsg::SetLoadout { primary, secondary } => change_build(&state, id, Change::SetLoadout(Loadout { primary, secondary })).await,
             ClientMsg::DebugGrantItem { .. } | ClientMsg::DebugBuyAttribute { .. } | ClientMsg::DebugBuyNode { .. } | ClientMsg::DebugRespec => {
                 if !lobby.lock().unwrap().is_debug(id) {
-                    lobby.lock().unwrap().error(id, "Debug is off.");
+                    lobby.lock().unwrap().error_as(id, "Debug is off.", Some(protocol::Refusal::Guard));
                     continue;
                 }
                 let change = match cm {
@@ -257,15 +257,15 @@ async fn change_build(state: &AppState, conn: u32, change: Change) {
     let check = state.lobby.lock().unwrap().can_change(conn);
     let (character, class) = match check {
         Ok(c) => c,
-        Err(e) => return state.lobby.lock().unwrap().error(conn, e),
+        Err(e) => return state.lobby.lock().unwrap().error_as(conn, e, Some(protocol::Refusal::Guard)),
     };
     let result = db::update_progress(&state.db, character, change, class).await;
     let mut l = state.lobby.lock().unwrap();
     match result {
         Ok(db::Modified::Done(p)) => l.apply_progress(character, p),
-        Ok(db::Modified::Refused(e)) => l.error(conn, e),
+        Ok(db::Modified::Refused(e)) => l.error_as(conn, e, Some(protocol::Refusal::Build)),
         Ok(db::Modified::Missing) => l.error(conn, "No such character."),
-        Ok(db::Modified::WrongKind) => l.error(conn, "Debug is off."),
+        Ok(db::Modified::WrongKind) => l.error_as(conn, "Debug is off.", Some(protocol::Refusal::Guard)),
         Err(e) => {
             tracing::error!("change build: {e}");
             l.error(conn, "Something went wrong on the server. Please try again.");

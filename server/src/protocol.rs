@@ -437,6 +437,16 @@ pub struct PlayerStats {
     pub alive: bool,
 }
 
+/// The kind of a refused build or debug message (`ServerMsg::Error`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub enum Refusal {
+    /// Refused before anything was stored (debug off, during a run, while ready, no character, not a weapon).
+    Guard,
+    /// The sheet refused the build (an Attribute shortfall, an item or ability that does not fit): the server may hold the pick.
+    Build,
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(tag = "t")]
 #[ts(export)]
@@ -462,7 +472,8 @@ pub enum ServerMsg {
     /// The hero's speed or abilities changed (an Attribute effect started or ended): the numbers the client
     /// predicts with, as in `RunStartInfo`. `disabled`: the pick's requirement fails, so it does nothing; it names the Attribute requirement that fails.
     HeroChanged { speed: f64, abilities: [crate::sheet::ResolvedAbility; 2], fallback: crate::sheet::ResolvedAbility, disabled: [Option<(Attr, i32)>; 2] },
-    Error { msg: String },
+    /// `refused`: what kind of refusal this is, when the client must react to it (never matched on `msg`).
+    Error { msg: String, refused: Option<Refusal> },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
     /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `cove`: the path to the nymph's cove while the
     /// hero is outside it (else empty). `immortal`: false after `DebugImmortal { on: false }`.

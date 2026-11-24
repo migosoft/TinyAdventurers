@@ -160,7 +160,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
       case 'Error':
         lastError = { msg: m.msg, at: performance.now() };
         if (hub.visible) hub.error(m.msg);
-        else lobby.error(m.msg);
+        else lobby.error(m.msg, m.refused);
         break;
       case 'RunStarted': {
         const info = m as RunStartInfo;

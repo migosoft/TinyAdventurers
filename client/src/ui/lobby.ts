@@ -4,6 +4,7 @@ import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { LevelId } from '../generated/LevelId';
+import type { Refusal } from '../generated/Refusal';
 import type { RoomPlayer } from '../generated/RoomPlayer';
 import type { RunSummary } from '../generated/RunSummary';
 import type { Net } from '../net';
@@ -51,15 +52,8 @@ export function debugWeapons(cls: ClassId, slot: 'Melee' | 'Ranged'): WeaponId[]
   });
 }
 
-/** The server's answers that mean a debug message was refused before it stored anything. */
-export function isDebugGuardError(msg: string): boolean {
-  return ['Debug is off.', 'Join a dungeon first.', 'Not during a run.', 'Not while ready.', 'Choose a character first.', 'Only weapons.'].includes(msg);
-}
-
 /** Which debug picks the user changed since the last reset (only those can be answered by an error). */
 export type DebugTouched = { loadout: boolean; melee: boolean; ranged: boolean };
-
-export const BUILD_ERROR = /needs |is not one of your abilities|cannot go in the|does not fit the|cannot use the item|not trained in the item/;
 
 /** The select label of a pool card: its name, plus the reason when it is invalid ("Frost Nova (needs INT 17.)"). */
 export function pickOptionLabel(label: string, error: string | null): string {
@@ -67,20 +61,15 @@ export function pickOptionLabel(label: string, error: string | null): string {
   return `${label} (${error.includes('needs ') ? error.slice(error.indexOf('needs ')) : error})`;
 }
 
-/** A server answer that refuses a build change (the selects must be drawn from the saved state again). */
-export const isBuildRefusal = (msg: string): boolean => isDebugGuardError(msg) || BUILD_ERROR.test(msg);
-
 /**
- * What to do with a server error about the debug picks the user changed: `reset` the selects to
- * their defaults, and `resend` the defaults of those the server may have stored (a refused sheet;
- * a guard refusal stored nothing). Errors that are not about a pick, or name another player, do nothing.
+ * What to do with a server refusal (`Error.refused`) of the debug picks the user changed: `reset` the selects to
+ * their defaults, and `resend` the defaults of those the server may have stored (a refused sheet, `Build`;
+ * a `Guard` refusal stored nothing). Errors without a refusal kind (another player's build, other messages) do nothing.
  */
-export function debugReject(msg: string, touched: DebugTouched, others: string[]): { reset: DebugTouched; resend: DebugTouched } {
+export function debugReject(refused: Refusal | null | undefined, touched: DebugTouched): { reset: DebugTouched; resend: DebugTouched } {
   const none: DebugTouched = { loadout: false, melee: false, ranged: false };
-  if (!touched.loadout && !touched.melee && !touched.ranged) return { reset: none, resend: none };
-  if (isDebugGuardError(msg)) return { reset: { ...touched }, resend: none };
-  if (others.some((n) => msg.startsWith(`${n}: `)) || !BUILD_ERROR.test(msg)) return { reset: none, resend: none };
-  return { reset: { ...touched }, resend: { ...touched } };
+  if (!refused || (!touched.loadout && !touched.melee && !touched.ranged)) return { reset: none, resend: none };
+  return { reset: { ...touched }, resend: refused === 'Build' ? { ...touched } : none };
 }
 
 export class Lobby {
@@ -144,11 +133,11 @@ export class Lobby {
     this.render();
   }
 
-  error(msg: string): void {
-    this.resetRejectedDebugPick(msg);
+  error(msg: string, refused?: Refusal | null): void {
+    this.resetRejectedDebugPick(msg, refused);
     // A refused build change is not followed by a Character message: draw the selects from the saved state again.
     // Any other error only writes the line, so half-typed input stays.
-    if (isBuildRefusal(msg)) this.render();
+    if (refused) this.render();
     this.errorText = msg;
     const e = this.root.querySelector('.error');
     if (e) e.textContent = msg;
@@ -162,12 +151,10 @@ export class Lobby {
    * an Attribute shortfall) would stay selected: reset the selects the user changed, and the server
    * with them when it may have stored them. Nothing is ever sent for a pick the user did not change.
    */
-  private resetRejectedDebugPick(msg: string): void {
+  private resetRejectedDebugPick(msg: string, refused?: Refusal | null): void {
     const pick = this.debugPick;
     if (!pick || !this.room) return;
-    const me = this.room.players.find((p) => p.id === this.myId);
-    const others = this.room.players.filter((p) => p !== me).map((p) => p.name);
-    const { reset, resend } = debugReject(msg, pick.touched, others);
+    const { reset, resend } = debugReject(refused, pick.touched);
     if (!reset.loadout && !reset.melee && !reset.ranged) return;
     const start = CLASSES[pick.cls];
     if (reset.loadout) {
