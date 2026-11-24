@@ -1115,6 +1115,21 @@ mod tests {
     }
 
     #[test]
+    fn after_a_glance_a_target_out_of_the_cone_is_dropped_within_the_hold() {
+        let (mut run, mi) = lost(PI - 170f64.to_radians(), None); // the hero is 170 degrees off: beyond head and cone, in the open
+        run.monsters[mi].turn = 0.0; // the body does not follow, so the target stays out of the cone
+        run.monsters[mi].ai.deaf_t = GLANCE_AGAIN; // a glance has just ended
+        let mut t = 0.0;
+        while run.monsters[mi].ai.state == AiState::Chase && t < 2.0 {
+            run.step();
+            t += DT;
+        }
+        assert_eq!(run.monsters[mi].ai.state, AiState::Look, "it gave the target up");
+        assert!(t <= GLANCE_HOLD + 2.0 * DT, "no later than the hold: {t}");
+        assert!(t >= GLANCE_HOLD - 2.0 * DT, "but the head's swing back is covered: {t}");
+    }
+
+    #[test]
     fn a_chaser_hit_by_a_closer_foe_switches() {
         // The ranger stands at the orc's side (south), nearer than the paladin it chases.
         let (mut run, mi) = two_foes(120.0, Vec2::new(0.0, 40.0));
