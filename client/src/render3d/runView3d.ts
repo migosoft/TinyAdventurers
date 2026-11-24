@@ -81,6 +81,8 @@ export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 |
 }
 
 /** A Boom kind's camera shake near the own hero: [ms, intensity]. */
+/** Half the screen's width at the default zoom, world px: a blast's shake is gone this far from its edge. */
+const SHAKE_RANGE = 320;
 const BLAST_SHAKE: Record<number, readonly [number, number]> = { 0: [120, 0.004], 4: [120, 0.004], 7: [120, 0.004], 6: [200, 0.007], 10: [200, 0.007], 5: [140, 0.005] };
 
 export class RunView3d implements RunView {
@@ -120,6 +122,9 @@ export class RunView3d implements RunView {
   private readonly shakeGround = { x: 0, z: 0 };
   /** The run clock of the last host frame, seconds (events are stamped with it). */
   private clockNow = 0;
+  /** What the camera follows (the own hero, or the watched teammate), simulation px: a blast shakes by its distance from here. */
+  private readonly followed: { x: number; y: number } = { x: 0, y: 0 };
+  private hasFrame = false;
   // The dungeon air and the woodland's pollen (#307): simulated here, once per run (a lost device keeps it).
   private readonly air: Air3d;
   // The water (#345): ripples and droplet cues, made here like the air so a lost device keeps them. The air steps after the water in a
@@ -353,6 +358,9 @@ export class RunView3d implements RunView {
     // The own hero, for `window.__r3d`.
     this.hero.x = f.own.x / TILE;
     this.hero.z = f.own.y / TILE;
+    this.hasFrame = true;
+    this.followed.x = f.camera.x;
+    this.followed.y = f.camera.y;
 
     // The camera.
     const tx = f.camera.x / TILE;
@@ -644,8 +652,9 @@ export class RunView3d implements RunView {
     // The camera shakes on a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
     else if (ev.t === 'Boom' && BLAST_SHAKE[ev.k]) {
-      // Full near the own hero, none beyond about half a screen's width.
-      const near = blastFalloff(Math.hypot(ev.x - own.x, ev.y - own.y), this.c ? this.c.canvas.w / this.c.zoom / 2 : 0);
+      // Full where the blast reaches the followed hero, none beyond SHAKE_RANGE from its edge.
+      const at = this.hasFrame ? this.followed : own;
+      const near = blastFalloff(Math.max(0, Math.hypot(ev.x - at.x, ev.y - at.y) - ev.r), SHAKE_RANGE);
       if (near > 0) this.shake.kick(BLAST_SHAKE[ev.k][0], BLAST_SHAKE[ev.k][1] * near);
     }
     else if (ev.t === 'Died' && isBossKind(ev.kind)) this.shake.kick(120, 0.004);
