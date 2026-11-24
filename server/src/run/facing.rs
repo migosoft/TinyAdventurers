@@ -65,8 +65,6 @@ const LOOK_AROUND: f64 = 60.0 * PI / 180.0;
 /// Monster `mi` starts glancing `g` after its startle.
 pub fn glance(run: &mut Run, mi: usize, mut g: Glance) {
     g.wait = startle(&run.monsters[mi].attrs);
-    // A stationary creature turns only its head.
-    g.body &= run.monsters[mi].base_ai != crate::defs::enemies::BaseAi::Stationary;
     run.monsters[mi].ai.search = g.search;
     run.monsters[mi].ai.glance = Some(g);
 }
@@ -793,13 +791,26 @@ mod tests {
     }
 
     #[test]
-    fn a_stationary_creature_looks_with_its_head_only() {
+    fn a_stationary_creature_turns_but_does_not_walk_or_search() {
         let (mut run, mi) = lost(0.0, None);
         run.monsters[mi].base_ai = crate::defs::enemies::BaseAi::Stationary;
-        run.step();
-        assert!(!run.monsters[mi].ai.glance.expect("it looks").body);
-        steps(&mut run, 0.4);
-        assert!(run.monsters[mi].aim.abs() < 1e-9, "the body stood: {}", run.monsters[mi].aim);
+        let before = run.monsters[mi].pos;
+        let (mut turned, mut states) = (false, Vec::new());
+        // The hero stands behind it; keep it unseen until the look is over.
+        for _ in 0..(3.0 / DT) as usize {
+            let m = &run.monsters[mi];
+            let at = m.pos + Vec2::from_angle(m.gaze_dir() + PI) * 100.0;
+            hero_to(&mut run, at);
+            run.step();
+            let m = &run.monsters[mi];
+            turned |= angle_diff(m.aim, 0.0).abs() > 60f64.to_radians();
+            assert!(m.pos.dist(before) < 0.5, "it does not walk");
+            if states.last() != Some(&m.ai.state) {
+                states.push(m.ai.state);
+            }
+        }
+        assert!(turned, "the body turned toward the last sighting");
+        assert!(!states.contains(&AiState::Search) && states.last() == Some(&AiState::Idle), "{states:?}");
     }
 
     #[test]
