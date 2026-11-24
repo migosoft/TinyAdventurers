@@ -260,6 +260,8 @@ pub struct Ai {
     pub search: Option<Vec2>,
     /// Seconds it ignores further blows, after a glance in which it kept its target.
     pub deaf_t: f64,
+    /// Ids of the shots it has already reacted to (`facing::notice_shots`).
+    pub noticed: Vec<u32>,
 }
 
 impl Ai {
@@ -296,6 +298,7 @@ impl Ai {
             seen_tick: None,
             search: None,
             deaf_t: 0.0,
+            noticed: Vec::new(),
         }
     }
 }

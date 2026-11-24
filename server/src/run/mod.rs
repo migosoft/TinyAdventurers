@@ -572,6 +572,7 @@ impl Run {
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
             // A dodging tick skips the rest of the behaviour (regroup, escape_terrain, leave_wall) for that
             // fraction of a second; the attack cooldowns still count (dodge::tick).
+            facing::notice_shots(self, mi);
             if dodge::tick(self, mi, DT, false) {
                 continue;
             }

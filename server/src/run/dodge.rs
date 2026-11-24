@@ -545,6 +545,70 @@ mod tests {
         assert_eq!(threats(&run, mi).len(), 1, "a near shot is a threat");
     }
 
+    /// The orc looks away from the hero (body east) with a narrow cone, so an arrow from the hero is behind it.
+    fn look_away(run: &mut Run, mi: usize) {
+        run.monsters[mi].sight.cone = 120.0;
+        run.monsters[mi].aim = 0.0;
+        run.monsters[mi].gaze = 0.0;
+    }
+
+    #[test]
+    fn an_arrow_at_a_friend_in_its_cone_is_noticed() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        let hero = run.players[0].pos();
+        // The watcher stands off to the side and looks at the hero; the arrow flies at the other orc.
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(50.0, 60.0), None);
+        let wi = run.monster_idx(id).unwrap();
+        run.monsters[wi].ai.cd = 1e9;
+        crate::run::tests::face(&mut run, wi, hero);
+        fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
+        let (wid, mid) = (run.monsters[wi].id, run.monsters[mi].id);
+        let wi = run.monster_idx(wid).unwrap();
+        assert!(course_hit(&run, 0, wi, run.monsters[wi].pos, 0.0).is_none(), "not at the watcher");
+        super::super::facing::notice_shots(&mut run, wi);
+        assert_eq!(run.monsters[wi].ai.noticed, vec![run.projectiles[0].id]);
+        assert_eq!(run.monsters[wi].ai.state, crate::run::entities::AiState::Search);
+        assert!(run.monsters[run.monster_idx(mid).unwrap()].ai.noticed.is_empty());
+    }
+
+    #[test]
+    fn an_arrow_from_behind_is_neither_noticed_nor_dodged() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        look_away(&mut run, mi);
+        fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
+        super::super::facing::notice_shots(&mut run, mi);
+        assert!(run.monsters[mi].ai.noticed.is_empty());
+        assert_eq!(run.monsters[mi].ai.state, crate::run::entities::AiState::Idle);
+        assert!(threats(&run, mi).is_empty(), "not dodged either");
+    }
+
+    #[test]
+    fn a_head_turned_to_the_side_sees_the_arrow_coming_from_there() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        look_away(&mut run, mi);
+        fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
+        run.monsters[mi].gaze = std::f64::consts::PI;
+        super::super::facing::notice_shots(&mut run, mi);
+        assert_eq!(run.monsters[mi].ai.noticed.len(), 1);
+        assert_eq!(threats(&run, mi).len(), 1);
+    }
+
+    #[test]
+    fn a_shot_is_noticed_once() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
+        super::super::facing::notice_shots(&mut run, mi);
+        assert_eq!(run.monsters[mi].ai.state, crate::run::entities::AiState::Search);
+        run.monsters[mi].ai.enter(crate::run::entities::AiState::Idle);
+        super::super::facing::notice_shots(&mut run, mi);
+        assert_eq!(run.monsters[mi].ai.state, crate::run::entities::AiState::Idle, "no second reaction");
+        assert_eq!(run.monsters[mi].ai.noticed.len(), 1);
+        // Ids of shots that are gone are dropped.
+        run.projectiles.clear();
+        super::super::facing::notice_shots(&mut run, mi);
+        assert!(run.monsters[mi].ai.noticed.is_empty());
+    }
+
     // ---- the step and the hook ----
 
     use crate::defs::effects::EffectKind;

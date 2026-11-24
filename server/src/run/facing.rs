@@ -119,6 +119,34 @@ pub fn notice(run: &mut Run, mi: usize, back: f64) {
     }
 }
 
+/// Monster `mi` reacts, once per shot, to a foe's shot in flight that it sees and that would hit it or a creature
+/// of its side near the shot (`notice` with the direction the shot came from). Ids of shots that are gone are dropped.
+pub fn notice_shots(run: &mut Run, mi: usize) {
+    let live: Vec<u32> = run.projectiles.iter().filter(|p| !p.dead).map(|p| p.id).collect();
+    run.monsters[mi].ai.noticed.retain(|id| live.contains(id));
+    let m = &run.monsters[mi];
+    if !m.alive {
+        return;
+    }
+    let (reach, sight, gaze, pos, side) = (run.smarts.notice_px(&m.attrs), m.sight_now(), m.gaze_dir(), m.pos, m.side);
+    let mut seen = Vec::new();
+    for (pi, pr) in run.projectiles.iter().enumerate() {
+        if pr.dead || pr.owner == m.id || m.ai.noticed.contains(&pr.id) || pr.vel.len() <= 0.0 || pr.pos.dist(pos) > reach || !crate::run::perception::sees(run, sight, pos, gaze, pr.pos) {
+            continue;
+        }
+        let aimed_at_us = run.monsters.iter().enumerate().any(|(j, o)| {
+            o.alive && (j == mi || (o.side == side && o.pos.dist(pr.pos) <= reach)) && super::targets::may_hit(run, pr.side, super::effects::Creature::Monster(j)) && super::dodge::course_hit(run, pi, j, o.pos, 0.0).is_some()
+        });
+        if aimed_at_us {
+            seen.push((pr.id, (pr.vel * -1.0).angle()));
+        }
+    }
+    for (id, back) in seen {
+        run.monsters[mi].ai.noticed.push(id);
+        notice(run, mi, back);
+    }
+}
+
 /// Monster `mi` starts glancing `g` after its startle.
 pub fn glance(run: &mut Run, mi: usize, mut g: Glance) {
     g.wait = startle(&run.monsters[mi].attrs);
