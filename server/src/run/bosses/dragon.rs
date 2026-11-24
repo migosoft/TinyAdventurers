@@ -490,6 +490,27 @@ mod tests {
     }
 
     #[test]
+    fn the_smash_and_the_breath_hit_the_rangers_wolf() {
+        let radius = ab::def(AbilityId::Smash).own.radius;
+        let (mut run, _, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
+        let id = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(id).unwrap();
+        let max = run.monsters[wi].max_hp;
+        run.monsters[wi].pos = run.monsters[bi].pos + Vec2::new(radius - 8.0, 0.0);
+        let at = ahead(&run, bi);
+        assert!(monster_use(&mut run, bi, AbilityId::Smash, at));
+        assert!(run.monsters[wi].hp < max, "the smash hurt the wolf");
+
+        let (mut run, _, bi) = dragon_with_ready(&[Vec2::new(0.0, 60.0)], &[AbilityId::FireBreath]);
+        let id = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(id).unwrap();
+        let max = run.monsters[wi].max_hp;
+        run.monsters[wi].pos = run.monsters[bi].pos + Vec2::new(40.0, 0.0);
+        breathe_once(&mut run, bi);
+        assert!(run.monsters[wi].hp < max, "the breath burned the wolf");
+    }
+
+    #[test]
     fn the_smash_spares_heroes_outside_its_radius() {
         let radius = ab::def(AbilityId::Smash).own.radius;
         let (mut run, _, bi) = dragon_with(&[Vec2::new(radius + 8.0, 0.0)]);

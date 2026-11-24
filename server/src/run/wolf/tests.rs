@@ -368,6 +368,41 @@ fn an_enemy_arrow_hits_the_wolf() {
 }
 
 #[test]
+fn an_enemy_exploding_shot_bursts_on_the_wolf() {
+    let (mut run, id) = ranger_with_wolf();
+    lit_arena(&mut run);
+    let at = run.players[0].pos() + Vec2::new(6.0 * crate::dungeon::TILE, 0.0);
+    let wi = wolf_idx(&run, id);
+    // Beside the burst's centre: a push needs a direction.
+    run.monsters[wi].pos = at + Vec2::new(12.0, 0.0);
+    run.events.clear();
+    crate::run::tests::enemy_use(&mut run, EnemyType::Ogre, at - Vec2::new(60.0, 0.0), AbilityId::Fireball, at);
+    assert!(run.projectiles.last().unwrap().explode_r > 0.0, "an exploding shot");
+    for _ in 0..120 {
+        tick_projectiles(&mut run, DT);
+    }
+    let w = &run.monsters[wolf_idx(&run, id)];
+    assert!(w.hp < 80.0 && w.knock.x > 0.0, "the burst hurt and pushed the wolf");
+    assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Boom { k: 0, .. })), "it did explode");
+}
+
+#[test]
+fn a_ranger_sinking_but_alive_keeps_the_wolf() {
+    let (mut run, id) = ranger_with_wolf();
+    lit_arena(&mut run);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    run.layout.map.set(tx, ty, Tile::Chasm);
+    run.step();
+    assert!(run.players[0].sinking.is_some() && run.players[0].alive, "the ranger is falling");
+    for _ in 0..10 {
+        run.step();
+    }
+    assert!(run.players[0].alive && run.players[0].sinking.is_some());
+    assert_eq!(run.players[0].wolf, Some(id), "still the ranger's wolf");
+    assert!(run.monsters[wolf_idx(&run, id)].alive, "and still alive");
+}
+
+#[test]
 fn area_attacks_hit_the_wolf() {
     use crate::run::objects::{explode_barrel, Barrel, ObjState};
     // The ogre's slam.
@@ -470,6 +505,8 @@ fn a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait() {
     assert!(p.xp == 0 && p.coins == 0 && p.kills == 0);
     assert_eq!(p.wolf, None);
     assert!(p.cd2 > 55.0 * 10.0 / 13.0 && p.cd2 <= 60.0 * 10.0 / 13.0, "the wait for the next wolf started: {}", p.cd2);
+    let name = p.name.clone();
+    assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if *text == format!("{name}'s wolf has fallen"))), "the message names the ranger");
 }
 
 // ---- Behaviour: follow, guard, dash, bite, leash, reappear, chasm escape ----

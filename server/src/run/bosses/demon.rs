@@ -377,6 +377,21 @@ mod tests {
     }
 
     #[test]
+    fn the_breath_burns_the_rangers_wolf() {
+        // The demon turns to the hero (east); the wolf stands between them, in the cone.
+        let (mut run, mut d, bi) = demon_with(Vec2::new(70.0, 0.0), &[AbilityId::FireBreath]);
+        let id = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(id).unwrap();
+        let max = run.monsters[wi].max_hp;
+        run.monsters[wi].pos = run.monsters[bi].pos + Vec2::new(35.0, 0.0);
+        for _ in 0..(5.0 / DT) as usize {
+            d.tick(&mut run, DT);
+            tick_channel(&mut run, bi, DT);
+        }
+        assert!(run.monsters[wi].hp < max, "the wolf in the cone burns");
+    }
+
+    #[test]
     fn a_breath_cut_short_frees_the_demon() {
         let (mut run, mut d, bi) = demon_with(Vec2::new(40.0, 0.0), &[AbilityId::FireBreath]);
         let mut steps = 0;
