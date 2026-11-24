@@ -52,6 +52,7 @@ impl DamageSplit {
         }
         let listed: f64 = s.iter().sum();
         if listed > 1.0 + 1e-9 {
+            debug_assert!(false, "damage split shares add up to {listed}, over 100 %");
             // Over 100 %: keep the proportions, scaled to exactly 100 %.
             s.iter_mut().for_each(|x| *x /= listed);
             return DamageSplit(s);
@@ -350,9 +351,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_split_over_100_percent_is_scaled_to_exactly_100() {
-        let s = DamageSplit::split(&[(Heat, 0.8), (Cold, 0.8)]);
-        assert!((s.share(Heat) - 0.5).abs() < 1e-12 && (s.share(Cold) - 0.5).abs() < 1e-12 && s.share(Physical) == 0.0);
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "over 100 %")]
+    fn a_split_over_100_percent_fails_in_tests() {
+        DamageSplit::split(&[(Heat, 0.8), (Cold, 0.8)]);
+    }
+
+    #[test]
+    fn a_split_under_100_percent_fills_with_physical() {
         let under = DamageSplit::split(&[(Heat, 0.3)]);
         assert!((under.share(Physical) - 0.7).abs() < 1e-12, "under 100 %: the rest is physical");
     }

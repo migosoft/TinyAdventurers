@@ -99,7 +99,7 @@ pub fn on_danger(run: &mut Run, mi: usize, tile: u8) -> bool {
     }
     let Some(id) = leap_ability(run, mi) else { return false };
     // Ground the movement rules refuse this mover (a lava walker may stand in lava).
-    if !Map::terrain_blocks(tile, m.mover) ||!m.cds.ready(id) {
+    if !Map::terrain_blocks(tile, m.mover) || !m.cds.ready(id) {
         return false;
     }
     run.monsters[mi].knock = Vec2::ZERO;

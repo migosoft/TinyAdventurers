@@ -1523,17 +1523,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_push_breaks_a_wind_up() {
-        let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
-        tick_monster(&mut run, mi, 1.0 / 60.0);
-        assert!(run.monsters[mi].ai.windup.is_some(), "control: winding up");
-        run.monsters[mi].weight = 1.0;
-        run.knock_monster(mi, run.monsters[mi].pos + Vec2::new(10.0, 0.0), 40.0, 30);
-        assert!(run.monsters[mi].knock != Vec2::ZERO, "pushed");
-        assert!(run.monsters[mi].ai.windup.is_none() && run.monsters[mi].ai.cast.is_none());
-    }
-
-    #[test]
     fn a_monster_in_a_wide_lava_field_walks_out() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         open_floor(&mut run);

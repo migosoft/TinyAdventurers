@@ -29,6 +29,7 @@ pub fn q_aim(a: f64) -> u8 {
 }
 
 /// Element 6 of an entity: a hazard's radius in whole px (a plain number), else the aim as `q_aim`.
+/// The client's `isHazardKind` (`anim/defs.ts`) must name the same kinds.
 fn q_aim_or_radius(kind: u8, v: f64) -> u16 {
     use crate::defs::kinds::EntityKind::{FirePatch, HolyGround, Roots};
     if [FirePatch, HolyGround, Roots].iter().any(|&k| k as u8 == kind) {
@@ -285,6 +286,15 @@ mod tests {
     use super::*;
     use crate::protocol::{decode, ClientMsg, ServerMsg};
     use std::f64::consts::PI;
+
+    #[test]
+    fn only_hazard_kinds_carry_a_radius() {
+        use crate::defs::kinds::EntityKind::{FirePatch, HolyGround, Missile, Roots};
+        for k in [FirePatch, HolyGround, Roots] {
+            assert_eq!(q_aim_or_radius(k as u8, 300.0), 300, "{k:?} is a radius");
+        }
+        assert_eq!(q_aim_or_radius(Missile as u8, 300.0), q_aim(300.0) as u16, "a missile is an aim");
+    }
 
     #[test]
     fn positions_round_to_sixteenths() {
