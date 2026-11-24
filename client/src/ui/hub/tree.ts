@@ -1,12 +1,11 @@
 // The Skill tree tab: the class's node graph with owned / buyable / blocked / locked nodes, hover tooltips and buying.
 import { ABILITIES } from '../../generated/defs';
 import { ABILITY_INFO, ATTRS } from '../../generated/progression';
-import type { Attr } from '../../generated/Attr';
 import type { NodeId } from '../../generated/NodeId';
 import { classFigure, figureWeapon } from '../classes';
 import { esc } from '../hud';
 import { abilityIcon } from '../icons';
-import { abilityNumbers, cooldownSteps, monogram, nodeState, nodesOf, requirementStatus, spaced, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
+import { abilityNumbers, ATTR_ORDER, cooldownSteps, monogram, nodeState, nodesOf, requirementStatus, spaced, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
 import { clearTips, showTip } from './tip';
 import type { TabCtx } from './hub';
 
@@ -14,7 +13,6 @@ import type { TabCtx } from './hub';
 const NODE_SIZE: Record<TreeKind, number> = { Start: 46, Keystone: 40, Unlock: 38, Improve: 30, Proficiency: 32, Resist: 30 };
 const SPACE_X = 84;
 const SPACE_Y = 58;
-const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
 const div = (cls: string, html = ''): HTMLElement => {
   const e = document.createElement('div');
   e.className = cls;
@@ -49,7 +47,7 @@ function tipHtml(n: TreeNode, state: NodeState, ctx: TabCtx): string {
   if (n.kind === 'Unlock') {
     const card = info.sheet.pool.find((c) => c.pick.ability === n.ability && c.pick.source === 'Own');
     const steps = card?.ability ? cooldownSteps(card.ability) : '';
-    const nums = card?.ability ? abilityNumbers(card.ability, ABILITY_INFO[n.ability!].uses) : '';
+    const nums = card?.ability ? abilityNumbers(card.ability) : '';
     body = `<p>${abilityIcon(n.ability!, true)}${esc(ABILITY_INFO[n.ability!].text)}</p>${nums ? `<p class="muted">${esc(nums)}</p>` : ''}${steps.includes('→') ? `<p class="muted">${esc(steps)}</p>` : ''}`;
   } else body = `<p>${esc(n.text)}</p>`;
   const reqs = requirementStatus(info, n.req, true)

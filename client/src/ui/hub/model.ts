@@ -19,6 +19,8 @@ export type NodeState = 'owned' | 'buyable' | 'blocked' | 'locked';
 
 export const EQUIP_SLOTS: EquipSlot[] = ['Melee', 'Ranged', 'OffHand', 'Armor', 'Ring1', 'Ring2', 'Shoes', 'Belt'];
 const ATTR_KEYS = Object.keys(ATTRS) as Attr[];
+/** The Attributes in display order (the generated `ATTRS` is alphabetical). */
+export const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
 const itemDef = (id: string) => (ITEMS as unknown as Record<string, ItemDef>)[id];
 export const nodesOf = (info: CharacterInfo) => (TREES as unknown as Record<string, { nodes: Record<string, TreeNode>; start: string }>)[info.class];
 
@@ -161,8 +163,8 @@ export function cooldownSteps(r: ResolvedAbility): string {
   return out.join(' → ');
 }
 
-/** The numbers line of an ability card. `uses` is accepted for callers; the numbers do not depend on it. */
-export function abilityNumbers(res: ResolvedAbility, _uses: string): string {
+/** The numbers line of an ability card. */
+export function abilityNumbers(res: ResolvedAbility): string {
   const n = (v: number) => Math.round(v * 100) / 100;
   const r = { ...res, damage: n(res.damage), cooldown: n(res.cooldown), range: n(res.range), radius: n(res.radius), duration: n(res.duration) };
   const out: string[] = [];

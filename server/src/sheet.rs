@@ -13,7 +13,7 @@ use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, 
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, ItemProperty, PropKind};
+use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::{self, Sight};
@@ -883,15 +883,7 @@ pub fn spaced(name: &str) -> String {
 pub fn prof_name(p: Prof) -> String {
     match p {
         Prof::Weapon(k) => spaced(&format!("{k:?}")),
-        Prof::Armor(a) => format!(
-            "{} armor",
-            match a {
-                ArmorClass::Cloth => "Cloth",
-                ArmorClass::Light => "Light",
-                ArmorClass::Medium => "Medium",
-                ArmorClass::Heavy => "Heavy",
-            }
-        ),
+        Prof::Armor(a) => format!("{} armor", a.word()),
     }
 }
 
@@ -962,9 +954,12 @@ pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
         .into_iter()
         .map(|(pick, locked)| {
             let d = ab::def(pick.ability);
-            let error = resolve_pick(class, d.slot, pick, &cx).err().map(|e| e.message());
+            let resolved = resolve_pick(class, d.slot, pick, &cx);
+            let error = resolved.as_ref().err().map(|e| e.message());
             let ability = if locked {
                 cx.resolve(&d).map(|r| keystone_ability(r, &d, &cx.ks))
+            } else if let Ok((r, _)) = resolved {
+                Some(r)
             } else {
                 // Numbers even when a requirement fails: the version's mods and the tree's improvements.
                 let version = pick_version(class, &cx.usable, d.slot, pick).map(|v| v.0).unwrap_or(&[]);

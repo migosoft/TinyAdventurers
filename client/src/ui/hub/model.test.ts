@@ -94,17 +94,17 @@ describe('abilityNumbers', () => {
   const base = { id: 'MagicMissile', cooldown: 0, damage: 0, range: 0, arc: 0, speed: 0, radius: 0, duration: 0, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: {}, windup: 0, behind: 0 };
   const ab = (o: object) => ({ ...base, ...o }) as unknown as ResolvedAbility;
   test('a single-type ability', () => {
-    expect(abilityNumbers(ab({ damage: 12, cooldown: 0.35, range: 220, ranged: true, radius: 3, split: { Magical: 1 } }), 'Ranged')).toBe('12 magical · cd 0.35 s · range 220 · radius 3');
+    expect(abilityNumbers(ab({ damage: 12, cooldown: 0.35, range: 220, ranged: true, radius: 3, split: { Magical: 1 } }))).toBe('12 magical · cd 0.35 s · range 220 · radius 3');
   });
   test('a mixed split lists the shares', () => {
-    expect(abilityNumbers(ab({ damage: 45, split: { Heat: 0.7, Magical: 0.2, Physical: 0.1 } }), 'Ranged')).toMatch(/^45: 70 % heat, 20 % magical, 10 % physical/);
+    expect(abilityNumbers(ab({ damage: 45, split: { Heat: 0.7, Magical: 0.2, Physical: 0.1 } }))).toMatch(/^45: 70 % heat, 20 % magical, 10 % physical/);
   });
   test('numbers print with at most 2 decimals', () => {
-    expect(abilityNumbers(ab({ damage: 10.416666666666668, cooldown: 0.3500000014, split: { Cold: 1 } }), 'Ranged')).toBe('10.42 cold · cd 0.35 s');
-    expect(abilityNumbers(ab({ damage: 20.370370370370367, cooldown: 9, split: { Cold: 0.4, Heat: 0.6 }, duration: 3.999999 }), 'Ranged')).toBe('20.37: 60 % heat, 40 % cold · cd 9 s · 4 s');
+    expect(abilityNumbers(ab({ damage: 10.416666666666668, cooldown: 0.3500000014, split: { Cold: 1 } }))).toBe('10.42 cold · cd 0.35 s');
+    expect(abilityNumbers(ab({ damage: 20.370370370370367, cooldown: 9, split: { Cold: 0.4, Heat: 0.6 }, duration: 3.999999 }))).toBe('20.37: 60 % heat, 40 % cold · cd 9 s · 4 s');
   });
   test('Holy Light heals; duration and pierce show', () => {
-    expect(abilityNumbers(ab({ id: 'HolyLight', damage: 35, duration: 4, pierce_through: 2 }), 'Nothing')).toBe('heal 35 · 4 s · pierces 2');
+    expect(abilityNumbers(ab({ id: 'HolyLight', damage: 35, duration: 4, pierce_through: 2 }))).toBe('heal 35 · 4 s · pierces 2');
   });
 });
 

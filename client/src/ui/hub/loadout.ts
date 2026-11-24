@@ -16,7 +16,7 @@ function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): strin
   const id = c.pick.ability;
   const a = ABILITY_INFO[id] as unknown as Info;
   const ranged = c.ability?.ranged ? ' · ranged' : '';
-  const numbers = c.ability ? abilityNumbers(c.ability, a.uses) : '—';
+  const numbers = c.ability ? abilityNumbers(c.ability) : '—';
   const steps = c.ability ? cooldownSteps(c.ability) : '';
   const last = unavailable
     ? '<em class="bad">Not available any more.</em>'
@@ -50,8 +50,8 @@ export function renderLoadout(ctx: TabCtx): HTMLElement {
     col.innerHTML = `<h2><kbd>${key}</kbd> ${slot} ability</h2>`;
     const cards = poolFor(info, slot);
     const mine = saved[slot];
-    if (!cards.some((c) => samePick(c.pick, mine))) cards.unshift({ pick: mine, ability: null, error: null, locked: false });
-    const missing = cards[0].pick === mine;
+    const missing = !cards.some((c) => samePick(c.pick, mine));
+    if (missing) cards.unshift({ pick: mine, ability: null, error: null, locked: false });
     cards.forEach((c, i) => {
       const unavailable = missing && i === 0;
       const selected = samePick(c.pick, mine);

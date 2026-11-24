@@ -145,6 +145,18 @@ pub enum ArmorClass {
     Heavy,
 }
 
+impl ArmorClass {
+    /// The class as the player reads it ("Heavy": "Heavy armor" in `SheetSummary.profs` and the item tooltip).
+    pub fn word(self) -> &'static str {
+        match self {
+            ArmorClass::Cloth => "Cloth",
+            ArmorClass::Light => "Light",
+            ArmorClass::Medium => "Medium",
+            ArmorClass::Heavy => "Heavy",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ArmorStats {
     pub class: ArmorClass,
@@ -235,13 +247,7 @@ pub fn base_text(b: &ItemBase) -> String {
             t
         }
         ItemBase::Armor(a) => {
-            let class = match a.class {
-                ArmorClass::Cloth => "Cloth",
-                ArmorClass::Light => "Light",
-                ArmorClass::Medium => "Medium",
-                ArmorClass::Heavy => "Heavy",
-            };
-            format!("{class} armor · {} % physical resistance · weight {}", pct(a.physical), a.weight)
+            format!("{} armor · {} % physical resistance · weight {}", a.class.word(), pct(a.physical), a.weight)
         }
         ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt | ItemBase::Shield => String::new(),
     }

@@ -2,17 +2,15 @@
 import { api, ApiFail } from '../api';
 import { ABILITIES, CLASSES as CLASS_DEFS } from '../generated/defs';
 import { ABILITY_INFO, ITEMS } from '../generated/progression';
-import type { Attr } from '../generated/Attr';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { ClassId } from '../generated/ClassId';
 import type { Atlas } from './atlas';
 import { CLASSES, classFigure } from './classes';
-import { spaced } from './hub/model';
+import { ATTR_ORDER, spaced } from './hub/model';
 import { esc } from './hud';
 import { abilityIcon, itemIcon } from './icons';
 import { ATTR_SHORT, CLASS_TEXT, className } from './text';
 
-const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
 const itemName = (id: string) => (ITEMS as unknown as Record<string, { name: string }>)[id].name;
 
 export class Create {
