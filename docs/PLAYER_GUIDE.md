@@ -163,6 +163,18 @@ The Elven Ranger's wolf is a companion of its own kind, summoned with the right 
 - **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
 - **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
 
+## Where creatures look
+
+Enemies, bosses and animals do not see all round. A creature **sees in a cone in front of its head**, about 150 degrees wide (animals see wider, about 270; the Mimic and objects do not look at all). Its head can turn to the side a little (more for the dragon), and its body turns to follow. Range, line of sight and light still count: the cone is one more condition. You keep your all-round view.
+
+- **Sneak up from behind.** A creature that does not face you does not see you. Come up behind it, or from the side outside its cone, and you get the first strike. The tail of a boss is the exception: the demon and the dragon sense a hero right behind them and lash out.
+- **Shooting into a back.** A creature hit by an arrow or a spell from outside its cone does not learn where you are. It **glances** the way the blow came from after a short startle, and if it has nothing else to fight it turns and **searches back along the blow** for a few tiles. Stay out of its sight and it finds nothing. Clever enemies that see an arrow coming still step aside; one that is facing away does not.
+- **Slipping around one.** A creature that loses sight of you (you stepped out of its cone) looks to where you were heading, sweeps its head about the spot for a moment, then goes back to where it came from.
+- **Turning takes time.** A creature has to **face you before it attacks**, and a blow that has begun lands where you were: step out of the way (behind it is best) and it misses. **Big creatures turn slowly**: the ogre, the demon and the dragon take longer to swing round than a goblin. A creature walking backwards or sideways is slower than one walking forward.
+- **Two heroes, one enemy.** An enemy keeps fighting the hero in front of it. A hero who shoots it in the back makes it glance round at most every few seconds, so the one in front takes the fight and the one behind keeps shooting.
+- **What the stats do.** **Willpower** (WIL) widens a creature's view and shortens its startle; **Dexterity** (DEX) makes its head and body turn faster. The same goes for your wolf and for a charmed hero.
+- **Debug runs** (test accounts) show each creature's cone as a translucent fan on the floor.
+
 ## The Woodland
 
 The host can pick the **Woodland** in the lobby instead of the dungeon. It is a long **forest road** under open sky: it is **daylight**, so nothing is dark and you see as far as your field of vision reaches. Beyond that the forest is still drawn, only **hazy** (pale and a little washed out, never darker; the edge of your sight fades in softly, and a tree you can see is never hazy), but any creature out there stays hidden until it comes into your sight. Trees and bushes cast **shadows** on the ground, and each run's sun starts at a different place in the sky and slowly moves across it during the run, so the shadows turn and change length with it. Dark cloud shadows drift over the ground, and bees and butterflies fly about (cloud shadows, bees and butterflies are only for looks).
@@ -465,6 +477,7 @@ Press **L** to open a log that explains what the rules are doing. It answers two
 - The Paladin's heal only reaches allies close by, so stick together.
 - Only the clever archers back away from you; the simple ones stand and shoot. Close in, or use the Wizard and the Elven Ranger to pick them off. Clever enemies dodge shots they see coming, so shoot from close range or while they wind up. Enemy archers miss a lot at long range, and keep moving: the smartest ones lead their shots, so change direction.
 - Use corners: enemies can't attack what they can't see.
+- Get behind them: enemies see only in front of their heads. A hit in the back makes them glance round, not find you, and a swing that has started misses if you step out of its way.
 - Skeletons, demons and the dragon see you in the dark, so a lit torch behind you helps you see them. Humans and most monsters lose you in the dark: put out a torch (any non-fire hit does it) to slip past them, and light it again with **E** or with fire when you fight.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
 - Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.
