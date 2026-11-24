@@ -444,7 +444,7 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
     let dir = Vec2::from_angle(aim);
     match a.id {
         AbilityId::Fireball => {
-            let target = pos + dir * aim_dist.clamp(24.0, a.range);
+            let target = pos + dir * aim_dist.max(24.0).min(a.range);
             spawn_shot(run, c, a, EntityKind::Fireball, shot, dir, Some(target), a.radius, None);
         }
         AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -834,7 +834,7 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
         AbilityId::Entangle => {
             // Aimed like the Fireball, but it stops short of the first wall on the way.
             let dir = Vec2::from_angle(aim);
-            let want = aim_dist.clamp(24.0, a.range);
+            let want = aim_dist.max(24.0).min(a.range);
             let mut d = 0.0;
             while d + 2.0 <= want && !run.layout.map.opaque_at(pos + dir * (d + 2.0)) {
                 d += 2.0;
