@@ -4953,6 +4953,24 @@ mod hero_sides {
     }
 
     #[test]
+    fn a_shot_cast_for_the_heroes_pays_nobody_when_its_hero_turned_before_it_lands() {
+        // A Fireball: its blast is credited through the shot's owner (a plain hit goes through `credit_of`).
+        let mut run = crowd(&[ClassId::Wizard]);
+        assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Fireball);
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 70.0, 1000.0);
+        run.players[0].aim_dist = 70.0;
+        run.monsters[orc].hp = 1.0; // the blast kills it
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.projectiles[0].side, Side::Friendly);
+        run.players[0].side = Side::Hostile; // an enemy's Charm took the hero while the fireball flew
+        let before = (run.players[0].kills, run.players[0].damage);
+        fly(&mut run);
+        assert!(!run.monsters[orc].alive, "the blast still kills the orc");
+        // (The kill's XP goes to the whole party either way.)
+        assert_eq!(before, (run.players[0].kills, run.players[0].damage), "but the charmed hero gets no kill or damage");
+    }
+
+    #[test]
     fn a_shot_cast_for_the_enemies_stays_theirs_when_its_hero_turns_back() {
         // Magic Missile at the wolf, cast while hero 0 is hostile; hero 0 is Friendly again before it lands.
         let mut run = crowd(&[ClassId::Wizard, ClassId::ElvenRanger]);
@@ -4960,14 +4978,14 @@ mod hero_sides {
         let wi = run.monster_idx(wolf).unwrap();
         stand(&mut run, 1, -60.0); // out of the missile's way
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(60.0, 0.0);
-        let hp = run.monsters[wi].hp;
+        run.monsters[wi].hp = 1.0; // the hit kills it: a kill is what the credit rule must refuse
         run.players[0].side = Side::Hostile;
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].side, Side::Hostile);
         run.players[0].side = Side::Friendly;
         let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
         fly(&mut run);
-        assert!(run.monsters[wi].hp < hp, "the wolf still takes the hit");
+        assert!(!run.monsters[wi].alive, "the wolf still takes the hit, and falls");
         assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage), "and the hero is credited with none of it");
     }
 
@@ -4978,14 +4996,14 @@ mod hero_sides {
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 1);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(90.0, 0.0);
-        let hp = run.monsters[wi].hp;
+        run.monsters[wi].hp = 1.0; // the jump kills it: a kill is what the credit rule must refuse
         run.players[0].side = Side::Hostile;
         try_use(&mut run, 0, true, 1);
         run.players[0].side = Side::Friendly;
         let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
         fly(&mut run);
         assert!(run.players[1].hp < run.players[1].max_hp, "the spark hit hero 1");
-        assert!(run.monsters[wi].hp < hp, "the jump hit the wolf");
+        assert!(!run.monsters[wi].alive, "the jump hit the wolf, and it fell");
         assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage));
     }
 
