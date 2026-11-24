@@ -366,11 +366,11 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         ai.last_known = fpos;
         ai.state = AiState::Chase;
         ai.path.clear();
-    } else if run.monsters[mi].ai.target.is_some() {
+    } else if run.monsters[mi].ai.target.is_some() && run.monsters[mi].ai.windup.is_none() {
+        // A running wind-up is committed: the loss counts when it ends.
         run.monsters[mi].announced = None;
         let ai = &mut run.monsters[mi].ai;
         ai.target = None;
-        ai.windup = None;
         ai.state = AiState::Search;
         ai.search_t = 2.0;
     }
@@ -394,11 +394,14 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    // Finish a wind-up: the attack lands only if the target is still seen.
+    // Finish a wind-up: it is committed, so the blow is released at the foe's seen position, or at the last
+    // known one, and never further off the body's facing than its gate.
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at, id: w.id });
+            let m = &mut run.monsters[mi];
+            m.ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at, id: w.id });
+            m.face_to = Some(pos.angle_to(m.ai.last_known));
             return;
         }
         run.monsters[mi].ai.windup = None;
@@ -416,8 +419,15 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 return;
             }
         }
-        if let Some(foe) = seen {
-            perform_attack(run, mi, foe, w.alt, barrel);
+        let foe = seen.or_else(|| match run.monsters[mi].ai.target {
+            Some(Target::Player(id) | Target::Monster(id)) => run.creature_by_id(id).filter(|&c| run.creature_alive(c)),
+            _ => None,
+        });
+        if let Some(foe) = foe {
+            let gate = super::facing::gate(run.monsters[mi].kit.iter().nth(w.alt as usize).expect("the kit holds the main and the alt ability"));
+            let want = barrel.unwrap_or(if seen.is_some() { run.creature_pos(foe) } else { run.monsters[mi].ai.last_known });
+            let release = super::facing::release_point(run, mi, want, gate);
+            perform_attack(run, mi, foe, w.alt, (barrel.is_some() || seen.is_none() || release != want).then_some(release));
         }
         return;
     }
@@ -455,7 +465,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Shape::Swing | Shape::Blast | Shape::Ring | Shape::Dash | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Summon | Shape::Breath | Shape::Gaze => true,
                 };
                 let usable = ab::def(alt_id).module.is_none() && extra && worth_using(run, Creature::Monster(mi), &alt, foe, run.monsters[mi].ai.cd <= 0.0);
-                if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
+                if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) && super::facing::faces(run, mi, ppos, super::facing::gate(&alt)) {
                     if ab::def(alt_id).shape == Shape::Ring {
                         // The slam's own wind-up runs in `monster_use`.
                         set_anim(run, mi, Anim::Slam);
@@ -477,10 +487,12 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
-                announce_cast(run, Creature::Monster(mi), main.id, main.windup, aim);
-                set_anim(run, mi, ab::windup_anim(main.id));
-                return;
+                if super::facing::faces(run, mi, pos + Vec2::from_angle(aim) * d, super::facing::gate(&main)) {
+                    run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
+                    announce_cast(run, Creature::Monster(mi), main.id, main.windup, aim);
+                    set_anim(run, mi, ab::windup_anim(main.id));
+                    return;
+                }
             }
             if base_ai == BaseAi::Stationary {
                 return;

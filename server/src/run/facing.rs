@@ -4,7 +4,9 @@
 
 use super::entities::Monster;
 use super::{charm, Run};
+use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
+use crate::sheet::ResolvedAbility;
 use crate::defs::races::{BODY_TURN, HEAD_TURN, OFF_FACING_FULL, OFF_FACING_MIN, STARTLE};
 use crate::dungeon::{Mover, TILE};
 use crate::math::{angle_diff, Vec2};
@@ -16,6 +18,8 @@ const IDLE_LOOK_EVERY: (f64, f64) = (3.0, 7.0);
 const IDLE_LOOK_FOR: (f64, f64) = (1.0, 2.0);
 const IDLE_LOOK_SPAN: f64 = 0.8;
 
+/// How far (rad) off its target the body may be when an attack starts or is released.
+pub const ATTACK_FACING: f64 = 30.0 * PI / 180.0;
 /// A step shorter than this (px) is no walk: the body keeps its facing.
 const WALK_MIN: f64 = 0.05;
 /// How far (px) and in what steps the placement rays look for the longest free line.
@@ -51,6 +55,33 @@ pub fn head_speed(a: &Attributes) -> f64 {
 #[allow(dead_code)] // the glance comes with a later task
 pub fn startle(a: &Attributes) -> f64 {
     STARTLE.per(a)
+}
+
+/// How far (rad) off the target the body may be for an attack to start or be released: none for an
+/// ability that needs no facing, half the arc for a wide swing, else `ATTACK_FACING`.
+pub fn gate(a: &ResolvedAbility) -> Option<f64> {
+    match ab::def(a.id).shape {
+        Shape::Ring | Shape::SelfArea | Shape::Buff | Shape::Summon => None,
+        Shape::Swing => Some(ATTACK_FACING.max(a.arc / 2.0)),
+        Shape::Projectile | Shape::Blast | Shape::Dash | Shape::GroundArea | Shape::Breath | Shape::Gaze => Some(ATTACK_FACING),
+    }
+}
+
+/// Whether the body of monster `mi` faces `at` within `gate`.
+pub fn faces(run: &Run, mi: usize, at: Vec2, gate: Option<f64>) -> bool {
+    let m = &run.monsters[mi];
+    gate.map_or(true, |g| angle_diff(m.pos.angle_to(at), m.aim).abs() <= g)
+}
+
+/// Where the attack goes: `at` inside the gate, else the point at the same distance on the gate's edge.
+pub fn release_point(run: &Run, mi: usize, at: Vec2, gate: Option<f64>) -> Vec2 {
+    let m = &run.monsters[mi];
+    let Some(g) = gate else { return at };
+    let d = angle_diff(m.pos.angle_to(at), m.aim);
+    if d.abs() <= g {
+        return at;
+    }
+    m.pos + Vec2::from_angle(m.aim + d.signum() * g) * m.pos.dist(at)
 }
 
 /// The factor on the walking speed for a walk along `walk_angle` with the body facing `aim`.
@@ -379,5 +410,123 @@ mod tests {
         run.monsters[mi].wanders = false;
         let (jump, _) = watch(&mut run, mi, 12.0);
         assert!(jump <= head_speed(&run.monsters[mi].attrs) * DT + 1e-9);
+    }
+
+    /// An orc `d` px east of the hero (player 0), on open floor, attack ready, body facing the hero.
+    fn duel(d: f64) -> (Run, usize) {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].sight.cone = 150.0; // the race's cone, which `arena` widened
+        let ppos = run.players[0].pos();
+        run.monsters[mi].pos = ppos + Vec2::new(d, 0.0);
+        run.monsters[mi].ai.cd = 0.0;
+        crate::run::tests::face(&mut run, mi, ppos);
+        (run, mi)
+    }
+
+    /// Puts player 0 at `at`.
+    fn hero_to(run: &mut Run, at: Vec2) {
+        run.players[0].mv.x = at.x;
+        run.players[0].mv.y = at.y;
+    }
+
+    #[test]
+    fn no_wind_up_until_the_body_faces_the_target() {
+        let (mut run, mi) = duel(14.0);
+        let hero = run.players[0].pos();
+        run.monsters[mi].aim = 0.0; // away from the hero, who stands to the west
+        run.monsters[mi].sight.cone = 360.0; // it sees the hero, but has to turn to hit
+        let mut started = None;
+        for _ in 0..60 {
+            run.step();
+            if started.is_none() && run.monsters[mi].ai.windup.is_some() {
+                started = Some(angle_diff(run.monsters[mi].pos.angle_to(hero), run.monsters[mi].aim).abs());
+                break;
+            }
+            assert!(run.monsters[mi].ai.windup.is_none());
+        }
+        let off = started.expect("it turns and then winds up");
+        assert!(off <= ATTACK_FACING + 1e-9, "faced within the gate: {}", off.to_degrees());
+    }
+
+    #[test]
+    fn a_slam_needs_no_facing() {
+        let (mut run, mi) = crate::run::ai::tests::ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
+        run.monsters[mi].sight.cone = 360.0;
+        run.monsters[mi].aim = PI / 2.0; // both heroes are off to the side
+        crate::run::ai::tick_monster(&mut run, mi, DT);
+        assert!(run.monsters[mi].slam.is_some(), "the slam starts at once");
+    }
+
+    #[test]
+    fn a_wide_swing_starts_at_half_its_arc() {
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::OrcWarrior), &crate::defs::enemies::attr_sources(EnemyType::OrcWarrior).total(), &[]);
+        let strike = kit.get(crate::defs::abilities::AbilityId::Strike).unwrap().clone();
+        let narrow = crate::sheet::ResolvedAbility { arc: 20f64.to_radians(), ..strike.clone() };
+        let wide = crate::sheet::ResolvedAbility { arc: 140f64.to_radians(), ..strike };
+        assert_eq!(gate(&narrow), Some(ATTACK_FACING));
+        assert!((gate(&wide).unwrap() - 70f64.to_radians()).abs() < 1e-12);
+        let (run, mi) = duel(14.0);
+        let at = Vec2::new(0.0, 10.0);
+        let rel = |deg: f64| run.monsters[mi].pos + Vec2::from_angle(run.monsters[mi].aim + deg.to_radians()) * at.y;
+        assert!(!faces(&run, mi, rel(50.0), gate(&narrow)));
+        assert!(faces(&run, mi, rel(50.0), gate(&wide)));
+        assert!(faces(&run, mi, rel(180.0), None));
+    }
+
+    /// A duel where the hero steps `deg` degrees around the orc once its wind-up runs; returns the run, the orc,
+    /// the orc's aim before the tick that released the blow and the hero's hp before.
+    fn step_aside(deg: f64) -> (Run, usize, f64, f64) {
+        let (mut run, mi) = duel(14.0);
+        let (hero, hp) = (run.players[0].pos(), run.players[0].hp);
+        for _ in 0..30 {
+            run.step();
+            if run.monsters[mi].ai.windup.is_some() {
+                break;
+            }
+        }
+        assert!(run.monsters[mi].ai.windup.is_some(), "the wind-up started");
+        let pos = run.monsters[mi].pos;
+        hero_to(&mut run, pos + Vec2::from_angle(pos.angle_to(hero) + deg.to_radians()) * 14.0);
+        let mut before = run.monsters[mi].aim;
+        for _ in 0..120 {
+            before = run.monsters[mi].aim;
+            run.step();
+            if run.monsters[mi].ai.windup.is_none() {
+                break;
+            }
+        }
+        assert!(run.monsters[mi].ai.windup.is_none(), "the wind-up ended");
+        (run, mi, before, hp)
+    }
+
+    #[test]
+    fn a_wind_up_is_not_cancelled_when_the_target_steps_out_of_the_cone() {
+        let (run, mi, before, _) = step_aside(100.0);
+        let m = &run.monsters[mi];
+        assert!(m.ai.cd > 0.0, "the swing was released: its cooldown runs");
+        assert!(angle_diff(m.aim, before).abs() <= ATTACK_FACING + body_speed(m) * DT, "no jump: {}", angle_diff(m.aim, before).to_degrees());
+    }
+
+    #[test]
+    fn stepping_behind_makes_the_blow_miss() {
+        let (run, mi, _, hp) = step_aside(180.0);
+        assert!(run.monsters[mi].ai.cd > 0.0, "the attack's cooldown started");
+        assert_eq!(run.players[0].hp, hp);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, crate::protocol::Ev::Dmg { .. })), "no blow landed");
+    }
+
+    #[test]
+    fn a_circled_creature_still_attacks() {
+        let (mut run, mi) = duel(24.0);
+        let (centre, hp) = (run.monsters[mi].pos, run.players[0].hp);
+        let mut hit = false;
+        let mut a = 0.0f64;
+        for _ in 0..(6.0 / DT) as usize {
+            a += 80.0 / 24.0 * DT;
+            hero_to(&mut run, centre + Vec2::from_angle(a + PI) * 24.0);
+            run.step();
+            hit |= run.players[0].hp < hp;
+        }
+        assert!(hit, "a hero circling at speed 80 is hit at least once in 6 s");
     }
 }
