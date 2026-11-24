@@ -2601,6 +2601,19 @@ mod tests {
         let poison = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left);
         // A 50 % poison share is the higher tier: Poisoned (4 s) at power max(10, STR 8) = 10.
         assert_eq!(poison, Some(scaled_secs(4.0, 10, con)));
+        // Every later strike poisons again: the effect is renewed to its full time, and a second goblin hit with it is poisoned too.
+        for _ in 0..120 {
+            run.tick_effects();
+        }
+        let worn = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left).unwrap();
+        assert!(worn < scaled_secs(4.0, 10, con) - 1.0, "two seconds have worn it down: {worn}");
+        let second = run.spawn_enemy(EnemyType::GoblinArcher, run.players[0].pos() + Vec2::new(12.0, 8.0), None);
+        let si = run.monster_idx(second).unwrap();
+        run.monsters[si].hp = 1000.0;
+        melee_arc(&mut run, Creature::Player(0), &strike, false);
+        let left = |mi: usize| run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left);
+        assert_eq!(left(mi), Some(scaled_secs(4.0, 10, con)), "the second strike renews it");
+        assert_eq!(left(si), Some(scaled_secs(4.0, 10, con)), "a strike that hits two poisons both");
     }
 
     #[test]
@@ -2835,6 +2848,10 @@ mod tests {
         assert!((a.split.share(DamageType::Cold) - 0.4).abs() < 1e-12);
         assert!((a.split.share(DamageType::Magical) - 0.3).abs() < 1e-12);
         assert!((a.split.share(DamageType::Physical) - 0.3).abs() < 1e-12);
+        // Base 10, scaled by the hero's INT (the wizard's own 15 plus the 0 bought here) against the reference 14.
+        let scale = a.base.scale.expect("INT scales it");
+        assert_eq!((a.base.given, scale.attr, scale.at, scale.have), (10.0, Attr::Int, 14, run.players[0].sheet.attrs.get(Attr::Int)));
+        assert!(scale.ratio > 1.0 && (a.damage - 10.0 * scale.ratio).abs() < 1e-12);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::FrostBolt);
@@ -2886,6 +2903,8 @@ mod tests {
         run.monsters[wi].pos = at + Vec2::new(0.0, 20.0);
         let wolf_hp = run.monsters[wi].hp;
         let chest = run.spawn_object(EntityKind::Chest, at + Vec2::new(0.0, -20.0), crate::run::objects::ObjState::Chest { opened: None });
+        // A barrel, which a hit would light: the chest alone could not show the spark leaves objects be.
+        let barrel = run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, 40.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
         // A goblin within reach, behind a wall tile.
         let (tx, ty) = crate::dungeon::Map::tile_of(at);
         for x in tx - 1..=tx + 1 {
@@ -2904,6 +2923,8 @@ mod tests {
         assert_eq!(run.monsters[bi].hp, behind_hp, "no jump through a wall");
         let o = run.objects.iter().find(|o| o.id == chest).unwrap();
         assert!(matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }) && !o.gone, "the chest is untouched");
+        let b = run.objects.iter().find(|o| o.id == barrel).unwrap();
+        assert!(matches!(&b.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_none()) && !b.gone, "the barrel is not lit");
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Zap { .. })), "no zap");
     }
 
@@ -3168,7 +3189,9 @@ mod tests {
         let m = Creature::Monster(mi);
         assert!(run.has_effect(m, EffectKind::Poisoned) && !run.has_effect(m, EffectKind::Tainted), "Poisoned replaces the Tainted its share alone would give");
         // The coat itself is no weapon attack: a Technique with no weapon adds nothing to itself.
-        assert_eq!(weapon_damage(&run, Creature::Player(0), &coat), damage_of(run.players[0].id, &coat), "a coated hero's Technique gets no coat");
+        let own = weapon_damage(&run, Creature::Player(0), &coat);
+        assert_eq!(own.split.share(DamageType::Poison), 0.0, "a coated hero's Technique gets no coat share");
+        assert!(own.on_hit.iter().all(|h| h.kind != EffectKind::Poisoned), "and no poison on hit");
         // After 6 s the bow is plain again.
         for _ in 0..361 {
             run.tick_effects();
@@ -3179,6 +3202,23 @@ mod tests {
         let plain = run.projectiles.last().unwrap().damage.clone();
         assert_eq!(plain.split, bow.split);
         assert_eq!(plain.on_hit, bow.on_hit);
+    }
+
+    #[test]
+    fn a_coated_spell_gets_no_coat() {
+        let mut run = wizard_with(AbilityId::MagicMissile, 0);
+        let a = run.players[0].sheet.primary.clone();
+        assert_eq!(crate::defs::abilities::def(a.id).uses, Uses::Nothing);
+        let plain = weapon_damage(&run, Creature::Player(0), &a);
+        run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
+        let coated = weapon_damage(&run, Creature::Player(0), &a);
+        assert_eq!(coated.split, plain.split);
+        assert_eq!(coated.on_hit, plain.on_hit);
+        assert_eq!(coated.split.share(DamageType::Poison), 0.0);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Poisoned), "a Magic Missile does not poison");
     }
 
     #[test]
