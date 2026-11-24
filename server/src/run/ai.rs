@@ -610,7 +610,13 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
         let a = run.monsters[mi].kit.get(id).expect("the kit holds it").clone();
         target = super::aim::creature_aim(run, Creature::Monster(mi), foe, &a);
     }
-    if !monster_use(run, mi, id, target) {
+    // A shot at a barrel is no shot at the foe: it must not count as a miss for range finding.
+    let kept = at.map(|_| std::mem::take(&mut run.monsters[mi].ai.aim.target));
+    let used = monster_use(run, mi, id, target);
+    if let Some(t) = kept {
+        run.monsters[mi].ai.aim.target = t;
+    }
+    if !used {
         return;
     }
     let a = run.monsters[mi].kit.get(id).expect("monster_use found it").clone();

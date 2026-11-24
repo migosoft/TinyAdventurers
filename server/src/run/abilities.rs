@@ -416,8 +416,15 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
         }
         AbilityId::Volley | AbilityId::GloomBolts => {
             let own = ab::def(a.id).own;
-            for (i, off) in ab::shot_offsets(own.count, own.spread).into_iter().enumerate() {
+            let (first, offsets) = (run.projectiles.len(), ab::shot_offsets(own.count, own.spread));
+            for (i, off) in offsets.iter().enumerate() {
                 spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i as u8), Vec2::from_angle(aim + off), None, 0.0, land);
+            }
+            // Range finding learns once per volley: from the middle arrow, not from every side arrow.
+            for (i, p) in run.projectiles[first..].iter_mut().enumerate() {
+                if i != offsets.len() / 2 {
+                    p.aimed = None;
+                }
             }
         }
         // The demon's ring: `count` orbs spread over the full circle, starting at the aim, and a burst where it stands.
