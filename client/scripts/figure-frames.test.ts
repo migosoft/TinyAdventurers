@@ -12,8 +12,7 @@ describe('buildFigure', () => {
     expect(names).toEqual([0, 1, 2, 3].map((i) => `dire_wolf_idle_anim_f${i}`).concat([0, 1, 2, 3].map((i) => `dire_wolf_run_anim_f${i}`)));
     const f = frames.dire_wolf_idle_anim_f0;
     expect(new Set(Object.values(frames).map((g) => `${g.w}x${g.h}`)).size).toBe(1);
-    expect(f.w).toBeLessThanOrEqual(30); // the walk frames span 30 px (the spec guessed 26 x 17); the union of all eight is 30 x 19
-    expect(f.h).toBeLessThanOrEqual(19);
+    expect([f.w, f.h]).toEqual([30, 19]); // the union of all eight frames
     const bottomOpaque = [...Array(f.w).keys()].some((x) => img.data[((f.y + f.h - 1) * img.w + f.x + x) * 4 + 3] > 0);
     expect(bottomOpaque).toBe(true);
   });
