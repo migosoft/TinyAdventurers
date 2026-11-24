@@ -94,7 +94,7 @@ fn wildlife_flees(run: &mut Run, mi: usize, dt: f64) -> bool {
     }
     if calm {
         let m = &mut run.monsters[mi];
-        m.ai.state = AiState::Idle;
+        m.ai.enter(AiState::Idle);
         m.ai.target = None;
         m.ai.path.clear();
         ai::set_anim(run, mi, Anim::Idle);

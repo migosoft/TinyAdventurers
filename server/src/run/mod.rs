@@ -1352,7 +1352,7 @@ impl Run {
             let src = self.players[pi].pos();
             let m = &mut self.monsters[mi];
             if m.ai.target.is_none() && !m.is_boss {
-                m.ai.state = AiState::Search;
+                m.ai.enter(AiState::Search);
                 m.ai.last_known = src;
                 m.ai.path.clear();
                 m.ai.search_t = 3.0;

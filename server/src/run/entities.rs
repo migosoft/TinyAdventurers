@@ -252,9 +252,20 @@ pub struct Ai {
     pub glance: Option<Glance>,
     /// The target's motion (px/s) while it was seen; zero for a new target.
     pub last_vel: Vec2,
+    /// The tick the target was last seen (so `last_vel` is sampled only from consecutive ticks).
+    pub seen_tick: Option<u32>,
+    /// Where the creature walks when its look ends (`Glance.search`).
+    pub search: Option<Vec2>,
 }
 
 impl Ai {
+    /// Changes the state from outside the perception block: what it was looking at no longer applies.
+    pub fn enter(&mut self, state: AiState) {
+        self.state = state;
+        self.glance = None;
+        self.search = None;
+    }
+
     pub fn new(home: Vec2) -> Self {
         Ai {
             state: AiState::Idle,
@@ -278,6 +289,8 @@ impl Ai {
             idle_look_t: 3.0,
             glance: None,
             last_vel: Vec2::ZERO,
+            seen_tick: None,
+            search: None,
         }
     }
 }

@@ -194,7 +194,7 @@ pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<Creature> {
         if run.monsters[mi].companion.as_ref().is_some_and(|c| !c.summoned) {
             return Some(Creature::Monster(mi));
         }
-        run.monsters[mi].ai.state = AiState::Idle;
+        run.monsters[mi].ai.enter(AiState::Idle);
         if let Some(c) = run.monsters[mi].companion.as_mut() {
             c.prey = None;
         }
@@ -238,7 +238,7 @@ pub fn act(run: &mut Run, mi: usize, leader: Creature, dt: f64) {
     } else {
         let m = &mut run.monsters[mi];
         m.ai.windup = None;
-        m.ai.state = AiState::Idle;
+        m.ai.enter(AiState::Idle);
         let speed = m.base.speed;
         count_waits(run, mi, dt);
         if speed == 0.0 {

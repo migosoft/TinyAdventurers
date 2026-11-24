@@ -2,7 +2,7 @@
 //! walk), and one pass per tick turns the body toward the wish at its turn speed (DEX, race). Walking off the
 //! facing is slower (`off_facing_mul`).
 
-use super::entities::{AiState, Glance, Monster};
+use super::entities::{Glance, Monster};
 use super::{charm, Run};
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
@@ -21,7 +21,9 @@ const IDLE_LOOK_SPAN: f64 = 0.8;
 /// How far (rad) off its target the body may be when an attack starts or is released.
 pub const ATTACK_FACING: f64 = 30.0 * PI / 180.0;
 /// A step shorter than this (px) is no walk: the body keeps its facing.
-const WALK_MIN: f64 = 0.05;
+pub const WALK_MIN: f64 = 0.05;
+/// The fastest a target's motion (px/s) may count when the turn leads it.
+pub const LEAD_SPEED_MAX: f64 = 400.0;
 /// How far (px) and in what steps the placement rays look for the longest free line.
 const FREE_MAX: f64 = 20.0 * TILE;
 const FREE_STEP: f64 = 4.0;
@@ -63,6 +65,9 @@ const LOOK_AROUND: f64 = 60.0 * PI / 180.0;
 /// Monster `mi` starts glancing `g` after its startle.
 pub fn glance(run: &mut Run, mi: usize, mut g: Glance) {
     g.wait = startle(&run.monsters[mi].attrs);
+    // A stationary creature turns only its head.
+    g.body &= run.monsters[mi].base_ai != crate::defs::enemies::BaseAi::Stationary;
+    run.monsters[mi].ai.search = g.search;
     run.monsters[mi].ai.glance = Some(g);
 }
 
@@ -84,15 +89,7 @@ fn glance_wishes(m: &mut Monster, dt: f64) -> bool {
     let (dir, follow) = (g.dir, g.body && angle_diff(g.dir, aim).abs() > neck);
     g.hold -= dt;
     if g.hold <= 0.0 {
-        // A look that ends with somewhere to go (a hit's search, Task 6) walks there.
-        let search = g.search;
         m.ai.glance = None;
-        if let (Some(p), AiState::Look) = (search, m.ai.state) {
-            m.ai.state = AiState::Search;
-            m.ai.last_known = p;
-            m.ai.search_t = SEARCH_TIME;
-            m.ai.path.clear();
-        }
     }
     m.look_to = Some(look);
     if follow {
@@ -766,6 +763,43 @@ mod tests {
         }
         assert_eq!(&states[..2], &[AiState::Search, AiState::Return]);
         assert!(near, "it walked to the spot");
+    }
+
+    #[test]
+    fn a_target_set_without_a_sample_gives_no_lead_and_a_fast_one_is_clamped() {
+        use crate::run::entities::Target;
+        let (mut run, mi) = duel(100.0);
+        let hero = run.players[0].pos();
+        let id = run.players[0].id;
+        // A target set by something else (a charm switch): `last_known` is far off, but there is no sample.
+        run.monsters[mi].ai.target = Some(Target::Player(id));
+        run.monsters[mi].ai.last_known = hero + Vec2::new(3000.0, 0.0);
+        run.step();
+        assert_eq!(run.monsters[mi].ai.last_vel, Vec2::ZERO, "no spike");
+        // A real sample of the tick before, but an absurd jump: it is clamped.
+        run.monsters[mi].ai.last_known = hero + Vec2::new(3000.0, 0.0);
+        run.step();
+        assert!(run.monsters[mi].ai.last_vel.len() <= LEAD_SPEED_MAX + 1e-9);
+    }
+
+    #[test]
+    fn a_creature_in_look_that_is_hit_searches_without_the_old_glance() {
+        let (mut run, mi) = lost(0.0, None);
+        run.step();
+        assert_eq!(run.monsters[mi].ai.state, AiState::Look);
+        run.hurt_monster(mi, crate::run::Damage::physical(1.0), false, Some(0));
+        assert_eq!(run.monsters[mi].ai.state, AiState::Search);
+        assert!(run.monsters[mi].ai.glance.is_none(), "the old look is gone");
+    }
+
+    #[test]
+    fn a_stationary_creature_looks_with_its_head_only() {
+        let (mut run, mi) = lost(0.0, None);
+        run.monsters[mi].base_ai = crate::defs::enemies::BaseAi::Stationary;
+        run.step();
+        assert!(!run.monsters[mi].ai.glance.expect("it looks").body);
+        steps(&mut run, 0.4);
+        assert!(run.monsters[mi].aim.abs() < 1e-9, "the body stood: {}", run.monsters[mi].aim);
     }
 
     #[test]

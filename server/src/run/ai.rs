@@ -358,17 +358,25 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     };
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
+        let tick = run.tick;
         let ai = &mut run.monsters[mi].ai;
         let target = match foe {
             Creature::Player(_) => Target::Player(fid),
             Creature::Monster(_) => Target::Monster(fid),
         };
-        // Its motion while seen, for leading the turn when it slips out of the cone.
-        ai.last_vel = if ai.target == Some(target) { (fpos - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
+        // Its motion while seen, for leading the turn when it slips out of the cone: only from a sample of the
+        // tick before (`last_known` is that tick's position), and never faster than a plausible runner.
+        let sampled = ai.target == Some(target) && ai.seen_tick.is_some_and(|t| t.wrapping_add(1) == tick);
+        ai.last_vel = if sampled { (fpos - ai.last_known) * (1.0 / dt) } else { Vec2::ZERO };
+        if ai.last_vel.len() > super::facing::LEAD_SPEED_MAX {
+            ai.last_vel = ai.last_vel.norm() * super::facing::LEAD_SPEED_MAX;
+        }
+        ai.seen_tick = Some(tick);
         ai.target = Some(target);
         ai.last_known = fpos;
         if ai.state != AiState::Chase {
             ai.glance = None;
+            ai.search = None;
             ai.idle_look = None;
         }
         ai.state = AiState::Chase;
@@ -402,10 +410,16 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         }
     }
     if run.monsters[mi].ai.state == AiState::Look && run.monsters[mi].ai.glance.is_none() {
-        // The look is over: stationary creatures stand, the others go home.
+        // The look is over: a look with somewhere to go walks there, stationary creatures stand, the others go home.
         let ai = &mut run.monsters[mi].ai;
-        ai.state = if base_ai == BaseAi::Stationary { AiState::Idle } else { AiState::Return };
         ai.path.clear();
+        if let Some(p) = ai.search.take() {
+            ai.state = AiState::Search;
+            ai.last_known = p;
+            ai.search_t = super::facing::SEARCH_TIME;
+        } else {
+            ai.state = if base_ai == BaseAi::Stationary { AiState::Idle } else { AiState::Return };
+        }
     }
 
     // The incorporeal ambushers (their kit holds Vanish) vanish, drift to the straggler and warn first.
@@ -562,7 +576,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 if m.ai.search_t > 0.0 {
                     // At the spot: look where the target was heading, to one side and the other.
                     m.ai.search_t = 0.0;
-                    let dir = if m.ai.last_vel.len() > 0.05 { m.ai.last_vel.angle() } else { m.aim };
+                    let dir = if m.ai.last_vel.len() > super::facing::WALK_MIN { m.ai.last_vel.angle() } else { m.aim };
                     m.ai.glance = Some(Glance { wait: 0.0, dir, hold: super::facing::SEARCH_TIME, around: true, body: false, search: None });
                 } else if m.ai.glance.is_none() {
                     m.ai.state = AiState::Return;
