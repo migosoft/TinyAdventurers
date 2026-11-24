@@ -1303,6 +1303,18 @@ mod tests {
     }
 
     #[test]
+    fn a_duration_mod_lengthens_the_effect_seconds_of_every_timed_ability() {
+        let sheet = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap();
+        for id in [AbilityId::PoisonCoat, AbilityId::Haste, AbilityId::WarCry, AbilityId::Purify, AbilityId::Entangle] {
+            let r = resolve_ability(&ab::def(id), &sheet.attrs, &[sheet.melee.clone()], Body { radius: PLAYER_RADIUS }).unwrap();
+            let longer = apply_mods(r.clone(), &[AbilityMod::DurationAdd(2.0)]);
+            assert!(!r.effect.is_empty(), "{id:?} has own effects");
+            assert!(longer.effect.iter().all(|e| e.secs == r.duration + 2.0), "{id:?}: the effects follow the duration");
+            assert_eq!(longer.duration, r.duration + 2.0, "{id:?}");
+        }
+    }
+
+    #[test]
     fn own_split_and_share_and_effect_resolve() {
         use crate::defs::abilities::{OwnEffect, WeaponMult};
         use crate::defs::effects::EffectLook;
