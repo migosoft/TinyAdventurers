@@ -1653,6 +1653,30 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_frightened_monster_on_lava_still_walks_out() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let (hero, hid) = (run.players[0].pos(), run.players[0].id);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(8.0 * TILE, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        for y in ty - 1..=ty + 1 {
+            for x in tx - 1..=tx + 1 {
+                run.layout.map.set(x, y, Tile::Lava);
+            }
+        }
+        run.monsters[mi].hp = 1e6;
+        run.monsters[mi].max_hp = 1e6;
+        scared_of(&mut run, mi, Some((hid, hero)));
+        for _ in 0..90 {
+            run.step();
+        }
+        let m = &run.monsters[mi];
+        assert!(!run.layout.map.blocks_at(m.pos, m.mover), "out of the lava, though afraid");
+    }
+
+    #[test]
     fn a_frightened_monster_runs_away_and_does_not_attack() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
