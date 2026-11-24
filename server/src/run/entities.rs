@@ -166,7 +166,7 @@ impl Player {
     }
     pub fn sight_now(&self) -> Sight {
         let base = Sight { darkvision: self.darkvision.unwrap_or(self.sight.darkvision), ..self.sight };
-        self.effects.sight(base)
+        self.effects.sight(base.widened(&self.sheet.attrs))
     }
     pub fn kind(&self) -> EntityKind {
         self.kind

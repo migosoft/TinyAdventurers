@@ -91,5 +91,5 @@ pub(crate) fn ready(run: &Run, bi: usize, opening: &[(AbilityId, f64)], id: Abil
 /// A living foe within `reach` px (centre distance) whose direction differs from the boss's aim by more than 2.0 rad.
 pub(crate) fn foe_behind(run: &Run, bi: usize, reach: f64) -> bool {
     let (pos, aim, side) = (run.monsters[bi].pos, run.monsters[bi].aim, run.monsters[bi].side);
-    run.players.iter().any(|p| crate::run::targets::foes(side, p.side) && p.alive && p.pos().dist(pos) < reach && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0)
+    run.players.iter().any(|p| crate::run::targets::foes(side, p.side) && p.alive && !p.effects.has(crate::defs::effects::EffectKind::Invisible) && p.pos().dist(pos) < reach && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0)
 }

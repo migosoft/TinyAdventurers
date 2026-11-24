@@ -11,10 +11,13 @@ pub fn dark_reach(viewer: (i32, i32), tile: (i32, i32), range: f64) -> bool {
     range > 0.0 && dx * dx + dy * dy <= range * range
 }
 
+/// Anything closer than this (px) is felt whatever the direction.
+pub const FELT_PX: f64 = 1.0;
+
 /// Whether `to` lies within a cone of `cone_deg` (full angle) around `dir` (rad) seen from `from`. A cone of 360 or
-/// more sees all round, and anything within a tile is felt whatever the direction.
+/// more sees all round, and anything closer than `FELT_PX` is within it.
 pub fn in_cone(cone_deg: f64, dir: f64, from: Vec2, to: Vec2) -> bool {
-    cone_deg >= 360.0 || from.dist(to) < 1.0 || angle_diff(from.angle_to(to), dir).abs() <= cone_deg.to_radians() / 2.0
+    cone_deg >= 360.0 || from.dist(to) < FELT_PX || angle_diff(from.angle_to(to), dir).abs() <= cone_deg.to_radians() / 2.0
 }
 
 /// What `sees` was before facing: range, line of sight and light, all round. Needs `Run::refresh_lights` this tick
@@ -169,6 +172,17 @@ mod tests {
         assert!(sees(&run, seer(150.0), from, dir, behind_left), "150 off the body, 70 off the gaze");
         let (_, other_side) = off(tx, ty, 0.0, -80.0);
         assert!(!sees(&run, seer(150.0), from, dir, other_side), "80 off the body the other way is 160 off the gaze");
+    }
+
+    #[test]
+    fn a_hero_with_more_wil_sees_wider() {
+        use crate::defs::attributes::{Attr, BASELINE};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let base = run.players[0].sight_now().cone;
+        run.players[0].sheet.attrs.add(Attr::Wil, 10);
+        let wil = run.players[0].sheet.attrs.get(Attr::Wil);
+        assert!(wil > BASELINE);
+        assert!(run.players[0].sight_now().cone > base, "WIL {wil}");
     }
 
     #[test]

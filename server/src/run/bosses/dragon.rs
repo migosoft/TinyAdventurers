@@ -385,6 +385,17 @@ mod tests {
     }
 
     #[test]
+    fn an_invisible_hero_behind_the_dragon_is_not_whipped() {
+        let (mut run, mut d, bi) = dragon_with_ready(&[Vec2::new(-25.0, 0.0)], &[AbilityId::TailWhip]);
+        run.players[0].effects.add(crate::defs::effects::EffectKind::Invisible, 30.0);
+        assert!(!foe_behind(&run, bi, 60.0), "invisible: not felt");
+        d.tick(&mut run, DT);
+        assert_ne!(run.monsters[bi].anim, Anim::Tail);
+        run.players[0].effects.remove(crate::defs::effects::EffectKind::Invisible);
+        assert!(foe_behind(&run, bi, 60.0), "control: visible, it is behind");
+    }
+
+    #[test]
     fn the_dragon_never_picks_a_charmed_hero() {
         let (mut run, _, bi) = dragon_with(&[Vec2::new(40.0, 0.0), Vec2::new(90.0, 0.0)]);
         assert_eq!(target(&run, bi).map(|t| t.0), Some(0), "control: the nearer hero");
