@@ -445,7 +445,9 @@ mod tests {
             assert!(run.monsters[mi].ai.windup.is_none());
         }
         let off = started.expect("it turns and then winds up");
-        assert!(off <= ATTACK_FACING + 1e-9, "faced within the gate: {}", off.to_degrees());
+        let gate = gate(run.monsters[mi].kit.first().unwrap()).unwrap();
+        assert!(off <= gate + 1e-9, "faced within the gate ({}): {}", gate.to_degrees(), off.to_degrees());
+        assert!(off > 1f64.to_radians(), "and it did not wait for a perfect aim: {}", off.to_degrees());
     }
 
     #[test]
