@@ -688,6 +688,13 @@ pub fn land_slam(run: &mut Run, c: Creature) {
         hurt(run, t, dmg.clone(), false, c);
         run.knock_creature(t, pos, aim, a.push, a.push_str);
     }
+    // The slam hits the objects in its circle too (barrels, chests), whoever uses it; the user's hero is the igniter.
+    let by = hero_of(c).map(|pi| run.players[pi].id);
+    for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
+        if line_of_sight(&run.layout.map, pos, run.objects[oi].pos) {
+            crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
+        }
+    }
 }
 
 /// How long (s) a monster's dash `a` lasts when aimed `aim_dist` px away: its own duration, else the time
@@ -3997,6 +4004,22 @@ mod tests {
         assert!(!line_of_sight(&run.layout.map, at, near), "but walled off");
         run.tick_hazards(0.3);
         assert!(!run.has_effect(Creature::Monster(g), EffectKind::Entangled));
+    }
+
+    #[test]
+    fn ground_slam_lights_barrels_in_its_radius() {
+        use crate::run::objects::{Barrel, ObjState};
+        let mut run = ground_slam();
+        let p = run.players[0].pos();
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        run.spawn_object(EntityKind::Barrel, p + Vec2::new(0.0, 20.0), ObjState::Barrel(Barrel::new()));
+        run.spawn_object(EntityKind::Barrel, p + Vec2::new(0.0, -80.0), ObjState::Barrel(Barrel::new()));
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
+        assert_eq!(lit, vec![true, false]);
     }
 
     #[test]

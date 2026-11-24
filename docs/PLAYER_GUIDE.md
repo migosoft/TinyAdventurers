@@ -94,7 +94,7 @@ The toughest hero.
 - **Left – Strike (Great Axe):** a heavy swing toward the mouse pointer that hits every enemy in reach in front of you. Slower than the sword, but it hits harder.
 - **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through with your axe (a little weaker than a strike). It works with enemies right next to you.
 - **More, left button:** **Hurl** (needs Throwing Axes in the ranged slot): throw an axe that spins as it flies. **Whirl** (DEX 14): a swing all the way around you, weaker and slower than a strike.
-- **More, right button:** **War Cry** (STR 16, 12 s): a shout that sends the enemies close to you running for 3 seconds (they cannot attack while afraid), and speeds up you and your friends close to you. **Ground Slam** (STR 17, needs a hammer or a club, 6 s): you raise your weapon, and half a second later it lands, hurting and pushing the enemies around you.
+- **More, right button:** **War Cry** (STR 16, 12 s): a shout that sends the enemies close to you running for 3 seconds (they cannot attack while afraid), and speeds up you and your friends close to you. **Ground Slam** (STR 17, needs a hammer or a club, 6 s): you raise your weapon, and half a second later it lands, hurting and pushing the enemies around you. It also hits barrels and chests in the circle: it lights barrels (their blast can hurt your friends) and breaks chests.
 
 ### Elven Ranger, 90 HP
 The fastest hero, and the only one who fights with a companion. An elf: she sees **twice as far** as the others (18 tiles, still only where there is light and no wall), she sees a third of that range into the dark, she shrugs off a tenth of poison and she **cannot be put to sleep**.
@@ -225,7 +225,7 @@ Both fight by ambush. When they notice you they **vanish**, then drift through t
 Every dungeon has **one ogre**, roaming one of the deeper rooms like any other enemy. It is big, slow and tough, and always shows a **wide health bar** over its head. It is worth 60 XP and 30 coins.
 
 - **Spiked club:** a heavy swing that **knocks you back further than any other enemy** (28 px, almost two tiles).
-- **Ground Slam** (the same ability as the Barbarian's): when two heroes are close to it (or one, while its club is still recovering), it raises its club and a **red circle** appears on the floor around it. The circle fills up from the middle; when it is full the club comes down. **Everyone inside the circle** takes damage and is pushed straight away from the ogre (28 px). Step out of the circle before it fills.
+- **Ground Slam** (the same ability as the Barbarian's): when two heroes are close to it (or one, while its club is still recovering), it raises its club and a **red circle** appears on the floor around it. The circle fills up from the middle; when it is full the club comes down. **Everyone inside the circle** takes damage and is pushed straight away from the ogre (28 px); barrels in it are lit and chests break. Step out of the circle before it fills.
 - Tip: fight it away from chasms and deep water, and don't crowd around it.
 
 Enemies **flash red and shake** just before they strike. That is your moment to step away. Enemies get tougher the deeper you go, and halls hold the biggest groups.
