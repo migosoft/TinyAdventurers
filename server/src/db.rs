@@ -116,13 +116,13 @@ pub async fn delete_account(db: &Db, id: i32) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Sets a new password hash and ends all sessions of the account, in one
-/// transaction. False if the account does not exist.
+/// Sets a new password hash and ends the sessions of the account (all, or all but `keep`: the one that changed
+/// the password), in one transaction. False if the account does not exist.
 #[tracing::instrument(skip_all)]
-pub async fn set_password(db: &Db, id: i32, password_hash: &str) -> Result<bool, sqlx::Error> {
+pub async fn set_password(db: &Db, id: i32, password_hash: &str, keep: Option<&[u8]>) -> Result<bool, sqlx::Error> {
     let mut tx = db.begin().await?;
     let r = sqlx::query("UPDATE accounts SET password_hash = $2 WHERE id = $1").bind(id).bind(password_hash).execute(&mut *tx).await?;
-    sqlx::query("DELETE FROM sessions WHERE account_id = $1").bind(id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM sessions WHERE account_id = $1 AND id_hash IS DISTINCT FROM $2::bytea").bind(id).bind(keep).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(r.rows_affected() > 0)
 }
@@ -450,6 +450,21 @@ pub mod tests {
         assert_eq!(find_account(&db, "HERO").await.unwrap().unwrap().id, a);
         create_character(&db, a, "Merlin", ClassId::Wizard).await.unwrap();
         assert!(matches!(create_character(&db, a, "merlin", ClassId::Paladin).await, Err(DbError::NameTaken)));
+    }
+
+    #[tokio::test]
+    async fn a_password_change_ends_the_other_sessions_and_keeps_the_one_that_made_it() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Hero", "old").await.unwrap();
+        let other = create_account(&db, "Other", "old").await.unwrap();
+        for (acc, s) in [(a, b"s1"), (a, b"s2"), (other, b"s3")] {
+            create_session(&db, acc, s, WEEK).await.unwrap();
+        }
+        assert!(set_password(&db, a, "new", Some(b"s1")).await.unwrap());
+        assert_eq!(touch_session(&db, b"s1", WEEK).await.unwrap(), Some(a), "this session stays");
+        assert_eq!(touch_session(&db, b"s2", WEEK).await.unwrap(), None, "the other one ends");
+        assert_eq!(touch_session(&db, b"s3", WEEK).await.unwrap(), Some(other), "another account is untouched");
+        assert_eq!(account(&db, a).await.unwrap().unwrap().password_hash, "new");
     }
 
     #[tokio::test]

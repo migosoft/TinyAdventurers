@@ -79,11 +79,13 @@ pub struct Map {
     pub w: i32,
     pub h: i32,
     pub tiles: Vec<u8>,
+    /// Counts the tiles changed by `set`: a cache of something derived from the tiles (a view, wall edges) is current while it matches.
+    pub rev: u32,
 }
 
 impl Map {
     pub fn new(w: i32, h: i32) -> Self {
-        Map { w, h, tiles: vec![Tile::Void as u8; (w * h) as usize] }
+        Map { w, h, tiles: vec![Tile::Void as u8; (w * h) as usize], rev: 0 }
     }
     pub fn in_bounds(&self, x: i32, y: i32) -> bool {
         x >= 0 && y >= 0 && x < self.w && y < self.h
@@ -98,6 +100,7 @@ impl Map {
     pub fn set(&mut self, x: i32, y: i32, t: Tile) {
         if self.in_bounds(x, y) {
             self.tiles[(y * self.w + x) as usize] = t as u8;
+            self.rev = self.rev.wrapping_add(1);
         }
     }
     /// Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors, terrain and barriers do not.

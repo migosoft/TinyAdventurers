@@ -357,7 +357,8 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     let by = match &o.state {
         ObjState::Barrel(b) => b.igniter,
         _ => None,
-    };
+    }
+    .filter(|&id| run.player_idx(id).is_some_and(|i| !run.players[i].left)); // an igniter who left the run gets no credit
     let src = by.and_then(|id| run.player_idx(id));
     let (r, dmg, knock) = (BARREL_BLAST_R, barrel_blast().by(run.objects[oi].id, crate::defs::damage::What::Blast), BARREL_BLAST_KNOCK);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_BARREL }, Some(pos));
@@ -877,6 +878,22 @@ mod tests {
         run.events.clear();
         step_for(&mut run, BARREL_FUSE + 0.1);
         assert_eq!(booms(&run), 1);
+    }
+
+    #[test]
+    fn a_blast_lit_by_a_hero_who_left_credits_nobody() {
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(30.0, 0.0));
+        let mi = monster_at(&mut run, Vec2::new(50.0, 0.0));
+        run.monsters[mi].hp = 1.0;
+        let wiz = run.players[1].id;
+        hurt_object(&mut run, oi, Damage::physical(1.0), Some(wiz));
+        run.handle(crate::run::RunCmd::Leave { conn: 2 });
+        let (kills, dmg) = (run.players[1].kills, run.players[1].damage);
+        explode_barrel(&mut run, oi);
+        assert!(!run.monsters[mi].alive, "the blast still kills");
+        assert_eq!((run.players[1].kills, run.players[1].damage), (kills, dmg), "but nothing goes to the hero who left");
     }
 
     /// A closed chest `off` from the hero in `clear_run`.

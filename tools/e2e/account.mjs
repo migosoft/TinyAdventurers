@@ -3,6 +3,8 @@ import { execFileSync } from 'node:child_process';
 
 export const PASSWORD = 'smoke-test-password';
 export const tag = () => Math.random().toString(16).slice(2, 8);
+/** Character names take letters only: digits 0-9 become g-p. */
+export const letters = (s) => s.replace(/\d/g, (d) => 'ghijklmnop'[d]);
 
 /** Marks one of this script's own e2e_* accounts as a debug account. */
 let adminCookie = null;
@@ -42,7 +44,7 @@ export async function login(page, account, register) {
 /** From the roster: creates a character of `cls` (its hub opens and the Sheet tab shows). */
 export async function createCharacter(page, name, cls) {
   await page.click('#new-char');
-  await page.fill('#char-name', name);
+  await page.fill('#char-name', letters(name));
   await page.click(`.ui-class.c-${cls.toLowerCase()}`);
   await page.click('#char-create');
   await page.waitForSelector('.ui-bar');

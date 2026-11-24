@@ -1,5 +1,5 @@
 // The roster: the account's characters as cards (a card opens its hub), the "new character" card, and the
-// account actions (logout, delete account).
+// account actions (logout, change password, delete account).
 import { api, ApiFail } from '../api';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { Me } from '../generated/Me';
@@ -15,6 +15,7 @@ export class Roster {
   private root = document.createElement('div');
   private me: Me | null = null;
   private confirmDelete = false;
+  private changing = false;
 
   constructor(
     host: HTMLElement,
@@ -61,7 +62,17 @@ export class Roster {
       ${logoHeader}
       <div class="panel account ui-w">
         <span>Logged in as <b>${esc(me.name)}</b></span>
-        <span class="row"><button id="logout" class="ghost">Log out</button><button id="delete-account" class="danger">Delete account</button></span>
+        <span class="row"><button id="logout" class="ghost">Log out</button><button id="change-password" class="ghost">Change password</button><button id="delete-account" class="danger">Delete account</button></span>
+        ${
+          this.changing
+            ? `<form class="confirm-delete" id="change-form">
+                <p>Enter your password and the new one (at least 8 characters). Your other logins are ended.</p>
+                <div class="row"><input id="old-password" type="password" autocomplete="current-password" placeholder="Password" required>
+                <input id="new-password" type="password" autocomplete="new-password" maxlength="128" placeholder="New password" required>
+                <button type="submit" class="primary">Change</button><button type="button" id="change-cancel" class="ghost">Cancel</button></div>
+              </form>`
+            : ''
+        }
         ${
           this.confirmDelete
             ? `<form class="confirm-delete">
@@ -124,9 +135,34 @@ export class Roster {
     };
     $('#delete-account')!.onclick = () => {
       this.confirmDelete = !this.confirmDelete;
+      this.changing = false;
       this.render();
     };
-    const delForm = $<HTMLFormElement>('.confirm-delete');
+    $('#change-password')!.onclick = () => {
+      this.changing = !this.changing;
+      this.confirmDelete = false;
+      this.render();
+    };
+    const changeForm = $<HTMLFormElement>('#change-form');
+    if (changeForm) {
+      $<HTMLInputElement>('#old-password')!.focus();
+      $('#change-cancel')!.onclick = () => {
+        this.changing = false;
+        this.render();
+      };
+      changeForm.onsubmit = async (e) => {
+        e.preventDefault();
+        try {
+          await api.changePassword($<HTMLInputElement>('#old-password')!.value, $<HTMLInputElement>('#new-password')!.value);
+          this.changing = false;
+          this.render();
+          this.error('Password changed.');
+        } catch (err) {
+          this.error(err instanceof ApiFail ? err.message : String(err));
+        }
+      };
+    }
+    const delForm = $<HTMLFormElement>('form.confirm-delete:not(#change-form)');
     if (delForm) {
       $<HTMLInputElement>('#delete-password')!.focus();
       $('#delete-cancel')!.onclick = () => {

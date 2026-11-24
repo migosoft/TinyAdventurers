@@ -547,7 +547,11 @@ impl Run {
             if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
                 self.monsters[mi].slam = None;
                 self.monsters[mi].dodge = None;
-                ai::flee(self, mi, DT);
+                if self.layout.map.blocks_at(self.monsters[mi].pos, self.monsters[mi].mover) {
+                    ai::escape_terrain(self, mi, DT); // blown into lava while afraid: out first, as every monster
+                } else {
+                    ai::flee(self, mi, DT);
+                }
                 continue;
             }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);

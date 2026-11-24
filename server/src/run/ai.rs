@@ -641,8 +641,8 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || super::behaviour::role(&run.monsters[i]) == super::behaviour::Role::Waiting {
-            continue; // a creature waiting where it was placed stays there
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || run.monsters[i].effects.no_move() || super::behaviour::role(&run.monsters[i]) == super::behaviour::Role::Waiting {
+            continue; // a creature waiting where it was placed, or held (asleep, petrified, frozen, entangled), stays there
         }
         for j in 0..n {
             if i == j || !run.monsters[j].alive {
@@ -1025,7 +1025,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn ogre_slam_leaves_barrels_alone() {
+    fn ogre_slam_lights_barrels_in_its_radius() {
         use crate::run::objects::{Barrel, ObjState};
         let r = slam_radius();
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
@@ -1038,7 +1038,23 @@ pub(crate) mod tests {
             tick_monster_slam(&mut run, mi, crate::run::DT);
         }
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
-        assert_eq!(lit, vec![false, false], "a slam hits no objects, whoever uses it (the club's swing does)");
+        assert_eq!(lit, vec![true, false], "the slam lights the barrel in its radius, not the one outside");
+    }
+
+    #[test]
+    fn a_sleeping_monster_is_not_pushed_apart() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        let at = run.players[0].pos() + Vec2::new(100.0, 0.0);
+        run.monsters.retain(|m| m.is_boss);
+        let a = run.spawn_enemy(EnemyType::Chort, at, None);
+        let b = run.spawn_enemy(EnemyType::Chort, at + Vec2::new(2.0, 0.0), None);
+        let (a, b) = (run.monster_idx(a).unwrap(), run.monster_idx(b).unwrap());
+        run.apply_effect(Creature::Monster(a), EffectKind::Sleep, Some(5.0));
+        let (pa, pb) = (run.monsters[a].pos, run.monsters[b].pos);
+        separate_monsters(&mut run);
+        assert_eq!(run.monsters[a].pos, pa, "the sleeper stays");
+        assert_ne!(run.monsters[b].pos, pb, "the awake one is pushed");
     }
 
     #[test]
@@ -1634,6 +1650,30 @@ pub(crate) mod tests {
     fn scared_of(run: &mut Run, mi: usize, source: Option<(u32, Vec2)>) {
         let a = Apply { source, ..Apply::plain(EffectKind::Fear, Some(5.0)) };
         assert!(run.apply(Creature::Monster(mi), a));
+    }
+
+    #[test]
+    fn a_frightened_monster_on_lava_still_walks_out() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let (hero, hid) = (run.players[0].pos(), run.players[0].id);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(8.0 * TILE, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        for y in ty - 1..=ty + 1 {
+            for x in tx - 1..=tx + 1 {
+                run.layout.map.set(x, y, Tile::Lava);
+            }
+        }
+        run.monsters[mi].hp = 1e6;
+        run.monsters[mi].max_hp = 1e6;
+        scared_of(&mut run, mi, Some((hid, hero)));
+        for _ in 0..90 {
+            run.step();
+        }
+        let m = &run.monsters[mi];
+        assert!(!run.layout.map.blocks_at(m.pos, m.mover), "out of the lava, though afraid");
     }
 
     #[test]

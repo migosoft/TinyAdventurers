@@ -1044,19 +1044,31 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
             RoomKind::Boss => {
                 let n = rng.gen_range(3..=5);
                 let mut placed = 0;
+                // The spot is `(x, y)` when it is valid and `try_place` takes it.
+                let mut place = |x: i32, y: i32, walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
+                    // Three tiles of plain floor all round, so a wide boss can always walk past.
+                    let open = (-3..=3).all(|dy| (-3..=3).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
+                    if !open || hall_keep_clear(r, x, y) || out.iter().any(|&(bx, by)| (bx - x).abs() <= 3 && (by - y).abs() <= 3) {
+                        return false;
+                    }
+                    try_place(&[(x, y)], walled, out)
+                };
                 for _ in 0..200 {
                     if placed == n {
                         break;
                     }
                     let x = rng.gen_range(r.x + 2..r.x + r.w - 2);
                     let y = rng.gen_range(r.y + 2..r.y + r.h - 2);
-                    // Three tiles of plain floor all round, so a wide boss can always walk past.
-                    let open = (-3..=3).all(|dy| (-3..=3).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
-                    if !open || hall_keep_clear(r, x, y) || out.iter().any(|&(bx, by)| (bx - x).abs() <= 3 && (by - y).abs() <= 3) {
-                        continue;
-                    }
-                    if try_place(&[(x, y)], &mut walled, &mut out) {
-                        placed += 1;
+                    placed += place(x, y, &mut walled, &mut out) as usize;
+                }
+                // Too few by luck: take the first valid spots in order, up to the three every hall keeps (no rng, so
+                // a hall the random tries already filled is untouched).
+                for y in r.y + 2..r.y + r.h - 2 {
+                    for x in r.x + 2..r.x + r.w - 2 {
+                        if placed >= 3 {
+                            break;
+                        }
+                        placed += place(x, y, &mut walled, &mut out) as usize;
                     }
                 }
             }
@@ -1290,6 +1302,36 @@ mod tests {
             assert_eq!(layout.torches.len(), n_t);
             assert_eq!(layout.suns, suns);
             assert_eq!((*parts.boss_hall(), parts.door.clone()), (hall, door));
+        }
+    }
+
+    #[test]
+    fn a_hall_with_few_valid_spots_still_gets_three_barrels() {
+        // A 50x11 hall of lava with three 7x7 islands of floor: only their middles are valid barrel spots, which a
+        // few hundred random picks often miss.
+        let (hall, start) = (Rect { x: 2, y: 2, w: 50, h: 11 }, Rect { x: 54, y: 2, w: 8, h: 8 });
+        let mut map = Map::new(64, 16);
+        for y in 0..start.h {
+            for x in 0..start.w {
+                map.set(start.x + x, start.y + y, Tile::Floor);
+            }
+        }
+        for y in hall.y..hall.y + hall.h {
+            for x in hall.x..hall.x + hall.w {
+                map.set(x, y, Tile::Lava);
+            }
+        }
+        for cx in [8, 18, 40] {
+            for y in 3..10 {
+                for x in cx - 3..=cx + 3 {
+                    map.set(x, y, Tile::Floor);
+                }
+            }
+        }
+        let rooms = [Room { rect: start, kind: RoomKind::Start }, Room { rect: hall, kind: RoomKind::Boss }];
+        for seed in 0..30 {
+            let out = place_barrels(&mut ChaCha8Rng::seed_from_u64(seed), &map, &rooms, &[], &[]);
+            assert_eq!(out.len(), 3, "seed {seed}");
         }
     }
 
