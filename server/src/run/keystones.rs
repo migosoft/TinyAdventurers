@@ -239,6 +239,17 @@ mod tests {
     }
 
     #[test]
+    fn radiant_counts_against_a_demon_boss() {
+        let mut run = run_of(ClassId::Paladin, &[NodeId::PU5]);
+        let bi = run.monsters.iter().position(|m| m.is_boss).expect("the Demon boss");
+        assert!(run.monsters[bi].races.contains(&Race::Demon));
+        let judge = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Judgement));
+        assert!(outgoing(&run, 0, bi, &judge).contains(&(Keystone::Radiant, 1.2)));
+        let strike = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Strike));
+        assert!(outgoing(&run, 0, bi, &strike).is_empty(), "Strike is not innate");
+    }
+
+    #[test]
     fn pack_hunter_needs_a_recent_bite() {
         let mut run = run_of(ClassId::ElvenRanger, &[NodeId::EU5]);
         let mi = enemy(&mut run, EnemyType::OrcWarrior);
