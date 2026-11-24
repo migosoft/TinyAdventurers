@@ -11,6 +11,14 @@ import type { TabCtx } from './hub';
 
 
 const NODE_SIZE: Record<TreeKind, number> = { Start: 46, Keystone: 40, Unlock: 38, Improve: 30, Proficiency: 32, Resist: 30 };
+/** The share of a node's size that text can use: a circle and a rotated diamond are narrower than a square. */
+const LABEL_ROOM: Record<TreeKind, number> = { Start: 1, Keystone: 1, Unlock: 0.85, Improve: 0.6, Proficiency: 0.85, Resist: 0.6 };
+const LABEL_PX = 11;
+/** The label's font size: 11 px, smaller (down to 7) when the text is too wide for its shape (bold glyphs are about 0.62 em wide). */
+export function labelFontPx(kind: TreeKind, text: string): number {
+  const room = NODE_SIZE[kind] * LABEL_ROOM[kind];
+  return Math.max(7, Math.min(LABEL_PX, Math.floor(room / (Math.max(1, text.length) * 0.62))));
+}
 const SPACE_X = 84;
 const SPACE_Y = 58;
 const div = (cls: string, html = ''): HTMLElement => {
@@ -96,6 +104,7 @@ export function renderTree(ctx: TabCtx): HTMLElement {
     const l = label(n, ctx);
     if (typeof l === 'string') inner.innerHTML = l;
     else inner.append(l);
+    if (typeof l === 'string' && inner.textContent) (inner as HTMLElement).style.fontSize = `${labelFontPx(n.kind, inner.textContent)}px`;
     if (n.kind === 'Unlock') e.classList.add(`t-${(ABILITY_INFO[n.ability!].tint ?? 'none').toLowerCase()}`);
     if (n.kind === 'Unlock' || n.kind === 'Keystone') {
       const lab = div(`ui-nlabel ${st === 'owned' ? 'owned' : st === 'buyable' || st === 'blocked' ? 'reach' : ''}`, esc(n.name));

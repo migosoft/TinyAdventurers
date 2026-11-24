@@ -5,6 +5,7 @@ describe('slotView', () => {
   it('is full and ready when not cooling', () => expect(slotView(0, 5)).toEqual({ fill: 1, ready: true, label: '' }));
   it('fills clockwise as the cooldown runs out', () =>
     expect(slotView(3.2, 5)).toEqual({ fill: expect.closeTo(0.36, 5), ready: false, label: '3.2' }));
+  it('never shows 0.0 while still cooling', () => expect(slotView(0.03, 5).label).toBe('0.1'));
   it('never goes past empty or full', () => {
     expect(slotView(9, 5).fill).toBe(0);
     expect(slotView(0.0001, 5).fill).toBeLessThanOrEqual(1);

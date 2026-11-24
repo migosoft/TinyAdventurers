@@ -560,7 +560,7 @@
 }
 .ui-node i {
   font-style: normal;
-  font-size: 11px;
+  font-size: 1em;
   margin-left: 1px;
   color: var(--green);
 }

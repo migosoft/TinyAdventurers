@@ -48,7 +48,7 @@ import { Cove3d } from './cove3d';
 import type { FrameInput, SunFrame, View } from './view';
 import { Effects3d } from './fx/effects3d';
 import { FxPass } from './fx/pass';
-import { Shake, groundShift } from './fx/shake';
+import { Shake, blastFalloff, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
 import { reflects, shimmers } from './params';
@@ -79,6 +79,11 @@ export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 |
   const w = keysToWorld(yawRad, ix, iz);
   return dir8(w.x, w.z);
 }
+
+/** A Boom kind's camera shake near the own hero: [ms, intensity]. */
+/** Half the screen's width at the default zoom, world px: a blast's shake is gone this far from its edge. */
+const SHAKE_RANGE = 320;
+const BLAST_SHAKE: Record<number, readonly [number, number]> = { 0: [120, 0.004], 4: [120, 0.004], 7: [120, 0.004], 6: [200, 0.007], 10: [200, 0.007], 5: [140, 0.005] };
 
 export class RunView3d implements RunView {
   /** Draw calls of the last frame. */
@@ -117,6 +122,9 @@ export class RunView3d implements RunView {
   private readonly shakeGround = { x: 0, z: 0 };
   /** The run clock of the last host frame, seconds (events are stamped with it). */
   private clockNow = 0;
+  /** What the camera follows (the own hero, or the watched teammate), simulation px: a blast shakes by its distance from here. */
+  private readonly followed: { x: number; y: number } = { x: 0, y: 0 };
+  private hasFrame = false;
   // The dungeon air and the woodland's pollen (#307): simulated here, once per run (a lost device keeps it).
   private readonly air: Air3d;
   // The water (#345): ripples and droplet cues, made here like the air so a lost device keeps them. The air steps after the water in a
@@ -350,6 +358,9 @@ export class RunView3d implements RunView {
     // The own hero, for `window.__r3d`.
     this.hero.x = f.own.x / TILE;
     this.hero.z = f.own.y / TILE;
+    this.hasFrame = true;
+    this.followed.x = f.camera.x;
+    this.followed.y = f.camera.y;
 
     // The camera.
     const tx = f.camera.x / TILE;
@@ -640,9 +651,12 @@ export class RunView3d implements RunView {
     this.fx.event(ev, this.clockNow, dark);
     // The camera shakes on a hit on the own hero, a barrel's blast, a fire pool next to the own hero.
     if (ev.t === 'Dmg' && !ev.imm && onOwnHero(ev, own)) this.shake.kick(90, 0.003);
-    else if (ev.t === 'Boom' && (ev.k === 0 || ev.k === 4 || ev.k === 7)) this.shake.kick(120, 0.004);
-    else if (ev.t === 'Boom' && (ev.k === 6 || ev.k === 10)) this.shake.kick(200, 0.007);
-    else if (ev.t === 'Boom' && ev.k === 5) this.shake.kick(140, 0.005);
+    else if (ev.t === 'Boom' && BLAST_SHAKE[ev.k]) {
+      // Full where the blast reaches the followed hero, none beyond SHAKE_RANGE from its edge.
+      const at = this.hasFrame ? this.followed : own;
+      const near = blastFalloff(Math.max(0, Math.hypot(ev.x - at.x, ev.y - at.y) - ev.r), SHAKE_RANGE);
+      if (near > 0) this.shake.kick(BLAST_SHAKE[ev.k][0], BLAST_SHAKE[ev.k][1] * near);
+    }
     else if (ev.t === 'Died' && isBossKind(ev.kind)) this.shake.kick(120, 0.004);
     else if (ev.t === 'Boom' && ev.k === 11 && Math.hypot(ev.x - own.x, ev.y - own.y) < CONST.PLAYER_RADIUS * 2) this.shake.kick(100, 0.003);
     // A hit on the own hero is born at the predicted foot (#281).

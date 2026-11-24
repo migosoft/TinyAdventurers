@@ -22,6 +22,9 @@ const BLADE = '<path d="M2.5 13.5 11.5 4.5M9.5 2.5l4 4M3.8 9.8l2.4 2.4"/>';
 
 const DOWN = '<path d="M8 2v11M3.5 8.5 8 13l4.5-4.5"/>';
 
+/** Drawn for an id with no symbol (a client older than the server). */
+const UNKNOWN_ICON: IconDef = { body: '<path d="M5.5 5.6a2.6 2.6 0 1 1 3.6 2.4c-.8.4-1.1.9-1.1 1.7M8 12.4v.2"/>', mode: 'line', weak: false, color: '#b3a3a8' };
+
 const def = (body: string, mode: IconMode, color: string, weak = false): IconDef => ({ body, mode, weak, color });
 
 export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> = {
@@ -56,7 +59,7 @@ export const DRAIN_TEXT: Record<number, { name: string; attr: string }> = {
 
 /** The symbol as a standalone `<svg>` string of `px` x `px`. */
 export function effectIconSvg(id: number, px: number): string {
-  const d = (EFFECT_ICON as Record<number, IconDef>)[id];
+  const d = (EFFECT_ICON as Record<number, IconDef | undefined>)[id] ?? UNKNOWN_ICON;
   let paint: string;
   if (d.mode === 'fill') {
     paint = d.weak ? `fill="none" stroke="${d.color}" stroke-width="1.4" stroke-linejoin="round"` : `fill="${d.color}"`;

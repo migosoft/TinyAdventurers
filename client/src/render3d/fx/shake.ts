@@ -12,6 +12,11 @@ export function groundShift(pitch: number, yaw: number, dx: number, dy: number, 
   out.z = -(sx * s + zr * c);
 }
 
+/** How much of a blast's shake reaches the own hero: 1 on top of it, falling linearly to 0 at `range` (world px; about half a screen) and beyond. */
+export function blastFalloff(dist: number, range: number): number {
+  return range > 0 ? Math.min(1, Math.max(0, 1 - dist / range)) : 0;
+}
+
 export class Shake {
   private start = -1;
   private ms = 0;

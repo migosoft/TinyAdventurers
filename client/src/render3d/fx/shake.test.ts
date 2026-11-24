@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Shake, groundShift } from './shake';
+import { Shake, blastFalloff, groundShift } from './shake';
 import { project } from '../camera';
 
 describe('groundShift', () => {
@@ -42,5 +42,15 @@ describe('Shake', () => {
     let big = 0;
     for (let t = 0; t < 50; t += 5) { s.offset(t, 800, 600, o); big = Math.max(big, Math.abs(o.x)); }
     expect(big).toBeGreaterThan(0.001 * 800);
+  });
+});
+
+describe('blastFalloff', () => {
+  it('is 1 on the hero, falls linearly and is 0 at the range and beyond', () => {
+    expect(blastFalloff(0, 200)).toBe(1);
+    expect(blastFalloff(50, 200)).toBeCloseTo(0.75);
+    expect(blastFalloff(200, 200)).toBe(0);
+    expect(blastFalloff(900, 200)).toBe(0);
+    expect(blastFalloff(0, 0)).toBe(0);
   });
 });

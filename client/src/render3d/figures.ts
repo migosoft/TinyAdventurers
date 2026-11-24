@@ -16,7 +16,7 @@ import type { EntState } from '../game/world';
 import type { TileMap } from '../sim/map';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
-import { snapGround, viewRay, type Cam } from './camera';
+import { snapFollowed, snapGround, viewRay, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha } from './light';
 import type { ShadowCaster } from './lights';
@@ -735,6 +735,9 @@ export class Figures3d {
   private figFoot(e: EntState, s: ViewState, f: RunFrame, o: { skims: boolean; start: 'fall' | 'drown' | null }, height: number): Foot {
     const foot = this.foot(e.id, s.x / TILE, s.y / TILE, f.dt, f.now, { skims: o.skims, start: o.start, height });
     this.reportDescent(e.id, foot);
+    // The followed hero's foot is snapped relative to the snapped camera, so it does not wobble by an art px while the camera eases (#349).
+    const cam = this.cam;
+    if (cam && e.id === f.you && !foot.d) { const g = snapFollowed(cam.pitch, cam.yaw, cam.x, cam.z, foot.x, foot.z); foot.x = g.x; foot.z = g.z; }
     return foot;
   }
 

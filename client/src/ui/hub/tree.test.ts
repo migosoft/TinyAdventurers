@@ -7,6 +7,7 @@ import type { PoolCard } from '../../generated/PoolCard';
 import { TREES } from '../../generated/progression';
 import { fixtureInfo } from './fixture';
 import { Hub } from './hub';
+import { labelFontPx } from './tree';
 
 const ctx = { imageSmoothingEnabled: false, clearRect() {}, drawImage() {} };
 vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
@@ -111,4 +112,12 @@ test('a new Character message removes an open tooltip', () => {
 test.each(['Wizard', 'Paladin', 'Barbarian', 'ElvenRanger'] as const)('%s tree renders every node', (cls) => {
   open(cls, { xp: 500 });
   expect(host.querySelectorAll('.ui-node:not(.mini)')).toHaveLength(Object.keys(TREES[cls].nodes).length);
+});
+
+test('labelFontPx keeps 11 px where the text fits and shrinks it where it spills', () => {
+  expect(labelFontPx('Unlock', 'MM')).toBe(11);
+  expect(labelFontPx('Resist', '%')).toBe(11);
+  expect(labelFontPx('Resist', 'CON')).toBeLessThan(11);
+  expect(labelFontPx('Improve', 'MM+')).toBeLessThan(11);
+  expect(labelFontPx('Improve', 'MM+')).toBeGreaterThanOrEqual(7);
 });
