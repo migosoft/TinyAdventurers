@@ -117,6 +117,16 @@ pub fn heroes_may_hit(m: &Monster) -> bool {
     m.side == Side::Hostile || m.grudge.heroes || m.wild.is_some()
 }
 
+/// Does the death of `m` (back to its own side) count as a kill for the hero who caused it? Not the unrecruited
+/// knight and not a calm wild animal; an enemy, an ally and a wild animal with a grudge against the heroes do.
+pub fn kill_counts(m: &Monster) -> bool {
+    if m.wild.is_some() {
+        m.grudge.heroes
+    } else {
+        m.side != Side::Neutral
+    }
+}
+
 /// May an enemy hit `m`? An ally of the heroes, a creature with a grudge against the enemies, or a wild animal.
 pub fn enemies_may_hit(m: &Monster) -> bool {
     m.side == Side::Friendly || m.grudge.enemies || m.wild.is_some()

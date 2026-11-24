@@ -55,9 +55,7 @@ impl LevelRules for DungeonLevel {
         // The cove's animals after the knight, so every earlier id stays: the boar, the stag, three deer, ten
         // bunnies. Their spots come from the cove's seed, not the run's rng.
         if let Some(cove) = run.layout.cove {
-            use crate::defs::enemies::EnemyType as E;
-            let kinds = [E::Boar, E::Stag, E::Deer, E::Deer, E::Deer].into_iter().chain([E::Bunny; 10]);
-            for (t, pos) in kinds.zip(crate::dungeon::cove::animal_spots(&run.layout, &cove)) {
+            for (t, pos) in crate::dungeon::cove::ANIMAL_KINDS.into_iter().zip(crate::dungeon::cove::animal_spots(&run.layout, &cove)) {
                 run.spawn_enemy(t, pos, None);
             }
         }

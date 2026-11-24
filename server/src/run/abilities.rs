@@ -4028,6 +4028,22 @@ mod tests {
     }
 
     #[test]
+    fn a_chain_spark_cast_skips_a_calm_animal() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let bunny = put_enemy(&mut run, 0, EnemyType::Bunny, 60.0, 1000.0);
+        run.monsters[bunny].pos = run.monsters[first].pos + Vec2::new(0.0, 20.0);
+        assert!(run.monsters[bunny].wild.is_some(), "control: a wild animal");
+        let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        run.monsters[far].pos = run.monsters[first].pos + Vec2::new(0.0, -40.0);
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0, "the first target is hit");
+        assert_eq!(run.monsters[bunny].hp, 1000.0, "the calm bunny is passed over");
+        assert!(run.monsters[far].hp < 1000.0, "the spark jumps on to the next foe");
+    }
+
+    #[test]
     fn frost_nova_flashes_icy_blue() {
         let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
         try_use(&mut run, 0, false, 1);
