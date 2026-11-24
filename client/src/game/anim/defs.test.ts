@@ -13,6 +13,14 @@ describe('heroWeapons', () => {
   it('gives a ranger without a ranged weapon the melee sprite for both', () => {
     expect(heroWeapons(FIGURES[KIND.ElvenRanger], 'Rapier', null)).toEqual({ weapon: 'weapon_duel_sword', meleeWeapon: 'weapon_duel_sword' });
   });
+  it('keeps the def frame for an item without art', () => {
+    // no hero weapon lacks art today, so an armour stands in
+    expect(heroWeapons(FIGURES[KIND.Paladin], 'ChainMail', null).weapon).toBe(FIGURES[KIND.Paladin].weapon);
+    expect(heroWeapons(FIGURES[KIND.ElvenRanger], 'ChainMail', 'ChainMail')).toEqual({
+      weapon: FIGURES[KIND.ElvenRanger].weapon,
+      meleeWeapon: FIGURES[KIND.ElvenRanger].meleeWeapon,
+    });
+  });
   it('never mutates the shared figure defs', () => {
     heroWeapons(FIGURES[KIND.Paladin], 'WarHammer', null);
     heroWeapons(FIGURES[KIND.ElvenRanger], 'Knife', 'HuntersBow');

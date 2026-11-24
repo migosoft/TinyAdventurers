@@ -179,6 +179,7 @@ describe('Lobby', () => {
     sent.length = 0;
     l.error('Frost Nova needs INT 20.');
     expect(sent).toEqual([]);
+    expect(dbg('secondary').value).toBe('Fireball');
   });
 });
 
