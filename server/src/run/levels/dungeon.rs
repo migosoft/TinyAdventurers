@@ -43,12 +43,14 @@ impl LevelRules for DungeonLevel {
         };
         if let Some(t) = crate::defs::enemies::haunt_for(boss) {
             for pos in haunts {
-                run.spawn_enemy(t, pos, None);
+                let id = run.spawn_enemy(t, pos, None);
+                crate::run::facing::place(run, id);
             }
         }
         // The knight last, so every earlier entity keeps its id: Neutral until a hero recruits it.
         if let Some(pos) = knight {
             let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Knight, pos, None);
+            crate::run::facing::place(run, id);
             let mi = run.monster_idx(id).expect("the knight just spawned");
             run.monsters[mi].side = Side::Neutral;
         }
@@ -56,7 +58,8 @@ impl LevelRules for DungeonLevel {
         // bunnies. Their spots come from the cove's seed, not the run's rng.
         if let Some(cove) = run.layout.cove {
             for (t, pos) in crate::dungeon::cove::ANIMAL_KINDS.into_iter().zip(crate::dungeon::cove::animal_spots(&run.layout, &cove)) {
-                run.spawn_enemy(t, pos, None);
+                let id = run.spawn_enemy(t, pos, None);
+                crate::run::facing::place(run, id);
             }
         }
     }

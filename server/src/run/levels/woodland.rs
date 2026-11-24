@@ -32,7 +32,8 @@ impl LevelRules for WoodlandLevel {
             _ => return,
         };
         for (t, pos) in animals {
-            run.spawn_enemy(t, pos, None);
+            let id = run.spawn_enemy(t, pos, None);
+            crate::run::facing::place(run, id);
         }
     }
     fn post_tick(run: &mut Run) {

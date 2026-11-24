@@ -65,7 +65,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
     let hpos = run.players[h].pos();
     let reach = main.range + run.creature_radius(Creature::Player(h)) - SWING_SLACK;
     let aim = pos.angle_to(hpos);
-    run.monsters[mi].aim = aim;
+    run.monsters[mi].face_to = Some(aim);
     // The warning starts only where it may rest, never inside a wall.
     if pos.dist(hpos) <= reach && can_rest(run, mi, pos) {
         run.start_windup(mi, Windup { t: AMBUSH_WARNING, aim, alt: false, at: None, id: None });

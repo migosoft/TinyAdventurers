@@ -46,6 +46,17 @@ pub struct Sight {
 /// A creature's cone widens by this share per WIL point above the baseline (capped at 360 degrees).
 pub const CONE_WIL_PCT: f64 = 0.04;
 
+/// How fast a creature turns its body (rad/s at DEX 10); the race's turn factor multiplies it.
+pub const BODY_TURN: Scaled = Scaled { value: std::f64::consts::TAU, attr: Attr::Dex, pct: 0.04, at: BASELINE };
+/// How fast a creature turns its head (rad/s at DEX 10).
+pub const HEAD_TURN: Scaled = Scaled { value: 2.0 * std::f64::consts::TAU, attr: Attr::Dex, pct: 0.04, at: BASELINE };
+/// The pause (s at WIL 10) before a creature turns to a hit or a seen attack; WIL shortens it.
+pub const STARTLE: Scaled = Scaled { value: 0.2, attr: Attr::Wil, pct: 0.04, at: BASELINE };
+/// Walking within this angle (rad) of the facing is at full speed; the speed falls linearly to `OFF_FACING_MIN`
+/// (a factor) at 180 degrees.
+pub const OFF_FACING_FULL: f64 = std::f64::consts::FRAC_PI_4;
+pub const OFF_FACING_MIN: f64 = 0.6;
+
 impl Sight {
     #[cfg(test)]
     pub const NONE: Sight = Sight { vision: 0.0, darkvision: 0.0, cone: 0.0, neck: 0.0 };

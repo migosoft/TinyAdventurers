@@ -249,6 +249,8 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
     }
     run.monsters[mi].dodge = cur;
     let Some(mut d) = cur else { return false };
+    // A sidestep does not turn the body: it keeps facing where it faced.
+    run.monsters[mi].face_to = Some(run.monsters[mi].aim);
     if d.wait > 0.0 {
         super::ai::count_cooldowns(run, mi, dt);
         d.wait -= dt;

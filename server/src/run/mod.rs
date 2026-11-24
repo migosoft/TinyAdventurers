@@ -14,6 +14,7 @@ pub mod debug;
 pub mod dodge;
 pub mod effects;
 pub mod entities;
+pub mod facing;
 pub mod hero_brain;
 pub mod keystones;
 pub mod levels;
@@ -287,12 +288,14 @@ impl Run {
         let spawns = run.layout.spawns.clone();
         for s in spawns {
             let t = run.level.enemy_type(s.enemy);
-            run.spawn_enemy(t, s.pos, None);
+            let id = run.spawn_enemy(t, s.pos, None);
+            facing::place(&mut run, id);
         }
         // Mimics are monsters from the start, hiding and drawn as a closed chest.
         for c in run.layout.chests.clone() {
             if c.mimic {
                 let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None);
+                facing::place(&mut run, id);
                 let mi = run.monster_idx(id).unwrap();
                 run.monsters[mi].hiding = true;
             } else {
@@ -353,6 +356,7 @@ impl Run {
             aim: 0.0,
             gaze: 0.0,
             turn: prof.turn,
+            face_to: None,
             aim_dist: 0.0,
             anim: Anim::Idle,
             anim_start: self.time,
@@ -519,6 +523,11 @@ impl Run {
         self.refresh_lights(); // the AI perceives by the lights of this tick
 
         let player_pos: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
+        // The wishes of this tick are written by the behaviour below; `facing::turn` turns the bodies after it.
+        let before: Vec<Vec2> = self.monsters.iter().map(|m| m.pos).collect();
+        for m in &mut self.monsters {
+            m.face_to = None;
+        }
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];
             // A charmed boss acts as an Escort like any monster; its pattern waits (levels/boss.rs).
@@ -565,6 +574,11 @@ impl Run {
             behaviour::tick(self, mi, DT, active);
         }
         Level::tick(self, DT);
+        // Only what the creature walked itself turns it: knockback, separation and slides come after.
+        for (mi, b) in before.into_iter().enumerate() {
+            let moved = self.monsters[mi].pos - b;
+            facing::turn(self, mi, moved, DT);
+        }
         for mi in 0..self.monsters.len() {
             abilities::tick_channel(self, mi, DT);
         }

@@ -139,7 +139,6 @@ pub fn flee_from(run: &mut Run, mi: usize, from: Vec2, dt: f64) -> Option<Vec2> 
     let speed = gait(run, mi, m.speed);
     move_toward(run, mi, pos + dir * 24.0, speed, dt);
     let moved = run.monsters[mi].pos.dist(pos) > 1e-9;
-    run.monsters[mi].aim = dir.angle();
     set_anim(run, mi, if moved { Anim::Move } else { Anim::Idle });
     behind
 }
@@ -152,14 +151,16 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     if dist < 2.0 {
         return true;
     }
-    let speed = speed * m.effects.speed_mul();
+    let mover = m.mover_now();
+    // Walking off the facing is slower; a flying creature (a dash) goes where it likes.
+    let off = if mover == Mover::Dash { 1.0 } else { super::facing::off_facing_mul(d.angle(), m.aim) };
+    let speed = speed * m.effects.speed_mul() * off;
     if speed <= 0.0 {
         return false;
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
     // A phantom drifts through solid objects too.
-    let mover = m.mover_now();
     let solids = run.solids_for(mover, None);
     let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, mover, &solids);
     let m = &mut run.monsters[mi];
@@ -434,7 +435,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let d = pos.dist(ppos);
             let aim = pos.angle_to(ppos);
             let rest = can_rest(run, mi, pos);
-            run.monsters[mi].aim = aim;
+            run.monsters[mi].face_to = Some(aim);
             // Movement follows the main ability's reach (`reach_of`).
             let main = run.monsters[mi].kit.first().expect("a creature has its main ability").clone();
             let range = reach_of(&main, foe_radius);
@@ -488,7 +489,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             if preferred > 0.0 && d < preferred - 25.0 && run.smarts.can(int, Smart::KeepDistance) {
                 // Ranged enemies smart enough (INT tier) back off to their preferred distance.
                 let away = pos + (pos - ppos).norm() * 16.0;
-                move_toward(run, mi, away, speed * 0.8, dt);
+                move_toward(run, mi, away, speed, dt);
                 set_anim(run, mi, Anim::Move);
             } else if d > range * 0.85 || preferred == 0.0 && d > range * 0.7 {
                 chase_step(run, mi, ppos, speed, dt);
@@ -522,12 +523,21 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let speed = gait(run, mi, base_speed * 0.7);
             if path_toward(run, mi, home, speed, dt) {
                 run.monsters[mi].ai.state = AiState::Idle;
+                run.monsters[mi].ai.turn_home = true;
                 set_anim(run, mi, Anim::Idle);
             } else {
                 set_anim(run, mi, Anim::Move);
             }
         }
         AiState::Idle => {
+            // Back home: turn to the facing it was placed with.
+            if run.monsters[mi].ai.turn_home {
+                if super::facing::at_home_facing(&run.monsters[mi]) {
+                    run.monsters[mi].ai.turn_home = false;
+                } else {
+                    run.monsters[mi].face_to = Some(run.monsters[mi].ai.home_aim);
+                }
+            }
             // The Disciple stands still; an awake mimic waits where it was found.
             if base_ai == BaseAi::Stationary || !wanders {
                 return;
@@ -549,8 +559,6 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     run.monsters[mi].ai.wander_to = None;
                     set_anim(run, mi, Anim::Idle);
                 } else {
-                    let a = before.angle_to(to);
-                    run.monsters[mi].aim = a;
                     set_anim(run, mi, Anim::Move);
                 }
             }

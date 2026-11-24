@@ -70,6 +70,7 @@ pub fn raise(run: &mut Run, mi: usize, a: &ResolvedAbility) {
         return;
     }
     let (pos, id, boss) = (run.monsters[mi].pos, run.monsters[mi].id, run.monsters[mi].is_boss);
+    let raiser_aim = run.monsters[mi].aim;
     let kinds = own.kind.raises();
     let mut count: Vec<usize> = {
         let now = living(run, mi, kinds);
@@ -86,6 +87,11 @@ pub fn raise(run: &mut Run, mi: usize, a: &ResolvedAbility) {
             spot = pos;
         }
         let new = run.spawn_enemy(kinds[slot], spot, Some(id));
+        // A raised minion faces where its raiser faces.
+        if let Some(ni) = run.monster_idx(new) {
+            run.monsters[ni].aim = raiser_aim;
+            run.monsters[ni].ai.home_aim = raiser_aim;
+        }
         // A charmed master's minions fight for the party from the start.
         if let Some(ni) = run.monster_idx(new) {
             charm::sync_one(run, ni);

@@ -226,6 +226,9 @@ pub struct Ai {
     pub hold: f64,
     /// What its last arcing shots taught it (`aim.rs`).
     pub aim: AimMemory,
+    /// The facing it was placed with, and whether it is turning back to it after returning home.
+    pub home_aim: f64,
+    pub turn_home: bool,
 }
 
 impl Ai {
@@ -246,6 +249,8 @@ impl Ai {
             wander_to: None,
             hold: 0.0,
             aim: AimMemory::default(),
+            home_aim: 0.0,
+            turn_home: false,
         }
     }
 }
@@ -318,6 +323,8 @@ pub struct Monster {
     pub gaze: f64,
     /// The factor on its body's turn speed (from its profile).
     pub turn: f64,
+    /// Where its body wants to face this tick (`None`: where it walks); cleared before each tick (`facing.rs`).
+    pub face_to: Option<f64>,
     /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_use`.
     pub aim_dist: f64,
     pub anim: Anim,

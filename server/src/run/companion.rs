@@ -174,12 +174,12 @@ pub fn follow(run: &mut Run, mi: usize, leader: Creature, e: &Escort, speed: f64
         c.following = true;
     }
     if c.following {
-        run.monsters[mi].aim = pos.angle_to(leader);
+        run.monsters[mi].face_to = Some(pos.angle_to(leader));
         ai::path_toward(run, mi, leader, speed, dt);
         set_anim(run, mi, Anim::Move);
     } else {
         run.monsters[mi].ai.path.clear();
-        run.monsters[mi].aim = if aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI };
+        run.monsters[mi].face_to = Some(if aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI });
         set_anim(run, mi, Anim::Idle);
     }
 }
