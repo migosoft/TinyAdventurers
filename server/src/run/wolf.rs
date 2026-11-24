@@ -50,6 +50,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
+        hurt_dir: None,
         kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
         cds: Default::default(),
         slam: None,

@@ -2,7 +2,7 @@
 //! walk), and one pass per tick turns the body toward the wish at its turn speed (DEX, race). Walking off the
 //! facing is slower (`off_facing_mul`).
 
-use super::entities::{Glance, Monster};
+use super::entities::{AiState, Glance, Monster};
 use super::{charm, Run};
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
@@ -62,6 +62,58 @@ pub fn startle(a: &Attributes) -> f64 {
 pub const SEARCH_TIME: f64 = 2.0;
 const LOOK_AROUND: f64 = 60.0 * PI / 180.0;
 
+/// How far (tiles) back along an attack a hit creature searches, how long (s) its head looks at a blow while
+/// fighting, and how long (s) it ignores further blows after a glance in which it kept its target.
+pub const SEARCH_BACK: f64 = 3.0;
+pub const GLANCE_HOLD: f64 = 0.5;
+pub const GLANCE_AGAIN: f64 = 4.0;
+
+/// The point a creature searches after a blow that came from direction `back`: up to `SEARCH_BACK` tiles along
+/// it, cut before the first spot the creature cannot stand on (wall, chasm). Never the attacker's position.
+pub fn search_point(run: &Run, mi: usize, back: f64) -> Vec2 {
+    let m = &run.monsters[mi];
+    let dir = Vec2::from_angle(back);
+    let (max, mut d) = (SEARCH_BACK * TILE, 0.0);
+    while d < max && !run.layout.map.blocks_at(m.pos + dir * (d + FREE_STEP).min(max), m.mover) {
+        d = (d + FREE_STEP).min(max);
+    }
+    m.pos + dir * d
+}
+
+/// Monster `mi` was hit by a blow that came from direction `back` (rad). After its startle its head glances
+/// that way; with nothing to fight it turns and searches back along the blow. Never learns where the attacker is.
+pub fn notice(run: &mut Run, mi: usize, back: f64) {
+    let (pos, sight, gaze) = (run.monsters[mi].pos, run.monsters[mi].sight_now(), run.monsters[mi].gaze_dir());
+    let m = &run.monsters[mi];
+    // A boss's script owns its facing until its task; a hidden mimic, a companion and a fleeing animal have their own rules.
+    let busy = m.ai.windup.is_some() || m.ai.cast.is_some() || m.slam.is_some() || m.channel.is_some() || m.dash.is_some();
+    if !m.alive || m.hiding || busy || m.ai.deaf_t > 0.0 || m.ai.glance.is_some_and(|g| g.wait > 0.0) || (m.is_boss && !charm::is_on(m)) || m.companion.is_some() || m.wild.is_some_and(|w| w.scare.is_some()) {
+        return;
+    }
+    let (chasing, stationary) = (m.ai.target.is_some(), m.base_ai == crate::defs::enemies::BaseAi::Stationary);
+    let search = (!stationary).then(|| search_point(run, mi, back));
+    let inside = crate::run::perception::in_cone(sight.cone, gaze, pos, pos + Vec2::from_angle(back) * TILE);
+    let ai = &mut run.monsters[mi].ai;
+    let g = Glance { wait: 0.0, dir: back, hold: GLANCE_HOLD, around: false, body: false, search: None };
+    if chasing {
+        if !inside {
+            glance(run, mi, g);
+        }
+    } else if inside {
+        // Already looking that way: no turn, straight to the search.
+        if let Some(p) = search {
+            ai.enter(AiState::Search);
+            ai.last_known = p;
+            ai.path.clear();
+            ai.search_t = SEARCH_TIME;
+        }
+    } else {
+        ai.enter(AiState::Look);
+        ai.path.clear();
+        glance(run, mi, Glance { body: true, search, ..g });
+    }
+}
+
 /// Monster `mi` starts glancing `g` after its startle.
 pub fn glance(run: &mut Run, mi: usize, mut g: Glance) {
     g.wait = startle(&run.monsters[mi].attrs);
@@ -88,6 +140,10 @@ fn glance_wishes(m: &mut Monster, dt: f64) -> bool {
     g.hold -= dt;
     if g.hold <= 0.0 {
         m.ai.glance = None;
+        // A chaser's glance that ended with its target kept: it ignores blows for a while.
+        if m.ai.state == AiState::Chase {
+            m.ai.deaf_t = GLANCE_AGAIN;
+        }
     }
     m.look_to = Some(look);
     if follow {
@@ -785,7 +841,9 @@ mod tests {
         let (mut run, mi) = lost(0.0, None);
         run.step();
         assert_eq!(run.monsters[mi].ai.state, AiState::Look);
-        run.hurt_monster(mi, crate::run::Damage::physical(1.0), false, Some(0));
+        run.monsters[mi].ai.glance.as_mut().unwrap().wait = 0.0; // past the startle
+        // A blow from the east: the orc faces east, so the blow's origin is inside its cone.
+        run.hurt_monster(mi, crate::run::Damage::physical(1.0).along(Vec2::new(-1.0, 0.0)), false, Some(0));
         assert_eq!(run.monsters[mi].ai.state, AiState::Search);
         assert!(run.monsters[mi].ai.glance.is_none(), "the old look is gone");
     }
@@ -826,5 +884,229 @@ mod tests {
         assert_ne!(run.monsters[mi].aim, aim, "then it turns");
         let wise = Attributes::new(0, 0, 0, 0, 10, 0);
         assert!(startle(&BASELINE_ATTRS.with_delta(wise)) < wait, "more WIL is quicker");
+    }
+
+    // ----- hits carry their direction, and a hit creature looks back along it -----
+
+    use crate::defs::damage::{Damage, DamageType};
+    use crate::run::targets::Side;
+
+    fn put(run: &mut Run, pi: usize, at: Vec2) {
+        run.players[pi].mv.x = at.x;
+        run.players[pi].mv.y = at.y;
+    }
+
+    #[test]
+    fn a_poison_tick_gives_no_direction() {
+        let (mut run, mi) = arena(EnemyType::OrcWarrior);
+        run.monsters[mi].hurt_dir = Some(1.0);
+        run.hurt_monster(mi, Damage::effect_tick(1.0, DamageType::Poison), false, None);
+        assert_eq!(run.monsters[mi].hurt_dir, None);
+        assert_eq!(run.last_hit.as_ref().unwrap().dir, None);
+    }
+
+    #[test]
+    fn a_melee_hit_points_away_from_the_attacker() {
+        let (mut run, mi) = duel(14.0);
+        let hp = run.players[0].hp;
+        for _ in 0..90 {
+            run.step();
+            if run.players[0].hp < hp {
+                break;
+            }
+        }
+        assert!(run.players[0].hp < hp, "the orc hit");
+        // The orc stands east of the hero: the blow travelled west.
+        let d = run.players[0].hurt_dir.expect("a direction");
+        assert!(angle_diff(d, PI).abs() < 0.1, "{d}");
+    }
+
+    #[test]
+    fn a_shot_points_along_its_flight() {
+        let (mut run, mi) = arena(EnemyType::OrcArcher);
+        run.monsters[mi].ai.cd = 0.0;
+        let hp = run.players[0].hp;
+        for _ in 0..(5.0 / DT) as usize {
+            run.step();
+            if run.players[0].hp < hp {
+                break;
+            }
+        }
+        assert!(run.players[0].hp < hp, "the arrow hit");
+        let d = run.players[0].hurt_dir.expect("a direction");
+        assert!(angle_diff(d, PI).abs() < 0.3, "west, along the flight: {d}");
+        assert_eq!(run.last_hit.as_ref().unwrap().dir.map(|v| v.len().round()), Some(1.0), "a unit vector");
+        let _ = mi;
+    }
+
+    #[test]
+    fn a_blast_points_away_from_its_centre() {
+        let (mut run, _) = arena(EnemyType::OrcWarrior);
+        let at = run.players[0].pos() + Vec2::new(10.0, 0.0);
+        crate::run::abilities::explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 0, false, 0.0, 0);
+        let d = run.players[0].hurt_dir.expect("a direction");
+        assert!(angle_diff(d, PI).abs() < 1e-6, "away from the centre: {d}");
+    }
+
+    /// A blow that travelled along `travel` hits the orc, struck by hero 0 (as an arrow does).
+    fn blow(run: &mut Run, mi: usize, travel: Vec2) {
+        run.hurt_monster(mi, Damage::physical(1.0).along(travel), false, Some(0));
+    }
+
+    #[test]
+    fn a_blow_from_inside_the_cone_starts_no_glance() {
+        let (mut run, mi) = duel(100.0);
+        blow(&mut run, mi, Vec2::new(1.0, 0.0)); // from the west, where the orc looks
+        let ai = &run.monsters[mi].ai;
+        assert!(ai.glance.is_none(), "it already looks that way");
+        assert_eq!(ai.state, AiState::Search, "and with nothing to fight it searches at once");
+    }
+
+    #[test]
+    fn no_glance_during_a_wind_up() {
+        let (mut run, mi) = duel(100.0);
+        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 5.0, aim: 0.0, alt: false, at: None, id: None });
+        blow(&mut run, mi, Vec2::new(-1.0, 0.0)); // from behind
+        assert!(run.monsters[mi].ai.glance.is_none());
+        assert_eq!(run.monsters[mi].ai.state, AiState::Idle);
+    }
+
+    #[test]
+    fn an_arrow_in_the_back_turns_the_head_then_the_body_then_it_searches() {
+        let (mut run, mi) = duel(100.0);
+        let (pos, hero) = (run.monsters[mi].pos, run.players[0].pos());
+        run.monsters[mi].aim = 0.0; // the hero, and the shooter, are behind it
+        run.monsters[mi].sight.vision = 0.0;
+        blow(&mut run, mi, Vec2::new(1.0, 0.0)); // travelled east: it came from the west
+        assert_eq!(run.monsters[mi].ai.state, AiState::Look);
+        let wait = startle(&run.monsters[mi].attrs);
+        let (mut first_gaze, mut first_aim, mut states) = (None, None, vec![AiState::Look]);
+        let mut point = None;
+        for i in 0..(3.0 / DT) as usize {
+            run.step();
+            let m = &run.monsters[mi];
+            if first_gaze.is_none() && m.gaze != 0.0 {
+                first_gaze = Some(i);
+            }
+            if first_aim.is_none() && m.aim != 0.0 {
+                first_aim = Some(i);
+            }
+            if (i as f64) * DT < wait - 2.0 * DT {
+                assert!(m.gaze == 0.0 && m.aim == 0.0, "nothing turns for the startle");
+            }
+            if states.last() != Some(&m.ai.state) {
+                states.push(m.ai.state);
+                if m.ai.state == AiState::Search {
+                    point = Some(m.ai.last_known);
+                    run.monsters[mi].sight.vision = 12.0; // the hero comes into view as it walks
+                }
+            }
+        }
+        assert!(first_gaze.unwrap() <= first_aim.unwrap(), "the head leads: {first_gaze:?} {first_aim:?}");
+        assert_eq!(&states[..2], &[AiState::Look, AiState::Search]);
+        assert!(states.contains(&AiState::Chase), "it found the hero: {states:?}");
+        assert!(point.unwrap().dist(pos + Vec2::new(-3.0 * TILE, 0.0)) < 6.0, "back along the arrow, not at the hero: {:?} {hero:?}", point);
+    }
+
+    #[test]
+    fn the_search_point_stops_at_a_wall() {
+        let (mut run, mi) = duel(100.0);
+        let pos = run.monsters[mi].pos;
+        let (wx, wy) = crate::dungeon::Map::tile_of(pos + Vec2::new(-1.5 * TILE, 0.0));
+        run.layout.map.set(wx, wy, Tile::Wall);
+        let p = search_point(&run, mi, PI);
+        assert!(p.dist(pos) < 2.0 * TILE && !run.layout.map.blocks_at(p, run.monsters[mi].mover), "{p:?}");
+        let free = search_point(&run, mi, 0.0);
+        assert!((free.dist(pos) - 3.0 * TILE).abs() < 1e-6, "open floor: the full three tiles");
+    }
+
+    #[test]
+    fn the_search_point_stops_at_a_chasm() {
+        let (mut run, mi) = duel(100.0);
+        let pos = run.monsters[mi].pos;
+        let (cx, cy) = crate::dungeon::Map::tile_of(pos + Vec2::new(-1.5 * TILE, 0.0));
+        for y in cy - 3..=cy + 3 {
+            run.layout.map.set(cx, y, Tile::Chasm);
+        }
+        let p = search_point(&run, mi, PI);
+        assert!(p.dist(pos) < 2.0 * TILE && !run.layout.map.blocks_at(p, run.monsters[mi].mover), "{p:?}");
+    }
+
+    #[test]
+    fn a_disciple_only_turns() {
+        let (mut run, mi) = duel(100.0);
+        run.monsters[mi].base_ai = crate::defs::enemies::BaseAi::Stationary;
+        run.monsters[mi].aim = 0.0;
+        run.monsters[mi].sight.vision = 0.0;
+        let before = run.monsters[mi].pos;
+        blow(&mut run, mi, Vec2::new(1.0, 0.0));
+        let (mut turned, mut states) = (false, Vec::new());
+        for _ in 0..(3.0 / DT) as usize {
+            run.step();
+            let m = &run.monsters[mi];
+            turned |= angle_diff(m.aim, 0.0).abs() > 60f64.to_radians();
+            assert!(m.pos.dist(before) < 0.5, "it does not walk");
+            if states.last() != Some(&m.ai.state) {
+                states.push(m.ai.state);
+            }
+        }
+        assert!(turned, "body and head turned to the blow");
+        assert!(!states.contains(&AiState::Search), "{states:?}");
+    }
+
+    /// Two heroes and an orc: hero 0 `ahead` px west of it (its target), hero 1 at `other`, relative to the orc.
+    fn two_foes(ahead: f64, other: Vec2) -> (Run, usize) {
+        let mut run = test_run(&[ClassId::Paladin, ClassId::ElvenRanger], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos() + Vec2::new(ahead, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].attrs = BASELINE_ATTRS;
+        run.monsters[mi].ai.cd = 0.0;
+        let h0 = run.players[0].pos();
+        crate::run::tests::face(&mut run, mi, h0);
+        put(&mut run, 1, at + other);
+        (run, mi)
+    }
+
+    #[test]
+    fn a_fighting_orc_shot_from_behind_keeps_swinging() {
+        let (mut run, mi) = two_foes(20.0, Vec2::new(80.0, 0.0));
+        let g = gate(run.monsters[mi].kit.first().unwrap()).unwrap();
+        steps(&mut run, 0.1);
+        assert!(run.monsters[mi].ai.target.is_some(), "it fights the paladin");
+        let (mut glances, mut had, mut hits, mut hp) = (0, false, 0, run.players[0].hp);
+        for i in 0..(6.0 / DT) as usize {
+            if i % 30 == 0 {
+                // The ranger's arrow in its back, twice a second.
+                run.hurt_monster(mi, Damage::physical(1.0).along(Vec2::new(-1.0, 0.0)), false, Some(1));
+            }
+            run.step();
+            let m = &run.monsters[mi];
+            let has = m.ai.glance.is_some();
+            glances += (has && !had) as usize;
+            had = has;
+            let off = angle_diff(m.pos.angle_to(run.players[0].pos()), m.aim).abs();
+            assert!(off <= g + 0.1, "the body stays on the paladin: {}", off.to_degrees());
+            if run.players[0].hp < hp {
+                hits += 1;
+            }
+            hp = run.players[0].hp;
+        }
+        assert!(hits >= 2, "the paladin was hit {hits} times");
+        assert!(glances >= 1 && glances <= 2, "{glances} glances in 6 s");
+    }
+
+    #[test]
+    fn a_chaser_hit_by_a_closer_foe_switches() {
+        // The ranger stands at the orc's side (south), nearer than the paladin it chases.
+        let (mut run, mi) = two_foes(120.0, Vec2::new(0.0, 40.0));
+        steps(&mut run, 0.1);
+        assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
+        run.hurt_monster(mi, Damage::physical(1.0).along(Vec2::new(0.0, -1.0)), false, Some(1));
+        steps(&mut run, 1.0);
+        assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[1].id)));
+        assert!(run.monsters[mi].ai.glance.is_none());
     }
 }

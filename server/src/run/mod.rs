@@ -253,6 +253,7 @@ impl Run {
                 anim_start: 0.0,
                 moving: false,
                 hurt_t: 0.0,
+                hurt_dir: None,
                 inputs: VecDeque::new(),
                 ack: 0,
                 // Empty: steady play spends each tick's input, so only silent ticks bank budget for a burst.
@@ -362,6 +363,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
+            hurt_dir: None,
             kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
             cds: Default::default(),
             slam: None,
@@ -1075,6 +1077,7 @@ impl Run {
         }
         if !imm {
             p.hurt_t = 0.15;
+            p.hurt_dir = dmg.dir.map(|d| d.angle());
         }
         let (hp_after, debug) = (p.hp.max(0.0), p.immortal());
         let pos = p.pos();
@@ -1328,6 +1331,7 @@ impl Run {
         m.hp -= raw;
         if !imm {
             m.hurt_t = 0.15;
+            m.hurt_dir = dmg.dir.map(|d| d.angle());
         }
         let applied = raw.min(m.hp + raw);
         let hp_after = m.hp.max(0.0);
@@ -1348,16 +1352,13 @@ impl Run {
         if let Some(pi) = src_player {
             self.monsters[mi].last_hit_by = Some(pi);
             self.players[pi].damage += applied;
-            // Getting hit makes a monster investigate where the attack came from.
-            let src = self.players[pi].pos();
-            let m = &mut self.monsters[mi];
-            if m.ai.target.is_none() && !m.is_boss {
-                m.ai.enter(AiState::Search);
-                m.ai.last_known = src;
-                m.ai.path.clear();
-                m.ai.search_t = 3.0;
-            }
-            if m.hiding {
+        }
+        // Getting hit makes a creature look back along the attack (never at the attacker's position).
+        if let Some(d) = dmg.dir.filter(|_| !dmg.from_effect && self.monsters[mi].hp > 0.0) {
+            facing::notice(self, mi, crate::math::angle_diff(d.angle() + std::f64::consts::PI, 0.0));
+        }
+        if src_player.is_some() {
+            if self.monsters[mi].hiding {
                 self.wake_mimic(mi);
             }
             self.monsters[mi].dormant = false;

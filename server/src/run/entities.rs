@@ -48,6 +48,8 @@ pub struct Player {
     pub anim_start: f64,
     pub moving: bool,
     pub hurt_t: f64,
+    /// The way the last hit travelled (rad), set with `hurt_t`; none for a hit without a direction.
+    pub hurt_dir: Option<f64>,
     pub inputs: VecDeque<InputMsg>,
     pub ack: u32,
     /// Live ticks not yet matched by a processed input, up to `INPUT_BACKLOG_MAX`: grows by one per tick and costs
@@ -256,6 +258,8 @@ pub struct Ai {
     pub seen_tick: Option<u32>,
     /// Where the creature walks when its look ends (`Glance.search`).
     pub search: Option<Vec2>,
+    /// Seconds it ignores further blows, after a glance in which it kept its target.
+    pub deaf_t: f64,
 }
 
 impl Ai {
@@ -291,6 +295,7 @@ impl Ai {
             last_vel: Vec2::ZERO,
             seen_tick: None,
             search: None,
+            deaf_t: 0.0,
         }
     }
 }
@@ -372,6 +377,8 @@ pub struct Monster {
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
+    /// The way the last hit travelled (rad), set with `hurt_t`; none for a hit without a direction.
+    pub hurt_dir: Option<f64>,
     /// The abilities it uses, resolved at spawn (a boss's are its own), and their cooldowns.
     pub kit: crate::sheet::Kit,
     pub cds: super::abilities::Cooldowns,

@@ -98,7 +98,11 @@ fn shot_credit(run: &Run, side: Side, owner: u32) -> Option<usize> {
 /// A hit of `by` on `target`: one by a hero or an ally goes through `hurt_monster` with the hero it pays as
 /// its source (credit, keystones for a hero's own, crit), anything else through `hurt_creature`. The wolf's
 /// bite marks its target for Pack Hunter.
-pub fn hurt(run: &mut Run, target: Creature, dmg: Damage, crit: bool, by: Creature) {
+pub fn hurt(run: &mut Run, target: Creature, mut dmg: Damage, crit: bool, by: Creature) {
+    // A blow with no flight of its own (melee, a ring, a dash) travels from its user to the target.
+    if dmg.dir.is_none() && !dmg.from_effect {
+        dmg = dmg.along(run.creature_pos(target) - run.creature_pos(by));
+    }
     match (target, credit_of(run, by)) {
         (Creature::Monster(mi), Some(pi)) => {
             if hero_of(by).is_none() && dmg.why.what == What::Ability(AbilityId::Bite) {
@@ -1270,6 +1274,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
+    let flight = pr.vel;
     let src = shot_credit(run, side, owner);
     if explode_r > 0.0 {
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
@@ -1290,10 +1295,10 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     match side {
         // Credit (and the refusal of a hit on the hero's own side) only for a shot cast for the heroes' side.
         Side::Friendly => match by {
-            Some(by) => hurt(run, c, damage.clone(), crit, by),
-            None => run.hurt_creature(c, damage.clone()),
+            Some(by) => hurt(run, c, damage.clone().along(flight), crit, by),
+            None => run.hurt_creature(c, damage.clone().along(flight)),
         },
-        Side::Hostile => run.hurt_creature(c, damage.clone()),
+        Side::Hostile => run.hurt_creature(c, damage.clone().along(flight)),
         Side::Neutral => {}
     }
     // A hero's spark jumps on whichever side the hero cast it for (the jumps keep that side too).
@@ -1357,7 +1362,7 @@ fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage, side
         let jump = jump as u8;
         let to = run.creature_pos(t);
         run.event(Ev::Zap { x: from.x as f32, y: from.y as f32, x2: to.x as f32, y2: to.y as f32 }, None);
-        let jump_damage = Damage { amount, ..damage.clone() }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) });
+        let jump_damage = Damage { amount, ..damage.clone() }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) }).along(to - from);
         if side == Side::Friendly {
             hurt(run, t, jump_damage, false, c);
         } else {
@@ -1418,7 +1423,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
                 .map(|(i, m)| (i, m.hiding))
                 .collect();
             for (mi, hiding) in hits {
-                run.hurt_monster(mi, damage.clone(), crit, src);
+                run.hurt_monster(mi, damage.clone().along(run.monsters[mi].pos - pos), crit, src);
                 // A mimic that was still hiding stays where it is (the hit wakes it); a boss is never pushed (`knock_monster`).
                 if !hiding {
                     run.knock_creature(Creature::Monster(mi), pos, 0.0, push, push_str);
@@ -1429,14 +1434,14 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
                 .filter(|&pi| run.players[pi].alive && targets::may_hit(run, side, Creature::Player(pi)) && run.players[pi].pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.layout.map, pos, run.players[pi].pos()))
                 .collect();
             for pi in foes {
-                run.hurt_creature(Creature::Player(pi), damage.clone());
+                run.hurt_creature(Creature::Player(pi), damage.clone().along(run.players[pi].pos() - pos));
                 run.knock_creature(Creature::Player(pi), pos, 0.0, push, push_str);
             }
         }
         Side::Hostile => {
             let touched: Vec<Creature> = run.foes_touching(pos, r, true).into_iter().filter(|&c| !run.passes_through(c, &damage.split)).collect();
             for c in touched {
-                run.hurt_creature(c, damage.clone());
+                run.hurt_creature(c, damage.clone().along(run.creature_pos(c) - pos));
                 run.knock_creature(c, pos, 0.0, push, push_str);
             }
         }

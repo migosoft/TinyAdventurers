@@ -5,6 +5,7 @@ use super::abilities::AbilityId;
 use super::attributes::Attr;
 use super::effects::EffectKind;
 use super::kinds::EntityKind;
+use crate::math::Vec2;
 
 super::enum_list::listed_enum! {
     /// Open set: a new type is a new variant; `ALL` and `COUNT` grow with it
@@ -157,6 +158,9 @@ pub struct Damage {
     pub power: i32,
     /// Where the hit came from, for the rules log. Only one rule reads it: a hit on a wild animal gives it a grudge against the side of `by` (`Run::hit_gives_grudge`).
     pub why: Why,
+    /// The way the blow travelled (a unit vector), for the target's hit jolt and for where it looks back to.
+    /// None for anything without a place: effect ticks, terrain.
+    pub dir: Option<Vec2>,
 }
 
 /// The Attribute that scaled a base amount: `ratio = factor(have) / factor(at)`.
@@ -244,7 +248,12 @@ impl Why {
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split, on_hit: Vec::new(), from_effect: false, power: 0, why: Why::NONE }
+        Damage { amount, split, on_hit: Vec::new(), from_effect: false, power: 0, why: Why::NONE, dir: None }
+    }
+    /// The hit travelled along `d`; none when `d` is (nearly) zero.
+    pub fn along(mut self, d: Vec2) -> Self {
+        self.dir = (d.len() >= 1e-6).then(|| d.norm());
+        self
     }
     pub fn by(mut self, id: u32, what: What) -> Self {
         self.why.by = Some(id);

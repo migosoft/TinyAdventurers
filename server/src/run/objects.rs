@@ -382,14 +382,14 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
         })
         .collect();
     for c in foes {
-        run.hurt_creature(c, dmg.clone());
+        run.hurt_creature(c, dmg.clone().along(run.creature_pos(c) - pos));
         run.knock_creature(c, pos, 0.0, knock, BARREL_BLAST_STR);
     }
     for mi in monsters {
         if run.passes_through(crate::run::effects::Creature::Monster(mi), &dmg.split) {
             continue; // the blast goes through a ghost: no hit, no knock
         }
-        run.hurt_monster(mi, dmg.clone(), false, src);
+        run.hurt_monster(mi, dmg.clone().along(run.monsters[mi].pos - pos), false, src);
         run.knock_monster(mi, pos, knock, BARREL_BLAST_STR);
     }
     for qi in barrels {

@@ -352,10 +352,29 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
 
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).
-    let seen = match &run.monsters[mi].companion {
+    let mut seen = match &run.monsters[mi].companion {
         Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
         None => find_visible_foe(run, mi),
     };
+    run.monsters[mi].ai.deaf_t = (run.monsters[mi].ai.deaf_t - dt).max(0.0);
+    // A chaser whose head glances at a blow keeps the target it is engaged with while it is in the open; a closer
+    // foe the gaze sees takes its place and the head comes back.
+    if run.monsters[mi].ai.state == AiState::Chase && run.monsters[mi].ai.glance.is_some() {
+        let held = match run.monsters[mi].ai.target {
+            Some(Target::Player(id) | Target::Monster(id)) => run
+                .creature_by_id(id)
+                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible) && super::perception::in_open(run, sight, pos, run.creature_pos(c))),
+            _ => None,
+        };
+        if let Some(t) = held {
+            let closer = seen.is_some_and(|s| run.creature_id(s) != run.creature_id(t) && run.creature_pos(s).dist(pos) < run.creature_pos(t).dist(pos));
+            if closer {
+                run.monsters[mi].ai.glance = None;
+            } else {
+                seen = Some(t);
+            }
+        }
+    }
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
         let tick = run.tick;
@@ -573,6 +592,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             if arrived {
                 set_anim(run, mi, Anim::Idle);
                 let m = &mut run.monsters[mi];
+                // `search_t > 0` marks a search that has not looked around yet (set when a search starts).
                 if m.ai.search_t > 0.0 {
                     // At the spot: look where the target was heading, to one side and the other.
                     m.ai.search_t = 0.0;
@@ -1713,9 +1733,14 @@ pub(crate) mod tests {
         let mi = run.monster_idx(id).unwrap();
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.target, None, "blind in the dark");
-        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        // The hero is west of it; the blow travels east, so it came from the west, and the necromancer faces that way.
+        crate::run::tests::face(&mut run, mi, ppos);
+        let pos = run.monsters[mi].pos;
+        run.hurt_monster(mi, Damage::physical(1.0).along(Vec2::new(1.0, 0.0)), false, Some(0));
         assert_eq!(run.monsters[mi].ai.state, AiState::Search);
-        assert_eq!(run.monsters[mi].ai.last_known, ppos);
+        // It searches back along the blow, three tiles: never the hero's own position.
+        assert!(run.monsters[mi].ai.last_known.dist(pos + Vec2::new(-3.0 * TILE, 0.0)) < 1.0, "{:?}", run.monsters[mi].ai.last_known);
+        assert!(run.monsters[mi].ai.last_known.dist(ppos) > TILE);
     }
 
     #[test]
