@@ -635,11 +635,11 @@ fn party_around(run: &Run, pos: Vec2, radius: f64, side: Side) -> Vec<Creature> 
 }
 
 /// Counts down a hero's Ground Slam wind-up; it lands at the hero's position then. A hero who
-/// died (`step_player` clears it), sinks or is pushed loses it.
+/// died (`step_player` clears it), sinks, is pushed, or is frozen, asleep or turned to stone (the monsters' rule, `Run::step`) loses it.
 pub fn tick_slam(run: &mut Run, pi: usize) {
     let p = &mut run.players[pi];
     let Some(left) = p.slam else { return };
-    if p.sinking.is_some() || p.mv.knocked() || p.mv.dash_t > 0.0 {
+    if p.sinking.is_some() || p.mv.knocked() || p.mv.dash_t > 0.0 || p.effects.no_act() {
         p.slam = None;
         return;
     }
@@ -1330,7 +1330,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
 
 /// Chain Spark: from the first target `first`, up to `CHAIN_JUMPS` jumps, each to the nearest living
 /// enemy within `CHAIN_REACH` of the last target that the spark has not hit and sees (no wall between,
-/// no ally, no object, no hiding mimic or dormant monster), for `CHAIN_FALLOFF` times the damage of the
+/// no ally, no object, no hiding mimic, dormant or airborne monster), for `CHAIN_FALLOFF` times the damage of the
 /// jump before. Every jump draws a `Zap`.
 fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage, side: Side) {
     let mut hit = vec![first];
@@ -1342,7 +1342,7 @@ fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage, side
     let (mut skips, mut stop) = (Vec::new(), None);
     for jump in 1..=ab::CHAIN_JUMPS {
         let from = run.creature_pos(last);
-        let rule = targets::Rule { at: from, reach: ab::CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, skip_calm: true, passes: Some(damage.split) };
+        let rule = targets::Rule { at: from, reach: ab::CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: true, skip_invisible: true, skip_calm: true, passes: Some(damage.split) };
         let (near, more) = targets::select(run, &user, &rule, &hit, log, |t| run.creature_pos(t));
         // The target the spark stands on is not a candidate to log.
         targets::merge(&mut skips, more.into_iter().filter(|&(t, _)| t != last).collect());
@@ -4047,6 +4047,35 @@ mod tests {
         fly(&mut run);
         assert!(run.monsters[first].hp < 1000.0);
         assert_eq!(run.monsters[sleeper].hp, 1000.0);
+    }
+
+    #[test]
+    fn chain_spark_skips_airborne_monsters() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let flyer = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        run.monsters[flyer].pos = run.monsters[first].pos + Vec2::new(0.0, 20.0);
+        run.monsters[flyer].airborne = true;
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0);
+        assert_eq!(run.monsters[flyer].hp, 1000.0);
+    }
+
+    #[test]
+    fn a_hero_who_is_frozen_or_asleep_loses_a_started_slam() {
+        for kind in [EffectKind::Frozen, EffectKind::Sleep] {
+            let mut run = ground_slam();
+            let g = goblins(&mut run, &[20.0]);
+            try_use(&mut run, 0, false, 1);
+            assert!(run.players[0].slam.is_some());
+            run.apply_effect(Creature::Player(0), kind, Some(5.0));
+            for _ in 0..40 {
+                run.step_player(0);
+            }
+            assert_eq!(run.players[0].slam, None, "{kind:?}");
+            assert_eq!(run.monsters[g[0]].hp, 1000.0, "{kind:?}");
+        }
     }
 
     #[test]
