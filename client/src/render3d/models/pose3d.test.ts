@@ -6,7 +6,7 @@ import { Matrix4 } from 'three';
 import { BONES, MAX_BONES, buildFigure, type FigureModel } from './model';
 import { buildJob } from './build';
 import { AMBUSH_WARNING } from '../../game/shadeHaze';
-import { APART, ATTACK_IN_SECS, BUTT, ELBOW, FLOAT, GAIT, HIT_SECS, LEG_FOLD, LIE_SINK, LUNGE_SECS, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
+import { APART, ATTACK_IN_SECS, BUTT, ELBOW, FLOAT, GAIT, HEAD_TURN, HIT_SECS, LEG_FOLD, LIE_SINK, LUNGE_SECS, SLAM_DEFAULT_SECS, TURN_RATE, WALK, copyPose, newPose3dMemory, poseFigure, restPose, sideReach, type Pose3d, type Pose3dMemory } from './pose3d';
 import { skinVertex } from './rig';
 import { DESCS, type DescKey } from './table';
 import { HERO_TABLE } from './heroTable';
@@ -1040,6 +1040,54 @@ describe('a facing creature', () => {
     const sleeper = settled();
     for (let i = 0; i < 120; i++) poseFigure(m, d, view({ aim: 1.2, faces: true, effects: 1 << EFFECT.Sleep }), 1 / 60, sleeper);
     expect(sleeper.yaw).toBe(0);
+  }, SLOW);
+});
+
+describe('the head\'s turn', () => {
+  const STEP = (80 * Math.PI) / 180, DEG = Math.PI / 180;
+  /** The way the head bone looks, from the body's heading towards the game's +y (the model's +z), as the server's head angle counts. */
+  const looks = (p: Pose3d): number => Math.atan2(p.bones[bone('head') * 12 + 8], p.bones[bone('head') * 12]);
+  // A biped, a quadruped, one with a neck, a robed one, a floating one and one whose parts float apart.
+  for (const k of ['skelet', 'boar', 'stag', 'necromancer', 'ghost', 'shade'] as const) {
+    it(`${k}: the head follows its angle without stepping`, () => {
+      const m = k === 'skelet' ? model(k) : tube(k), d = k === 'skelet' ? def(k) : tdef(k), mem = settled(), twin = settled();
+      /** One frame with the head angle `head`: how far the head looks from where the same figure's head looks without one (its idle sway). */
+      const frame = (head: number): number => {
+        const b = looks(poseFigure(m, d, view(), 1 / 60, twin));
+        return looks(poseFigure(m, d, view({ head }), 1 / 60, mem)) - b;
+      };
+      expect(Math.abs(frame(0))).toBeLessThan(1e-6);
+      let last = frame(STEP);
+      expect(last).toBeGreaterThan(0);
+      expect(last).toBeLessThan(STEP / 4);
+      for (let i = 1; i < 30; i++) {
+        const a = frame(STEP);
+        expect(a).toBeGreaterThan(last - 1e-9);          // never back
+        expect(a).toBeLessThan(STEP + 0.2 * DEG);        // never past it
+        last = a;
+      }
+      expect(Math.abs(last - STEP)).toBeLessThan(3 * DEG);   // there after 0.5 s
+    }, SLOW);
+  }
+
+  it('the stag\'s neck goes part of the way and the head stays on its end', () => {
+    const m = tube('stag'), mem = settled({ headYaw: STEP }), p = poseFigure(m, tdef('stag'), view({ head: STEP }), 0, mem);
+    const nb = m.neckBend!, o = m.bends[nb].origin, e = pivot(m, 'head'), k = nb * 4, ang = p.bends[k + 3], ay = p.bends[k + 1];
+    expect(ay * ang).toBeCloseTo(-HEAD_TURN.neck * STEP, 6);
+    // `skinVertex`'s turn of the neck's end (the bend's axis has no x part, the end no z part).
+    const vx = e[0] - o[0], vy = e[1] - o[1], az = p.bends[k + 2], ca = Math.cos(ang), sa = Math.sin(ang), dot = ay * vy * (1 - ca);
+    const end: [number, number, number] = [o[0] + vx * ca - az * vy * sa, o[1] + vy * ca + az * vx * sa + ay * dot, -ay * vx * sa + az * dot];
+    const want = apply(p, bone('body'), end), got = apply(p, bone('head'), e);
+    for (let i = 0; i < 3; i++) expect(got[i]).toBeCloseTo(want[i], 3);
+    expect(got[2]).toBeGreaterThan(apply(p, bone('body'), e)[2] + 0.3);   // carried to the side it looks to
+  }, SLOW);
+
+  it('a sleeper\'s head goes back, and a figure that appears has its head there at once', () => {
+    const m = model('skelet'), d = def('skelet'), mem = settled({ headYaw: STEP });
+    for (let i = 0; i < 60; i++) poseFigure(m, d, view({ head: STEP, effects: 1 << EFFECT.Sleep }), 1 / 60, mem);
+    expect(Math.abs(mem.headYaw)).toBeLessThan(0.01);
+    const fresh = newPose3dMemory();
+    expect(looks(poseFigure(m, d, view({ head: STEP }), 1 / 60, fresh))).toBeCloseTo(STEP, 2);
   }, SLOW);
 });
 

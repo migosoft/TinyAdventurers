@@ -42,6 +42,8 @@ const PAN_SPEED = 12;
 /** The figure states the rows cycle through. */
 /** The URL's `&hit` (rad) and `&head` (rad, or a sweep from side to side) of the gallery's figures. */
 export interface GalleryLook { hit: number | null; head: number | 'sweep' | null }
+/** `&head=sweep` at gallery time `t`: to 80° on one side at the server's 720°/s, held, then to the other (a turn every 2.1 s), as a creature looking around does. */
+export const sweepAt = (t: number): number => 1.4 * Math.max(-1, Math.min(1, 9 * Math.sin(t * 1.5)));
 /** Parses `&hit=<deg>` and `&head=<deg>|sweep`; null when neither is a usable value. */
 export function lookOf(hit: string | null, head: string | null): GalleryLook | null {
   const deg = (v: string | null): number | null => (v !== null && v !== '' && Number.isFinite(Number(v)) ? (Number(v) * Math.PI) / 180 : null);
@@ -332,7 +334,7 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
   // `&hit` and `&head`: the way the blow travelled and the head's angle of the figure and model rows.
   const dirs: Partial<EntState> = {};
   if (look?.hit != null) dirs.hurtDir = look.hit;
-  if (look?.head != null) dirs.head = look.head === 'sweep' ? 0.9 * Math.sin(t * 1.2) : look.head;
+  if (look?.head != null) dirs.head = look.head === 'sweep' ? sweepAt(t) : look.head;
   const animMs = ((t % 1.2) % 0.5) * 1000;
   const aim = aimPin ?? Math.sin(t * 0.7) * 0.6 + (Math.floor(t / 4) % 2 ? Math.PI : 0);
   const hurt = Math.floor(t * 2) % 6 === 0 ? FLAG.HURT : 0;
@@ -367,7 +369,7 @@ export function galleryEnts(t: number, state: string | null, crowd = 0, aimPin: 
     const p = GALLERY.lineup(i);
     const kind = lineupKind(key);
     // A Mimic stands awake here (a hiding one is the chest beside it); the chest and the barrel are neutral objects.
-    out.push(ent(ID.lineup + i, kind, p.x, p.z, { anim: ANIM.Idle, animMs: 0, aim: 0, ...(kind === KIND.Chest || kind === KIND.Barrel ? { side: SIDE.Neutral } : {}) }));
+    out.push(ent(ID.lineup + i, kind, p.x, p.z, { anim: ANIM.Idle, animMs: 0, aim: 0, ...dirs, ...(kind === KIND.Chest || kind === KIND.Barrel ? { side: SIDE.Neutral } : {}) }));
   });
   out.push(...spectreAt(t, aimPin));
   GALLERY.pillarTorches.forEach((p, i) => out.push(ent(ID.pillarTorch + i, KIND.Torch, p.x, p.z, { side: SIDE.Neutral, anim: 1, extra: 0 })));

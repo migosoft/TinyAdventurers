@@ -56,6 +56,13 @@ export const APART = {
   asleep: { hover: 0.5, droop: -0.35 },
 } as const;
 export const TURN_RATE = 12, HIT_SECS = 0.26;
+/**
+ * The head's turn (#341). The server's head angle turns at a constant speed and comes in snapshots; the drawn head follows it as a
+ * critically damped spring of stiffness `rate` (1/s): it starts slowly, stops slowly and never overshoots. `max`: the furthest the
+ * drawn head turns (rad). `body`: the share of the turn an upright figure's shoulders take; `neck`: the share a neck bend takes
+ * (it carries the head sideways; the head bone itself always ends up turned by the whole angle).
+ */
+export const HEAD_TURN = { rate: 14, max: 1.5, body: 0.2, neck: 0.45 } as const;
 /** The walk blends in and out by `dt * 9` per frame, as on the page (the page wins over the brief's 0.2 s): an exponential, 83 % after 0.2 s. */
 const BLEND_RATE = 9;
 /** A strike's pose is blended in over this long, unless the figure was already holding the wound-up pose (a Windup before it). */
@@ -67,6 +74,8 @@ const SLAM_UP_AT = 0.75;
 export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: number; faced: boolean; lastX: number; lastY: number; speed: number; turn: number; hitT: number; wasHurt: boolean; held: Pose3d | null;
   /** The way the blow of the running jolt travelled (world rad); undefined: straight back (a dev page's hit). */
   hitDir?: number | null;
+  /** The head's turn from the body as drawn (rad; it follows `ViewState.head`, see `HEAD_TURN`) and its speed (rad/s). */
+  headYaw: number; headVel: number;
   /** The pose `poseFigure` returns (written anew each call), and its attack object. */
   out: Pose3d | null; atk: { style: AttackStyle; u: number };
   /** A Windup came before this attack (the figure already holds the wound-up pose): no blend-in. */
@@ -80,7 +89,7 @@ export interface Pose3dMemory { clock: number; phi: number; walk: number; yaw: n
   /** Floating parts: the wind when the current melee began, and the last frame's animation and its time (to tell a new blow from the same one). */
   windStart: number; prevAnim: number; prevAnimT: number }
 export function newPose3dMemory(): Pose3dMemory {
-  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0,
+  return { clock: 0, phi: 0, walk: 0, yaw: 0, faced: false, lastX: 0, lastY: 0, speed: 0, turn: 0, hitT: -1, wasHurt: false, headYaw: 0, headVel: 0, held: null, out: null, atk: { style: 'swing', u: 0 }, woundUp: false, crest: 1, phase: 0, drag: 0, lean: 0,
     blowT: -1, wind: 0, carry: [0, 0], windStart: 0, prevAnim: -1, prevAnimT: 0 };
 }
 
@@ -644,6 +653,17 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   mem.turn += (step / Math.max(dt, 1e-3) - mem.turn) * Math.min(1, dt * 12);
   mem.faced = true;
 
+  // ---- the head's turn: the drawn angle follows the server's as a critically damped spring (the exact step, so any `dt` is stable) ----
+  const headWant = asleep ? 0 : Math.max(-HEAD_TURN.max, Math.min(HEAD_TURN.max, num(s.head)));
+  if (first) { mem.headYaw = headWant; mem.headVel = 0; }
+  else {
+    const e = Math.exp(-HEAD_TURN.rate * dt), off = mem.headYaw - headWant, c = mem.headVel + HEAD_TURN.rate * off;
+    mem.headYaw = headWant + (off + c * dt) * e;
+    mem.headVel = (mem.headVel - HEAD_TURN.rate * c * dt) * e;
+  }
+  /** The turn in the rig: a positive head angle is towards the game's +y, the model's +z, which is a negative turn about the model's y. */
+  const hy = -mem.headYaw;
+
   // The jolt along the blow: `jx`, `jz` are its unit direction in the figure's frame (forward, sideways); the tilts use `HJ`, the rock backwards.
   const hd = mem.hitDir, rel = typeof hd === 'number' ? hd - mem.yaw : 0;
   const jx = typeof hd === 'number' ? Math.cos(rel) : -1, jz = typeof hd === 'number' ? Math.sin(rel) : 0;
@@ -688,7 +708,7 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   resetLocals();
   const body = locals[BODY], head = locals[HEAD];
   const neck = m.neckBend !== undefined && m.neckBend >= 0 ? m.bends[m.neckBend] : null;
-  let nbend = 0;
+  let nbend = 0, nyaw = 0;
   if (m.quad) {
     // Bounding: the front pair and the hind pair each move together; highest with the legs stretched, nose up at the take-off.
     const ext = -Math.cos(2 * phi);
@@ -714,7 +734,13 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
       const tilt = -0.4 * AP.fwd, look = asleep ? 0 : 0.4 * Math.sin(t * 0.5) * idle * (1 - Math.max(AP.back, AP.fwd));
       const hp = HEAD * 3, vx = m.pivots[hp] - neck.origin[0], vy = m.pivots[hp + 1] - neck.origin[1], c = Math.cos(nbend), sn = Math.sin(nbend);
       head.rz = 0.6 * nbend + tilt + 0.25 * HJ; head.ry = look;
-      head.tx = vx * c - vy * sn - vx; head.ty = vx * sn + vy * c - vy;
+      nyaw = HEAD_TURN.neck * hy;
+      if (nyaw === 0) { head.tx = vx * c - vy * sn - vx; head.ty = vx * sn + vy * c - vy; }
+      else {
+        // The neck also swings to the side the head looks to: one turn about the axis (0, nyaw, nbend), as `skinVertex` turns the neck's end.
+        const raw = Math.hypot(nyaw, nbend), ay = nyaw / raw, az = nbend / raw, ca = Math.cos(raw), sa = Math.sin(raw), dot = ay * vy * (1 - ca);
+        head.tx = vx * ca - az * vy * sa - vx; head.ty = vy * ca + az * vx * sa + ay * dot - vy; head.tz = -ay * vx * sa + az * dot;
+      }
     } else {
       head.rz = -0.75 * pitch + 0.04 * cos2 * w + 0.02 * breath * idle + AP.head + 0.25 * HJ - 0.3 * AP.back + 0.45 * AP.fwd;   // the head stays level (a butt tilts it)
       head.ty = 0.1 * breath * idle;
@@ -779,6 +805,11 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
     body.rz += leanBack;
     if (HR) { body.rz += 0.32 * HJ; head.rz += 0.22 * HJ; body.sy *= 1 - 0.1 * Math.abs(HR); }
   }
+  // The head turns to its angle; an upright figure's shoulders go a little of the way with it.
+  if (hy !== 0) {
+    const share = m.quad || floating ? 0 : HEAD_TURN.body;
+    body.ry += share * hy; head.ry += (1 - share) * hy;
+  }
 
   // ---- the arms and what they hold ----
   // A floating model's arms hang limp, hand and weapon bones at rest; only a model with the swipe raises the arm its attack uses.
@@ -841,7 +872,11 @@ export function poseFigure(m: FigureModel, d: FigureDef, s: ViewState, dt: numbe
   // ---- bends and the robe ----
   for (let i = 0; i < m.bends.length && i < MAX_BENDS; i++) {
     const B = m.bends[i];
-    if (B.neck) { pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = 0; pose.bends[i * 4 + 2] = 1; pose.bends[i * 4 + 3] = nbend; continue; }
+    if (B.neck) {
+      const raw = nyaw === 0 ? 0 : Math.hypot(nyaw, nbend);
+      pose.bends[i * 4] = 0; pose.bends[i * 4 + 1] = raw ? nyaw / raw : 0; pose.bends[i * 4 + 2] = raw ? nbend / raw : 1; pose.bends[i * 4 + 3] = raw || nbend;
+      continue;
+    }
     const kk = B.k * loose * 1.5;
     let wx = kk * 0.14 * Math.sin(phi - 0.8) * w + B.wag * 0.4 * Math.sin(t * 7) * idle;
     let wy = Math.max(-0.6, Math.min(0.6, -turn * 0.04 * kk));
