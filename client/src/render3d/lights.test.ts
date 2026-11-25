@@ -285,6 +285,30 @@ describe('lavaTexels', () => {
     expect(out[at(8, 5)]).toBe(0);
     expect(out[at(10, 10)]).toBe(0);
   });
+
+  it('gives no light on a daylight field without lava (#428)', () => {
+    const w = 8;
+    const m = new TileMap(w, w, new Uint8Array(w * w).fill(TILE_ID.Floor));
+    const f = new LightField(m);
+    f.daylight = true;
+    const out = new Float32Array(w * w * 4);
+    lavaTexels(f, m, out);
+    for (let i = 0; i < w * w; i++) expect([out[i * 4], out[i * 4 + 1], out[i * 4 + 2]]).toEqual([0, 0, 0]);
+  });
+
+  it('still gives a lava light its own glow on a daylight field', () => {
+    const w = 12;
+    const tiles = new Uint8Array(w * w).fill(TILE_ID.Floor);
+    tiles[5 * w + 5] = TILE_ID.Lava;
+    const m = new TileMap(w, w, tiles);
+    const f = new LightField(m);
+    f.daylight = true;
+    f.add({ id: 1, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 5, y: 5, on: true, wall: 0 });
+    const out = new Float32Array(w * w * 4);
+    lavaTexels(f, m, out);
+    expect(out[(5 * w + 6) * 4]).toBeGreaterThan(0);
+    expect(out[(5 * w + 11) * 4]).toBe(0);
+  });
 });
 
 describe('selectCasters and assignSkips', () => {
