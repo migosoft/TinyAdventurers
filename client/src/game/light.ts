@@ -8,9 +8,6 @@ import type { LightInfo } from '../generated/LightInfo';
 import { Fov } from '../sim/fov';
 import type { TileMap } from '../sim/map';
 
-/** The colour a daylight level fills every tile with (white: no tint). */
-export const DAYLIGHT = 0xffffff;
-
 export interface StaticLight {
   id: number;
   kind: number;
@@ -143,10 +140,6 @@ export class LightField {
     only: (l: StaticLight) => boolean = () => true,
   ): void {
     const w = this.map.w;
-    if (this.daylight) {
-      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) addColour(rgb, y * w + x, DAYLIGHT, 1);
-      return;
-    }
     for (const l of this.lights.values()) {
       if (!l.on || !only(l)) continue;
       const r = LIGHT[l.kind].radius;

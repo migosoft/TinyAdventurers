@@ -2,21 +2,21 @@ import { describe, expect, it } from 'vitest';
 import fixtures from '../generated/fixtures.json';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
-import { addColour, cloudy, DAYLIGHT, EDGE, falloff, LightField } from './light';
+import { addColour, cloudy, EDGE, falloff, LightField } from './light';
 import type { LightInfo } from '../generated/LightInfo';
 
 const fmap = () => new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
 
 describe('light field', () => {
-  it('daylight: every tile is lit and filled with DAYLIGHT', () => {
+  it('daylight: every tile is lit, but accumulate adds only the lights (no white fill, #428)', () => {
     const m = fmap();
     const f = new LightField(m);
     f.daylight = true;
     expect(f.isLit(0, 0)).toBe(true);
+    expect(f.isLit(m.w - 1, m.h - 1)).toBe(true);
     const rgb = new Float32Array(m.w * m.h * 3);
-    f.accumulate(rgb, 1, 1, 3, 3, () => 1);
-    expect([rgb[(1 * m.w + 1) * 3], rgb[(2 * m.w + 2) * 3 + 2]]).toEqual([(DAYLIGHT >> 16) & 255, DAYLIGHT & 255]);
-    expect(rgb[0]).toBe(0);
+    f.accumulate(rgb, 0, 0, m.w, m.h, () => 1);
+    expect(rgb.every((v) => v === 0)).toBe(true);
   });
 
   it('lights exactly the tiles the server lights', () => {
