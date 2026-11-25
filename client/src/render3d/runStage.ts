@@ -116,8 +116,10 @@ export function createRunStage(
   const overlay = new Overlay3d(el);
   // A woodland's pond (#360): the view draws a copy of the map (a bridge's tiles are water) with the pond's field; the simulation keeps session.map.
   const pond = info.woodland?.pond ?? null;
+  // shortcut: the view copy ignores Tile events (session.ts applies them to the rules map only); mirror them into the view map
+  // if a woodland level ever changes tiles
   const viewMap = pond ? pondViewMap(session.map, pond) : session.map;
-  if (pond) setPondField(viewMap, pondField(session.map, pond));
+  if (pond) setPondField(viewMap, pondField(session.map, pond, viewMap));
   const runView = new RunView3d({ ...session.viewInit(), map: viewMap }, assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
   const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };

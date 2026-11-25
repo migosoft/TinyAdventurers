@@ -56,27 +56,44 @@ describe('pondField (#360)', () => {
       const { rules, pond } = level(i);
       const f = pondField(rules, pond);
       expect(f.mouths).toHaveLength(pond.streams.filter((s) => s.inflow).length);
-      for (const m of f.mouths) {
-        expect(f.shoreAt(m.x, m.z)).toBeGreaterThan(0.4); // a stream that never leaves its channel ends at its last point
-        expect(Math.hypot(m.dx, m.dz)).toBeCloseTo(1, 5);
-      }
+      const ins = pond.streams.filter((s) => s.inflow);
+      f.mouths.forEach((m, k) => {
+        const p = ins[k].points, [lx, lz] = p[p.length - 1], [qx, qz] = p[p.length - 2];
+        const len = Math.hypot(lx - qx, lz - qz);
+        expect(m.x).toBeCloseTo(lx / 16, 6);
+        expect(m.z).toBeCloseTo(lz / 16, 6);
+        expect(m.dx).toBeCloseTo((lx - qx) / len, 6);
+        expect(m.dz).toBeCloseTo((lz - qz) / len, 6);
+      });
     }
   });
 
-  it('the current follows the stream and fades in the pond', () => {
-    const { rules, pond } = level(2);
-    const f = pondField(rules, pond);
-    const [px, pz] = pond.streams[0].points[0];
-    const on = f.flowAt(px / 16, pz / 16);
-    expect(on.s).toBe(1);
-    const [bx, bz] = pond.streams[0].points[1];
-    expect(on.x * (bx - px) + on.z * (bz - pz)).toBeGreaterThan(0); // along the flow
-    expect(f.flowAt(px / 16 + 5, pz / 16).s).toBe(0);
-    const m = f.mouths[0];
-    expect(f.flowAt(m.x, m.z).s).toBeGreaterThan(0.9);
-    const far = f.flowAt(m.x + m.dx * 3.5, m.z + m.dz * 3.5);
-    expect(far.s).toBeLessThan(0.1);
-    expect(f.flowAt(m.x + m.dx * 1.5, m.z + m.dz * 1.5).s).toBeLessThan(f.flowAt(m.x, m.z).s);
+  // A straight stream along +x at z = 5.5 on a plain map; the inflow ends at x = 10, the outflow starts at x = 10.
+  const straight = (inflow: boolean) => pondField(new TileMap(30, 12, new Uint8Array(360).fill(TILE_ID.Floor)),
+    { seed: 1, bridges: [], streams: [{ inflow, points: [[inflow ? 80 : 160, 88], [inflow ? 160 : 240, 88]] }] });
+
+  it('the current runs three tiles into the pond', () => {
+    const f = straight(true);
+    expect(f.flowAt(10, 5.5).s).toBeCloseTo(1, 5); // at the mouth
+    const mid = f.flowAt(11.5, 5.5);
+    expect(mid.s).toBeCloseTo(0.5, 2);
+    expect([mid.x, mid.z]).toEqual([1, 0]);
+    expect(f.flowAt(13, 5.5).s).toBe(0);
+    expect(f.flowAt(14, 5.5).s).toBe(0);
+    expect(f.flowAt(11.5, 7.5).s).toBe(0); // 2 tiles to the side
+    expect(f.flowAt(7, 5.5).s).toBe(1); // on the stream itself
+  });
+
+  it('the pond is drawn toward an outflow', () => {
+    const f = straight(false);
+    expect(f.flowAt(10, 5.5).s).toBeCloseTo(1, 5); // at the first point
+    const mid = f.flowAt(8.5, 5.5);
+    expect(mid.s).toBeCloseTo(0.5, 2);
+    expect([mid.x, mid.z]).toEqual([1, 0]);
+    expect(f.flowAt(7, 5.5).s).toBe(0);
+    expect(f.flowAt(6, 5.5).s).toBe(0);
+    expect(f.flowAt(8.5, 7.5).s).toBe(0);
+    expect(f.flowAt(13, 5.5).s).toBe(1);
   });
 
   it('a figure on a deck stands on it', () => {

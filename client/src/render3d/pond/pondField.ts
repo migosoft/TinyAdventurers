@@ -2,7 +2,7 @@ import type { BridgeInfo } from '../../generated/BridgeInfo';
 import type { PondInfo } from '../../generated/PondInfo';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { BED_RES, DEEP_BED, SHALLOW_BED, isWater, pondFieldOf, setPondField } from '../dips/shape';
+import { DEEP_BED, SHALLOW_BED, isWater, pondFieldOf, setPondField } from '../dips/shape';
 
 export { pondFieldOf, setPondField };
 
@@ -26,9 +26,9 @@ export interface PondField {
 
 export const DECK_Y = 0.14; // tiles above the ground // balancing
 const SHORE_SHALLOW = 0.5, SHORE_DEEP = 2.5; // tiles from the shore where the bed is SHALLOW_BED / DEEP_BED // balancing
-const BODY_SHORE = 1.0; // a stream point this far from the shore is inside the pond body, not its own channel // balancing
+const FIELD_RES = 4; // samples per tile of the shore grid
 const CORE = 0.5, REACH = 1.5; // stream: full current within CORE of the line, none REACH away // balancing
-const FADE = 3; // tiles along the line past the mouth over which the current dies // balancing
+const FADE = 3; // tiles into the pond, straight on from the end segment, over which the current dies // balancing
 const DECK_GROW = 0.5; // a deck reaches this far past its rect at both ends of its travel axis // balancing
 
 const FAR = 1e12; // stands for infinity in the distance transform
@@ -62,12 +62,13 @@ function edt1(f: Float64Array, out: Float64Array, n: number, v: Int32Array, z: F
   }
 }
 
-export function pondField(rules: TileMap, pond: PondInfo): PondField {
-  const view = pondViewMap(rules, pond);
-  const W = view.w * BED_RES + 2, H = view.h * BED_RES + 2; // one sample of land all round
+/** `viewMap` is the view copy (`pondViewMap`) when the caller has one already; else it is made here. */
+export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): PondField {
+  const view = viewMap ?? pondViewMap(rules, pond);
+  const W = view.w * FIELD_RES + 2, H = view.h * FIELD_RES + 2; // one sample of land all round
   const water = new Uint8Array(W * H);
   for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) {
-    if (isWater(view.get(Math.floor((i - 1) / BED_RES), Math.floor((j - 1) / BED_RES)))) water[j * W + i] = 1;
+    if (isWater(view.get(Math.floor((i - 1) / FIELD_RES), Math.floor((j - 1) / FIELD_RES)))) water[j * W + i] = 1;
   }
   // Distance in samples to the nearest land sample, two passes of the 1D transform.
   const d2 = new Float64Array(W * H), n = Math.max(W, H);
@@ -84,57 +85,51 @@ export function pondField(rules: TileMap, pond: PondInfo): PondField {
   }
   // A water sample centre lies half a sample inside the edge of its land neighbour's sample: the shore is that much nearer.
   const shore = new Float32Array(W * H);
-  for (let k = 0; k < W * H; k++) shore[k] = water[k] ? Math.max(0, (Math.sqrt(d2[k]) - 0.5) / BED_RES) : 0;
+  for (let k = 0; k < W * H; k++) shore[k] = water[k] ? Math.max(0, (Math.sqrt(d2[k]) - 0.5) / FIELD_RES) : 0;
 
   const shoreAt = (x: number, z: number): number => {
-    const u = Math.min(W - 1, Math.max(0, x * BED_RES + 0.5)), w = Math.min(H - 1, Math.max(0, z * BED_RES + 0.5));
+    const u = Math.min(W - 1, Math.max(0, x * FIELD_RES + 0.5)), w = Math.min(H - 1, Math.max(0, z * FIELD_RES + 0.5));
     const i = Math.min(W - 2, Math.floor(u)), j = Math.min(H - 2, Math.floor(w)), fx = u - i, fz = w - j;
     const a = shore[j * W + i] * (1 - fx) + shore[j * W + i + 1] * fx;
     const b = shore[(j + 1) * W + i] * (1 - fx) + shore[(j + 1) * W + i + 1] * fx;
     return a * (1 - fz) + b * fz;
   };
 
-  // Streams: tile-space polylines with their arc length, and where the pond body starts (inflow) or ends (outflow).
-  interface Line { pts: [number, number][]; arc: number[]; inflow: boolean; edge: number }
-  const lines: Line[] = [];
+  // Streams as segments of the current: the stream's own (full strength) and, past an inflow's mouth or before an outflow's first
+  // point, an extension of the end segment into the pond that fades over FADE tiles. `fadeFrom` is the extension's end that keeps
+  // full strength (0 = a, 1 = b); none for a stream's own segments.
+  interface Seg { ax: number; az: number; bx: number; bz: number; fadeFrom: 0 | 1 | null }
+  const segs: Seg[] = [];
   const mouths: Mouth[] = [];
   for (const s of pond.streams) {
     const pts = s.points.map(([px, pz]) => [px / 16, pz / 16] as [number, number]);
-    const arc = [0];
-    for (let i = 1; i < pts.length; i++) arc.push(arc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    const at = (a: number): { x: number; z: number; dx: number; dz: number } => {
-      let i = 1;
-      while (i < pts.length - 1 && arc[i] < a) i++;
-      const len = arc[i] - arc[i - 1] || 1, t = Math.min(1, Math.max(0, (a - arc[i - 1]) / len));
-      return { x: pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, z: pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t,
-        dx: (pts[i][0] - pts[i - 1][0]) / len, dz: (pts[i][1] - pts[i - 1][1]) / len };
+    for (let i = 1; i < pts.length; i++) segs.push({ ax: pts[i - 1][0], az: pts[i - 1][1], bx: pts[i][0], bz: pts[i][1], fadeFrom: null });
+    if (pts.length < 2) continue;
+    const dirOf = (p: [number, number], q: [number, number]) => {
+      const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      return { dx: (q[0] - p[0]) / len, dz: (q[1] - p[1]) / len };
     };
-    const total = arc[arc.length - 1];
-    let edge = s.inflow ? total : 0; // no body point found: an inflow ends at its last point, an outflow has no body
     if (s.inflow) {
-      for (let a = 0; a <= total; a += 0.25) { const p = at(a); if (shoreAt(p.x, p.z) > BODY_SHORE) { edge = a; break; } }
-      const m = at(edge);
-      mouths.push({ x: m.x, z: m.z, dx: m.dx, dz: m.dz });
+      const p = pts[pts.length - 1], { dx, dz } = dirOf(pts[pts.length - 2], p);
+      mouths.push({ x: p[0], z: p[1], dx, dz });
+      segs.push({ ax: p[0], az: p[1], bx: p[0] + dx * FADE, bz: p[1] + dz * FADE, fadeFrom: 0 });
     } else {
-      for (let a = total; a >= 0; a -= 0.25) { const p = at(a); if (shoreAt(p.x, p.z) > BODY_SHORE) { edge = a; break; } }
+      const p = pts[0], { dx, dz } = dirOf(p, pts[1]);
+      segs.push({ ax: p[0] - dx * FADE, az: p[1] - dz * FADE, bx: p[0], bz: p[1], fadeFrom: 1 });
     }
-    lines.push({ pts, arc, inflow: s.inflow, edge });
   }
 
   const flowAt = (x: number, z: number): { x: number; z: number; s: number } => {
-    let best = { x: 0, z: 0, s: 0 }, bestD = REACH;
-    for (const l of lines) for (let i = 1; i < l.pts.length; i++) {
-      const [ax, az] = l.pts[i - 1], [bx, bz] = l.pts[i];
-      const ex = bx - ax, ez = bz - az, len2 = ex * ex + ez * ez || 1;
-      const t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / len2));
-      const d = Math.hypot(x - (ax + ex * t), z - (az + ez * t));
-      if (d >= bestD) continue;
-      bestD = d;
-      const a = l.arc[i - 1] + Math.sqrt(len2) * t;
-      const past = l.inflow ? a - l.edge : l.edge - a; // tiles into the pond body along the line
-      const fade = past > 0 ? 1 - Math.min(1, past / FADE) : 1;
+    let best = { x: 0, z: 0, s: 0 };
+    for (const g of segs) {
+      const ex = g.bx - g.ax, ez = g.bz - g.az, len2 = ex * ex + ez * ez || 1;
+      const t = Math.min(1, Math.max(0, ((x - g.ax) * ex + (z - g.az) * ez) / len2));
+      const d = Math.hypot(x - (g.ax + ex * t), z - (g.az + ez * t));
+      let s = 1 - Math.min(1, Math.max(0, (d - CORE) / (REACH - CORE)));
+      if (g.fadeFrom !== null) s *= g.fadeFrom === 0 ? 1 - t : t;
+      if (s <= best.s) continue;
       const len = Math.sqrt(len2);
-      best = { x: ex / len, z: ez / len, s: (1 - Math.min(1, Math.max(0, (d - CORE) / (REACH - CORE)))) * fade };
+      best = { x: ex / len, z: ez / len, s };
     }
     return best;
   };
