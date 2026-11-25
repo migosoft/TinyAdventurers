@@ -1,6 +1,7 @@
 import { TILE_ID } from '../../generated/defs';
 import { cellHeight } from '../heights';
 import type { TileMap } from '../../sim/map';
+import type { PondField } from '../pond/pondField';
 
 /** Which kind of dip a terrain tile makes. */
 export const DIP = { none: 0, water: 1, lava: 2, chasm: 3 } as const;
@@ -81,7 +82,17 @@ export function bedAt(map: TileMap, x: number, z: number): number {
  * corners), where the server lets a figure walk; only a Sink (or a barrel's anim 2) makes a figure fall. Water and lava are as in `bedAt`.
  */
 export function walkBedAt(map: TileMap, x: number, z: number): number {
-  return bed(map, x, z, false);
+  const deck = pondFieldOf(map)?.deckAt(x, z);
+  return deck != null ? deck : bed(map, x, z, false);
+}
+
+/** The pond's field (#360) of a view map, kept beside the map: a woodland's pond shapes its own bed. Maps without one take the tile masks. */
+const ponds = new WeakMap<TileMap, PondField>();
+export function setPondField(map: TileMap, field: PondField | null): void {
+  if (field) ponds.set(map, field); else ponds.delete(map);
+}
+export function pondFieldOf(map: TileMap): PondField | undefined {
+  return ponds.get(map);
 }
 
 function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
@@ -89,7 +100,9 @@ function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
-  let h = -(SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD))
+  const pond = pondFieldOf(map);
+  const water = pond ? pond.depthAt(x, z) : SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD);
+  let h = -water
     - LAVA_BED * ss(OUTLINE_EDGE, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(OUTLINE_EDGE, STEEP.chasm, mC) : 0);
   h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(OUTLINE_EDGE, 0.7, any) * (1 - ss(0.56, 0.9, mC));
   // A continuous bump on the outside of the outline: 0 at the cell edge (any = OUTLINE_EDGE) and beyond 0.25.

@@ -12,6 +12,7 @@ import { atlasBounds } from './atlasBounds';
 import { loadState } from './loadProgress';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
+import { pondField, pondViewMap, setPondField } from './pond/pondField';
 import { stoneField } from './stone/field';
 import { paintDone } from './stone/paint';
 import { makeStoneRun } from './stone/stoneRun';
@@ -113,16 +114,20 @@ export function createRunStage(
   const { session } = run;
   // The overlay canvas is the stage's, not the view's: it survives a lost device's rebuild (which replaces the 3D canvas).
   const overlay = new Overlay3d(el);
-  const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames), overlay);
+  // A woodland's pond (#360): the view draws a copy of the map (a bridge's tiles are water) with the pond's field; the simulation keeps session.map.
+  const pond = info.woodland?.pond ?? null;
+  const viewMap = pond ? pondViewMap(session.map, pond) : session.map;
+  if (pond) setPondField(viewMap, pondField(session.map, pond));
+  const runView = new RunView3d({ ...session.viewInit(), map: viewMap }, assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
   const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };
   const world: WorldInput = {
-    map: session.map, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
+    map: viewMap, painted: !!info.woodland, clear: info.woodland ? WOODLAND_CLEAR : 'stone', stone: info.woodland ? null : stoneField(session.map, info.stone),
     taken: { lights: info.lights.map(([id, kind, , x, y, , wall]) => ({ id, kind, x, y, wall })), spawn },
   };
   // The cover of every level (the woodland's grass; a dungeon's moss and the cove's grass), built once and kept for the rebuilds after a lost device.
   const job: CoverJob = coverJob(
-    coverSources(session.map, { woodland: info.woodland, cove: info.cove ?? null, spawnRow: info.spawn_y / TILE, spots: runView.bushelSpots(), marks: marksOf(world) }),
+    coverSources(viewMap, { woodland: info.woodland, cove: info.cove ?? null, spawnRow: info.spawn_y / TILE, spots: runView.bushelSpots(), marks: marksOf(world) }),
     info.woodland ? info.woodland.seed : tilesSeed(session.map),
   );
   // A ground or cover too large for the device: shown once, the run goes on without cover (nothing is lifted then).

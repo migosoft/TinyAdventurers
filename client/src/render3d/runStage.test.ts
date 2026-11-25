@@ -15,10 +15,12 @@ import { startHost, type Host, type StageCtx } from './host';
 import { DEFAULTS, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import { toCanvas } from './screen';
+import { pondFieldOf } from './pond/pondField';
 import { createRunStage, newRun, stepInput } from './runStage';
 import { R3D_SYSTEMS } from './stats';
 import { GroundTooLargeError, type Assets, type View } from './view';
 import type { RunStartInfo } from '../generated/RunStartInfo';
+import type { PondInfo } from '../generated/PondInfo';
 
 const ROWS = ['#####', '#...#', '#####'];
 const BIG = Array.from({ length: 40 }, () => '.'.repeat(40));
@@ -121,6 +123,19 @@ describe('the run stage', () => {
     expect(stage.world.map.get(2, 1)).toBe(TILE_ID.DoorClosed);
     expect(stage.world.painted).toBe(false);
     expect(stage.world.clear).toBe('stone');
+  });
+
+  it('a run without a pond registers no field, a pond gets one on a view copy that keeps the rules map as it was (#360)', () => {
+    const none = setup(ROWS, { woodland: WOODLAND });
+    expect(none.stage.world.map).toBe(none.run.session.map);
+    expect(pondFieldOf(none.stage.world.map)).toBeUndefined();
+    const pond: PondInfo = { seed: 3, streams: [], bridges: [{ rect: [1, 1, 2, 1], along_x: true, road: false }] };
+    const { stage, run } = setup(['#####', '#...#', '#####'], { woodland: { ...WOODLAND!, pond } });
+    expect(stage.world.map).not.toBe(run.session.map);
+    expect(pondFieldOf(stage.world.map)).toBeDefined();
+    expect(pondFieldOf(run.session.map)).toBeUndefined();
+    expect(stage.world.map.get(1, 1)).toBe(TILE_ID.ShallowWater);
+    expect(run.session.map.get(1, 1)).toBe(TILE_ID.Floor);
   });
 
   it('a woodland run is painted on a green clear colour', () => {
