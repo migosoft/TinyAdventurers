@@ -604,7 +604,7 @@ export class RunView3d implements RunView {
     if (this.tagOf) layoutTags(i, this.tagOf, items);
     layoutUseHint(i, items);
     this.marks.layout(i.at, c.zoom, c.labelZoom, items);
-    this.floats.layout(i.at, c.zoom, c.labelZoom, items);
+    this.floats.layout(i.at, c.zoom, c.labelZoom, items, this.figures.anchors);
     this.overlayCount = items.length;
     o.paint(items, c.labelZoom);
   }

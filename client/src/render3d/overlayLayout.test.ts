@@ -379,6 +379,21 @@ describe('Floats.addPicture', () => {
     expect(t.text).toBe('!');
     expect(t.y).toBe(Math.round(at(5, 5).py - 22 * ZOOM));
   });
+  it('a Cue follows its creature, and stays where it was last seen when the creature is gone', () => {
+    const f = new Floats(mid);
+    f.addPicture({ t: 'Cue', id: 1, x: 5 * TILE, y: 5 * TILE, k: 1 } as PictureEv, { x: 0, y: 0 }, null);
+    f.addPicture({ t: 'Immune', x: 5 * TILE, y: 5 * TILE } as PictureEv, { x: 0, y: 0 }, null);
+    const lay = (anchors: Map<number, { x: number; z: number }>) => {
+      const out: OverlayItem[] = [];
+      f.layout(at, ZOOM, ZOOM, out, anchors);
+      return only(out, 'text');
+    };
+    const [cue, imm] = lay(new Map([[1, { x: 8, z: 6 }]]));
+    expect(cue.x).toBe(Math.round(at(8, 6).px));
+    expect(cue.y).toBe(Math.round(at(8, 6).py - 22 * ZOOM));
+    expect(imm.x, 'a float without an id keeps its spot').toBe(Math.round(at(5, 5).px));
+    expect(lay(new Map())[0].x).toBe(Math.round(at(8, 6).px));
+  });
   it('a hit on the own hero is born at the predicted foot', () => {
     const f = new Floats(mid);
     // server hero (100, 60), predicted (130, 60); the event sits 10 px over the server foot

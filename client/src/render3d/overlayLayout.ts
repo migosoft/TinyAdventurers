@@ -179,8 +179,8 @@ export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: n
   return { x: ev.x + pred.x - srv.x, y: ev.y + pred.y - srv.y };
 }
 
-/** A floating number or word, kept at its ground spot (tiles) and rising in screen space. */
-interface Float { x: number; z: number; dx: number; up: number; rise: number; vy: number; age: number; life: number; max: number; pop: boolean; text: string; color: string; stroke: string; kind: WorldTextKind }
+/** A floating number or word, kept at its ground spot (tiles) and rising in screen space. `id`: the figure it follows (a cue, #422). */
+interface Float { id?: number; x: number; z: number; dx: number; up: number; rise: number; vy: number; age: number; life: number; max: number; pop: boolean; text: string; color: string; stroke: string; kind: WorldTextKind }
 
 export class Floats {
   private readonly list: Float[] = [];
@@ -210,7 +210,11 @@ export class Floats {
     if (ev.t === 'Dmg' || ev.t === 'Heal') {
       const at = floatSpot(ev, own, server);
       this.add(at.x, at.y + BODY_RISE, w.text, w.color, { ...w.opts, up: (w.opts.up ?? 0) + BODY_RISE });
-    } else if (ev.t === 'Immune' || ev.t === 'Coins' || ev.t === 'Cue') this.add(ev.x, ev.y, w.text, w.color, w.opts);
+    } else if (ev.t === 'Immune' || ev.t === 'Coins') this.add(ev.x, ev.y, w.text, w.color, w.opts);
+    else if (ev.t === 'Cue') {
+      this.add(ev.x, ev.y, w.text, w.color, w.opts);
+      this.list[this.list.length - 1].id = ev.id;
+    }
   }
 
   update(dt: number): void {
@@ -227,9 +231,17 @@ export class Floats {
     }
   }
 
-  /** `zoom`: the world's (the start height above the spot); `label`: the label's (the sideways spread and the rise). */
-  layout(at: LayoutIn['at'], zoom: number, label: number, out: OverlayItem[]): void {
+  /**
+   * `zoom`: the world's (the start height above the spot); `label`: the label's (the sideways spread and the rise). A float with
+   * an `id` moves with that figure's anchor while it has one, and stays where it was last seen when the figure is gone.
+   */
+  layout(at: LayoutIn['at'], zoom: number, label: number, out: OverlayItem[], anchors?: ReadonlyMap<number, { x: number; z: number }>): void {
     for (const f of this.list) {
+      const a = f.id === undefined ? undefined : anchors?.get(f.id);
+      if (a) {
+        f.x = a.x;
+        f.z = a.z;
+      }
       const p = at(f.x, f.z, 0);
       out.push({
         t: 'text', x: Math.round(p.px + f.dx * label), y: Math.round(p.py + f.rise * label - f.up * zoom), text: f.text, kind: f.kind, color: f.color, stroke: f.stroke,
