@@ -1103,6 +1103,7 @@
   height: auto;
 }
 .loading-bar {
+  position: relative;
   width: min(420px, 80%);
   height: 10px;
   background: var(--well);
@@ -1114,19 +1115,14 @@
   background: linear-gradient(90deg, var(--brass-lo), var(--brass-hi));
   position: relative;
 }
-/* Runes sparkling from the bar's tip (#405). Only transform and opacity move, so the
-   compositor plays them while the main thread builds the level. */
-.loading-tip {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  pointer-events: none;
-}
-.loading-tip::before {
+/* The tip glints; progress throws runes and sparks off it, which stay where they were
+   thrown (#405, flown by loading.ts with Web Animations of transform and opacity). */
+.loading-fill::after {
   content: '';
   position: absolute;
-  left: -9px;
-  top: -9px;
+  right: -9px;
+  top: 50%;
+  margin-top: -9px;
   width: 18px;
   height: 18px;
   background: radial-gradient(circle, #fff 0, rgba(190, 234, 255, 0.7) 30%, transparent 70%);
@@ -1135,13 +1131,13 @@
 .loading-rune,
 .loading-spark {
   position: absolute;
+  top: 50%;
   opacity: 0;
-  animation: loading-fly cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  pointer-events: none;
   will-change: transform, opacity;
 }
 .loading-rune {
-  left: -7px;
-  top: -10.5px;
+  margin: -10.5px 0 0 -7px;
   width: 14px;
   height: 21px;
   overflow: visible;
@@ -1158,25 +1154,18 @@
   opacity: 0.35;
 }
 .loading-spark {
-  left: -1px;
-  top: -1px;
+  margin: -1px 0 0 -1px;
   width: 2px;
   height: 2px;
   background: #fff;
   box-shadow: 0 0 4px 1px rgba(140, 215, 255, 0.9);
-}
-@keyframes loading-fly {
-  0% { transform: translate(0, 0) scale(0.3) rotate(0deg); opacity: 0; }
-  15% { opacity: 1; }
-  60% { opacity: 0.85; }
-  100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; }
 }
 @keyframes loading-glint {
   from { transform: scale(0.7); opacity: 0.6; }
   to { transform: scale(1.15); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .loading-tip { display: none; }
+  .loading-fill::after, .loading-rune, .loading-spark { display: none; }
 }
 .loading-line {
   color: var(--muted);
