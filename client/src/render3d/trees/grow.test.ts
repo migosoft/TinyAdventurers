@@ -69,12 +69,11 @@ describe('growWillow and growPlant', () => {
     expect(() => growLeafy(spec('bush', 1))).toThrow(/not a leafy tree/);
   });
 
-  it('give a dead plant no sway at all', () => {
-    for (const f of ['conifer', 'bush'] as const) {
-      const sk = growPlant({ ...spec(f, 3), dead: true });
-      expect(sk.amp).toBe(0);
-      for (const b of sk.lobes) expect(b.k).toBe(0);
-      for (const k of sk.skirts) expect(k.k).toBe(0);
-    }
+  it('give a dead conifer no sway at all, and a dead bush its factor (the brush mark, #331; the wind is zeroed in the shader)', () => {
+    const c = growPlant({ ...spec('conifer', 3), dead: true });
+    expect(c.amp).toBe(0);
+    for (const b of c.lobes) expect(b.k).toBe(0);
+    for (const k of c.skirts) expect(k.k).toBe(0);
+    expect(growPlant({ ...spec('bush', 3), dead: true }).amp).toBe(growPlant(spec('bush', 3)).amp);
   });
 });

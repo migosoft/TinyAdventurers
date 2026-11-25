@@ -6,6 +6,7 @@ import { makeSight } from '../sightNodes';
 import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
+import { makeBrushUniforms } from '../windNodes';
 import { makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
 import { buildTree } from './build';
 import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
@@ -41,7 +42,7 @@ function treeGeometry(): BufferGeometry {
 
 function build(hasSun: boolean): { mats: TreeMaterials; geometry: BufferGeometry } {
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
-  const mats = treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette: new Texture(), shared: makeTreeShared(), hasSun });
+  const mats = treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette: new Texture(), shared: makeTreeShared(), hasSun, brush: makeBrushUniforms() });
   return { mats, geometry: treeGeometry() };
 }
 
@@ -127,6 +128,12 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
         expect(code).toMatch(collapse);
         expect(code).toContain('treeLeafOverride');
       }
+    });
+
+    it('the depth, colour and sun vertex code each carry the brush loop; the falling leaf carries none', () => {
+      const { mats, geometry } = build(true);
+      for (const m of [mats.depth, mats.colour, mats.sun!]) expect(vertex(B, m, { compare: true, geometry })).toContain('brushSum');
+      expect(vertex(B, mats.leaf, { compare: true, geometry: leafGeometry(leafSample()) })).not.toContain('brushSum');
     });
 
     it('the falling leaf builds in both stages, ends with the sight step, and collapses with the tree\'s own leaf rule', () => {

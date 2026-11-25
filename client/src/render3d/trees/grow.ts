@@ -39,9 +39,9 @@ export interface Skeleton {
 /** The sway factor (tiles) of a point at height `y` of a plant `height` tall whose top swings `amp`. */
 export const swayK = (amp: number, y: number, height: number): number => amp * (Math.max(0, y) / height) ** 2;
 
-/** How far the top of a plant of this form swings; a dead plant does not sway. */
+/** How far the top of a plant of this form swings; a dead plant does not sway, except a bush: its brush factor stays (the wind is zeroed in the shader). */
 function ampOf(form: TreeForm, dead: boolean): number {
-  if (dead) return 0;
+  if (dead && form !== 'bush') return 0;
   return form === 'conifer' ? SWAY.conifer : form === 'bush' ? SWAY.small : SWAY.leafy;
 }
 

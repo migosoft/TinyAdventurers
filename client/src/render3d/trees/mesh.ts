@@ -55,7 +55,7 @@ export const MESH_STREAMS = ['position', 'normal', 'grad', 'sway', 'part', 'misc
 
 /**
  * One typed stream per vertex value; the getters return views of the used part (read them once per loop, not per vertex).
- * position, normal: 3 each. grad: crown gradient xyz and height darkening. sway: sway factor, anchor height.
+ * position, normal: 3 each. grad: crown gradient xyz and height darkening. sway: sway factor (negative on a bush: the brush mark), anchor height.
  * part: ramp row, shape, own warm shift, own bright shift. misc: light lift; wood: standing shade, skirt: hem v,
  * tuft: 1 = casts no shadow; 1 on the trunk; leaf threshold (0 for wood). tuft: corner x, y, half-size, seed.
  */
@@ -247,7 +247,7 @@ export const packedLeaf = (leaf: number, dead: boolean): number => (dead ? -1 : 
 
 /**
  * A world chunk's trees merged, in the layout the GPU takes, so the view can hand these streams to three.js without a copy.
- * Nine streams fit the 8 vertex buffers WebGPU allows by packing: `nrm` is normal xyz and the sway factor; `plant` is foot x,
+ * Nine streams fit the 8 vertex buffers WebGPU allows by packing: `nrm` is normal xyz and the sway factor (negative on a bush: the brush mark); `plant` is foot x,
  * z, `packedLeaf` and the anchor height. position, grad, part, misc, tuft: as `TreeMesh`. look: leaf bright, leaf warm, bark
  * light, bark grey (the plant's variation).
  */

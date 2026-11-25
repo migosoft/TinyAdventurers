@@ -8,6 +8,7 @@ import { Forest } from './forest';
 import type { TreeForm, TreeSpec } from './spec';
 import { plantVariation } from './variation';
 import { SWAY_WAVE_MAX } from '../wind';
+import { BRUSH } from '../brush';
 
 const spec = (x: number, z: number, seed = 1, extra: Partial<TreeSpec> = {}): TreeSpec => ({ form: 'round' as TreeForm, x, z, seed, scalePct: 100, mirrored: false, leaf: 1, dead: false, ...extra });
 const MAP = { w: 48, h: 32 }; // 3 x 2 chunks
@@ -210,5 +211,27 @@ describe('Forest.frame', () => {
     expect(ch.leaves.n).toBeGreaterThan(n1);
     expect(f.frame({ wind: true, t: 0 }).leafRate).toBe(1);
     expect(f.frame({ wind: true, t: 0, leafRate: 12 }).leafRate).toBe(12);
+  });
+});
+
+describe('Forest chunk bounds and the brush', () => {
+  // The same look with its sway factors made positive: the wind alone.
+  const windOnly = (s: TreeSpec): BuiltTree => { const t = buildTree(s); const w = t.mesh.sway; for (let i = 0; i < w.length; i += 2) w[i] = Math.abs(w[i]); return t; };
+  const bounds = (form: TreeForm, build: (s: TreeSpec) => BuiltTree) => {
+    const f = new Forest([spec(24, 16, 3, { form })], MAP, 0, build, () => 0);
+    f.step({ x: 0, z: 0 }, 1000);
+    return [...f.frame({ wind: true, t: 0 }).chunks.values()][0].bounds;
+  };
+  it('a bush chunk reaches BRUSH.max further in x and z than the wind alone', () => {
+    const a = bounds('bush', buildTree), b = bounds('bush', windOnly);
+    for (const k of ['x', 'z'] as const) {
+      expect(a.max[k] - b.max[k]).toBeCloseTo(BRUSH.max, 5);
+      expect(b.min[k] - a.min[k]).toBeCloseTo(BRUSH.max, 5);
+    }
+  });
+  it('a round tree\'s bounds are unchanged', () => {
+    const a = bounds('round', buildTree), b = bounds('round', windOnly);
+    expect(a.max).toEqual(b.max);
+    expect(a.min).toEqual(b.min);
   });
 });

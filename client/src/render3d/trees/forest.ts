@@ -10,6 +10,7 @@ import { ChunkMesh, FLUTTER_PX } from './mesh';
 import { lookKey, type TreeSpec } from './spec';
 import { plantVariation } from './variation';
 import { SWAY_WAVE_MAX } from '../wind';
+import { BRUSH } from '../brush';
 
 export interface Vec3 { x: number; y: number; z: number }
 /** One world chunk's trees merged, in the GPU's layout (`ChunkMesh`: the plant's foot, leaf amount and look on every vertex), and the falling leaves of its trees (it grows with the chunk). */
@@ -52,10 +53,11 @@ function extent(t: BuiltTree): Built {
   let half = 0, swing = 0;
   const tuft = m.tuft, sway = m.sway;
   for (let i = 2; i < tuft.length; i += 4) half = Math.max(half, tuft[i]);
-  // The sway stream's x is each vertex's sway factor (tiles per unit of wave); the wave reaches SWAY_WAVE_MAX at most.
-  for (let i = 0; i < sway.length; i += 2) swing = Math.max(swing, sway[i]);
+  // The sway stream's x is each vertex's sway factor (tiles per unit of wave; negative on a bush: the brush mark); the wave reaches SWAY_WAVE_MAX at most.
+  let brushed = false;
+  for (let i = 0; i < sway.length; i += 2) { swing = Math.max(swing, Math.abs(sway[i])); if (sway[i] < 0) brushed = true; }
   // A patch is spread along the camera's right and up axes, whose horizontal parts together reach sqrt 2 times the half-size.
-  const room = Math.max(MIN_MARGIN, half * Math.SQRT2 + swing * SWAY_WAVE_MAX + FLUTTER);
+  const room = Math.max(MIN_MARGIN, half * Math.SQRT2 + swing * SWAY_WAVE_MAX + FLUTTER) + (brushed ? BRUSH.max : 0);
   min.x -= room; min.z -= room; max.x += room; max.z += room;
   max.y = Math.max(max.y + half, (t.height + half) * STRETCH);
   return { tree: t, min, max };

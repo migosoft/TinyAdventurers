@@ -6,6 +6,7 @@ import { makeSunLight } from '../sunNodes';
 import { makeSight } from '../sightNodes';
 import { viewTowardUniform } from '../materials';
 import { makeTreeShared, treeMaterials } from '../trees/treeNodes';
+import { makeBrushUniforms } from '../windNodes';
 import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { GH_MAX as KINDS_GH_MAX } from './kinds';
@@ -123,7 +124,7 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     const make = (cover: boolean) => {
       const t = new Texture();
       return treeMaterials({
-        lighting: real(false), sight: makeSight(), see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false,
+        lighting: real(false), sight: makeSight(), see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, brush: makeBrushUniforms(),
         cover: cover ? makeCoverShared(standIn()) : undefined,
       }).leaf;
     };

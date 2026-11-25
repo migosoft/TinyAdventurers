@@ -4,14 +4,14 @@
 import { DoubleSide, EqualDepth, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { NodeBuilder } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { Fn, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, mod, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, abs, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, mod, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
 import { hash3 } from '../noiseNodes';
 import { coverHeightNode, type CoverShared } from '../cover/coverRead';
-import { WIND_DIR } from '../wind';
-import { gustNode, swayNode } from '../windNodes';
+import { SWAY, WIND_DIR } from '../wind';
+import { brushNode, gustNode, swayNode, type BrushUniforms } from '../windNodes';
 import { FLUTTER_PX, RAMP, packedLeaf } from './mesh';
 import { NOON_LIGHT, SKY_LEVEL_MIN, TREE_LIGHT } from './tone';
 import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE } from './leaves';
@@ -61,7 +61,7 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
 
 /**
  * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,
- * `tuft`, `plant`, `look`. This packs the two that carry the tree's sway: `nrm` is the normal with the vertex's sway factor in w, and `plant` is
+ * `tuft`, `plant`, `look`. This packs the two that carry the tree's sway: `nrm` is the normal with the vertex's sway factor in w (negative on a bush: the brush mark, `streams`), and `plant` is
  * (foot x, foot z, leaf amount or -1 for a dead tree, the vertex's lift height). `plant` is (foot x, z, leaf, dead) per vertex. The forest's
  * chunks are kept packed already (`ChunkMesh`); this is for single meshes.
  */
@@ -84,7 +84,9 @@ function streams() {
   const nrm = attribute('nrm', 'vec4');
   const shape = part.y;
   return {
-    normal: nrm.xyz, grad: attribute('grad', 'vec4'), sway: vec2(nrm.w, plant.w),
+    normal: nrm.xyz, grad: attribute('grad', 'vec4'), sway: vec2(abs(nrm.w), plant.w),
+    // 0..1 on a bush (its factor is stored negated), 0 on every other plant.
+    brushK: max(nrm.w.negate(), 0).div(SWAY.small),
     part, misc: attribute('misc', 'vec4'), tuft: attribute('tuft', 'vec4'), plant, look: attribute('look', 'vec4'),
     foot: plant.xy,
     dead: plant.z.lessThan(-0.5),
@@ -133,12 +135,14 @@ export function plantLeaf(shared: TreeShared, plantZ: N): { dead: N; leaf: N } {
  * - `sunPosition`: the point for the sun's pass (not lifted; a patch marked "casts no shadow" is gone);
  * - `gone`: foliage whose leaf threshold is above the plant's leaf amount (`leafGone`) collapses out of view in all three.
  */
-export function treePoint(shared: TreeShared) {
+export function treePoint(shared: TreeShared, brush: BrushUniforms) {
   const s = streams();
   const { dead, leaf } = plantLeaf(shared, s.plant.z);
   const gone = s.isFoliage.and(leafGone(s.misc.w, leaf));
   // A dead tree does not sway; a living one with no leaves does. The factor is the vertex's own (already scaled by height).
-  const offset = swayNode(s.foot, float(1), float(1), select(dead, float(0), s.sway.x), shared.t, shared.windOn);
+  // A bush's brush wiggle is not gated by dead or by the wind.
+  const offset = swayNode(s.foot, float(1), float(1), select(dead, float(0), s.sway.x), shared.t, shared.windOn)
+    .add(brushNode(brush, positionGeometry.xz, s.brushK, s.foot));
   const alongWind = vec3(WIND_DIR[0], 0, WIND_DIR[1]);
   const acrossWind = vec3(-WIND_DIR[1], 0, WIND_DIR[0]);
   const phase = s.tuft.w;
@@ -205,10 +209,12 @@ export function treeMaterials(o: {
   lighting: Lighting; sight: Sight; see: SeeUniforms; mask: Texture; palette: Texture; shared: TreeShared; hasSun: boolean;
   /** The ground cover (#330): a leaf lies on top of it. */
   cover?: CoverShared;
+  /** The brushers of the frame (#331): a bush wiggles where a figure brushes it. */
+  brush: BrushUniforms;
 }): TreeMaterials {
   const { lighting, sight, see, mask, palette, shared, hasSun } = o;
   const s = streams();
-  const p = treePoint(shared);
+  const p = treePoint(shared, o.brush);
   const cut = patchCut(s);
   const truePos = varying(p.point, 'treePos');
   const foot = varying(s.foot, 'treeFoot');

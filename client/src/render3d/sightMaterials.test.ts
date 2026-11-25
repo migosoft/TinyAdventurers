@@ -4,6 +4,7 @@ import { BufferAttribute, BufferGeometry, DataTexture, DoubleSide, GLSLNodeBuild
 import { cardMaterial, fxLitMaterial, fxMaterial,glowMaterial, seeUniforms, shadowMaterial, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import { fieldMaterial, fieldUniforms } from './fieldMesh';
 import { makeTreeShared, treeMaterials } from './trees/treeNodes';
+import { makeBrushUniforms } from './windNodes';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
@@ -48,7 +49,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
   const t = new Texture();
   // The tree's depth pass stipples by the sight value at the foot; its colour pass ends with the sight step. The sun's pass is depth only and never hidden (plants are scenery).
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
-  const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover });
+  const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover, brush: makeBrushUniforms() });
   const air = airMaterials(l, sight, { sun: false, toward });
   return [
     { name: 'world', m: worldMaterial(l, t, t, sight, cover, sheets()).material, world: true },

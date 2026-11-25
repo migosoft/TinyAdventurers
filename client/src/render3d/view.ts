@@ -61,6 +61,7 @@ import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
+import { makeBrushUniforms } from './windNodes';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { FigureLayer, figureLooks, imageTexture } from './models/layer';
@@ -702,7 +703,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return sunDepth!;
   };
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
-  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover }));
+  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush: makeBrushUniforms() }));
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
   // The id pass (#364): the pieces of the model figures drawn into an id target of the picture's size; the hulls read it (nodes.ts).

@@ -249,7 +249,8 @@ describe('the bush', () => {
           expect(m.misc[i * 4 + 3]).toBe(0);
           expect(m.misc[i * 4]).toBe(Math.fround(0.3));
         }
-        top = Math.max(top, m.sway[i * 2]);
+        top = Math.max(top, -m.sway[i * 2]);
+        expect(m.sway[i * 2]).toBeLessThanOrEqual(0);
       }
       expect(top).toBeLessThanOrEqual(SWAY.small + 1e-9);
       expect(top).toBeGreaterThan(0.3 * SWAY.small);
@@ -267,11 +268,31 @@ describe('a dead conifer or bush', () => {
       expect(dead.mesh.position).toEqual(live.mesh.position);
       let leaves = 0;
       for (let i = 0; i < dead.mesh.verts; i++) {
-        expect(dead.mesh.sway[i * 2]).toBe(0);
+        // A bush keeps its brush mark (a negative factor) when dead; the wind is zeroed in the shader.
+        if (f === 'bush') expect(dead.mesh.sway[i * 2]).toBe(live.mesh.sway[i * 2]); else expect(dead.mesh.sway[i * 2]).toBe(0);
         if (dead.mesh.part[i * 4 + 1] === SHAPE.wood) expect(dead.mesh.part[i * 4]).toBe(RAMP.dead); else leaves++;
       }
       expect(leaves).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('the brush mark', () => {
+  it('is the negative sway factor of a bush, living or dead; every other plant has none', () => {
+    const range = (s: TreeSpec) => { const w = buildTree(s).mesh.sway; let lo = 0, hi = 0; for (let i = 0; i < w.length; i += 2) { lo = Math.min(lo, w[i]); hi = Math.max(hi, w[i]); } return { lo, hi }; };
+    for (const dead of [false, true]) {
+      const b = range(spec('bush', 5, 100, { dead }));
+      expect(b.hi).toBeLessThanOrEqual(0);
+      expect(b.lo).toBeLessThan(-0.3 * SWAY.small);
+      expect(b.lo).toBeGreaterThanOrEqual(-SWAY.small - 1e-9);
+    }
+    expect(range(spec('bush', 5, 100, { dead: true })).lo).toBeCloseTo(range(spec('bush', 5)).lo, 12);
+    for (const s of [spec('round', 5), spec('conifer', 5), spec('round', 5, 100, { dead: true }), spec('tall', 5, 100, { dead: true })]) expect(range(s).lo).toBeGreaterThanOrEqual(0);
+  });
+  it('keeps the radius and the lobes positive', () => {
+    const t = buildTree(spec('bush', 5));
+    expect(t.radius).toBeGreaterThan(0);
+    for (const l of t.lobes) expect(l.k).toBeGreaterThanOrEqual(0);
   });
 });
 

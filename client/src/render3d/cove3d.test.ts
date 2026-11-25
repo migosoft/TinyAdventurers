@@ -17,6 +17,7 @@ import { buildTree, type BuiltTree } from './trees/build';
 import { newLeafBuf, pushLeaves } from './trees/leaves';
 import { leafGeometry } from './trees/treeLayer';
 import { makeTreeShared, packTreeStreams, treeMaterials } from './trees/treeNodes';
+import { makeBrushUniforms } from './windNodes';
 import { TILE_ID } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { TILE, TileMap } from '../sim/map';
@@ -89,7 +90,7 @@ describe('the cove tree in the colour pass without a sun', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`builds the willow's materials and the falling leaves for ${B.name}`, () => {
       const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: false });
-      const mats = treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette: new Texture(), shared: makeTreeShared(), hasSun: false });
+      const mats = treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette: new Texture(), shared: makeTreeShared(), hasSun: false, brush: makeBrushUniforms() });
       expect(mats.sun).toBeNull();
       const built = buildTree(coveWillow(room(1)));
       expect(built.drops).toBe(true);

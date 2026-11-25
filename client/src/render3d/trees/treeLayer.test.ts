@@ -8,6 +8,7 @@ import { Forest } from './forest';
 import { paletteBytes } from './palette';
 import type { TreeForm, TreeSpec } from './spec';
 import { TREE_ORDER, treeMaterials } from './treeNodes';
+import { makeBrushUniforms } from '../windNodes';
 import { TREE_UPLOAD_MS, TreeLayer, chunkGeometry } from './treeLayer';
 import { treeSpecOf } from './spec';
 import demo from '../../generated/woodland-demo.json';
@@ -24,7 +25,7 @@ function layer(hasSun: boolean, now?: () => number): { l: TreeLayer; scene: Scen
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
   const l = new TreeLayer(scene, sun, (palette, shared) => {
     made.n++;
-    return treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette, shared, hasSun });
+    return treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette, shared, hasSun, brush: makeBrushUniforms() });
   }, now);
   return { l, scene, sun, made };
 }
@@ -364,6 +365,7 @@ function fnv(a: ArrayLike<number>, uint = false): number {
 describe('chunkGeometry', () => {
   // The demo woodland's chunk geometries, every stream byte for byte. Re-recorded once by #335 (typed streams): every stream but `position`
   // stayed byte for byte; positions are now rounded to float32 in the plant's own frame and again after the move to its foot (under 2.4e-7 tiles).
+  // Re-recorded once by #331: a bush's sway factor is stored negated (the brush mark), so `nrm` changed.
   it('uploads the demo woodland unchanged', () => {
     const lvl = (demo as unknown as { w: number; h: number; woodland: { plants: PlantInfo[]; palette: number } }[])[0];
     const f = new Forest(lvl.woodland.plants.map(treeSpecOf), { w: lvl.w, h: lvl.h }, lvl.woodland.palette);
@@ -377,6 +379,6 @@ describe('chunkGeometry', () => {
       h = fnv([h, k, ...sums], true);
     }
     expect(chunks.size).toBe(36);
-    expect(h.toString(16)).toBe('1e1c92b4');
+    expect(h.toString(16)).toBe('5cfabfc7');
   }, 60_000);
 });

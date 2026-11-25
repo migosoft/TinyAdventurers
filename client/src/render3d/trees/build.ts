@@ -25,7 +25,7 @@ function skeletonOf(s: TreeSpec): Skeleton {
 
 /**
  * Builds the mesh of one tree, unmirrored and then mirrored when the spec asks for it. A dead leafy tree is its bare wood; a dead
- * conifer or bush keeps its living shape and leaves, with dead wood and no sway (first guess).
+ * conifer or bush keeps its living shape and leaves, with dead wood and no wind sway (first guess); a dead bush still carries its brush mark.
  */
 export function buildTree(s: TreeSpec): BuiltTree {
   const sk = skeletonOf(s), m = new TreeMesh(), leafy = s.form === 'round' || s.form === 'wide' || s.form === 'tall';
@@ -49,6 +49,8 @@ export function buildTree(s: TreeSpec): BuiltTree {
   }
   for (const o of sk.skirts) skirt(m, o);
   for (const t of sk.curtain) tuftPatch(m, t);
+  // The brush mark: a bush's sway factors are stored negated (every other plant's are 0 or positive).
+  if (s.form === 'bush') { const w = m.sway; for (let i = 0; i < w.length; i += 2) w[i] = -w[i]; }
 
   let height = 0, reach = 0;
   const pos = m.position;
