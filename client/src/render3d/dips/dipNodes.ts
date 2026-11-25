@@ -164,7 +164,6 @@ export function dipMaterial(lighting: Lighting, groundStart: Texture, sight: Sig
   const d = y.negate();
   // The rock is drawn in a plane that slides with depth, so the pattern does not smear on steep banks.
   const pp = wp.xz.add(vec2(y.mul(0.8), y.mul(-0.5)));
-  const bank = smoothstep(ROCK_START, ROCK_FULL, d);
 
   // The kinds, by ranges of the vertex attribute (0 none, 1 water, 2 lava, 3 chasm).
   const isLava = dip.greaterThan(1.5).and(dip.lessThan(2.5));
@@ -173,6 +172,9 @@ export function dipMaterial(lighting: Lighting, groundStart: Texture, sight: Sig
   // colours can become an `if` that holds the first use of a node, and a later use outside it then emits the node a second time.
   const lavaW = weight(isLava);
   const chasmW = weight(isChasm);
+  // The woodland's painted ground (#360) keeps its own texel all the way down a water bed: the pond's bank and bed are painted, no rock lies under them.
+  const paintedBed = weight(kind.greaterThan(2.5)).mul(float(1).sub(lavaW)).mul(float(1).sub(chasmW));
+  const bank = smoothstep(ROCK_START, ROCK_FULL, d).mul(float(1).sub(paintedBed));
 
   // All the noise is evaluated here, at the top level; the kinds mix the results by weight.
   const rough = fbm2(pp.mul(5));
@@ -251,7 +253,10 @@ export function dipMaterial(lighting: Lighting, groundStart: Texture, sight: Sig
   const rock = mix(mix(waterRock, lavaRock, lavaW), chasmRock, chasmW);
   const albedo = mix(byChasm, rock, bank);
 
-  const lit = lighting.lightAt(wp, normalize(normal.sub(flat.bend)), WRAP);
+  // The sun (#360; only a painted map has one, elsewhere the option does nothing): its shadow is read at the ground's level over the
+  // point, so a pond's bed takes the shadows that fall on the pond and the pit does not shade itself.
+  const lightNormal = normalize(normal.sub(flat.bend));
+  const lit = lighting.lightAt(wp, lightNormal, WRAP, { sun: { Ps: vec3(wp.x, max(wp.y, 0).add(0.03), wp.z), ndl: mix(max(lightNormal.dot(lighting.sun.dir), 0), float(1), WRAP) } });
   const base = lighting.finish(albedo, lit).add(ember);
 
   // The lava's glowing band at its own level, and the chasm's cool self-light, then its fade with depth (the twin of `depthFade`).

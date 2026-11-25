@@ -111,6 +111,10 @@ describe('dipMaterial', () => {
     expect(fragment(WGSLNodeBuilder, m.material, { geometry: geometry() })).toContain('sightMode');
   });
 
+  it('asks for the sun (#360: a painted map\'s bed is sunlit; a world without a sun ignores the option)', () => {
+    expect((build().calls[0] as { sun?: unknown }).sun).toBeDefined();
+  });
+
   it('hands back the handles the view drives', () => {
     const { m } = build();
     expect(m.smooth.value).toBe(0);
