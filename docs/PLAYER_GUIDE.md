@@ -207,7 +207,7 @@ Every nymph's cove is home to 15 wild animals: a boar, a stag, three deer and te
 | Orc warrior | Tough melee fighter, hits hard and **knocks you back**. |
 | Orc archer | Tough archer. |
 | Necromancer | Casts **Shadow Bolts** (green) and casts **Raise Dead**: after a short wind-up (0.7 s) it raises **two** skeletons or skeleton archers around itself, about every 7 seconds, up to **four alive** at a time. Kill the necromancer and all of its minions crumble. |
-| Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
+| Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it turns to face you, **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
 
 **Enemy archers do not aim perfectly.** Their arrows arc like yours and scatter around you: the farther away and the clumsier the archer (Dexterity), the wider the spread. Clever archers would correct after each miss and shoot closer and closer, and the very cleverest would also **aim ahead of you when you move**. A shot that flies over or lands short of you does not need dodging.
 

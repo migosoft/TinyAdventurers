@@ -1255,4 +1255,42 @@ mod tests {
         assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[1].id)));
         assert!(run.monsters[mi].ai.glance.is_none());
     }
+
+    // ----- a hiding Mimic turns to whoever woke it -----
+
+    /// A hiding Mimic placed facing east, and a hero `d` px west of it (behind it).
+    fn mimic_with_hero_behind(d: f64) -> (Run, usize) {
+        let (mut run, mi) = arena(EnemyType::Mimic);
+        run.monsters[mi].sight.cone = 150.0;
+        run.monsters[mi].hiding = true;
+        run.monsters[mi].aim = 0.0;
+        run.monsters[mi].gaze = 0.0;
+        let at = run.monsters[mi].pos;
+        hero_to(&mut run, at + Vec2::new(-d, 0.0));
+        (run, mi)
+    }
+
+    #[test]
+    fn a_mimic_woken_by_a_hero_behind_it_turns_and_chases() {
+        let (mut run, mi) = mimic_with_hero_behind(8.0);
+        run.step();
+        assert!(!run.monsters[mi].hiding, "touched, it wakes");
+        assert_eq!(run.monsters[mi].aim, 0.0, "the body does not snap to the hero");
+        steps(&mut run, 3.0);
+        let m = &run.monsters[mi];
+        let to_hero = (run.players[0].pos() - m.pos).angle();
+        assert!(angle_diff(m.aim, to_hero).abs() <= ATTACK_FACING, "faces the hero: {} {}", m.aim, to_hero);
+        assert_eq!(m.ai.state, AiState::Chase);
+    }
+
+    #[test]
+    fn a_hiding_mimic_hit_from_behind_wakes_and_looks_back_along_the_blow() {
+        let (mut run, mi) = mimic_with_hero_behind(60.0);
+        blow(&mut run, mi, Vec2::new(1.0, 0.0)); // travelled east: it came from the west
+        assert!(!run.monsters[mi].hiding);
+        assert_eq!(run.monsters[mi].ai.state, AiState::Look, "it turns to the blow");
+        steps(&mut run, 3.0);
+        let m = &run.monsters[mi];
+        assert!(angle_diff(m.aim, PI).abs() < 0.5, "turned west: {}", m.aim);
+    }
 }

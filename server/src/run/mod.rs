@@ -936,7 +936,8 @@ impl Run {
     /// close to a sleeping mimic, the mimic wakes up.
     fn touch_chests(&mut self) {
         let alive: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
-        let near = |pos: Vec2| alive.iter().any(|p| p.dist(pos) < enemies::CHEST_TOUCH);
+        let toucher = |pos: Vec2| alive.iter().copied().filter(|p| p.dist(pos) < enemies::CHEST_TOUCH).min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)));
+        let near = |pos: Vec2| toucher(pos).is_some();
         for oi in 0..self.objects.len() {
             let o = &self.objects[oi];
             let objects::ObjState::Chest { opened: None } = o.state else { continue };
@@ -950,8 +951,14 @@ impl Run {
         }
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];
-            if m.alive && m.hiding && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
+            if !(m.alive && m.hiding && m.etype == Some(EnemyType::Mimic)) {
+                continue;
+            }
+            let pos = m.pos;
+            if let Some(hero) = toucher(pos) {
                 self.wake_mimic(mi);
+                // It turns to whoever touched it (after the wake: `notice` skips a hiding creature).
+                facing::notice(self, mi, (hero - pos).angle());
             }
         }
     }
@@ -1354,15 +1361,16 @@ impl Run {
             self.monsters[mi].last_hit_by = Some(pi);
             self.players[pi].damage += applied;
         }
-        // Getting hit makes a creature look back along the attack (never at the attacker's position).
-        if let Some(d) = dmg.dir.filter(|_| !dmg.from_effect && self.monsters[mi].hp > 0.0) {
-            facing::notice(self, mi, crate::math::angle_diff(d.angle() + std::f64::consts::PI, 0.0));
-        }
         if src_player.is_some() {
             if self.monsters[mi].hiding {
                 self.wake_mimic(mi);
             }
             self.monsters[mi].dormant = false;
+        }
+        // Getting hit makes a creature look back along the attack (never at the attacker's position).
+        // After the wake: `notice` skips a hiding Mimic.
+        if let Some(d) = dmg.dir.filter(|_| !dmg.from_effect && self.monsters[mi].hp > 0.0) {
+            facing::notice(self, mi, crate::math::angle_diff(d.angle() + std::f64::consts::PI, 0.0));
         }
         if self.monsters[mi].hp <= 0.0 {
             // Back to its old self first: the kill counts, and pays, as the enemy's.
