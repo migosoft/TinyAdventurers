@@ -225,6 +225,9 @@ try {
   await p3.waitForSelector('#runname');
   await p1.waitForFunction(() => /another window/.test(document.body.textContent ?? ''), null, { timeout: 10000 });
   console.log('second login closed the first window');
+  // The closed window still draws its frozen run; in software rendering the woodland's frames
+  // starve Bob's page in the same browser, so his clicks below took over 5 s (#425).
+  await p1.close();
 
   // Bob leaves the run and deletes his account by typing the password (it contains
   // w, a, s, d, e: game keys must not be swallowed outside the game).
