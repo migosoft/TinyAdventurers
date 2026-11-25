@@ -4,7 +4,7 @@
 use super::Tile;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
-use std::collections::HashSet;
+
 
 pub struct Blob {
     pub cx: f64,
@@ -42,32 +42,39 @@ fn wobble(seed: u32, x: f64, y: f64) -> f64 {
 
 /// Signed distance-like value: > 0 inside the union of the blobs, about "tiles inside", with a wobbled edge.
 pub fn inside(blobs: &[Blob], wobble_seed: u32, x: f64, y: f64) -> f64 {
-    let d = blobs
+    plain(blobs, x, y) + wobble(wobble_seed, x, y)
+}
+
+/// `inside` without the wobble.
+fn plain(blobs: &[Blob], x: f64, y: f64) -> f64 {
+    blobs
         .iter()
         .map(|b| {
             let (dx, dy) = ((x - b.cx) / b.rx, (y - b.cy) / b.ry);
             (1.0 - (dx * dx + dy * dy).sqrt()) * b.rx.min(b.ry)
         })
-        .fold(f64::NEG_INFINITY, f64::max);
-    d + wobble(wobble_seed, x, y)
+        .fold(f64::NEG_INFINITY, f64::max)
 }
 
-/// Every tile whose centre is inside. `DeepWater` where `inside >= DEEP_IN` and all 8 neighbours are water, else `ShallowWater`.
+/// Every tile whose centre is inside (the wobbled value is > 0). `DeepWater` where the UNWOBBLED value is >= `DEEP_IN`
+/// and all 8 neighbours are water, else `ShallowWater`: the wobble shapes the shore only, so a blob whose smaller
+/// radius is below `DEEP_IN` is always all shallow. One piece is only tested for blobs of radius 3 and more.
 pub fn blob_tiles(blobs: &[Blob], wobble_seed: u32) -> Vec<(i32, i32, Tile)> {
     let val = |x: i32, y: i32| inside(blobs, wobble_seed, x as f64 + 0.5, y as f64 + 0.5);
-    let min_x = blobs.iter().map(|b| (b.cx - b.rx).floor() as i32 - 2).min().unwrap_or(0);
-    let max_x = blobs.iter().map(|b| (b.cx + b.rx).ceil() as i32 + 2).max().unwrap_or(0);
-    let min_y = blobs.iter().map(|b| (b.cy - b.ry).floor() as i32 - 2).min().unwrap_or(0);
-    let max_y = blobs.iter().map(|b| (b.cy + b.ry).ceil() as i32 + 2).max().unwrap_or(0);
+    let margin = |b: &Blob| (WOBBLE_AMP * b.rx.max(b.ry) / b.rx.min(b.ry)).ceil() as i32 + 1;
+    let min_x = blobs.iter().map(|b| (b.cx - b.rx).floor() as i32 - margin(b)).min().unwrap_or(0);
+    let max_x = blobs.iter().map(|b| (b.cx + b.rx).ceil() as i32 + margin(b)).max().unwrap_or(0);
+    let min_y = blobs.iter().map(|b| (b.cy - b.ry).floor() as i32 - margin(b)).min().unwrap_or(0);
+    let max_y = blobs.iter().map(|b| (b.cy + b.ry).ceil() as i32 + margin(b)).max().unwrap_or(0);
     let mut out = Vec::new();
     for y in min_y..=max_y {
         for x in min_x..=max_x {
-            let v = val(x, y);
-            if v <= 0.0 {
+            if val(x, y) <= 0.0 {
                 continue;
             }
             let ringed = (-1..=1).all(|dy| (-1..=1).all(|dx| val(x + dx, y + dy) > 0.0));
-            let tile = if v >= DEEP_IN && ringed { Tile::DeepWater } else { Tile::ShallowWater };
+            let deep = plain(blobs, x as f64 + 0.5, y as f64 + 0.5) >= DEEP_IN && ringed;
+            let tile = if deep { Tile::DeepWater } else { Tile::ShallowWater };
             out.push((x, y, tile));
         }
     }
@@ -91,13 +98,12 @@ pub fn winding_path(rng: &mut ChaCha8Rng, from: (f64, f64), to: (f64, f64)) -> V
 }
 
 /// The 4-connected line of tiles under a polyline, in order, without repeats.
+/// A tile the line comes back to cuts the loop out, so the line stays 4-connected and repeat-free.
 pub fn path_tiles(path: &[(f64, f64)]) -> Vec<(i32, i32)> {
     let mut out: Vec<(i32, i32)> = Vec::new();
-    let mut seen = HashSet::new();
-    let mut push = |t: (i32, i32), out: &mut Vec<(i32, i32)>| {
-        if seen.insert(t) {
-            out.push(t);
-        }
+    let push = |t: (i32, i32), out: &mut Vec<(i32, i32)>| match out.iter().position(|&o| o == t) {
+        Some(i) => out.truncate(i + 1),
+        None => out.push(t),
     };
     for (i, w) in path.windows(2).enumerate() {
         let steps = (((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)) / 0.25).ceil().max(1.0) as usize;
@@ -117,6 +123,7 @@ pub fn path_tiles(path: &[(f64, f64)]) -> Vec<(i32, i32)> {
             out.push((p.0.floor() as i32, p.1.floor() as i32));
         }
     }
+    debug_assert!(out.windows(2).all(|w| (w[0].0 - w[1].0).abs() + (w[0].1 - w[1].1).abs() == 1));
     out
 }
 
@@ -124,6 +131,7 @@ pub fn path_tiles(path: &[(f64, f64)]) -> Vec<(i32, i32)> {
 mod tests {
     use super::*;
     use rand::SeedableRng;
+    use std::collections::HashSet;
 
     fn blob(cx: f64, cy: f64, rx: f64, ry: f64) -> Blob {
         Blob { cx, cy, rx, ry }
@@ -180,22 +188,29 @@ mod tests {
 
     #[test]
     fn a_small_blob_is_all_shallow() {
-        let tiles = blob_tiles(&[blob(10.0, 10.0, 1.5, 1.5)], 5);
-        assert!(!tiles.is_empty());
-        assert!(tiles.iter().all(|t| t.2 == Tile::ShallowWater));
+        for seed in 0..100 {
+            for c in [10.0, 10.5] {
+                let tiles = blob_tiles(&[blob(c, c, 1.5, 1.5)], seed);
+                assert!(!tiles.is_empty());
+                assert!(tiles.iter().all(|t| t.2 == Tile::ShallowWater), "seed {seed} at {c}");
+            }
+        }
     }
 
     #[test]
     fn path_tiles_are_4_connected_and_end_at_both_ends() {
-        let mut rng = ChaCha8Rng::seed_from_u64(11);
-        let (from, to) = ((3.2, 4.7), (40.5, 22.1));
-        let tiles = path_tiles(&winding_path(&mut rng, from, to));
-        assert_eq!(tiles[0], (3, 4));
-        assert_eq!(*tiles.last().unwrap(), (40, 22));
-        for w in tiles.windows(2) {
-            assert_eq!((w[0].0 - w[1].0).abs() + (w[0].1 - w[1].1).abs(), 1, "{w:?}");
+        for seed in 0..20 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            for (from, to, first, last) in [((3.2, 4.7), (40.5, 22.1), (3, 4), (40, 22)), ((10.4, 3.1), (12.7, 45.9), (10, 3), (12, 45))] {
+                let tiles = path_tiles(&winding_path(&mut rng, from, to));
+                assert_eq!(tiles[0], first);
+                assert_eq!(*tiles.last().unwrap(), last);
+                for w in tiles.windows(2) {
+                    assert_eq!((w[0].0 - w[1].0).abs() + (w[0].1 - w[1].1).abs(), 1, "{w:?}");
+                }
+                assert_eq!(tiles.len(), tiles.iter().collect::<HashSet<_>>().len());
+            }
         }
-        assert_eq!(tiles.len(), tiles.iter().collect::<HashSet<_>>().len());
     }
 
     #[test]
