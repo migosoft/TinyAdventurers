@@ -31,12 +31,12 @@ const ROAD_SPARSE_ONE_IN: u32 = 200;
 /// Groves: the least distance between two centres and a grove's radius, in tiles. Outside the groves a tree
 /// grows only on a `ROAD_SPARSE_ONE_IN` tile, as in the road's clearing.
 // balancing
-const GROVE_GAP: f64 = 12.0;
+const GROVE_GAP: f64 = 15.0;
 const GROVE_R: std::ops::RangeInclusive<f64> = 3.0..=5.5;
-/// Ground bushes: one per this many walkable tiles; away from the groves only one candidate in `BUSH_AWAY_ONE_IN`.
+/// Ground bushes: one per this many walkable tiles, scattered over the whole ground in clumps of `BUSH_CLUMP`.
 // balancing
-const BUSH_TILES: usize = 45;
-const BUSH_AWAY_ONE_IN: u32 = 4;
+const BUSH_TILES: usize = 60;
+const BUSH_CLUMP: std::ops::RangeInclusive<i32> = 1..=3;
 /// The western invisible wall's column; the playable part is the columns strictly between the two walls.
 const WALL_W: i32 = WOODLAND_RUNOUT + 2;
 /// The eastern invisible wall's column.
@@ -442,34 +442,38 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         }
     }
 
-    // 6. Bushes on the walkable ground, most of them in and around the groves.
+    // 6. Bushes on the walkable ground: small clumps scattered everywhere, so the open ground reads as meadow.
     let walkable = map.tiles.iter().filter(|&&t| t == Tile::Floor as u8).count();
     let want = walkable / BUSH_TILES;
     let mut floor: Vec<(i32, i32)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8).collect();
     floor.shuffle(&mut rng);
     let mut bushes: Vec<Plant> = vec![];
-    for &(x, y) in &floor {
+    for &(sx, sy) in &floor {
         if bushes.len() >= want {
             break;
         }
-        if !in_grove(x, y, 2.5) && !rng.gen_ratio(1, BUSH_AWAY_ONE_IN) {
-            continue;
+        // a small clump: the tile's own bush and up to two more within two tiles
+        for k in 0..rng.gen_range(BUSH_CLUMP) {
+            let (x, y) = if k == 0 { (sx, sy) } else { (sx + rng.gen_range(-2..=2), sy + rng.gen_range(-2..=2)) };
+            if map.get(x, y) != Tile::Floor as u8 {
+                continue;
+            }
+            let foot = jitter(&mut rng, x, y);
+            if (foot.y - line(x)).abs() < TILE || !placed.free(foot, 1.5) {
+                continue;
+            }
+            placed.add(foot, 1.5);
+            let scale_pct = rng.gen_range(75..=150); // balancing: 24..48 px wide
+            bushes.push(Plant {
+                kind: PlantKind::Bush,
+                foot,
+                seed: fresh_seed(&mut rng, &mut used),
+                scale_pct,
+                mirrored: rng.gen_bool(0.5),
+                leaf_pct: WOODLAND_FOLIAGE.leaf_pct,
+                dead: false,
+            });
         }
-        let foot = jitter(&mut rng, x, y);
-        if (foot.y - line(x)).abs() < TILE || !placed.free(foot, 1.5) {
-            continue;
-        }
-        placed.add(foot, 1.5);
-        let scale_pct = rng.gen_range(75..=150); // balancing: 24..48 px wide
-        bushes.push(Plant {
-            kind: PlantKind::Bush,
-            foot,
-            seed: fresh_seed(&mut rng, &mut used),
-            scale_pct,
-            mirrored: rng.gen_bool(0.5),
-            leaf_pct: WOODLAND_FOLIAGE.leaf_pct,
-            dead: false,
-        });
     }
 
     // 7. Trunks; a tree whose trunk cuts off walkable ground is dropped.
@@ -745,7 +749,7 @@ mod tests {
     #[test]
     fn counts_are_in_range() {
         each(|seed, l, w| {
-            // measured over these seeds in #427: 646 to 732 plants, 168 to 244 roadside trees (21 to 57 of them within `ROAD_SPARSE` of the road)
+            // measured over these seeds in #427: 565 to 653 plants, 133 to 202 roadside trees, 132 to 151 ground bushes
             assert!((500..=850).contains(&w.plants.len()), "seed {seed}: {} plants", w.plants.len());
             let trees = w.plants.iter().filter(|p| p.kind != PlantKind::Bush && !on_thicket(l, p)).count();
             assert!(trees >= 100, "seed {seed}: {trees} roadside trees");
@@ -881,8 +885,8 @@ mod tests {
     fn the_map_is_unchanged_by_the_sun() {
         let got: Vec<u64> = [1u64, 2, 3, 7, 42].iter().map(|s| map_fingerprint(*s)).collect();
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
-        // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves.
-        assert_eq!(got, vec![3091935303313141644, 940604919871620320, 13046611472662001805, 7428338492584742229, 6780765458523491946]);
+        // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
+        assert_eq!(got, vec![10293044552774504163, 2449216727139127116, 3178422832859391124, 7367593523915622726, 1831013090409208476]);
     }
 
     #[test]
