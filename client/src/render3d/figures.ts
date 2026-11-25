@@ -22,7 +22,7 @@ import { AMBIENT, darkAlpha } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
 import { drownY, LAVA_SINK, sinkCell, standY, stepLavaSink } from './dips/descent';
-import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, surfaceAt, walkBedAt } from './dips/shape';
+import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, pondFieldOf, surfaceAt, walkBedAt } from './dips/shape';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue, StuckShot } from './fx/types';
 import type { MV3 } from './fx/shapes';
@@ -799,7 +799,7 @@ export class Figures3d {
     mo.pz = z;
     const inLava = !o.skims && this.map.get(Math.floor(x), Math.floor(z)) === TILE_ID.Lava;
     mo.lava = stepLavaSink(mo.lava, inLava ? LAVA_SINK : 0, dt);
-    mo.y = o.skims ? 0 : standY(this.bedAt(x, z), inLava || mo.lava > 0.001 ? mo.lava : null);
+    mo.y = o.skims ? (pondFieldOf(this.map)?.deckAt(x, z) ?? 0) : standY(this.bedAt(x, z), inLava || mo.lava > 0.001 ? mo.lava : null);
     return { x, z, y: mo.y, d: undefined, started, gone: false };
   }
 
@@ -808,6 +808,8 @@ export class Figures3d {
    * on it (not hover over a chasm, nor stand on the walk ground above a rendered wall, nor float in lava) and not be under a liquid.
    */
   private ovalOk(x: number, z: number, y: number): boolean {
+    const deck = pondFieldOf(this.map)?.deckAt(x, z); // a figure on a bridge stands on the planks, the bed runs on under them
+    if (deck != null) return Math.abs(y - deck) <= 0.05;
     return y - this.bedFn(x, z) <= 0.05 && y >= surfaceAt(this.map, x, z);
   }
 

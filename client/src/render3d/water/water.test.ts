@@ -288,16 +288,33 @@ describe('Water3d on a woodland pond (#360)', () => {
       }
     }
     expect(spot).not.toBeNull();
-    const after = (figs: DrawnFig[]): number[] => {
+    const after = (figs: DrawnFig[], hidden = NONE): number[] => {
       const v = new Water3d(view, rng);
-      let out = v.step(inp(0, 0, figs));
-      for (let k = 1; k <= 30; k++) out = v.step(inp(k / 60, 1 / 60, figs));
+      let out = v.step(inp(0, 0, figs, { hidden }));
+      for (let k = 1; k <= 30; k++) out = v.step(inp(k / 60, 1 / 60, figs, { hidden }));
       return Array.from(out.fish!);
     };
     const calm = after([]);
     expect(calm).not.toEqual(first);
     expect(after([fig(1, spot!.x, spot!.z, { foot: 0.3 })])).toEqual(calm);
     expect(after([fig(1, spot!.x, spot!.z)])).not.toEqual(calm);
+    // fish, like the ripples, ignore a wader the viewer cannot see
+    expect(after([fig(1, spot!.x, spot!.z)], new Set([1]))).toEqual(calm);
+  });
+
+  it('a deck is dry: a dash along a bridge throws no spray, but one beside it does', () => {
+    const { view } = pondMap(3);
+    const [bx, bz, bw, bh] = (demo[3].woodland!.pond as unknown as PondInfo).bridges[0].rect;
+    const dash = (x: number, z: number) => {
+      const w = new Water3d(view, rng);
+      let sprays = 0, live = 0;
+      for (let i = 0; i < 60; i++) { const r = w.step(inp(i / 60, 1 / 60, [fig(1, x, z, { dashing: true })])); sprays += r.cues.spray.length; live = r.live; }
+      return { sprays, live };
+    };
+    const on = dash(bx + bw / 2, bz + bh / 2);
+    expect(on.sprays).toBe(0);
+    expect(on.live).toBe(0);
+    expect(dash(bx - 1.5, bz + bh / 2).sprays).toBeGreaterThan(20);
   });
 
   it('a map without a pond has no fish and no mouth rings', () => {

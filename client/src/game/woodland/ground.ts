@@ -16,7 +16,11 @@ export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_I
 /** BANK (#360): the drawn water's bed, and the wet earth it creeps onto the land with. No tile has it: it comes from the `Shore`. */
 export const NONE = 0, GRASS = 1, THICKET = 2, ROAD = 3, BANK = 4;
 /** What the painter reads of a pond's drawn shore (the view's `PondField`), at tile points: tiles inside the drawn water (0 on land), tiles from it on land (0 in it), and how much of the pond's body is around (0..1; 0 along a stream). */
-export interface Shore { shoreAt(x: number, z: number): number; bankAt(x: number, z: number): number; bodyAt(x: number, z: number): number }
+export interface Shore {
+  shoreAt(x: number, z: number): number; bankAt(x: number, z: number): number; bodyAt(x: number, z: number): number;
+  /** The bridge decks (tile rects): the view map has water under them, but a deck that carries the road keeps the road's paint where the drawn shore is dry. */
+  decks?: readonly { x0: number; z0: number; x1: number; z1: number; road: boolean }[];
+}
 /** Inside the tile kinds only (`kinds`): WET flags a tile the drawn water or its bank can reach, KIND masks the flag off. */
 const WET = 8, KIND = 7;
 /** A tile is WET when its centre is nearer the drawn water than this (tiles): the bank's reach plus half a tile's diagonal. */
@@ -71,6 +75,7 @@ function kinds(map: TileMap, shore?: Shore): Uint8Array {
   const k = new Uint8Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) k[y * w + x] = groundOf(map, x, y);
   if (!shore) return k;
+  for (const d of shore.decks ?? []) if (d.road) for (let y = d.z0; y < d.z1; y++) for (let x = d.x0; x < d.x1; x++) if (k[y * w + x] === GRASS) k[y * w + x] = ROAD;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (k[y * w + x] !== NONE && shore.bankAt(x + 0.5, y + 0.5) < WET_TILES) k[y * w + x] |= WET;
   SHORES.set(k, shore);
   return k;

@@ -114,9 +114,9 @@ export class Water3d {
     const frame = ++this.frameNo;
     for (let k = 0; k < i.figs.length; k++) {
       const f = i.figs[k];
-      const over = isWater(this.map.get(Math.floor(f.x), Math.floor(f.z)));
+      const over = isWater(this.map.get(Math.floor(f.x), Math.floor(f.z))) && this.pond?.deckAt(f.x, f.z) == null; // a deck is dry
       const standing = over && !f.dashing && f.foot < WATER_LEVEL;
-      if (standing && this.fish) this.waders.push(f.id, f.x, f.z);
+      if (standing && this.fish && !hidden.has(f.id)) this.waders.push(f.id, f.x, f.z);
       const puddle = !over && !!i.puddles && f.foot < PUDDLE_STIR.foot && inPuddle(i.puddles, f.x, f.z);
       const quiet = hidden.has(f.id);
       let s = this.states.get(f.id);

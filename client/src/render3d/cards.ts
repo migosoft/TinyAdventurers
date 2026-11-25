@@ -11,7 +11,7 @@ export const LIE_Y = 0.02;
 /** Tiles a held weapon is pushed toward the camera so it draws over its wielder. */
 export const WEAPON_BIAS = 0.01;
 /** Height of a ground shadow: above the floor, below the lying cards. */
-const SHADOW_Y = 0.01;
+export const SHADOW_Y = 0.01;
 
 /** 6 vertices per quad. `look` has 5 floats per vertex: r, g, b, mode (0 multiply, 1 fill, 2 grey then multiply), alpha. */
 export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; /** One entity id per vertex, -1 none. */ owner: Float32Array; /** 1 per vertex of a card the server marks dark (lit by the ambient only), else 0. */ dark: Float32Array; /** 4 per vertex: the foot point (x, z), the reach (tiles, half the drawn width) and the scenery flag (0 or 1), the sight mask's reading point. */ foot: Float32Array; count: number }

@@ -27,7 +27,7 @@ export interface PondField {
   bankAt(x: number, z: number): number;
   /** The drawn water's smooth mask, 0..1: 0.5 on the drawn shore (as `OUTLINE_EDGE` of the tile masks), more inside. */
   wetAt(x: number, z: number): number;
-  /** How much of the pond's body is around, 0..1: the blurred body mask (0.5 on a straight shore of the pond, 0 along a stream away from it). */
+  /** How much of the pond's body is around, 0..1: the shape's `inside` as a linear ramp (0.5 on a straight shore of the pond, 0 along a stream away from it). */
   bodyAt(x: number, z: number): number;
   /** Bed depth below the ground, >= 0: SHALLOW_BED at 0.5 tiles from the drawn shore, falling evenly to DEEP_BED at 2.5 tiles. */
   depthAt(x: number, z: number): number;

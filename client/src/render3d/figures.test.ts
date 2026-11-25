@@ -29,6 +29,10 @@ import { LAVA_SINK } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, SHADE_FADE, SPECTRE_FORM, SPECTRE_SINK, untinted, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
+import demo from '../generated/pond-demo.json';
+import type { PondInfo } from '../generated/PondInfo';
+import { DECK_Y, pondField, pondViewMap, setPondField } from './pond/pondField';
+import { SHADOW_Y } from './cards';
 
 const FIG = { w: 16, h: 28 };
 const frames: FrameRects = {};
@@ -2140,5 +2144,33 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     const under = bedAt(dm, 1.5, 1.5 - 2 / TILE);   // the token lies 2 px up the screen from the death spot (yaw 0)
     expect(under).toBeLessThan(-0.3);
     for (const y of ys(skull.decals)) expect(y).toBeCloseTo(LIE_Y + under, 5);
+  });
+});
+
+describe('Figures3d on a bridge (#360)', () => {
+  const lv = demo[3];
+  const pond = lv.woodland!.pond as unknown as PondInfo;
+  const view = pondViewMap(new TileMap(lv.w, lv.h, Uint8Array.from(lv.tiles)), pond);
+  setPondField(view, pondField(new TileMap(lv.w, lv.h, Uint8Array.from(lv.tiles)), pond));
+  const [bx, bz, bw, bh] = pond.bridges[0].rect;
+  const onDeck = (dashing: boolean) => {
+    const fg = new Figures3d({ ...init(), map: view }, frames, bounds);
+    const k = ent(10, KIND.Knight, { x: (bx + bw / 2) * TILE, y: (bz + bh / 2) * TILE, anim: dashing ? ANIM.Dash : ANIM.Idle });
+    return { fg, out: fg.frame(frame([k]), cam()) };
+  };
+
+  it('a figure on a deck keeps its ground shadow, on the planks', () => {
+    const { out } = onDeck(false);
+    expect(out.shadows.n).toBe(1);
+    expect(ys(out.shadows as unknown as CardBuf)[0]).toBeCloseTo(SHADOW_Y + DECK_Y, 6);
+    // beside the bridge, in the water, it has none
+    const fg = new Figures3d({ ...init(), map: view }, frames, bounds);
+    const wet = fg.frame(frame([ent(10, KIND.Knight, { x: (bx - 1.5) * TILE, y: (bz + bh / 2) * TILE })]), cam());
+    expect(wet.shadows.n).toBe(0);
+  });
+
+  it('a dashing figure skims at the deck, not in it', () => {
+    const { fg } = onDeck(true);
+    expect(fg.anchors.get(10)!.y).toBeCloseTo(DECK_Y, 6);
   });
 });

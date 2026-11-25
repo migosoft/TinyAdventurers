@@ -152,7 +152,7 @@ pub struct Pond {
     pub bridges: Vec<Bridge>,
     pub seed: u32,
     pub blobs: Vec<Blob>,
-    /// Read by the tests only today; a client water layer that sizes its mesh from the pond's extent should read it.
+    /// The bounding rect of the pond and its streams; read by the tests.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub bounds: Rect,
 }

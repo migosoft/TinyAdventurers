@@ -196,3 +196,26 @@ describe('the bank (#360)', () => {
     expect(Buffer.from(p.data).equals(Buffer.from(paintGround(m, 9, SHORE).data))).toBe(true);
   });
 });
+
+describe('a road deck over a brook (#360)', () => {
+  it('keeps the road paint where the drawn shore is dry and paints bed where it is wet', () => {
+    // a road down x = 18, a brook across z = 6.5, and a deck over rows 5 to 7 (the view map has water under it)
+    const m = pondMap();
+    for (let y = 0; y < H; y++) m.set(18, y, TILE_ID.Road);
+    for (let y = 5; y < 8; y++) m.set(18, y, TILE_ID.ShallowWater);
+    const shore: Shore = { ...SHORE, decks: [{ x0: 18, z0: 5, x1: 19, z1: 8, road: true }] };
+    const rows = kindRows(m, 4, shore), w = m.w * TILE, px = (tx: number, ty: number, lx: number, ly: number): number => {
+      const out = new Uint8Array(w * TILE);
+      rows(ty, out);
+      return out[ly * w + tx * TILE + lx];
+    };
+    expect(px(18, 5, 8, 2)).toBe(ROAD); // the deck, a tile from the brook
+    expect(px(18, 7, 8, 13)).toBe(ROAD);
+    expect(px(18, 6, 8, 8)).toBe(BANK); // the brook under it
+    // a deck that does not carry the road stays as it was
+    const wood: Shore = { ...SHORE, decks: [{ x0: 18, z0: 5, x1: 19, z1: 8, road: false }] };
+    const out = new Uint8Array(w * TILE);
+    kindRows(m, 4, wood)(5, out);
+    expect(out[2 * w + 18 * TILE + 8]).toBe(GRASS);
+  });
+});
