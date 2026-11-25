@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::defs::attributes::{Attr, Attributes};
+use crate::dungeon::TILE;
 use crate::defs::items::{EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Loadout, Pick};
 use crate::defs::trees::NodeId;
@@ -225,6 +226,34 @@ pub struct WoodlandInfo {
     pub sun: SunInfo,
     /// The leaf palette's id (`LeafPalette`).
     pub palette: u8,
+    /// The pond with its streams and bridges, if the seed has one (#360).
+    pub pond: Option<PondInfo>,
+}
+
+/// A stream in flow order: points in px; `inflow` runs into the pond, else out of it.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct StreamInfo {
+    pub inflow: bool,
+    pub points: Vec<[i32; 2]>,
+}
+
+/// A bridge deck as `[x, y, w, h]` in tiles; `along_x` is its travel axis, `road` a road bridge.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct BridgeInfo {
+    pub rect: [i32; 4],
+    pub along_x: bool,
+    pub road: bool,
+}
+
+/// The woodland's water: the seed of the pond's shore, its streams and bridges.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct PondInfo {
+    pub seed: u32,
+    pub streams: Vec<StreamInfo>,
+    pub bridges: Vec<BridgeInfo>,
 }
 
 /// The woodland's sun: `side` -1 (west) or 1 (east), `elevation` in degrees above the horizon.
@@ -253,6 +282,18 @@ impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
                 .collect(),
             sun: SunInfo::from(w.sun),
             palette: w.palette as u8,
+            pond: w.pond.as_ref().map(|p| PondInfo {
+                seed: p.seed,
+                streams: p
+                    .streams
+                    .iter()
+                    .map(|s| StreamInfo {
+                        inflow: s.inflow,
+                        points: s.points.iter().map(|&(x, y)| [(x * TILE).round() as i32, (y * TILE).round() as i32]).collect(),
+                    })
+                    .collect(),
+                bridges: p.bridges.iter().map(|b| BridgeInfo { rect: [b.rect.x, b.rect.y, b.rect.w, b.rect.h], along_x: b.along_x, road: b.road }).collect(),
+            }),
         }
     }
 }
@@ -539,6 +580,25 @@ mod tests {
     use crate::defs::abilities::AbilityId;
     use crate::defs::items::EquipSlot;
     use crate::defs::loadout::Source;
+
+    #[test]
+    fn the_pond_travels() {
+        let (_, w) = (1..200u64)
+            .map(crate::dungeon::woodland::generate)
+            .find(|(_, w)| w.pond.as_ref().is_some_and(|p| p.bridges.iter().any(|b| b.road)))
+            .expect("a seed with a road bridge");
+        let src = w.pond.as_ref().unwrap();
+        let info = WoodlandInfo::from(&w).pond.expect("the pond is sent");
+        assert_eq!(info.seed, src.seed);
+        assert_eq!(info.streams.len(), src.streams.len());
+        assert_eq!(info.bridges.len(), src.bridges.len());
+        let (s, i) = (&src.streams[0], &info.streams[0]);
+        assert_eq!(i.inflow, s.inflow);
+        assert_eq!(i.points.len(), s.points.len());
+        assert_eq!(i.points[0], [(s.points[0].0 * 16.0).round() as i32, (s.points[0].1 * 16.0).round() as i32]);
+        let (b, j) = (&src.bridges[0], &info.bridges[0]);
+        assert_eq!(j.rect, [b.rect.x, b.rect.y, b.rect.w, b.rect.h]);
+    }
 
     #[test]
     fn client_msg_roundtrip() {

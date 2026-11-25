@@ -131,7 +131,6 @@ pub struct Plant {
 
 /// A stream (tiles, in flow order): `inflow` runs from the band's edge into the pond, else out of it.
 #[derive(Clone, Debug)]
-#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
 pub struct Stream {
     pub points: Vec<(f64, f64)>,
     pub inflow: bool,
@@ -139,7 +138,6 @@ pub struct Stream {
 
 /// A bridge deck's tiles; `along_x` is its travel axis; `road` is a bridge of the road over a stream.
 #[derive(Clone, Debug)]
-#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
 pub struct Bridge {
     pub rect: Rect,
     pub along_x: bool,
@@ -148,11 +146,11 @@ pub struct Bridge {
 
 /// The woodland's water (#360): `bounds` encloses the pond and its streams; `seed` shapes the pond's shore.
 #[derive(Clone, Debug)]
-#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
 pub struct Pond {
     pub streams: Vec<Stream>,
     pub bridges: Vec<Bridge>,
     pub seed: u32,
+    #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub bounds: Rect,
 }
 
@@ -174,7 +172,6 @@ pub struct Woodland {
     /// The colours of the leaves.
     pub palette: LeafPalette,
     /// The pond, if the seed has one.
-    #[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
     pub pond: Option<Pond>,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only

@@ -755,3 +755,30 @@ fn export_woodland_demo() {
     std::fs::create_dir_all(out_dir()).unwrap();
     std::fs::write(out_dir().join("woodland-demo.json"), serde_json::to_string(&maps).unwrap()).unwrap();
 }
+
+/// Four woodlands for the pond's dev page (#360): the first seeds with no water works, an inflow under a road
+/// bridge, an inflow and an outflow, and a bridge over the pond.
+#[test]
+fn export_pond_demo() {
+    use crate::dungeon::woodland::Pond;
+    let wanted: [fn(&Pond) -> bool; 4] = [
+        |p| p.streams.is_empty() && p.bridges.is_empty(),
+        |p| p.streams.iter().any(|s| s.inflow) && p.bridges.iter().any(|b| b.road),
+        |p| p.streams.iter().any(|s| s.inflow) && p.streams.iter().any(|s| !s.inflow),
+        |p| p.bridges.iter().any(|b| !b.road),
+    ];
+    let maps: Vec<serde_json::Value> = wanted
+        .iter()
+        .map(|want| {
+            let (layout, w) = (1..=2000u64)
+                .map(crate::dungeon::woodland::generate)
+                .find(|(_, w)| w.pond.as_ref().is_some_and(want))
+                .expect("a seed for every pond case");
+            let spot = |t: enemies::EnemyType, p: crate::math::Vec2| json!([enemies::def(t).kind as u8, p.x.round() as i32, p.y.round() as i32]);
+            let spawns: Vec<serde_json::Value> = layout.spawns.iter().map(|s| spot(s.enemy, s.pos)).chain(w.animals.iter().map(|&(t, p)| spot(t, p))).collect();
+            json!({ "w": layout.map.w, "h": layout.map.h, "tiles": layout.map.tiles, "woodland": crate::protocol::WoodlandInfo::from(&w), "spawns": spawns })
+        })
+        .collect();
+    std::fs::create_dir_all(out_dir()).unwrap();
+    std::fs::write(out_dir().join("pond-demo.json"), serde_json::to_string(&maps).unwrap()).unwrap();
+}
