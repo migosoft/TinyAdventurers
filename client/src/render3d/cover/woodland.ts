@@ -26,6 +26,8 @@ export function woodlandSource(map: TileMap, seed: number, spawnRow: number, sho
   const w = map.w * TILE, h = map.h * TILE;
   const grow = new Uint8Array(w * h), allow = new Uint8Array(w * h);
   const row = new Uint8Array(w * TILE);
+  // nothing grows through a bridge's deck (#360): the decks of the view map's own pond
+  const deckAt = pondFieldOf(map)?.deckAt;
   const prep: (() => void)[] = [];
   for (const ty of bandOrder(map.h, spawnRow)) {
     prep.push(() => {
@@ -38,6 +40,7 @@ export function woodlandSource(map: TileMap, seed: number, spawnRow: number, sho
         grow[o + i] = k === GRASS || k === THICKET ? 1 : 0;
         // nothing grows on a bank (#360), and nothing reaches out over the drawn water and the wet line beside it
         allow[o + i] = k !== NONE && !(k === BANK && shore!.bankAt(((i % w) + 0.5) / TILE, (ty * TILE + Math.floor(i / w) + 0.5) / TILE) * TILE < WET_LINE) ? 1 : 0;
+        if (deckAt && deckAt(((i % w) + 0.5) / TILE, (ty * TILE + Math.floor(i / w) + 0.5) / TILE) !== null) grow[o + i] = allow[o + i] = 0;
       }
     });
   }

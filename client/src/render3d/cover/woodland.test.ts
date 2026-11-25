@@ -3,6 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { BASE, EDGE, FLOWERS, PATCH, type Rgb } from '../../game/covemath';
 import { BANK, GroundPainter, groundKindAt, kindRow, kindRows, type Shore, paintGround, THICK_0, THICK_1 } from '../../game/woodland/ground';
 import { TILE, TileMap } from '../../sim/map';
+import { setPondField, type PondField } from '../pond/pondField';
 import { woodlandSource } from './woodland';
 
 // 12 x 8: thicket in row 0, road columns 4..7 rows 2..5, a trunk, a barrier, walls and void at the right edge
@@ -120,6 +121,17 @@ describe('woodlandSource at a pond (#360)', () => {
     const plain = woodlandSource(m, SEED, 3);
     plain.prep.forEach((u) => u());
     expect(plain.grow[(5 * TILE + 8) * plain.w + 6 * TILE + 8]).toBe(1); // the pond's middle is grass
+  });
+
+  it("nothing grows through a bridge's deck", () => {
+    // a map of its own, whose field (all this source reads of it) has a deck over tiles (1..3, 1)
+    const own = new TileMap(w, h, t.slice());
+    setPondField(own, { deckAt: (x: number, z: number) => (x >= 1 && x <= 3 && z >= 1 && z <= 2 ? 0.14 : null) } as PondField);
+    const s = woodlandSource(own, SEED, 3, shore);
+    s.prep.forEach((u) => u());
+    const px = (x: number, z: number): number => Math.floor(z * TILE) * s.w + Math.floor(x * TILE);
+    expect([s.grow[px(2, 1.5)], s.allow[px(2, 1.5)]]).toEqual([0, 0]);
+    expect([s.grow[px(2, 3.5)], s.allow[px(2, 3.5)]]).toEqual([1, 1]);
   });
 
   it('the bare picture shows the bank as the ground paints it', () => {

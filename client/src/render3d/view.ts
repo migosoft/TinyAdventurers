@@ -80,6 +80,8 @@ import { buildCrystalChunk, crystalChunkOf, switchedChunks } from './stone/cryst
 import { crystalMaterial } from './stone/crystalNodes';
 import { buildTorchChunk, torchChunkOf } from './torch/torch';
 import { FLAME_ORDER, FLAME_REACH, flameMaterial, holderMaterial } from './torch/torchNodes';
+import { BRIDGE_ATTRS, bridgesOf } from './bridge/bridge';
+import { bridgeCasterMaterial, bridgeMaterial } from './bridge/bridgeNodes';
 import { makeSheets, type Sheets } from './stone/sheets';
 import type { StoneJobResult } from './stone/stoneJob';
 import { stoneField } from './stone/field';
@@ -716,6 +718,20 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // The brushers (#331): one set of uniforms for the bushes and the bushels, written every frame.
   const brush = makeBrushUniforms();
   const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush }));
+  // The pond's wooden bridges (#360): one static mesh a deck in the opaque scene (layer 0, so the water's mirror shows it), and the
+  // same geometry in the sun's pass. A map without a pond's field builds nothing, not even the materials.
+  const bridges = bridgesOf(pondFieldOf(map)).map((a) => {
+    const g = new BufferGeometry();
+    for (const [name, size] of BRIDGE_ATTRS) g.setAttribute(name, new BufferAttribute(a[name], size));
+    g.setIndex(new BufferAttribute(a.index, 1));
+    g.computeBoundingSphere();
+    return g;
+  });
+  const bridgeMats = bridges.length ? [bridgeMaterial(lighting, sight), bridgeCasterMaterial()] : [];
+  for (const g of bridges) {
+    scene.add(new Mesh(g, bridgeMats[0]));
+    if (hasSun) sunScene.add(new Mesh(g, bridgeMats[1]));
+  }
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
   // The id pass (#364): the pieces of the model figures drawn into an id target of the picture's size; the hulls read it (nodes.ts).
@@ -1352,6 +1368,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         lava.material.dispose();
         crystal.material.dispose();
         holder.dispose();
+        for (const x of [...bridges, ...bridgeMats]) x.dispose();
         flame.material.dispose();
         shimmer.material.dispose();
         sceneCopy.dispose();
