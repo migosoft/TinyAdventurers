@@ -145,11 +145,13 @@ pub struct Bridge {
 }
 
 /// The woodland's water (#360): `bounds` encloses the pond and its streams; `seed` shapes the pond's shore.
+/// `blobs` with `seed` are the pond's free shape (`water_shapes::inside`): the client draws its shore from them.
 #[derive(Clone, Debug)]
 pub struct Pond {
     pub streams: Vec<Stream>,
     pub bridges: Vec<Bridge>,
     pub seed: u32,
+    pub blobs: Vec<Blob>,
     /// Read by the tests only today; a client water layer that sizes its mesh from the pond's extent should read it.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub bounds: Rect,
@@ -545,7 +547,7 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
             let mut bridges: Vec<Bridge> = streams.iter().filter_map(|s| s.road_bridge.clone()).collect();
             bridges.extend(pond_bridge.map(|b| b.0.clone()));
             let streams = streams.iter().map(|s| Stream { points: s.points.clone(), inflow: s.inflow }).collect();
-            return Some((m, Pond { streams, bridges, seed: pond_seed, bounds: Rect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }));
+            return Some((m, Pond { streams, bridges, seed: pond_seed, blobs: blobs.clone(), bounds: Rect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }));
         }
         // every variant failed the check: a failed try, the next one places another pond
     }

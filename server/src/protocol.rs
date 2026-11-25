@@ -247,11 +247,13 @@ pub struct BridgeInfo {
     pub road: bool,
 }
 
-/// The woodland's water: the seed of the pond's shore, its streams and bridges.
+/// The woodland's water: the pond's shape (`blobs`: ellipses as `[cx, cy, rx, ry]` in tiles, their edge wobbled by
+/// `seed`: `water_shapes::inside`, which the client ports to draw the shore), its streams and bridges.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct PondInfo {
     pub seed: u32,
+    pub blobs: Vec<[f64; 4]>,
     pub streams: Vec<StreamInfo>,
     pub bridges: Vec<BridgeInfo>,
 }
@@ -284,6 +286,7 @@ impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
             palette: w.palette as u8,
             pond: w.pond.as_ref().map(|p| PondInfo {
                 seed: p.seed,
+                blobs: p.blobs.iter().map(|b| [b.cx, b.cy, b.rx, b.ry]).collect(),
                 streams: p
                     .streams
                     .iter()
@@ -590,6 +593,8 @@ mod tests {
         let src = w.pond.as_ref().unwrap();
         let info = WoodlandInfo::from(&w).pond.expect("the pond is sent");
         assert_eq!(info.seed, src.seed);
+        assert!((2..=4).contains(&info.blobs.len()));
+        assert_eq!(info.blobs, src.blobs.iter().map(|b| [b.cx, b.cy, b.rx, b.ry]).collect::<Vec<_>>());
         assert_eq!(info.streams.len(), src.streams.len());
         assert_eq!(info.bridges.len(), src.bridges.len());
         let (s, i) = (&src.streams[0], &info.streams[0]);

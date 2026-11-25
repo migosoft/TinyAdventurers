@@ -3,6 +3,7 @@ import type { BridgeInfo } from "./BridgeInfo";
 import type { StreamInfo } from "./StreamInfo";
 
 /**
- * The woodland's water: the seed of the pond's shore, its streams and bridges.
+ * The woodland's water: the pond's shape (`blobs`: ellipses as `[cx, cy, rx, ry]` in tiles, their edge wobbled by
+ * `seed`: `water_shapes::inside`, which the client ports to draw the shore), its streams and bridges.
  */
-export type PondInfo = { seed: number, streams: Array<StreamInfo>, bridges: Array<BridgeInfo>, };
+export type PondInfo = { seed: number, blobs: Array<[number, number, number, number]>, streams: Array<StreamInfo>, bridges: Array<BridgeInfo>, };

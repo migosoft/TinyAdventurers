@@ -758,8 +758,8 @@ fn export_woodland_demo() {
 
 /// Four woodlands for the pond's dev page (#360): the first seeds with no water works, an inflow under a road
 /// bridge, an inflow and an outflow, and a bridge over the pond.
-#[test]
-fn export_pond_demo() {
+#[cfg(test)]
+fn pond_demo_levels() -> Vec<(crate::dungeon::Layout, crate::dungeon::woodland::Woodland)> {
     use crate::dungeon::woodland::Pond;
     let wanted: [fn(&Pond) -> bool; 4] = [
         |p| p.streams.is_empty() && p.bridges.is_empty(),
@@ -767,16 +767,41 @@ fn export_pond_demo() {
         |p| p.streams.iter().any(|s| s.inflow) && p.streams.iter().any(|s| !s.inflow),
         |p| p.bridges.iter().any(|b| !b.road),
     ];
-    let maps: Vec<serde_json::Value> = wanted
+    wanted
         .iter()
-        .map(|want| {
-            let (layout, w) = (1..=2000u64)
-                .map(crate::dungeon::woodland::generate)
-                .find(|(_, w)| w.pond.as_ref().is_some_and(want))
-                .expect("a seed for every pond case");
+        .map(|want| (1..=2000u64).map(crate::dungeon::woodland::generate).find(|(_, w)| w.pond.as_ref().is_some_and(want)).expect("a seed for every pond case"))
+        .collect()
+}
+
+/// The pond shape's parity fixture (#360): for each demo pond its blobs, its seed and `water_shapes::inside` on a
+/// 20 x 15 grid over the blobs' bounds plus 3 tiles. The client's port (`pond/pondShape.ts`) must give the same values.
+#[test]
+fn export_pond_shape_fixture() {
+    let ponds: Vec<serde_json::Value> = pond_demo_levels()
+        .iter()
+        .map(|(_, w)| {
+            let p = w.pond.as_ref().unwrap();
+            let (x0, x1) = (p.blobs.iter().map(|b| b.cx - b.rx).fold(f64::MAX, f64::min) - 3.0, p.blobs.iter().map(|b| b.cx + b.rx).fold(f64::MIN, f64::max) + 3.0);
+            let (y0, y1) = (p.blobs.iter().map(|b| b.cy - b.ry).fold(f64::MAX, f64::min) - 3.0, p.blobs.iter().map(|b| b.cy + b.ry).fold(f64::MIN, f64::max) + 3.0);
+            let samples: Vec<[f64; 3]> = (0..15)
+                .flat_map(|j| (0..20).map(move |i| (x0 + (x1 - x0) * i as f64 / 19.0, y0 + (y1 - y0) * j as f64 / 14.0)))
+                .map(|(x, y)| [x, y, crate::dungeon::water_shapes::inside(&p.blobs, p.seed, x, y)])
+                .collect();
+            json!({ "blobs": p.blobs.iter().map(|b| [b.cx, b.cy, b.rx, b.ry]).collect::<Vec<_>>(), "seed": p.seed, "samples": samples })
+        })
+        .collect();
+    std::fs::create_dir_all(out_dir()).unwrap();
+    std::fs::write(out_dir().join("pond-shape-fixture.json"), serde_json::to_string(&ponds).unwrap()).unwrap();
+}
+
+#[test]
+fn export_pond_demo() {
+    let maps: Vec<serde_json::Value> = pond_demo_levels()
+        .iter()
+        .map(|(layout, w)| {
             let spot = |t: enemies::EnemyType, p: crate::math::Vec2| json!([enemies::def(t).kind as u8, p.x.round() as i32, p.y.round() as i32]);
             let spawns: Vec<serde_json::Value> = layout.spawns.iter().map(|s| spot(s.enemy, s.pos)).chain(w.animals.iter().map(|&(t, p)| spot(t, p))).collect();
-            json!({ "w": layout.map.w, "h": layout.map.h, "tiles": layout.map.tiles, "woodland": crate::protocol::WoodlandInfo::from(&w), "spawns": spawns })
+            json!({ "w": layout.map.w, "h": layout.map.h, "tiles": layout.map.tiles, "woodland": crate::protocol::WoodlandInfo::from(w), "spawns": spawns })
         })
         .collect();
     std::fs::create_dir_all(out_dir()).unwrap();

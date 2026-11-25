@@ -4,7 +4,8 @@ use super::Tile;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 
-
+/// One ellipse of a pond's shape: centre and radii in tiles.
+#[derive(Clone, Debug)]
 pub struct Blob {
     pub cx: f64,
     pub cy: f64,
