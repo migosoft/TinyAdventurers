@@ -114,6 +114,14 @@ describe('Water3d', () => {
     expect(r.ripples[7]).toBeCloseTo(0.45);
   });
 
+  it("leaves out the life's rings outside the screen's ground, so they take no ripple slot (#360)", () => {
+    const w = new Water3d(room(), rng);
+    const r = w.step(inp(0, 1 / 60, [], { rings: [6.5, 1.5, 1, 30, 1.5, 1, 6.5, 40, 1], fp: { x0: 0, z0: 0, x1: 12, z1: 8 } }));
+    expect(r.live).toBe(1);
+    expect(r.ripples[0]).toBeCloseTo(6.5);
+    expect(r.ripples[1]).toBeCloseTo(1.5);
+  });
+
   it('stays silent for what the hero cannot see', () => {
     const w = new Water3d(room(), rng);
     const hidden = new Set([1]);

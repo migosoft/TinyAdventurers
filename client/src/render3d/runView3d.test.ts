@@ -38,6 +38,13 @@ const ROUND_POND: PondField = (() => {
 
 const deg = (d: number): number => (d * Math.PI) / 180;
 
+/** Whether the frame's water has a live ring where frog `g` lands (the packed ripples: x, z, age or -1, strength). */
+const ringAt = (f: FrameInput, g: { wx: number; wz: number }): boolean => {
+  const r = f.water!.ripples!;
+  for (let i = 0; i + 3 < r.length; i += 4) if (r[i + 2] >= 0 && r[i + 3] > 0 && Math.hypot(r[i] - g.wx, r[i + 1] - g.wz) < 1e-3) return true;
+  return false;
+};
+
 describe('moveInput', () => {
   it('W at yaw 0 walks north', () => {
     expect(moveInput(new Set(['KeyW']), 0)).toEqual({ mx: 0, my: -1 });
@@ -73,7 +80,7 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; pond?: boolean; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
+function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; dark?: number[]; pond?: boolean; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0, pond: null } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
@@ -99,7 +106,7 @@ function run(over: { water?: [number, number][]; lava?: [number, number][]; cove
   const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never, ...(over.tick !== undefined ? { tick: over.tick } : {}) });
   if (over.me) Object.assign(s.me, over.me);
   const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
-  const f = { dt: 1 / 60, now: 0, ents: new Map((over.figs ?? []).map((e) => [e.id, e])), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
+  const f = { dt: 1 / 60, now: 0, ents: new Map((over.figs ?? []).map((e) => [e.id, e])), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(over.dark ?? []), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
   const stats = v.frame(f);
   const first = got as FrameInput | null;
   /** Another frame of the same view and frame data: what it hands `draw`. */
@@ -278,7 +285,23 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     let f = near.f!;
     for (let i = 0; i < 90; i++) f = near.again()!;
     expect(near.v.pondLife!.frogs.every((g) => g.state !== 'sit')).toBe(true);
-    expect(f.water!.ripples![3]).toBeGreaterThan(0);
+    expect(ringAt(f, near.v.pondLife!.frogs[0])).toBe(true);
+  });
+  it('a figure the viewer cannot see leaves the frogs sitting and the water still; the same figure seen makes them leap (#360)', () => {
+    const far = { woodland: true, torch: false, pond: true, ownX: 160 };
+    // an enemy beside the first frog (the life is the same for the same field and seed)
+    const g0 = run(far).v.pondLife!.frogs[0];
+    const enemy: EntState = { id: 7, kind: KIND.Wizard, x: (g0.hx + 1.2) * 16, y: g0.hz * 16, hp: 0.5, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0 };
+    const hidden = run({ ...far, figs: [enemy], dark: [7] });
+    let f = hidden.f!;
+    for (let i = 0; i < 90; i++) f = hidden.again()!;
+    expect(hidden.v.pondLife!.frogs.every((g) => g.state === 'sit')).toBe(true);
+    expect(ringAt(f, hidden.v.pondLife!.frogs[0])).toBe(false);
+    const seen = run({ ...far, figs: [enemy] });
+    f = seen.f!;
+    for (let i = 0; i < 90; i++) f = seen.again()!;
+    expect(seen.v.pondLife!.frogs[0].state).not.toBe('sit');
+    expect(ringAt(f, seen.v.pondLife!.frogs[0])).toBe(true);
   });
   it('a snapshot at tick 60 * 720 is one hour later', () => {
     const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });

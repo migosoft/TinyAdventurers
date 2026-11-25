@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PondInfo } from '../../generated/PondInfo';
 import demo from '../../generated/pond-demo.json';
-import { TileMap } from '../../sim/map';
+import { PLANT_KIND } from '../../generated/defs';
+import { TILE, TileMap } from '../../sim/map';
+import { View } from '../../sim/view';
+import { SightMask, hiddenAt } from '../sightmask';
 import { newCardBuf, newShadowBuf } from '../cards';
 import { PX_FRAME } from '../critters3d';
 import { pondField, type PondField } from './pondField';
-import { FROG, LIFE, PondLife } from './pondLife';
+import { FROG, LIFE, PondLife, plantFeet, type PlantFoot } from './pondLife';
 
 const fieldOf = (i: number): PondField => {
   const rules = new TileMap(demo[i].w, demo[i].h, Uint8Array.from(demo[i].tiles));
@@ -172,6 +175,36 @@ describe("the pond's life (#360)", () => {
     run(life, 1.5, [{ x: g.hx + 0.5, z: g.hz }]);
     expect(g.state).toBe('under');
     expect(pushed(life, 0).out.cards.n).toBeLessThan(before);
+  });
+
+  it('with a plant list no bank frog sits under a bush or a tree', () => {
+    let moved = 0;
+    for (const field of FIELDS) for (const seed of SEEDS) {
+      // a bush at the first bank frog's seat and a tree at the second's
+      const bank = new PondLife(field, seed).frogs.filter((g) => !g.pad);
+      const plants: PlantFoot[] = bank.slice(0, 2).map((g, i) => ({ x: g.hx, z: g.hz, bush: i === 0 }));
+      const life = new PondLife(field, seed, plants);
+      for (const g of life.frogs) if (!g.pad) for (const p of plants) expect(Math.hypot(p.x - g.hx, p.z - g.hz)).toBeGreaterThanOrEqual(p.bush ? LIFE.frogBush : LIFE.frogTree);
+      if (plants.length > 0 && life.frogs.some((g) => !g.pad)) moved++;
+    }
+    expect(moved).toBeGreaterThan(50);
+    // the server's plants: kind, x and y in px
+    expect(plantFeet([[PLANT_KIND.Bush, 32, 48, 0, 100, false, 100, false], [PLANT_KIND.Conifer, 8, 16, 0, 100, false, 100, false]])).toEqual([{ x: 2, z: 3, bush: true }, { x: 0.5, z: 1, bush: false }]);
+  });
+
+  it('a frog the viewer cannot see makes no ring', () => {
+    const rules = new TileMap(demo[0].w, demo[0].h, Uint8Array.from(demo[0].tiles));
+    const life = new PondLife(FIELDS[0], 5), g = life.frogs[0];
+    // the viewer stands in a far corner and sees 2 tiles around
+    const view = new View(rules.w, rules.h);
+    view.compute(rules, 1.5 * TILE, 1.5 * TILE, 2, 'hard');
+    const mask = new SightMask(rules, { daylight: false, feather: 0, ramp: 0 });
+    mask.update(view, null, 0);
+    expect(hiddenAt(mask, g.wx, g.wz)).toBe(true);
+    const rings: number[] = [];
+    for (let t = 0; t < 2; t += 1 / 30) rings.push(...life.step(1 / 30, [{ x: g.hx + 0.5, z: g.hz }], mask));
+    expect(g.state).toBe('under'); // it leapt all the same
+    expect(rings).toEqual([]);
   });
 
   it('the same seed and steps give the same life', () => {

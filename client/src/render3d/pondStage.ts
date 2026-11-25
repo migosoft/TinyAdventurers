@@ -23,7 +23,7 @@ import { footprint } from './lights';
 import { DEFAULT_HOUR, reflects, type R3dParams } from './params';
 import { walkBedAt } from './dips/shape';
 import { pondField, pondViewMap, setPondField, type PondField } from './pond/pondField';
-import { PondLife } from './pond/pondLife';
+import { PondLife, plantFeet } from './pond/pondLife';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
@@ -82,7 +82,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   const map = pondViewMap(rules, pond);
   const field = pondField(rules, pond);
   setPondField(map, field);
-  const life = new PondLife(field, field.seed);
+  const life = new PondLife(field, field.seed, plantFeet(wl.plants));
   const scene: PondScene = { field, life, step: (dt, figs) => life.step(dt, figs), push: (...a) => life.push(...a) };
   // `scare=from,to`: the seconds between which the knight counts for the frogs.
   const sc = (q.get('scare') ?? '').split(',').map(Number);

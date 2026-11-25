@@ -3,6 +3,8 @@
 // for the look: the server does not know it, nothing blocks or slows, and every client has its own. Everything is a few solid pixel
 // rects drawn as cards, like the woodland's bees and butterflies (critters3d.ts). Pure TypeScript apart from the card helpers, and the
 // same life for the same seed and the same sequence of steps. (The fish are the water's: fish.ts.)
+import { PLANT_KIND } from '../../generated/defs';
+import type { PlantInfo } from '../../generated/PlantInfo';
 import type { Cam } from '../camera';
 import { pushCard, pushFlat, pushShadow, LIE_Y, type CardBuf, type ShadowBuf } from '../cards';
 import { PX_FRAME } from '../critters3d';
@@ -91,15 +93,20 @@ export const FROG = { scare: 2.2, nerve: 0.5, panic: 0.9, leap: 0.42, arc: 0.5, 
  * The zones and the counts. A pond rolls how many of each kind it has in `pads`, `clumps`, `frogs` and `flies` (least, most), each
  * kind on its own, so ponds differ. `padShore`: pads lie this far from the drawn shore (tiles into the water). `reedShore` and
  * `reedBank`: reeds stand at most this far into the water and this far onto the bank. `frogBank`: a bank frog sits at most this far
- * outside the drawn shore and this far inside it: the bare wet earth, where the bed is still above the water. `calm`: the current's strength (`flowAt`) above which nothing lives (a brook, the water before a
- * mouth). `mouth`: nothing within this many tiles of a mouth.
+ * outside the drawn shore and this far inside it: the bare wet earth, where the bed is still above the water;
+ * `frogBush` and `frogTree`: and at least this far from a bush's and a tree's foot (their leaves and shade would hide it).
+ * `calm`: the current's strength (`flowAt`) above which nothing lives (a brook, the water before a mouth). `mouth`: nothing within
+ * this many tiles of a mouth.
  */
 export const LIFE = {
   pads: [0, 14], clumps: [2, 9], frogs: [2, 7], flies: [0, 4],
-  padShore: [0.6, 2.5], reedShore: 0.6, reedBank: 0.3, frogBank: [0.1, 0.08], calm: 0.2, mouth: 1,
+  padShore: [0.6, 2.5], reedShore: 0.6, reedBank: 0.3, frogBank: [0.1, 0.08], frogBush: 1.2, frogTree: 1.5, calm: 0.2, mouth: 1,
 } as const;
 
-/** A clump holds this many stalks (least, most); a stalk is this tall (px); the share of stalks with a brown head (only the taller carry one) and of dry ones. */
+/**
+ * A clump holds this many stalks (least, most); a stalk is this tall (px); the share of stalks with a brown head (only the taller
+ * carry one) and of dry ones.
+ */
 const STALKS = [3, 7], STALK_H = [11, 22], HEADS = 0.4, DRY = 0.15;
 /** The share of stalks with a leaf beside them: it makes a clump a bushel and not a row of lines. */
 const BLADES = 0.9;
@@ -117,6 +124,15 @@ const SHADE = { frog: 0.32, reeds: 0.22, fly: 0.2 };
 const MARGIN = 2;
 /** A flat pad lies this far over the water's surface (tiles), and what sits on it a hair higher. */
 const PAD_OVER = 0.012;
+
+/** The palettes of the grids: a pad's by its colour, a flower's by its petal colour, the frog's (and with the eye shut). */
+const PAD_PALS: Record<string, Rgb>[] = C.pad.map((P) => ({ P, S: C.padLight, K: C.padDark }));
+const FLOWER_PALS: Record<string, Rgb>[] = C.petal.map((F, i) => ({ F, H: C.petalShade[i], Y: C.heart }));
+const SKIN: Record<string, Rgb> = { G: C.frog, D: C.frogDark, L: C.belly, E: C.eye };
+const SKIN_BLINK: Record<string, Rgb> = { ...SKIN, E: C.frog };
+/** Where a pad lies at time `t` (tiles): it drifts a hair around its place. */
+const padX = (p: { x: number; phase: number }, t: number): number => p.x + Math.sin(t * 0.5 + p.phase) * DRIFT;
+const padZ = (p: { z: number; phase: number }, t: number): number => p.z + Math.cos(t * 0.4 + p.phase) * DRIFT * 0.7;
 
 /** A small seeded generator (mulberry32), 0..1. */
 function rng(seed: number): () => number {
@@ -140,6 +156,10 @@ export type FrogState = 'sit' | 'leap' | 'under' | 'peek' | 'back';
 export interface Frog { hx: number; hz: number; wx: number; wz: number; pad: Pad | null; state: FrogState; t: number; wait: number; alarm: number; nerve: number; face: number; blink: number }
 export interface Fly { hx: number; hz: number; x: number; z: number; y: number; fx: number; fz: number; fy: number; tx: number; tz: number; ty: number; t: number; dur: number; hover: number; colour: Rgb; face: number }
 
+/** A plant's foot (tiles); `bush`: a bush, else a tree. */
+export interface PlantFoot { x: number; z: number; bush: boolean }
+/** The feet of a woodland's plants as the server sends them (`PlantInfo`: kind, x and y in px, ...). */
+export const plantFeet = (plants: readonly PlantInfo[]): PlantFoot[] => plants.map((p) => ({ x: p[1] / TILE, z: p[2] / TILE, bush: p[0] === PLANT_KIND.Bush }));
 export interface LifeOut { cards: CardBuf; shadows: ShadowBuf }
 export interface LifeLook {
   /** The sky's day share: the dragonflies fly from 0.5 on. */
@@ -163,7 +183,8 @@ export class PondLife {
   /** The rings of the last step: (x, z, strength) triples. */
   private readonly rings: number[] = [];
 
-  constructor(private readonly field: PondField, seed: number) {
+  /** `plants`: the feet of the level's trees and bushes (tiles): no bank frog sits under one, where it would not be seen. */
+  constructor(private readonly field: PondField, seed: number, plants: readonly PlantFoot[] = []) {
     const r = this.r = rng(seed ^ 0x51f3a7);
     const b = field.box;
     const roll = (range: readonly number[]): number => range[0] + Math.floor(r() * (range[1] - range[0] + 1));
@@ -227,7 +248,8 @@ export class PondLife {
     }
     for (let i = this.frogs.length; i < nFrogs; i++) {
       const at = somewhere((x, z) => {
-        return field.bankAt(x, z) <= LIFE.frogBank[0] && field.shoreAt(x, z) <= LIFE.frogBank[1] && field.bodyAt(x, z) > 0.2 && this.free(x, z, 0.3) && apart(x, z, 1.2) && !this.clumps.some((c) => Math.hypot(c.x - x, c.z - z) < 1);
+        return field.bankAt(x, z) <= LIFE.frogBank[0] && field.shoreAt(x, z) <= LIFE.frogBank[1] && field.bodyAt(x, z) > 0.2 && this.free(x, z, 0.3) && apart(x, z, 1.2)
+          && !this.clumps.some((c) => Math.hypot(c.x - x, c.z - z) < 1) && !plants.some((p) => Math.hypot(p.x - x, p.z - z) < (p.bush ? LIFE.frogBush : LIFE.frogTree));
       });
       if (!at) continue;
       // Into the water: up the slope of the shore distance.
@@ -271,11 +293,13 @@ export class PondLife {
 
   /**
    * One step of everything that moves. `near`: every drawn figure (heroes, enemies, animals; tiles): any of them scares a frog.
-   * Returns the rings the frogs made in this step as (x, z, strength) triples for the water (the same array every call).
+   * Returns the rings the frogs made in this step as (x, z, strength) triples for the water (the same array every call); with
+   * `mask` (the viewer's sight) none where the viewer does not see.
    */
-  step(dt: number, near: readonly { x: number; z: number }[]): number[] {
-    const r = this.r, rings = this.rings;
-    rings.length = 0;
+  step(dt: number, near: readonly { x: number; z: number }[], mask: SightMask | null = null): number[] {
+    const r = this.r;
+    this.rings.length = 0;
+    const rings = { push: (x: number, z: number, s: number): void => { if (!mask || !hiddenAt(mask, x, z)) this.rings.push(x, z, s); } };
     const nearest = (x: number, z: number): number => {
       let d = Infinity;
       for (let i = 0; i < near.length; i++) d = Math.min(d, Math.hypot(near[i].x - x, near[i].z - z));
@@ -327,7 +351,12 @@ export class PondLife {
         }
       }
     }
-    return rings;
+    return this.rings;
+  }
+
+  /** How far (px across the screen) a stalk's point `y` px up is bent: its own lean, and the wind's sway times `wind` (0: no wind). */
+  private bend(s: Stalk, x: number, z: number, y: number, wind: number, t: number): number {
+    return Math.round((wind !== 0 ? sway(x, z, y, s.h, REED_SWAY, t) * wind : 0) + s.lean * (y / s.h) * 2);
   }
 
   /** The height (tiles, <= 0) of what one sees at a point of the shore: the ground, the sloping bed while it is dry, then the water's surface. */
@@ -337,7 +366,7 @@ export class PondLife {
 
   /** Where a pad lies at time `t`: it drifts a hair around its place. */
   padAt(p: Pad, t: number): [number, number] {
-    return [p.x + Math.sin(t * 0.5 + p.phase) * DRIFT, p.z + Math.cos(t * 0.4 + p.phase) * DRIFT * 0.7];
+    return [padX(p, t), padZ(p, t)];
   }
 
   /** Pushes the pads, reeds, frogs and dragonflies into `out.cards` and their soft shadows into `out.shadows`. Returns how many dragonflies it drew. */
@@ -355,21 +384,21 @@ export class PondLife {
 
     for (const p of this.pads) {
       if (!inView(p.x, p.z)) continue;
-      const [x, z] = this.padAt(p, t);
-      const s = PADS[p.size], pal: Record<string, Rgb> = { P: C.pad[p.colour], S: C.padLight, K: C.padDark };
+      const x = padX(p, t), z = padZ(p, t);
+      const s = PADS[p.size], pal = PAD_PALS[p.colour];
       // Flat on the water, in the opaque pass: the water's surface is drawn after it and stays under it.
       for (const q of s.runs) {
         pushFlat(out.cards, { frame: PX_FRAME, crop: { x: 0, y: 0, w: q.w, h: 1 }, x, z, lift: 0, flip: false, originX: 0, footY: 0, scale: 1, offset: [(p.flip ? s.w - q.x - q.w : q.x) - s.w / 2, q.y - s.h / 2], tint: pal[q.c], mode: 1, alpha: 1, base: WATER_LEVEL + PAD_OVER - LIE_Y, scenery: true }, frames, cam);
       }
       if (p.flower >= 0) {
-        const fp: Record<string, Rgb> = { F: C.petal[p.flower], H: C.petalShade[p.flower], Y: C.heart };
+        const fp = FLOWER_PALS[p.flower];
         const fl = p.size >= 7 ? FLOWER_BIG : FLOWER;
         for (const q of fl.runs) up(x, z, WATER_LEVEL + PAD_OVER, q.x - (fl.w >> 1) - (p.flip ? 0 : 1), q.y - fl.h, q.w, 1, fp[q.c], true);
       }
     }
 
     // The wind's sway runs along WIND_DIR on the ground: what of it shows across the screen.
-    const across = WIND_DIR[0] * Math.cos(cam.yaw) + WIND_DIR[1] * Math.sin(cam.yaw);
+    const wind = o.wind ? (WIND_DIR[0] * Math.cos(cam.yaw) + WIND_DIR[1] * Math.sin(cam.yaw)) * TILE : 0;
     for (const c of this.clumps) {
       if (!inView(c.x, c.z)) continue;
       pushShadow(out.shadows, cam, c.x, c.z, 0.34, 0.14, SHADE.reeds * oval, this.floorAt(c.x, c.z));
@@ -377,43 +406,43 @@ export class PondLife {
         const x = c.x + s.dx, z = c.z + s.dz;
         const lift = this.floorAt(x, z);
         // Three pieces, each shifted by the wind's sway at its height (whole px), so the stalk bends.
-        const bend = (y: number): number => Math.round((o.wind ? sway(x, z, y, s.h, REED_SWAY, t) * across * TILE : 0) + s.lean * (y / s.h) * 2);
-        const cuts = [0, Math.round(s.h * 0.4), Math.round(s.h * 0.72), s.h];
-        for (let i = 0; i < 3; i++) up(x, z, lift, bend(cuts[i + 1]), -cuts[i + 1], 1, cuts[i + 1] - cuts[i], s.colour, true);
+        const c1 = Math.round(s.h * 0.4), c2 = Math.round(s.h * 0.72), top = this.bend(s, x, z, s.h, wind, t);
+        up(x, z, lift, this.bend(s, x, z, c1, wind, t), -c1, 1, c1, s.colour, true);
+        up(x, z, lift, this.bend(s, x, z, c2, wind, t), -c2, 1, c2 - c1, s.colour, true);
+        up(x, z, lift, top, -s.h, 1, s.h - c2, s.colour, true);
         if (s.blade > 0) {
           // The leaf: beside the stalk's foot, its upper part a px further out.
           const side = s.lean >= 0 ? 1 : -1, low = Math.round(s.blade * 0.6);
           up(x, z, lift, side, -low, 1, low, s.colour, true);
-          up(x, z, lift, side * 2 + bend(s.blade), -s.blade, 1, s.blade - low, s.colour, true);
+          up(x, z, lift, side * 2 + this.bend(s, x, z, s.blade, wind, t), -s.blade, 1, s.blade - low, s.colour, true);
         }
         if (s.head) {
           // The cattail: a brown head two px thick below the stalk's tip, its lit side lighter.
-          const hx = bend(s.h);
+          const hx = top;
           up(x, z, lift, hx, -s.h + 2, 1, 4, C.headLight, true);
           up(x, z, lift, hx + 1, -s.h + 2, 1, 4, C.head, true);
         }
       }
     }
 
-    const skin = { G: C.frog, D: C.frogDark, L: C.belly, E: C.eye };
     for (const f of this.frogs) {
       if (f.state === 'under') continue;
-      const [hx, hz] = f.pad ? this.padAt(f.pad, t) : [f.hx, f.hz];
+      const hx = f.pad ? padX(f.pad, t) : f.hx, hz = f.pad ? padZ(f.pad, t) : f.hz;
       const home = f.pad ? WATER_LEVEL + PAD_OVER * 2 : this.floorAt(hx, hz) + (o.ground ? o.ground(hx, hz, 0) : 0);
       if (f.state === 'peek') {
         if (!inView(f.wx, f.wz) || !seen(f.wx, f.wz)) continue;
-        stand(FROG_PEEK, f.blink > 0 ? skin : { ...skin, E: C.frog }, f.wx, f.wz, WATER_LEVEL, 1, 1);
+        stand(FROG_PEEK, f.blink > 0 ? SKIN : SKIN_BLINK, f.wx, f.wz, WATER_LEVEL, 1, 1);
         continue;
       }
       const leaping = f.state !== 'sit';
-      const k = leaping ? Math.min(1, f.t / FROG.leap) : 0;
-      const [ax, az, al, bx, bz, bl] = f.state === 'back' ? [f.wx, f.wz, WATER_LEVEL, hx, hz, home] : [hx, hz, home, f.wx, f.wz, WATER_LEVEL];
-      const x = ax + (bx - ax) * k, z = az + (bz - az) * k;
+      // `k`: how far it is from its seat to the water (a leap back runs the other way).
+      const part = leaping ? Math.min(1, f.t / FROG.leap) : 0, k = f.state === 'back' ? 1 - part : part;
+      const x = hx + (f.wx - hx) * k, z = hz + (f.wz - hz) * k;
       if (!inView(x, z) || !seen(x, z)) continue;
       const rise = Math.sin(Math.PI * k);
-      const base = al + (bl - al) * k;
+      const base = home + (WATER_LEVEL - home) * k;
       pushShadow(out.shadows, cam, x, z, 0.2, 0.09, SHADE.frog * oval * (1 - 0.6 * rise), Math.min(base, 0));
-      stand(leaping ? FROG_LEAP : FROG_SIT, f.blink > 0 || leaping ? skin : { ...skin, E: C.frog }, x, z, base + rise * FROG.arc, 3, f.face);
+      stand(leaping ? FROG_LEAP : FROG_SIT, f.blink > 0 || leaping ? SKIN : SKIN_BLINK, x, z, base + rise * FROG.arc, 3, f.face);
     }
 
     let n = 0;
@@ -427,7 +456,7 @@ export class PondLife {
         up(d.x, d.z, lift, -3, -1, 5, 1, d.colour);
         up(d.x, d.z, lift, d.face > 0 ? 2 : -4, -1, 1, 1, C.flyHead);
         const len = Math.floor(t * 24) % 2 === 0 ? 3 : 2;
-        for (const wx of [0, -2]) {
+        for (let wx = -2; wx <= 0; wx += 2) {
           up(d.x, d.z, lift, wx, -1 - len, 1, len, C.wing);
           up(d.x, d.z, lift, wx, 0, 1, len, C.wing);
         }
