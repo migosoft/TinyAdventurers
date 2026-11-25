@@ -6,7 +6,8 @@ import type { AirMover } from '../game/airTypes';
 export const BRUSH = {
   // rate 3: at 4.5 swings a second a shift of one or two art pixels read as a flicker, not a rustle; ease 0.45 lets it ring out about once.
   // amp 0.22 (about 3.5 art pixels at a bush's top): at the first guess 0.09 the play-test saw nothing next to the wind (the user, 2026-11-25).
-  cap: 16, amp: 0.22, max: 0.32, margin: 0.35, soft: 0.3, rate: 3,
+  // margin 0.8, soft 0.8: the see-through (`SEE_DEFAULTS`, 0.8 tiles) cuts the plant away around a figure, so the push must reach past it to be seen.
+  cap: 16, amp: 0.22, max: 0.32, margin: 0.8, soft: 0.8, rate: 3,
   lean: 0.4, // the steady part of the push (0..1): the bush bends away first, the sine rides on it
   along: 0.4, // how much of the direction is the figure's way (0: straight away from it)
   rise: 0.08, ease: 0.45, tail: 0.15,
