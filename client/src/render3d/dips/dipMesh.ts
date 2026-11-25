@@ -6,7 +6,7 @@ import { STONE_PX } from '../stone/field';
 import type { SheetPlan } from '../stone/plan';
 import { TILE_ID } from '../../generated/defs';
 import { GROUND_TILES } from '../../game/woodland/ground';
-import { bedAt, dipOf, inDipMesh, isChasm, isLava, isWater, kindOf, maskAt, nearAt } from './shape';
+import { bedAt, dipOf, inDipMesh, isChasm, isLava, kindOf, maskAt, nearAt, waterMaskAt } from './shape';
 
 /** Quads per cell edge of the dip ground. */
 export const DIP_RES = 12;
@@ -67,7 +67,7 @@ export function buildDipChunk(map: TileMap, painted: boolean, cx: number, cz: nu
       kind.push(s.kind);
       sheet.push((px - x0) * STONE_PX, (pz - z0) * STONE_PX, s.kind === KIND.ground ? -1 : layer);
       const chasm = maskAt(map, px, pz, isChasm);
-      dip.push(kindOf(maskAt(map, px, pz, isWater), maskAt(map, px, pz, isLava), chasm));
+      dip.push(kindOf(waterMaskAt(map, px, pz), maskAt(map, px, pz, isLava), chasm));
       marks.push(chasm, 0, 0);
       nearAt(map, px, pz, marks, marks.length - 2);
       min[0] = Math.min(min[0], px); min[1] = Math.min(min[1], py); min[2] = Math.min(min[2], pz);

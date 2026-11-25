@@ -4,16 +4,32 @@ import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import { DEEP_BED, SHALLOW_BED, isWater, pondFieldOf, setPondField } from '../dips/shape';
 
+import { inside, lattice } from './pondShape';
+
 export { pondFieldOf, setPondField };
 
 /** Where an inflow meets the pond, and the flow direction there (tiles; the direction is a unit vector). */
 export interface Mouth { x: number; z: number; dx: number; dz: number }
 /** A bridge deck: its tile rect, the travel axis, whether it carries the road, and the top height above the ground. */
 export interface Deck { x0: number; z0: number; x1: number; z1: number; alongX: boolean; road: boolean; y: number }
+/**
+ * The DRAWN water of a woodland pond. The tiles stay the truth for the rules (walking, slowing, drowning); what is drawn is the free
+ * shape the server made the tiles from: the pond's body is `inside > 0` of its blobs (`pondShape.ts`; a body tile is water exactly
+ * when its centre is inside, so its centre is drawn wet and the shore lies within about 0.7 tiles of the tile edges), a stream is a
+ * brook along a smooth curve through its points, opening into the pond. The drawn water never lies more than CLIP_FAR tiles outside
+ * the water tiles (the view map's: a pond bridge's tiles are water), and every DeepWater tile's centre is at least DEEP_MIN deep.
+ * A brook cuts the corners of its tile staircase: a stream tile's centre may be drawn dry and a land tile's wet.
+ */
 export interface PondField {
-  /** Tiles to the nearest shore, > 0 in water, 0 on land. Bilinear over a grid of 4 per tile. */
+  /** Tiles to the nearest drawn shore, > 0 in the drawn water, 0 on land. Bilinear over a grid of FIELD_RES per tile. */
   shoreAt(x: number, z: number): number;
-  /** Bed depth below the ground, >= 0: SHALLOW_BED at 0.5 tiles from the shore, falling evenly to DEEP_BED at 2.5 tiles. */
+  /** Tiles from the drawn shore on land (0 in the drawn water; large far from any water). */
+  bankAt(x: number, z: number): number;
+  /** The drawn water's smooth mask, 0..1: 0.5 on the drawn shore (as `OUTLINE_EDGE` of the tile masks), more inside. */
+  wetAt(x: number, z: number): number;
+  /** How much of the pond's body is around, 0..1: the blurred body mask (0.5 on a straight shore of the pond, 0 along a stream away from it). */
+  bodyAt(x: number, z: number): number;
+  /** Bed depth below the ground, >= 0: SHALLOW_BED at 0.5 tiles from the drawn shore, falling evenly to DEEP_BED at 2.5 tiles. */
   depthAt(x: number, z: number): number;
   /** The current: direction and strength 0..1. 1 on a stream, fading to 0 over 3 tiles inside the pond. */
   flowAt(x: number, z: number): { x: number; z: number; s: number };
@@ -26,7 +42,17 @@ export interface PondField {
 
 export const DECK_Y = 0.14; // tiles above the ground // balancing
 const SHORE_SHALLOW = 0.5, SHORE_DEEP = 2.5; // tiles from the shore where the bed is SHALLOW_BED / DEEP_BED // balancing
-const FIELD_RES = 4; // samples per tile of the shore grid
+const FIELD_RES = 8; // samples per tile of the field's grids
+const MARGIN = 3; // tiles of land the grids keep around the water
+const BODY_SOFT = 0.5, BODY_WIDE = 1.5; // tiles of the shape's `inside` over which the body's mask (and `bodyAt`) goes from 0.5 on the shore to 1 and to 0
+const BROOK_MIN = 0.3, BROOK_MAX = 0.5, BROOK_WAVE = 2.5; // tiles: a brook's half-width swells between these, over about this length
+const MOUTH_HALF = 0.7, MOUTH_LEN = 2; // tiles: the half-width at a brook's pond end, reached over this length
+const STREAM_SOFT = 0.4; // tiles: the brook's mask goes from 0.5 on its edge to 1 (and 0) over this distance
+const EDGE_ROUGH = 0.09, EDGE_WAVE = 0.9; // tiles: how far a brook's edge strays, and the size of its bumps
+const CURVE_STEPS = 8; // straight pieces per span of the curve through a stream's points
+const CLIP_NEAR = 0.7, CLIP_FAR = 0.95; // tiles outside the water tiles: the drawn water fades from the first and is gone at the second (the dip mesh and the water quads cover the cells that touch a water tile: one tile)
+export const DEEP_MIN = 1.2; // the least bed depth at a DeepWater tile's centre // balancing
+const DEEP_PIT = 0.7, DEEP_RAMP = 0.2; // tiles: the radius of the hollow that keeps a DeepWater tile's centre DEEP_MIN deep where the shore is near; it starts this far from the shore
 const CORE = 0.5, REACH = 1.5; // stream: full current within CORE of the line, none REACH away // balancing
 const FADE = 3; // tiles into the pond, straight on from the end segment, over which the current dies // balancing
 const DECK_GROW = 0.5; // a deck reaches this far past its rect at both ends of its travel axis // balancing
@@ -65,35 +91,116 @@ function edt1(f: Float64Array, out: Float64Array, n: number, v: Int32Array, z: F
 /** `viewMap` is the view copy (`pondViewMap`) when the caller has one already; else it is made here. */
 export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): PondField {
   const view = viewMap ?? pondViewMap(rules, pond);
-  const W = view.w * FIELD_RES + 2, H = view.h * FIELD_RES + 2; // one sample of land all round
-  const water = new Uint8Array(W * H);
-  for (let j = 1; j < H - 1; j++) for (let i = 1; i < W - 1; i++) {
-    if (isWater(view.get(Math.floor((i - 1) / FIELD_RES), Math.floor((j - 1) / FIELD_RES)))) water[j * W + i] = 1;
-  }
-  // Distance in samples to the nearest land sample, two passes of the 1D transform.
-  const d2 = new Float64Array(W * H), n = Math.max(W, H);
-  const f = new Float64Array(n), o = new Float64Array(n), v = new Int32Array(n), zz = new Float64Array(n + 1);
-  for (let i = 0; i < W; i++) {
-    for (let j = 0; j < H; j++) f[j] = water[j * W + i] ? FAR : 0;
-    edt1(f, o, H, v, zz);
-    for (let j = 0; j < H; j++) d2[j * W + i] = o[j];
-  }
-  for (let j = 0; j < H; j++) {
-    for (let i = 0; i < W; i++) f[i] = d2[j * W + i];
-    edt1(f, o, W, v, zz);
-    for (let i = 0; i < W; i++) d2[j * W + i] = o[i];
-  }
-  // A water sample centre lies half a sample inside the edge of its land neighbour's sample: the shore is that much nearer.
-  const shore = new Float32Array(W * H);
-  for (let k = 0; k < W * H; k++) shore[k] = water[k] ? Math.max(0, (Math.sqrt(d2[k]) - 0.5) / FIELD_RES) : 0;
+  const R = FIELD_RES;
+  const wet = (x: number, z: number): boolean => isWater(view.get(x, z));
+  // The grids cover the water tiles and the streams' points with MARGIN tiles of land around: tile (ox, oz), bw x bh tiles.
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  const grow = (x: number, z: number): void => { x0 = Math.min(x0, x); z0 = Math.min(z0, z); x1 = Math.max(x1, x); z1 = Math.max(z1, z); };
+  const blobs = pond.blobs;
+  for (let z = 0; z < view.h; z++) for (let x = 0; x < view.w; x++) if (wet(x, z)) grow(x, z);
+  for (const [cx, cz, rx, rz] of blobs) { grow(Math.floor(cx - rx - 1), Math.floor(cz - rz - 1)); grow(Math.ceil(cx + rx + 1), Math.ceil(cz + rz + 1)); }
+  for (const s of pond.streams) for (const [px, pz] of s.points) grow(Math.floor(px / 16), Math.floor(pz / 16));
+  if (x0 === Infinity) { x0 = z0 = 0; x1 = z1 = -1; } // no water at all: empty grids
+  const ox = x0 - MARGIN, oz = z0 - MARGIN, bw = Math.max(0, x1 - x0 + 1 + 2 * MARGIN), bh = Math.max(0, z1 - z0 + 1 + 2 * MARGIN);
+  const W = bw * R, H = bh * R, n = Math.max(W, H, 1);
+  // Sample (i, j) lies at tile point (ox + (i + 0.5) / R, oz + (j + 0.5) / R).
+  const px = (i: number): number => ox + (i + 0.5) / R, pz = (j: number): number => oz + (j + 0.5) / R;
 
-  const shoreAt = (x: number, z: number): number => {
-    const u = Math.min(W - 1, Math.max(0, x * FIELD_RES + 0.5)), w = Math.min(H - 1, Math.max(0, z * FIELD_RES + 0.5));
+  /** Distance (samples) of every sample to the nearest sample where `zero` holds: two passes of the 1D transform. */
+  const f = new Float64Array(n), o = new Float64Array(n), v = new Int32Array(n), zz = new Float64Array(n + 1);
+  const distance = (zero: (k: number) => boolean): Float32Array => {
+    const d2 = new Float64Array(W * H), out = new Float32Array(W * H);
+    for (let i = 0; i < W; i++) {
+      for (let j = 0; j < H; j++) f[j] = zero(j * W + i) ? 0 : FAR;
+      edt1(f, o, H, v, zz);
+      for (let j = 0; j < H; j++) d2[j * W + i] = o[j];
+    }
+    for (let j = 0; j < H; j++) {
+      for (let i = 0; i < W; i++) f[i] = d2[j * W + i];
+      edt1(f, o, W, v, zz);
+      for (let i = 0; i < W; i++) out[j * W + i] = Math.sqrt(o[i]);
+    }
+    return out;
+  };
+
+  // The water tiles (for the limit below), and the pond's body: the server's own free shape, evaluated at every sample. `inside` is
+  // about "tiles inside"; the mask is 0.5 on its zero line. `body` is the same with a wide ramp: how much of the pond is around.
+  const tileWater = new Uint8Array(W * H), body = new Float32Array(W * H), mask = new Float32Array(W * H);
+  for (let tz = 0; tz < bh; tz++) for (let tx = 0; tx < bw; tx++) {
+    if (!wet(ox + tx, oz + tz)) continue;
+    for (let j = tz * R; j < tz * R + R; j++) for (let i = tx * R; i < tx * R + R; i++) tileWater[j * W + i] = 1;
+  }
+  if (blobs.length) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const v = inside(blobs, pond.seed, px(i), pz(j));
+    mask[j * W + i] = Math.min(1, Math.max(0, 0.5 + v / (2 * BODY_SOFT)));
+    body[j * W + i] = Math.min(1, Math.max(0, 0.5 + v / (2 * BODY_WIDE)));
+  }
+
+  // The brooks join the body softly (1 - (1 - a)(1 - b)): brook and pond are one shape, with no notch at a mouth.
+  /** Raises grid `g` around (cx, cz) to `value(distance)` within `reach` tiles. */
+  const stamp = (g: Float32Array, cx: number, cz: number, reach: number, value: (d: number) => number): void => {
+    const i0 = Math.max(0, Math.floor((cx - reach - ox) * R)), i1 = Math.min(W - 1, Math.ceil((cx + reach - ox) * R));
+    const j0 = Math.max(0, Math.floor((cz - reach - oz) * R)), j1 = Math.min(H - 1, Math.ceil((cz + reach - oz) * R));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const d = Math.hypot(px(i) - cx, pz(j) - cz);
+      if (d < reach) g[j * W + i] = Math.max(g[j * W + i], value(d));
+    }
+  };
+  // A brook: a channel along a smooth curve through the stream's points. Its half-width swells and narrows along its length, its
+  // edge is uneven (both seeded), and it opens toward the pond.
+  const channel = new Float32Array(W * H);
+  for (const [si, s] of pond.streams.entries()) {
+    const widthSeed = (pond.seed + 7919 * (si + 1)) >>> 0;
+    const curve = streamCurve(s.points.map(([qx, qz]) => [qx / 16, qz / 16] as [number, number]));
+    if (curve.length < 2) continue;
+    const len = [0];
+    for (let k = 1; k < curve.length; k++) len.push(len[k - 1] + Math.hypot(curve[k][0] - curve[k - 1][0], curve[k][1] - curve[k - 1][1]));
+    const total = len[len.length - 1];
+    for (let k = 1; k < curve.length; k++) {
+      const [ax, az] = curve[k - 1], [bx, bz] = curve[k], ex = bx - ax, ez = bz - az, l2 = ex * ex + ez * ez || 1;
+      const reach = MOUTH_HALF + STREAM_SOFT + EDGE_ROUGH;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - reach - ox) * R)), i1 = Math.min(W - 1, Math.ceil((Math.max(ax, bx) + reach - ox) * R));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - reach - oz) * R)), j1 = Math.min(H - 1, Math.ceil((Math.max(az, bz) + reach - oz) * R));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const t = Math.min(1, Math.max(0, ((px(i) - ax) * ex + (pz(j) - az) * ez) / l2));
+        const d = Math.hypot(px(i) - (ax + ex * t), pz(j) - (az + ez * t)) + (noise2(widthSeed ^ 0x5bd1, px(i) / EDGE_WAVE, pz(j) / EDGE_WAVE) - 0.5) * 2 * EDGE_ROUGH;
+        // the half-width: its own swell along the length, opening toward the stream's pond end (an inflow's last point, an outflow's first)
+        const along = len[k - 1] + (len[k] - len[k - 1]) * t, toPond = s.inflow ? total - along : along;
+        const own = BROOK_MIN + (BROOK_MAX - BROOK_MIN) * noise2(widthSeed, along / BROOK_WAVE, 0.5);
+        const half = own + (MOUTH_HALF - own) * smooth(1 - toPond / MOUTH_LEN);
+        const m = Math.min(1, Math.max(0, 0.5 + (half - d) / (2 * STREAM_SOFT)));
+        if (m > channel[j * W + i]) channel[j * W + i] = m;
+      }
+    }
+  }
+  for (let k = 0; k < W * H; k++) mask[k] = 1 - (1 - mask[k]) * (1 - channel[k]);
+  // No drawn water far outside the water tiles: the mask fades between CLIP_NEAR and CLIP_FAR tiles from them.
+  const fromTiles = distance((k) => tileWater[k] === 1);
+  for (let k = 0; k < W * H; k++) mask[k] *= 1 - smooth((fromTiles[k] / R - CLIP_NEAR) / (CLIP_FAR - CLIP_NEAR));
+  // A hollow under every DeepWater tile (where the wobbled shore comes near one): a little deeper than DEEP_MIN at the centre, because the bilinear read between samples loses some.
+  const deepFloor = new Float32Array(W * H);
+  for (let tz = 0; tz < bh; tz++) for (let tx = 0; tx < bw; tx++) {
+    if (view.get(ox + tx, oz + tz) === TILE_ID.DeepWater) stamp(deepFloor, ox + tx + 0.5, oz + tz + 0.5, DEEP_PIT, (d) => DEEP_MIN * 1.15 * smooth(1 - d / DEEP_PIT));
+  }
+
+  // The drawn shore: where the mask crosses 0.5. Distances to it, inside and outside (a sample's centre lies half a sample from the shore between it and its neighbour).
+  const drawn = (k: number): boolean => mask[k] > 0.5;
+  const shore = distance((k) => !drawn(k)), bank = distance(drawn);
+  for (let k = 0; k < W * H; k++) {
+    shore[k] = drawn(k) ? Math.max(0, (shore[k] - 0.5) / R) : 0;
+    bank[k] = drawn(k) ? 0 : Math.max(0, (bank[k] - 0.5) / R);
+  }
+
+  /** Bilinear read of a grid at tile point (x, z); `outside` beyond the grids. */
+  const read = (g: Float32Array, outside: number) => (x: number, z: number): number => {
+    const u = (x - ox) * R - 0.5, w = (z - oz) * R - 0.5;
+    if (W < 2 || H < 2 || u < 0 || w < 0 || u > W - 1 || w > H - 1) return outside;
     const i = Math.min(W - 2, Math.floor(u)), j = Math.min(H - 2, Math.floor(w)), fx = u - i, fz = w - j;
-    const a = shore[j * W + i] * (1 - fx) + shore[j * W + i + 1] * fx;
-    const b = shore[(j + 1) * W + i] * (1 - fx) + shore[(j + 1) * W + i + 1] * fx;
+    const a = g[j * W + i] * (1 - fx) + g[j * W + i + 1] * fx;
+    const b = g[(j + 1) * W + i] * (1 - fx) + g[(j + 1) * W + i + 1] * fx;
     return a * (1 - fz) + b * fz;
   };
+  const shoreAt = read(shore, 0), deepAt = read(deepFloor, 0);
 
   // Streams as segments of the current: the stream's own (full strength) and, past an inflow's mouth or before an outflow's first
   // point, an extension of the end segment into the pond that fades over FADE tiles. `fadeFrom` is the extension's end that keeps
@@ -143,7 +250,35 @@ export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): Po
     return null;
   };
 
-  return { shoreAt, depthAt: (x, z) => depthOf(shoreAt(x, z)), flowAt, deckAt, mouths, decks, seed: pond.seed };
+  return {
+    shoreAt, bankAt: read(bank, MARGIN), wetAt: read(mask, 0), bodyAt: read(body, 0),
+    // the hollow of a DeepWater tile only inside the drawn water
+    depthAt: (x, z) => { const s = shoreAt(x, z); return s > 0 ? Math.max(depthOf(s), deepAt(x, z) * smooth(s / DEEP_RAMP)) : 0; },
+    flowAt, deckAt, mouths, decks, seed: pond.seed,
+  };
+}
+
+/** Smooth value noise in 0..1 on the unit lattice, from the pond shape's hash. */
+function noise2(seed: number, x: number, z: number): number {
+  const i = Math.floor(x), j = Math.floor(z), u = smooth(x - i), w = smooth(z - j);
+  const a = lattice(seed, i, j) * (1 - u) + lattice(seed, i + 1, j) * u, b = lattice(seed, i, j + 1) * (1 - u) + lattice(seed, i + 1, j + 1) * u;
+  return (a * (1 - w) + b * w) * 0.5 + 0.5;
+}
+
+/** A smooth curve through a stream's points (uniform Catmull-Rom, CURVE_STEPS straight pieces per span; the end points doubled). */
+function streamCurve(p: [number, number][]): [number, number][] {
+  if (p.length < 3) return p;
+  const out: [number, number][] = [p[0]];
+  const at = (k: number): [number, number] => p[Math.min(p.length - 1, Math.max(0, k))];
+  for (let k = 0; k + 1 < p.length; k++) {
+    const a = at(k - 1), b = at(k), c = at(k + 1), d = at(k + 2);
+    for (let s = 1; s <= CURVE_STEPS; s++) {
+      const t = s / CURVE_STEPS, t2 = t * t, t3 = t2 * t;
+      const cr = (i: 0 | 1): number => 0.5 * (2 * b[i] + (c[i] - a[i]) * t + (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t2 + (3 * b[i] - a[i] - 3 * c[i] + d[i]) * t3);
+      out.push([cr(0), cr(1)]);
+    }
+  }
+  return out;
 }
 
 function deckOf(b: BridgeInfo): Deck {

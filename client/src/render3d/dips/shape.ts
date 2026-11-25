@@ -95,8 +95,14 @@ export function pondFieldOf(map: TileMap): PondField | undefined {
   return ponds.get(map);
 }
 
+/** The water's outline mask at (x, z): the pond field's drawn shore (#360) where the map has one, else the water tiles' `maskAt`. `OUTLINE_EDGE` on the outline either way. */
+export function waterMaskAt(map: TileMap, x: number, z: number): number {
+  const pond = pondFieldOf(map);
+  return pond ? pond.wetAt(x, z) : maskAt(map, x, z, isWater);
+}
+
 function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
-  const mW = maskAt(map, x, z, isWater), mD = maskAt(map, x, z, isDeep);
+  const mW = waterMaskAt(map, x, z), mD = maskAt(map, x, z, isDeep);
   const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
@@ -137,7 +143,7 @@ export function kindOf(water: number, lava: number, chasm: number): DipKind {
 
 /** The liquid's surface height where (x, z) lies inside a water or lava outline (mask > `OUTLINE_EDGE`), else -Infinity. */
 export function surfaceAt(map: TileMap, x: number, z: number): number {
-  const w = maskAt(map, x, z, isWater), l = maskAt(map, x, z, isLava);
+  const w = waterMaskAt(map, x, z), l = maskAt(map, x, z, isLava);
   if (w > OUTLINE_EDGE && w >= l) return WATER_LEVEL;
   if (l > OUTLINE_EDGE) return LAVA_LEVEL;
   return -Infinity;

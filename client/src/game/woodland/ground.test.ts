@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
 import { BASE, PATCH } from '../covemath';
-import { BANK, flowerSpots, GRASS, GROUND_TILES, GroundPainter, groundKindAt, groundOf, paintGround, ROAD, THICKET } from './ground';
+import { BANK, flowerSpots, GRASS, GROUND_TILES, GroundPainter, groundKindAt, groundOf, kindRows, paintGround, ROAD, THICKET, type Shore } from './ground';
 
 // 12 x 6 tiles: thicket top row, road in columns 4..7 of rows 1..4, grass elsewhere, a wall at the bottom right
 function mapOf(): TileMap {
@@ -81,86 +81,118 @@ describe('paintGround', () => {
   it('the banded paint equals the one-shot paint', () => {
     const m = mapOf();
     const p = new GroundPainter(m, 9);
-    for (let ty = p.rows - 1; ty >= 0; ty--) p.band(ty); // any order
+    for (let ty = p.rows - 1; ty >= 0; ty--) p.band(ty);
     p.blades();
     p.flowers();
     expect(Buffer.from(p.data).equals(Buffer.from(paintGround(m, 9).data))).toBe(true);
   });
 });
 
-// 20 x 12 grass: a pond in columns 3..9 of rows 3..9 (deep in the middle), a stream one tile wide along row 6 from column 10 to 17
+// A drawn shore on a 24 x 13 map of grass (with a road column at x = 1): a round pond of radius 3 tiles at (6.5, 6.5), and a brook
+// 0.4 tiles to either side of z = 6.5 from x = 14 eastward, away from the pond's body.
+const W = 24, H = 13, R = 3, BROOK = 0.4, BROOK_X = 14;
+const fromPond = (x: number, z: number): number => Math.hypot(x - 6.5, z - 6.5) - R;
+const fromBrook = (x: number, z: number): number => Math.hypot(Math.max(0, BROOK_X - x), Math.max(0, Math.abs(z - 6.5) - BROOK)) - (x >= BROOK_X && Math.abs(z - 6.5) < BROOK ? BROOK - Math.abs(z - 6.5) : 0);
+const SHORE: Shore = {
+  shoreAt: (x, z) => Math.max(0, -Math.min(fromPond(x, z), fromBrook(x, z))),
+  bankAt: (x, z) => Math.max(0, Math.min(fromPond(x, z), fromBrook(x, z))),
+  bodyAt: (x, z) => Math.min(1, Math.max(0, 0.5 - fromPond(x, z) / 3)),
+};
 function pondMap(): TileMap {
-  const w = 20, h = 12;
-  const t = new Uint8Array(w * h).fill(TILE_ID.Floor);
-  for (let y = 3; y <= 9; y++) for (let x = 3; x <= 9; x++) t[y * w + x] = x >= 5 && x <= 7 && y >= 5 && y <= 7 ? TILE_ID.DeepWater : TILE_ID.ShallowWater;
-  for (let x = 10; x <= 17; x++) t[6 * w + x] = TILE_ID.ShallowWater;
-  return new TileMap(w, h, t);
+  const t = new Uint8Array(W * H).fill(TILE_ID.Floor);
+  for (let y = 0; y < H; y++) t[y * W + 1] = TILE_ID.Road;
+  return new TileMap(W, H, t);
 }
+/** Every px's kind with the shore. */
+function kindsOf(m: TileMap, seed: number): Uint8Array {
+  const w = m.w * TILE, out = new Uint8Array(w * m.h * TILE), rows = kindRows(m, seed, SHORE);
+  for (let ty = 0; ty < m.h; ty++) rows(ty, out.subarray(ty * TILE * w, (ty + 1) * TILE * w));
+  return out;
+}
+const centre = (p: number): number => (p + 0.5) / TILE;
 
 describe('the bank (#360)', () => {
-  it('a woodland without water paints as before', () => {
+  it('a woodland without a shore paints as before, water tiles or not', () => {
     const m = mapOf();
     expect(createHash('sha256').update(paintGround(m, 7).data).digest('hex')).toBe('73d1ac2ed0a1f7c579181de831c54156977e4dfcfb7d94be7cf840d853aecb14');
     expect(flowerSpots(m, 7).length).toBe(265);
-  });
-
-  it('water tiles paint as bank', () => {
-    const m = pondMap(), img = paintGround(m, 4);
+    // a water tile without a shore is grass, as it was before ponds; the painted ground still covers it
+    const wet = mapOf();
+    wet.set(1, 3, TILE_ID.ShallowWater);
+    wet.set(2, 3, TILE_ID.DeepWater);
+    expect(Buffer.from(paintGround(wet, 7).data).equals(Buffer.from(paintGround(m, 7).data))).toBe(true);
     expect(GROUND_TILES.has(TILE_ID.ShallowWater) && GROUND_TILES.has(TILE_ID.DeepWater)).toBe(true);
-    expect(groundOf(m, 3, 3)).toBe(BANK);
-    expect(groundOf(m, 6, 6)).toBe(BANK);
-    expect(groundOf(m, 14, 6)).toBe(BANK);
-    const grass = (i: number) => [BASE, PATCH].some((c) => img.data[i] === c[0] && img.data[i + 1] === c[1] && img.data[i + 2] === c[2]);
-    for (let y = 3 * TILE; y < 10 * TILE; y++) for (let x = 3 * TILE; x < 10 * TILE; x++) {
-      const i = (y * img.w + x) * 4;
-      expect(groundKindAt(m, 4, x, y)).toBe(BANK);
-      expect(img.data[i + 3]).toBe(255);
-      expect(grass(i)).toBe(false);
-    }
   });
 
-  it('the bank creeps onto the grass: under a tile at the pond, a few px at a stream', () => {
-    const m = pondMap();
-    // how far (px) the bank reaches north of a water tile's top edge, the farthest over the columns of tiles x0..x1
-    const reach = (x0: number, x1: number, edge: number): number => {
+  it('the drawn water paints as bank, whatever the tiles', () => {
+    const m = pondMap(), img = paintGround(m, 4, SHORE), k = kindsOf(m, 4);
+    const grass = (i: number) => [BASE, PATCH].some((c) => img.data[i] === c[0] && img.data[i + 1] === c[1] && img.data[i + 2] === c[2]);
+    let wet = 0;
+    for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) {
+      if (SHORE.shoreAt(centre(x), centre(y)) <= 0) continue;
+      wet++;
+      const i = y * img.w + x;
+      expect(k[i]).toBe(BANK);
+      expect(groundKindAt(m, 4, x, y, SHORE)).toBe(BANK);
+      expect(img.data[i * 4 + 3]).toBe(255);
+      expect(grass(i * 4)).toBe(false);
+    }
+    expect(wet).toBeGreaterThan(Math.PI * R * R * TILE * TILE);
+    expect(k[(1 * TILE + 8) * img.w + 20 * TILE + 8]).toBe(GRASS); // far from the water
+  });
+
+  it('the bank creeps onto the land: under a tile at the pond, a few px at a brook, and over a road too', () => {
+    const m = pondMap(), k = kindsOf(m, 4), w = m.w * TILE;
+    // the farthest bank px from the drawn shore (px), among the px where `where` holds
+    const reach = (where: (x: number, z: number) => boolean): number => {
       let far = 0;
-      for (let x = x0 * TILE; x < (x1 + 1) * TILE; x++) for (let d = 1; d <= 2 * TILE; d++) if (groundKindAt(m, 4, x, edge * TILE - d) === BANK) far = Math.max(far, d);
+      for (let y = 0; y < m.h * TILE; y++) for (let x = 0; x < w; x++) {
+        if (k[y * w + x] === BANK && where(centre(x), centre(y))) far = Math.max(far, SHORE.bankAt(centre(x), centre(y)) * TILE);
+      }
       return far;
     };
-    const pond = reach(4, 8, 3), stream = reach(12, 16, 6);
+    const pond = reach((x) => x < 11), brook = reach((x) => x > 16);
     expect(pond).toBeGreaterThanOrEqual(8);
     expect(pond).toBeLessThanOrEqual(TILE);
-    expect(stream).toBeGreaterThanOrEqual(2);
-    expect(stream).toBeLessThanOrEqual(5);
+    expect(brook).toBeGreaterThanOrEqual(2);
+    expect(brook).toBeLessThanOrEqual(5);
     // the px right at the water is bank everywhere
-    for (let x = 4 * TILE; x < 9 * TILE; x++) expect(groundKindAt(m, 4, x, 3 * TILE - 1)).toBe(BANK);
+    for (let y = 0; y < m.h * TILE; y++) for (let x = 0; x < w; x++) {
+      const d = SHORE.bankAt(centre(x), centre(y)) * TILE;
+      if (d > 0 && d <= 1) expect(k[y * w + x]).toBe(BANK);
+    }
+    // a road beside the water gives way as grass does
+    const road = new TileMap(W, H, new Uint8Array(W * H).fill(TILE_ID.Road));
+    expect(groundKindAt(road, 4, 6 * TILE + 8, 3 * TILE + 6, SHORE)).toBe(BANK); // 2 px outside the pond
+    expect(groundKindAt(road, 4, 20 * TILE, 2 * TILE, SHORE)).toBe(ROAD);
   });
 
   it('the deep middle is darker than the shallows', () => {
-    const m = pondMap(), img = paintGround(m, 4);
+    const img = paintGround(pondMap(), 4, SHORE);
     const mean = (tx: number, ty: number): number => {
       let s = 0;
       for (let y = ty * TILE; y < ty * TILE + TILE; y++) for (let x = tx * TILE; x < tx * TILE + TILE; x++) { const i = (y * img.w + x) * 4; s += img.data[i] + img.data[i + 1] + img.data[i + 2]; }
       return s / (TILE * TILE * 3);
     };
-    expect(mean(6, 6)).toBeLessThan(mean(6, 3) - 15);
+    expect(mean(6, 6)).toBeLessThan(mean(6, 4) - 10);
   });
 
   it('flowerSpots avoids the bank', () => {
-    const m = pondMap(), spots = flowerSpots(m, 5);
+    const m = pondMap(), spots = flowerSpots(m, 5, SHORE);
     expect(spots.length).toBeGreaterThan(100);
+    expect(spots.length).toBeLessThan(flowerSpots(m, 5).length);
     for (const s of spots) {
-      expect(m.get(Math.floor(s.x / TILE), Math.floor(s.y / TILE))).toBe(TILE_ID.Floor);
-      expect(groundKindAt(m, 5, s.x, s.y)).toBe(GRASS);
+      expect(SHORE.shoreAt(centre(s.x), centre(s.y))).toBe(0);
+      expect(groundKindAt(m, 5, s.x, s.y, SHORE)).toBe(GRASS);
     }
   });
 
-  it('the banded paint equals the one-shot paint on a pond map', () => {
+  it('the banded paint equals the one-shot paint with a shore', () => {
     const m = pondMap();
-    const p = new GroundPainter(m, 9);
+    const p = new GroundPainter(m, 9, SHORE);
     for (let ty = p.rows - 1; ty >= 0; ty--) p.band(ty);
     p.blades();
     p.flowers();
-    expect(Buffer.from(p.data).equals(Buffer.from(paintGround(m, 9).data))).toBe(true);
+    expect(Buffer.from(p.data).equals(Buffer.from(paintGround(m, 9, SHORE).data))).toBe(true);
   });
 });

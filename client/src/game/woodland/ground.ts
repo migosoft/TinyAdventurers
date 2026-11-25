@@ -2,8 +2,9 @@
 // stand on) is the cove's grass with flowers, Road is packed dirt, Thicket is dark undergrowth. Where a
 // stronger ground meets a weaker one (road over thicket over grass) it creeps 3 px into it, dithered, so no
 // tile edge shows. Walls and Void stay transparent (the dungeon tiles are drawn there). Pure and seeded.
-// A pond's water tiles (#360) are the bank: their bed is painted here (sand, silt, mud, stones), and the bank creeps onto every
-// ground around them, up to a tile wide at a pond and a few px at a stream. A map without water paints exactly as before.
+// A pond (#360) is painted from its drawn shore (`Shore`, the view's pond field), not from the water tiles: the drawn water is the
+// bank, whose bed is painted here (sand, silt, mud, stones), and the bank creeps onto every ground around it, up to a tile wide at
+// a pond and a few px at a stream. Without a shore the paint is exactly as it was before ponds: water tiles are grass.
 import { TILE_ID } from '../../generated/defs';
 import { TILE, type TileMap } from '../../sim/map';
 import type { Rgba } from '../vegetation';
@@ -12,23 +13,24 @@ import { BASE, EDGE, FLOWERS, G1, noise, PATCH, rng, type Rgb } from '../covemat
 /** The tiles the woodland paints itself (the dungeon tile art is skipped there): the pond's water tiles too, whose bank and bed are painted (#360). */
 export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk, TILE_ID.Barrier, TILE_ID.ShallowWater, TILE_ID.DeepWater]);
 
-/** BANK (#360): a water tile's bed, and the wet earth it creeps onto the land with. */
+/** BANK (#360): the drawn water's bed, and the wet earth it creeps onto the land with. No tile has it: it comes from the `Shore`. */
 export const NONE = 0, GRASS = 1, THICKET = 2, ROAD = 3, BANK = 4;
-/**
- * Inside the tile kinds only (`kinds`): POND is a water tile of a pond's body or beside it (BANK is then a stream's tile: its bank is
- * narrow), WET flags a land tile with water among its eight neighbours, KIND masks the flag off.
- */
-const POND = 5, WET = 8, KIND = 7;
+/** What the painter reads of a pond's drawn shore (the view's `PondField`), at tile points: tiles inside the drawn water (0 on land), tiles from it on land (0 in it), and how much of the pond's body is around (0..1; 0 along a stream). */
+export interface Shore { shoreAt(x: number, z: number): number; bankAt(x: number, z: number): number; bodyAt(x: number, z: number): number }
+/** Inside the tile kinds only (`kinds`): WET flags a tile the drawn water or its bank can reach, KIND masks the flag off. */
+const WET = 8, KIND = 7;
+/** A tile is WET when its centre is nearer the drawn water than this (tiles): the bank's reach plus half a tile's diagonal. */
+const WET_TILES = 1.75;
+/** The shores of the tile kinds that have one (`kinds`). */
+const SHORES = new WeakMap<Uint8Array, Shore>();
 /** How far a stronger ground creeps into a weaker one (px). */
 const CREEP = 3;
-/** How far the bank reaches onto the land at most (px, under a tile): beside a pond and beside a stream. */
-const POND_REACH = 15, STREAM_REACH = 4.5;
+/** How far the bank reaches onto the land at most (px, under a tile): beside a pond and beside a stream; the pond's reach is full where `Shore.bodyAt` is at least BODY_NEAR. */
+const POND_REACH = 15, STREAM_REACH = 4.5, BODY_NEAR = 0.1;
 /** The bank's edge wobbles between this share of the reach and all of it, over lattice cells of BANK_WOBBLE px, and frays over BANK_FRINGE px. */
 const BANK_MIN = 0.25, BANK_WOBBLE = 11, BANK_FRINGE = 2;
 /** Grass tufts on the bank: clumps of TUFT_STEP px, none nearer the water than TUFT_FROM px, a share of TUFT_FAR of the ground at the bank's far edge and thinning to TUFT_NEAR toward the water. */
 const TUFT_STEP = 3, TUFT_FROM = 3, TUFT_FAR = 0.4, TUFT_NEAR = 0.08;
-/** The bed's paint knows the shore up to this many tiles away (the bed is flat beyond 2.5, `pondField.ts`). */
-const SHORE_TILES = 3;
 /** The bed's zones by shore distance (px): the wet line at the water's edge is this wide either side, then sand, silt from here, mud from here; a stream's bed counts as this much deeper (silt and pebbles, not a sand path). */
 const WATERLINE = 2, SILT_FROM = 12, MUD_FROM = 30, STREAM_DEEPER = 9;
 /** The share of darker specks in the wet line. */
@@ -50,41 +52,34 @@ export const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
 const DAMP: Rgb = [72, 59, 58], EARTH: Rgb = [119, 92, 85], SAND: Rgb = [170, 141, 122], PALE: Rgb = [211, 191, 169];
 const STONE: Rgb = [123, 137, 148], STONE_LIT: Rgb = [182, 203, 207], STONE_DARK: Rgb = [73, 73, 73];
 
-const isWater = (t: number): boolean => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
-const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : isWater(t) ? BANK : GRASS);
+const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : GRASS);
 
 /**
  * The ground a tile shows. An invisible wall (Barrier, #259) shows its west neighbour's ground (else its east one's):
- * the wall column repeats the column beside it, so the road and the grass run on without a seam (beside water it is grass: it has no bed).
+ * the wall column repeats the column beside it, so the road and the grass run on without a seam.
  */
 export function groundOf(map: TileMap, x: number, y: number): number {
   const t = map.get(x, y);
   if (t !== TILE_ID.Barrier) return kindOf(t);
   const west = map.get(x - 1, y);
-  const k = kindOf(west !== TILE_ID.Barrier && west !== TILE_ID.Void ? west : map.get(x + 1, y));
-  return k === BANK ? GRASS : k;
+  return kindOf(west !== TILE_ID.Barrier && west !== TILE_ID.Void ? west : map.get(x + 1, y));
 }
 
-/** The tiles' kinds. On a map with water: its tiles are BANK or POND, and the land tiles around it carry WET (read a kind through `& KIND`). */
-function kinds(map: TileMap): Uint8Array {
+/** The tiles' kinds. With a shore, the tiles its water or bank can reach carry WET (read a kind through `& KIND`) and the array remembers the shore. */
+function kinds(map: TileMap, shore?: Shore): Uint8Array {
   const { w, h } = map;
   const k = new Uint8Array(w * h);
-  let water = false;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if ((k[y * w + x] = groundOf(map, x, y)) === BANK) water = true;
-  if (!water) return k;
-  const wet = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < w && y < h && isWater(map.get(x, y));
-  // a pond's body: water on all four sides (a stream, one tile wide, has none)
-  const body = (x: number, y: number): boolean => wet(x, y) && wet(x - 1, y) && wet(x + 1, y) && wet(x, y - 1) && wet(x, y + 1);
-  const around = (x: number, y: number, f: (x: number, y: number) => boolean): boolean => {
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (f(x + dx, y + dy)) return true;
-    return false;
-  };
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x;
-    if (k[i] === BANK) { if (around(x, y, body)) k[i] = POND; }
-    else if (k[i] !== NONE && around(x, y, wet)) k[i] |= WET;
-  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) k[y * w + x] = groundOf(map, x, y);
+  if (!shore) return k;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (k[y * w + x] !== NONE && shore.bankAt(x + 0.5, y + 0.5) < WET_TILES) k[y * w + x] |= WET;
+  SHORES.set(k, shore);
   return k;
+}
+
+/** Where pixel (x, y) lies across the drawn shore (px): positive in the drawn water, zero or negative on the land. */
+function shorePx(s: Shore, x: number, y: number): number {
+  const X = (x + 0.5) / TILE, Z = (y + 0.5) / TILE, inside = s.shoreAt(X, Z);
+  return inside > 0 ? inside * TILE : -s.bankAt(X, Z) * TILE;
 }
 
 /** Cheap per-pixel hash in [0, 1). */
@@ -103,20 +98,23 @@ function wobble(x: number, y: number, step: number, seed: number): number {
   return a + (b - a) * v;
 }
 
-/** Distance (px) from pixel (x, y) to the rect of tile (nx, ny): 1 on the pixel that touches it. */
-function tileDist(x: number, y: number, nx: number, ny: number): number {
-  const gx = x < nx * TILE ? nx * TILE - x : x > nx * TILE + TILE - 1 ? x - (nx * TILE + TILE - 1) : 0;
-  const gy = y < ny * TILE ? ny * TILE - y : y > ny * TILE + TILE - 1 ? y - (ny * TILE + TILE - 1) : 0;
-  return Math.hypot(gx, gy);
-}
-
 /** The ground kind a pixel shows: its tile's, or a stronger neighbour tile's where that creeps in (dithered). */
 function pixelKind(k: Uint8Array, w: number, h: number, tx: number, ty: number, x: number, y: number, seed: number): number {
   const raw = k[ty * w + tx], own = raw & KIND;
-  if (own === NONE || own >= BANK) return Math.min(own, BANK);
-  // deeper than CREEP px inside the tile, no neighbour tile is near enough to creep in (but a bank, which reaches further)
+  if (own === NONE) return own;
+  if (raw & WET) {
+    // the bank, stronger than every ground: the drawn water, and on the land an edge that wobbles, frayed by the dither
+    const s = SHORES.get(k)!, d = -shorePx(s, x, y);
+    if (d <= 1) return BANK; // the water, and the px at it
+    const body = Math.min(1, s.bodyAt((x + 0.5) / TILE, (y + 0.5) / TILE) / BODY_NEAR);
+    const reach = (STREAM_REACH + (POND_REACH - STREAM_REACH) * body) * (BANK_MIN + (1 - BANK_MIN) * wobble(x, y, BANK_WOBBLE, seed + 11));
+    // tufts of the ground under it stay standing on the bank, fewer toward the water
+    if (d + hash(x, y, seed + 3) * BANK_FRINGE < reach && !(d > TUFT_FROM && wobble(x, y, TUFT_STEP, seed + 17) < TUFT_NEAR + (TUFT_FAR - TUFT_NEAR) * (d / reach))) return BANK;
+  }
+  if (own === ROAD) return own;
+  // deeper than CREEP px inside the tile, no neighbour tile is near enough to creep in
   const lx = x - tx * TILE, ly = y - ty * TILE;
-  if (!(raw & WET) && (own === ROAD || (lx >= CREEP - 1 && lx <= TILE - CREEP && ly >= CREEP - 1 && ly <= TILE - CREEP))) return own;
+  if (lx >= CREEP - 1 && lx <= TILE - CREEP && ly >= CREEP - 1 && ly <= TILE - CREEP) return own;
   let best = own;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     if (!dx && !dy) continue;
@@ -124,33 +122,13 @@ function pixelKind(k: Uint8Array, w: number, h: number, tx: number, ty: number, 
     if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
     const nk = k[ny * w + nx] & KIND;
     if (nk <= own || nk <= best) continue;
-    const d = tileDist(x, y, nx, ny);
-    if (nk >= BANK) {
-      // the bank: an edge that wobbles, frayed by the dither; the px at the water is always bank
-      const reach = (nk === POND ? POND_REACH : STREAM_REACH) * (BANK_MIN + (1 - BANK_MIN) * wobble(x, y, BANK_WOBBLE, seed + 11));
-      if (d <= 1) best = nk;
-      else if (d + hash(x, y, seed + 3) * BANK_FRINGE < reach) {
-        // tufts of the weaker ground stay standing on the bank, fewer toward the water
-        const tuft = d > TUFT_FROM && wobble(x, y, TUFT_STEP, seed + 17) < TUFT_NEAR + (TUFT_FAR - TUFT_NEAR) * (d / reach);
-        if (!tuft) best = nk;
-      }
-    } else if (d < CREEP && hash(x, y, seed) < 1 - d / CREEP) best = nk;
+    // distance (px) from this pixel to the neighbour tile's rect
+    const gx = dx < 0 ? x - (nx * TILE + TILE - 1) : dx > 0 ? nx * TILE - x : 0;
+    const gy = dy < 0 ? y - (ny * TILE + TILE - 1) : dy > 0 ? ny * TILE - y : 0;
+    const d = Math.hypot(gx, gy);
+    if (d < CREEP && hash(x, y, seed) < 1 - d / CREEP) best = nk;
   }
-  return Math.min(best, BANK);
-}
-
-/**
- * Where a bank pixel lies across the shore (px): positive in the water (1 on the px at the land, up to SHORE_TILES tiles), zero or
- * negative on the land (0 on the px at the water). Outside the map is land.
- */
-function shorePx(k: Uint8Array, w: number, h: number, tx: number, ty: number, x: number, y: number): number {
-  const inWater = (k[ty * w + tx] & KIND) >= BANK, r = inWater ? SHORE_TILES : 1;
-  let best = SHORE_TILES * TILE;
-  for (let ny = ty - r; ny <= ty + r; ny++) for (let nx = tx - r; nx <= tx + r; nx++) {
-    const water = nx >= 0 && ny >= 0 && nx < w && ny < h && (k[ny * w + nx] & KIND) >= BANK;
-    if (water !== inWater) best = Math.min(best, tileDist(x, y, nx, ny));
-  }
-  return inWater ? best : 1 - best;
+  return best;
 }
 
 /** True where the pixel (x, y) shows grass (not road, thicket or off the map; creeping edges included). */
@@ -161,15 +139,15 @@ function grassAt(k: Uint8Array, w: number, h: number, seed: number, x: number, y
 }
 
 /** The ground kind (NONE, GRASS, THICKET, ROAD, BANK) that pixel (x, y) shows, creeping edges included. */
-export function groundKindAt(map: TileMap, seed: number, x: number, y: number): number {
+export function groundKindAt(map: TileMap, seed: number, x: number, y: number, shore?: Shore): number {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return NONE;
-  return pixelKind(kinds(map), map.w, map.h, tx, ty, x, y, seed);
+  return pixelKind(kinds(map, shore), map.w, map.h, tx, ty, x, y, seed);
 }
 
 /** A `kindRow` reader that fixes the map's tile kinds now (one pass), so a source built at one moment stays consistent. */
-export function kindRows(map: TileMap, seed: number): (ty: number, out: Uint8Array) => void {
-  const k = kinds(map);
+export function kindRows(map: TileMap, seed: number, shore?: Shore): (ty: number, out: Uint8Array) => void {
+  const k = kinds(map, shore);
   const w = map.w * TILE;
   return (ty, out) => {
     for (let ly = 0; ly < TILE; ly++) for (let x = 0; x < w; x++) out[ly * w + x] = pixelKind(k, map.w, map.h, x >> 4, ty, x, ty * TILE + ly, seed);
@@ -182,8 +160,8 @@ export function kindRow(map: TileMap, seed: number, ty: number, out: Uint8Array)
 }
 
 /** Flower spots (px, the flower's own pixel; it and its four neighbours show grass), about one per FLOWER_AREA px² of grass, never on road, thicket or a bank. */
-export function flowerSpots(map: TileMap, seed: number): { x: number; y: number }[] {
-  const k = kinds(map);
+export function flowerSpots(map: TileMap, seed: number, shore?: Shore): { x: number; y: number }[] {
+  const k = kinds(map, shore);
   const r = rng(seed * 7919 + 41);
   const out: { x: number; y: number }[] = [];
   const per = (TILE * TILE) / FLOWER_AREA;
@@ -219,12 +197,13 @@ export class GroundPainter {
   private nBed: (x: number, y: number) => number;
   private nBedBig: (x: number, y: number) => number;
 
-  constructor(private map: TileMap, private seed: number) {
+  /** `shore`: the pond's drawn shore (#360); without one no bank is painted. */
+  constructor(private map: TileMap, private seed: number, private shore?: Shore) {
     this.w = map.w * TILE;
     this.h = map.h * TILE;
     this.rows = map.h;
     this.data = new Uint8ClampedArray(this.w * this.h * 4);
-    this.k = kinds(map);
+    this.k = kinds(map, shore);
     this.kindAt = new Uint8Array(this.w * this.h);
     this.nGrass = noise(seed * 3 + 17, 26);
     this.nDirt = noise(seed * 5 + 9, 14);
@@ -242,17 +221,18 @@ export class GroundPainter {
    * under the turf's edge and wet, darker sand at the water; in the water pale sand in the shallows, then silt and, three tiles in, the
    * mud of the deep middle. The zones' borders wander with the noise and are dithered. Stones lie scattered over all of it, in clusters.
    */
-  private bank(x: number, y: number, ty: number): Rgb {
-    const { seed } = this;
-    const own = this.k[ty * this.map.w + (x >> 4)] & KIND;
-    const u = shorePx(this.k, this.map.w, this.map.h, x >> 4, ty, x, y);
+  private bank(x: number, y: number): Rgb {
+    const { seed } = this, shore = this.shore!;
+    const u = shorePx(shore, x, y);
+    // how much of a stream this is (1) and not the pond's body (0)
+    const stream = 1 - Math.min(1, shore.bodyAt((x + 0.5) / TILE, (y + 0.5) / TILE) * 2);
     const fine = this.nBed(x, y), dither = hash(x, y, seed + 21);
-    // the depth the paint goes by: the shore distance, pushed about by the two noises (px) so no zone follows the tile outline
-    const t = u + (own === BANK ? STREAM_DEEPER : 0) + (this.nBedBig(x, y) - 0.5) * 12 + (fine - 0.5) * 5 + (dither - 0.5) * 4;
+    // the depth the paint goes by: the shore distance, pushed about by the two noises (px) so no zone follows the outline
+    const t = u + stream * STREAM_DEEPER + (this.nBedBig(x, y) - 0.5) * 12 + (fine - 0.5) * 5 + (dither - 0.5) * 4;
 
     // a stone: one per STONE_CELL px cell at most; in clusters (the big noise), and all along a stream
     const cx = Math.floor(x / STONE_CELL), cy = Math.floor(y / STONE_CELL);
-    const many = own === BANK || this.nBedBig(cx * STONE_CELL + 40, cy * STONE_CELL + 90) > 0.55;
+    const many = stream > 0.5 || this.nBedBig(cx * STONE_CELL + 40, cy * STONE_CELL + 90) > 0.55;
     const share = u <= 0 ? STONES_LAND : (many ? STONES_MANY : STONES_FEW) * (t > MUD_FROM ? STONES_DEEP : 1);
     if (hash(cx, cy, seed + 31) < share) {
       const size = hash(cx, cy, seed + 34), rows = STONE_SHAPES[size < 0.55 ? 0 : size < 0.88 ? 1 : 2];
@@ -307,7 +287,7 @@ export class GroundPainter {
           // a faint rim where the road meets something else: its edge pixels blend towards a darker, greener brown
           if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => this.kindNear(x + dx, y + dy) !== ROAD)) c = [0, 1, 2].map((i) => Math.round(c[i] + (RIM[i] - c[i]) * RIM_MIX)) as Rgb;
           this.put(x, y, c);
-        } else if (pk === BANK) this.put(x, y, this.bank(x, y, ty));
+        } else if (pk === BANK) this.put(x, y, this.bank(x, y));
         else if (pk === THICKET) this.put(x, y, this.nThick(x, y) < 0.5 || hash(x, y, seed + 9) < 0.08 ? THICK_0 : THICK_1);
       }
     }
@@ -327,7 +307,7 @@ export class GroundPainter {
   /** Flowers on the grass (single pixel with a stem, a third are small crosses). */
   flowers(): void {
     const rf = rng(this.seed * 17 + 5);
-    for (const s of flowerSpots(this.map, this.seed)) {
+    for (const s of flowerSpots(this.map, this.seed, this.shore)) {
       const c = FLOWERS[Math.floor(rf() * FLOWERS.length)];
       if (rf() < 0.35) { this.put(s.x - 1, s.y, c); this.put(s.x + 1, s.y, c); this.put(s.x, s.y - 1, c); this.put(s.x, s.y + 1, G1); this.put(s.x, s.y, FLOWERS[1]); }
       else { this.put(s.x, s.y, c); this.put(s.x, s.y + 1, G1); }
@@ -336,8 +316,8 @@ export class GroundPainter {
 }
 
 /** The whole map in px (map.w·16 × map.h·16). */
-export function paintGround(map: TileMap, seed: number): Rgba {
-  const p = new GroundPainter(map, seed);
+export function paintGround(map: TileMap, seed: number, shore?: Shore): Rgba {
+  const p = new GroundPainter(map, seed, shore);
   for (let ty = 0; ty < p.rows; ty++) p.band(ty);
   p.blades();
   p.flowers();

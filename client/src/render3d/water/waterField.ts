@@ -1,5 +1,5 @@
 import type { TileMap } from '../../sim/map';
-import { BED_RES, OUTLINE_EDGE, bedAt, inDipMesh, isWater, maskAt } from '../dips/shape';
+import { BED_RES, OUTLINE_EDGE, bedAt, inDipMesh, waterMaskAt } from '../dips/shape';
 import type { Puddle } from '../stone/place';
 
 /** Two floats per texel (bed height, water mask) on a grid of BED_RES texels per tile: (map.w * BED_RES + 1) by (map.h * BED_RES + 1), row by row. */
@@ -25,7 +25,7 @@ function setTexel(f: WaterField, map: TileMap, i: number, j: number, puddles: re
     }
   }
   f.data[k] = touches ? bedAt(map, x, z) : 0;
-  f.data[k + 1] = touches ? maskAt(map, x, z, isWater) : 0;
+  f.data[k + 1] = touches ? waterMaskAt(map, x, z) : 0;
   if (touches || !floor) return;
   let mask = -Infinity;
   for (const p of puddles) {

@@ -129,7 +129,7 @@ describe('the run stage', () => {
     const none = setup(ROWS, { woodland: WOODLAND });
     expect(none.stage.world.map).toBe(none.run.session.map);
     expect(pondFieldOf(none.stage.world.map)).toBeUndefined();
-    const pond: PondInfo = { seed: 3, streams: [], bridges: [{ rect: [1, 1, 2, 1], along_x: true, road: false }] };
+    const pond: PondInfo = { seed: 3, blobs: [], streams: [], bridges: [{ rect: [1, 1, 2, 1], along_x: true, road: false }] };
     const { stage, run } = setup(['#####', '#...#', '#####'], { woodland: { ...WOODLAND!, pond } });
     expect(stage.world.map).not.toBe(run.session.map);
     expect(pondFieldOf(stage.world.map)).toBeDefined();
