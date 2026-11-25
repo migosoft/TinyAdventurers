@@ -1,6 +1,7 @@
 pub mod cove;
 pub mod generate;
 pub mod stone;
+pub mod water_shapes;
 pub mod woodland;
 
 use crate::defs::enemies::EnemyType;
