@@ -50,6 +50,12 @@ describe('the sun term', () => {
     });
   }
 
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: the cloud noise uses no sin hash (#429)`, () => {
+      expect(termFragment(B, true)).not.toMatch(/\bsin\(/);
+    });
+  }
+
   it('GLSL: the depth texture is compared (a shadow sampler), not just read', () => {
     const code = termFragment(GLSLNodeBuilder, true);
     expect(code).toMatch(/sampler2DShadow/);

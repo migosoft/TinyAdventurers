@@ -1,7 +1,8 @@
 // The sun in the light of the 3D view (#306): the shadow-map lookup, the cloud shadow and the camera of the sun's pass, in TSL.
 // The maths of the fit is sun.ts's; the lookup here uses `sunCoord`'s formula.
 import { DepthTexture, LessEqualCompare, LinearFilter, OrthographicCamera, Vector2, Vector3 } from 'three/webgpu';
-import { Fn, clamp, dot, float, floor, fract, max, mix, sin, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
+import { clamp, dot, float, max, mix, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
+import { vnoise2 } from './noiseNodes';
 import type { SunFit, Vec3 } from './sun';
 import type { SunFrame } from './view';
 
@@ -55,14 +56,6 @@ export function sunCamera(fit: SunFit, into: OrthographicCamera = new Orthograph
   return cam;
 }
 
-const h21 = Fn(([p]: N[]) => fract(sin(dot(p, vec2(127.1, 311.7))).mul(43758.5453)));
-const vnoise = Fn(([p]: N[]) => {
-  const i: N = floor(p);
-  const f0: N = fract(p);
-  const f: N = f0.mul(f0).mul(float(3).sub(f0.mul(2)));
-  return mix(mix(h21(i), h21(i.add(vec2(1, 0))), f.x), mix(h21(i.add(vec2(0, 1))), h21(i.add(vec2(1, 1))), f.x), f.y);
-});
-
 export function makeSunLight(): SunLight {
   const uColour = uniform(new Vector3());
   const uDir = uniform(new Vector3(0, 1, 0));
@@ -95,7 +88,7 @@ export function makeSunLight(): SunLight {
   // Cloud shadow: the noise is read where the sun ray through P meets a cloud layer high up, so air and ground agree.
   const cloud = (P: N): N => {
     const q = P.xz.add(uDir.xz.div(max(uDir.y, 0.2)).mul(float(CLOUD.layer).sub(P.y))).mul(CLOUD.scale).sub(uDrift);
-    const n = vnoise(q).mul(0.65).add(vnoise(q.mul(2.3).add(7.1)).mul(0.35));
+    const n = vnoise2(q).mul(0.65).add(vnoise2(q.mul(2.3).add(7.1)).mul(0.35));
     const c = float(1).sub(float(CLOUD.darkest).mul(smoothstep(0.47, 0.66, n)));
     return mix(float(1), c, uClouds);
   };
