@@ -6,7 +6,7 @@ import { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
 import { WATER_LEVEL } from '../dips/shape';
 import { RIPPLE_CAP } from './ripples';
-import { Water3d, WADE, type WaterIn } from './water';
+import { PUDDLE_STIR, Water3d, WADE, type WaterIn } from './water';
 
 // a 10 x 4 room: floor in the west half, a shallow pool from x = 5
 const room = (): TileMap => {
@@ -171,5 +171,25 @@ describe('Water3d', () => {
     expect(c.ripples).toBe(a.ripples);
     expect(c.cues.enters).toBe(enters);
     expect(c.cues.spray).toBe(spray);
+  });
+
+  it('stirs a puddle with small rings as a figure steps in and walks through, and makes no cue (#401)', () => {
+    const w = new Water3d(room(), rng);
+    const puddles = [{ x: 2, z: 2, r: 0.6 }], dt = 1 / 60;
+    const at = (now: number, x: number, o: Partial<DrawnFig> = {}) => w.step(inp(now, dt, [fig(1, x, 2, { foot: 0, ...o })], { puddles }));
+    expect(at(0, 1).live).toBe(0);
+    const r = at(dt, 1.8); // stepped in
+    expect(r.live).toBe(1);
+    expect(r.ripples[3]).toBe(-PUDDLE_STIR.enter);
+    expect(r.cues.enters.length).toBe(0);
+    expect(at(2 * dt, 1.8).live).toBe(1); // standing still: no more rings
+    let now = 2 * dt, x = 1.8;
+    for (let k = 0; k < 7; k++) { now += dt; x += 0.1; at(now, x); } // 0.7 tiles on, still inside
+    expect(w.step(inp(now, 0, [fig(1, x, 2, { foot: 0 })], { puddles })).live).toBe(3); // walking: a ring every `step` tiles
+    // the dry rim, a faller above the puddle and a puddle-less level: nothing
+    const dry = new Water3d(room(), rng);
+    dry.step(inp(0, dt, [fig(1, 1, 2, { foot: 0 }), fig(2, 1, 2, { foot: 1 }), fig(3, 1, 2, { foot: 0 })], { puddles }));
+    expect(dry.step(inp(dt, dt, [fig(1, 2.58, 2, { foot: 0 }), fig(2, 2, 2, { foot: 1 })], { puddles })).live).toBe(0);
+    expect(dry.step(inp(2 * dt, dt, [fig(3, 2, 2, { foot: 0 })])).live).toBe(0);
   });
 });

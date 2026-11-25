@@ -110,4 +110,24 @@ describe('ripples', () => {
     expect(xs).toContain(99);
     expect(xs).toContain(1);
   });
+
+  it('a small ring replaces only the oldest small ring, never a pool ring (#401)', () => {
+    const r = new Ripples(), out = new Float32Array(RIPPLE_CAP * 4);
+    const xs = () => { r.pack(1, out); return Array.from({ length: RIPPLE_CAP }, (_, i) => out[i * 4]); };
+    for (let i = 0; i < RIPPLE_CAP; i++) r.add(i, 0, i * 0.01, 1);
+    r.add(50, 0, 0.5, -1); // all slots hold live pool rings: dropped
+    expect(xs()).not.toContain(50);
+    r.add(60, 0, 0.6, 1); // a pool ring replaces the oldest
+    r.add(61, 0, 0.61, -1); // still no small ring to replace
+    expect(xs()).not.toContain(61);
+    const s = new Ripples();
+    for (let i = 0; i < RIPPLE_CAP; i++) s.add(i, 0, i * 0.01, i === 3 || i === 7 ? -1 : 1);
+    s.add(70, 0, 0.7, -1);
+    s.pack(1, out);
+    const got = Array.from({ length: RIPPLE_CAP }, (_, i) => out[i * 4]);
+    expect(got).toContain(70);
+    expect(got).not.toContain(3);
+    expect(got).toContain(7);
+    expect(got).toContain(0);
+  });
 });

@@ -1,5 +1,5 @@
 // The stage of the ?r3d=stone page (#380): the stonework's own level on the real code, no server. A knight walks with WASD.
-// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate|torch|rocktorch`, `&lamp=0` (the light that walks with the knight off),
+// `&stone=laid|rock|zones` (default: the map's own kinds), `&at=cave|border|hall|circle|mosaic|cave2|door|grate|torch|rocktorch|puddle` (puddle: just west of the puddle nearest the cave, #401), `&lamp=0` (the light that walks with the knight off),
 // `&break=1` (every crystal broken: its light is off and its cluster is stumps), `&t=<s>` shifts the clock of the lights' flicker and the puddles' drops; `&refl=0` turns the puddles' reflections off.
 import { LIGHT, LIGHT_KIND } from '../../generated/defs';
 import { LightField } from '../../game/light';
@@ -27,7 +27,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
   const mode = q.get('stone');
   const kinds = mode === 'rock' ? new Uint8Array(map.w * map.h).fill(ROCK) : mode === 'laid' ? null : zoneKinds(map);
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map, kinds, STONE_SEED) };
-  const [px, pz] = PLACES[(q.get('at') ?? 'cave') as keyof typeof PLACES] ?? PLACES.cave;
+  const [px, pz]: readonly [number, number] = PLACES[(q.get('at') ?? 'cave') as keyof typeof PLACES] ?? PLACES.cave;
   const stoneRun = makeStoneRun(world, { x: px, z: pz });
 
   // One knight, no props or torch figures: the scene is the demo's with everything else taken out.
@@ -53,6 +53,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
 
   // The cover as the dev scene has it (moss in every room), built whole at the first build and kept for the rebuilds.
   let job: CoverJob | null = null;
+  let placed = false;
   return {
     world,
     built(view: View): void {
@@ -61,6 +62,12 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
         job.step(Infinity);
       }
       view.setCover(job.result()!);
+      // `&at=puddle` (#401): the knight starts just west of the puddle nearest the cave, so D walks it through.
+      if (q.get('at') === 'puddle' && !placed) {
+        placed = true;
+        const near = [...(view.stone?.marks.puddles ?? [])].sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz))[0];
+        if (near) { scene.player.x = cam.x = near.x - near.r - 0.3; scene.player.z = cam.z = near.z; }
+      }
     },
     frame(c: StageCtx): number {
       t += c.dt;
@@ -84,8 +91,8 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
         ? selectLights([...staticCands(field, t), ...movingCands(lamp ? [[scene.player.x * TILE, scene.player.z * TILE, LIGHT_KIND.Torch, LIGHT[LIGHT_KIND.Torch].colour]] : [], [], () => null, t)], lightView(footprint(cam, c.plan.halfW, c.plan.halfH), cam), cam, Math.min(LIGHT_CAP, c.params.lcap)).list
         : [];
       c.timer.lap('lights');
-      // The puddles' drops, on the page's clock `t`.
-      const wo = water.step({ dt: c.dt, now: t, figs: [], sinks: [], landed: null, hidden: NONE_IDS, puddles: c.view.stone?.marks.puddles, fp: footprint(cam, c.plan.halfW, c.plan.halfH) });
+      // The puddles' drops and the knight's feet in them, on the page's clock `t`.
+      const wo = water.step({ dt: c.dt, now: t, figs: [{ id: 0, x: scene.player.x, z: scene.player.z, foot: 0, dashing: false }], sinks: [], landed: null, hidden: NONE_IDS, puddles: c.view.stone?.marks.puddles, fp: footprint(cam, c.plan.halfW, c.plan.halfH) });
       c.timer.renderStart();
       return c.view.draw(
         {

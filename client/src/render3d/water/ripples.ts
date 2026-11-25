@@ -54,14 +54,18 @@ export class Ripples {
 
   /** A source at (x, z) tiles born at `now` (s). With RIPPLE_CAP live sources the oldest is replaced.
    *  A free or expired slot (now - born >= RIPPLE_LIFE) is reused first, so a live source is only replaced when none is left.
-   *  A slot born in the future (the caller's clock went back) is free too: it would never show nor expire. */
+   *  A slot born in the future (the caller's clock went back) is free too: it would never show nor expire.
+   *  A small ring (negative strength: a puddle's, #401) replaces only the oldest small ring and is dropped when there is none, so the
+   *  puddles of a busy cave never push out a pool's rings. */
   add(x: number, z: number, now: number, strength: number): void {
     let slot = -1, oldest = Infinity;
     for (let i = 0; i < RIPPLE_CAP; i++) {
       const age = now - this.born[i];
       if (age >= RIPPLE_LIFE || age < 0) { slot = i; break; }
+      if (strength < 0 && this.strength[i] >= 0) continue;
       if (this.born[i] < oldest) { oldest = this.born[i]; slot = i; }
     }
+    if (slot < 0) return;
     this.x[slot] = x; this.z[slot] = z; this.strength[slot] = strength; this.born[slot] = now;
   }
 

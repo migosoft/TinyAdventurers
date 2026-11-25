@@ -10,6 +10,12 @@ import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, puddleDrops } from './ripples';
 
 /** Seconds between the rings of a wader, its speed (tiles/s) above which it rings, the strengths of the ripples and the rates (per second) of the cues. */
 export const WADE = { every: 0.3, speed: 0.3, ring: 1, enter: 1.6, drip: 0.55, plunge: 1.6, plunges: 3, stir: 0.6, stirRate: 8, bubbleRate: 12, sprayRate: 30 } as const;
+/**
+ * A figure's feet in a puddle (#401): small rings (`DROP.scale`) of these strengths as it steps in and every `step` tiles it walks there
+ * (by distance, not time: a puddle is crossed in a fraction of a second), within this share of the puddle's radius (the rim of a basin
+ * is dry), with its foot below this height (tiles; a faller is above it).
+ */
+export const PUDDLE_STIR = { enter: 1.5, ring: 1, step: 0.3, within: 0.85, foot: 0.05 } as const;
 /** How far (tiles) the ripples of a drowning scatter around the spot: the plunge, the stirring. */
 const PLUNGE_SCATTER = 0.15, STIR_SCATTER = 0.2;
 
@@ -18,19 +24,19 @@ export interface WaterCues { enters: WaterSpot[]; plunges: WaterSpot[]; spray: W
 export interface WaterIn {
   dt: number;
   now: number;
-  figs: readonly DrawnFig[];
+  figs: readonly Pick<DrawnFig, 'id' | 'x' | 'z' | 'foot' | 'dashing'>[];
   /** The drownings that began this frame (`FigureOut.sinks`). */
   sinks: readonly WaterSpot[];
   /** The drips that reached the water this frame: (x, z) pairs. */
   landed: { count: number; pos: Float32Array } | null;
   hidden: ReadonlySet<number>;
-  /** The level's puddles and the ground the screen shows (#380): drops ring the puddles in view. Absent: none. */
+  /** The level's puddles and the ground the screen shows (#380): drops ring the puddles in view, and feet stir them (#401). Absent: none. */
   puddles?: readonly Puddle[];
   fp?: Footprint;
 }
 
 /** `standing`: in the water last frame; a dash over water counts as in it (a figure keeps its tile during a dash), so a dash that ends in water makes no entering. */
-interface FigState { x: number; z: number; standing: boolean; ring: number; spray: number; seen: number }
+interface FigState { x: number; z: number; standing: boolean; puddle: boolean; walked: number; ring: number; spray: number; seen: number }
 interface Drown { id: number; x: number; z: number; left: number; stir: number; bubble: number }
 
 /** A list of cues that reuses its spot objects from frame to frame. */
@@ -44,6 +50,11 @@ class Spots {
     s.id = id; s.x = x; s.z = z;
     this.list.push(s);
   }
+}
+
+function inPuddle(puddles: readonly Puddle[], x: number, z: number): boolean {
+  for (const p of puddles) if (Math.hypot(x - p.x, z - p.z) < p.r * PUDDLE_STIR.within) return true;
+  return false;
 }
 
 export class Water3d {
@@ -88,10 +99,11 @@ export class Water3d {
       const f = i.figs[k];
       const over = isWater(this.map.get(Math.floor(f.x), Math.floor(f.z)));
       const standing = over && !f.dashing && f.foot < WATER_LEVEL;
+      const puddle = !over && !!i.puddles && f.foot < PUDDLE_STIR.foot && inPuddle(i.puddles, f.x, f.z);
       const quiet = hidden.has(f.id);
       let s = this.states.get(f.id);
       if (!s) {
-        s = { x: f.x, z: f.z, standing, ring: 0, spray: 0, seen: frame };
+        s = { x: f.x, z: f.z, standing, puddle, walked: 0, ring: 0, spray: 0, seen: frame };
         this.states.set(f.id, s);
       } else {
         const speed = dt > 0 ? Math.hypot(f.x - s.x, f.z - s.z) / dt : 0;
@@ -102,8 +114,14 @@ export class Water3d {
         } else if (standing && speed > WADE.speed && s.ring >= WADE.every) {
           s.ring = 0;
           if (!quiet) this.ripples.add(f.x, f.z, now, WADE.ring);
+        } else if (puddle) {
+          s.walked = s.puddle ? s.walked + speed * dt : PUDDLE_STIR.step;
+          if (s.walked >= PUDDLE_STIR.step) {
+            s.walked = 0;
+            if (!quiet) this.ripples.add(f.x, f.z, now, s.puddle ? -PUDDLE_STIR.ring : -PUDDLE_STIR.enter);
+          }
         }
-        s.x = f.x; s.z = f.z; s.standing = standing || (over && f.dashing); s.seen = frame;
+        s.x = f.x; s.z = f.z; s.standing = standing || (over && f.dashing); s.puddle = puddle; s.seen = frame;
       }
       if (over && f.dashing) {
         s.spray += WADE.sprayRate * dt;
