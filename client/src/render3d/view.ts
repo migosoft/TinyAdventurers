@@ -739,7 +739,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     }
   };
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
-  const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover }) });
+  const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover, brush: makeBrushUniforms() }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);

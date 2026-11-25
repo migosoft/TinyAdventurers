@@ -6,7 +6,7 @@ import { Fn, attribute, float, floor, max, min, mix, positionGeometry, select, s
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import { CARD_BIAS, bayerAt, cardSunAt, type ViewToward } from '../materials';
-import { swayNode } from '../windNodes';
+import { brushNode, swayNode, type BrushUniforms } from '../windNodes';
 import { hash3 } from '../noiseNodes';
 import { GH_MAX } from './kinds';
 import { bushelSwayOf, bushelTone, coverTexel, kindLook, type CoverShared } from './coverRead';
@@ -59,7 +59,7 @@ export function coverSheetMaterial(o: { lighting: Lighting; sight: Sight; shared
  * facing the camera, as tall as `h / 16 * gh` tiles stretched by 1 / cos(pitch), swayed by `oy^2 * look.sway`. The blades are made per
  * pixel column from the seed. Stippled by the sight at the foot (scenery: misted, never hidden on daylight maps).
  */
-export function bushelMaterial(o: { lighting: Lighting; sight: Sight; toward: ViewToward; shared: CoverShared }): MeshBasicNodeMaterial {
+export function bushelMaterial(o: { lighting: Lighting; sight: Sight; toward: ViewToward; shared: CoverShared; brush: BrushUniforms }): MeshBasicNodeMaterial {
   const { lighting, sight, toward, shared: s } = o;
   const foot: N = positionGeometry;
   const corner: N = attribute('corner', 'vec2');
@@ -70,7 +70,10 @@ export function bushelMaterial(o: { lighting: Lighting; sight: Sight; toward: Vi
   // The kind under the foot (a fetch in the vertex shader) gives the sway and, passed on, the tones.
   const kind = varying(coverTexel(s, floor(foot.xz.mul(16))).id, 'bushelKind');
   const sway = swayNode(foot.xz, corner.y, float(1), bushelSwayOf(kind), s.t, s.windOn);
-  const world = foot.add(lighting.sun.right.mul(corner.x.sub(0.5).mul(w).div(16))).add(vec3(0, corner.y.mul(h).div(16).mul(s.gh), 0)).add(sway);
+  const spread = foot.add(lighting.sun.right.mul(corner.x.sub(0.5).mul(w).div(16)));
+  // The foot row (corner.y 0) stays planted; the brush grows with the square of the height, like the sway.
+  const brush = brushNode(o.brush, spread.xz, corner.y.mul(corner.y), foot.xz);
+  const world = spread.add(vec3(0, corner.y.mul(h).div(16).mul(s.gh), 0)).add(sway).add(brush);
   // The screen shows the card at its full height: stretch by 1 / cos(pitch); the light uses the true point.
   m.positionNode = vec3(world.x, world.y.div(s.cosP), world.z).add(toward.mul(CARD_BIAS));
 

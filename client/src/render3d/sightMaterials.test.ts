@@ -70,7 +70,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [
     // strength is gated by the seen share at the view ray's ground point (the mask's read and the mode are in its code).
     { name: 'shimmer', m: shimmerMaterial(sight, l.lavaTexture, { w: 4, h: 3 }, toward).material, world: true },
     { name: 'cover sheet', m: coverSheetMaterial({ lighting: l, sight, shared: cover }), world: false },
-    { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover }), world: false },
+    { name: 'bushel', m: bushelMaterial({ lighting: l, sight, toward, shared: cover, brush: makeBrushUniforms() }), world: false },
     { name: 'card opaque', m: cardMaterial(t, 64, 64, l, toward, sight).material, world: false },
     { name: 'card translucent', m: cardMaterial(t, 64, 64, l, toward, sight, { translucent: true }).material, world: false },
     { name: 'card flat', m: cardMaterial(t, 64, 64, l, toward, sight, { flat: true, translucent: true }).material, world: false },

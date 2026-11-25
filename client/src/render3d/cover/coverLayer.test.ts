@@ -12,6 +12,7 @@ import { buildCoverChunk } from './coverMesh';
 import { encodeCover, GH_MAX } from './kinds';
 import type { Bushel } from './source';
 import { CHUNK } from '../worldMesh';
+import { makeBrushUniforms } from '../windNodes';
 
 const W = 40, H = 20; // 3 x 2 chunks
 function result(put: [number, number, number][], bushels: Bushel[] = []): CoverResult {
@@ -30,7 +31,7 @@ function make() {
   const sight = makeSight();
   const materials = {
     sheet: coverSheetMaterial({ lighting, sight, shared }),
-    bushel: bushelMaterial({ lighting, sight, toward: viewTowardUniform(), shared }),
+    bushel: bushelMaterial({ lighting, sight, toward: viewTowardUniform(), shared, brush: makeBrushUniforms() }),
   };
   const layer = new CoverLayer(scene, shared, materials);
   return { layer, scene, shared, materials };

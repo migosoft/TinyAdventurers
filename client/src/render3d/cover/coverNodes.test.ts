@@ -38,7 +38,7 @@ function build(lighting: Lighting) {
   return {
     shared,
     sheet: coverSheetMaterial({ lighting, sight, shared }),
-    bushel: bushelMaterial({ lighting, sight, toward: viewTowardUniform(), shared }),
+    bushel: bushelMaterial({ lighting, sight, toward: viewTowardUniform(), shared, brush: makeBrushUniforms() }),
   };
 }
 
@@ -80,6 +80,13 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
         expect(loads.length, name).toBeGreaterThan(0);
         for (const h of loads) expect(atTopLevel(code, h.index), name).toBe(true);
       }
+    });
+
+    it('the bushel vertex code carries the brush loop; the sheet carries none', () => {
+      const m = build(stub());
+      expect(vertex(B, m.bushel)).toContain('brushSum');
+      expect(vertex(B, m.sheet)).not.toContain('brushSum');
+      expect(fragment(B, m.sheet)).not.toContain('brushSum');
     });
 
     it('the sun marker (the sun\'s own jitter constant 311.7) is in the code of a world with a sun', () => {
