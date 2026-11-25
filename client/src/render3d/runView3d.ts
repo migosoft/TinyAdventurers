@@ -31,6 +31,8 @@ import { Air3d } from './air/air';
 import type { AirParts } from './air/airParts';
 import { Water3d, type WaterCues, type WaterIn } from './water/water';
 import { MoverTracker, collectAirMovers } from '../game/airmovers';
+import { BrushTracker } from './brush';
+import { brushFrame } from './brushRun';
 import type { AirMover, AirShot } from '../game/airTypes';
 import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
@@ -140,6 +142,7 @@ export class RunView3d implements RunView {
   private readonly lavaIn: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean } = { bubbles: null, stirs: null, now: 0, heat: false };
   private readonly moverTracker = new MoverTracker();
   private readonly airMovers: AirMover[] = [];
+  private readonly brushTracker = new BrushTracker();
   private readonly myKind: number;
   private readonly airTorches: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
   /** The objects behind `airTorches` and `airShots`, kept between frames (the lists are refilled, nothing is allocated per frame). */
@@ -502,6 +505,8 @@ export class RunView3d implements RunView {
     // The dungeon's sunlight through the ceiling (#307): the Daylight lights the viewer sees now (this frame's mask), as their cracks. A woodland and the work light have none.
     if (!work && !skyNow) cracks = selectCracks(this.field, fp, c.params.sight ? this.mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
     const air = this.airFrame(f, c, fp, lights, cracks, !!skyNow);
+    // The figures that walk past plants (#331): after the air, which collected the movers; `hidden` is final.
+    const brush = brushFrame(this.brushTracker, f, this.airMovers, this.hidden, cam);
     c.timer.lap('air');
     // The sun or moon of the hour (not with the work light), its map fitted to what the camera sees.
     let sun: SunFrame | null = null;
@@ -525,7 +530,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
       },
       c.timer,
     );

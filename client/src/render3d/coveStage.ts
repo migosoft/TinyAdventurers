@@ -14,6 +14,7 @@ import { tilesSeed } from './cover/moss';
 import { atlasBounds } from './atlasBounds';
 import { closeCam, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { StageBrush } from './brushStage';
 import { Cove3d } from './cove3d';
 import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
@@ -114,6 +115,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
     if (!map.blocks(Math.floor(knight.x), Math.floor(nz), 'hero')) knight.z = nz;
   };
 
+  const brush = new StageBrush();
   let seconds = 0;
   world.taken = { lights: [...field.lights.values()], spawn: KNIGHT_START };
   return {
@@ -140,6 +142,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       cam.x = knight.x;
       cam.z = knight.z;
       const ents: EntState[] = [...torchEnts, ent(KNIGHT_ID, KIND.Knight, knight.x * TILE, knight.z * TILE, { anim: knight.moving ? ANIM.Move : ANIM.Idle, animMs: c.now * 1000, aim: knight.aim })];
+      const brushers = brush.step(c.dt, ents, cam);
       c.timer.lap('sim');
       stoneRun.frame(c.view);
       if (!c.view) return 0;
@@ -189,7 +192,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
         {
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
+          brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
         },

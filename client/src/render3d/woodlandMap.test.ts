@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { PLANT_KINDS } from '../game/vegetation';
-import { DEAD_TREE, KNIGHT_START, LEAF_ROW, ROAD_ROWS, SHAPE_ROW, WOODLAND_H, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, WOODLAND_W, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, BRUSH_LANE_PLANTS, brushWalk, DEAD_TREE, KNIGHT_START, LEAF_ROW, ROAD_ROWS, SHAPE_ROW, WOODLAND_H, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, WOODLAND_W, woodlandStageMap } from './woodlandMap';
 
 describe('the woodland stage map', () => {
   const map = woodlandStageMap();
@@ -75,5 +75,30 @@ describe('the line-ups on the woodland stage', () => {
     expect(w.dead).toBe(false);
     expect(map.get(Math.floor(w.x), Math.floor(w.z))).toBe(TILE_ID.Trunk);
     expect(PLANT_KINDS as readonly string[]).not.toContain('willow');
+  });
+});
+
+describe('the brush lane (#331)', () => {
+  const map = woodlandStageMap(true);
+  it('has a bush and a small round tree beside it, on the lane, with the lane walkable', () => {
+    expect(BRUSH_LANE.bush.z).toBeCloseTo(BRUSH_LANE.z + 0.5, 1);
+    expect(map.get(Math.floor(BRUSH_LANE.bush.x), Math.floor(BRUSH_LANE.bush.z))).toBe(TILE_ID.Floor);
+    expect(map.get(BRUSH_LANE.tree.tx, BRUSH_LANE.tree.tz)).toBe(TILE_ID.Trunk);
+    for (let x = BRUSH_LANE.bush.x - 4; x <= BRUSH_LANE.bush.x + 4; x++) expect(map.blocks(Math.floor(x), BRUSH_LANE.z, 'hero')).toBe(false);
+    expect(BRUSH_LANE_PLANTS.map((s) => s.form)).toEqual(['bush', 'round']);
+    expect(BRUSH_LANE_PLANTS[1].scalePct).toBe(60);
+    expect(woodlandStageMap().get(BRUSH_LANE.tree.tx, BRUSH_LANE.tree.tz)).toBe(TILE_ID.Floor);
+  });
+
+  it('brushWalk is periodic, stays on the lane within 3 tiles of the bush and passes the bush', () => {
+    for (let t = 0; t < 12; t += 0.37) {
+      const w = brushWalk(t);
+      expect(brushWalk(t + BRUSH_LANE.period).x).toBeCloseTo(w.x, 6);
+      expect(w.z).toBe(BRUSH_LANE.z + 0.5);
+      expect(Math.abs(w.x - BRUSH_LANE.bush.x)).toBeLessThanOrEqual(3 + 1e-9);
+    }
+    const xs = Array.from({ length: 600 }, (_, i) => brushWalk(i * 0.02).x);
+    expect(Math.min(...xs)).toBeLessThan(BRUSH_LANE.bush.x - 2.9);
+    expect(Math.max(...xs)).toBeGreaterThan(BRUSH_LANE.bush.x + 2.9);
   });
 });

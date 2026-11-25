@@ -4,6 +4,7 @@ import { TileMap } from '../../sim/map';
 import { LAID, ROCK, stoneField } from '../stone/field';
 import { noMarks } from '../stone/place';
 import { floorHeight } from '../stone/shape';
+import { BRUSH } from '../brush';
 import { CARD_BIAS } from '../materials';
 import { PITCH_MAX } from '../params';
 import { SWAY_WAVE_MAX } from '../wind';
@@ -108,6 +109,15 @@ describe('buildCoverChunk', () => {
     }
     expect(c.min[0]).toBe(32);
     expect(c.max[0]).toBeGreaterThanOrEqual(W);
+  });
+
+  it('a bushel chunk reaches BRUSH.max further than the wind and the bias alone (#331)', () => {
+    const b: Bushel = { x: 31.5, z: 15.5, w: 12, h: 13, seed: 0.3, fern: false }; // by the chunk's far corner, so the bushel sets the bounds
+    const c = buildCoverChunk(result([[20 * 16, 3 * 16, 4]], [b]), 1, 0)!;
+    const sway = Math.max(0, ...COVER_KINDS.map((k) => k.bushels?.sway ?? 0)) * SWAY_WAVE_MAX;
+    const room = b.w / 16 / 2 + sway + CARD_BIAS;
+    expect(c.max[0] - (b.x + room)).toBeCloseTo(BRUSH.max, 5);
+    expect(c.max[2] - (b.z + room)).toBeCloseTo(BRUSH.max, 5);
   });
 
   it('keeps every drawn bushel corner inside the bounds for any yaw, with sway and the card bias', () => {

@@ -11,7 +11,7 @@ import { SUN_MAP, fitSunMap, mistLightOf, sky, sunView } from './sun';
 import { footprint } from './lights';
 import type { FrameInput } from './view';
 import { WIND } from './wind';
-import { WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, brushWalk, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
 import { createWoodlandStage, woodlandEnts } from './woodlandStage';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -235,5 +235,15 @@ describe('the ?r3d=woodland stage', () => {
     const f = setup('?r3d=woodland&sight=0').run(1, 0.016);
     expect(f.sight!.mode).toBe('off');
     expect(f.sun).not.toBeNull();
+  });
+
+  it('with brush=1 paces the knight along the lane and feeds the brushers; a pinned t gives the same brushers twice (#331)', () => {
+    const a = setup('?r3d=woodland&brush=1&t=2').run(1, 0.016);
+    const b = setup('?r3d=woodland&brush=1&t=2').run(1, 0.016);
+    expect(a.brush!.length).toBeGreaterThan(0);
+    expect(JSON.parse(JSON.stringify(a.brush))).toEqual(JSON.parse(JSON.stringify(b.brush)));
+    expect(a.cam.z).toBeCloseTo(BRUSH_LANE.z + 0.5);
+    expect(a.cam.x).toBeCloseTo(brushWalk(2).x);
+    expect(setup('?r3d=woodland').run(3, 0.016).brush).toEqual([]);
   });
 });

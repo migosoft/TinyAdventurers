@@ -31,7 +31,8 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
 import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
-import { KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE_PLANTS, KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, brushWalk, woodlandStageMap } from './woodlandMap';
+import { StageBrush } from './brushStage';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
 
@@ -81,14 +82,17 @@ export function fireballAt(t: number): MovingLight {
 
 /** `?models=1` draws the figures as 3D models (#338); `deps.kit` is for tests (the stage then leaves it alone at the end). */
 export function createWoodlandStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'setDaylight' | 'setSky'>, deps: { kit?: FigureKit } = {}): Stage {
-  const map = woodlandStageMap();
+  const map = woodlandStageMap(p.brush);
   const useModels = /[?&]models=1(&|$)/.test(search);
   // One kit for the stage, kept across a rebuilt view.
   const kit = useModels ? deps.kit ?? createStageKit(assets) : null;
   const readout = kit ? modelsReadouter(kit) : null;
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures of the line-ups.
   const at = /[?&]at=(\d+),(\d+)/.exec(search);
-  const start = at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
+  // `brush=1` (#331): the knight paces the brush lane; `t=<s>` pins its clock (the picture is the same every time).
+  const pin = p.brush ? /[?&]t=(\d+(?:\.\d+)?)/.exec(search) : null;
+  const pinned = pin ? Number(pin[1]) : null;
+  const start = p.brush ? brushWalk(pinned ?? 0) : at && !map.blocks(Number(at[1]), Number(at[2]), 'hero') ? { x: Number(at[1]) + 0.5, z: Number(at[2]) + 0.5 } : KNIGHT_START;
   const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR, stone: null };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   host?.setDaylight(true);
@@ -107,7 +111,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   };
 
   // The trees are grown by `step` a few per frame.
-  const forest = new Forest([...WOODLAND_STAGE_PLANTS.map(treeSpecOf), ...WOODLAND_STAGE_EXTRA], map, LEAF_PALETTE.Summer);
+  const forest = new Forest([...WOODLAND_STAGE_PLANTS.map(treeSpecOf), ...WOODLAND_STAGE_EXTRA, ...(p.brush ? BRUSH_LANE_PLANTS : [])], map, LEAF_PALETTE.Summer);
 
   const critters = new Critters3d(map, GROUND_SEED);
   const fireflies = new Fireflies(GROUND_SEED);
@@ -142,6 +146,14 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
     label.textContent = text;
   };
 
+  // The brushers (#331): a pinned clock replays the last second of the lane walk once (the knight only), then holds still.
+  const brush = new StageBrush();
+  let replayed = false;
+  const replay = (t: number): void => {
+    const step = 1 / 60;
+    for (let s = Math.max(0, t - 1); s <= t + 1e-9; s += step) brush.step(step, woodlandEnts(false, s, { ...brushWalk(s), moving: true }).slice(0, 1), brushWalk(s));
+  };
+
   /** Moves the knight by `d` tiles along the world direction (wx, wz), one axis at a time so it slides along what blocks. */
   const walk = (wx: number, wz: number, d: number): void => {
     const len = Math.hypot(wx, wz) || 1;
@@ -173,7 +185,9 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       let iz = 0;
       for (const k of c.held) { ix += MOVE_KEYS[k][0]; iz += MOVE_KEYS[k][1]; }
       knight.moving = ix !== 0 || iz !== 0;
-      if (knight.moving) {
+      if (p.brush) {
+        Object.assign(knight, brushWalk(pinned ?? seconds), { moving: true });
+      } else if (knight.moving) {
         const w = keysToWorld(cam.yaw, ix, iz);
         walk(w.x, w.z, KNIGHT_SPEED * c.dt);
         if (w.x !== 0) knight.aim = w.x < 0 ? Math.PI : 0;
@@ -181,6 +195,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       cam.x = knight.x;
       cam.z = knight.z;
       const ents = woodlandEnts(useModels, c.now, knight);
+      if (pinned !== null && !replayed) { replayed = true; replay(pinned); }
+      const brushers = brush.step(pinned === null ? c.dt : 0, ents, cam);
       c.timer.lap('sim');
       if (!c.view) return 0;
 
@@ -251,7 +267,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           ...(kit ? { models: { insts: fo.models, built: fo.built, kit } } : {}),
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
+          brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,
       );

@@ -61,7 +61,8 @@ import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
-import { makeBrushUniforms } from './windNodes';
+import { makeBrushUniforms, setBrushers } from './windNodes';
+import type { Brusher } from './brush';
 import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { FigureLayer, figureLooks, imageTexture } from './models/layer';
@@ -166,6 +167,8 @@ export interface FrameInput {
   shafts?: boolean;
   /** The air (#307): the simulation's parts for this frame and the haze (`on`, `t` seconds for its drift); absent or null = none. */
   air?: { parts: AirParts; haze: { on: boolean; t: number } } | null;
+  /** The brushers of this frame (#331): the figures that make bushes and bushels wiggle; absent = none. */
+  brush?: readonly Brusher[];
   /** The water (#345): the packed ripples (null: none), its clock in seconds, and whether the mirror pass runs. Absent: no ripples, clock `t`, no mirror. */
   water?: { ripples: Float32Array | null; now: number; reflect: boolean };
   /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
@@ -703,7 +706,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return sunDepth!;
   };
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
-  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush: makeBrushUniforms() }));
+  // The brushers (#331): one set of uniforms for the bushes and the bushels, written every frame.
+  const brush = makeBrushUniforms();
+  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush }));
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
   // The id pass (#364): the pieces of the model figures drawn into an id target of the picture's size; the hulls read it (nodes.ts).
@@ -739,7 +744,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     }
   };
   // The ground cover (#330): the sheets and bushels share the `cover` uniforms and image with the ground and the trees.
-  const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover, brush: makeBrushUniforms() }) });
+  const coverLayer = new CoverLayer(scene, cover, { sheet: coverSheetMaterial({ lighting, sight, shared: cover }), bushel: bushelMaterial({ lighting, sight, toward, shared: cover, brush }) });
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
@@ -1076,6 +1081,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       trees.shared.cosP.value = Math.cos(f.cam.pitch);
       figures.shared.cosP.value = Math.cos(f.cam.pitch);
       figures.shared.idOn.value = 0;   // the shafts' depth pass and the mirror run before the id pass
+      setBrushers(brush, f.brush ?? [], f.t);
       coverLayer.frame(f.cover ?? { on: false, gh: 1, wind: false, t: f.t }, Math.cos(f.cam.pitch));
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;

@@ -114,9 +114,16 @@ describe('toSearch', () => {
       see: 'off', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
-      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false,
+      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false, brush: true,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
+  });
+
+  it('reads brush=1 (the woodland brush lane, #331) and writes it back', () => {
+    expect(parseParams('?r3d=woodland').brush).toBe(false);
+    expect(parseParams('?r3d=woodland&brush=1').brush).toBe(true);
+    expect(toSearch({ ...DEFAULTS, brush: true }, '?r3d=woodland')).toBe('?r3d=woodland&brush=1');
+    expect(toSearch(DEFAULTS, '?r3d=woodland&brush=1')).toBe('?r3d=woodland');
   });
 
   it('reads the see-through switch and sliders, clamps them, and leaves defaults out of the URL', () => {

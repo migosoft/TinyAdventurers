@@ -38,7 +38,17 @@ export const SHAPE_ROW = { z: 10, xs: [4, 8, 12, 17, 22, 27, 32, 35, 38], seeds:
 export const DEAD_TREE = { x: 29, z: 22, seed: 331 } as const;
 const WILLOW = { x: 36, z: 19, seed: 341 } as const;
 
-export function woodlandStageMap(): TileMap {
+/** The brush lane (#331, `?r3d=woodland&brush=1`): a bush on the grass row `z` with a small round tree beside it; the knight paces east and west through the bush, 3 tiles each way, one round per `period` seconds. */
+export const BRUSH_LANE = { z: 6, bush: { x: 20.5, z: 6.5, seed: 351 }, tree: { tx: 22, tz: 5, seed: 352 }, reach: 3, period: 6 } as const;
+
+/** The knight on the brush lane at time `t` (s): on the lane's row, facing the way it goes (0 east, PI west). */
+export function brushWalk(t: number): { x: number; z: number; aim: number } {
+  const a = (2 * Math.PI * t) / BRUSH_LANE.period;
+  return { x: BRUSH_LANE.bush.x + BRUSH_LANE.reach * Math.sin(a), z: BRUSH_LANE.z + 0.5, aim: Math.cos(a) >= 0 ? 0 : Math.PI };
+}
+
+/** `brush`: with the brush lane's tree (`BRUSH_LANE_PLANTS`). */
+export function woodlandStageMap(brush = false): TileMap {
   const tiles = new Uint8Array(WOODLAND_W * WOODLAND_H).fill(TILE_ID.Floor);
   const row = (z: number, tile: number): void => {
     tiles.fill(tile, z * WOODLAND_W, (z + 1) * WOODLAND_W);
@@ -51,6 +61,7 @@ export function woodlandStageMap(): TileMap {
   for (const x of SHAPE_ROW.xs) tiles[SHAPE_ROW.z * WOODLAND_W + x] = TILE_ID.Trunk;
   tiles[DEAD_TREE.z * WOODLAND_W + DEAD_TREE.x] = TILE_ID.Trunk;
   tiles[WILLOW.z * WOODLAND_W + WILLOW.x] = TILE_ID.Trunk;
+  if (brush) tiles[BRUSH_LANE.tree.tz * WOODLAND_W + BRUSH_LANE.tree.tx] = TILE_ID.Trunk;
   for (const z of ROAD_ROWS) row(z, TILE_ID.Road);
   row(WOODLAND_H - 1, TILE_ID.Void);
   return new TileMap(WOODLAND_W, WOODLAND_H, tiles);
@@ -70,4 +81,10 @@ export const WOODLAND_STAGE_PLANTS: PlantInfo[] = [
 /** Plants the server never sends: the willow, for the dev page only (it is no plant kind). */
 export const WOODLAND_STAGE_EXTRA: TreeSpec[] = [
   { form: 'willow', x: WILLOW.x + 0.5, z: WILLOW.z + 12 / TILE, seed: WILLOW.seed, scalePct: 100, mirrored: false, leaf: 1, dead: false },
+];
+
+/** The brush lane's bush on a grass tile and a small round tree beside it (a tree's low crown is part of its build); only with `brush=1`. */
+export const BRUSH_LANE_PLANTS: TreeSpec[] = [
+  { form: 'bush', x: BRUSH_LANE.bush.x, z: BRUSH_LANE.bush.z, seed: BRUSH_LANE.bush.seed, scalePct: 100, mirrored: false, leaf: 1, dead: false },
+  { form: 'round', x: BRUSH_LANE.tree.tx + 0.5, z: BRUSH_LANE.tree.tz + 12 / TILE, seed: BRUSH_LANE.tree.seed, scalePct: 60, mirrored: false, leaf: 1, dead: false },
 ];
