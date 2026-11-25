@@ -102,4 +102,18 @@ describe('collectAirMovers', () => {
     expect(out[0].shot).toBe(true);
     expect(out[0].heat).toBe(projectileAir(KIND.Fireball).heat);
   });
+
+  it('a figure\'s mover carries its entity id and flags; the own hero\'s carries f.you', () => {
+    const tr = new MoverTracker();
+    const mk = (x: number) => {
+      const f = frame([ent(5, KIND.Paladin, x, FLAG.AIRBORNE)], [], true);
+      (f.own as unknown as { x: number; flags: number }).x = x;
+      (f.own as unknown as { flags: number }).flags = FLAG.INCORPOREAL;
+      return f;
+    };
+    run(tr, mk(10));
+    const out = run(tr, mk(11));
+    expect(out.find((m) => m.id === 5)!.flags).toBe(FLAG.AIRBORNE);
+    expect(out.find((m) => m.id === 1)!.flags).toBe(FLAG.INCORPOREAL);
+  });
 });

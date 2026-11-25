@@ -66,7 +66,7 @@ describe('dust', () => {
     let t = 4;
     let peak = 0;
     for (let i = 0; i < 12; i++, t += 0.05) {
-      parts = air.step(make(t, [{ x: (sx - 0.4 + 0.1 * i) * 16, y: sz * 16, vx: 120, vy: 0, r: 6, shot: false, heat: 0 }]));
+      parts = air.step(make(t, [{ id: 1, flags: 0, x: (sx - 0.4 + 0.1 * i) * 16, y: sz * 16, vx: 120, vy: 0, r: 6, shot: false, heat: 0 }]));
       peak = Math.max(peak, air.counts.stirred);
     }
     expect(peak).toBeGreaterThan(0);
@@ -86,7 +86,7 @@ describe('dust', () => {
     const make = (t: number, movers: AirInput['movers'] = []) => frame({ t, lights: [flood()], on: { dust: true, smoke: true, embers: true, drips: true, stir: false, draft: true }, movers });
     let parts = run(air, 4, (t) => make(t));
     const [sx, , sz] = at(parts, 0);
-    for (let i = 0; i < 12; i++) parts = air.step(make(4 + i * 0.05, [{ x: (sx - 0.4 + 0.1 * i) * 16, y: sz * 16, vx: 120, vy: 0, r: 6, shot: false, heat: 0 }]));
+    for (let i = 0; i < 12; i++) parts = air.step(make(4 + i * 0.05, [{ id: 1, flags: 0, x: (sx - 0.4 + 0.1 * i) * 16, y: sz * 16, vx: 120, vy: 0, r: 6, shot: false, heat: 0 }]));
     expect(air.counts.stirred).toBe(0);
   });
 

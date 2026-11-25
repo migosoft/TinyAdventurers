@@ -27,7 +27,7 @@ export class MoverTracker {
   }
 
   /** The mover for this id at (x, y), or null on its first frame, when it stood still, or when it jumped more than JUMP px. */
-  track(id: number, x: number, y: number, r: number, shot: boolean, heat: number): AirMover | null {
+  track(id: number, x: number, y: number, r: number, shot: boolean, heat: number, flags = 0): AirMover | null {
     const o = this.prev.get(id);
     let c = this.cur.get(id);
     if (!c) {
@@ -44,7 +44,7 @@ export class MoverTracker {
     const d = Math.hypot(dx, dy);
     if (d === 0 || d > JUMP) return null;
     const k = Math.min(1, MAX_SPEED / (d / this.dt));
-    return { x, y, vx: (dx / this.dt) * k, vy: (dy / this.dt) * k, r, shot, heat };
+    return { id, flags, x, y, vx: (dx / this.dt) * k, vy: (dy / this.dt) * k, r, shot, heat };
   }
 }
 
@@ -73,10 +73,14 @@ export function collectAirMovers(f: RunFrame, tracker: MoverTracker, myKind: num
     } else if (e.kind === KIND.Torch || e.kind === KIND.Crystal || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
       continue;
     } else {
-      add(tracker.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0));
+      add(tracker.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0, e.flags));
     }
   }
-  if (f.own.alive) add(tracker.track(-1, f.own.x, f.own.y, FIGURES[myKind]?.baseR ?? 6, false, 0));
+  if (f.own.alive) {
+    const m = tracker.track(-1, f.own.x, f.own.y, FIGURES[myKind]?.baseR ?? 6, false, 0, f.own.flags);
+    if (m) m.id = f.you; // the tracker's key stays -1
+    add(m);
+  }
   for (const c of f.shots) {
     const a = projectileAir(c.kind);
     add(shotMover(tracker.track(-(100000 + c.shot), c.x, c.y, a.r, true, a.heat)));

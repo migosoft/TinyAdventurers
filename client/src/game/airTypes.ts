@@ -2,6 +2,10 @@
 
 /** A moving figure (r = body radius) or projectile (shot = true); v in px/s. */
 export interface AirMover {
+  /** The entity id; the own hero's is `f.you`; a predicted shot keeps its tracker key. */
+  id: number;
+  /** `FLAG` bits (0 for shots). */
+  flags: number;
   x: number;
   y: number;
   /** The y where the air is injected (default `y`): a shot is drawn 8 px above its ground position. */
