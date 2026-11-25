@@ -38,7 +38,7 @@ import { CRACK_CAP, crackOf, selectCracks, type Crack } from './air/cracks';
 import { sunLook } from '../game/sunmath';
 import { assignSkips,footprint, lavaTexels, lightView, movingCands, selectCasters, selectLights, staticCands, torchOf, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, fxLine, lightLines, skyLines, stoneLine, treeLine } from './stats';
-import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
+import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, waterSky, type Sky } from './sun';
 import { CoverField } from './cover/coverField';
 import type { CoverResult } from './cover/coverJob';
 import type { BushelSpot } from './cover/source';
@@ -135,7 +135,7 @@ export class RunView3d implements RunView {
   private landed: AirParts['landed'] | null = null;
   /** The input of `water.step`, reused every frame. */
   private readonly waterStepIn: WaterIn = { dt: 0, now: 0, figs: [], sinks: [], landed: null, hidden: new Set() };
-  private readonly waterIn:{ ripples: Float32Array | null; now: number; reflect: boolean } = { ripples: null, now: 0, reflect: false };
+  private readonly waterIn: NonNullable<FrameInput['water']> ={ ripples: null, now: 0, reflect: false };
   // The lava (#344): bubbles, rings and spark cues, made here like the water so a lost device keeps them.
   private readonly lavaSim: Lava3d;
   private readonly lavaStepIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: new Set(), fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: { x: 0, z: 0 } };
@@ -453,6 +453,7 @@ export class RunView3d implements RunView {
     this.landed = null;
     const wi = this.waterIn;
     wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = reflects(c.params);
+    if (skyNow) wi.sky = waterSky(skyNow); // a woodland's pond mirrors the hour's sky (#360)
     // The lava (#344): the same place in the frame; its cues go to the effects, its arrays to the view.
     const ls = this.lavaStepIn;
     ls.dt = dt; ls.now = c.now; ls.figs = fo.figs; ls.hidden = this.hidden; ls.fp = fp; ls.mask = c.params.sight ? this.mask : null;

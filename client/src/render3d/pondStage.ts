@@ -2,7 +2,7 @@
 // rules map (deep water blocks, shallow water slows) and is drawn on the view map (a bridge's tiles are water, the deck lifts the feet).
 // `&pond=0..3` picks the level (0 plain pond, 1 inflow with a road bridge, 2 inflow and outflow, 3 a pond bridge; default 1),
 // `&at=pond|mouth|bridge|stream` the start of the knight (the camera holds on the pond's middle at `pond` until the first step), `&hour=`,
-// `&t=<s>` pins every clock, `&zoom=`. The stage owns one `PondScene` (the pond's field and the hooks the later pond work fills in).
+// `&t=<s>` pins every clock, `&zoom=`, `&dry=1` leaves the water's surface out (the bed for look work). The stage owns one `PondScene` (the pond's field and the hooks the later pond work fills in).
 import { ANIM, KIND, LEAF_PALETTE, SIDE, TILE_ID } from '../generated/defs';
 import type { PondInfo } from '../generated/PondInfo';
 import type { WoodlandInfo } from '../generated/WoodlandInfo';
@@ -23,7 +23,7 @@ import { pondField, pondViewMap, setPondField, type PondField } from './pond/pon
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
-import { SkyClock, hourLabel, ovalOf, sky, sunFrame } from './sun';
+import { SkyClock, hourLabel, ovalOf, sky, sunFrame, waterSky } from './sun';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
 import type { Assets, View, WorldInput } from './view';
@@ -144,7 +144,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   let focus: { x: number; z: number } | null = !at || at === 'pond' ? mid : null; // the camera holds on the pond's middle until the knight walks
   const cam = { x: knight.x, z: knight.z, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 
-  const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR, stone: null };
+  const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR, stone: null, dry: q.get('dry') === '1' };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   host?.setDaylight(true);
   host?.setSky(true);
@@ -238,7 +238,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           brush: [], lava: null, lavaVersion: 0, darkvision: null, casters: [], sight: SIGHT_OFF, sun,
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
-          water: { ripples: wo.ripples, now, reflect: reflects(params) },
+          water: { ripples: wo.ripples, now, reflect: reflects(params), sky: waterSky(s) },
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,

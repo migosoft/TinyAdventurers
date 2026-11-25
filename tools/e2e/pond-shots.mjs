@@ -1,5 +1,5 @@
 // Check shots of the pond page (#360): every demo pond at=pond (zoom 2 and 6), mouth and bridge, at hours 9.5 and 18.5, t=3.
-// node pond-shots.mjs [base] [outDir]; GPU=1 for the real card (gpu.mjs). Fails on a browser error. EXTRA=&cover=0 adds to every URL.
+// node pond-shots.mjs [base] [outDir]; GPU=1 for the real card (gpu.mjs). Fails on a browser error. EXTRA=&cover=0 adds to every URL (EXTRA='&dry=1': the beds without the water's surface).
 import { launch } from './gpu.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:5173/';

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { HOUR_RATE, HourClock, SkyClock, mistInputs, ovalOf, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, type Vec3 } from './sun';
+import { HOUR_RATE, HourClock, SkyClock, mistInputs, ovalOf, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, waterSky, type Vec3 } from './sun';
 import { footprint, type Footprint } from './lights';
 import { groundAt } from './camera';
 
@@ -83,6 +83,20 @@ describe('helpers', () => {
     expect(cardSunGain([0, 0.6, -0.1])).toBeCloseTo(0.62 + 0.3 * 0.2 + 0.09, 9);
     expect(hourLabel(9.5)).toBe('09:30');
     expect(hourLabel(24.25)).toBe('00:15');
+  });
+});
+
+describe('waterSky (#360)', () => {
+  it('is blue overhead by day, with the haze toward the horizon, and dark at night', () => {
+    const noon = waterSky(sky(13)), night = waterSky(sky(1));
+    expect(noon.zenith[2]).toBeGreaterThan(noon.zenith[0] * 2);
+    expect(noon.horizon).toEqual(sky(13).haze);
+    expect(Math.max(...night.zenith, ...night.horizon)).toBeLessThan(0.2);
+  });
+  it('warms the horizon while the sun stands low', () => {
+    const warmth = (h: number): number => { const w = waterSky(sky(h)).horizon; return w[0] / w[2]; };
+    expect(warmth(18.5)).toBeGreaterThan(warmth(13) * 1.1);
+    expect(warmth(19.6)).toBeGreaterThan(warmth(18.5));
   });
 });
 

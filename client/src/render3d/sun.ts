@@ -64,6 +64,14 @@ export function sky(hour: number): Sky {
   return { dir, colour, ambient, night, day, haze, elevation: el, moon };
 }
 
+/** The sky a pond mirrors (#360): the colour overhead at night and by day, and how much of the low sun's colour the horizon takes at most. */
+const SKY_ZENITH = { night: [0.015, 0.025, 0.06] as Vec3, day: [0.3, 0.5, 0.82] as Vec3 }, HORIZON_WARM = 0.6;
+/** The sky's colours for the water's mirror: `zenith` overhead, `horizon` low down (the haze, warmed by a low sun). */
+export function waterSky(s: Sky): { zenith: Vec3; horizon: Vec3 } {
+  const low = s.moon ? 0 : s.day * (1 - smooth(8, 34, s.elevation)) * HORIZON_WARM;
+  return { zenith: mix3(SKY_ZENITH.night, SKY_ZENITH.day, s.day), horizon: mix3(s.haze, s.colour, low) };
+}
+
 const lum = (v: Vec3): number => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
 let noonLight = 0;
 /** The mist's light: luminance of ambient + colour over its value at 13:00, clamped 0..1. */

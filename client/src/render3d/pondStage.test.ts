@@ -10,6 +10,7 @@ import { renderPlan } from './quality';
 import type { StageCtx } from './host';
 import type { FrameInput } from './view';
 import { createPondStage } from './pondStage';
+import { sky, waterSky } from './sun';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
@@ -70,6 +71,13 @@ describe('the ?r3d=pond stage (#360)', () => {
         expect(stage.scene.field.decks.length).toBe(demo[i].woodland!.pond.bridges.length);
       }
     }
+  });
+
+  it('gives the water the hour\'s sky, and `&dry=1` leaves the surface out', () => {
+    const wet = setup('?r3d=pond&pond=0&hour=13');
+    expect(wet.stage.world.dry).toBe(false);
+    expect(wet.run(1, 0.016).water!.sky).toEqual(waterSky(sky(13)));
+    expect(setup('?r3d=pond&pond=0&dry=1').stage.world.dry).toBe(true);
   });
 
   it('walks the knight on the rules map: it moves, and never into deep water', () => {

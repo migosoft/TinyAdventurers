@@ -90,7 +90,7 @@ import { dipMaterial } from './dips/dipNodes';
 import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
 import { refreshWaterField, waterField } from './water/waterField';
 import { buildWaterChunk } from './water/waterMesh';
-import { ceilingMaterial, waterMaterial } from './water/waterNodes';
+import { ceilingMaterial, waterMaterial, type WaterSky } from './water/waterNodes';
 import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './water/passes';
 import { BUBBLE } from './lava/bubbles';
 import { buildLavaChunk, buildShimmerChunk, type LavaChunk } from './lava/lavaMesh';
@@ -105,6 +105,8 @@ export interface WorldInput {
   map: TileMap; painted: boolean; clear: 'stone' | [number, number, number]; stone: StoneField | null;
   /** The level's static lights and the heroes' start: what the stone's marks keep clear (#380). Without it the stone has no marks. */
   taken?: Taken;
+  /** A dev page's switch (`?r3d=pond&dry=1`, #360): no water surface is built, so the beds show dry. */
+  dry?: boolean;
 }
 /** The marks of a world (the same for the same world every time): what the view places, and what a stage's moss keeps clear of. */
 export const marksOf = (world: WorldInput): Marks => (world.stone && world.taken ? placeMarks(world.map, world.stone, world.taken) : noMarks());
@@ -170,7 +172,7 @@ export interface FrameInput {
   /** The brushers of this frame (#331): the figures that make bushes and bushels wiggle; absent = none. */
   brush?: readonly Brusher[];
   /** The water (#345): the packed ripples (null: none), its clock in seconds, and whether the mirror pass runs. Absent: no ripples, clock `t`, no mirror. */
-  water?: { ripples: Float32Array | null; now: number; reflect: boolean };
+  water?: { ripples: Float32Array | null; now: number; reflect: boolean; /** The sky a daylight water mirrors (#360: `waterSky`); absent: as it was. */ sky?: WaterSky };
   /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
   lavaPool?: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean };
   /** The crystals (#380) and wall torches (#391): a big cluster whose light `off` names is drawn broken, a torch without its flame (the chunk is rebuilt only when a light of it switched); `now` is the clock of the lights' pulse (s), which the gems' glow and the flames follow. Absent: every one as it was, clock `t`. */
@@ -417,7 +419,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   uploadField(0, wField.h - 1);
   // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame. The water reads it as its view vector.
   const toward = viewTowardUniform();
-  const water = waterMaterial(lighting, sight, fieldTex, map, toward);
+  const water = waterMaterial(lighting, sight, fieldTex, map, toward, { daylight: world.painted });
   // The copy of the opaque scene the water sees through, and the mirror picture: resized in place (the water's nodes keep the texture objects).
   const sceneCopy = new RenderTarget(1, 1, { depthBuffer: false, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
   sceneCopy.texture.colorSpace = NoColorSpace;
@@ -597,7 +599,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const d = buildDipChunk(map, world.painted, cx, cz, kit.plan);
     if (d) dipChunks[i] = makeDipMesh(d);
     dropChunk(waterChunks, i);
-    const w = buildWaterChunk(map, cx, cz, kit.marks.puddles);
+    const w = world.dry ? null : buildWaterChunk(map, cx, cz, kit.marks.puddles);
     if (w) waterChunks[i] = makeWaterMesh(w.position);
     waterBoxes = null;
     dropChunk(lavaChunks, i);
@@ -639,7 +641,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   const boxesOfWater = (): GroundBox[] => (waterBoxes ??= boxesOf(waterChunks));
   const boxesOfLava = (): GroundBox[] => (lavaBoxes ??= boxesOf(lavaChunks));
-  // The ceiling only the mirror pass draws (#345): one quad over the map at the walls' height, facing down. A painted map has no water.
+  // The ceiling only the mirror pass draws (#345): one quad over the map at the walls' height, facing down. A painted map has none: its water (#360) mirrors the sky where the mirror pass drew nothing.
   const ceilingMat = world.painted ? null : ceilingMaterial(lighting, sight);
   let ceiling: Mesh | null = null;
   if (ceilingMat) {
@@ -1089,6 +1091,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       dm.time.value = f.t;
       water.time.value = f.water?.now ?? f.t;
       water.setRipples(f.water?.ripples ?? null);
+      if (f.water?.sky) water.setSky(f.water.sky);
       lava.time.value = shimmer.time.value = f.lavaPool?.now ?? f.t;
       crystal.time.value = flame.time.value = f.wallLights?.now ?? f.t;
       if (f.wallLights) {
@@ -1259,10 +1262,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sight.clipBelow.value = WATER_LEVEL;
         wm.see.mode.value = 0;
         inPrepass = true;
+        // Under a sky the mirror's picture is clear (alpha 0) where nothing stands: the water puts the sky there.
+        if (world.painted) renderer.setClearColor(0x000000, 0);
         try {
           renderer.setRenderTarget(mirrorTarget);
           renderer.render(scene, mirrorCam);
         } finally {
+          if (world.painted) renderer.setClearColor(clearColour, 1);
           inPrepass = false;
           wm.see.mode.value = seeMode;
           sight.clipBelow.value = NO_CLIP;

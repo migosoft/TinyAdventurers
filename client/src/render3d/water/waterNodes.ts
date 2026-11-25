@@ -5,8 +5,8 @@
 // not the depth buffer. On top: the room mirrored in the water plane (a picture the view draws from below, passes.ts) and the glints of
 // the lights. Calm, large waves and the ripples of ripples.ts tilt the normal that all of it reads. The numbers are first guesses from
 // the mockup, tuned by eye.
-import { Matrix4, MeshBasicNodeMaterial, Texture, Vector4, type NodeMaterial } from 'three/webgpu';
-import { Fn, If, Loop, abs, clamp, dot, exp, float, length, max, mix, normalize, positionWorld, pow, screenUV, sin, smoothstep, step, texture, uniform, uniformArray, vec2, vec3, vec4 } from 'three/tsl';
+import { Matrix4, MeshBasicNodeMaterial, Texture, Vector3, Vector4, type NodeMaterial } from 'three/webgpu';
+import { Fn, If, Loop, abs, clamp, dot, exp, float, length, max, mix, normalize, positionWorld, pow, reflect, screenUV, sin, smoothstep, step, texture, uniform, uniformArray, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import type { ViewToward } from '../materials';
@@ -47,6 +47,40 @@ export const PUDDLE_GATE = (WATER_LEVEL + PUDDLE_LEVEL) / 2;
 const FRESNEL_0 = 0.02, FRESNEL_POW = 5;
 
 /**
+ * The water in daylight (#360: a woodland's pond and brooks), by eye after the pond spike (#348). The same clear sheet as the dungeon's,
+ * under a sun and a sky instead of a ceiling.
+ */
+export const DAY = {
+  /** What a tile of way through the water takes from red, green and blue (the bed turns blue-green with depth), and the colour the water scatters back per unit of light at the surface. */
+  absorb: [0.5, 0.17, 0.13], murk: [0.04, 0.2, 0.2],
+  /** The height over the ground the sun's shadow is read at: the bed's (dipNodes.ts), so the water and its bed sit in the same tree shadows. */
+  shadowAt: 0.03,
+  /**
+   * The sky's mirror: its share looking down (`base`) and how fast the Fresnel term raises it (`gain`) up to `max`; the mirrored ray's
+   * heights between which the colour goes from the horizon's to the zenith's (`low`, `high`); the factor on the waves' tilt for that
+   * ray (`tilt`: the calm waves show as bands of sky); the depth (tiles) over which the mirror fades in from the shore (`shore`); the
+   * share a mirrored tree or figure adds (`things`); the share of the sky's mirror left in a tree's shadow (`shade`: a bright sheet in
+   * a dark shadow reads as milk).
+   */
+  sky: { base: 0.16, gain: 6, max: 0.9, low: 0.45, high: 0.95, tilt: 3, shore: 0.35, things: 0.25, shade: 0.6 },
+  /** The caustics on the bed: the two noises' cells per tile and their drifts (cells per second), half the width of a light line (in noise value), the depths (tiles) where they fade in and are gone, and their gain on the sunlit bed. */
+  caustic: { freq: 2.63, driftA: [0.21, 0.13], driftB: [-0.17, 0.19], width: 0.1, shore: 0.1, from: 0.15, to: 1.3, gain: 0.3 },
+  /**
+   * The sun's sparkles: small dashes across the screen that twinkle. Two noises (`along` the screen's right and `across`, cells per tile,
+   * the second `finer` by this factor) are multiplied; a sparkle shows where the product passes `from` (full at `to`). A low sun
+   * stretches them (`stretch`: the share `along` loses). How many there are follows the slope a wavelet needs to turn the sun to the
+   * eye: `spread` (and `spreadLow` more under a low sun) is the slope the wavelets reach, `lean` the factor on the calm waves' own
+   * slope (sparkles gather on the sides that face the sun), `rare` what a poor angle takes from the product, `least` the share that
+   * is always left. `gain`: a sparkle's brightness in sun light; `sheen`: the faint glow around them.
+   */
+  spark: { along: 5.3, across: 9.7, finer: 1.6, from: 0.64, to: 0.7, stretch: 0.45, spread: 0.3, spreadLow: 0.6, lean: 6, rare: 0.12, least: 0.45, gain: 0.8, sheen: 0.03 },
+  /** The pale line where the water meets the bank: its width as depth (tiles) and its share of the light. */
+  edge: { width: 0.05, gain: 0.1 },
+} as const;
+/** The sky's colours the water mirrors (`waterSky` in sun.ts makes them from the hour's sky). */
+export interface WaterSky { zenith: readonly [number, number, number]; horizon: readonly [number, number, number] }
+
+/**
  * The ceiling's rock: the darkest albedo and the range the noise adds, its warm tint, the noise's frequency (per tile); the cracks'
  * frequency, half width (in noise value) and how dark they are; the light's wrap.
  */
@@ -65,10 +99,84 @@ export interface WaterMaterial {
   readonly mirrorOn: { value: number };
   /** The ripple uniform's RIPPLE_CAP slots (x, z, age, strength) as `setRipples` left them; read-only, for tests. */
   readonly ripples: readonly Vector4[];
+  /** In daylight: the sky's colours the surface mirrors, set per frame. A water without daylight has no sky: null, and `setSky` does nothing. */
+  setSky(s: WaterSky): void;
+  readonly sky: { zenith: Vector3; horizon: Vector3 } | null;
+  /** In daylight: 1 while a mirror is set, else 0 (quality Fast): the switch of the sparkles and the caustics. Null without daylight. */
+  readonly fine: { value: number } | null;
 }
 
-/** `field`: the RG half-float texture of the bed height and the water mask (waterField.ts), linear; `map` its size in tiles; `toward`: the unit vector toward the eye. */
-export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, map: { w: number; h: number }, toward: ViewToward): WaterMaterial {
+/**
+ * The colour of the surface in daylight (`DAY`): the bed and what stands in the water, seen through clear water that takes the sun and
+ * the trees' shadows; the sky mirrored by Fresnel, with the mirror pass's trees and figures in it; the sun's sparkles; a pale line at
+ * the bank.
+ */
+function daylightColour(k: {
+  lighting: Lighting; P: N; V: N; Nw: N; slope: N; depth: N; thick: N; lit: N; copy: N; mirror: N; mirrorOn: N; time: N; zenith: N; horizon: N; fine: N;
+}): N {
+  const { P, V, Nw, slope, depth, thick, time } = k;
+  const { sun } = k.lighting;
+  const p = P.xz;
+  // The sun on the surface, read once: its colour, the trees' shadows and the clouds'.
+  const sunLit: N = sun.term(P, vec3(P.x, DAY.shadowAt, P.z), float(1)).toVar();
+  const light: N = k.lit.add(sunLit.mul(mix(max(dot(Nw, sun.dir), 0), float(1), WRAP))).toVar();
+
+  // The slope a wavelet needs to turn the sun toward the eye, and how well the surface here offers it (0..1).
+  const S = DAY.spark, C = DAY.caustic;
+  const half: N = normalize(sun.dir.add(V));
+  const lowSun = float(1).sub(sun.dir.y);
+  const miss = half.xz.div(max(half.y, 0.2)).negate().sub(slope.mul(S.lean));
+  const spread = float(S.spread).add(lowSun.mul(S.spreadLow));
+  const facing: N = exp(dot(miss, miss).div(spread.mul(spread)).negate()).toVar();
+
+  // The fine work, which quality Fast leaves out (plain arithmetic, so a real branch): x the caustics' lines, y the sparkles.
+  const fineWork: N = Fn(() => {
+    const v = vec2(0, 0).toVar();
+    If(k.fine.greaterThan(0.5), () => {
+      // The caustics lie on the bed: where the view ray lands, not on the surface.
+      const pb = p.sub(V.xz.mul(thick));
+      const ca = vnoise2(pb.mul(C.freq).add(vec2(time.mul(C.driftA[0]), time.mul(C.driftA[1]))));
+      const cb = vnoise2(pb.mul(C.freq).add(vec2(time.mul(C.driftB[0]), time.mul(C.driftB[1]))).add(4.4));
+      const lines = float(1).sub(smoothstep(0, C.width, abs(ca.sub(cb))));
+      // The sparkles: dashes along the screen's right, wherever the camera has turned.
+      const right = sun.right.xz;
+      const q = vec2(dot(p, right), dot(p, vec2(right.y.negate(), right.x)));
+      const along = float(S.along).mul(float(1).sub(lowSun.mul(S.stretch)));
+      const tw1 = vnoise2(q.mul(vec2(along, S.across)).add(vec2(time.mul(0.9), time.mul(-0.6))));
+      const tw2 = vnoise2(q.mul(vec2(along.mul(S.finer), S.across * S.finer)).add(vec2(time.mul(-0.7), time.mul(1.1))).add(3.3));
+      const often = mix(float(S.least), float(1), facing);
+      v.assign(vec2(lines, smoothstep(S.from, S.to, tw1.mul(tw2).sub(float(1).sub(often).mul(S.rare)))));
+    });
+    return v;
+  })().toVar();
+
+  // Through the water: the bed (lit by the same sun, with the caustics where it is shallow), absorbed along the way, and the water's own murk.
+  const sunShare = clamp(dot(sunLit, vec3(1 / 3, 1 / 3, 1 / 3)), 0, 1);
+  const caustics = fineWork.x.mul(smoothstep(0, C.shore, depth)).mul(float(1).sub(smoothstep(C.from, C.to, depth))).mul(sunShare).mul(C.gain);
+  const T = exp(vec3(...DAY.absorb).mul(thick).negate());
+  const through = k.copy.rgb.mul(caustics.add(1)).mul(T).add(vec3(...DAY.murk).mul(light).mul(float(1).sub(T)));
+
+  // The sky in the surface, and over it what the mirror pass drew (its picture is clear, alpha 0, where nothing stands).
+  const K = DAY.sky;
+  const R: N = reflect(V.negate(), normalize(vec3(slope.x.mul(-K.tilt), 1, slope.y.mul(-K.tilt))));
+  const skyCol = mix(vec3(k.horizon), vec3(k.zenith), smoothstep(K.low, K.high, R.y));
+  const things = k.mirror.a.mul(k.mirrorOn);
+  const mirrored = skyCol.mul(mix(float(K.shade), float(1), sunShare)).mul(float(1).sub(things)).add(k.mirror.rgb.mul(k.mirrorOn));
+  const open = smoothstep(0, K.shore, depth);
+  const fresnel = pow(float(1).sub(max(dot(Nw, V), 0)), FRESNEL_POW);
+  const share = clamp(float(K.base).add(fresnel.mul(K.gain)).add(things.mul(K.things)), 0, K.max).mul(open);
+
+  const glints = sunLit.mul(fineWork.y.mul(S.gain).add(facing.mul(S.sheen))).mul(open);
+  const edge = light.mul(float(1).sub(smoothstep(0, DAY.edge.width, depth)).mul(DAY.edge.gain));
+  return mix(through, mirrored, share).add(k.lighting.glintAt(P, Nw, V)).add(glints).add(edge);
+}
+
+/**
+ * `field`: the RG half-float texture of the bed height and the water mask (waterField.ts), linear; `map` its size in tiles; `toward`: the
+ * unit vector toward the eye. `daylight` (#360): the water of a world with a sun and a sky (`lighting` must have its sun); without it
+ * the shader is the dungeon's, with nothing of the sun in it.
+ */
+export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, map: { w: number; h: number }, toward: ViewToward, opts: { daylight?: boolean } = {}): WaterMaterial {
   const time = uniform(0);
   // A free slot has age -1 and adds nothing (its strength is stale: only the age says whether a slot is live).
   const rip = uniformArray(Array.from({ length: RIPPLE_CAP }, () => new Vector4(0, 0, -1, 0)), 'vec4');
@@ -126,7 +234,12 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
   // A puddle (its sheet lies above a pool's) mirrors only dark rock, so a ring's sides that lean toward the eye also catch the light at
   // the surface: one line a crest.
   const sheen = smoothstep(RING_SHEEN.from, RING_SHEEN.to, dot(Nw.xz, V.xz)).mul(step(PUDDLE_GATE, P.y)).mul(RING_SHEEN.gain);
-  const colour = mix(through, mirrorNode.rgb.mul(MIRROR_GAIN), share).add(lighting.glintAt(P, Nw, V)).add(lit.mul(sheen));
+  const day = opts.daylight
+    ? { zenith: uniform(new Vector3(0.3, 0.5, 0.82)).setName('waterZenith'), horizon: uniform(new Vector3(0.74, 0.79, 0.82)).setName('waterHorizon'), fine: uniform(0).setName('waterFine') }
+    : null;
+  const colour = day
+    ? daylightColour({ lighting, P, V, Nw, slope: vec2(slopeX, slopeZ), depth, thick, lit, copy: copyNode, mirror: mirrorNode, mirrorOn: uMirrorOn, time, ...day })
+    : mix(through, mirrorNode.rgb.mul(MIRROR_GAIN), share).add(lighting.glintAt(P, Nw, V)).add(lit.mul(sheen));
 
   const m = new MeshBasicNodeMaterial();
   // Outside the pool's outline (a chasm's or a lava pool's bulge into a border cell) there is no surface.
@@ -148,8 +261,15 @@ export function waterMaterial(lighting: Lighting, sight: Sight, field: Texture, 
     setScene(copy) {
       copyNode.value = copy;
     },
+    sky: day && { zenith: day.zenith.value, horizon: day.horizon.value },
+    fine: day && day.fine,
+    setSky(s) {
+      day?.zenith.value.set(...s.zenith);
+      day?.horizon.value.set(...s.horizon);
+    },
     setMirror(mi) {
       uMirrorOn.value = mi ? 1 : 0;
+      if (day) day.fine.value = uMirrorOn.value;
       if (!mi) return;
       mirrorNode.value = mi.picture;
       (uMirror.value as Matrix4).copy(mi.matrix);
