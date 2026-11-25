@@ -5,7 +5,11 @@ import { KIND } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
 import { WATER_LEVEL } from '../dips/shape';
-import { RIPPLE_CAP } from './ripples';
+import type { PondInfo } from '../../generated/PondInfo';
+import demo from '../../generated/pond-demo.json';
+import { FISH, FISH_CAP, FISH_STRIDE, Fish } from '../pond/fish';
+import { pondField, pondViewMap, setPondField } from '../pond/pondField';
+import { MOUTH_RING, RIPPLE_CAP } from './ripples';
 import { PUDDLE_STIR, Water3d, WADE, type WaterIn } from './water';
 
 // a 10 x 4 room: floor in the west half, a shallow pool from x = 5
@@ -191,5 +195,99 @@ describe('Water3d', () => {
     dry.step(inp(0, dt, [fig(1, 1, 2, { foot: 0 }), fig(2, 1, 2, { foot: 1 }), fig(3, 1, 2, { foot: 0 })], { puddles }));
     expect(dry.step(inp(dt, dt, [fig(1, 2.58, 2, { foot: 0 }), fig(2, 2, 2, { foot: 1 })], { puddles })).live).toBe(0);
     expect(dry.step(inp(2 * dt, dt, [fig(3, 2, 2, { foot: 0 })])).live).toBe(0);
+  });
+});
+
+describe('Water3d on a woodland pond (#360)', () => {
+  /** The view map of demo level `i` with its pond field, as a run sets it up. */
+  const pondMap = (i: number) => {
+    const l = demo[i], pond = l.woodland!.pond as unknown as PondInfo;
+    const rules = new TileMap(l.w, l.h, Uint8Array.from(l.tiles));
+    const view = pondViewMap(rules, pond), field = pondField(rules, pond, view);
+    setPondField(view, field);
+    return { view, field };
+  };
+  const slots = (r: Float32Array) => Array.from({ length: RIPPLE_CAP }, (_, i) => ({ x: r[i * 4], z: r[i * 4 + 1], age: r[i * 4 + 2], strength: r[i * 4 + 3] }));
+
+  it('a mouth makes rings and leaves slots for waders', () => {
+    const { view, field } = pondMap(2);
+    expect(field.mouths.length).toBe(1);
+    const m = field.mouths[0];
+    const w = new Water3d(view, rng);
+    const births = new Set<number>();
+    for (let k = 0; k <= 720; k++) {
+      const now = k / 60, r = w.step(inp(now, 1 / 60, []));
+      expect(r.live).toBeLessThanOrEqual(MOUTH_RING.slots);
+      if (now > 3) expect(r.live).toBeGreaterThanOrEqual(MOUTH_RING.slots - 1);
+      for (const s of slots(r.ripples)) {
+        if (s.age < 0) continue;
+        births.add(Math.round((now - s.age) * 1000));
+        expect(s.strength).toBeCloseTo(MOUTH_RING.strength, 6);
+        // just inside the pond from the mouth
+        expect(Math.hypot(s.x - (m.x + m.dx * MOUTH_RING.into), s.z - (m.z + m.dz * MOUTH_RING.into))).toBeLessThanOrEqual(MOUTH_RING.scatter + 1e-4);
+      }
+    }
+    // one every 0.5 to 0.9 s
+    const at = [...births].sort((a, b) => a - b);
+    expect(at.length).toBeGreaterThan(12);
+    for (let k = 1; k < at.length; k++) {
+      expect(at[k] - at[k - 1]).toBeGreaterThanOrEqual(499);
+      expect(at[k] - at[k - 1]).toBeLessThanOrEqual(901);
+    }
+    // twelve other rings in one frame: all of them find a slot, and the mouth keeps its own
+    const n = RIPPLE_CAP - MOUTH_RING.slots;
+    const pos = new Float32Array(n * 2).map((_, i) => 500 + i);
+    const full = w.step(inp(12.01, 0.01, [], { landed: { count: n, pos } }));
+    expect(full.live).toBe(RIPPLE_CAP);
+    const xs = slots(full.ripples).map((s) => s.x);
+    for (let k = 0; k < n; k++) expect(xs).toContain(500 + 2 * k);
+    // ... and the mouth's rings go on without taking a slot from them
+    let later = full;
+    for (let k = 1; k <= 60; k++) later = w.step(inp(12.01 + k / 60, 1 / 60, []));
+    const xs2 = slots(later.ripples).filter((s) => s.age >= 0).map((s) => s.x);
+    for (let k = 0; k < n; k++) expect(xs2).toContain(500 + 2 * k);
+    expect(later.live).toBe(RIPPLE_CAP);
+  });
+
+  it('a pinned clock shows the rings that still live, the same ones every time', () => {
+    const { view } = pondMap(1);
+    const a = new Water3d(view, rng).step(inp(7.3, 0, [])), b = new Water3d(view, rng).step(inp(7.3, 0, []));
+    expect(a.live).toBe(MOUTH_RING.slots);
+    expect(Array.from(a.ripples)).toEqual(Array.from(b.ripples));
+  });
+
+  it('steps the pond\'s fish with the figures that wade, and hands them on', () => {
+    const { view, field } = pondMap(0);
+    const w = new Water3d(view, rng);
+    const first = Array.from(w.step(inp(0, 0, [])).fish!);
+    expect(first.length).toBe(FISH_CAP * FISH_STRIDE);
+    expect(first).toEqual(Array.from(new Fish(field, field.seed).positions()));
+    // a shallow tile near a fish: a figure standing there scares it, one flying over it does not
+    let spot: { x: number; z: number } | null = null;
+    for (let i = 0; i < FISH_CAP && !spot; i++) {
+      const fx = first[i * FISH_STRIDE], fz = first[i * FISH_STRIDE + 1];
+      for (let z = Math.floor(fz) - 2; z <= fz + 2 && !spot; z++) for (let x = Math.floor(fx) - 2; x <= fx + 2; x++) {
+        if (view.get(x, z) === TILE_ID.ShallowWater && Math.hypot(x + 0.5 - fx, z + 0.5 - fz) < FISH.scare - 0.3) { spot = { x: x + 0.5, z: z + 0.5 }; break; }
+      }
+    }
+    expect(spot).not.toBeNull();
+    const after = (figs: DrawnFig[]): number[] => {
+      const v = new Water3d(view, rng);
+      let out = v.step(inp(0, 0, figs));
+      for (let k = 1; k <= 30; k++) out = v.step(inp(k / 60, 1 / 60, figs));
+      return Array.from(out.fish!);
+    };
+    const calm = after([]);
+    expect(calm).not.toEqual(first);
+    expect(after([fig(1, spot!.x, spot!.z, { foot: 0.3 })])).toEqual(calm);
+    expect(after([fig(1, spot!.x, spot!.z)])).not.toEqual(calm);
+  });
+
+  it('a map without a pond has no fish and no mouth rings', () => {
+    const w = new Water3d(room(), rng);
+    let r = w.step(inp(0, 1 / 60, []));
+    for (let k = 1; k < 300; k++) r = w.step(inp(k / 60, 1 / 60, []));
+    expect(r.fish).toBeNull();
+    expect(r.live).toBe(0);
   });
 });

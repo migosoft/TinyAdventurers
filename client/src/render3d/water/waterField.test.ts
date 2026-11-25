@@ -5,9 +5,11 @@ import { BED_RES, OUTLINE_EDGE, bedAt, isWater, maskAt } from '../dips/shape';
 import { ROCK, stoneField } from '../stone/field';
 import { noMarks } from '../stone/place';
 import { PUDDLE_LEVEL, floorHeight } from '../stone/shape';
-import { refreshWaterField, sampleWaterField, waterField } from './waterField';
+import { pondField, setPondField } from '../pond/pondField';
+import type { PondInfo } from '../../generated/PondInfo';
+import { FIELD_STRIDE as S, refreshWaterField, sampleWaterField, waterField } from './waterField';
 
-/** The weighted sum of the field of the test below, recorded before puddles existed. */
+/** The weighted sum of the bed and the mask of the field of the test below, recorded before puddles existed (and before the field held the current, #360: two floats per texel then). */
 const PINNED_SUM = -4653.0024;
 
 const CH: Record<string, number> = {
@@ -29,14 +31,14 @@ describe('waterField', () => {
     const f = waterField(m);
     expect(f.w).toBe(m.w * BED_RES + 1);
     expect(f.h).toBe(m.h * BED_RES + 1);
-    expect(f.data.length).toBe(2 * f.w * f.h);
+    expect(f.data.length).toBe(S * f.w * f.h);
     let wet = 0, deep = 0;
     for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
       const k = j * f.w + i, x = i / BED_RES, z = j / BED_RES;
-      expect(f.data[2 * k], `bed at ${i}, ${j}`).toBe(Math.fround(bedAt(m, x, z)));
-      expect(f.data[2 * k + 1], `mask at ${i}, ${j}`).toBe(Math.fround(maskAt(m, x, z, isWater)));
-      if (f.data[2 * k + 1] > OUTLINE_EDGE) wet++;
-      if (f.data[2 * k] < -1) deep++;
+      expect(f.data[S *k], `bed at ${i}, ${j}`).toBe(Math.fround(bedAt(m, x, z)));
+      expect(f.data[S *k + 1], `mask at ${i}, ${j}`).toBe(Math.fround(maskAt(m, x, z, isWater)));
+      if (f.data[S *k + 1] > OUTLINE_EDGE) wet++;
+      if (f.data[S *k] < -1) deep++;
     }
     expect(wet).toBeGreaterThan(0);
     expect(deep).toBeGreaterThan(0);
@@ -47,17 +49,17 @@ describe('waterField', () => {
     const f = waterField(m);
     // The pool is cell (5, 4); the texel at (1.5, 1.5) is 3 tiles from it.
     const k = (1.5 * BED_RES) * f.w + 1.5 * BED_RES;
-    expect([f.data[2 * k], f.data[2 * k + 1]]).toEqual([0, 0]);
+    expect([f.data[S *k], f.data[S *k + 1]]).toEqual([0, 0]);
     const far = (7.5 * BED_RES) * f.w + 9.5 * BED_RES;
-    expect([f.data[2 * far], f.data[2 * far + 1]]).toEqual([0, 0]);
+    expect([f.data[S *far], f.data[S *far + 1]]).toEqual([0, 0]);
     const near = (4.5 * BED_RES) * f.w + 5.5 * BED_RES;
-    expect(f.data[2 * near + 1]).toBeGreaterThan(OUTLINE_EDGE);
+    expect(f.data[S *near + 1]).toBeGreaterThan(OUTLINE_EDGE);
   });
 
   it('samples between its texels', () => {
     const m = room('.....', '.~W..', '.W~..', '.....', '.....');
     const f = waterField(m);
-    const at = (i: number, j: number) => ({ bed: f.data[2 * (j * f.w + i)], mask: f.data[2 * (j * f.w + i) + 1] });
+    const at = (i: number, j: number) => ({ bed: f.data[S *(j * f.w + i)], mask: f.data[S *(j * f.w + i) + 1] });
     // on a grid point: the texel
     for (const [i, j] of [[0, 0], [9, 8], [10, 10], [13, 14], [f.w - 1, f.h - 1]]) {
       const s = sampleWaterField(f, i / BED_RES, j / BED_RES), t = at(i, j);
@@ -93,9 +95,43 @@ describe('waterField', () => {
     const m = room('.......', '.~~W...', '.~WW.LL', '.....LL', '.CC....', '.CC....', '.......');
     const f = waterField(m), g = waterField(m, [], () => { throw new Error('no floor is asked without a puddle'); });
     expect(Array.from(g.data)).toEqual(Array.from(f.data));
+    // the sum as it was taken over two floats per texel (bed, mask): a map without a pond field keeps both, and has no current
     let sum = 0;
-    f.data.forEach((v, i) => { sum += v * ((i % 13) + 1); });
+    for (let k = 0; k < f.w * f.h; k++) {
+      sum += f.data[S * k] * (((2 * k) % 13) + 1) + f.data[S * k + 1] * (((2 * k + 1) % 13) + 1);
+      expect(f.data[S * k + 2]).toBe(0);
+      expect(f.data[S * k + 3]).toBe(0);
+    }
     expect(sum).toBeCloseTo(PINNED_SUM, 3);
+  });
+
+  it('the flow channels follow the field (#360)', () => {
+    // a round pond with a brook running into it from the north
+    const pond: PondInfo = { seed: 11, blobs: [[10.5, 12.5, 4, 4]], streams: [{ inflow: true, points: [[168, 24], [168, 88], [168, 136]] }], bridges: [] };
+    const m = new TileMap(21, 21, new Uint8Array(21 * 21).fill(TILE_ID.Floor));
+    for (let z = 9; z <= 16; z++) for (let x = 7; x <= 13; x++) if (Math.hypot(x - 10, z - 12) < 4) m.set(x, z, TILE_ID.ShallowWater);
+    for (let z = 1; z < 9; z++) m.set(10, z, TILE_ID.ShallowWater);
+    const field = pondField(m, pond);
+    setPondField(m, field);
+    const f = waterField(m);
+    let flowing = 0;
+    for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
+      const k = S * (j * f.w + i), x = i / BED_RES, z = j / BED_RES, fl = field.flowAt(x, z);
+      // wherever the drawn water is, the current is the field's; elsewhere it is the field's or nothing
+      const want = [Math.fround(fl.x * fl.s), Math.fround(fl.z * fl.s)], got = [f.data[k + 2], f.data[k + 3]];
+      if (f.data[k + 1] > 0) expect(got, `flow at ${x}, ${z}`).toEqual(want);
+      else expect([want, [0, 0]], `flow at ${x}, ${z}`).toContainEqual(got);
+      if (f.data[k + 3] > 0.9) flowing++;
+    }
+    expect(flowing).toBeGreaterThan(20);
+    // on the brook: full strength, downstream (south); in the pond's far end: none
+    const at = (x: number, z: number) => { const k = S * (z * BED_RES * f.w + x * BED_RES); return [f.data[k + 2], f.data[k + 3]]; };
+    expect(at(10.5, 4)).toEqual([0, 1]);
+    expect(at(10.5, 15.5)).toEqual([0, 0]);
+    // a refresh keeps the flow
+    const before = Array.from(f.data);
+    refreshWaterField(f, m, 10, 4);
+    expect(Array.from(f.data)).toEqual(before);
   });
 
   it('keeps the outline of a puddle inside its basin (#380)', () => {
@@ -109,7 +145,7 @@ describe('waterField', () => {
     expect(mid.mask).toBeGreaterThan(OUTLINE_EDGE);
     expect(mid.bed).toBeLessThan(PUDDLE_LEVEL);
     const i = Math.round(p.x * BED_RES), j = Math.round(p.z * BED_RES);
-    expect(f.data[2 * (j * f.w + i)]).toBe(Math.fround(floor(i / BED_RES, j / BED_RES)));
+    expect(f.data[S *(j * f.w + i)]).toBe(Math.fround(floor(i / BED_RES, j / BED_RES)));
     let wet = 0;
     for (let z = 0; z <= m.h; z += 0.05) for (let x = 0; x <= m.w; x += 0.05) {
       const s = sampleWaterField(f, x, z), d = Math.hypot(x - p.x, z - p.z);

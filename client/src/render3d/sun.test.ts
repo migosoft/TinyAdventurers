@@ -98,6 +98,14 @@ describe('waterSky (#360)', () => {
     expect(warmth(18.5)).toBeGreaterThan(warmth(13) * 1.1);
     expect(warmth(19.6)).toBeGreaterThan(warmth(18.5));
   });
+  it('writes into the object it is given: a caller that asks every frame allocates nothing', () => {
+    const out = { zenith: [9, 9, 9] as Vec3, horizon: [9, 9, 9] as Vec3 }, { zenith, horizon } = out;
+    expect(waterSky(sky(18.5), out)).toBe(out);
+    expect(out.zenith).toBe(zenith);
+    expect(out.horizon).toBe(horizon);
+    expect(out).toEqual(waterSky(sky(18.5)));
+    expect(waterSky(sky(13), out)).toEqual(waterSky(sky(13)));
+  });
 });
 
 describe("the shader's card gain", () => {

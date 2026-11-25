@@ -19,6 +19,7 @@ import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR, WORK_AMBIENT } from './light';
 import { footprint } from './lights';
 import { DEFAULT_HOUR, reflects, type R3dParams } from './params';
+import { walkBedAt } from './dips/shape';
 import { pondField, pondViewMap, setPondField, type PondField } from './pond/pondField';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
@@ -34,8 +35,10 @@ const KNIGHT_ID = 100;
 const KNIGHT_SPEED = 4; // tiles per second
 const ALL_VISIBLE = { isVisible: (): boolean => true };
 const NONE_IDS: ReadonlySet<number> = new Set();
+/** With `&t=`: the water is stepped up to the pinned time in steps of this many seconds, over the last WARM_MAX seconds at most. */
+const WARM_STEP = 1 / 30, WARM_MAX = 60;
 
-/** What the pond's later work fills in: the pond's field, a step per frame with the figures' tile positions, and the push of its drawables. Empty for now. */
+/** What the pond's later work fills in: the pond's field, a step per frame with the figures' tile positions, and the push of its drawables. Empty for now (the fish need neither: `Water3d` steps them and the water's material draws them). */
 export interface PondScene {
   field: PondField;
   step(dt: number, figs: { x: number; z: number }[]): void;
@@ -150,6 +153,11 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   host?.setSky(true);
   const forest = new Forest(wl.plants.map(treeSpecOf), map, wl.palette ?? LEAF_PALETTE.Summer);
   const water = new Water3d(map);
+  // A pinned clock shows the pond as it is after that many seconds (the last WARM_MAX of them): the fish have swum, and fled the knight if it stands in the water.
+  if (pin !== null) {
+    const figs = [{ id: KNIGHT_ID, x: knight.x, z: knight.z, foot: walkBedAt(map, knight.x, knight.z), dashing: false }];
+    for (let s = Math.max(0, pin - WARM_MAX) + WARM_STEP; s <= pin; s += WARM_STEP) water.step({ dt: WARM_STEP, now: s, figs, sinks: [], landed: null, hidden: NONE_IDS });
+  }
 
   let job: CoverJob | null = null;
   const paint = (): CoverJob => {
@@ -238,7 +246,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           brush: [], lava: null, lavaVersion: 0, darkvision: null, casters: [], sight: SIGHT_OFF, sun,
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
-          water: { ripples: wo.ripples, now, reflect: reflects(params), sky: waterSky(s) },
+          water: { ripples: wo.ripples, now, reflect: reflects(params), sky: waterSky(s), fish: wo.fish },
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
         },
         c.timer,

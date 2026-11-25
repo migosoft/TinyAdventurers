@@ -17,7 +17,6 @@ import {
   OrthographicCamera,
   QuadMesh,
   RedFormat,
-  RGFormat,
   RGBAFormat,
   RenderTarget,
   Scene,
@@ -87,8 +86,8 @@ import { stoneField } from './stone/field';
 import { GRATE_DEPTH } from './stone/laidMesh';
 import { buildDipChunk, dipClassChanged, type DipChunk } from './dips/dipMesh';
 import { dipMaterial } from './dips/dipNodes';
-import { BED_RES, LAVA_LEVEL, WATER_LEVEL } from './dips/shape';
-import { refreshWaterField, waterField } from './water/waterField';
+import { BED_RES, LAVA_LEVEL, WATER_LEVEL, pondFieldOf } from './dips/shape';
+import { FIELD_STRIDE, refreshWaterField, waterField } from './water/waterField';
 import { buildWaterChunk } from './water/waterMesh';
 import { ceilingMaterial, waterMaterial, type WaterSky } from './water/waterNodes';
 import { CEILING_LAYER, WATER_LAYER, mirrorPose, picturePasses, poolInView } from './water/passes';
@@ -172,7 +171,13 @@ export interface FrameInput {
   /** The brushers of this frame (#331): the figures that make bushes and bushels wiggle; absent = none. */
   brush?: readonly Brusher[];
   /** The water (#345): the packed ripples (null: none), its clock in seconds, and whether the mirror pass runs. Absent: no ripples, clock `t`, no mirror. */
-  water?: { ripples: Float32Array | null; now: number; reflect: boolean; /** The sky a daylight water mirrors (#360: `waterSky`); absent: as it was. */ sky?: WaterSky };
+  water?: {
+    ripples: Float32Array | null; now: number; reflect: boolean;
+    /** The sky a daylight water mirrors (#360: `waterSky`); absent: as it was. */
+    sky?: WaterSky;
+    /** A pond's fish (#360: `Water3d.step`'s, as `Fish.positions` lays them out); absent or null: none. */
+    fish?: Float32Array | null;
+  };
   /** The lava's surface (#344): the packed bubbles and rings of `Lava3d.step`, its clock, and whether the heat shimmer runs (`shimmers(params)`). Absent: a calm surface, no shimmer. */
   lavaPool?: { bubbles: Float32Array | null; stirs: Float32Array | null; now: number; heat: boolean };
   /** The crystals (#380) and wall torches (#391): a big cluster whose light `off` names is drawn broken, a torch without its flame (the chunk is rebuilt only when a light of it switched); `now` is the clock of the lights' pulse (s), which the gems' glow and the flames follow. Absent: every one as it was, clock `t`. */
@@ -400,11 +405,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const wm = worldMaterial(lighting, groundStart, mask.texture, sight, cover, sheets);
   const material = wm.material;
   const dm = dipMaterial(lighting, groundStart, sight, cover, sheets);
-  // The water (#345). The field: the bed's height and the water's outline mask, half floats, filtered linearly (the lava light
-  // texture is read the same way), kept up to date by `tileChanged`. A puddle's bed (#380) is the rock floor the stone mesh draws.
+  // The water (#345). The field: the bed's height, the water's outline mask and the current (#360), half floats, filtered linearly (the
+  // lava light texture is read the same way), kept up to date by `tileChanged`. A puddle's bed (#380) is the rock floor the stone mesh draws.
   const floorAt = (x: number, z: number): number => floorHeight(field, map, kit.marks, x, z);
   const wField = waterField(map, kit.marks.puddles, floorAt);
-  const fieldTex = new DataTexture(new Uint16Array(wField.data.length), wField.w, wField.h, RGFormat, HalfFloatType);
+  const fieldTex = new DataTexture(new Uint16Array(wField.data.length), wField.w, wField.h, RGBAFormat, HalfFloatType);
   fieldTex.colorSpace = NoColorSpace;
   fieldTex.magFilter = LinearFilter;
   fieldTex.minFilter = LinearFilter;
@@ -413,13 +418,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   /** Converts the field's rows j0..j1 (inclusive) to half floats and marks the texture for upload. */
   const uploadField = (j0: number, j1: number): void => {
     const out = fieldTex.image.data as Uint16Array;
-    for (let i = j0 * wField.w * 2, end = (j1 + 1) * wField.w * 2; i < end; i++) out[i] = DataUtils.toHalfFloat(wField.data[i]);
+    for (let i = j0 * wField.w * FIELD_STRIDE, end = (j1 + 1) * wField.w * FIELD_STRIDE; i < end; i++) out[i] = DataUtils.toHalfFloat(wField.data[i]);
     fieldTex.needsUpdate = true;
   };
   uploadField(0, wField.h - 1);
   // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame. The water reads it as its view vector.
   const toward = viewTowardUniform();
-  const water = waterMaterial(lighting, sight, fieldTex, map, toward, { daylight: world.painted });
+  const water = waterMaterial(lighting, sight, fieldTex, map, toward, { daylight: world.painted, pond: pondFieldOf(map) });
   // The copy of the opaque scene the water sees through, and the mirror picture: resized in place (the water's nodes keep the texture objects).
   const sceneCopy = new RenderTarget(1, 1, { depthBuffer: false, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
   sceneCopy.texture.colorSpace = NoColorSpace;
@@ -1092,6 +1097,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       water.time.value = f.water?.now ?? f.t;
       water.setRipples(f.water?.ripples ?? null);
       if (f.water?.sky) water.setSky(f.water.sky);
+      water.setFish(f.water?.fish ?? null);
       lava.time.value = shimmer.time.value = f.lavaPool?.now ?? f.t;
       crystal.time.value = flame.time.value = f.wallLights?.now ?? f.t;
       if (f.wallLights) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, puddleDrops, rippleHeight } from './ripples';
+import { DROP, MOUTH_RING, RIPPLE_CAP, RIPPLE_LIFE, Ripples, mouthRings, puddleDrops, rippleHeight } from './ripples';
 
 function peak(age: number, strength = 1): { max: number; at: number } {
   let max = 0, at = 0;
@@ -129,5 +129,44 @@ describe('ripples', () => {
     expect(got).not.toContain(3);
     expect(got).toContain(7);
     expect(got).toContain(0);
+  });
+
+  it('the mouths of a pond share their few slots and never take another ring\'s (#360)', () => {
+    const out = new Float32Array(RIPPLE_CAP * 4);
+    const xs = (r: Ripples, now: number): number[] => { r.pack(now, out); return Array.from({ length: RIPPLE_CAP }, (_, i) => (out[i * 4 + 2] >= 0 ? out[i * 4] : NaN)).filter((x) => !Number.isNaN(x)); };
+    // two mouths, ten seconds, frame by frame: never more than the mouths' slots, and each ring was born at one of the two
+    const mouths = [{ x: 10, z: 10, dx: 1, dz: 0 }, { x: 40, z: 10, dx: 0, dz: 1 }];
+    const r = new Ripples();
+    let last = -Infinity, born = 0;
+    for (let k = 0; k <= 600; k++) {
+      const now = k / 60;
+      mouthRings(mouths, Math.max(now - RIPPLE_LIFE, last), now, (x, z, at) => { born++; expect(at).toBeGreaterThan(last); expect(at).toBeLessThanOrEqual(now); r.addMouth(x, z, at, now); });
+      last = now;
+      const live = xs(r, now);
+      expect(live.length).toBeLessThanOrEqual(MOUTH_RING.slots);
+      for (const x of live) expect(Math.min(Math.abs(x - 10 - MOUTH_RING.into), Math.abs(x - 40)), `${x}`).toBeLessThanOrEqual(MOUTH_RING.scatter + 1e-4);
+    }
+    expect(born).toBeGreaterThan(2 * 10 / 0.9 - 2);
+    const seen = xs(r, 10);
+    expect(seen.some((x) => x < 20) && seen.some((x) => x > 30)).toBe(true);
+    // every slot taken by a fresh ring of something else: the mouth's ring is left out
+    const busy = new Ripples();
+    for (let i = 0; i < RIPPLE_CAP; i++) busy.add(100 + i, 0, 1, 1);
+    busy.addMouth(7, 7, 1.2, 1.2);
+    expect(xs(busy, 1.2)).not.toContain(7);
+    expect(xs(busy, 1.2).length).toBe(RIPPLE_CAP);
+    // four held and the oldest still fresh: left out; once it is `spare` older: replaced
+    const held = new Ripples();
+    for (let i = 0; i < MOUTH_RING.slots; i++) held.addMouth(i, 0, i * 0.1, i * 0.1);
+    held.addMouth(50, 0, 1, 1);
+    expect(xs(held, 1)).not.toContain(50);
+    held.addMouth(51, 0, MOUTH_RING.spare, MOUTH_RING.spare);
+    expect(xs(held, MOUTH_RING.spare)).toContain(51);
+    expect(xs(held, MOUTH_RING.spare)).not.toContain(0);
+    // a figure's ring may take a mouth's slot (the oldest), not the other way round
+    const mixed = new Ripples();
+    mixed.addMouth(9, 9, 0, 0);
+    for (let i = 0; i < RIPPLE_CAP; i++) mixed.add(200 + i, 0, 0.5, 1);
+    expect(xs(mixed, 0.5)).not.toContain(9);
   });
 });

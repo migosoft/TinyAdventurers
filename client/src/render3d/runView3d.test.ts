@@ -23,7 +23,7 @@ import { rng } from './fx/rand';
 import type { PlantInfo } from '../generated/PlantInfo';
 import type { CoverResult } from './cover/coverJob';
 import { encodeCover } from './cover/kinds';
-import { hourLabel, mistLightOf, sky, startHour } from './sun';
+import { hourLabel, mistLightOf, sky, startHour, waterSky } from './sun';
 import { WIND, WIND_DIR } from './wind';
 
 const deg = (d: number): number => (d * Math.PI) / 180;
@@ -245,6 +245,9 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     expect(f!.sun!.colour).toEqual(s.colour);
     expect(f!.sun!.fit.size).toBe(2048);
     expect(f?.trees).toBeDefined();
+    // the water's sky (#360) is the hour's; a level without a pond has no fish
+    expect(f!.water!.sky).toEqual(waterSky(s));
+    expect(f!.water!.fish).toBeNull();
   });
   it('a snapshot at tick 60 * 720 is one hour later', () => {
     const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });

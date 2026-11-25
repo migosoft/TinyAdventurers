@@ -66,10 +66,18 @@ export function sky(hour: number): Sky {
 
 /** The sky a pond mirrors (#360): the colour overhead at night and by day, and how much of the low sun's colour the horizon takes at most. */
 const SKY_ZENITH = { night: [0.015, 0.025, 0.06] as Vec3, day: [0.3, 0.5, 0.82] as Vec3 }, HORIZON_WARM = 0.6;
-/** The sky's colours for the water's mirror: `zenith` overhead, `horizon` low down (the haze, warmed by a low sun). */
-export function waterSky(s: Sky): { zenith: Vec3; horizon: Vec3 } {
+/**
+ * The sky's colours for the water's mirror: `zenith` overhead, `horizon` low down (the haze, warmed by a low sun). Written into `out`
+ * (a caller that asks every frame keeps one: nothing is allocated then).
+ */
+export function waterSky(s: Sky, out: { zenith: Vec3; horizon: Vec3 } = { zenith: [0, 0, 0], horizon: [0, 0, 0] }): { zenith: Vec3; horizon: Vec3 } {
   const low = s.moon ? 0 : s.day * (1 - smooth(8, 34, s.elevation)) * HORIZON_WARM;
-  return { zenith: mix3(SKY_ZENITH.night, SKY_ZENITH.day, s.day), horizon: mix3(s.haze, s.colour, low) };
+  const { night, day } = SKY_ZENITH;
+  for (let i = 0; i < 3; i++) {
+    out.zenith[i] = night[i] + (day[i] - night[i]) * s.day;
+    out.horizon[i] = s.haze[i] + (s.colour[i] - s.haze[i]) * low;
+  }
+  return out;
 }
 
 const lum = (v: Vec3): number => 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];

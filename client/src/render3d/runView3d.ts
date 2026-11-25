@@ -136,6 +136,8 @@ export class RunView3d implements RunView {
   /** The input of `water.step`, reused every frame. */
   private readonly waterStepIn: WaterIn = { dt: 0, now: 0, figs: [], sinks: [], landed: null, hidden: new Set() };
   private readonly waterIn: NonNullable<FrameInput['water']> ={ ripples: null, now: 0, reflect: false };
+  /** The sky a woodland's pond mirrors (#360), written every frame by `waterSky`. */
+  private readonly waterSkyNow: ReturnType<typeof waterSky> = { zenith: [0, 0, 0], horizon: [0, 0, 0] };
   // The lava (#344): bubbles, rings and spark cues, made here like the water so a lost device keeps them.
   private readonly lavaSim: Lava3d;
   private readonly lavaStepIn: LavaIn = { dt: 0, now: 0, figs: [], hidden: new Set(), fp: { x0: 0, z0: 0, x1: 0, z1: 0 }, mask: null, focus: { x: 0, z: 0 } };
@@ -453,7 +455,8 @@ export class RunView3d implements RunView {
     this.landed = null;
     const wi = this.waterIn;
     wi.ripples = wo.ripples; wi.now = c.now; wi.reflect = reflects(c.params);
-    if (skyNow) wi.sky = waterSky(skyNow); // a woodland's pond mirrors the hour's sky (#360)
+    wi.fish = wo.fish; // a woodland pond's fish (#360), stepped by the water with the figures that wade
+    if (skyNow) wi.sky = waterSky(skyNow, this.waterSkyNow); // a woodland's pond mirrors the hour's sky (#360)
     // The lava (#344): the same place in the frame; its cues go to the effects, its arrays to the view.
     const ls = this.lavaStepIn;
     ls.dt = dt; ls.now = c.now; ls.figs = fo.figs; ls.hidden = this.hidden; ls.fp = fp; ls.mask = c.params.sight ? this.mask : null;

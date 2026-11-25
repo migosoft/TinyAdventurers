@@ -1,12 +1,14 @@
 // Water in 3D (#345): what the figures do to the water of a dip. Wading, entering, dashing, drowning and the
 // drips that land become ripple sources (for the surface) and cues (for the droplet effects), in tiles. Pure: no three.js, no effects.
 import { CONST } from '../../generated/defs';
-import { WATER_LEVEL, isWater } from '../dips/shape';
+import { WATER_LEVEL, isWater, pondFieldOf } from '../dips/shape';
 import type { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
 import type { Footprint } from '../lights';
+import { Fish } from '../pond/fish';
+import type { PondField } from '../pond/pondField';
 import type { Puddle } from '../stone/place';
-import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, puddleDrops } from './ripples';
+import { DROP, RIPPLE_CAP, RIPPLE_LIFE, Ripples, mouthRings, puddleDrops } from './ripples';
 
 /** Seconds between the rings of a wader, its speed (tiles/s) above which it rings, the strengths of the ripples and the rates (per second) of the cues. */
 export const WADE = { every: 0.3, speed: 0.3, ring: 1, enter: 1.6, drip: 0.55, plunge: 1.6, plunges: 3, stir: 0.6, stirRate: 8, bubbleRate: 12, sprayRate: 30 } as const;
@@ -68,9 +70,15 @@ export class Water3d {
   private readonly spray = new Spots();
   private readonly bubbles = new Spots();
   private readonly cues: WaterCues = { enters: this.enters.list, plunges: this.plunges.list, spray: this.spray.list, bubbles: this.bubbles.list };
-  private readonly result = { ripples: this.packed, live: 0, cues: this.cues };
+  /** A woodland pond's fish (#360), stepped here with the figures that stand in the water; null: the map has no pond, or the pond no deep water. */
+  private readonly fish: Fish | null;
+  private readonly waders = new Spots();
+  private readonly result: { ripples: Float32Array; live: number; cues: WaterCues; fish: Float32Array | null } = { ripples: this.packed, live: 0, cues: this.cues, fish: null };
+  /** A mouth's ring (`mouthRings`), with the frame's clock. */
+  private now = 0;
+  private readonly mouthRing = (x: number, z: number, at: number): void => this.ripples.addMouth(x, z, at, this.now);
 
-  /** The clock the puddles' drops are made up to, and the ground in view this frame. */
+  /** The clock the puddles' drops and the mouths' rings are made up to, and the ground in view this frame. */
   private dropsTo = -Infinity;
   private fp: Footprint = { x0: 0, z0: 0, x1: 0, z1: 0 };
   /** A drop rings its puddle only in view: the ripple slots are few. */
@@ -79,7 +87,11 @@ export class Water3d {
     if (p.x + p.r > f.x0 && p.x - p.r < f.x1 && p.z + p.r > f.z0 && p.z - p.r < f.z1) this.ripples.add(x, z, at, -DROP.strength);
   };
 
-  constructor(private readonly map: TileMap, private readonly rng: () => number = Math.random) {}
+  /** `pond`: the map's pond field (#360), whose mouths ring and whose deep water holds fish; a map without one has neither. */
+  constructor(private readonly map: TileMap, private readonly rng: () => number = Math.random, private readonly pond: PondField | undefined = pondFieldOf(map)) {
+    const fish = pond ? new Fish(pond, pond.seed) : null;
+    this.fish = fish && fish.count > 0 ? fish : null;
+  }
 
   /** A ripple of `strength` at (x, z), scattered by up to `scatter` tiles. */
   private ring(x: number, z: number, now: number, strength: number, scatter: number): void {
@@ -90,15 +102,19 @@ export class Water3d {
     this.ripples.add(x, z, now, strength);
   }
 
-  /** One frame: the packed ripples (the same array every call), how many are live, and the cues for the effects (reused lists). */
-  step(i: WaterIn): { ripples: Float32Array; live: number; cues: WaterCues } {
+  /**
+   * One frame: the packed ripples (the same array every call), how many are live, the cues for the effects (reused lists) and the
+   * pond's fish (`Fish.positions`; null: none).
+   */
+  step(i: WaterIn): { ripples: Float32Array; live: number; cues: WaterCues; fish: Float32Array | null } {
     const { dt, now, hidden } = i;
-    this.enters.clear(); this.plunges.clear(); this.spray.clear(); this.bubbles.clear();
+    this.enters.clear(); this.plunges.clear(); this.spray.clear(); this.bubbles.clear(); this.waders.clear();
     const frame = ++this.frameNo;
     for (let k = 0; k < i.figs.length; k++) {
       const f = i.figs[k];
       const over = isWater(this.map.get(Math.floor(f.x), Math.floor(f.z)));
       const standing = over && !f.dashing && f.foot < WATER_LEVEL;
+      if (standing && this.fish) this.waders.push(f.id, f.x, f.z);
       const puddle = !over && !!i.puddles && f.foot < PUDDLE_STIR.foot && inPuddle(i.puddles, f.x, f.z);
       const quiet = hidden.has(f.id);
       let s = this.states.get(f.id);
@@ -159,13 +175,22 @@ export class Water3d {
     const l = i.landed;
     if (l) for (let k = 0; k < l.count; k++) this.ripples.add(l.pos[k * 2], l.pos[k * 2 + 1], now, WADE.drip);
 
-    // The puddles' drops since the last frame; the first frame, and one after the clock went back, brings the rings that still live.
+    // The puddles' drops and the mouths' rings since the last frame; the first frame, and one after the clock went back, brings the rings that still live.
+    const since = Math.max(now - RIPPLE_LIFE, this.dropsTo > now ? -Infinity : this.dropsTo);
     if (i.puddles && i.fp) {
       this.fp = i.fp;
-      puddleDrops(i.puddles, Math.max(now - RIPPLE_LIFE, this.dropsTo > now ? -Infinity : this.dropsTo), now, this.drop);
+      puddleDrops(i.puddles, since, now, this.drop);
+    }
+    if (this.pond && this.pond.mouths.length > 0) {
+      this.now = now;
+      mouthRings(this.pond.mouths, since, now, this.mouthRing);
     }
     this.dropsTo = now;
 
+    if (this.fish) {
+      this.fish.step(dt, this.waders.list);
+      this.result.fish = this.fish.positions();
+    }
     this.result.live = this.ripples.pack(now, this.packed);
     return this.result;
   }

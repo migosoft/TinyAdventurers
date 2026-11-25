@@ -9,7 +9,9 @@ import { parseParams } from './params';
 import { renderPlan } from './quality';
 import type { StageCtx } from './host';
 import type { FrameInput } from './view';
+import { FISH_CAP, FISH_STRIDE } from './pond/fish';
 import { createPondStage } from './pondStage';
+import { MOUTH_RING } from './water/ripples';
 import { sky, waterSky } from './sun';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -78,6 +80,25 @@ describe('the ?r3d=pond stage (#360)', () => {
     expect(wet.stage.world.dry).toBe(false);
     expect(wet.run(1, 0.016).water!.sky).toEqual(waterSky(sky(13)));
     expect(setup('?r3d=pond&pond=0&dry=1').stage.world.dry).toBe(true);
+  });
+
+  it('hands the water its fish and the mouth\'s rings; a pinned clock shows them as they are after that time', () => {
+    const live = (f: FrameInput): number => Array.from({ length: 16 }, (_, i) => f.water!.ripples![i * 4 + 2]).filter((age) => age >= 0).length;
+    // running: the fish swim from frame to frame
+    const { run } = setup('?r3d=pond&pond=1');
+    const a = Array.from(run(1, 0.016).water!.fish!);
+    expect(a.length).toBe(FISH_CAP * FISH_STRIDE);
+    expect(Array.from(run(5, 0.016).water!.fish!)).not.toEqual(a);
+    // pinned: the same picture every time, and not the first moment's; the mouth has rung
+    const at = (t: number): FrameInput => setup(`?r3d=pond&pond=1&t=${t}`).run(3, 0.016);
+    const p3 = at(3);
+    expect(Array.from(p3.water!.fish!)).toEqual(Array.from(at(3).water!.fish!));
+    expect(Array.from(p3.water!.fish!)).not.toEqual(Array.from(at(3.5).water!.fish!));
+    expect(Array.from(p3.water!.fish!)).not.toEqual(a);
+    expect(live(p3)).toBe(MOUTH_RING.slots);
+    expect(Array.from(p3.water!.ripples!)).toEqual(Array.from(at(3).water!.ripples!));
+    // a pond without a brook has no rings
+    expect(live(setup('?r3d=pond&pond=0&t=3').run(3, 0.016))).toBe(0);
   });
 
   it('walks the knight on the rules map: it moves, and never into deep water', () => {

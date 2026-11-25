@@ -45,12 +45,58 @@ export function puddleDrops<P extends { x: number; z: number; r: number }>(puddl
   }
 }
 
+/**
+ * The stir where a brook runs into a pond (#360): a ring at each mouth every `every` seconds, `jitter` earlier or later at most (so
+ * 0.5 to 0.9 s apart), of this `strength`, born `into` tiles into the pond from the mouth and up to `scatter` tiles off. All the
+ * mouths together hold at most `slots` of the ripple slots; a new ring takes the oldest one's slot only when that one is `spare`
+ * seconds older (faded to a few percent), else it is left out.
+ */
+export const MOUTH_RING = { every: 0.7, jitter: 0.2, strength: 0.7, into: 0.45, scatter: 0.3, slots: 4, spare: 2 } as const;
+
+/**
+ * The rings born at the mouths after `from` and up to `to` (s), in the order of their number: `emit` gets the spot (tiles) and the
+ * time. Ring n of a mouth is born at n * every plus a share of `jitter`; when and where comes from the mouth's place and n alone.
+ */
+export function mouthRings(mouths: readonly { x: number; z: number; dx: number; dz: number }[], from: number, to: number, emit: (x: number, z: number, at: number) => void): void {
+  const M = MOUTH_RING;
+  for (let n = Math.floor(from / M.every) - 1; n <= Math.floor(to / M.every); n++) {
+    for (const m of mouths) {
+      const a = Math.round(m.x * 64), b = Math.round(m.z * 64);
+      const at = n * M.every + hash(n, a, b, 1) * M.jitter;
+      if (!(at > from && at <= to)) continue;
+      const ang = hash(n, a, b, 2) * Math.PI * 2, d = Math.sqrt(hash(n, a, b, 3)) * M.scatter;
+      emit(m.x + m.dx * M.into + Math.cos(ang) * d, m.z + m.dz * M.into + Math.sin(ang) * d, at);
+    }
+  }
+}
+
 export class Ripples {
   private readonly x = new Float32Array(RIPPLE_CAP);
   private readonly z = new Float32Array(RIPPLE_CAP);
   private readonly strength = new Float32Array(RIPPLE_CAP);
   /** Birth time per slot; -Infinity marks a never-used slot. */
   private readonly born = new Float64Array(RIPPLE_CAP).fill(-Infinity);
+  /** 1: the slot holds a mouth's ring (`addMouth`). */
+  private readonly mouth = new Uint8Array(RIPPLE_CAP);
+
+  /**
+   * A mouth's ring (`MOUTH_RING`) at (x, z), born at `born` <= `now`. It takes a free or expired slot while the mouths hold fewer
+   * than `MOUTH_RING.slots` live ones, else the slot of the mouths' oldest ring if that is `spare` seconds older; otherwise it is
+   * left out. It never replaces another source's live ring, so the other `RIPPLE_CAP - slots` slots stay with the figures.
+   */
+  addMouth(x: number, z: number, born: number, now: number): void {
+    let free = -1, held = 0, oldest = -1;
+    for (let i = 0; i < RIPPLE_CAP; i++) {
+      const age = now - this.born[i];
+      if (age >= RIPPLE_LIFE || age < 0) { if (free < 0) free = i; continue; }
+      if (!this.mouth[i]) continue;
+      held++;
+      if (oldest < 0 || this.born[i] < this.born[oldest]) oldest = i;
+    }
+    const slot = held < MOUTH_RING.slots ? free : born - this.born[oldest] >= MOUTH_RING.spare ? oldest : -1;
+    if (slot < 0) return;
+    this.x[slot] = x; this.z[slot] = z; this.strength[slot] = MOUTH_RING.strength; this.born[slot] = born; this.mouth[slot] = 1;
+  }
 
   /** A source at (x, z) tiles born at `now` (s). With RIPPLE_CAP live sources the oldest is replaced.
    *  A free or expired slot (now - born >= RIPPLE_LIFE) is reused first, so a live source is only replaced when none is left.
@@ -66,7 +112,7 @@ export class Ripples {
       if (this.born[i] < oldest) { oldest = this.born[i]; slot = i; }
     }
     if (slot < 0) return;
-    this.x[slot] = x; this.z[slot] = z; this.strength[slot] = strength; this.born[slot] = now;
+    this.x[slot] = x; this.z[slot] = z; this.strength[slot] = strength; this.born[slot] = now; this.mouth[slot] = 0;
   }
 
   /** Writes (x, z, age, strength) per slot into `out` (RIPPLE_CAP * 4); a free or expired slot has age -1. Returns the live count. */

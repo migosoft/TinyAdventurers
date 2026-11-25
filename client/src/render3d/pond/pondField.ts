@@ -38,6 +38,8 @@ export interface PondField {
   mouths: Mouth[];
   decks: Deck[];
   seed: number;
+  /** The tiles the field's grids cover: all the drawn water lies inside. */
+  box: { x0: number; z0: number; x1: number; z1: number };
 }
 
 export const DECK_Y = 0.14; // tiles above the ground // balancing
@@ -254,7 +256,7 @@ export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): Po
     shoreAt, bankAt: read(bank, MARGIN), wetAt: read(mask, 0), bodyAt: read(body, 0),
     // the hollow of a DeepWater tile only inside the drawn water
     depthAt: (x, z) => { const s = shoreAt(x, z); return s > 0 ? Math.max(depthOf(s), deepAt(x, z) * smooth(s / DEEP_RAMP)) : 0; },
-    flowAt, deckAt, mouths, decks, seed: pond.seed,
+    flowAt, deckAt, mouths, decks, seed: pond.seed, box: { x0: ox, z0: oz, x1: ox + bw, z1: oz + bh },
   };
 }
 
