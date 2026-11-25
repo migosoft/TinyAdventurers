@@ -88,7 +88,7 @@ describe("the pond's life (#360)", () => {
         for (const d of life.flies) clear(d.tx, d.tz);
       }
     });
-  });
+  }, 30_000); // 2 to 3 s alone; the whole suite under load ran it past the default 5 s
 
   it('the counts stay in their ranges, and the demo ponds have life', () => {
     each((life) => {

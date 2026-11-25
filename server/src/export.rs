@@ -775,8 +775,10 @@ fn pond_demo_levels() -> Vec<(crate::dungeon::Layout, crate::dungeon::woodland::
 
 /// The pond shape's parity fixture (#360): for each demo pond its blobs, its seed and `water_shapes::inside` on a
 /// 20 x 15 grid over the blobs' bounds plus 3 tiles. The client's port (`pond/pondShape.ts`) must give the same values.
+/// Named `export_bindings_…` so the local run's `--skip export_bindings` leaves it out: the docker suite creates the
+/// file as root, and a local run cannot write it (as with the ts-rs bindings).
 #[test]
-fn export_pond_shape_fixture() {
+fn export_bindings_pond_shape_fixture() {
     let ponds: Vec<serde_json::Value> = pond_demo_levels()
         .iter()
         .map(|(_, w)| {
@@ -794,8 +796,9 @@ fn export_pond_shape_fixture() {
     std::fs::write(out_dir().join("pond-shape-fixture.json"), serde_json::to_string(&ponds).unwrap()).unwrap();
 }
 
+/// Named `export_bindings_…` for the same reason as the shape fixture above.
 #[test]
-fn export_pond_demo() {
+fn export_bindings_pond_demo() {
     let maps: Vec<serde_json::Value> = pond_demo_levels()
         .iter()
         .map(|(layout, w)| {
