@@ -46,10 +46,19 @@ pub fn turn_toward(from: f64, to: f64, max_step: f64) -> f64 {
     }
 }
 
+/// Seconds after a cue in which the creature shows no further one.
+pub const CUE_QUIET: f64 = 2.0;
+
 /// The attention cue (#422): `!` (k 0) when a creature starts to chase, `?` (k 1) when it starts to look or search.
-/// Only a living, visible, hostile non-companion sends one; the state of this tick is remembered either way.
+/// Only a living, visible, hostile non-companion that can act sends one. `Ai.cued` is the state last compared: it
+/// stands still for `CUE_QUIET` after a cue and during a hold (the Mimic's reveal), so a creature that flickers
+/// between states shows one cue per quiet time, and the last cue shown catches up with the state it ended in.
 pub fn cue(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
+    m.ai.cue_t = (m.ai.cue_t - super::DT).max(0.0);
+    if m.ai.cue_t > 0.0 || m.ai.hold > 0.0 {
+        return;
+    }
     let (prev, now) = (m.ai.cued, m.ai.state);
     m.ai.cued = now;
     let looking = |s: AiState| matches!(s, AiState::Look | AiState::Search);
@@ -60,9 +69,10 @@ pub fn cue(run: &mut Run, mi: usize) {
     } else {
         return;
     };
-    if !m.alive || m.side != Side::Hostile || m.companion.is_some() || m.hiding || m.dormant || m.effects.has(EffectKind::Invisible) {
+    if !m.alive || m.side != Side::Hostile || m.companion.is_some() || m.hiding || m.dormant || m.effects.no_act() || m.effects.has(EffectKind::Invisible) {
         return;
     }
+    m.ai.cue_t = CUE_QUIET;
     let (id, pos) = (m.id, m.pos);
     run.event(Ev::Cue { id, x: pos.x as f32, y: pos.y as f32, k }, Some(pos));
 }
@@ -1343,8 +1353,49 @@ mod tests {
         let (mut run, mi) = duel(100.0);
         run.monsters[mi].effects.add(EffectKind::Invisible, 60.0);
         assert!(cues_over(&mut run, 40).is_empty());
+        // A Friendly chaser (a charmed creature after a monster): the state changes, no cue goes out.
         let (mut run, mi) = duel(100.0);
+        run.events.clear();
         run.monsters[mi].side = Side::Friendly;
-        assert!(cues_over(&mut run, 40).is_empty());
+        run.monsters[mi].ai.state = AiState::Chase;
+        cue(&mut run, mi);
+        assert!(run.events.is_empty());
+        run.monsters[mi].side = Side::Hostile;
+        run.monsters[mi].ai.cued = AiState::Idle;
+        cue(&mut run, mi);
+        assert_eq!(run.events.len(), 1, "the same creature, Hostile, cues");
+    }
+
+    #[test]
+    fn a_flickering_creature_cues_once_per_quiet_time_and_ends_on_its_state() {
+        let (mut run, mi) = duel(100.0);
+        run.events.clear();
+        let ks = |run: &Run| run.events.iter().filter_map(|(e, _)| if let Ev::Cue { k, .. } = e { Some(*k) } else { None }).collect::<Vec<_>>();
+        // Chase, Look, Chase, ... every tick for a second: one `!`.
+        for i in 0..(1.0 / DT) as usize {
+            run.monsters[mi].ai.state = if i % 2 == 0 { AiState::Chase } else { AiState::Look };
+            cue(&mut run, mi);
+        }
+        assert_eq!(ks(&run), vec![0]);
+        // It ends looking: once the quiet time is over the `?` follows.
+        run.monsters[mi].ai.state = AiState::Look;
+        (0..(CUE_QUIET / DT) as usize + 1).for_each(|_| cue(&mut run, mi));
+        assert_eq!(ks(&run), vec![0, 1]);
+    }
+
+    #[test]
+    fn a_mimic_cues_only_after_its_reveal() {
+        let (mut run, mi) = mimic_with_hero_behind(8.0);
+        let mut first = None;
+        run.events.clear();
+        for _ in 0..(3.0 / DT) as usize {
+            run.step();
+            if first.is_none() {
+                first = run.events.iter().find_map(|(e, _)| if let Ev::Cue { k, .. } = e { Some((*k, run.monsters[mi].ai.hold)) } else { None });
+            }
+        }
+        let (k, hold) = first.expect("the woken Mimic cues");
+        assert!(hold <= 0.0, "no cue during the reveal hold");
+        assert!(k == 0 || k == 1);
     }
 }
