@@ -372,6 +372,13 @@ describe('Floats.addPicture', () => {
     f.addPicture({ t: 'Immune', x: 5 * TILE, y: 5 * TILE } as PictureEv, { x: 0, y: 0 }, null);
     expect(only(floatItems(f), 'text')[0].y).toBe(Math.round(at(5, 5).py - 18 * ZOOM));
   });
+  it('a Cue floats over the creature, higher than a damage number', () => {
+    const f = new Floats(mid);
+    f.addPicture({ t: 'Cue', id: 1, x: 5 * TILE, y: 5 * TILE, k: 0 } as PictureEv, { x: 0, y: 0 }, null);
+    const t = only(floatItems(f), 'text')[0];
+    expect(t.text).toBe('!');
+    expect(t.y).toBe(Math.round(at(5, 5).py - 22 * ZOOM));
+  });
   it('a hit on the own hero is born at the predicted foot', () => {
     const f = new Floats(mid);
     // server hero (100, 60), predicted (130, 60); the event sits 10 px over the server foot

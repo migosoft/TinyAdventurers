@@ -583,6 +583,7 @@ impl Run {
         for (mi, b) in before.into_iter().enumerate() {
             let moved = self.monsters[mi].pos - b;
             facing::turn(self, mi, moved, DT);
+            facing::cue(self, mi);
         }
         for mi in 0..self.monsters.len() {
             abilities::tick_channel(self, mi, DT);

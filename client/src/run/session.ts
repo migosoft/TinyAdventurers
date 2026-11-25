@@ -601,6 +601,7 @@ export class RunSession {
       case 'Immune':
       case 'Effect':
       case 'Cast':
+      case 'Cue':
         this.view?.event(ev, this.pred.state, this.serverOwn, dark);
         break;
       case 'Land': {

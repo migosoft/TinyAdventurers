@@ -12,6 +12,8 @@ describe('floatOf', () => {
     expect(floatOf({ t: 'Heal', x: 0, y: 0, v: 4.4, p: true })).toEqual({ text: '+4', color: '#60ff80', opts: {} });
     expect(floatOf({ t: 'Immune', x: 0, y: 0 })).toEqual({ text: 'IMMUNE', color: '#9ae0ff', opts: { kind: 'small', up: 18 } });
     expect(floatOf({ t: 'Coins', x: 0, y: 0, v: 7 })).toEqual({ text: '+7 coins', color: '#ffd040', opts: { kind: 'small', up: 14 } });
+    expect(floatOf({ t: 'Cue', id: 1, x: 0, y: 0, k: 0 })).toEqual({ text: '!', color: '#ffd040', opts: { big: true, up: 22 } });
+    expect(floatOf({ t: 'Cue', id: 1, x: 0, y: 0, k: 1 })).toEqual({ text: '?', color: '#cfe8ff', opts: { big: true, up: 22 } });
     expect(floatOf({ t: 'Boom', x: 0, y: 0, r: 1, k: 0 })).toBeNull();
   });
   it('finds a hit on the own hero by the proximity rule', () => {

@@ -1135,6 +1135,7 @@ export const EV = {
   "Boom": 2,
   "Cast": 15,
   "Coins": 8,
+  "Cue": 17,
   "Died": 3,
   "Dmg": 0,
   "Effect": 13,

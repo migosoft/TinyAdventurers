@@ -264,6 +264,8 @@ pub struct Ai {
     pub noticed: Vec<u32>,
     /// A boss's script is in the middle of an action (set by `levels/boss.rs` each tick): head forward, no glances.
     pub acting: bool,
+    /// The state of the tick before, which `facing::cue` compares with to send the `!` and `?` cues.
+    pub cued: AiState,
 }
 
 impl Ai {
@@ -302,6 +304,7 @@ impl Ai {
             deaf_t: 0.0,
             noticed: Vec::new(),
             acting: false,
+            cued: AiState::Idle,
         }
     }
 }

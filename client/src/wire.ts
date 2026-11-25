@@ -41,6 +41,7 @@ type EffectW = [number, number, number, boolean, number];
 type ZapW = [number, number, number, number, number];
 type CastW = [number, number, number, number, number, number, number, number];
 type LandW = [number, number, number, number, number, number, number];
+type CueW = [number, number, number, number, number];
 
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
@@ -111,6 +112,10 @@ function unpackEv(e: EvW): Ev {
     case EV.Land: {
       const [, id, x, y, kind, aim, extra] = e as LandW;
       return { t: 'Land', id, x: pos(x), y: pos(y), kind, aim: angle(aim), extra };
+    }
+    case EV.Cue: {
+      const [, id, x, y, k] = e as CueW;
+      return { t: 'Cue', id, x: pos(x), y: pos(y), k };
     }
     default:
       throw new Error(`unknown event code ${e[0]}`);

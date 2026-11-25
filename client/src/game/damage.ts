@@ -15,7 +15,7 @@ export const DMG_COLORS: Record<number, string> = {
 /** A floating number or word for a picture event, as the run shows it (`up`: art px above the event's spot). */
 export interface FloatOf { text: string; color: string; opts: { big?: boolean; kind?: WorldTextKind; up?: number } }
 
-/** The float of a `Dmg`, `Heal`, `Immune` or `Coins` event; null for the other events. */
+/** The float of a `Dmg`, `Heal`, `Immune`, `Coins` or `Cue` event (`!` noticed, `?` lost or alerted); null for the other events. */
 export function floatOf(e: Ev): FloatOf | null {
   switch (e.t) {
     case 'Dmg':
@@ -28,6 +28,8 @@ export function floatOf(e: Ev): FloatOf | null {
       return { text: 'IMMUNE', color: '#9ae0ff', opts: { kind: 'small', up: 18 } };
     case 'Coins':
       return { text: `+${e.v} coins`, color: '#ffd040', opts: { kind: 'small', up: 14 } };
+    case 'Cue':
+      return e.k === 0 ? { text: '!', color: '#ffd040', opts: { big: true, up: 22 } } : { text: '?', color: '#cfe8ff', opts: { big: true, up: 22 } };
     default:
       return null;
   }

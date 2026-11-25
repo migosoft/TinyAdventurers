@@ -210,7 +210,7 @@ export class Floats {
     if (ev.t === 'Dmg' || ev.t === 'Heal') {
       const at = floatSpot(ev, own, server);
       this.add(at.x, at.y + BODY_RISE, w.text, w.color, { ...w.opts, up: (w.opts.up ?? 0) + BODY_RISE });
-    } else if (ev.t === 'Immune' || ev.t === 'Coins') this.add(ev.x, ev.y, w.text, w.color, w.opts);
+    } else if (ev.t === 'Immune' || ev.t === 'Coins' || ev.t === 'Cue') this.add(ev.x, ev.y, w.text, w.color, w.opts);
   }
 
   update(dt: number): void {

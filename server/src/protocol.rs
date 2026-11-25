@@ -391,6 +391,9 @@ pub enum Ev {
     /// `extra` is the projectile's `(owner_id << 16) | shot_id`, so the owner's client can tell its own landed arrow.
     /// Positional: sent where the point is in sight.
     Land { id: u32, x: f32, y: f32, kind: u8, aim: f32, extra: u32 },
+    /// A creature's attention cue over figure `id` standing at (x, y); `k`: 0 = it noticed a foe (`!`), 1 = it lost
+    /// its target or was alerted and looks around (`?`). Positional: sent where the point is in sight.
+    Cue { id: u32, x: f32, y: f32, k: u8 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

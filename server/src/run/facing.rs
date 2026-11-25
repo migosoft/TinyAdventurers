@@ -3,7 +3,10 @@
 //! facing is slower (`off_facing_mul`).
 
 use super::entities::{AiState, Glance, Monster};
+use super::targets::Side;
 use super::Run;
+use crate::defs::effects::EffectKind;
+use crate::protocol::Ev;
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::attributes::Attributes;
 use crate::sheet::ResolvedAbility;
@@ -41,6 +44,27 @@ pub fn turn_toward(from: f64, to: f64, max_step: f64) -> f64 {
     } else {
         angle_diff(from + d.signum() * max_step, 0.0)
     }
+}
+
+/// The attention cue (#422): `!` (k 0) when a creature starts to chase, `?` (k 1) when it starts to look or search.
+/// Only a living, visible, hostile non-companion sends one; the state of this tick is remembered either way.
+pub fn cue(run: &mut Run, mi: usize) {
+    let m = &mut run.monsters[mi];
+    let (prev, now) = (m.ai.cued, m.ai.state);
+    m.ai.cued = now;
+    let looking = |s: AiState| matches!(s, AiState::Look | AiState::Search);
+    let k = if now == AiState::Chase && prev != AiState::Chase {
+        0
+    } else if looking(now) && !looking(prev) {
+        1
+    } else {
+        return;
+    };
+    if !m.alive || m.side != Side::Hostile || m.companion.is_some() || m.hiding || m.dormant || m.effects.has(EffectKind::Invisible) {
+        return;
+    }
+    let (id, pos) = (m.id, m.pos);
+    run.event(Ev::Cue { id, x: pos.x as f32, y: pos.y as f32, k }, Some(pos));
 }
 
 /// How fast the body turns (rad/s).
@@ -1292,5 +1316,35 @@ mod tests {
         steps(&mut run, 3.0);
         let m = &run.monsters[mi];
         assert!(angle_diff(m.aim, PI).abs() < 0.5, "turned west: {}", m.aim);
+    }
+
+    /// Steps `n` ticks (events pile up in `run.events`) and returns the `k` of every `Ev::Cue`.
+    fn cues_over(run: &mut Run, n: usize) -> Vec<u8> {
+        run.events.clear();
+        (0..n).for_each(|_| run.step());
+        run.events.iter().filter_map(|(e, _)| if let Ev::Cue { k, .. } = e { Some(*k) } else { None }).collect()
+    }
+
+    #[test]
+    fn a_creature_that_sees_a_hero_cues_once() {
+        let (mut run, _) = duel(100.0);
+        assert_eq!(cues_over(&mut run, 40), vec![0], "one ! and no more while it chases");
+    }
+
+    #[test]
+    fn a_chaser_that_loses_its_target_cues_a_question_mark() {
+        let (mut run, mi) = lost(0.0, None);
+        run.monsters[mi].ai.cued = AiState::Chase;
+        assert_eq!(cues_over(&mut run, 10), vec![1]);
+    }
+
+    #[test]
+    fn an_invisible_or_friendly_creature_cues_nothing() {
+        let (mut run, mi) = duel(100.0);
+        run.monsters[mi].effects.add(EffectKind::Invisible, 60.0);
+        assert!(cues_over(&mut run, 40).is_empty());
+        let (mut run, mi) = duel(100.0);
+        run.monsters[mi].side = Side::Friendly;
+        assert!(cues_over(&mut run, 40).is_empty());
     }
 }
