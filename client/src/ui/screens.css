@@ -1112,6 +1112,71 @@
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, var(--brass-lo), var(--brass-hi));
+  position: relative;
+}
+/* Runes sparkling from the bar's tip (#405). Only transform and opacity move, so the
+   compositor plays them while the main thread builds the level. */
+.loading-tip {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  pointer-events: none;
+}
+.loading-tip::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  background: radial-gradient(circle, #fff 0, rgba(190, 234, 255, 0.7) 30%, transparent 70%);
+  animation: loading-glint 0.9s ease-in-out infinite alternate;
+}
+.loading-rune,
+.loading-spark {
+  position: absolute;
+  opacity: 0;
+  animation: loading-fly cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  will-change: transform, opacity;
+}
+.loading-rune {
+  left: -7px;
+  top: -10.5px;
+  width: 14px;
+  height: 21px;
+  overflow: visible;
+  fill: none;
+  stroke: #d6f2ff;
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The first copy of each rune is its glow: wide and faint (cheaper than a filter). */
+.loading-rune path:first-child {
+  stroke: #6cc8ff;
+  stroke-width: 3.4;
+  opacity: 0.35;
+}
+.loading-spark {
+  left: -1px;
+  top: -1px;
+  width: 2px;
+  height: 2px;
+  background: #fff;
+  box-shadow: 0 0 4px 1px rgba(140, 215, 255, 0.9);
+}
+@keyframes loading-fly {
+  0% { transform: translate(0, 0) scale(0.3) rotate(0deg); opacity: 0; }
+  15% { opacity: 1; }
+  60% { opacity: 0.85; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; }
+}
+@keyframes loading-glint {
+  from { transform: scale(0.7); opacity: 0.6; }
+  to { transform: scale(1.15); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-tip { display: none; }
 }
 .loading-line {
   color: var(--muted);
