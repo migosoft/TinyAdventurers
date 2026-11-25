@@ -367,7 +367,7 @@ describe('chunkGeometry', () => {
   // stayed byte for byte; positions are now rounded to float32 in the plant's own frame and again after the move to its foot (under 2.4e-7 tiles).
   // Re-recorded once by #331: a bush's sway factor is stored negated (the brush mark), so `nrm` changed.
   // Re-recorded once by #427: the demo woodland is the larger level with the road's clearing, groves and bush clumps (63 chunks, 36 before).
-  // Re-recorded once by #360: the demo seeds got ponds, so their forests were drawn anew (65 chunks, 63 before).
+  // Re-recorded once by #360: the demo seeds got ponds, so their forests were drawn anew (63 chunks).
   it('uploads the demo woodland unchanged', () => {
     const lvl = (demo as unknown as { w: number; h: number; woodland: { plants: PlantInfo[]; palette: number } }[])[0];
     const f = new Forest(lvl.woodland.plants.map(treeSpecOf), { w: lvl.w, h: lvl.h }, lvl.woodland.palette);
@@ -380,7 +380,7 @@ describe('chunkGeometry', () => {
       sums.push(fnv(g.getIndex()!.array as ArrayLike<number>, true));
       h = fnv([h, k, ...sums], true);
     }
-    expect(chunks.size).toBe(65);
-    expect(h.toString(16)).toBe('9c492e7c');
+    expect(chunks.size).toBe(63);
+    expect(h.toString(16)).toBe('c2859cae');
   }, 60_000);
 });

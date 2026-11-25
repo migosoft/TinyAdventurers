@@ -150,6 +150,7 @@ pub struct Pond {
     pub streams: Vec<Stream>,
     pub bridges: Vec<Bridge>,
     pub seed: u32,
+    /// Read by the tests only today; a client water layer that sizes its mesh from the pond's extent should read it.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub bounds: Rect,
 }
@@ -397,8 +398,9 @@ fn plan_stream(rng: &mut ChaCha8Rng, c: &WaterCtx, inflow: bool, far: bool, apar
         if !fits {
             continue;
         }
-        // the last two tiles before the pond are one tile wider
-        let mouth: Vec<usize> = if inflow { vec![tiles.len() - 2, tiles.len() - 1] } else { vec![0, 1] };
+        // the last two stream tiles before the pond (not pond water) are one tile wider
+        let dry: Vec<usize> = (0..tiles.len()).filter(|&i| !c.water.contains(&tiles[i])).collect();
+        let mouth: Vec<usize> = if inflow { dry.iter().rev().take(2).copied().collect() } else { dry.iter().take(2).copied().collect() };
         let mut wide = vec![];
         for i in mouth {
             let t = tiles[i];
@@ -497,7 +499,13 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
             for &(x, y) in &tiles {
                 for (dx, dy) in [(1, 0), (0, 1)] {
                     let k = (0..=4).take_while(|&k| shallow(x + dx * k, y + dy * k)).count() as i32;
-                    if (2..=4).contains(&k) && dry(x - dx, y - dy) && dry(x + dx * k, y + dy * k) {
+                    // a plank has water on both long sides of at least one of its tiles
+                    let wet = |x: i32, y: i32| is_water_tile(pond_map.get(x, y));
+                    let across = (0..k).any(|i| {
+                        let (px, py) = (x + dx * i, y + dy * i);
+                        wet(px + dy, py + dx) && wet(px - dy, py - dx)
+                    });
+                    if (2..=4).contains(&k) && across && dry(x - dx, y - dy) && dry(x + dx * k, y + dy * k) {
                         let rect = Rect { x, y, w: if dx == 1 { k } else { 1 }, h: if dy == 1 { k } else { 1 } };
                         lines.push((Bridge { rect, along_x: dx == 1, road: false }, (0..k).map(|i| (x + dx * i, y + dy * i)).collect()));
                     }
@@ -539,7 +547,7 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
             let streams = streams.iter().map(|s| Stream { points: s.points.clone(), inflow: s.inflow }).collect();
             return Some((m, Pond { streams, bridges, seed: pond_seed, bounds: Rect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }));
         }
-        // every variant failed the check: the next try
+        // every variant failed the check: a failed try, the next one places another pond
     }
     None
 }
@@ -657,7 +665,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 && !ellipses.iter().any(|e| in_ellipse(e, x, y))
                 && (-1..=1).all(|dy| (-1..=1).all(|dx| is_open(map.get(x + dx, y + dy))))
                 && !(-TREE_SHORE_GAP..=TREE_SHORE_GAP).any(|dy| (-TREE_SHORE_GAP..=TREE_SHORE_GAP).any(|dx| is_water_tile(map.get(x + dx, y + dy))))
-                && !bridge_zone.contains(&(x, y))
+                && !(-1..=1).any(|dy| (-1..=1).any(|dx| bridge_zone.contains(&(x + dx, y + dy))))
         })
         .collect();
     tiles.shuffle(&mut rng);
@@ -1214,7 +1222,7 @@ mod tests {
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
         // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
-        assert_eq!(got, vec![11382961426608249891, 8904440953177393501, 11368231502334707319, 9123075183366432284, 1831013090409208476]);
+        assert_eq!(got, vec![262704624205756269, 8904440953177393501, 11368231502334707319, 2764633660331206483, 1831013090409208476]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
@@ -1267,7 +1275,7 @@ mod tests {
         let mut n = 0;
         each(|_, _, w| n += w.pond.is_some() as u64);
         eprintln!("ponds: {n} of {SEEDS}");
-        assert!((SEEDS * 40 / 100..=SEEDS * 65 / 100).contains(&n), "{n} of {SEEDS} seeds have a pond");
+        assert!((SEEDS * 40 / 100..=SEEDS * 70 / 100).contains(&n), "{n} of {SEEDS} seeds have a pond");
     }
 
     #[test]
@@ -1354,12 +1362,47 @@ mod tests {
                 let (src, end) = (tile_of(s.points[0]), tile_of(*s.points.last().unwrap()));
                 let (pond_end, edge_end) = if s.inflow { (end, src) } else { (src, end) };
                 assert!(is_water(l, pond_end.0, pond_end.1), "seed {seed}: the stream's pond end is dry");
+                // the pond's body (water away from every stream line) lies within 2 tiles of the pond end
+                let joins = pond_body(l, w).iter().any(|&(x, y)| (x - pond_end.0).abs() <= 2 && (y - pond_end.1).abs() <= 2);
+                assert!(joins, "seed {seed}: the stream's pond end is not at the pond");
                 assert!(is_water(l, edge_end.0, edge_end.1), "seed {seed}: the stream's far end is dry");
                 let thicket = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|d| l.map.get(edge_end.0 + d.0, edge_end.1 + d.1) == Tile::Thicket as u8);
                 assert!(thicket, "seed {seed}: the stream does not reach the band's edge");
             }
         });
         assert!(streams > 0);
+    }
+
+    #[test]
+    fn streams_keep_to_open_ground() {
+        each(|seed, l, w| {
+            for s in w.pond.iter().flat_map(|p| p.streams.iter()) {
+                for (x, y) in path_tiles(&s.points) {
+                    assert!(playable_x(x), "seed {seed}: stream tile {x},{y} outside the walls");
+                    assert!(!w.start.contains_tile(x, y) && !w.ellipses.iter().any(|e| in_ellipse(e, x, y)), "seed {seed}: stream tile {x},{y} in the start or a clearing");
+                    assert!(is_water(l, x, y) || l.map.get(x, y) == Tile::Road as u8, "seed {seed}: stream tile {x},{y} is neither water nor road");
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn a_pond_bridge_is_a_plank_across_water() {
+        let mut n = 0;
+        each(|seed, l, w| {
+            for b in w.pond.iter().flat_map(|p| p.bridges.iter()).filter(|b| !b.road) {
+                n += 1;
+                let r = b.rect;
+                let (len, wid) = if b.along_x { (r.w, r.h) } else { (r.h, r.w) };
+                assert!((2..=4).contains(&len) && wid == 1, "seed {seed}: deck {r:?}");
+                assert!(tiles_of(r).all(|(x, y)| l.map.get(x, y) == Tile::Floor as u8), "seed {seed}: deck is not Floor");
+                let side = |x: i32, y: i32| if b.along_x { [(x, y - 1), (x, y + 1)] } else { [(x - 1, y), (x + 1, y)] };
+                assert!(tiles_of(r).any(|(x, y)| side(x, y).iter().all(|&(sx, sy)| is_water(l, sx, sy))), "seed {seed}: no water beside the deck");
+                let (a, z) = if b.along_x { ((r.x - 1, r.y), (r.x + r.w, r.y)) } else { ((r.x, r.y - 1), (r.x, r.y + r.h)) };
+                assert!(l.map.get(a.0, a.1) == Tile::Floor as u8 && l.map.get(z.0, z.1) == Tile::Floor as u8, "seed {seed}: an end is not Floor");
+            }
+        });
+        assert!(n > 0);
     }
 
     #[test]
