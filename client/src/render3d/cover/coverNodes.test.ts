@@ -89,9 +89,9 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       expect(fragment(B, m.sheet)).not.toContain('brushSum');
     });
 
-    it('the sun marker (the sun\'s own jitter constant 311.7) is in the code of a world with a sun', () => {
+    it('the sun marker (the sun\'s own uniform sunClouds) is in the code of a world with a sun', () => {
       const m = build(real(true));
-      for (const [name, mat] of [['sheet', m.sheet], ['bushel', m.bushel]] as const) expect(fragment(B, mat, { compare: true }), name).toContain('311.7');
+      for (const [name, mat] of [['sheet', m.sheet], ['bushel', m.bushel]] as const) expect(fragment(B, mat, { compare: true }), name).toContain('sunClouds');
     });
 
     it('carry no sun code in a world without a sun', () => {
@@ -99,7 +99,7 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       for (const [name, mat] of [['sheet', m.sheet], ['bushel', m.bushel]] as const) {
         const code = fragment(B, mat, { compare: true });
         expect(code, name).not.toMatch(wgsl ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/);
-        expect(code, name).not.toContain('311.7');
+        expect(code, name).not.toContain('sunClouds');
       }
     });
 

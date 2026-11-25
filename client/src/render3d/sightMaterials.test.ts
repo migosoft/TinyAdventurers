@@ -121,7 +121,7 @@ describe('a world without a sun', () => {
       for (const m of ms) {
         const code = fragment(B, m, { compare: true });
         expect(code).not.toMatch(B === WGSLNodeBuilder ? /texture_depth_2d|textureSampleCompare/ : /uniform sampler2DShadow/);
-        expect(code).not.toContain('311.7');
+        expect(code).not.toContain('sunClouds');
       }
     });
   }
