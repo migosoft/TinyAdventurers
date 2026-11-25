@@ -105,6 +105,15 @@ describe('Water3d', () => {
     expect(r.ripples[3]).toBeCloseTo(WADE.drip);
   });
 
+  it("rings where the pond's life asks for one, with its strength (#360)", () => {
+    const w = new Water3d(room(), rng);
+    const r = w.step(inp(0, 1 / 60, [], { rings: [6.5, 1.5, 1, 8.5, 2.5, 0.45] }));
+    expect(r.live).toBe(2);
+    expect(r.ripples[0]).toBeCloseTo(6.5);
+    expect(r.ripples[3]).toBeCloseTo(1);
+    expect(r.ripples[7]).toBeCloseTo(0.45);
+  });
+
   it('stays silent for what the hero cannot see', () => {
     const w = new Water3d(room(), rng);
     const hidden = new Set([1]);

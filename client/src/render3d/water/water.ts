@@ -31,6 +31,8 @@ export interface WaterIn {
   sinks: readonly WaterSpot[];
   /** The drips that reached the water this frame: (x, z) pairs. */
   landed: { count: number; pos: Float32Array } | null;
+  /** The rings the pond's life made this frame (#360: a frog that lands, peeks or dives): (x, z, strength) triples. Absent: none. */
+  rings?: readonly number[] | null;
   hidden: ReadonlySet<number>;
   /** The level's puddles and the ground the screen shows (#380): drops ring the puddles in view, and feet stir them (#401). Absent: none. */
   puddles?: readonly Puddle[];
@@ -174,6 +176,8 @@ export class Water3d {
 
     const l = i.landed;
     if (l) for (let k = 0; k < l.count; k++) this.ripples.add(l.pos[k * 2], l.pos[k * 2 + 1], now, WADE.drip);
+    const g = i.rings;
+    if (g) for (let k = 0; k + 2 < g.length; k += 3) this.ripples.add(g[k], g[k + 1], now, g[k + 2]);
 
     // The puddles' drops and the mouths' rings since the last frame; the first frame, and one after the clock went back, brings the rings that still live.
     const since = Math.max(now - RIPPLE_LIFE, this.dropsTo > now ? -Infinity : this.dropsTo);

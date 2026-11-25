@@ -25,6 +25,16 @@ import type { CoverResult } from './cover/coverJob';
 import { encodeCover } from './cover/kinds';
 import { hourLabel, mistLightOf, sky, startHour, waterSky } from './sun';
 import { WIND, WIND_DIR } from './wind';
+import { setPondField, type PondField } from './pond/pondField';
+
+/** A round pond's drawn field around (3.5, 2), 1.4 tiles wide: no brook, no bridge. */
+const ROUND_POND: PondField = (() => {
+  const d = (x: number, z: number): number => 1.4 - Math.hypot(x - 3.5, z - 2);
+  return {
+    shoreAt: (x, z) => Math.max(0, d(x, z)), bankAt: (x, z) => Math.max(0, -d(x, z)), wetAt: (x, z) => Math.min(1, Math.max(0, 0.5 + d(x, z))), bodyAt: () => 1,
+    depthAt: (x, z) => Math.max(0, d(x, z)), flowAt: () => ({ x: 0, z: 0, s: 0 }), deckAt: () => null, mouths: [], decks: [], seed: 9, box: { x0: 1, z0: 0, x1: 6, z1: 4 },
+  };
+})();
 
 const deg = (d: number): number => (d * Math.PI) / 180;
 
@@ -63,12 +73,13 @@ const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
-function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
+function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; pond?: boolean; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: over.plants ?? [], sun: { side: 1, elevation: 30 }, palette: 0, pond: null } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   for (const [wx, wy] of over.water ?? []) map.set(wx, wy, TILE_ID.ShallowWater);
   for (const [lx, ly] of over.lava ?? []) map.set(lx, ly, TILE_ID.Lava);
+  if (over.pond) setPondField(map, ROUND_POND);
   const light = new LightField(map);
   if (over.sun) light.add({ id: 2, kind: LIGHT_KIND.Daylight, colour: 0xffffff, x: 3, y: 2, on: true, wall: 0 });
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true, wall: 0 });
@@ -248,6 +259,26 @@ describe('the woodland run: sky, hour, sun and plants (#306)', () => {
     // the water's sky (#360) is the hour's; a level without a pond has no fish
     expect(f!.water!.sky).toEqual(waterSky(s));
     expect(f!.water!.fish).toBeNull();
+  });
+  it("a level with a pond has the pond's life, and its frogs ring the water when a figure is near; one without has none (#360)", () => {
+    const plain = run({ woodland: true, torch: false });
+    expect(plain.v.pondLife).toBeNull();
+    const far = { woodland: true, torch: false, ownX: 160 }; // the hero stands away from the pond
+    const pond = run({ ...far, pond: true });
+    const life = pond.v.pondLife!;
+    expect(life.frogs.length).toBeGreaterThan(0);
+    expect(life.clumps.length).toBeGreaterThan(0);
+    // its cards and shadows are in the frame
+    expect(pond.f!.dynamic.cards.count).toBeGreaterThan(run(far).f!.dynamic.cards.count);
+    expect(pond.f!.dynamic.shadows.count).toBeGreaterThan(run(far).f!.dynamic.shadows.count);
+    for (let i = 0; i < 90; i++) pond.again();
+    expect(life.frogs.every((g) => g.state === 'sit')).toBe(true);
+    // the hero beside the pond: the frogs leap (the hero is a drawn figure like any other), and a landing rings the water
+    const near = run({ woodland: true, torch: false, pond: true });
+    let f = near.f!;
+    for (let i = 0; i < 90; i++) f = near.again()!;
+    expect(near.v.pondLife!.frogs.every((g) => g.state !== 'sit')).toBe(true);
+    expect(f.water!.ripples![3]).toBeGreaterThan(0);
   });
   it('a snapshot at tick 60 * 720 is one hour later', () => {
     const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });

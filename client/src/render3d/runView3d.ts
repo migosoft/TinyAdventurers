@@ -45,6 +45,8 @@ import type { BushelSpot } from './cover/source';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
 import { Critters3d } from './critters3d';
+import { pondFieldOf } from './pond/pondField';
+import { PondLife } from './pond/pondLife';
 import { Fireflies } from './fireflies';
 import { Cove3d } from './cove3d';
 import type { FrameInput, SunFrame, View } from './view';
@@ -164,6 +166,8 @@ export class RunView3d implements RunView {
   /** The stage's stone job progress, for the F3 line (#380); null without stone. */
   stoneProgress: { done: number; total: number } | null = null;
   private critters: Critters3d | null = null;
+  /** The life at a woodland's pond (#360): lily pads, reeds, frogs, dragonflies. Null on a level without a pond. Only for the look, per client. */
+  pondLife: PondLife | null = null;
   private fireflies: Fireflies | null = null;
   // The nymph's cove (dungeon runs): its tufts and ferns as bushel spots, the bushes' casters, the pixies.
   private cove: Cove3d | null = null;
@@ -208,6 +212,8 @@ export class RunView3d implements RunView {
       // The trees are grown by `step` a few per frame; the forest outlives a lost device (the view re-reads every chunk).
       this.forest = new Forest(wl.plants.map(treeSpecOf), init.map, wl.palette);
       this.critters = new Critters3d(init.map, wl.seed);
+      const pond = pondFieldOf(init.map);
+      if (pond) this.pondLife = new PondLife(pond, pond.seed);
       this.fireflies = new Fireflies(wl.seed);
     }
     if (init.info.cove) {
@@ -435,6 +441,11 @@ export class RunView3d implements RunView {
       // Bees and butterflies by day, fireflies at night, where the viewer sees (the mask of the last frame: one frame behind is not seen).
       const seenMask = c.params.sight ? this.mask : null;
       this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, fp, ground);
+      if (this.pondLife) {
+        // Any drawn figure scares a frog; the rings of the frogs go to the water's step below.
+        this.waterStepIn.rings = this.pondLife.step(dt, fo.figs);
+        this.pondLife.push(fo, this.frames, cam, c.now, { day: skyNow.day, wind: c.params.wind, mask: seenMask, view: fp, oval, ground });
+      }
       this.fireflies.step(c.dt, cam);
       this.fireflies.push(fo.glows, cam, skyNow.night, seenMask);
     }

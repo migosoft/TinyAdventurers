@@ -2,7 +2,9 @@
 // rules map (deep water blocks, shallow water slows) and is drawn on the view map (a bridge's tiles are water, the deck lifts the feet).
 // `&pond=0..3` picks the level (0 plain pond, 1 inflow with a road bridge, 2 inflow and outflow, 3 a pond bridge; default 1),
 // `&at=pond|mouth|bridge|stream` the start of the knight (the camera holds on the pond's middle at `pond` until the first step), `&hour=`,
-// `&t=<s>` pins every clock, `&zoom=`, `&dry=1` leaves the water's surface out (the bed for look work). The stage owns one `PondScene` (the pond's field and the hooks the later pond work fills in).
+// `&t=<s>` pins every clock, `&zoom=`, `&dry=1` leaves the water's surface out (the bed for look work). The stage owns one `PondScene` (the pond's field and its life: lily pads, reeds, frogs, dragonflies).
+// For looking at the life: `&at=frog:<i>` starts the knight on the land beside frog i, `&see=frog:<i>|pad:<i>|reed:<i>|fly:<i>` holds the camera on that thing,
+// `&scare=<from>,<to>` lets the knight count for the frogs only between these seconds (default always), so a pinned `t` shows a frog sitting, leaping, under, peeking and back.
 import { ANIM, KIND, LEAF_PALETTE, SIDE, TILE_ID } from '../generated/defs';
 import type { PondInfo } from '../generated/PondInfo';
 import type { WoodlandInfo } from '../generated/WoodlandInfo';
@@ -21,6 +23,7 @@ import { footprint } from './lights';
 import { DEFAULT_HOUR, reflects, type R3dParams } from './params';
 import { walkBedAt } from './dips/shape';
 import { pondField, pondViewMap, setPondField, type PondField } from './pond/pondField';
+import { PondLife } from './pond/pondLife';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
@@ -38,11 +41,12 @@ const NONE_IDS: ReadonlySet<number> = new Set();
 /** With `&t=`: the water is stepped up to the pinned time in steps of this many seconds, over the last WARM_MAX seconds at most. */
 const WARM_STEP = 1 / 30, WARM_MAX = 60;
 
-/** What the pond's later work fills in: the pond's field, a step per frame with the figures' tile positions, and the push of its drawables. Empty for now (the fish need neither: `Water3d` steps them and the water's material draws them). */
+/** The pond's field and its life (pondLife.ts): a step per frame with the figures' tile positions, which returns the rings for the water, and the push of its cards. (The fish need neither: `Water3d` steps them and the water's material draws them.) */
 export interface PondScene {
   field: PondField;
-  step(dt: number, figs: { x: number; z: number }[]): void;
-  push(): void;
+  life: PondLife;
+  step(dt: number, figs: { x: number; z: number }[]): number[];
+  push: PondLife['push'];
 }
 
 /** The page's stage: the knight's tile position and the pond scene are readable (tests, the shots script). */
@@ -78,7 +82,12 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   const map = pondViewMap(rules, pond);
   const field = pondField(rules, pond);
   setPondField(map, field);
-  const scene: PondScene = { field, step() {}, push() {} };
+  const life = new PondLife(field, field.seed);
+  const scene: PondScene = { field, life, step: (dt, figs) => life.step(dt, figs), push: (...a) => life.push(...a) };
+  // `scare=from,to`: the seconds between which the knight counts for the frogs.
+  const sc = (q.get('scare') ?? '').split(',').map(Number);
+  const scare = [Number.isFinite(sc[0]) ? sc[0] : 0, sc.length > 1 && Number.isFinite(sc[1]) ? sc[1] : Infinity];
+  const scaring = (s: number): boolean => s >= scare[0] && s < scare[1];
   const pin = q.has('t') && Number.isFinite(Number(q.get('t'))) ? Number(q.get('t')) : null;
 
   // The pond's middle: the water tile farthest from the shore.
@@ -129,7 +138,10 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   };
   const at = q.get('at');
   const tileAt = /^(\d+),(\d+)$/.exec(at ?? ''); // `at=x,z`: that tile, when the knight can stand there (for the pictures and tests)
+  const frogAt = /^frog:(\d+)$/.exec(at ?? ''); // `at=frog:i`: on the land beside that frog, away from the water
   const start = ((): { x: number; z: number } => {
+    const fr = frogAt && life.frogs[Number(frogAt[1])];
+    if (fr) return nearestLand(rules, fr.hx + (fr.hx - fr.wx), fr.hz + (fr.hz - fr.wz)) ?? pondStart();
     if (tileAt && !rules.blocks(Number(tileAt[1]), Number(tileAt[2]), 'hero')) return { x: Number(tileAt[1]) + 0.5, z: Number(tileAt[2]) + 0.5 };
     if (at === 'mouth' && field.mouths.length) { const m = field.mouths[0]; return nearestLand(rules, m.x - m.dz * 2, m.z + m.dx * 2) ?? pondStart(); }
     if (at === 'bridge' && field.decks.length) {
@@ -145,6 +157,12 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   })();
   const knight = { x: start.x, z: start.z, aim: 0, moving: false };
   let focus: { x: number; z: number } | null = !at || at === 'pond' ? mid : null; // the camera holds on the pond's middle until the knight walks
+  const see = /^(frog|pad|reed|fly):(\d+)$/.exec(q.get('see') ?? '');
+  if (see) {
+    const i = Number(see[2]);
+    const th: { x: number; z: number } | undefined = see[1] === 'frog' ? life.frogs[i] && { x: life.frogs[i].hx, z: life.frogs[i].hz } : see[1] === 'pad' ? life.pads[i] : see[1] === 'reed' ? life.clumps[i] : life.flies[i];
+    if (th) focus = { x: th.x, z: th.z };
+  }
   const cam = { x: knight.x, z: knight.z, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 
   const world: WorldInput = { map, painted: true, clear: WOODLAND_CLEAR, stone: null, dry: q.get('dry') === '1' };
@@ -153,10 +171,10 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   host?.setSky(true);
   const forest = new Forest(wl.plants.map(treeSpecOf), map, wl.palette ?? LEAF_PALETTE.Summer);
   const water = new Water3d(map);
-  // A pinned clock shows the pond as it is after that many seconds (the last WARM_MAX of them): the fish have swum, and fled the knight if it stands in the water.
+  // A pinned clock shows the pond as it is after that many seconds (the last WARM_MAX of them): the fish have swum, and fled the knight if it stands in the water; the frogs have leapt, the dragonflies flown.
   if (pin !== null) {
     const figs = [{ id: KNIGHT_ID, x: knight.x, z: knight.z, foot: walkBedAt(map, knight.x, knight.z), dashing: false }];
-    for (let s = Math.max(0, pin - WARM_MAX) + WARM_STEP; s <= pin; s += WARM_STEP) water.step({ dt: WARM_STEP, now: s, figs, sinks: [], landed: null, hidden: NONE_IDS });
+    for (let s = Math.max(0, pin - WARM_MAX) + WARM_STEP; s <= pin; s += WARM_STEP) water.step({ dt: WARM_STEP, now: s, figs, sinks: [], landed: null, rings: life.step(WARM_STEP, scaring(s) ? figs : []), hidden: NONE_IDS });
   }
 
   let job: CoverJob | null = null;
@@ -201,7 +219,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
       cam.yaw = (params.yaw * Math.PI) / 180;
       const hour = clock.hour(params, seconds);
       const s = sky(hour);
-      label.textContent = `pond ${idx}, at=${at ?? 'pond'}: ${hourLabel(hour)}; WASD walks`;
+      label.textContent = `pond ${idx}, at=${at ?? 'pond'}: ${hourLabel(hour)}; WASD walks; ${life.pads.length} pads, ${life.clumps.length} reed clumps, ${life.flies.length} dragonflies, frogs: ${life.frogs.map((g) => g.state).join(' ')}`;
 
       let ix = 0, iz = 0;
       for (const k of c.held) { ix += MOVE_KEYS[k][0]; iz += MOVE_KEYS[k][1]; }
@@ -214,7 +232,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
       }
       cam.x = focus?.x ?? knight.x;
       cam.z = focus?.z ?? knight.z;
-      scene.step(dt, [{ x: knight.x, z: knight.z }]);
+      const rings = scene.step(dt, scaring(seconds) ? [{ x: knight.x, z: knight.z }] : []);
       const ents: EntState[] = [{
         id: KNIGHT_ID, kind: KIND.Knight, x: knight.x * TILE, y: knight.z * TILE, hp: 10, anim: knight.moving ? ANIM.Move : ANIM.Idle, aim: knight.aim,
         animMs: now * 1000, flags: 0, extra: 0, effects: 0, side: SIDE.Friendly, entangled: 0,
@@ -227,8 +245,8 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
       const ground = cover && params.cover ? (x: number, z: number, rad: number): number => cover!.topAt(x, z, rad, params.gh) : undefined;
       const fo = figures.frame(galleryFrame(ents, now, dt), cam, { ambient, dark: params.dark, oval: game ? ovalOf(s) : 1, ground });
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
-      scene.push();
-      const wo = water.step({ dt, now, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE_IDS });
+      scene.push(fo, assets.frames, cam, seconds, { day: s.day, wind: params.wind, mask: null, view: fp, oval: game ? ovalOf(s) : 1, ground });
+      const wo = water.step({ dt, now, figs: fo.figs, sinks: fo.sinks, landed: null, rings, hidden: NONE_IDS });
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       forest.step(cam, TREE_BUDGET_MS);
