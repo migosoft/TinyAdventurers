@@ -242,6 +242,8 @@ describe('the ?r3d=woodland stage', () => {
     const b = setup('?r3d=woodland&brush=1&t=2').run(1, 0.016);
     expect(a.brush!.length).toBeGreaterThan(0);
     expect(JSON.parse(JSON.stringify(a.brush))).toEqual(JSON.parse(JSON.stringify(b.brush)));
+    expect(a.t).toBe(2);
+    expect(setup('?r3d=woodland&brush=1&t=2', 500).run(3, 0.1).t).toBe(2); // the page's clock does not move a pinned picture
     expect(a.cam.z).toBeCloseTo(BRUSH_LANE.z + 0.5);
     expect(a.cam.x).toBeCloseTo(brushWalk(2).x);
     expect(setup('?r3d=woodland').run(3, 0.016).brush).toEqual([]);

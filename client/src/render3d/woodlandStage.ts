@@ -173,7 +173,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
     },
     frame(c: StageCtx): number {
       const params = c.params;
-      seconds += c.dt;
+      seconds = pinned ?? seconds + c.dt; // a pinned clock (brush=1&t=) stands still
+      const now = pinned ?? c.now;
       cam.pitch = (params.pitch * Math.PI) / 180;
       cam.yaw = (params.yaw * Math.PI) / 180;
       // The hour: a new URL/panel hour re-anchors there; a new pace continues from the hour reached so far.
@@ -194,7 +195,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       }
       cam.x = knight.x;
       cam.z = knight.z;
-      const ents = woodlandEnts(useModels, c.now, knight);
+      const ents = woodlandEnts(useModels, now, knight);
       if (pinned !== null && !replayed) { replayed = true; replay(pinned); }
       const brushers = brush.step(pinned === null ? c.dt : 0, ents, cam);
       c.timer.lap('sim');
@@ -203,7 +204,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
       const ground = field && params.cover ? (x: number, z: number, rad: number): number => field!.topAt(x, z, rad, params.gh) : undefined;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, oval: game ? ovalOf(s) : 1, ground, ...(kit ? { models: { kit, is: () => true } } : {}) });
+      const fo = figures.frame(galleryFrame(ents, now, c.dt), cam, { ambient, dark: params.dark, oval: game ? ovalOf(s) : 1, ground, ...(kit ? { models: { kit, is: () => true } } : {}) });
       // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const seenMask = params.sight ? mask : null;
@@ -264,7 +265,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           ...(kit ? { models: { insts: fo.models, built: fo.built, kit } } : {}),
           brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
