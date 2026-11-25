@@ -55,6 +55,19 @@ describe('buildDipChunk', () => {
     expect([...cells].sort()).toEqual(['3,3', '3,4', '3,5', '4,3', '4,4', '4,5', '5,3', '5,4', '5,5']);
   });
 
+  it('a painted map\'s water bed reads the painted ground (#360)', () => {
+    const m = open(9, 9, [[4, 4, TILE_ID.ShallowWater], [4, 5, TILE_ID.DeepWater]]);
+    const { kind, uv, sheet, position: p, count } = buildDipChunk(m, true, 0, 0)!.arrays;
+    for (let v = 0; v < count; v++) {
+      expect(kind[v]).toBe(KIND.ground);
+      expect(sheet[v * 3 + 2]).toBe(-1);
+      expect(uv[v * 2]).toBeCloseTo(p[v * 3] * 16, 3);
+      expect(uv[v * 2 + 1]).toBeCloseTo(p[v * 3 + 2] * 16, 3);
+    }
+    // not painted: the stone floor, as before
+    expect(Array.from(buildDipChunk(m, false, 0, 0)!.arrays.kind).every((k) => k === KIND.floor)).toBe(true);
+  });
+
   it('lies on bedAt', () => {
     const m = open(9, 9, [[4, 4, TILE_ID.Chasm], [6, 6, TILE_ID.ShallowWater]]);
     const c = buildDipChunk(m, false, 0, 0)!;

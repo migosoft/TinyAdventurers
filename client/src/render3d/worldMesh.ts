@@ -1,5 +1,5 @@
 import { WALL_H, heightAt } from './heights';
-import { isTerrain, type TileMap } from '../sim/map';
+import type { TileMap } from '../sim/map';
 import { GROUND_TILES } from '../game/woodland/ground';
 import { inDipMesh } from './dips/shape';
 import { CHUNK, KIND, chunkBounds, chunkGrid, chunksOfTile } from './stone/grid';
@@ -62,11 +62,11 @@ export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [n
 
 /**
  * What a height-0 cell shows where it is flat: the painted ground (kind ground) on a painted map's GROUND_TILES, else a stone sheet's
- * floor (kind floor). Terrain cells take the floor kind. (u0, v0) is the uv of the cell's corner (x, z).
+ * floor (kind floor). Lava and chasm cells take the floor kind; a painted map's water cells are ground (the pond's painted bank and bed, #360).
+ * (u0, v0) is the uv of the cell's corner (x, z).
  */
 export function flatSurface(m: TileMap, painted: boolean, x: number, z: number): { kind: number; u0: number; v0: number } {
-  const t = m.get(x, z);
-  if (painted && !isTerrain(t) && GROUND_TILES.has(t)) return { kind: KIND.ground, u0: x * 16, v0: z * 16 };
+  if (painted && GROUND_TILES.has(m.get(x, z))) return { kind: KIND.ground, u0: x * 16, v0: z * 16 };
   return { kind: KIND.floor, u0: 0, v0: 0 };
 }
 

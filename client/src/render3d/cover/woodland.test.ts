@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { BASE, EDGE, FLOWERS, PATCH, type Rgb } from '../../game/covemath';
-import { groundKindAt, kindRow, paintGround, THICK_0, THICK_1 } from '../../game/woodland/ground';
+import { BANK, GroundPainter, groundKindAt, kindRow, paintGround, THICK_0, THICK_1 } from '../../game/woodland/ground';
 import { TILE, TileMap } from '../../sim/map';
 import { woodlandSource } from './woodland';
 
@@ -81,5 +81,42 @@ describe('woodlandSource', () => {
   it('leaves paintGround of the original map unchanged', () => {
     expect(Buffer.from(paintGround(m, SEED).data).equals(before)).toBe(true);
     expect(m.get(5, 3)).toBe(TILE_ID.Road);
+  });
+});
+
+describe('woodlandSource at a pond (#360)', () => {
+  // 14 x 10 grass with a road column, a pond in columns 4..8 of rows 3..7
+  const w = 14, h = 10;
+  const t = new Uint8Array(w * h).fill(TILE_ID.Floor);
+  for (let y = 0; y < h; y++) t[y * w + 12] = TILE_ID.Road;
+  for (let y = 3; y <= 7; y++) for (let x = 4; x <= 8; x++) t[y * w + x] = x === 6 && y === 5 ? TILE_ID.DeepWater : TILE_ID.ShallowWater;
+  const m = new TileMap(w, h, t);
+  const src = woodlandSource(m, SEED, 3);
+  src.prep.forEach((u) => u());
+
+  it('no cover grows on a bank', () => {
+    let land = 0;
+    const d = src.bare!.image.data;
+    for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) {
+      if (groundKindAt(m, SEED, x, y) !== BANK) continue;
+      const i = y * src.w + x, water = m.get(x >> 4, y >> 4) !== TILE_ID.Floor;
+      expect(src.grow[i]).toBe(0);
+      if (water) expect(src.allow[i]).toBe(0); else land++;
+      // the bare picture shows the bank there, as the ground's own picture does
+      expect(d[i * 4 + 3]).toBe(255);
+    }
+    expect(land).toBeGreaterThan(500); // the bank reaches onto the grass around the pond
+    expect(src.grow[(1 * TILE + 8) * src.w + 1 * TILE + 8]).toBe(1); // grass away from the pond
+  });
+
+  it('the bare picture shows the bank as the ground paints it', () => {
+    const p = new GroundPainter(m, SEED); // the bands only: a blade mark of the grass may lie on a bank px
+    for (let ty = 0; ty < p.rows; ty++) p.band(ty);
+    const bare = src.bare!.image.data, own = p.data;
+    for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) {
+      if (groundKindAt(m, SEED, x, y) !== BANK) continue;
+      const i = (y * src.w + x) * 4;
+      expect([bare[i], bare[i + 1], bare[i + 2]]).toEqual([own[i], own[i + 1], own[i + 2]]);
+    }
   });
 });

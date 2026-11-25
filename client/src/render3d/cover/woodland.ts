@@ -1,7 +1,7 @@
 // The woodland's cover source (#330): the painted ground split in two. The bare picture is the ground with every
 // grass tile turned to road (what shows under the cover); the cover picture is the ground with roads turned to grass.
 import { TILE_ID } from '../../generated/defs';
-import { GRASS, GroundPainter, kindRows, NONE, THICKET } from '../../game/woodland/ground';
+import { BANK, GRASS, GroundPainter, groundOf, kindRows, NONE, THICKET } from '../../game/woodland/ground';
 import { bandOrder } from '../../game/woodland/settle';
 import { TILE, TileMap } from '../../sim/map';
 import { COVER } from './kinds';
@@ -31,7 +31,8 @@ export function woodlandSource(map: TileMap, seed: number, spawnRow: number): Co
       for (let i = 0; i < row.length; i++) {
         const k = row[i];
         grow[o + i] = k === GRASS || k === THICKET ? 1 : 0;
-        allow[o + i] = k !== NONE ? 1 : 0;
+        // nothing grows on a bank (#360), and nothing reaches out over the water's tiles, where the ground falls to the bed
+        allow[o + i] = k !== NONE && !(k === BANK && groundOf(map, (i % w) >> 4, ty) === BANK) ? 1 : 0;
       }
     });
   }

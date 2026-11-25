@@ -244,6 +244,12 @@ describe('buildChunk', () => {
     expect(flatSurface(m, true, 1, 0).kind).toBe(KIND.floor);
     expect(flatSurface(m, true, 2, 0)).toEqual({ kind: KIND.ground, u0: 32, v0: 0 });
     expect(flatSurface(m, false, 2, 0).kind).toBe(KIND.floor);
+    // a painted map's water is ground too: the pond's bank and bed are painted (#360); lava and a chasm stay stone
+    const w = mapOf(3, 1, [t.ShallowWater, t.DeepWater, t.Lava]);
+    expect(flatSurface(w, true, 0, 0)).toEqual({ kind: KIND.ground, u0: 0, v0: 0 });
+    expect(flatSurface(w, true, 1, 0)).toEqual({ kind: KIND.ground, u0: 16, v0: 0 });
+    expect(flatSurface(w, true, 2, 0).kind).toBe(KIND.floor);
+    expect(flatSurface(w, false, 0, 0).kind).toBe(KIND.floor);
   });
 
   it('DoorClosed and DoorOpen are floor', () => {
