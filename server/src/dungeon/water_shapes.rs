@@ -1,5 +1,4 @@
 //! Pure shapes for ponds, streams and rivers (tile coordinates; a tile (x, y) has its centre at (x + 0.5, y + 0.5)).
-#![allow(dead_code)] // used by the woodland generator from Task 2 of #360
 
 use super::Tile;
 use rand::Rng;

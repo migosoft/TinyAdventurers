@@ -3,6 +3,7 @@
 //! The forest and the road run on past both ends of the playable part; a column of `Tile::Barrier` (an
 //! invisible wall) across the walkable band stops the party there (#259).
 
+use super::water_shapes::{blob_tiles, path_tiles, winding_path, Blob};
 use super::{Layout, Map, Rect, Spawn, Tile, TILE};
 use crate::defs::enemies::EnemyType;
 use crate::defs::foliage::{LeafPalette, WOODLAND_FOLIAGE};
@@ -53,6 +54,46 @@ const SUN_SALT: u64 = 0x5355_4e5f_4c49;
 // balancing
 pub const SUN_ELEVATION: std::ops::RangeInclusive<u8> = 35..=70;
 
+/// The pond rolls from its own stream too (#360), so a seed without a pond keeps its old map.
+const POND_SALT: u64 = 0x504f_4e44_3336_30;
+/// Water (#360): the chance of a pond, tries to place it, blobs, the first blob's and the next blobs' radii,
+/// how far into the previous blob a next centre lies (share of the way to its edge), the first centre's
+/// gap to the road beyond its radius.
+// balancing
+const POND_PCT: u32 = 60;
+const POND_TRIES: usize = 30;
+const POND_BLOBS: std::ops::RangeInclusive<usize> = 2..=4;
+const POND_FIRST_RX: std::ops::RangeInclusive<f64> = 3.5..=6.0;
+const POND_FIRST_RY: std::ops::RangeInclusive<f64> = 2.5..=4.0;
+const POND_NEXT_RX: std::ops::RangeInclusive<f64> = 2.0..=4.5;
+const POND_NEXT_RY: std::ops::RangeInclusive<f64> = 2.0..=3.5;
+const POND_NEXT_AT: std::ops::RangeInclusive<f64> = 0.5..=0.9;
+const POND_ROAD_GAP: std::ops::RangeInclusive<f64> = 5.0..=8.0;
+/// Placement: columns kept free after the start and before the end ellipse, a water tile's distance from the
+/// road's centre line (least, and the nearest tile's most), tiles kept from the thicket (Chebyshev).
+// balancing
+const POND_FROM_ENDS: i32 = 24;
+const POND_ROAD_MIN: f64 = 4.5;
+const POND_ROAD_MAX: f64 = 9.5;
+const POND_THICKET_GAP: i32 = 2;
+/// Streams: share with none, share with an inflow only (the rest has both), columns around the pond where a
+/// stream may meet the band's edge, how many sources to try, share of inflows from across the road, columns
+/// an outflow keeps from an inflow on its side, tiles of straight stream before and after the road.
+// balancing
+const STREAM_NONE_PCT: u32 = 30;
+const STREAM_INFLOW_PCT: u32 = 45;
+const STREAM_REACH: i32 = 14;
+const STREAM_TRIES: usize = 10;
+const STREAM_FAR_PCT: u32 = 50;
+const STREAM_APART: i32 = 8;
+const STREAM_STRAIGHT: i32 = 3;
+/// The chance of a bridge over a narrow arm of the pond.
+// balancing
+const POND_BRIDGE_PCT: u32 = 40;
+/// Trees keep this far (Chebyshev) from any water.
+// balancing
+const TREE_SHORE_GAP: i32 = 2;
+
 /// The run's sun: which side it stands on (-1 west, +1 east) and how high.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sun {
@@ -88,6 +129,33 @@ pub struct Plant {
     pub dead: bool,
 }
 
+/// A stream (tiles, in flow order): `inflow` runs from the band's edge into the pond, else out of it.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
+pub struct Stream {
+    pub points: Vec<(f64, f64)>,
+    pub inflow: bool,
+}
+
+/// A bridge deck's tiles; `along_x` is its travel axis; `road` is a bridge of the road over a stream.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
+pub struct Bridge {
+    pub rect: Rect,
+    pub along_x: bool,
+    pub road: bool,
+}
+
+/// The woodland's water (#360): `bounds` encloses the pond and its streams; `seed` shapes the pond's shore.
+#[derive(Clone, Debug)]
+#[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
+pub struct Pond {
+    pub streams: Vec<Stream>,
+    pub bridges: Vec<Bridge>,
+    pub seed: u32,
+    pub bounds: Rect,
+}
+
 #[derive(Clone, Debug)]
 pub struct Woodland {
     pub plants: Vec<Plant>,
@@ -105,6 +173,9 @@ pub struct Woodland {
     pub sun: Sun,
     /// The colours of the leaves.
     pub palette: LeafPalette,
+    /// The pond, if the seed has one.
+    #[cfg_attr(not(test), allow(dead_code))] // read by Task 3 of #360
+    pub pond: Option<Pond>,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     ellipses: Vec<[f64; 4]>,
@@ -240,6 +311,246 @@ fn fresh_seed(rng: &mut ChaCha8Rng, used: &mut HashSet<u32>) -> u32 {
     }
 }
 
+fn is_water_tile(t: u8) -> bool {
+    t == Tile::ShallowWater as u8 || t == Tile::DeepWater as u8
+}
+
+/// What a stream's planning looks at.
+struct WaterCtx<'a> {
+    map: &'a Map,
+    start: Rect,
+    ellipses: &'a [[f64; 4]],
+    /// The pond's tiles.
+    water: &'a HashSet<(i32, i32)>,
+    /// The pond's tiles in order, for the nearest one.
+    pond: &'a [(i32, i32)],
+    /// -1 when the pond lies above the road, +1 below.
+    side: i32,
+    /// The columns a stream may meet the band's edge in.
+    reach: (i32, i32),
+}
+
+struct StreamPlan {
+    points: Vec<(f64, f64)>,
+    tiles: Vec<(i32, i32)>,
+    /// The tiles of the widened mouth (only those that were Floor).
+    wide: Vec<(i32, i32)>,
+    inflow: bool,
+    road_bridge: Option<Bridge>,
+}
+
+impl WaterCtx<'_> {
+    fn free_tile(&self, x: i32, y: i32) -> bool {
+        playable_x(x) && !self.start.contains_tile(x, y) && !self.ellipses.iter().any(|e| in_ellipse(e, x, y))
+    }
+}
+
+/// The Floor tile at the band's edge of column `x`, from the top (`dir` < 0) or the bottom: a Thicket lies beyond it.
+fn band_edge(map: &Map, x: i32, dir: i32) -> Option<(i32, i32)> {
+    let open = |&y: &i32| map.get(x, y) != Tile::Thicket as u8;
+    let y = if dir < 0 { (0..map.h).find(open) } else { (0..map.h).rev().find(open) }?;
+    (map.get(x, y) == Tile::Floor as u8).then_some((x, y))
+}
+
+/// A stream between the band's edge (across the road when `far`) and the pond's nearest tile, or None.
+fn plan_stream(rng: &mut ChaCha8Rng, c: &WaterCtx, inflow: bool, far: bool, apart: Option<i32>) -> Option<StreamPlan> {
+    let (floor, road) = (Tile::Floor as u8, Tile::Road as u8);
+    for _ in 0..STREAM_TRIES {
+        let x = rng.gen_range(c.reach.0..=c.reach.1);
+        if !playable_x(x) || apart.is_some_and(|a| (x - a).abs() < STREAM_APART) {
+            continue;
+        }
+        let Some(edge) = band_edge(c.map, x, if far { -c.side } else { c.side }) else { continue };
+        let e = (edge.0 as f64 + 0.5, edge.1 as f64 + 0.5);
+        let d2 = |t: &&(i32, i32)| (t.0 as f64 + 0.5 - e.0).powi(2) + (t.1 as f64 + 0.5 - e.1).powi(2);
+        let p = *c.pond.iter().min_by(|a, b| d2(a).total_cmp(&d2(b)))?;
+        let p = (p.0 as f64 + 0.5, p.1 as f64 + 0.5);
+        let (from, to) = if inflow { (e, p) } else { (p, e) };
+        let mut points = winding_path(rng, from, to);
+        let mut road_bridge = None;
+        let mut cross_x = None;
+        if far {
+            // straight along one column from 3 tiles before the road to 3 tiles after it
+            let Some(&(cx, _)) = path_tiles(&points).iter().find(|t| c.map.get(t.0, t.1) == road) else { continue };
+            let rows: Vec<i32> = (0..c.map.h).filter(|&y| c.map.get(cx, y) == road).collect();
+            let (rt, rb) = (rows[0], rows[rows.len() - 1]);
+            if rows.len() as i32 != rb - rt + 1 {
+                continue;
+            }
+            let dir = if to.1 > from.1 { 1.0 } else { -1.0 };
+            let (ya, yb) = if dir > 0.0 { (rt - STREAM_STRAIGHT, rb + STREAM_STRAIGHT) } else { (rb + STREAM_STRAIGHT, rt - STREAM_STRAIGHT) };
+            let (ya, yb) = (ya as f64 + 0.5, yb as f64 + 0.5);
+            let (Some(i), Some(j)) = (points.iter().position(|p| (p.1 - ya) * dir >= 0.0), points.iter().position(|p| (p.1 - yb) * dir > 0.0)) else { continue };
+            if i == 0 {
+                continue;
+            }
+            let after = points.split_off(j);
+            points.truncate(i);
+            points.extend([(cx as f64 + 0.5, ya), (cx as f64 + 0.5, yb)]);
+            points.extend(after);
+            road_bridge = Some(Bridge { rect: Rect { x: cx, y: rt, w: 1, h: rb - rt + 1 }, along_x: true, road: true });
+            cross_x = Some(cx);
+        }
+        let tiles = path_tiles(&points);
+        let fits = tiles.len() >= 2
+            && tiles.iter().all(|&(x, y)| {
+                let t = c.map.get(x, y);
+                c.free_tile(x, y) && (c.water.contains(&(x, y)) || t == floor || (t == road && cross_x == Some(x)))
+            });
+        if !fits {
+            continue;
+        }
+        // the last two tiles before the pond are one tile wider
+        let mouth: Vec<usize> = if inflow { vec![tiles.len() - 2, tiles.len() - 1] } else { vec![0, 1] };
+        let mut wide = vec![];
+        for i in mouth {
+            let t = tiles[i];
+            let other = tiles[if i + 1 < tiles.len() { i + 1 } else { i - 1 }];
+            let w = if t.1 == other.1 { (t.0, t.1 + 1) } else { (t.0 + 1, t.1) };
+            if c.map.get(w.0, w.1) == floor && c.free_tile(w.0, w.1) {
+                wide.push(w);
+            }
+        }
+        return Some(StreamPlan { points, tiles, wide, inflow, road_bridge });
+    }
+    None
+}
+
+/// Every safe tile is reached from the road's start (deep water blocks).
+fn all_reached(map: &Map, road0: (i32, i32)) -> bool {
+    let seen = bfs_hero(map, road0.0, road0.1);
+    (0..map.h).all(|y| (0..map.w).all(|x| !map.safe(x, y) || seen[(y * map.w + x) as usize]))
+}
+
+/// 3b. Water (#360): a pond with 0 to 2 streams and bridges, on a copy of the map that is returned only when
+/// every walkable tile is still reached. Its own rng: a seed without a pond is the old map.
+fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, ellipses: &[[f64; 4]], road0: (i32, i32)) -> Option<(Map, Pond)> {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ POND_SALT);
+    if rng.gen_range(0..100) >= POND_PCT {
+        return None;
+    }
+    let end = ellipses[ellipses.len() - 1];
+    let (min_x, max_x) = (start.x + start.w - 1 + POND_FROM_ENDS, (end[0] - end[2]).floor() as i32 - POND_FROM_ENDS);
+    let floor = Tile::Floor as u8;
+    for _ in 0..POND_TRIES {
+        let pond_seed = rng.gen_range(1..=1_000_000u32);
+        let side = if rng.gen_bool(0.5) { -1 } else { 1 };
+        let (rx, ry) = (rng.gen_range(POND_FIRST_RX), rng.gen_range(POND_FIRST_RY));
+        let cx = rng.gen_range(min_x as f64 + rx..=max_x as f64 - rx);
+        let cy = centre(cx as i32) + 0.5 + side as f64 * (ry + rng.gen_range(POND_ROAD_GAP));
+        let mut blobs = vec![Blob { cx, cy, rx, ry }];
+        for _ in 1..rng.gen_range(POND_BLOBS) {
+            let p = &blobs[blobs.len() - 1];
+            let (a, f) = (rng.gen_range(0.0..std::f64::consts::TAU), rng.gen_range(POND_NEXT_AT));
+            let (nx, ny) = (p.cx + a.cos() * p.rx * f, p.cy + a.sin() * p.ry * f);
+            blobs.push(Blob { cx: nx, cy: ny, rx: rng.gen_range(POND_NEXT_RX), ry: rng.gen_range(POND_NEXT_RY) });
+        }
+        let body = blob_tiles(&blobs, pond_seed);
+        let mut nearest = f64::MAX;
+        let on_open_ground = body.iter().all(|&(x, y, _)| {
+            let d = ((y as f64 + 0.5) - (centre(x) + 0.5)).abs();
+            nearest = nearest.min(d);
+            map.get(x, y) == floor
+                && playable_x(x)
+                && x >= min_x
+                && x <= max_x
+                && d >= POND_ROAD_MIN
+                && !start.contains_tile(x, y)
+                && !ellipses.iter().any(|e| in_ellipse(e, x, y))
+                && (-(POND_THICKET_GAP - 1)..POND_THICKET_GAP).all(|dy| (-(POND_THICKET_GAP - 1)..POND_THICKET_GAP).all(|dx| map.get(x + dx, y + dy) != Tile::Thicket as u8))
+        });
+        if body.is_empty() || !on_open_ground || nearest > POND_ROAD_MAX {
+            continue;
+        }
+        let mut pond_map = map.clone();
+        for &(x, y, t) in &body {
+            pond_map.set(x, y, t);
+        }
+        let water: HashSet<(i32, i32)> = body.iter().map(|t| (t.0, t.1)).collect();
+        let tiles: Vec<(i32, i32)> = body.iter().map(|t| (t.0, t.1)).collect();
+        let ctx = WaterCtx {
+            map,
+            start,
+            ellipses,
+            water: &water,
+            pond: &tiles,
+            side,
+            reach: (tiles.iter().map(|t| t.0).min().unwrap() - STREAM_REACH, tiles.iter().map(|t| t.0).max().unwrap() + STREAM_REACH),
+        };
+        // the plans: every draw comes before the checks, so dropping a part does not move the others
+        let roll = rng.gen_range(0..100);
+        let (mut inflow, mut outflow) = (None, None);
+        let mut far = false;
+        if roll >= STREAM_NONE_PCT {
+            far = rng.gen_range(0..100) < STREAM_FAR_PCT;
+            inflow = plan_stream(&mut rng, &ctx, true, far, None);
+        }
+        if roll >= STREAM_NONE_PCT + STREAM_INFLOW_PCT {
+            // an outflow keeps clear of an inflow on its own side of the road
+            let apart = inflow.as_ref().filter(|_| !far).map(|s| tile_of(s.points[0]).0);
+            outflow = plan_stream(&mut rng, &ctx, false, false, apart);
+        }
+        let used: HashSet<(i32, i32)> = [&inflow, &outflow].into_iter().flatten().flat_map(|s| s.tiles.iter().chain(&s.wide).copied()).collect();
+        let mut bridge: Option<(Bridge, Vec<(i32, i32)>)> = None;
+        if rng.gen_range(0..100) < POND_BRIDGE_PCT {
+            // a straight line of 2 to 4 shallow tiles with Floor at both ends
+            let shallow = |x: i32, y: i32| pond_map.get(x, y) == Tile::ShallowWater as u8 && water.contains(&(x, y)) && !used.contains(&(x, y));
+            let dry = |x: i32, y: i32| pond_map.get(x, y) == floor && playable_x(x) && !used.contains(&(x, y));
+            let mut lines: Vec<(Bridge, Vec<(i32, i32)>)> = vec![];
+            for &(x, y) in &tiles {
+                for (dx, dy) in [(1, 0), (0, 1)] {
+                    let k = (0..=4).take_while(|&k| shallow(x + dx * k, y + dy * k)).count() as i32;
+                    if (2..=4).contains(&k) && dry(x - dx, y - dy) && dry(x + dx * k, y + dy * k) {
+                        let rect = Rect { x, y, w: if dx == 1 { k } else { 1 }, h: if dy == 1 { k } else { 1 } };
+                        lines.push((Bridge { rect, along_x: dx == 1, road: false }, (0..k).map(|i| (x + dx * i, y + dy * i)).collect()));
+                    }
+                }
+            }
+            if !lines.is_empty() {
+                bridge = Some(lines.swap_remove(rng.gen_range(0..lines.len())));
+            }
+        }
+        // drop the outflow, then the pond bridge, then the inflow, then the pond
+        let mut tried = HashSet::new();
+        for (with_in, with_out, with_bridge) in [(true, true, true), (true, false, true), (true, false, false), (false, false, false)] {
+            let eff = (with_in && inflow.is_some(), with_out && outflow.is_some(), with_bridge && bridge.is_some());
+            if !tried.insert(eff) {
+                continue;
+            }
+            let streams: Vec<&StreamPlan> = [inflow.as_ref().filter(|_| eff.0), outflow.as_ref().filter(|_| eff.1)].into_iter().flatten().collect();
+            let mut m = pond_map.clone();
+            for s in &streams {
+                for &(x, y) in s.tiles.iter().chain(&s.wide) {
+                    if m.get(x, y) == floor {
+                        m.set(x, y, Tile::ShallowWater);
+                    }
+                }
+            }
+            let pond_bridge = bridge.as_ref().filter(|_| eff.2);
+            for &(x, y) in pond_bridge.iter().flat_map(|b| b.1.iter()) {
+                m.set(x, y, Tile::Floor);
+            }
+            if !all_reached(&m, road0) {
+                continue;
+            }
+            let mut wet: Vec<(i32, i32)> = tiles.clone();
+            wet.extend(streams.iter().flat_map(|s| s.tiles.iter().chain(&s.wide).copied()));
+            let (x0, x1) = (wet.iter().map(|t| t.0).min().unwrap(), wet.iter().map(|t| t.0).max().unwrap());
+            let (y0, y1) = (wet.iter().map(|t| t.1).min().unwrap(), wet.iter().map(|t| t.1).max().unwrap());
+            let mut bridges: Vec<Bridge> = streams.iter().filter_map(|s| s.road_bridge.clone()).collect();
+            bridges.extend(pond_bridge.map(|b| b.0.clone()));
+            let streams = streams.iter().map(|s| Stream { points: s.points.clone(), inflow: s.inflow }).collect();
+            return Some((m, Pond { streams, bridges, seed: pond_seed, bounds: Rect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } }));
+        }
+        // every variant failed the check: the next try
+    }
+    None
+}
+
+fn tile_of(p: (f64, f64)) -> (i32, i32) {
+    (p.0.floor() as i32, p.1.floor() as i32)
+}
+
 pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ WOODLAND_SALT);
     let (w, h) = (WOODLAND_W, WOODLAND_H);
@@ -317,6 +628,23 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             }
         }
     }
+    // 3b. Water (#360).
+    let pond = place_water(seed, &map, &centre, start, &ellipses, road0).map(|(m, p)| {
+        map = m;
+        p
+    });
+    // a pond bridge's deck and the tile beyond each end: no bush or creature there
+    let bridge_zone: HashSet<(i32, i32)> = pond
+        .iter()
+        .flat_map(|p| p.bridges.iter())
+        .flat_map(|b| {
+            let r = b.rect;
+            let ends: Vec<(i32, i32)> = (0..if b.along_x { r.h } else { r.w })
+                .flat_map(|k| if b.along_x { [(r.x - 1, r.y + k), (r.x + r.w, r.y + k)] } else { [(r.x + k, r.y - 1), (r.x + k, r.y + r.h)] })
+                .collect();
+            (r.y..r.y + r.h).flat_map(move |y| (r.x..r.x + r.w).map(move |x| (x, y))).chain(ends)
+        })
+        .collect();
     let line = |x: i32| (centre(x) + 0.5) * TILE;
     let mut used = HashSet::new();
     let mut plants: Vec<Plant> = vec![];
@@ -331,6 +659,8 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 && !start.contains_tile(x, y)
                 && !ellipses.iter().any(|e| in_ellipse(e, x, y))
                 && (-1..=1).all(|dy| (-1..=1).all(|dx| is_open(map.get(x + dx, y + dy))))
+                && !(-TREE_SHORE_GAP..=TREE_SHORE_GAP).any(|dy| (-TREE_SHORE_GAP..=TREE_SHORE_GAP).any(|dx| is_water_tile(map.get(x + dx, y + dy))))
+                && !bridge_zone.contains(&(x, y))
         })
         .collect();
     tiles.shuffle(&mut rng);
@@ -445,7 +775,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     // 6. Bushes on the walkable ground: small clumps scattered everywhere, so the open ground reads as meadow.
     let walkable = map.tiles.iter().filter(|&&t| t == Tile::Floor as u8).count();
     let want = walkable / BUSH_TILES;
-    let mut floor: Vec<(i32, i32)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8).collect();
+    let mut floor: Vec<(i32, i32)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8 && !bridge_zone.contains(&(x, y))).collect();
     floor.shuffle(&mut rng);
     let mut bushes: Vec<Plant> = vec![];
     for &(sx, sy) in &floor {
@@ -455,7 +785,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         // a small clump: the tile's own bush and up to two more within two tiles
         for k in 0..rng.gen_range(BUSH_CLUMP) {
             let (x, y) = if k == 0 { (sx, sy) } else { (sx + rng.gen_range(-2..=2), sy + rng.gen_range(-2..=2)) };
-            if map.get(x, y) != Tile::Floor as u8 {
+            if map.get(x, y) != Tile::Floor as u8 || bridge_zone.contains(&(x, y)) {
                 continue;
             }
             let foot = jitter(&mut rng, x, y);
@@ -536,7 +866,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         let n = rng.gen_range(2..=4);
         let mut cand: Vec<Vec2> = (r.y..r.y + r.h)
             .flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y)))
-            .filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8)
+            .filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8 && !bridge_zone.contains(&(x, y)))
             .map(|(x, y)| Map::center_of(x, y))
             .collect();
         cand.shuffle(&mut rng);
@@ -579,7 +909,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 continue;
             }
             let mut mine: Vec<Vec2> = vec![a];
-            let mut near: Vec<(i32, i32)> = (ay - 3..=ay + 3).flat_map(|y| (ax - 3..=ax + 3).map(move |x| (x, y))).filter(|&(x, y)| playable_x(x) && map.get(x, y) == Tile::Floor as u8).collect();
+            let mut near: Vec<(i32, i32)> = (ay - 3..=ay + 3).flat_map(|y| (ax - 3..=ax + 3).map(move |x| (x, y))).filter(|&(x, y)| playable_x(x) && map.get(x, y) == Tile::Floor as u8 && !bridge_zone.contains(&(x, y))).collect();
             near.shuffle(&mut rng);
             for (x, y) in near {
                 let p = Map::center_of(x, y);
@@ -604,7 +934,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(edge);
     let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
     let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, ellipses };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, pond, ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()), stone: vec![] };
     (layout, wl)
 }
@@ -886,7 +1216,198 @@ mod tests {
         let got: Vec<u64> = [1u64, 2, 3, 7, 42].iter().map(|s| map_fingerprint(*s)).collect();
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
         // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
-        assert_eq!(got, vec![10293044552774504163, 2449216727139127116, 3178422832859391124, 7367593523915622726, 1831013090409208476]);
+        // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
+        assert_eq!(got, vec![11382961426608249891, 8904440953177393501, 11368231502334707319, 9123075183366432284, 1831013090409208476]);
+    }
+
+    /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
+    const PRE_WATER_PINS: [(u64, u64); 5] = [
+        (1, 10293044552774504163),
+        (2, 2449216727139127116),
+        (3, 3178422832859391124),
+        (7, 7367593523915622726),
+        (42, 1831013090409208476),
+    ];
+
+    #[test]
+    fn the_map_without_a_pond_is_the_old_map() {
+        for (seed, pin) in PRE_WATER_PINS {
+            if generate(seed).1.pond.is_none() {
+                assert_eq!(map_fingerprint(seed), pin, "seed {seed}");
+            }
+        }
+    }
+
+    fn is_water(l: &Layout, x: i32, y: i32) -> bool {
+        let t = l.map.get(x, y);
+        t == Tile::ShallowWater as u8 || t == Tile::DeepWater as u8
+    }
+    /// The tiles a bridge's deck covers and the tile beyond each end of it.
+    fn bridge_zone(b: &Bridge) -> Vec<(i32, i32)> {
+        let r = b.rect;
+        let mut z: Vec<(i32, i32)> = tiles_of(r).collect();
+        for k in 0..if b.along_x { r.h } else { r.w } {
+            if b.along_x {
+                z.extend([(r.x - 1, r.y + k), (r.x + r.w, r.y + k)]);
+            } else {
+                z.extend([(r.x + k, r.y - 1), (r.x + k, r.y + r.h)]);
+            }
+        }
+        z
+    }
+    fn zone_of(w: &Woodland) -> HashSet<(i32, i32)> {
+        w.pond.iter().flat_map(|p| p.bridges.iter()).flat_map(bridge_zone).collect()
+    }
+    /// The water that is not a stream's own (a tile of a stream's line or beside one): the pond's body.
+    fn pond_body(l: &Layout, w: &Woodland) -> Vec<(i32, i32)> {
+        let line: HashSet<(i32, i32)> = w.pond.iter().flat_map(|p| p.streams.iter()).flat_map(|s| path_tiles(&s.points)).collect();
+        let near_line = |x: i32, y: i32| (-1..=1).any(|dy| (-1..=1).any(|dx| line.contains(&(x + dx, y + dy))));
+        (0..WOODLAND_H).flat_map(|y| (0..WOODLAND_W).map(move |x| (x, y))).filter(|&(x, y)| is_water(l, x, y) && !near_line(x, y)).collect()
+    }
+
+    #[test]
+    fn ponds_appear_in_about_60_percent() {
+        let mut n = 0;
+        each(|_, _, w| n += w.pond.is_some() as u64);
+        eprintln!("ponds: {n} of {SEEDS}");
+        assert!((SEEDS * 40 / 100..=SEEDS * 65 / 100).contains(&n), "{n} of {SEEDS} seeds have a pond");
+    }
+
+    #[test]
+    fn seeds_without_a_pond_have_no_water() {
+        each(|seed, l, w| {
+            if w.pond.is_none() {
+                assert!(l.map.tiles.iter().all(|&t| t != Tile::ShallowWater as u8 && t != Tile::DeepWater as u8), "seed {seed}");
+            }
+        });
+    }
+
+    #[test]
+    fn water_lies_on_open_ground() {
+        each(|seed, l, w| {
+            let Some(p) = &w.pond else { return };
+            let body = pond_body(l, w);
+            assert!(!body.is_empty(), "seed {seed}: no pond body");
+            let end_left = (w.ellipses.last().unwrap()[0] - w.ellipses.last().unwrap()[2]).floor() as i32;
+            let mut nearest = f64::MAX;
+            for &(x, y) in &body {
+                let d = ((y as f64 + 0.5) - (road_centre(l, x) + 0.5)).abs();
+                nearest = nearest.min(d);
+                // half a tile of slack: the road's row is read from its tiles
+                assert!(d >= POND_ROAD_MIN - 0.5, "seed {seed}: water {x},{y} is {d} from the road");
+                assert!(playable_x(x), "seed {seed}");
+                assert!(x - (w.start.x + w.start.w - 1) >= POND_FROM_ENDS && end_left - x >= POND_FROM_ENDS, "seed {seed}: water at column {x}");
+                assert!(!w.start.contains_tile(x, y) && !w.ellipses.iter().any(|e| in_ellipse(e, x, y)), "seed {seed}: water in a clearing");
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        assert_ne!(l.map.get(x + dx, y + dy), Tile::Thicket as u8, "seed {seed}: water {x},{y} beside thicket");
+                    }
+                }
+            }
+            assert!(nearest <= POND_ROAD_MAX + 0.5, "seed {seed}: nearest water {nearest} from the road");
+            assert!(p.bounds.contains_tile(body[0].0, body[0].1));
+            assert!((1..=1_000_000).contains(&p.seed));
+        });
+    }
+
+    /// The road's middle row at column `x`, from its tiles (they lie within half a tile of the generator's centre line).
+    fn road_centre(l: &Layout, x: i32) -> f64 {
+        let ys: Vec<i32> = (0..WOODLAND_H).filter(|&y| l.map.get(x, y) == Tile::Road as u8 || l.map.get(x, y) == Tile::Barrier as u8).collect();
+        (ys[0] + ys[ys.len() - 1]) as f64 / 2.0
+    }
+
+    #[test]
+    fn no_plant_or_creature_on_water_or_a_bridge() {
+        each(|seed, l, w| {
+            let zone = zone_of(w);
+            for p in &w.plants {
+                let t = Map::tile_of(p.foot);
+                assert!(!is_water(l, t.0, t.1) && !zone.contains(&t), "seed {seed}: a plant at {t:?}");
+            }
+            for p in l.spawns.iter().map(|s| s.pos).chain(w.animals.iter().map(|a| a.1)).chain(l.player_spawns.iter().copied()) {
+                let t = Map::tile_of(p);
+                assert!(!is_water(l, t.0, t.1) && !zone.contains(&t), "seed {seed}: a creature at {t:?}");
+            }
+        });
+    }
+
+    #[test]
+    fn trees_keep_two_tiles_from_the_shore() {
+        each(|seed, l, _| {
+            for y in 0..WOODLAND_H {
+                for x in 0..WOODLAND_W {
+                    if l.map.get(x, y) == Tile::Trunk as u8 {
+                        for dy in -TREE_SHORE_GAP..=TREE_SHORE_GAP {
+                            for dx in -TREE_SHORE_GAP..=TREE_SHORE_GAP {
+                                assert!(!is_water(l, x + dx, y + dy), "seed {seed}: trunk {x},{y} near water");
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn a_stream_joins_the_pond_and_the_bands_edge() {
+        let mut streams = 0;
+        each(|seed, l, w| {
+            for s in w.pond.iter().flat_map(|p| p.streams.iter()) {
+                streams += 1;
+                let (src, end) = (tile_of(s.points[0]), tile_of(*s.points.last().unwrap()));
+                let (pond_end, edge_end) = if s.inflow { (end, src) } else { (src, end) };
+                assert!(is_water(l, pond_end.0, pond_end.1), "seed {seed}: the stream's pond end is dry");
+                assert!(is_water(l, edge_end.0, edge_end.1), "seed {seed}: the stream's far end is dry");
+                let thicket = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|d| l.map.get(edge_end.0 + d.0, edge_end.1 + d.1) == Tile::Thicket as u8);
+                assert!(thicket, "seed {seed}: the stream does not reach the band's edge");
+            }
+        });
+        assert!(streams > 0);
+    }
+
+    #[test]
+    fn a_stream_crossing_the_road_has_a_road_bridge() {
+        let mut crossings = 0;
+        each(|seed, l, w| {
+            let Some(p) = &w.pond else { return };
+            let mut want = vec![];
+            for s in &p.streams {
+                let tiles = path_tiles(&s.points);
+                let road: Vec<(i32, i32)> = tiles.iter().copied().filter(|&(x, y)| l.map.get(x, y) == Tile::Road as u8).collect();
+                if road.is_empty() {
+                    continue;
+                }
+                crossings += 1;
+                let c = road[0].0;
+                assert!(road.iter().all(|t| t.0 == c), "seed {seed}: a stream runs along the road");
+                let (rt, rb) = (road.iter().map(|t| t.1).min().unwrap(), road.iter().map(|t| t.1).max().unwrap());
+                for y in rt - STREAM_STRAIGHT..=rb + STREAM_STRAIGHT {
+                    assert!(tiles.contains(&(c, y)), "seed {seed}: the stream bends near the road at {c},{y}");
+                }
+                want.push(Rect { x: c, y: rt, w: 1, h: rb - rt + 1 });
+            }
+            let got: Vec<Rect> = p.bridges.iter().filter(|b| b.road).map(|b| b.rect).collect();
+            assert_eq!(got, want, "seed {seed}");
+            for b in p.bridges.iter().filter(|b| b.road) {
+                assert!(b.along_x && tiles_of(b.rect).all(|(x, y)| l.map.get(x, y) == Tile::Road as u8), "seed {seed}: a road bridge off the road");
+            }
+        });
+        assert!(crossings > 0);
+    }
+
+    #[test]
+    fn some_seed_has_each_variant() {
+        let (mut none, mut inflow, mut both, mut road, mut pond_bridge) = (0, 0, 0, 0, 0);
+        each(|_, _, w| {
+            let Some(p) = &w.pond else { return };
+            none += p.streams.is_empty() as u32;
+            inflow += (p.streams.len() == 1 && p.streams[0].inflow) as u32;
+            both += (p.streams.len() == 2) as u32;
+            road += p.bridges.iter().any(|b| b.road) as u32;
+            pond_bridge += p.bridges.iter().any(|b| !b.road) as u32;
+        });
+        eprintln!("variants: no stream {none}, inflow only {inflow}, both {both}, road bridge {road}, pond bridge {pond_bridge}");
+        assert!(none > 0 && inflow > 0 && both > 0 && road > 0 && pond_bridge > 0);
     }
 
     #[test]
