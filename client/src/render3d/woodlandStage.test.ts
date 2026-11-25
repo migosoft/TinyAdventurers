@@ -244,8 +244,9 @@ describe('the ?r3d=woodland stage', () => {
     expect(JSON.parse(JSON.stringify(a.brush))).toEqual(JSON.parse(JSON.stringify(b.brush)));
     expect(a.t).toBe(2);
     expect(setup('?r3d=woodland&brush=1&t=2', 500).run(3, 0.1).t).toBe(2); // the page's clock does not move a pinned picture
-    expect(a.cam.z).toBeCloseTo(BRUSH_LANE.z + 0.5);
-    expect(a.cam.x).toBeCloseTo(brushWalk(2).x);
+    expect(a.brush![0].z).toBeCloseTo(BRUSH_LANE.z + 0.5); // the knight on the lane
+    expect(a.brush![0].x).toBeCloseTo(brushWalk(2).x);
+    expect(a.cam).toMatchObject({ x: BRUSH_LANE.bush.x, z: BRUSH_LANE.bush.z }); // the camera holds on the bush
     expect(setup('?r3d=woodland').run(3, 0.016).brush).toEqual([]);
   });
 });

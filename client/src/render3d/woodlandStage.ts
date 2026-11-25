@@ -31,7 +31,7 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
 import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
-import { BRUSH_LANE_PLANTS, KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, brushWalk, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, BRUSH_LANE_PLANTS, KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, brushWalk, woodlandStageMap } from './woodlandMap';
 import { StageBrush } from './brushStage';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
@@ -193,8 +193,9 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         walk(w.x, w.z, KNIGHT_SPEED * c.dt);
         if (w.x !== 0) knight.aim = w.x < 0 ? Math.PI : 0;
       }
-      cam.x = knight.x;
-      cam.z = knight.z;
+      // On the brush lane the camera holds on the bush, so its motion reads against a still picture.
+      cam.x = p.brush ? BRUSH_LANE.bush.x : knight.x;
+      cam.z = p.brush ? BRUSH_LANE.bush.z : knight.z;
       const ents = woodlandEnts(useModels, now, knight);
       if (pinned !== null && !replayed) { replayed = true; replay(pinned); }
       const brushers = brush.step(pinned === null ? c.dt : 0, ents, cam);
