@@ -67,7 +67,7 @@ export function makeSunLight(): SunLight {
   const uExt = uniform(new Vector3(1, 1, 1));
   const uFlip = uniform(0);
   const uShadows = uniform(0);
-  const uClouds = uniform(0);
+  const uClouds = uniform(0).setName('sunClouds'); // named: the tests find the sun's code by it
   const uDrift = uniform(new Vector2());
   const depthNode = texture(sunDepthTexture(1));
 
