@@ -76,7 +76,7 @@ export class LoadingScreen {
     this.runeDebt = Math.min(RUNE_POOL / 4, this.runeDebt + (to - from) * RUNES_PER_BAR);
     this.sparkDebt = Math.min(SPARK_POOL / 4, this.sparkDebt + (to - from) * SPARKS_PER_BAR);
     for (; this.runeDebt >= 1; this.runeDebt--) {
-      fly(this.runes[this.nextRune++ % RUNE_POOL], from + Math.random() * (to - from), 30 + Math.random() * 40, 1800 + Math.random() * 1100, Math.random() * 80 - 40);
+      fly(this.runes[this.nextRune++ % RUNE_POOL], from + Math.random() * (to - from), 45 + Math.random() * 45, 1300 + Math.random() * 700, Math.random() * 80 - 40);
     }
     for (; this.sparkDebt >= 1; this.sparkDebt--) {
       fly(this.sparks[this.nextSpark++ % SPARK_POOL], from + Math.random() * (to - from), 14 + Math.random() * 30, 700 + Math.random() * 800, 0);
@@ -98,6 +98,9 @@ function fly(el: HTMLElement, at: number, dist: number, ms: number, turn: number
       { opacity: 0.85, offset: 0.6 },
       { transform: end, opacity: 0 },
     ],
-    { duration: ms, easing: 'cubic-bezier(0.2, 0.6, 0.4, 1)' },
+    // Progress comes in steps (one per build slice), so each piece starts a little later than its
+    // neighbours: otherwise they pop up in clumps, which reads as a low frame rate. The easing keeps
+    // some speed to the end: a thin stroke crawling by fractions of a pixel flickers.
+    { duration: ms, delay: Math.random() * 300, easing: 'cubic-bezier(0.3, 0.45, 0.6, 0.9)' },
   );
 }

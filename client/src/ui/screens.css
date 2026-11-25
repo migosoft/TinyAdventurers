@@ -1125,7 +1125,7 @@
   margin-top: -9px;
   width: 18px;
   height: 18px;
-  background: radial-gradient(circle, #fff 0, rgba(190, 234, 255, 0.7) 30%, transparent 70%);
+  background: radial-gradient(circle, #fff 0, rgba(241, 207, 99, 0.75) 30%, transparent 70%);
   animation: loading-glint 0.9s ease-in-out infinite alternate;
 }
 .loading-rune,
@@ -1142,23 +1142,23 @@
   height: 21px;
   overflow: visible;
   fill: none;
-  stroke: #d6f2ff;
+  stroke: var(--brass-hi);
   stroke-width: 1;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 /* The first copy of each rune is its glow: wide and faint (cheaper than a filter). */
 .loading-rune path:first-child {
-  stroke: #6cc8ff;
+  stroke: var(--brass-lo);
   stroke-width: 3.4;
-  opacity: 0.35;
+  opacity: 0.45;
 }
 .loading-spark {
   margin: -1px 0 0 -1px;
   width: 2px;
   height: 2px;
-  background: #fff;
-  box-shadow: 0 0 4px 1px rgba(140, 215, 255, 0.9);
+  background: #fff6d0;
+  box-shadow: 0 0 4px 1px rgba(241, 207, 99, 0.9);
 }
 @keyframes loading-glint {
   from { transform: scale(0.7); opacity: 0.6; }
