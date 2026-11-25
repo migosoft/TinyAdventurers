@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { TILE_ID } from '../generated/defs';
+import { CONST, TILE_ID } from '../generated/defs';
 import { FIGURES } from '../game/anim/defs';
 import { r3dPage } from '../r3dFlag';
 import demo from '../generated/pond-demo.json';
@@ -41,6 +41,7 @@ function setup(search: string) {
 }
 
 const isWater = (t: number) => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
+const rulesOf = (i: number) => new TileMap(demo[i].w, demo[i].h, Uint8Array.from(demo[i].tiles));
 
 describe('the ?r3d=pond stage (#360)', () => {
   it('is a dev page', () => {
@@ -49,31 +50,52 @@ describe('the ?r3d=pond stage (#360)', () => {
 
   it('the pond page builds each demo level', () => {
     for (let i = 0; i < demo.length; i++) {
+      const rules = rulesOf(i);
       for (const at of ['pond', 'mouth', 'bridge', 'stream']) {
         const { stage, host, run } = setup(`?r3d=pond&pond=${i}&at=${at}`);
-        const rules = new TileMap(demo[i].w, demo[i].h, Uint8Array.from(demo[i].tiles));
-        const k = (stage as unknown as { knight: { x: number; z: number } }).knight;
-        const tx = Math.floor(k.x), tz = Math.floor(k.z);
+        const tx = Math.floor(stage.knight.x), tz = Math.floor(stage.knight.z);
         expect(rules.blocks(tx, tz, 'hero')).toBe(false);
         if (at === 'pond') {
+          // dry, no water beside it, and a tile of the pond's own body within 2 tiles
           expect(isWater(rules.get(tx, tz))).toBe(false);
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(isWater(stage.world.map.get(tx + dx, tz + dz))).toBe(false);
           let near = false;
-          for (let j = -3; j <= 3; j++) for (let x = -3; x <= 3; x++) near ||= isWater(rules.get(tx + x, tz + j));
+          for (let j = -2; j <= 2; j++) for (let x = -2; x <= 2; x++) near ||= stage.body.has((tz + j) * rules.w + tx + x);
           expect(near).toBe(true);
         }
         const f = run(2, 0.016);
         expect(f.water).toBeDefined();
         expect(f.trees!.chunks.size).toBeGreaterThan(0);
         expect(host.setSky).toHaveBeenCalledWith(true);
-        expect((stage as unknown as { scene: { field: { decks: unknown[] } } }).scene.field.decks.length).toBe(demo[i].woodland!.pond.bridges.length);
+        expect(stage.scene.field.decks.length).toBe(demo[i].woodland!.pond.bridges.length);
       }
     }
   });
 
-  it('walks the knight on the rules map: never into deep water', () => {
+  it('walks the knight on the rules map: it moves, and never into deep water', () => {
     const { stage, run } = setup('?r3d=pond&pond=0');
-    const k = (stage as unknown as { knight: { x: number; z: number } }).knight;
-    const rules = new TileMap(demo[0].w, demo[0].h, Uint8Array.from(demo[0].tiles));
-    for (let i = 0; i < 200; i++) { run(1, 0.1, ['KeyW']); expect(rules.get(Math.floor(k.x), Math.floor(k.z))).not.toBe(TILE_ID.DeepWater); }
+    const rules = rulesOf(0);
+    const z0 = stage.knight.z;
+    for (let i = 0; i < 200; i++) { run(1, 0.1, ['KeyW']); expect(rules.get(Math.floor(stage.knight.x), Math.floor(stage.knight.z))).not.toBe(TILE_ID.DeepWater); }
+    expect(stage.knight.z).not.toBeCloseTo(z0, 1);
+  });
+
+  it('a step in shallow water is SHALLOW_SPEED times a step on dry ground', () => {
+    const rules = rulesOf(1);
+    let shallow: string | null = null, dry: string | null = null;
+    for (let z = 0; z < rules.h && !(shallow && dry); z++) for (let x = 0; x < rules.w - 1; x++) {
+      if (rules.blocks(x + 1, z, 'hero') || rules.blocks(x, z, 'hero')) continue;
+      if (!shallow && rules.get(x, z) === TILE_ID.ShallowWater) shallow = `${x},${z}`;
+      if (!dry && rules.get(x, z) === TILE_ID.Floor) dry = `${x},${z}`;
+    }
+    const step = (at: string): number => {
+      const { stage, run } = setup(`?r3d=pond&pond=1&at=${at}`);
+      const x0 = stage.knight.x;
+      run(1, 0.05, ['KeyD']);
+      return stage.knight.x - x0;
+    };
+    expect(shallow && dry).toBeTruthy();
+    expect(step(dry!)).toBeGreaterThan(0);
+    expect(step(shallow!) / step(dry!)).toBeCloseTo(CONST.SHALLOW_SPEED, 5);
   });
 });

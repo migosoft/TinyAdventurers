@@ -46,9 +46,9 @@ export interface PondScene {
 export interface PondStage extends Stage {
   scene: PondScene;
   knight: { x: number; z: number };
+  /** The pond's body: the tiles (z * width + x) of its water without its streams and decks. */
+  body: ReadonlySet<number>;
 }
-
-export const POND_LEVELS = demo.length;
 
 /** The first walkable dry tile of rules `map` at `ok`, searching rings around (tx, tz). */
 function nearestLand(map: TileMap, tx: number, tz: number, ok: (x: number, z: number) => boolean = () => true): { x: number; z: number } | null {
@@ -85,11 +85,29 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
     const s = field.shoreAt(x + 0.5, z + 0.5);
     if (s > best) { best = s; mid = { x: x + 0.5, z: z + 0.5 }; }
   }
-  const waterNear = (x: number, z: number, r: number): boolean => {
-    for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (map.get(x + i, z + j) === TILE_ID.ShallowWater || map.get(x + i, z + j) === TILE_ID.DeepWater) return true;
+  const isW = (x: number, z: number): boolean => map.get(x, z) === TILE_ID.ShallowWater || map.get(x, z) === TILE_ID.DeepWater;
+  // The pond's body: the water tiles connected to its middle (4-neighbours) without crossing a stream cell (within 1 tile of a stream's line
+  // with the shore <= 1 tile away) or a bridge-deck tile (water on the view map only).
+  const nearLine = (x: number, z: number): boolean => pond.streams.some((s) => s.points.some((a, i) => {
+    if (!i) return false;
+    const [ax, az] = [s.points[i - 1][0] / TILE, s.points[i - 1][1] / TILE], [bx, bz] = [a[0] / TILE, a[1] / TILE];
+    const ex = bx - ax, ez = bz - az, t = Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez || 1)));
+    return Math.hypot(x - (ax + ex * t), z - (az + ez * t)) <= 1;
+  }));
+  const body = new Set<number>();
+  const open = [Math.floor(mid.z) * map.w + Math.floor(mid.x)];
+  while (open.length) {
+    const k = open.pop()!, x = k % map.w, z = Math.floor(k / map.w);
+    if (body.has(k) || (rules.get(x, z) !== TILE_ID.ShallowWater && rules.get(x, z) !== TILE_ID.DeepWater)) continue; // rules water: a deck tile is not
+    if (nearLine(x + 0.5, z + 0.5) && field.shoreAt(x + 0.5, z + 0.5) <= 1) continue;
+    body.add(k);
+    open.push(k + 1, k - 1, k + map.w, k - map.w);
+  }
+  const bodyNear = (x: number, z: number, r: number): boolean => {
+    for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (body.has((z + j) * map.w + x + i)) return true;
     return false;
   };
-  // On the road's side: dry ground two tiles from the water (none within one), nearest to the road tile nearest to the pond's middle.
+  // On the road's side: dry ground with no water beside it and the pond's body within two tiles, nearest to the road tile nearest to the pond's middle.
   const pondStart = (): { x: number; z: number } => {
     let road: { x: number; z: number } | null = null, rd = Infinity;
     for (let z = 0; z < map.h; z++) for (let x = 0; x < map.w; x++) {
@@ -100,22 +118,25 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
     const goal = road ?? mid;
     let found: { x: number; z: number } | null = null, fd = Infinity;
     for (let z = 0; z < map.h; z++) for (let x = 0; x < map.w; x++) {
-      if (rules.blocks(x, z, 'hero') || map.get(x, z) === TILE_ID.ShallowWater || waterNear(x, z, 1) || !waterNear(x, z, 2)) continue;
+      if (rules.blocks(x, z, 'hero') || isW(x, z) || isW(x + 1, z) || isW(x - 1, z) || isW(x, z + 1) || isW(x, z - 1) || !bodyNear(x, z, 2)) continue;
       const d = Math.hypot(x - goal.x, z - goal.z);
       if (d < fd) { fd = d; found = { x: x + 0.5, z: z + 0.5 }; }
     }
     return found ?? nearestLand(rules, mid.x, mid.z)!;
   };
   const at = q.get('at');
+  const tileAt = /^(\d+),(\d+)$/.exec(at ?? ''); // `at=x,z`: that tile, when the knight can stand there (for the pictures and tests)
   const start = ((): { x: number; z: number } => {
+    if (tileAt && !rules.blocks(Number(tileAt[1]), Number(tileAt[2]), 'hero')) return { x: Number(tileAt[1]) + 0.5, z: Number(tileAt[2]) + 0.5 };
     if (at === 'mouth' && field.mouths.length) { const m = field.mouths[0]; return nearestLand(rules, m.x - m.dz * 2, m.z + m.dx * 2) ?? pondStart(); }
     if (at === 'bridge' && field.decks.length) {
       const d = field.decks[0];
       return d.alongX ? { x: d.x0 + 0.5, z: (d.z0 + d.z1) / 2 } : { x: (d.x0 + d.x1) / 2, z: d.z0 + 0.5 };
     }
     if (at === 'stream' && pond.streams.length) {
-      const pts = pond.streams[0].points, m = pts[pts.length >> 1];
-      return nearestLand(rules, m[0] / TILE + 1.5, m[1] / TILE) ?? pondStart();
+      const pts = pond.streams[0].points, i = Math.max(1, pts.length >> 1), m = pts[i], a = pts[i - 1];
+      const len = Math.hypot(m[0] - a[0], m[1] - a[1]) || 1; // beside the point, 2 tiles along the perpendicular of the line
+      return nearestLand(rules, m[0] / TILE - ((m[1] - a[1]) / len) * 2, m[1] / TILE + ((m[0] - a[0]) / len) * 2) ?? pondStart();
     }
     return pondStart();
   })();
@@ -156,7 +177,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
   };
 
   return {
-    world, scene, knight,
+    world, scene, knight, body,
     built(view: View): void {
       const r = paint().result()!;
       view.setGround(r.bare!);
