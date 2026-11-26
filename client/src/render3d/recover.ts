@@ -15,6 +15,8 @@ export interface Recovery {
 export interface RecoveryOpts {
   /** Start on WebGL2 (the URL forced it). */
   webgl?: boolean;
+  /** Read live at the bound: true when the view already runs on WebGL2 (three's own fallback), so there is nothing to switch to. */
+  onWebGL?: () => boolean;
   now?: () => number;
   /** The bound was hit on WebGPU: from now on the rebuilds ask for WebGL2. */
   onFallback?: (reason: string) => void;
@@ -46,7 +48,7 @@ export function createRecovery(
     failures.push(t);
     if (failures.length < MAX_FAILURES) return false;
     failures = [];
-    if (!webgl) {
+    if (!webgl && !opts.onWebGL?.()) {
       webgl = true;
       console.warn(`The graphics device keeps failing (${reason}); switching to the WebGL2 fallback.`);
       opts.onFallback?.(reason);

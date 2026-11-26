@@ -7,9 +7,9 @@ import { parseMap, MAP_ROWS } from './demoMap';
 import { DEFAULTS } from './params';
 import { QUALITY_KEY } from './qualityPref';
 
-function fakeView(): View {
+function fakeView(backend: View['backend'] = 'WebGL2 fallback'): View {
   return {
-    backend: 'WebGL2 fallback', setSize: vi.fn(), draw: vi.fn(() => 0), canForceLoss: true, maxTexture: 8192, forceLoss: vi.fn(() => true), readback: vi.fn(async () => null),
+    backend, setSize: vi.fn(), draw: vi.fn(() => 0), canForceLoss: true, maxTexture: 8192, forceLoss: vi.fn(() => true), readback: vi.fn(async () => null),
     dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), setCover: vi.fn(), stone: null, setStonePages: vi.fn(), chunks: { total: 0, drawn: 0 }, meshes: 0,
   };
 }
@@ -235,6 +235,48 @@ describe('startHost', () => {
     expect(worlds[1]).toBe(world);
     expect(worlds[0]).toBe(world);
     expect(el.querySelectorAll('canvas').length).toBe(1);
+    host!.stop();
+  });
+
+  /** Reports a loss from the newest view and waits for the rebuild it starts (or for the recovery to give up). */
+  async function loseAndWait(deps: { createView: { mock: { calls: unknown[] } } }, lost: ((m: string) => void)[], settled: () => boolean): Promise<void> {
+    const before = deps.createView.mock.calls.length;
+    lost[lost.length - 1]('x');
+    await vi.waitFor(() => expect(deps.createView.mock.calls.length > before || settled()).toBe(true));
+    await new Promise((r) => setTimeout(r, 0));
+  }
+
+  it('WebGPU that keeps failing falls back to WebGL2, WebGL2 that keeps failing ends with one error box (#313)', async () => {
+    const forced: boolean[] = [];
+    const { deps, stage, lost } = setup();
+    deps.createView.mockImplementation(async (_c, _a, _w, o: unknown, onLost: (m: string) => void) => {
+      forced.push((o as { forceWebGL: boolean }).forceWebGL);
+      lost.push(onLost);
+      return fakeView(forced[forced.length - 1] ? 'WebGL2 fallback' : 'WebGPU');
+    });
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, '', 'demo', () => stage, deps);
+    let failed = false;
+    for (let i = 0; i < 3; i++) await loseAndWait(deps, lost, () => failed);
+    expect(forced[forced.length - 1]).toBe(true);
+    expect(window.__r3d!.backend).toBe('WebGL2 fallback (WebGPU failed)');
+    expect(el.querySelectorAll('.r3d-error').length).toBe(0);
+    failed = true;
+    for (let i = 0; i < 3; i++) await loseAndWait(deps, lost, () => el.querySelectorAll('.r3d-error').length > 0);
+    expect(el.querySelectorAll('.r3d-error').length).toBe(1);
+    expect(window.__r3d!.backend).toBe('Graphics device failed');
+    host!.stop();
+  });
+
+  it('three\'s own WebGL2 fallback counts as WebGL2: three losses end it with no switch (#313)', async () => {
+    const { deps, stage, lost } = setup(); // the mock view says 'WebGL2 fallback' whatever forceWebGL is
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, '', 'demo', () => stage, deps);
+    for (let i = 0; i < 3; i++) await loseAndWait(deps, lost, () => el.querySelectorAll('.r3d-error').length > 0);
+    expect(deps.createView).toHaveBeenCalledTimes(3); // the third loss gave up before rebuilding
+    expect(el.querySelectorAll('.r3d-error').length).toBe(1);
     host!.stop();
   });
 

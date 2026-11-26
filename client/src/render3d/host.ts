@@ -197,9 +197,7 @@ export async function startHost(
     else lostEarly = true;
   };
 
-  async function rebuild(forceWebGL: boolean): Promise<void> {
-    if (stopped) return;
-    const g = ++gen;
+  function disposeView(): void {
     if (viewLive && view) {
       viewLive = false;
       const old = view;
@@ -210,12 +208,24 @@ export async function startHost(
         console.warn('Disposing the lost view failed:', e);
       }
     }
+  }
+
+  async function rebuild(forceWebGL: boolean): Promise<void> {
+    if (stopped) return;
+    const g = ++gen;
+    disposeView();
     // A fresh canvas every attempt: the old one may hold a dead context. It takes the old one's place in the DOM.
     const next = document.createElement('canvas');
     next.className = 'r3d';
     canvas.replaceWith(next);
     canvas = next;
-    const v = await deps.createView(next, assets!, stage!.world, { forceWebGL }, lostFrom(g));
+    let v: View;
+    try {
+      v = await deps.createView(next, assets!, stage!.world, { forceWebGL }, lostFrom(g));
+    } catch (e) {
+      if (stopped) return; // a failure after stop() is not the device's
+      throw e;
+    }
     if (stopped) {
       v.dispose(); // stop() came while the view was being made
       return;
@@ -233,10 +243,15 @@ export async function startHost(
   let fellBack = false;
   const recovery: Recovery = createRecovery(rebuild, undefined, undefined, {
     webgl: initial.backend === 'webgl',
+    onWebGL: () => backendName.startsWith('WebGL2'), // three's own fallback already is WebGL2: nothing to switch to
     onFallback: () => {
-      fellBack = backendName === 'WebGPU'; // already on three's own WebGL2 fallback: nothing to announce
+      fellBack = true;
     },
     onGiveUp: (reason) => {
+      if (stopped) return;
+      disposeView(); // the frame loop must not touch the dead renderer
+      backendName = 'Graphics device failed';
+      state.backend = backendName;
       showError(el, `The graphics device keeps failing (${reason}).`, false);
     },
   });
