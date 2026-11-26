@@ -158,6 +158,11 @@ export interface FrameInput {
   trees?: TreeFrame;
   /** The 3D figures (#338); absent: none. */
   models?: FigureFrame;
+  /**
+   * Under the loading screen (#434): this frame also draws every kind of thing the level can show once (the empty dynamic meshes as one degenerate
+   * triangle, one chunk mesh of each kind though off screen), so three builds their programs and pipelines now and not at the first sight in play.
+   */
+  warm?: boolean;
   /** The effects (#308): blended triangles (unlit) and lit triangles; absent: none. */
   fx?: { tris: FxBuf; lit: FxBuf; /** The smoke quads of the smoke bodies (#359); absent: none. */ smoke?: SmokeBuf };
   /** The force field's life (#308): `age` seconds since it appeared (absent: an old one, no fade-in), `t` the clock. */
@@ -247,6 +252,12 @@ class DynMesh {
       a.addUpdateRange(0, count * size); // only the used part goes to the GPU
       a.needsUpdate = true;
     }
+  }
+  /** An empty mesh draws one degenerate triangle, so its pipeline is built under the loading screen and not at the first real content (#434). */
+  warm(): void {
+    const g = this.mesh.geometry;
+    if (g.drawRange.count === 0) g.setDrawRange(0, 3);
+    this.mesh.visible = true;
   }
   dispose(): void {
     this.mesh.geometry.dispose();
@@ -660,6 +671,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     scene.add(ceiling);
   }
   const chunks = { total: chunkTotal(), drawn: 0 };
+  // The warm-up (#434) draws one chunk mesh of each kind though it is off screen (frustum culling off), then puts it back.
+  let chunksWarm = false;
+  let warmDraws = 0;
+  let warmChunks: Mesh[] = [];
+  const setChunksWarm = (on: boolean): void => {
+    for (const m of warmChunks) m.frustumCulled = true;
+    warmChunks = on ? [...allChunks.map((list) => list.find(Boolean)?.mesh).filter((m): m is Mesh => !!m), ...trees.onePerMaterial(), ...coverLayer.onePerMaterial()] : [];
+    for (const m of warmChunks) m.frustumCulled = false;
+    chunksWarm = on;
+  };
 
   // The force field: one unlit, translucent mesh over every closed door cell.
   const fieldU = fieldUniforms();
@@ -1183,6 +1204,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (f.models?.built) figureSight(f.models.built, frameMask);
       figures.frame(f.models, (id) => slotOf.get(id) ?? -1);
       builtFrame(f.models);
+      if (f.warm) for (const d of [cards, ghosts, decals, shadows, glows, smokeDyn, fxDyn, fxLitDyn, airAdd, airBlend, hazeDyn]) d.warm();
+      if (!!f.warm !== chunksWarm) setChunksWarm(!!f.warm);
       timer?.lap('models');
       lighting.setLights(f.lights);
       lighting.cracks.set(f.cracks ?? []);
@@ -1260,7 +1283,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // (#344) asks for the copy only for its heat shimmer, whose sheets are drawn on no other frame.
       const p = f.plan;
       const fp = footprint(f.cam, p.halfW, p.halfH);
-      const wp = picturePasses({ water: poolInView(boxesOfWater(), fp), lava: poolInView(boxesOfLava(), fp), reflect: f.water?.reflect ?? false, heat: f.lavaPool?.heat ?? false }, p.targetW, p.targetH);
+      // The warm-up frames draw both ways, whatever is in view: straight to the canvas, then as with pools in view (the target, the scene copy, the mirror) (#434).
+      const pools = f.warm ? warmDraws++ % 2 === 1 : null;
+      const wp = picturePasses({ water: pools ?? poolInView(boxesOfWater(), fp), lava: pools ?? poolInView(boxesOfLava(), fp), reflect: f.water?.reflect ?? false, heat: f.lavaPool?.heat ?? false }, p.targetW, p.targetH);
       lastCopy = wp.copy;
       if (wp.shimmer !== shimmerOn) {
         shimmerOn = wp.shimmer;
