@@ -122,7 +122,8 @@ export function createRunStage(
   const viewMap = pond ? pondViewMap(session.map, pond) : session.map;
   if (pond) setPondField(viewMap, pondField(session.map, pond, viewMap));
   // The road is drawn along the generator's centre line, not by its tiles (#430).
-  if (info.woodland) setRoadEdge(viewMap, roadEdge(info.woodland.road, pond?.bridges ?? [], info.woodland.seed));
+  // A run without the line (an older server) keeps the tile paint.
+  if (info.woodland?.road?.length) setRoadEdge(viewMap, roadEdge(info.woodland.road, pond?.bridges ?? [], info.woodland.seed));
   const runView = new RunView3d({ ...session.viewInit(), map: viewMap }, assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
   const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };

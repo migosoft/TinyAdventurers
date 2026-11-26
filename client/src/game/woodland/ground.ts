@@ -32,9 +32,13 @@ const WET_TILES = 1.75;
 const SHORES = new WeakMap<Uint8Array, Shore>();
 /** How far a stronger ground creeps into a weaker one (px). */
 const CREEP = 3;
-/** The drawn road's edges of the tile kinds that have one (`kinds`); NEAR_ROAD flags a tile that can hold road px: the road's half-width is under 1.78 tiles, a tile's half-diagonal is 0.71, and the dither adds CREEP px. */
+/**
+ * The drawn road's edges of the tile kinds that have one (`kinds`); NEAR_ROAD flags a tile that can hold road px. `insideAt` changes
+ * faster than 1 tile per tile (the width's swing and a deck's S-bend add to the line's slope): a corner px lay 1.05 inside where the
+ * tile's centre read -0.91 (#430 review), so the bound is a tile's half-diagonal 0.71 with a margin, plus the dither's CREEP px.
+ */
 const ROADS = new WeakMap<Uint8Array, RoadEdge>();
-const NEAR_ROAD = 16, ROAD_NEAR = -0.71 - CREEP / TILE;
+const NEAR_ROAD = 16, ROAD_NEAR = -1.3 - CREEP / TILE;
 /** How far the bank reaches onto the land at most (px, under a tile): beside a pond and beside a stream; the pond's reach is full where `Shore.bodyAt` is at least BODY_NEAR. */
 const POND_REACH = 15, STREAM_REACH = 4.5, BODY_NEAR = 0.1;
 /** The bank's edge wobbles between this share of the reach and all of it, over lattice cells of BANK_WOBBLE px, and frays over BANK_FRINGE px. */
