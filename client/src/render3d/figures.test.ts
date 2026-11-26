@@ -1142,7 +1142,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(lf.model).toBe(true);
       expect(lf.gem).toBeUndefined();
       // the mouth: the builder's anchor, for the breath's start and its smoke
-      const dr = DEMON_FIGURE.draw({ anim: ANIM.Idle, animT: 0, effects: 0, flags: 0, aim: 0, look: null, x: 0, z: 0 }, 0, DEMON_FIGURE.newMem());
+      const dr = DEMON_FIGURE.draw({ anim: ANIM.Idle, animT: 0, effects: 0, flags: 0, aim: 0, look: null, x: 0, z: 0 }, frame([]).dt, DEMON_FIGURE.newMem());
       const want = builtPoint(dr.anchors.mouth!, lf.x, lf.z, lf.foot, b.yaw, b.scale, stretch, [0, 0, 0]);
       for (let i = 0; i < 3; i++) { expect(lf.mouth![i]).toBeCloseTo(want[i], 6); expect(lf.nostril![i]).toBeCloseTo(want[i], 6); }
       expect(lf.mouth).not.toBe(lf.nostril);
@@ -1153,18 +1153,18 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(fg.anchors.get(11)!.height).toBe(54);
     });
 
-    it('a lifted body raises the name and the marks by the lift, in game px', () => {
-      const keep = BUILT_OF_KIND[KIND.Demon]!;
-      // the real figure, with the lift a flying pose will give
-      BUILT_OF_KIND[KIND.Demon] = { key: keep.key, picture: keep.picture, unit: keep.unit, top: keep.top, hem: keep.hem, newMem: keep.newMem, rest: keep.rest, draw: (s, dt, m) => { const d = keep.draw(s, dt, m); d.lift = 10; return d; } };
-      try {
-        const fg = make();
-        built([demon()], painted(), fg);
-        const a = fg.anchors.get(11)!;
-        expect(a.height).toBeCloseTo(54 + 10 * DEMON.unit, 9);
-        expect(a.head).toBeCloseTo(a.height, 9);
-        expect(a.tag).toBeCloseTo(a.height + 3, 9);
-      } finally { BUILT_OF_KIND[KIND.Demon] = keep; }
+    it('a demon in the air: the body, its points and what the effects read hang 17 px up; the name and the marks rise with it; the oval stays on the floor', () => {
+      const ground = make(), air = make();
+      const g = built([demon()], painted(), ground), f = built([demon({ flags: FLAG.AIRBORNE })], painted(), air);
+      const a = air.anchors.get(11)!, up = 17 / TILE / Math.cos(cam().pitch);
+      expect(a.height).toBeCloseTo(54 + 17, 9);
+      expect(a.head).toBeCloseTo(a.height, 9);
+      expect(a.tag).toBeCloseTo(a.height + 3, 9);
+      expect(a.y).toBe(ground.anchors.get(11)!.y);
+      expect(f.built[0].lift - g.built[0].lift).toBeCloseTo(17 / TILE, 9);
+      expect(f.figs[0].foot - g.figs[0].foot).toBeCloseTo(up, 9);
+      expect(f.figs[0].chest![1] - g.figs[0].chest![1]).toBeGreaterThan(up * 0.8);   // the hover's pose differs a little from the standing one
+      expect(f.shadows.position[1]).toBeCloseTo(g.shadows.position[1], 9);
     });
 
     it('a petrified demon is stone and gives no chest light', () => {

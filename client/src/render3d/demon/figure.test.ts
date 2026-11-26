@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIM, EFFECT, FLAG, KIND } from '../../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { builtOf, type BuiltIn } from '../built';
 import { DEMON_DEV, DEMON_FIGURE } from './figure';
 import { WING } from './wings';
@@ -49,30 +49,40 @@ describe('DEMON_FIGURE', () => {
   });
 
   it('beats its wings and hangs in the air while airborne, trails a turn, holds all of it frozen or stone, and takes the dev page\'s fold', () => {
-    const m = DEMON_FIGURE.newMem() as { pose: { wingR: { arm: { raise: number; sweep: number; fold: number } }; wingL: { arm: { sweep: number } }; tail: Float32Array; lift: number } };
+    const m = DEMON_FIGURE.newMem() as { mem: { pose: { wingR: { arm: { raise: number; sweep: number; fold: number } }; wingL: { arm: { sweep: number } }; tail: Float32Array; lift: number } } };
+    const pose = m.mem.pose;
     const run = (o: Partial<BuiltIn>, frames: number, aimStep = 0): void => { for (let i = 0; i < frames; i++) DEMON_FIGURE.draw(idle({ ...o, aim: (aim += aimStep) }), 1 / 60, m); };
     let aim = 0;
     run({}, 30);
-    expect(m.pose.wingR.arm.raise).toBeCloseTo(WING.rest.raise, 6);
-    expect(m.pose.lift).toBe(0);
+    expect(Math.abs(pose.wingR.arm.raise - WING.rest.raise)).toBeLessThan(0.12);   // at rest, but for the breath and the drift
+    expect(pose.lift).toBe(0);
     let lo = 9, hi = -9;
-    for (let i = 0; i < 140; i++) { run({ flags: FLAG.AIRBORNE }, 1); lo = Math.min(lo, m.pose.wingR.arm.raise); hi = Math.max(hi, m.pose.wingR.arm.raise); }
+    for (let i = 0; i < 140; i++) { run({ flags: FLAG.AIRBORNE }, 1); lo = Math.min(lo, pose.wingR.arm.raise); hi = Math.max(hi, pose.wingR.arm.raise); }
     expect(hi - lo).toBeGreaterThan(1);
-    expect(m.pose.lift).toBeGreaterThan(9);
-    expect(DEMON_FIGURE.draw(idle({ flags: FLAG.AIRBORNE }), 1 / 60, m).lift).toBe(m.pose.lift);
+    expect(pose.lift).toBeGreaterThan(9);
+    expect(DEMON_FIGURE.draw(idle({ flags: FLAG.AIRBORNE }), 1 / 60, m).lift).toBe(pose.lift);
     for (const fx of [EFFECT.Frozen, EFFECT.Petrified]) {
-      const before = JSON.stringify(m.pose);
+      const before = JSON.stringify(pose);
       run({ flags: FLAG.AIRBORNE, effects: 1 << fx }, 20);
-      expect(JSON.stringify(m.pose)).toBe(before);
+      expect(JSON.stringify(pose)).toBe(before);
     }
-    // back on the floor, turning to its right: the right wing lags forward, the left back, the tail swings to the right
+    // back on the floor, turning to its right: the drawn facing follows behind the aim, the right wing lags forward of the left
     run({}, 120);
-    run({}, 20, 0.04);
-    expect(m.pose.wingR.arm.sweep).toBeLessThan(WING.rest.sweep - 0.05);
-    expect(m.pose.wingL.arm.sweep).toBeGreaterThan(WING.rest.sweep + 0.05);
-    expect(m.pose.tail[0]).toBeGreaterThan(0.1);
-    expect(m.pose.tail[0]).toBeGreaterThan(m.pose.tail[10]);
-    try { DEMON_DEV.fold = 1; run({}, 120); expect(m.pose.wingR.arm.fold).toBeCloseTo(1, 2); } finally { DEMON_DEV.fold = null; }
+    run({}, 40, 0.04);
+    const d = DEMON_FIGURE.draw(idle({ aim }), 1 / 60, m);
+    expect(d.yaw).toBeLessThan(aim - 0.2);
+    expect(d.yaw).toBeGreaterThan(0.3);
+    expect(pose.wingR.arm.sweep).toBeLessThan(pose.wingL.arm.sweep - 0.1);
+    expect(pose.tail[0]).toBeGreaterThan(pose.tail[10]);
+    try { DEMON_DEV.fold = 1; run({}, 120); expect(pose.wingR.arm.fold).toBeCloseTo(1, 2); } finally { DEMON_DEV.fold = null; }
+  });
+
+  it('the mouth gives its light while the breath channels, not in its wind-up and not on a stone demon', () => {
+    const m = DEMON_FIGURE.newMem(), breath = (animT: number, effects = 0): number => DEMON_FIGURE.draw(idle({ anim: ANIM.Breath, animT, effects }), 1 / 60, m).magic.mouth!;
+    expect(breath(CONST.DEMON_BREATH_WINDUP - 0.1)).toBe(0);
+    expect(breath(CONST.DEMON_BREATH_WINDUP + 0.1)).toBe(1);
+    expect(DEMON_FIGURE.draw(idle({ anim: ANIM.Breath, animT: 1.2 }), 1 / 60, m).levels[2]).toBeGreaterThan(1.5);
+    expect(breath(CONST.DEMON_BREATH_WINDUP + 0.2, 1 << EFFECT.Petrified)).toBe(0);
   });
 
   it('rest is the standing figure\'s body', () => {

@@ -8,6 +8,7 @@ import type { PageButton } from './panel';
 import type { Stage, StageCtx } from './host';
 import { createKit, directRunner } from './models/kit';
 import { createDemonStage, demonMap, parseDemon } from './demonStage';
+import { DEMON_ACTS } from './demonScript';
 import { TERRAIN } from '../game/terrain-layers';
 import type { FrameInput } from './view';
 
@@ -113,7 +114,7 @@ describe('the ?r3d=demon stage', () => {
     let last: FrameInput | undefined;
     await r.wait(() => { last = r.step(1)[0]; return built(last) === 1; });
     expect(last!.models!.built![0].stone).toBe(true);
-    expect(r.buttons.map((b) => b.name)).toEqual(['Frozen', 'Chilled', 'Stone', 'Work light']);
+    expect(r.buttons.map((b) => b.name)).toEqual([...DEMON_ACTS, 'Frozen', 'Chilled', 'Stone', 'Work light']);
     r.buttons.find((b) => b.name === 'Stone')!.press();
     expect(r.step(1)[0].models!.built![0].stone).toBe(false);
   });

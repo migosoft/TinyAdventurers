@@ -1018,8 +1018,10 @@ export class Figures3d {
     const dr = b.draw(bin, f.dt, mem);
 
     const scale = (b.unit * sc) / TILE;
+    // A flier's body hangs above its foot: the body, its points and what is listed for the effects go up with it; the oval and the lamp outline stay on the floor.
+    const yb = y + ((dr.lift ?? 0) * scale) / this.cp;
     out.built.push({
-      owner: e.id, key: b.key, x, z, lift: this.lifted(y), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
+      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
       dark, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     });
 
@@ -1042,7 +1044,7 @@ export class Figures3d {
     if (!pose.grey && !dark) {
       const at = this.haloAt, rgb = this.haloRgb, a = pose.alpha * k * (falling ? depthFade(y) : 1);
       for (const h of dr.halos) {
-        builtPoint(h.at, x, z, y, dr.yaw, scale, stretch, at);
+        builtPoint(h.at, x, z, yb, dr.yaw, scale, stretch, at);
         rgb[0] = h.rgb[0] * a; rgb[1] = h.rgb[1] * a; rgb[2] = h.rgb[2] * a;
         pushGlow(out.glows, at[0], at[1], at[2], h.r * scale, rgb, cam, undefined, HALO_LIFT * scale);
       }
@@ -1051,14 +1053,14 @@ export class Figures3d {
     const up = top + (dr.lift ?? 0) * b.unit * sc;   // the flier's body hangs above its foot
     this.anchors.set(e.id, { x, z, y, height: up, tag: up + 3, head: up, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
     const hand = dr.anchors.hand;
-    const lf = this.listFig(out, cam, e, s, d, x, z, y, top, pose.alpha * k, true, dr.yaw, builtPoint(hand, x, z, y, dr.yaw, scale, stretch, this.haloAt)[1], -1, dashing);
-    builtPoint(hand, x, z, y, dr.yaw, scale, stretch, lf.hand as MV3);
+    const lf = this.listFig(out, cam, e, s, d, x, z, yb, top, pose.alpha * k, true, dr.yaw, builtPoint(hand, x, z, yb, dr.yaw, scale, stretch, this.haloAt)[1], -1, dashing);
+    builtPoint(hand, x, z, yb, dr.yaw, scale, stretch, lf.hand as MV3);
     const slot = this.figUsed - 1;
-    if (dr.anchors.gem) lf.gem = builtPoint(dr.anchors.gem, x, z, y, dr.yaw, scale, stretch, (this.gemPool[slot] ??= [0, 0, 0]));
-    if (dr.anchors.eyes) lf.eyes = builtPoint(dr.anchors.eyes, x, z, y, dr.yaw, scale, stretch, (this.eyesPool[slot] ??= [0, 0, 0]));
-    if (dr.anchors.chest) lf.chest = builtPoint(dr.anchors.chest, x, z, y, dr.yaw, scale, stretch, (this.chestPool[slot] ??= [0, 0, 0]));
-    if (dr.anchors.mouth) lf.mouth = builtPoint(dr.anchors.mouth, x, z, y, dr.yaw, scale, stretch, (this.mouthPool[slot] ??= [0, 0, 0]));
-    if (dr.anchors.mouth) lf.nostril = builtPoint(dr.anchors.mouth, x, z, y, dr.yaw, scale, stretch, (this.nostrilPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.gem) lf.gem = builtPoint(dr.anchors.gem, x, z, yb, dr.yaw, scale, stretch, (this.gemPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.eyes) lf.eyes = builtPoint(dr.anchors.eyes, x, z, yb, dr.yaw, scale, stretch, (this.eyesPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.chest) lf.chest = builtPoint(dr.anchors.chest, x, z, yb, dr.yaw, scale, stretch, (this.chestPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.mouth) lf.mouth = builtPoint(dr.anchors.mouth, x, z, yb, dr.yaw, scale, stretch, (this.mouthPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.mouth) lf.nostril = builtPoint(dr.anchors.mouth, x, z, yb, dr.yaw, scale, stretch, (this.nostrilPool[slot] ??= [0, 0, 0]));
     const mg = (this.magicPool[slot] ??= { gem: 0, flare: 0 });
     mg.gem = dr.magic.gem; mg.flare = dr.magic.flare; mg.chest = dr.magic.chest; mg.mouth = dr.magic.mouth;
     lf.magic = mg;
