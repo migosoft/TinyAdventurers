@@ -99,9 +99,11 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   let lastError = { msg: '', at: 0 };
   // (installed before the font wait, so a close during it still shows the message; the Hud exists later)
   let hudForClose: Hud | undefined;
+  let leaveRunOnClose: (() => void) | undefined; // set once the run state below exists
   net.onClose = () => {
     const why = performance.now() - lastError.at < 2000 ? lastError.msg : 'Connection lost.';
     const msg = `${why} Reload the page to reconnect.`;
+    leaveRunOnClose?.(); // a frozen world must not keep the render loop (and the GPU) busy (#426)
     hudForClose?.message(msg);
     lobby.error(msg);
     hub.error(msg);
@@ -134,6 +136,10 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     backToLobby,
   );
   hudForClose = hud;
+  leaveRunOnClose = () => {
+    run3dStarts++; // drops a start still waiting for the chunk
+    if (gameEl.classList.contains('active')) backToLobby(); // the lobby keeps the error line, the HUD's message fades
+  };
 
   net.on(async (m) => {
     switch (m.t) {

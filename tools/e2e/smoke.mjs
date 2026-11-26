@@ -225,8 +225,9 @@ try {
   await p3.waitForSelector('#runname');
   await p1.waitForFunction(() => /another window/.test(document.body.textContent ?? ''), null, { timeout: 10000 });
   console.log('second login closed the first window');
-  // The closed window still draws its frozen run; in software rendering the woodland's frames
-  // starve Bob's page in the same browser, so his clicks below took over 5 s (#425).
+  // The closed window stops its 3D view and shows the lobby with the message (#426); a frozen run drawn on
+  // starved Bob's page in the same browser under software rendering (#425).
+  if (await p1.evaluate(() => !!document.querySelector('#game canvas') || !!window.__r3d)) errors.push('Alice: the closed window still runs its 3D view');
   await p1.close();
 
   // Bob leaves the run and deletes his account by typing the password (it contains
