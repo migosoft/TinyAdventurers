@@ -6,7 +6,8 @@
 // the lights. Calm, large waves and the ripples of ripples.ts tilt the normal that all of it reads. The numbers are first guesses from
 // the mockup, tuned by eye.
 import { Matrix4, MeshBasicNodeMaterial, Texture, Vector3, Vector4, type NodeMaterial } from 'three/webgpu';
-import { Fn, If, Loop, abs, clamp, cos, dot, exp, float, fract, length, max, mix, normalize, positionWorld, pow, reflect, screenUV, sin, smoothstep, sqrt, step, texture, uniform, uniformArray, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, If, Loop, abs, clamp, cos, dot, exp, float, fract, length, max, mix, normalize, positionWorld, pow, reflect, screenUV, sin, smoothstep, sqrt, step, texture, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { sharedArray } from '../sharedArray';
 import type { Lighting } from '../lightNodes';
 import type { Sight } from '../sightNodes';
 import type { ViewToward } from '../materials';
@@ -316,7 +317,7 @@ export function waterMaterial(
 ): WaterMaterial {
   const time = uniform(0);
   // A free slot has age -1 and adds nothing (its strength is stale: only the age says whether a slot is live).
-  const rip = uniformArray(Array.from({ length: RIPPLE_CAP }, () => new Vector4(0, 0, -1, 0)), 'vec4');
+  const rip = sharedArray(Array.from({ length: RIPPLE_CAP }, () => new Vector4(0, 0, -1, 0)), 'vec4');
   const uMirror = uniform(new Matrix4());
   const uMirrorOn = uniform(0);
 
@@ -354,7 +355,7 @@ export function waterMaterial(
     ? { zenith: uniform(new Vector3(0.3, 0.5, 0.82)).setName('waterZenith'), horizon: uniform(new Vector3(0.74, 0.79, 0.82)).setName('waterHorizon'), fine: uniform(0).setName('waterFine') }
     : null;
   // A pond's water (#360): the current and the stir tilt the surface too.
-  const fish = day && opts.pond ? uniformArray(Array.from({ length: FISH_CAP }, () => new Vector4(FISH_AWAY, FISH_AWAY, 0, 0)), 'vec4') : null;
+  const fish = day && opts.pond ? sharedArray(Array.from({ length: FISH_CAP }, () => new Vector4(FISH_AWAY, FISH_AWAY, 0, 0)), 'vec4') : null;
   const pond = day && opts.pond && fish ? { ...pondSurface({ p, time, fine: day.fine, flow: fieldAt.zw, mouths: opts.pond.mouths }), fish } : null;
   const slope: N = pond ? vec2(slopeX, slopeZ).add(pond.slope).toVar() : vec2(slopeX, slopeZ);
   const Nw: N = (pond ? normalize(vec3(slope.x.negate(), 1, slope.y.negate())) : normalize(vec3(slopeX.negate(), 1, slopeZ.negate()))).toVar();

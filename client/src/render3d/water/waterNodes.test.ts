@@ -244,8 +244,8 @@ describe('the water and ceiling materials', () => {
     // first 16 hex digits). A change that is meant to alter the dungeon's water (or its lighting, which is part of the text) records
     // these again; anything else must leave them alone.
     const PINNED: [Builder, string, string][] = [
-      [GLSLNodeBuilder, '89da2ebf24dc0cc7', 'a275636aa8d970c1'],
-      [WGSLNodeBuilder, '8a2d68ca6d011f66', '28943ee78d54c8bc'],
+      [GLSLNodeBuilder, 'b30050d3472b1d13', 'a275636aa8d970c1'],
+      [WGSLNodeBuilder, 'd6385ed84efdaca4', '28943ee78d54c8bc'],
     ];
     const sha = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 16);
     for (const [B, frag, vert] of PINNED) {

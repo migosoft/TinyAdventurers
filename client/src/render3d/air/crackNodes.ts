@@ -2,7 +2,8 @@
 // 3D demo's `sunMask` with the variety of rays, the faint main beam and widening; `lightAt` adds it as a light term, Task 5's
 // shaft march reads it again. Only If/Loop control flow and no texture read, so it may sit inside any branch.
 import { Vector4 } from 'three/webgpu';
-import { Break, Fn, If, Loop, atan, cos, float, int, length, max, mix, sin, smoothstep, uniform, uniformArray, vec2 } from 'three/tsl';
+import { Break, Fn, If, Loop, atan, cos, float, int, length, max, mix, sin, smoothstep, uniform, vec2 } from 'three/tsl';
+import { sharedArray } from '../sharedArray';
 import { CHASM_BED } from '../dips/shape';
 import { CRACK_CAP, RAY_CAP, RIM_HI, RIM_LO, packCracks, type Crack } from './cracks';
 
@@ -40,7 +41,7 @@ const vec4s =(n: number): Vector4[] => Array.from({ length: n }, () => new Vecto
 
 export function makeCracks(): Cracks {
   // One uniform buffer for all of it: WebGPU allows 12 per fragment stage and the world material is near that (five arrays made 13).
-  const data = uniformArray(vec4s(DATA_LEN), 'vec4');
+  const data = sharedArray(vec4s(DATA_LEN), 'vec4');
   const count = uniform(0);
 
   const mask = (Q: N, s: N): N => Fn(() => {

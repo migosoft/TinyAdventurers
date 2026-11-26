@@ -1,6 +1,7 @@
 // The light of the 3D view in TSL: point lights with a grid-walk wall shadow (port of the demo's lightAt / wallVis).
 import { DataTexture, DataUtils, HalfFloatType, LinearFilter, NoColorSpace, RGBAFormat, Vector2, Vector3, Vector4, type Texture } from 'three/webgpu';
-import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length, max, min, mix, normalize, pow, select, smoothstep, texture, textureLoad, uniform, uniformArray, dot, vec2, vec3, vec4 } from 'three/tsl';
+import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length, max, min, mix, normalize, pow, select, smoothstep, texture, textureLoad, uniform, dot, vec2, vec3, vec4 } from 'three/tsl';
+import { sharedArray } from './sharedArray';
 import { DV_DARK, EDGE } from '../game/light';
 import { AMBIENT, DV_EYE, DV_FADE, DV_MARGIN, LIGHT_CAP, packLights, type Light } from './light';
 import { makeCracks, type Cracks } from './air/crackNodes';
@@ -79,12 +80,12 @@ export interface Lighting {
 /** `opts.sun`: the world has a sun (a woodland): `lightAt` then takes its `sun` option. Without it the shaders carry nothing of the sun. */
 export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }, atlas: Texture, opts: { sun?: boolean } = {}): Lighting {
   // The casters: (x, z, w, y0), (y1, 0, 0, 0) and the atlas rect (u0, v0, u1, v1) per slot; w 0 ends the list.
-  const cA = uniformArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
-  const cB = uniformArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
-  const cR = uniformArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
+  const cA = sharedArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
+  const cB = sharedArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
+  const cR = sharedArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
   const uRight = uniform(new Vector2(1, 0));
-  const lPos = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
-  const lCol = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
+  const lPos = sharedArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
+  const lCol = sharedArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
   const uShadows = uniform(1);
   const uAmbient = uniform(new Vector3(...AMBIENT)).setName('lightAmbient');
   const ambient = uAmbient;
