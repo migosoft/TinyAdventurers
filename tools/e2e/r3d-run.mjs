@@ -2,7 +2,7 @@
 // waits for drawn frames, walks the hero, switches to the free camera and checks the chunk culling on the dungeon.
 // It is a debug account, so the debug keys run here too: F4 (darkvision), F9 (immortality) and, with LOG=1, the rules log (L, F8).
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
-// Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
+// Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] [PHASE=walk|turn] [GLPROF=1] [TRACE=file.json] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
 // Dungeon: waits (WAIT_MS) for the F3 line `stone <done> of <total>` to be complete and prints `stone painted ...` with the time and the longest frame (#380).
 // BOSS=lich|dragon|demon: picks that boss in the room before the start (the boss decides the dungeon's stone: laid, natural rock, both; default: the room's own Random).
 // ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376). It prints the glide's frame times; ZOOM_PASSES=3 zooms there, back and there again (a hitch only in pass 1 is a first-use cost).
@@ -29,9 +29,27 @@ await page.addInitScript((counters) => {
   const perf = { t: [], dt: [], calls: 0, tris: 0, on: false };
   window.__perf = perf;
   let last = performance.now();
-  const loop = (t) => { if (perf.on) { perf.t.push(t); perf.dt.push(t - last); } last = t; requestAnimationFrame(loop); };
+  // GLPROF=1 (#437): per frame interval, perf.gl[i] (it goes with perf.dt[i]) holds the count and ms of the WebGL2 calls that can stall or compile
+  // ({ calls: { name: [n, ms] } }) and the rarer calls with their sizes (`rare`: new buffers and textures, non-uniform bufferData, texture uploads).
+  perf.gl = []; let acc = { calls: {}, rare: [] };
+  const loop = (t) => { if (perf.on) { perf.t.push(t); perf.dt.push(t - last); perf.gl.push(acc); } acc = { calls: {}, rare: [] }; last = t; requestAnimationFrame(loop); };
   requestAnimationFrame(loop);
   if (!counters) return;
+  if (counters === 'glprof') {
+    const P = WebGL2RenderingContext.prototype;
+    const RARE = new Set(['bufferData', 'texImage2D', 'texStorage2D', 'texImage3D', 'texStorage3D', 'texSubImage2D', 'texSubImage3D', 'createBuffer', 'createTexture', 'deleteBuffer', 'deleteTexture', 'createFramebuffer']);
+    const sz = (v) => typeof v === 'number' ? v : v?.byteLength ?? v?.width ?? '?';
+    for (const name of ['linkProgram', 'compileShader', 'getProgramParameter', 'getShaderParameter', 'bufferData', 'bufferSubData', 'texImage2D', 'texSubImage2D',
+      'texStorage2D', 'texImage3D', 'texSubImage3D', 'texStorage3D', 'generateMipmap', 'readPixels', 'getError', 'clientWaitSync', 'getBufferSubData',
+      'getUniformLocation', 'createBuffer', 'createTexture', 'deleteBuffer', 'deleteTexture', 'createFramebuffer', 'useProgram', 'bindVertexArray']) {
+      const orig = P[name];
+      P[name] = function (...a) {
+        if (perf.on && RARE.has(name) && !(name === 'bufferData' && a[0] === 0x8A11)) acc.rare.push(name === 'bufferData' ? `bufferData(${a[0].toString(16)},${sz(a[1])})` : name.startsWith('tex') ? `${name}(${a.slice(1, 6).map(sz).join(',')})` : name);
+        const s = performance.now();
+        try { return orig.apply(this, a); } finally { const e = acc.calls[name] ??= [0, 0]; e[0]++; e[1] += performance.now() - s; }
+      };
+    }
+  }
   const tri = (mode, n, inst = 1) => { perf.calls++; if (mode === 4) perf.tris += (n / 3) * inst; };
   for (const [name, f] of [
     ['drawElements', (mode, n) => tri(mode, n)], ['drawElementsInstanced', (mode, n, _t, _o, i) => tri(mode, n, i)],
@@ -47,8 +65,8 @@ await page.addInitScript((counters) => {
       GPURenderPassEncoder.prototype[name] = function (n, inst = 1, ...r) { perf.calls++; perf.tris += (n / 3) * inst; return orig.call(this, n, inst, ...r); };
     }
   }
-}, !!process.env.FPS_S);
-const measure = (on) => page.evaluate((on) => { const p = window.__perf; if (on) { p.t.length = 0; p.dt.length = 0; } p.on = on; }, on);
+}, process.env.GLPROF ? 'glprof' : !!process.env.FPS_S);
+const measure = (on) => page.evaluate((on) => { const p = window.__perf; if (on) { p.t.length = 0; p.dt.length = 0; p.gl.length = 0; } p.on = on; }, on);
 // A lost device is only a console warning (host.ts); unless the script loses it on purpose below, it is a failure.
 let losing = false;
 watchPage(page, '', errors, () => losing);
@@ -176,9 +194,32 @@ try {
   // (all passes) and the F3 block. With FPS_ONLY=1 the run ends after this and the picture r3d-run-<level>-fps.png.
   if (process.env.FPS_S) {
     await page.waitForTimeout(1000);
+    // PHASE=walk|turn (#437): D held, or Z and X in turn every 0.5 s, during the window (default: standing). TRACE=<file.json>: a Chrome trace of
+    // the window (TRACE_CATS: comma-separated categories). GLPROF=1: after the window, every frame over 33 ms with its WebGL2 calls, and every frame
+    // with a rare call (a new buffer or texture, a non-uniform upload).
+    const phase = process.env.PHASE ?? 'stand';
+    if (process.env.TRACE) await browser.startTracing(page, { path: process.env.TRACE, screenshots: false, categories: (process.env.TRACE_CATS ?? 'devtools.timeline,disabled-by-default-devtools.timeline,v8,v8.execute,blink,cc,gpu,viz,toplevel,disabled-by-default-v8.gc,blink.user_timing').split(',') });
+    if (phase === 'walk') await page.keyboard.down('d');
     await measure(true);
     const a = await page.evaluate(() => ({ now: performance.now(), calls: window.__perf.calls, tris: window.__perf.tris }));
-    await page.waitForTimeout(Number(process.env.FPS_S) * 1000);
+    if (phase === 'turn') for (let i = 0; i < Number(process.env.FPS_S) * 2; i++) { await page.keyboard.press(i % 4 < 2 ? 'z' : 'x'); await page.waitForTimeout(500); }
+    else await page.waitForTimeout(Number(process.env.FPS_S) * 1000);
+    if (phase === 'walk') await page.keyboard.up('d');
+    if (process.env.TRACE) await browser.stopTracing();
+    if (process.env.GLPROF) {
+      const long = await page.evaluate((a) => {
+        const p = window.__perf, f = (o) => Object.entries(o.calls).map(([k, [n, ms]]) => `${k} ${n}/${ms.toFixed(1)}`).join(' ');
+        const typical = p.gl.slice(-60, -1).map((o) => Object.values(o.calls).reduce((s, [, ms]) => s + ms, 0));
+        const out = [`typical gl ms per frame (last 60): ${typical.sort((x, y) => x - y)[typical.length >> 1]?.toFixed(1)}`];
+        p.dt.forEach((d, i) => {
+          if (p.t[i] < a.now) return;
+          const r = p.gl[i].rare.filter((x) => !/^texSubImage2D\(0,0,0,/.test(x) || d > 33);
+          if (d > 33 || r.length) out.push(`${d > 33 ? 'LONG ' : ''}${d.toFixed(0)} ms at +${((p.t[i] - a.now) / 1000).toFixed(2)} s: ${d > 33 ? f(p.gl[i]) : ''} ${r.slice(0, 12).join(' ')}${r.length > 12 ? ` ...${r.length}` : ''}`);
+        });
+        return out;
+      }, a);
+      console.log(long.join('\n'));
+    }
     const m = await page.evaluate((a) => {
       const p = window.__perf, now = performance.now();
       const dts = p.dt.filter((_, i) => p.t[i] >= a.now).sort((x, y) => y - x);
