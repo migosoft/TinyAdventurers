@@ -40,7 +40,7 @@ const TUFT_STEP = 3, TUFT_FROM = 3, TUFT_FAR = 0.4, TUFT_NEAR = 0.08;
 /** The bed's zones by shore distance (px): the wet line at the water's edge is this wide either side, then sand, silt from here, mud from here; a stream's bed counts as this much deeper (silt and pebbles, not a sand path). */
 const WATERLINE = 2, SILT_FROM = 12, MUD_FROM = 30, STREAM_DEEPER = 9;
 /** With the bed's depth (`Shore.depthAt`): the shore distance counts up to SHELF_PX only (a shelf is sand and silt however wide), and every tile of depth below SHELF_DEPTH counts as DEPTH_PX more (the slope to the deep turns to mud). */
-const SHELF_PX = 17, SHELF_DEPTH = 0.8, DEPTH_PX = 22;
+const SHELF_PX = 17, SHELF_DEPTH = 0.8, DEPTH_PX = 22; // balancing
 /** The share of darker specks in the wet line. */
 const WET_SPECKS = 0.12;
 /** Stones: the cell (px) that holds one at most, and the share of cells that do: on the land, in the water's sparse and clustered parts, and the factor in the mud. */
