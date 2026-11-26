@@ -81,7 +81,7 @@ describe('buildModelOutlines, the built figures (#358)', () => {
   it('has model_lich, as tall as the figure at rest, with the collar or skull on top and the hem on the bottom row', () => {
     const f = frames['model_lich'];
     expect(f).toBeDefined();
-    expect(Object.keys(frames).length).toBe(keys.length + 1);
+    expect(Object.keys(frames).length).toBe(keys.length + 2);   // the lich and the demon
     expect(f.h).toBe(Math.ceil(LICH_TOP * LICH.unit));
     expect(f.w % 2).toBe(0);
     expect(f.w).toBeGreaterThanOrEqual(11);
@@ -89,5 +89,17 @@ describe('buildModelOutlines, the built figures (#358)', () => {
     for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) if (alpha(f.x + x, f.y + y)) (y < f.h / 4 ? top++ : 0, y === f.h - 1 ? bottom++ : 0);
     expect(top).toBeGreaterThan(0);
     expect(bottom).toBeGreaterThan(0);
+  });
+
+  it('has model_demon (#379): the standing demon with its wings, taller and far wider than its 54 px body, feet on the bottom rows', () => {
+    const f = frames['model_demon'];
+    expect(f).toBeDefined();
+    expect(f.h).toBeGreaterThanOrEqual(54);
+    expect(f.w % 2).toBe(0);
+    expect(f.w).toBeGreaterThan(54);
+    expect(f.w).toBeLessThanOrEqual(WIDTH);
+    let low = 0;
+    for (let y = f.h - 4; y < f.h; y++) for (let x = 0; x < f.w; x++) if (alpha(f.x + x, f.y + y)) low++;
+    expect(low).toBeGreaterThan(0);
   });
 });

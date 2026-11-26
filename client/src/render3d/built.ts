@@ -2,6 +2,7 @@
 // per-frame data of a built figure (`BuiltInst`, `BuiltDrawn`), and the registry of built figures by kind (`BUILT_OF_KIND`).
 // The registry imports `lich/figure.ts`, which imports only types from here; `lich/shape.ts` uses `newBuiltBuf`.
 import { KIND } from '../generated/defs';
+import { DEMON_FIGURE } from './demon/figure';
 import { LICH_FIGURE } from './lich/figure';
 
 export type V3 = [number, number, number];
@@ -65,8 +66,8 @@ export interface BuiltFigure {
   rest(): BuiltBuf;
 }
 
-/** The built figures by entity kind: the lich is the first. */
-export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE };
+/** The built figures by entity kind: the lich (#358) and the demon (#379). */
+export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE, [KIND.Demon]: DEMON_FIGURE };
 export const builtOf = (kind: number): BuiltFigure | null => BUILT_OF_KIND[kind] ?? null;
 
 /**

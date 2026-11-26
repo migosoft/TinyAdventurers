@@ -7,6 +7,8 @@ import { cardHeight, createKit, directRunner, type FigureKit } from './models/ki
 import { BONES } from './models/model';
 import { LICH, LICH_TOP } from './lich/shape';
 import { BUILT_OF_KIND, builtPoint } from './built';
+import { DEMON_FIGURE } from './demon/figure';
+import { DEMON } from './demon/shape';
 import { SOUTH } from './models/objectPose3d';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
@@ -1108,6 +1110,74 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       const stretch = 1 / Math.cos(Math.PI / 4), b = at0.built[0];
       expect(builtPoint([dx / b.scale, 0, 0], foot.x, foot.z, 0, 0, b.scale, stretch, [0, 0, 0])[0]).toBeCloseTo(g0[0], 6);
       expect(g0[1] - foot.foot).toBeGreaterThan(0);
+    });
+  });
+
+  describe('the demon as a built figure (#379)', () => {
+    const demon = (o: Partial<EntState> = {}) => ent(11, KIND.Demon, o);
+    const painted = (): FigureKit => ({ ...kit, picture: (k) => (k === 'demon' ? { w: 8, h: 8, data: new Uint8Array(4) } : null) });
+    const built = (ents: EntState[], k: FigureKit = painted(), fg = make()) => fg.frame(frame(ents), cam(), look({ kit: k, ...all }));
+
+    it('is a card without models, and the same cards while its picture is not ready', () => {
+      const plain = make().frame(frame([demon()]), cam(), look());
+      expect(plain.built).toEqual([]);
+      expect(owned(plain.cards, 11) + owned(plain.ghosts, 11)).toBeGreaterThan(0);
+      expect(built([demon()], noPicture())).toEqual(plain);
+    });
+
+    it('with the picture ready: one built instance with its hull, no card, no model, no halo, the hand, mouth and chest and the chest light', () => {
+      const plain = make().frame(frame([demon()]), cam(), look());
+      const fg = make(), out = built([demon()], painted(), fg);
+      expect(out.built.length).toBe(1);
+      const b = out.built[0];
+      expect(b).toMatchObject({ key: 'demon', owner: 11, stone: false, glow: null });
+      expect(b.scale).toBeCloseTo(DEMON.unit / TILE, 9);
+      expect(b.hull!.verts).toBeGreaterThan(0);
+      expect(b.hull === b.body).toBe(false);   // `===`: `not.toBe` compares the big buffers deeply for its message
+      expect(owned(out.cards, 11) + owned(out.ghosts, 11) + owned(out.decals, 11)).toBe(0);
+      expect(out.models).toEqual([]);
+      expect(out.glows.n).toBeLessThanOrEqual(plain.glows.n);
+      expect(out.casters.length).toBe(1);
+      const lf = out.figs[0], stretch = 1 / Math.cos(cam().pitch);
+      expect(lf.model).toBe(true);
+      expect(lf.gem).toBeUndefined();
+      // the mouth: the builder's anchor, for the breath's start and its smoke
+      const dr = DEMON_FIGURE.draw({ anim: ANIM.Idle, animT: 0, effects: 0, flags: 0, aim: 0, look: null, x: 0, z: 0 }, 0, DEMON_FIGURE.newMem());
+      const want = builtPoint(dr.anchors.mouth!, lf.x, lf.z, lf.foot, b.yaw, b.scale, stretch, [0, 0, 0]);
+      for (let i = 0; i < 3; i++) { expect(lf.mouth![i]).toBeCloseTo(want[i], 6); expect(lf.nostril![i]).toBeCloseTo(want[i], 6); }
+      expect(lf.mouth).not.toBe(lf.nostril);
+      expect(lf.chest![1]).toBeGreaterThan(lf.foot);
+      expect(lf.magic!.chest).toBeGreaterThan(0);   // the pulse at the chest, never 0 on a live demon
+      expect(lf.magic!.chest).toBeLessThanOrEqual(1);
+      expect(lf.magic!.mouth).toBe(0);
+      expect(fg.anchors.get(11)!.height).toBe(54);
+    });
+
+    it('a lifted body raises the name and the marks by the lift, in game px', () => {
+      const keep = BUILT_OF_KIND[KIND.Demon]!;
+      // the real figure, with the lift a flying pose will give
+      BUILT_OF_KIND[KIND.Demon] = { key: keep.key, picture: keep.picture, unit: keep.unit, top: keep.top, hem: keep.hem, newMem: keep.newMem, rest: keep.rest, draw: (s, dt, m) => { const d = keep.draw(s, dt, m); d.lift = 10; return d; } };
+      try {
+        const fg = make();
+        built([demon()], painted(), fg);
+        const a = fg.anchors.get(11)!;
+        expect(a.height).toBeCloseTo(54 + 10 * DEMON.unit, 9);
+        expect(a.head).toBeCloseTo(a.height, 9);
+        expect(a.tag).toBeCloseTo(a.height + 3, 9);
+      } finally { BUILT_OF_KIND[KIND.Demon] = keep; }
+    });
+
+    it('a petrified demon is stone and gives no chest light', () => {
+      const out = built([demon({ effects: 1 << EFFECT.Petrified })]);
+      expect(out.built[0].stone).toBe(true);
+      expect(out.figs[0].magic!.chest).toBe(0);
+    });
+
+    it('two demons give two instances with their own buffers', () => {
+      const out = built([demon(), ent(13, KIND.Demon, { x: at(2) })]);
+      expect(out.built.length).toBe(2);
+      expect(out.built[0].body.position === out.built[1].body.position).toBe(false);
+      expect(out.built[0].hull!.position === out.built[1].hull!.position).toBe(false);
     });
   });
 

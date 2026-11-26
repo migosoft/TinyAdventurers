@@ -69,6 +69,8 @@ import { figureMaterials, seeMaterials } from './models/nodes';
 import type { BuiltInst } from './built';
 import { LichLayer, type BuiltLayer } from './lich/layer';
 import { lichMaterials } from './lich/nodes';
+import { DemonLayer } from './demon/layer';
+import { demonMaterials } from './demon/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -771,8 +773,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   });
   // The built figures (#358): one layer per built key, made when the first instance of the key arrives (and its picture is ready). A new
   // key (#377, #379) is one more entry here. A view built after a lost device makes its own layers and pictures from the kit.
-  const builtFactories: Record<string, (paint: Texture) => BuiltLayer> = {
-    lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER),
+  // `mips`: whether the picture gets mip levels. Both do: without them the demon's thin cracks sparkle where the figure is drawn small
+  // (its material sorts the filtered alpha by ranges, demon/glow.ts).
+  const builtFactories: Record<string, { mips: boolean; layer: (paint: Texture) => BuiltLayer }> = {
+    lich: { mips: true, layer: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER) },
+    demon: { mips: true, layer: (paint) => new DemonLayer(scene, idScene, () => demonMaterials({ lighting, sight, shared: figures.shared, paint, idTex: idTarget.texture })) },
   };
   const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
   const builtByKey = new Map<string, BuiltInst[]>();
@@ -785,7 +790,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       let e = builtLayers.get(key);
       if (!e && list.length > 0 && f && builtFactories[key]) {
         const img = f.kit.picture(key);
-        if (img) { const paint = imageTexture(img, { mips: true }); builtLayers.set(key, e = { layer: builtFactories[key](paint), paint }); }
+        if (img) { const paint = imageTexture(img, { mips: builtFactories[key].mips }); builtLayers.set(key, e = { layer: builtFactories[key].layer(paint), paint }); }
       }
       e?.layer.frame(list, (id) => slotOf.get(id) ?? -1);
     }
