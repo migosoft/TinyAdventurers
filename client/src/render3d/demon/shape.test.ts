@@ -111,8 +111,10 @@ describe('the demon builder', () => {
     expect(M[BONE.thighR * 12 + 3]).toBeCloseTo(1, 4);   // not turned
     pose.joints[J.footR + FOOT.y] = 3; pose.joints[J.hipsY] = -2;
     placeBones(pose, M);
-    expect(M[BONE.footR * 12 + 1]).toBeCloseTo(RIG.hock[1] + 3, 4);
-    expect(M[BONE.shinR * 12]).toBeGreaterThan(RIG.stifle[0]);   // the knee goes forward
+    // the lifted foot's toes hang (the foot rule), which lifts the hock a little more
+    const hx = RIG.hock[0] - RIG.sole[0], hy = RIG.hock[1] - RIG.sole[1];
+    expect(M[BONE.footR * 12 + 1]).toBeCloseTo(3 - Math.sin(RIG.toesHang) * hx + Math.cos(RIG.toesHang) * hy, 4);
+    expect(M[BONE.shinR * 12]).toBeGreaterThan(Math.max(M[BONE.thighR * 12], M[BONE.footR * 12]) + 1);   // the knee bends forward
     expect(M[BONE.footL * 12 + 1]).toBeCloseTo(RIG.hock[1], 4);   // the other foot stays planted under the sunk hips
   });
 

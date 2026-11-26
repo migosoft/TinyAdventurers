@@ -7,13 +7,14 @@
 // Cost: `buildDemon` allocates nothing. Which point is which never changes, so `newDemonOut` writes the uvs, colours, looks and
 // indices once; a frame writes only the body's positions and normals and the hull's positions.
 //
-// In this state the wings are built at rest only (the spike's half-folded flat layout); the pose's `WingState`s are not read yet.
+// The wings' bones come from the pose's `WingState`s (`wingBones`, wings.ts); at rest they are the spike's half-folded flat layout.
 import { newBuiltBuf, type BuiltBuf, type V3 } from '../built';
 import { STAGES } from '../models/bones';
 import { DEMON_PAINT, skinUv, webUv } from './paint';
 import { CHEST_AT, EYES_AT, HANDS, LINE_UNIT, MOUTH_AT, PARTS, TAIL, TAIL_AT, WING_BONE, palm } from './parts';
 import { restPose, TAIL_LINKS, type DemonPose } from './pose';
 import { ARM, BONE, J, PIVOT, RIG, SLOT, SLOTS, hang, mul, placeBones, rotAxis, rotY, rotZ } from './skeleton';
+import { WING, WING_PT, newWingFrame, wingBones } from './wings';
 
 /**
  * `unit`: game px per builder unit (the head's top, 31.7 units, is 54 px). The buffer sizes are the builder's counts plus a quarter.
@@ -29,17 +30,11 @@ export const DEMON = {
 } as const;
 
 /**
- * A wing laid out flat in its own plane, half folded (the spike's): `s` out along the span from the root, `h` up, in units of `size`.
- * An arm from the root over the elbow to the wrist, four fingers fanning out and down from the wrist (a point each bows through, and
- * its tip), webbing between them and down the back to `backEnd`. `arc`: how deep each panel's edge hangs in between its two bones,
- * as a share of their length. `fold`: how deep each panel hangs behind the wing, like a curtain pushed together.
+ * What the builder makes of a wing's bones (their layout and motion: `WING`, wings.ts): bone tubes, and webbing between the fingers
+ * and down the back. `arc`: how deep each panel's edge hangs in between its two bones, as a share of their length.
  */
 export const WING_FLAT = {
-  size: 6, fold: 0.42, wrist: [1.0, 2.3], elbow: [0.95, 0.9], backEnd: [0.1, -2.4],
-  fingers: [[[3.5, 2.95], [6.2, 1.3]], [[3.1, 1.0], [4.7, -1.5]], [[2.3, -0.1], [3.1, -3.2]], [[1.45, -0.5], [1.5, -3.8]]],
   arc: [0.13, 0.12, 0.1, 0.06],
-  /** The span's direction and the way the plane's up leans (the right wing; z mirrors), and the root off the shoulders' middle. */
-  span: [-0.62, -0.1, 0.78], lean: [-0.2, 0.97, 0], root: [-3.8, -0.6, 2.8],
   /** The bones' radii, root to wrist and wrist to tip; the thumb claw's direction in the plane. */
   arm: [1.15, 0.8], finger: [0.7, 0.3], thumb: [0.25, 1],
   /** Cells of a panel of the webbing: from the wrist out to the edge, and from bone to bone. */
@@ -157,27 +152,11 @@ export function newDemonOut(): DemonOut {
 // ---------------------------------------------------------------- a wing's bones: 29 points
 // 0 the shoulder, 1 the elbow, 2 the wrist, 3.. the four fingers (6 points each, wrist to tip), 27 where the webbing ends on the back,
 // 28 the unit normal of the hand's plane (behind the wing).
-const W_FINGER = 3, W_BACK = 27, W_NORMAL = 28, WF = 29 * 3;
-const unit3 = (v: number[]): number[] => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
-/** The flat wing's points relative to the chest's pivot, rest pose. */
-function flatWing(sd: number): Float64Array {
-  const F = WING_FLAT, S = unit3([F.span[0], F.span[1], F.span[2] * sd]), k = F.lean[0] * S[0] + F.lean[1] * S[1] + F.lean[2] * S[2];
-  const U = unit3([F.lean[0] - k * S[0], F.lean[1] - k * S[1], F.lean[2] - k * S[2]]);
-  const root = [RIG.shoulder[0] + F.root[0] - RIG.chest[0], RIG.shoulder[1] + F.root[1] - RIG.chest[1], sd * F.root[2]];
-  const out = new Float64Array(WF);
-  const on = (i: number, s: number, h: number): void => { for (let a = 0; a < 3; a++) out[i * 3 + a] = root[a] + (S[a] * s + U[a] * h) * F.size; };
-  on(0, 0, 0); on(1, F.elbow[0], F.elbow[1]); on(2, F.wrist[0], F.wrist[1]); on(W_BACK, F.backEnd[0], F.backEnd[1]);
-  F.fingers.forEach(([mid, tip], i) => {
-    // a bow through `mid` to `tip`
-    const cx = 2 * mid[0] - (F.wrist[0] + tip[0]) / 2, cy = 2 * mid[1] - (F.wrist[1] + tip[1]) / 2;
-    for (let j = 0; j < 6; j++) { const t = j / 5, q = 1 - t; on(W_FINGER + i * 6 + j, q * q * F.wrist[0] + 2 * q * t * cx + t * t * tip[0], q * q * F.wrist[1] + 2 * q * t * cy + t * t * tip[1]); }
-  });
-  out[W_NORMAL * 3] = (S[1] * U[2] - S[2] * U[1]) * sd; out[W_NORMAL * 3 + 1] = (S[2] * U[0] - S[0] * U[2]) * sd; out[W_NORMAL * 3 + 2] = (S[0] * U[1] - S[1] * U[0]) * sd;
-  return out;
-}
-const REST_WING = [flatWing(1), flatWing(-1)];
+const W_FINGER = WING_PT.finger, W_BACK = WING_PT.back, W_NORMAL = WING_PT.normal, WF = 29 * 3;
+/** A wing's bones in the chest's frame, before the chest places them. */
+const WB = newWingFrame();
 /** The thumb claw's turn from the forearm's line towards the span, in the wing's plane. */
-const THUMB_TURN = Math.atan2(WING_FLAT.thumb[0], WING_FLAT.thumb[1]) - Math.atan2(WING_FLAT.wrist[0] - WING_FLAT.elbow[0], WING_FLAT.wrist[1] - WING_FLAT.elbow[1]);
+const THUMB_TURN = Math.atan2(WING_FLAT.thumb[0], WING_FLAT.thumb[1]) - Math.atan2(WING.flat.wrist[0] - WING.flat.elbow[0], WING.flat.wrist[1] - WING.flat.elbow[1]);
 
 // ---------------------------------------------------------------- curves: three's centripetal Catmull-Rom, as `models/tubes.ts` sweeps its tubes
 const MAXP = 8;
@@ -298,8 +277,9 @@ function aim(M: Float32Array, f: number, ox: number, oy: number, oz: number, xx:
 
 // ---------------------------------------------------------------- the webbing
 // per column of a panel: how far the edge hangs in between the bones, and how deep the fold behind the wing is there
-const ARCW = new Float64Array(NW + 1), HANG = new Float64Array(NW + 1);
-for (let c = 0; c <= NW; c++) { const w = c / NW; ARCW[c] = 4 * w * (1 - w); HANG[c] = Math.sin(Math.PI * w) + WING_FLAT.ripple * Math.sin(3 * Math.PI * w); }
+// and the one bow the air blows it into
+const ARCW = new Float64Array(NW + 1), HANG = new Float64Array(NW + 1), BELLY = new Float64Array(NW + 1);
+for (let c = 0; c <= NW; c++) { const w = c / NW; ARCW[c] = 4 * w * (1 - w); BELLY[c] = Math.sin(Math.PI * w); HANG[c] = BELLY[c] + WING_FLAT.ripple * Math.sin(3 * Math.PI * w); }
 let AX = 0, AY = 0, AZ = 0;
 /** A point of the webbing's ray `i` at `t`: a finger (0..3, wrist to tip), or the inner edge (4: from the wrist down the arm to the root, then down the back). */
 function ray(M: Float32Array, wf: number, i: number, t: number): void {
@@ -316,13 +296,14 @@ function ray(M: Float32Array, wf: number, i: number, t: number): void {
 }
 /**
  * Four panels, each ruled from one bone to the next, from the wrist out to the edge. The edge hangs in an arc between the finger tips;
- * the webbing has more cloth than room, so every panel hangs in a fold behind the wing (`fold` deep).
+ * the webbing has more cloth than room, so every panel hangs in a fold behind the wing (`slack` deep, in units), and the air
+ * bellies it (`billow`, units: behind the wing or, below 0, in front of it).
  */
-function web(b: BuiltBuf, M: Float32Array, wf: number, v0: number, i0: number, fold: number): void {
-  const p = b.position, nx = M[wf + W_NORMAL * 3], ny = M[wf + W_NORMAL * 3 + 1], nz = M[wf + W_NORMAL * 3 + 2], deep = fold * WING_FLAT.size;
+function web(b: BuiltBuf, M: Float32Array, wf: number, v0: number, i0: number, slack: number, billow: number): void {
+  const p = b.position, nx = M[wf + W_NORMAL * 3], ny = M[wf + W_NORMAL * 3 + 1], nz = M[wf + W_NORMAL * 3 + 2];
   let o = v0 * 3;
   for (let i = 0; i < 4; i++) for (let a = 0; a <= NT; a++) for (let c = 0; c <= NW; c++, o += 3) {
-    const w = c / NW, te = (a / NT) * (1 - WING_FLAT.arc[i] * ARCW[c]), d = deep * te * HANG[c];
+    const w = c / NW, te = (a / NT) * (1 - WING_FLAT.arc[i] * ARCW[c]), d = te * (slack * HANG[c] + billow * BELLY[c]);
     ray(M, wf, i, te);
     const x = AX, y = AY, z = AZ;
     ray(M, wf, i + 1, te);
@@ -370,17 +351,19 @@ export function buildDemon(pose: DemonPose, out: DemonOut): void {
 
   // the wings: their bones in the chest's frame, the claws on the finger tips and the wrist
   for (let side = 0; side < 2; side++) {
-    const wf = SLOTS * 12 + side * WF, rest = REST_WING[side], w = WINGS[side], c = BONE.chest * 12;
+    const wf = SLOTS * 12 + side * WF, rest = WB, w = WINGS[side], c = BONE.chest * 12, wing = side === 0 ? pose.wingR : pose.wingL;
+    wingBones(wing, w.sd, WB);
     for (let i = 0; i < W_NORMAL; i++) point(M, BONE.chest, rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2], M, wf + i * 3);
     const n = wf + W_NORMAL * 3, r = W_NORMAL * 3;
     M[n] = M[c + 3] * rest[r] + M[c + 6] * rest[r + 1] + M[c + 9] * rest[r + 2]; M[n + 1] = M[c + 4] * rest[r] + M[c + 7] * rest[r + 1] + M[c + 10] * rest[r + 2]; M[n + 2] = M[c + 5] * rest[r] + M[c + 8] * rest[r + 1] + M[c + 11] * rest[r + 2];
     RAD[0] = WING_FLAT.arm[0]; RAD[1] = (WING_FLAT.arm[0] + WING_FLAT.arm[1]) / 2; RAD[2] = WING_FLAT.arm[1];
     prep(M, wf, 3, CO, 0);
-    sweep(body, hull, w.arm, CO, 0, 3, 0, 0, 1);
+    // the rings start against the wing's normal: no bone ever runs along it, wherever the wing points
+    sweep(body, hull, w.arm, CO, 0, 3, M[n], M[n + 1], M[n + 2]);
     for (let k = 0; k < 6; k++) RAD[k] = WING_FLAT.finger[0] + (WING_FLAT.finger[1] - WING_FLAT.finger[0]) * k / 5;
     for (let i = 0; i < 4; i++) {
       prep(M, wf + (W_FINGER + i * 6) * 3, 6, FC, i * 60);
-      sweep(body, hull, w.fingers[i], FC, i * 60, 6, 0, 0, 1);
+      sweep(body, hull, w.fingers[i], FC, i * 60, 6, M[n], M[n + 1], M[n + 2]);
       curve(FC, i * 60, 6, 1);
       aim(M, SLOT.wingClaw + side * 5 + i, CX, CY, CZ, DX, DY, DZ, M[n], M[n + 1], M[n + 2]);
     }
@@ -392,7 +375,7 @@ export function buildDemon(pose: DemonPose, out: DemonOut): void {
     const d = gx * fx + gy * fy + gz * fz; gx -= fx * d; gy -= fy * d; gz -= fz * d;
     const gl = Math.hypot(gx, gy, gz) || 1, ct = Math.cos(THUMB_TURN), st = Math.sin(THUMB_TURN) / gl;
     aim(M, SLOT.wingClaw + side * 5 + 4, M[wf + 6], M[wf + 7], M[wf + 8], fx * ct + gx * st, fy * ct + gy * st, fz * ct + gz * st, M[n], M[n + 1], M[n + 2]);
-    web(body, M, wf, w.web, w.webIndex, WING_FLAT.fold);
+    web(body, M, wf, w.web, w.webIndex, wing.hand.fold * WING.slack * WING.flat.size, wing.billow * WING.flat.size);
   }
 
   // the rigid parts, each by its frame

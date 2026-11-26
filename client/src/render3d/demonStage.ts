@@ -9,7 +9,8 @@
 import { EFFECT, KIND, SIDE } from '../generated/defs';
 import { TERRAIN } from '../game/terrain-layers';
 import { builtOf } from './built';
-import { actPeriod, DEMON_ACTS, demonAct, type DemonAct } from './demonScript';
+import { DEMON_DEV } from './demon/figure';
+import { actPeriod, DEMON_ACTS, demonAct, demonDev, type DemonAct } from './demonScript';
 import { fxEnt } from './fxStage';
 import type { Host, Stage } from './host';
 import { BOSS_ID, createHallStage, HALL_CENTRE, hallMap, queryNum, type HallPool } from './lichStage';
@@ -56,10 +57,11 @@ export function createDemonStage(assets: Assets, p: R3dParams, search: string, h
       toggle('Frozen', 'frozen'), toggle('Chilled', 'chilled'), toggle('Stone', 'stone'),
       { name: 'Work light', pressed: () => host!.params.light === 'work', press: () => { host!.setParams({ ...host!.params, light: host!.params.light === 'work' ? 'game' : 'work' }); } },
     ],
-    sim(_dt, _t, knight): void {
-      demon.aim = opts.face ?? Math.atan2(knight.z - demon.z, knight.x - demon.x);
+    sim(_dt, t, knight): void {
+      demon.aim = (opts.face ?? Math.atan2(knight.z - demon.z, knight.x - demon.x)) + demonDev(state.act, actClock(t)).turn;
     },
     ents(t) {
+      DEMON_DEV.fold = demonDev(state.act, actClock(t)).fold;
       if (!opts.demon) return { ents: [], drain: null };
       const effects = (state.frozen ? 1 << EFFECT.Frozen : 0) | (state.chilled ? 1 << EFFECT.Chilled : 0) | (state.stone ? 1 << EFFECT.Petrified : 0);
       return { ents: [fxEnt(BOSS_ID, KIND.Demon, demon.x, demon.z, { side: SIDE.Hostile, aim: demon.aim, ...demonAct(state.act, actClock(t)), effects })], drain: null };

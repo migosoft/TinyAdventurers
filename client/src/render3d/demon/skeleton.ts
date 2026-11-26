@@ -24,6 +24,7 @@ export const RIG = {
   shoulder: [1.8, 26.0], shoulderZ: 4.9 * 1.55 + 1.1, elbow: 6.3, fore: 6.5,
   /** rad the jaw drops at `jaw` 1. */ jawOpen: 0.6,
   /** rad the flat palm is turned in towards the body (the spike's). */ palmTurn: 0.5,
+  /** rad the toes hang on a foot off the floor, and the height (units) from which they hang fully. */ toesHang: (35 * Math.PI) / 180, toesClear: 2.5,
 } as const;
 
 /**
@@ -43,7 +44,7 @@ export const TURN = 0, LEAN = 1, ROLL = 2;
  * fingers and of the `thumb` (0 the rest's loose claw, 1 a fist, below 0 spread flat).
  */
 export const ARM = { swing: 0, out: 1, twist: 2, elbow: 3, wristBend: 4, wristTurn: 5, curl: 6, thumb: 7 } as const;
-/** A foot's values: the foot point (model frame, y 0 on the floor) and `toes` (rad the toes hang down; 0 flat). */
+/** A foot's values: the foot point (model frame, y 0 on the floor) and `toes` (rad the toes hang down, on top of the foot rule: flat when planted, hanging `RIG.toesHang` off the floor). */
 export const FOOT = { x: 0, y: 1, z: 2, toes: 3 } as const;
 
 /** Each bone's pivot in the rest pose. */
@@ -116,13 +117,15 @@ function legBone(f: Float32Array, b: number, ox: number, oy: number, oz: number,
 }
 
 /**
- * A leg: the foot stands on its foot point (turned about it by `toes`), which gives the hock; the thigh and the shin reach it by
- * two-bone IK from the hip, the knee forward (the hips' front). A hock out of reach leaves the leg straight and takes the foot along.
+ * A leg: the foot stands on its foot point (turned about it by the toes' angle), which gives the hock; the thigh and the shin reach it
+ * by two-bone IK from the hip, the knee forward (the hips' front). A hock out of reach leaves the leg straight and takes the foot along.
+ * The foot rule: flat on the floor, the toes hanging the higher the foot point is above it (`lift`: how high the whole body hangs).
  */
-function leg(f: Float32Array, j: Float32Array, at: number, sd: number, thigh: number, shin: number, foot: number): void {
+function leg(f: Float32Array, j: Float32Array, at: number, sd: number, thigh: number, shin: number, foot: number, lift: number): void {
   const h = BONE.hips * 12, z = sd * RIG.legZ;
   const hx = f[h] + f[h + 9] * z, hy = f[h + 1] + f[h + 10] * z, hz = f[h + 2] + f[h + 11] * z;
-  const c = Math.cos(j[at + FOOT.toes]), s = Math.sin(j[at + FOOT.toes]);
+  const up = Math.max(0, Math.min(1, (j[at + FOOT.y] + lift) / RIG.toesClear)), toes = j[at + FOOT.toes] + RIG.toesHang * up * up * (3 - 2 * up);
+  const c = Math.cos(toes), s = Math.sin(toes);
   let kx = j[at + FOOT.x] + c * HOCK_X + s * HOCK_Y, ky = j[at + FOOT.y] - s * HOCK_X + c * HOCK_Y, kz = j[at + FOOT.z];
   let dx = kx - hx, dy = ky - hy, dz = kz - hz;
   const far = Math.hypot(dx, dy, dz) || 1e-6, d = Math.min(THIGH + SHIN - 1e-4, Math.max(Math.abs(THIGH - SHIN) + 1e-4, far));
@@ -160,6 +163,6 @@ export function placeBones(pose: DemonPose, out: Float32Array): void {
     // the wrist bends about the line of the knuckles, towards the palm
     child(out, arm + 2, arm + 1, mul(rotY(sd * j[a + ARM.wristTurn], A), rotAxis(sd * Math.cos(RIG.palmTurn), 0, -Math.sin(RIG.palmTurn), j[a + ARM.wristBend], B), L));
   }
-  leg(out, j, J.footR, 1, BONE.thighR, BONE.shinR, BONE.footR);
-  leg(out, j, J.footL, -1, BONE.thighL, BONE.shinL, BONE.footL);
+  leg(out, j, J.footR, 1, BONE.thighR, BONE.shinR, BONE.footR, pose.lift);
+  leg(out, j, J.footL, -1, BONE.thighL, BONE.shinL, BONE.footL, pose.lift);
 }
