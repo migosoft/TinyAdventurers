@@ -177,6 +177,16 @@ describe('the bank (#360)', () => {
     expect(mean(6, 6)).toBeLessThan(mean(6, 4) - 10);
   });
 
+  it('with the bed\'s depth the mud lies where the bed is deep: a shelf\'s middle stays light (#431)', () => {
+    const middle = (depth: number): number => {
+      const img = paintGround(pondMap(), 4, { ...SHORE, depthAt: () => depth });
+      let s = 0;
+      for (let y = 6 * TILE; y < 7 * TILE; y++) for (let x = 6 * TILE; x < 7 * TILE; x++) { const i = (y * img.w + x) * 4; s += img.data[i] + img.data[i + 1] + img.data[i + 2]; }
+      return s / (TILE * TILE * 3);
+    };
+    expect(middle(0.7)).toBeGreaterThan(middle(2.3) + 10);
+  });
+
   it('flowerSpots avoids the bank', () => {
     const m = pondMap(), spots = flowerSpots(m, 5, SHORE);
     expect(spots.length).toBeGreaterThan(100);

@@ -18,6 +18,8 @@ export const NONE = 0, GRASS = 1, THICKET = 2, ROAD = 3, BANK = 4;
 /** What the painter reads of a pond's drawn shore (the view's `PondField`), at tile points: tiles inside the drawn water (0 on land), tiles from it on land (0 in it), and how much of the pond's body is around (0..1; 0 along a stream). */
 export interface Shore {
   shoreAt(x: number, z: number): number; bankAt(x: number, z: number): number; bodyAt(x: number, z: number): number;
+  /** The bed's depth (tiles): with it the mud lies where the bed is deep, not wherever the shore is far (#431). */
+  depthAt?(x: number, z: number): number;
   /** The bridge decks (tile rects): the view map has water under them, but a deck that carries the road keeps the road's paint where the drawn shore is dry. */
   decks?: readonly { x0: number; z0: number; x1: number; z1: number; road: boolean }[];
 }
@@ -37,6 +39,8 @@ const BANK_MIN = 0.25, BANK_WOBBLE = 11, BANK_FRINGE = 2;
 const TUFT_STEP = 3, TUFT_FROM = 3, TUFT_FAR = 0.4, TUFT_NEAR = 0.08;
 /** The bed's zones by shore distance (px): the wet line at the water's edge is this wide either side, then sand, silt from here, mud from here; a stream's bed counts as this much deeper (silt and pebbles, not a sand path). */
 const WATERLINE = 2, SILT_FROM = 12, MUD_FROM = 30, STREAM_DEEPER = 9;
+/** With the bed's depth (`Shore.depthAt`): the shore distance counts up to SHELF_PX only (a shelf is sand and silt however wide), and every tile of depth below SHELF_DEPTH counts as DEPTH_PX more (the slope to the deep turns to mud). */
+const SHELF_PX = 17, SHELF_DEPTH = 0.8, DEPTH_PX = 22;
 /** The share of darker specks in the wet line. */
 const WET_SPECKS = 0.12;
 /** Stones: the cell (px) that holds one at most, and the share of cells that do: on the land, in the water's sparse and clustered parts, and the factor in the mud. */
@@ -52,8 +56,8 @@ const DIRT_D: Rgb = [176, 112, 74], DIRT_C: Rgb = [143, 64, 41], DIRT_B: Rgb = [
 const RIM: Rgb = [70, 56, 40], RIM_MIX = 0.4;
 export const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
 
-// the pack's earth browns (dark to pale) and stone greys
-const DAMP: Rgb = [72, 59, 58], EARTH: Rgb = [119, 92, 85], SAND: Rgb = [170, 141, 122], PALE: Rgb = [211, 191, 169];
+// the pack's earth browns (dark to pale), a little warmer than the pack's (less blue in them: the bed read as grey, #431), and stone greys
+const DAMP: Rgb = [78, 58, 48], EARTH: Rgb = [128, 94, 74], SAND: Rgb = [180, 144, 112], PALE: Rgb = [218, 192, 156];
 const STONE: Rgb = [123, 137, 148], STONE_LIT: Rgb = [182, 203, 207], STONE_DARK: Rgb = [73, 73, 73];
 
 const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : GRASS);
@@ -223,8 +227,8 @@ export class GroundPainter {
 
   /**
    * A bank pixel's colour, by where it lies across the shore (`shorePx`): on the land sand with patches of earth, a line of dark soil
-   * under the turf's edge and wet, darker sand at the water; in the water pale sand in the shallows, then silt and, three tiles in, the
-   * mud of the deep middle. The zones' borders wander with the noise and are dithered. Stones lie scattered over all of it, in clusters.
+   * under the turf's edge and wet, darker sand at the water; in the water pale sand in the shallows, then silt and the mud of the deep middle
+   * (where the bed is deep, when the shore tells its depth, #431: a wide shelf stays sand and silt; else two tiles in). The zones' borders wander with the noise and are dithered. Stones lie scattered over all of it, in clusters.
    */
   private bank(x: number, y: number): Rgb {
     const { seed } = this, shore = this.shore!;
@@ -233,7 +237,8 @@ export class GroundPainter {
     const stream = 1 - Math.min(1, shore.bodyAt((x + 0.5) / TILE, (y + 0.5) / TILE) * 2);
     const fine = this.nBed(x, y), dither = hash(x, y, seed + 21);
     // the depth the paint goes by: the shore distance, pushed about by the two noises (px) so no zone follows the outline
-    const t = u + stream * STREAM_DEEPER + (this.nBedBig(x, y) - 0.5) * 12 + (fine - 0.5) * 5 + (dither - 0.5) * 4;
+    const depth = u > 0 && shore.depthAt ? shore.depthAt((x + 0.5) / TILE, (y + 0.5) / TILE) : null;
+    const t = (depth === null ? u : Math.min(u, SHELF_PX) + Math.max(0, depth - SHELF_DEPTH) * DEPTH_PX) + stream * STREAM_DEEPER +(this.nBedBig(x, y) - 0.5) * 12 + (fine - 0.5) * 5 + (dither - 0.5) * 4;
 
     // a stone: one per STONE_CELL px cell at most; in clusters (the big noise), and all along a stream
     const cx = Math.floor(x / STONE_CELL), cy = Math.floor(y / STONE_CELL);

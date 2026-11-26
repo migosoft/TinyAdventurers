@@ -7,11 +7,11 @@ import { FISH, FISH_AWAY, FISH_CAP, FISH_STRIDE, Fish } from './fish';
 import { pondField, type PondField } from './pondField';
 import { inside } from './pondShape';
 
-/** A pond of one round blob of radius `r` at (10.5, 10.5) on a 21 x 21 map, its tiles cut as the server cuts them. */
+/** A pond of one round blob of radius `r` at (10.5, 10.5) on a 21 x 21 map, its tiles cut about as the server cuts them: deep 2.4 tiles inside. */
 function round(r: number): PondField {
   const pond: PondInfo = { seed: 11, blobs: [[10.5, 10.5, r, r]], streams: [], bridges: [] };
   const m = new TileMap(21, 21, new Uint8Array(21 * 21).fill(TILE_ID.Floor));
-  for (let z = 0; z < 21; z++) for (let x = 0; x < 21; x++) if (inside(pond.blobs, pond.seed, x + 0.5, z + 0.5) > 0) m.set(x, z, TILE_ID.ShallowWater);
+  for (let z = 0; z < 21; z++) for (let x = 0; x < 21; x++) if (inside(pond.blobs, pond.seed, x + 0.5, z + 0.5) > 0) m.set(x, z, inside(pond.blobs, pond.seed, x + 0.5, z + 0.5) >= 2.4 ? TILE_ID.DeepWater : TILE_ID.ShallowWater);
   return pondField(m, pond);
 }
 const demoField = (i: number): PondField => {
@@ -35,7 +35,8 @@ describe('Fish (#360)', () => {
       const waders = [{ x: start[0].x, z: start[0].z }];
       for (let s = 0; s < 60 * 40; s++) {
         fish.step(DT, s > 600 && s < 1200 ? waders : []); // ten seconds of fright in between
-        for (const f of list(fish)) expect(field.depthAt(f.x, f.z)).toBeGreaterThanOrEqual(FISH.deep);
+        // (the positions are read back as 32-bit floats: on the slope to the deep that is worth a little depth)
+        for (const f of list(fish)) expect(field.depthAt(f.x, f.z)).toBeGreaterThanOrEqual(FISH.deep - 1e-4);
       }
       // ... and they do swim: every one has left its place
       list(fish).forEach((f, i) => expect(Math.hypot(f.x - start[i].x, f.z - start[i].z), `fish ${i}`).toBeGreaterThan(0.2));

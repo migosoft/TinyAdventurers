@@ -5,7 +5,7 @@ import demo from '../../generated/pond-demo.json';
 import { TileMap } from '../../sim/map';
 import { DEEP_BED, SHALLOW_BED, bedAt, inDipMesh, isWater, surfaceAt, walkBedAt, waterMaskAt, WATER_LEVEL } from '../dips/shape';
 import { waterCell } from '../water/waterMesh';
-import { DECK_Y, DEEP_MIN, pondField, pondViewMap, setPondField } from './pondField';
+import { DECK_Y, DEEP_MIN, SHELF_BED, pondField, pondViewMap, setPondField } from './pondField';
 import { inside } from './pondShape';
 
 const NONE: PondInfo = { seed: 1, blobs: [], streams: [], bridges: [] };
@@ -16,6 +16,20 @@ function tilesOf(pond: PondInfo, w = 21, h = 21): TileMap {
   const m = new TileMap(w, h, new Uint8Array(w * h).fill(TILE_ID.Floor));
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) if (inside(pond.blobs, pond.seed, x + 0.5, z + 0.5) > 0) m.set(x, z, TILE_ID.ShallowWater);
   return m;
+}
+/** The same with a deep middle: DeepWater where the tile's centre is `deepIn` tiles inside (about the server's rule). */
+function deepTilesOf(pond: PondInfo, deepIn = 2.4): TileMap {
+  const m = tilesOf(pond);
+  for (let z = 0; z < m.h; z++) for (let x = 0; x < m.w; x++) if (inside(pond.blobs, pond.seed, x + 0.5, z + 0.5) >= deepIn) m.set(x, z, TILE_ID.DeepWater);
+  return m;
+}
+/** Tiles from (x, z) to the nearest DeepWater tile of `map` (0 inside one), among the tiles within 3; Infinity: none. */
+function toDeepTile(map: TileMap, x: number, z: number): number {
+  let best = Infinity;
+  for (let tz = Math.floor(z) - 3; tz <= Math.floor(z) + 3; tz++) for (let tx = Math.floor(x) - 3; tx <= Math.floor(x) + 3; tx++) {
+    if (map.get(tx, tz) === TILE_ID.DeepWater) best = Math.min(best, Math.hypot(Math.max(tx - x, 0, x - tx - 1), Math.max(tz - z, 0, z - tz - 1)));
+  }
+  return best;
 }
 
 const level = (i: number) => {
@@ -56,17 +70,41 @@ describe('pondField (#360)', () => {
     }
   });
 
-  it('the bed slopes evenly', () => {
-    const f = pondField(tilesOf(ROUND), ROUND);
-    let last = -1;
-    for (let x = 4; x <= 10.5; x += 0.05) { const d = f.depthAt(x, 10.5); expect(d).toBeGreaterThanOrEqual(last - 0.02); last = d; }
-    expect(f.depthAt(10.5, 10.5)).toBe(DEEP_BED);
-    // the depth is a function of the shore distance: SHALLOW_BED at 0.5 tiles, DEEP_BED from 2.5
+  it('the bed is a shelf over shallow tiles and deep only around the deep ones (#431)', () => {
+    // all shallow: a shelf from shore to shore, never deeper than SHELF_BED
+    const flat = pondField(tilesOf(ROUND), ROUND);
     for (let z = 4; z < 17; z += 0.23) for (let x = 4; x < 17; x += 0.23) {
-      const s = f.shoreAt(x, z), d = f.depthAt(x, z);
+      const s = flat.shoreAt(x, z), d = flat.depthAt(x, z);
+      expect(d).toBeLessThanOrEqual(SHELF_BED);
       if (Math.abs(s - 0.5) < 0.02) expect(d).toBeCloseTo(SHALLOW_BED, 1);
-      if (s >= 2.5) expect(d).toBe(DEEP_BED);
+      if (s >= 0.5) expect(d).toBeGreaterThanOrEqual(SHALLOW_BED - 1e-6);
     }
+    // a deep middle: down to DEEP_BED there, the shelf around it, and no step between them
+    const m = deepTilesOf(ROUND), f = pondField(m, ROUND);
+    expect(m.get(10, 10)).toBe(TILE_ID.DeepWater);
+    expect(f.depthAt(10.5, 10.5)).toBeCloseTo(DEEP_BED, 5);
+    let last = f.depthAt(4, 10.5);
+    for (let x = 4; x <= 10.5; x += 0.05) { const d = f.depthAt(x, 10.5); expect(Math.abs(d - last)).toBeLessThan(0.25); last = d; }
+    for (let z = 4; z < 17; z += 0.23) for (let x = 4; x < 17; x += 0.23) {
+      const far = toDeepTile(m, x, z), d = f.depthAt(x, z);
+      if (far >= 1.5) expect(d).toBeLessThanOrEqual(SHELF_BED);
+      expect(d).toBeLessThanOrEqual(DEEP_BED);
+    }
+  });
+
+  it('on the demo levels: a shallow tile away from the deep ones is shelf, a deep tile is deep (#431)', () => {
+    let shelf = 0, deep = 0;
+    for (let i = 0; i < demo.length; i++) {
+      const { rules, pond } = level(i);
+      const view = pondViewMap(rules, pond), f = pondField(rules, pond, view);
+      for (let z = 0; z < rules.h; z++) for (let x = 0; x < rules.w; x++) {
+        const t = view.get(x, z), d = f.depthAt(x + 0.5, z + 0.5);
+        if (t === TILE_ID.DeepWater) { expect(d).toBeGreaterThanOrEqual(DEEP_MIN); deep++; }
+        if (t === TILE_ID.ShallowWater && toDeepTile(view, x + 0.5, z + 0.5) >= 1.5) { expect(d, `level ${i} tile ${x},${z}`).toBeLessThanOrEqual(SHELF_BED); shelf++; }
+      }
+    }
+    expect(shelf).toBeGreaterThan(100);
+    expect(deep).toBeGreaterThan(40);
   });
 
   it('on the demo levels: deep tiles are deep, the body\'s tiles are drawn wet, the drawn water keeps to the water tiles', () => {

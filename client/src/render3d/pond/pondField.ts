@@ -18,6 +18,8 @@ export interface Deck { x0: number; z0: number; x1: number; z1: number; alongX: 
  * when its centre is inside, so its centre is drawn wet and the shore lies within about 0.7 tiles of the tile edges), a stream is a
  * brook along a smooth curve through its points, opening into the pond. The drawn water never lies more than CLIP_FAR tiles outside
  * the water tiles (the view map's: a pond bridge's tiles are water), and every DeepWater tile's centre is at least DEEP_MIN deep.
+ * The bed follows the tiles too (#431): over ShallowWater it is a shelf, at most SHELF_BED deep, and it falls to DEEP_BED only around
+ * the DeepWater tiles, so what is drawn deep is what the rules call deep.
  * A brook cuts the corners of its tile staircase: a stream tile's centre may be drawn dry and a land tile's wet.
  */
 export interface PondField {
@@ -29,7 +31,11 @@ export interface PondField {
   wetAt(x: number, z: number): number;
   /** How much of the pond's body is around, 0..1: the shape's `inside` as a linear ramp (0.5 on a straight shore of the pond, 0 along a stream away from it). */
   bodyAt(x: number, z: number): number;
-  /** Bed depth below the ground, >= 0: SHALLOW_BED at 0.5 tiles from the drawn shore, falling evenly to DEEP_BED at 2.5 tiles. */
+  /**
+   * Bed depth below the ground, >= 0. A shelf: SHALLOW_BED at 0.5 tiles from the drawn shore (a brook is no deeper), then gently uneven
+   * and a little deeper with the shore distance, at most SHELF_BED. Around the DeepWater tiles it falls to DEEP_BED: the slope starts
+   * about DEEP_OUT tiles outside their edge and is down DEEP_INSIDE tiles inside it.
+   */
   depthAt(x: number, z: number): number;
   /** The current: direction and strength 0..1. 1 on a stream, fading to 0 over 3 tiles inside the pond. */
   flowAt(x: number, z: number): { x: number; z: number; s: number };
@@ -43,7 +49,10 @@ export interface PondField {
 }
 
 export const DECK_Y = 0.14; // tiles above the ground // balancing
-const SHORE_SHALLOW = 0.5, SHORE_DEEP = 2.5; // tiles from the shore where the bed is SHALLOW_BED / DEEP_BED // balancing
+const SHORE_SHALLOW = 0.5, SHORE_SHELF = 3; // tiles from the shore where the bed is SHALLOW_BED, and where the shelf has reached its depth // balancing
+export const SHELF_BED = 0.8; // the shelf's greatest depth: the bed over ShallowWater away from the deep tiles // balancing
+const SHELF_WAVE = 2.3, SHELF_EVEN = 0.45; // the shelf's unevenness: the size of its humps (tiles) and the share of its fall that is the same everywhere // balancing
+const DEEP_OUT = 0.9, DEEP_INSIDE = 0.8, DEEP_WOBBLE = 0.3, DEEP_WAVE = 1.7; // tiles: the slope to the deep starts this far outside the DeepWater tiles' edge and is down this far inside it; its line strays this far, over humps of this size // balancing
 const FIELD_RES = 8; // samples per tile of the field's grids
 const MARGIN = 3; // tiles of land the grids keep around the water
 const BODY_SOFT = 0.5, BODY_WIDE = 1.5; // tiles of the shape's `inside` over which the body's mask (and `bodyAt`) goes from 0.5 on the shore to 1 and to 0
@@ -62,11 +71,19 @@ const DECK_GROW = 0.5; // a deck reaches this far past its rect at both ends of 
 const FAR = 1e12; // stands for infinity in the distance transform
 const smooth = (t: number) => { const u = Math.min(1, Math.max(0, t)); return u * u * (3 - 2 * u); };
 
-/** The bed depth of a point `shore` tiles from the shore. */
-function depthOf(shore: number): number {
+/**
+ * The bed depth at (x, z), `shore` tiles from the shore and `deep` tiles inside the DeepWater tiles (negative: outside them): the
+ * shelf, and the slope from it to DEEP_BED around the deep tiles.
+ */
+function depthOf(seed: number, x: number, z: number, shore: number, deep: number): number {
   if (shore <= 0) return 0;
   if (shore <= SHORE_SHALLOW) return SHALLOW_BED * smooth(shore / SHORE_SHALLOW);
-  return SHALLOW_BED + (DEEP_BED - SHALLOW_BED) * Math.min(1, (shore - SHORE_SHALLOW) / (SHORE_DEEP - SHORE_SHALLOW));
+  const far = Math.min(1, (shore - SHORE_SHALLOW) / (SHORE_SHELF - SHORE_SHALLOW));
+  const shelf = SHALLOW_BED + (SHELF_BED - SHALLOW_BED) * far * (SHELF_EVEN + (1 - SHELF_EVEN) * noise2(seed ^ 0x51f3, x / SHELF_WAVE, z / SHELF_WAVE));
+  const g = deep + (noise2(seed ^ 0x2d07, x / DEEP_WAVE, z / DEEP_WAVE) - 0.5) * 2 * DEEP_WOBBLE;
+  // the slope never starts nearer the shore than the shelf's rim
+  const down = smooth((g + DEEP_OUT) / (DEEP_OUT + DEEP_INSIDE)) * smooth((shore - SHORE_SHALLOW) / SHORE_SHALLOW);
+  return shelf + (DEEP_BED - shelf) * down;
 }
 
 /** Squared distance transform of a 1D row (Felzenszwalb): `f` in, result in `out`. */
@@ -180,10 +197,15 @@ export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): Po
   const fromTiles = distance((k) => tileWater[k] === 1);
   for (let k = 0; k < W * H; k++) mask[k] *= 1 - smooth((fromTiles[k] / R - CLIP_NEAR) / (CLIP_FAR - CLIP_NEAR));
   // A hollow under every DeepWater tile (where the wobbled shore comes near one): a little deeper than DEEP_MIN at the centre, because the bilinear read between samples loses some.
-  const deepFloor = new Float32Array(W * H);
+  const deepFloor = new Float32Array(W * H), tileDeep = new Uint8Array(W * H);
   for (let tz = 0; tz < bh; tz++) for (let tx = 0; tx < bw; tx++) {
-    if (view.get(ox + tx, oz + tz) === TILE_ID.DeepWater) stamp(deepFloor, ox + tx + 0.5, oz + tz + 0.5, DEEP_PIT, (d) => DEEP_MIN * 1.15 * smooth(1 - d / DEEP_PIT));
+    if (view.get(ox + tx, oz + tz) !== TILE_ID.DeepWater) continue;
+    for (let j = tz * R; j < tz * R + R; j++) for (let i = tx * R; i < tx * R + R; i++) tileDeep[j * W + i] = 1;
+    stamp(deepFloor, ox + tx + 0.5, oz + tz + 0.5, DEEP_PIT, (d) => DEEP_MIN * 1.15 * smooth(1 - d / DEEP_PIT));
   }
+  // Tiles inside the DeepWater tiles (negative: outside them; far outside where the pond has none).
+  const deepIn = distance((k) => tileDeep[k] === 0), deepOut = distance((k) => tileDeep[k] === 1);
+  for (let k = 0; k < W * H; k++) deepIn[k] = tileDeep[k] ? (deepIn[k] - 0.5) / R : -Math.min(99, (deepOut[k] - 0.5) / R);
 
   // The drawn shore: where the mask crosses 0.5. Distances to it, inside and outside (a sample's centre lies half a sample from the shore between it and its neighbour).
   const drawn = (k: number): boolean => mask[k] > 0.5;
@@ -202,7 +224,7 @@ export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): Po
     const b = g[(j + 1) * W + i] * (1 - fx) + g[(j + 1) * W + i + 1] * fx;
     return a * (1 - fz) + b * fz;
   };
-  const shoreAt = read(shore, 0), deepAt = read(deepFloor, 0);
+  const shoreAt = read(shore, 0), deepAt = read(deepFloor, 0), deepInAt = read(deepIn, -99);
 
   // Streams as segments of the current: the stream's own (full strength) and, past an inflow's mouth or before an outflow's first
   // point, an extension of the end segment into the pond that fades over FADE tiles. `fadeFrom` is the extension's end that keeps
@@ -255,7 +277,7 @@ export function pondField(rules: TileMap, pond: PondInfo, viewMap?: TileMap): Po
   return {
     shoreAt, bankAt: read(bank, MARGIN), wetAt: read(mask, 0), bodyAt: read(body, 0),
     // the hollow of a DeepWater tile only inside the drawn water
-    depthAt: (x, z) => { const s = shoreAt(x, z); return s > 0 ? Math.max(depthOf(s), deepAt(x, z) * smooth(s / DEEP_RAMP)) : 0; },
+    depthAt: (x, z) => { const s = shoreAt(x, z); return s > 0 ? Math.max(depthOf(pond.seed, x, z, s, deepInAt(x, z)), deepAt(x, z) * smooth(s / DEEP_RAMP)) : 0; },
     flowAt, deckAt, mouths, decks, seed: pond.seed, box: { x0: ox, z0: oz, x1: ox + bw, z1: oz + bh },
   };
 }

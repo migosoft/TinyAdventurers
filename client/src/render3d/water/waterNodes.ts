@@ -55,6 +55,8 @@ const FRESNEL_0 = 0.02, FRESNEL_POW = 5;
 export const DAY = {
   /** What a tile of way through the water takes from red, green and blue (the bed turns blue-green with depth), and the colour the water scatters back per unit of light at the surface. */
   absorb: [0.5, 0.17, 0.13], murk: [0.04, 0.2, 0.2],
+  /** The deep is darker than its way through the water makes it (#431): below the depth `from` (tiles; a pond's shelf lies above it) a tile of way takes `absorb` more, and the murk falls to the share `murk` by the depth `to`. */
+  deep: { from: 0.9, to: 2.2, absorb: [0.3, 0.3, 0.26], murk: 0.55 }, // balancing
   /** The height over the ground the sun's shadow is read at: the bed's (dipNodes.ts), so the water and its bed sit in the same tree shadows. */
   shadowAt: 0.03,
   /**
@@ -272,8 +274,11 @@ function daylightColour(k: {
   // Through the water: the bed (lit by the same sun, with the caustics where it is shallow), absorbed along the way, and the water's own murk.
   const sunShare = clamp(dot(sunLit, vec3(1 / 3, 1 / 3, 1 / 3)), 0, 1);
   const caustics = fineWork.x.mul(smoothstep(0, C.shore, depth)).mul(float(1).sub(smoothstep(C.from, C.to, depth))).mul(sunShare).mul(C.gain);
-  const T = exp(vec3(...DAY.absorb).mul(thick).negate());
-  const clear = k.copy.rgb.mul(caustics.add(1)).mul(T).add(vec3(...DAY.murk).mul(light).mul(float(1).sub(T)));
+  const D = DAY.deep;
+  const deepWay = max(depth.sub(D.from), 0).div(max(V.y, VIEW_MIN));
+  const T = exp(vec3(...DAY.absorb).mul(thick).add(vec3(...D.absorb).mul(deepWay)).negate());
+  const murk = vec3(...DAY.murk).mul(mix(float(1), float(D.murk), smoothstep(D.from, D.to, depth)));
+  const clear = k.copy.rgb.mul(caustics.add(1)).mul(T).add(murk.mul(light).mul(float(1).sub(T)));
   // In a pond: the fish in front of the bed, and the water churned cloudy where a brook comes in.
   const through = k.pond
     ? mix(clear.mul(float(1).sub(fishShade({ p, V, Nw, depth, fish: k.pond.fish }))), vec3(...STIR.milk).mul(light), k.pond.stir.mul(STIR.pale).mul(smoothstep(0, DAY.sky.shore, depth)))
