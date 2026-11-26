@@ -395,7 +395,7 @@ const ATTACK = (anim: number): boolean => anim !== ANIM.Idle && anim !== ANIM.Mo
 export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   const first = !m.started, pose = m.pose;
   // frozen or stone: every clock of the figure stands still
-  if (!first && (has(s.effects, EFFECT.Frozen) || has(s.effects, EFFECT.Petrified))) return pose;
+  if (!first && (has(s.effects, EFFECT.Frozen) || has(s.effects, EFFECT.Petrified))) { m.faceV = m.headV = 0; return pose; }
   // the first sight and a long frame (the tab was away) show the target at once: no spring, no fade
   const jump = first || !(dt <= WING.maxDt), air = (s.flags & FLAG.AIRBORNE) !== 0, q = m.target.joints;
   m.t += dt;

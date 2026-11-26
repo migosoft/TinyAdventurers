@@ -347,6 +347,18 @@ describe('demonPose: the memory', () => {
     }
   });
 
+  it('frozen mid-turn: the thaw starts the facing\'s spring from rest, not at the speed it had', () => {
+    const m = newDemonMem();
+    stand(m, 0.3);
+    for (let i = 0; i < 20; i++) demonPose(inp({ aim: 2 }), 1 / FPS, m);
+    expect(Math.abs(m.faceV)).toBeGreaterThan(0.5);
+    const fx = 1 << EFFECT.Frozen;
+    for (let i = 0; i < 30; i++) demonPose(inp({ effects: fx, aim: 2 }), 1 / FPS, m);
+    const err = Math.abs(2 - m.face);
+    demonPose(inp({ aim: 2 }), 1 / FPS, m);
+    expect(Math.abs(m.faceV)).toBeLessThan(P.faceRate * P.faceRate * err / FPS * 1.1);
+  });
+
   it('thawed after the aim moved by 2 rad: the turn starts from standing; no wing target and no tail root jumps', () => {
     const m = newDemonMem();
     stand(m, 0.5);

@@ -58,11 +58,6 @@ export function newWing(rest: WingTarget): WingState {
 
 // ---------------------------------------------------------------- the chain
 const KEYS = ['fold', 'raise', 'sweep', 'pitch'] as const;
-/** One step of a damped spring: `x[k]` follows `to` at `rate`. */
-function follow(x: WingTarget, v: WingTarget, k: (typeof KEYS)[number], to: number, rate: number, damping: number, h: number): void {
-  v[k] += (rate * rate * (to - x[k]) - 2 * damping * rate * v[k]) * h;
-  x[k] += v[k] * h;
-}
 function snap(w: WingState, target: WingTarget): void {
   for (const k of KEYS) { w.arm[k] = w.hand[k] = w.tips[k] = w.aim[k] = target[k]; w.armV[k] = w.handV[k] = w.tipsV[k] = 0; }
   w.billow = w.billowV = 0;
@@ -74,10 +69,29 @@ export function wingStep(w: WingState, target: WingTarget, dt: number): void {
   if (dt > WING.maxDt) { snap(w, target); return; }
   const n = Math.ceil(dt / WING.step - 1e-6), h = dt / n, B = WING.billow, ra = WING.rates[0], rh = WING.rates[1], rt = WING.rates[2];
   for (let i = 1; i <= n; i++) {
-    for (const k of KEYS) {
-      follow(w.arm, w.armV, k, w.aim[k] + (target[k] - w.aim[k]) * (i / n), ra, 1, h);
-      follow(w.hand, w.handV, k, w.arm[k], rh, 1, h);
-      follow(w.tips, w.tipsV, k, w.hand[k], rt, WING.tipDamping, h);
+    {
+      const a = w.arm, av = w.armV, hd = w.hand, hv = w.handV, t = w.tips, tv = w.tipsV, f = i / n;
+      av.fold += (ra * ra * (w.aim.fold + (target.fold - w.aim.fold) * f - a.fold) - 2 * ra * av.fold) * h; a.fold += av.fold * h;
+      hv.fold += (rh * rh * (a.fold - hd.fold) - 2 * rh * hv.fold) * h; hd.fold += hv.fold * h;
+      tv.fold += (rt * rt * (hd.fold - t.fold) - 2 * WING.tipDamping * rt * tv.fold) * h; t.fold += tv.fold * h;
+    }
+    {
+      const a = w.arm, av = w.armV, hd = w.hand, hv = w.handV, t = w.tips, tv = w.tipsV, f = i / n;
+      av.raise += (ra * ra * (w.aim.raise + (target.raise - w.aim.raise) * f - a.raise) - 2 * ra * av.raise) * h; a.raise += av.raise * h;
+      hv.raise += (rh * rh * (a.raise - hd.raise) - 2 * rh * hv.raise) * h; hd.raise += hv.raise * h;
+      tv.raise += (rt * rt * (hd.raise - t.raise) - 2 * WING.tipDamping * rt * tv.raise) * h; t.raise += tv.raise * h;
+    }
+    {
+      const a = w.arm, av = w.armV, hd = w.hand, hv = w.handV, t = w.tips, tv = w.tipsV, f = i / n;
+      av.sweep += (ra * ra * (w.aim.sweep + (target.sweep - w.aim.sweep) * f - a.sweep) - 2 * ra * av.sweep) * h; a.sweep += av.sweep * h;
+      hv.sweep += (rh * rh * (a.sweep - hd.sweep) - 2 * rh * hv.sweep) * h; hd.sweep += hv.sweep * h;
+      tv.sweep += (rt * rt * (hd.sweep - t.sweep) - 2 * WING.tipDamping * rt * tv.sweep) * h; t.sweep += tv.sweep * h;
+    }
+    {
+      const a = w.arm, av = w.armV, hd = w.hand, hv = w.handV, t = w.tips, tv = w.tipsV, f = i / n;
+      av.pitch += (ra * ra * (w.aim.pitch + (target.pitch - w.aim.pitch) * f - a.pitch) - 2 * ra * av.pitch) * h; a.pitch += av.pitch * h;
+      hv.pitch += (rh * rh * (a.pitch - hd.pitch) - 2 * rh * hv.pitch) * h; hd.pitch += hv.pitch * h;
+      tv.pitch += (rt * rt * (hd.pitch - t.pitch) - 2 * WING.tipDamping * rt * tv.pitch) * h; t.pitch += tv.pitch * h;
     }
     // the air pushes the webbing against the way the hand travels along its normal
     const p = w.hand.pitch + PLANE, along = -w.handV.raise * Math.sin(p) + w.handV.sweep * Math.cos(w.hand.raise) * Math.cos(p);
