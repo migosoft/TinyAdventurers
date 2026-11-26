@@ -764,7 +764,7 @@ fn pond_demo_levels() -> Vec<(crate::dungeon::Layout, crate::dungeon::woodland::
     let wanted: [fn(&Pond) -> bool; 4] = [
         |p| p.streams.is_empty() && p.bridges.is_empty(),
         // exclusive cases (#431: with more footbridges the first match was one seed for all three)
-        |p| p.streams.iter().any(|s| s.inflow) && p.bridges.iter().any(|b| b.road) && p.bridges.iter().all(|b| b.road),
+        |p| p.streams.iter().all(|s| s.inflow) && p.streams.iter().any(|s| s.inflow) && p.bridges.iter().any(|b| b.road) && p.bridges.iter().all(|b| b.road),
         |p| p.streams.iter().any(|s| s.inflow) && p.streams.iter().any(|s| !s.inflow) && p.bridges.iter().all(|b| b.road),
         |p| p.streams.is_empty() && p.bridges.iter().any(|b| !b.road),
     ];
