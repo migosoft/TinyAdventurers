@@ -9,8 +9,8 @@ import type { TileMap } from '../../sim/map';
 
 /** Half the road's width, tiles: the three Road tiles of a column. */
 export const ROAD_HALF = 1.5;
-export const SWELL = 0.2, SWELL_LEN = 7; // tiles: how far each side swells and narrows, and over what length // balancing
-export const BUMP = 0.08, BUMP_LEN = 0.9; // tiles: the small bumps on top, as the brook's EDGE_ROUGH / EDGE_WAVE // balancing
+export const SWELL = 0.26, SWELL_LEN = 6; // tiles: how far each side swells and narrows, and over what length // balancing
+export const BUMP = 0.11, BUMP_LEN = 1.1; // tiles: the small bumps on top, as the brook's EDGE_ROUGH / EDGE_WAVE // balancing
 // Tiles: beside a road deck, the line bends to the deck's middle over this length. Shorter makes the S steeper where the road
 // crosses on a slant (3: up to 1.34; 4: 1.22), longer takes the dirt further off its tiles (6 breaks the 1.5-tile bound).
 export const DECK_FADE = 4; // balancing
