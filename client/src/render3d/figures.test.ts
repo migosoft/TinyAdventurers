@@ -1009,6 +1009,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(lf.model).toBe(true);
       expect(lf.gem && lf.eyes && lf.chest && lf.magic).toBeTruthy();
       expect(lf.magic!.gem).toBeGreaterThan(0);
+      expect(lf.mouth).toBeUndefined();   // the lich has no mouth anchor
       const fg = make();
       fg.frame(frame([lich()]), cam(), look({ kit: withPicture(), ...all }));
       expect(fg.anchors.get(11)!.height).toBeCloseTo(LICH_TOP * LICH.unit, 9);

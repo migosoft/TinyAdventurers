@@ -35,7 +35,7 @@ export function newBuiltBuf(maxVerts: number, maxIndices: number): BuiltBuf {
 export interface BuiltInst {
   owner: number; key: string;
   x: number; z: number; lift: number; /** World rad. */ yaw: number; /** Tiles per builder unit. */ scale: number;
-  body: BuiltBuf; glow: BuiltBuf | null;
+  body: BuiltBuf; glow: BuiltBuf | null; /** The body pushed out into the outline's hull; null: none. */ hull?: BuiltBuf | null;
   /** Four levels the builder's own material reads (the lich: rune, staff rune, wave, spare). */
   levels: [number, number, number, number];
   tint: [number, number, number]; stone: boolean; alpha: number; dark: boolean; cut: boolean; groundY: number;
@@ -47,11 +47,14 @@ export interface BuiltIn { anim: number; animT: number; effects: number; flags: 
 
 /** What a built figure hands back: its buffers (owned by its memory, valid until its next `draw`), levels, yaw and the points the view lights and tags. */
 export interface BuiltDrawn {
-  body: BuiltBuf; glow: BuiltBuf | null; levels: [number, number, number, number]; yaw: number;
+  body: BuiltBuf; glow: BuiltBuf | null; hull?: BuiltBuf | null; levels: [number, number, number, number]; yaw: number;
+  /** Builder units the body hangs above its foot (flight). */
+  lift?: number;
   /** Builder units, model frame. */
-  anchors: { hand: V3; gem?: V3; eyes?: V3; chest?: V3 };
+  anchors: { hand: V3; gem?: V3; eyes?: V3; chest?: V3; mouth?: V3 };
   halos: ReadonlyArray<{ at: V3; r: number; rgb: V3 }>;
-  magic: { gem: number; flare: number };
+  /** `chest`, `mouth`: 0..1 levels of a warm light at that anchor. */
+  magic: { gem: number; flare: number; chest?: number; mouth?: number };
 }
 
 export interface BuiltFigure {

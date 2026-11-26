@@ -1329,7 +1329,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         water.setMirror({ picture: mirrorTarget.texture, matrix: mirrorMatrix });
         timer?.lap('mirror');
       } else water.setMirror(null);
-      if (figures.drawn.figures > 0) {
+      let builtIds = false;
+      for (const e of builtLayers.values()) if (e.layer.ids && e.layer.drawn > 0) builtIds = true;
+      if (figures.drawn.figures > 0 || builtIds) {
         // The id pass: the size of the target the picture is drawn into, so the hull's texel fetch hits its own pixel on both backends.
         let iw = p.targetW, ih = p.targetH;
         if (p.direct && !wp.copy) {

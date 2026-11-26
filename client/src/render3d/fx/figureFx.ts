@@ -292,6 +292,15 @@ function builtLights(out: FxOut, f: DrawnFig, st: number): void {
     const k = 0.8 * m.flare * f.alpha;
     addLight(out, 'lf' + f.id, f.eyes[0], f.foot + (f.eyes[1] - f.foot) / st, f.eyes[2], 3, 0.69 * k, 0.37 * k, 1.0 * k, LIGHT_KIND.Magic);
   }
+  // a warm light (the demon's chest and mouth)
+  if (f.chest && m.chest) {
+    const k = 0.5 * m.chest * f.alpha;
+    addLight(out, 'lc' + f.id, f.chest[0], f.foot + (f.chest[1] - f.foot) / st, f.chest[2], 3, 1.0 * k, 0.45 * k, 0.15 * k, LIGHT_KIND.Fire);
+  }
+  if (f.mouth && m.mouth) {
+    const k = 0.8 * m.mouth * f.alpha;
+    addLight(out, 'lm' + f.id, f.mouth[0], f.foot + (f.mouth[1] - f.foot) / st, f.mouth[2], 3, 1.0 * k, 0.45 * k, 0.15 * k, LIGHT_KIND.Fire);
+  }
 }
 
 // ---- all of it ----

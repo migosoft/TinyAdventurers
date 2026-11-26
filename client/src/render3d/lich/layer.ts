@@ -13,6 +13,8 @@ export interface BuiltLayer {
   frame(insts: readonly BuiltInst[], slotOf: (id: number) => number): void;
   /** How many owners the last frame drew. */
   readonly drawn: number;
+  /** True: the layer draws into the id scene, so the id pass must run. */
+  readonly ids?: boolean;
   dispose(): void;
 }
 
@@ -27,7 +29,7 @@ interface Res {
 const dyn = (a: Float32Array | Uint32Array, n: number): BufferAttribute => { const at = new BufferAttribute(a, n); at.setUsage(DynamicDrawUsage); return at; };
 
 /** A geometry whose attributes wrap the buffer's own arrays; `lit` adds the normals, uvs and look the body reads. */
-function geometryOf(b: BuiltBuf, lit: boolean): BufferGeometry {
+export function geometryOf(b: BuiltBuf, lit: boolean): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', dyn(b.position, 3));
   g.setAttribute('colour', dyn(b.colour, 3));
@@ -43,7 +45,7 @@ function geometryOf(b: BuiltBuf, lit: boolean): BufferGeometry {
 }
 
 /** Marks the used part of the buffer's attributes for upload and sets the draw range. */
-function upload(g: BufferGeometry, b: BuiltBuf): void {
+export function upload(g: BufferGeometry, b: BuiltBuf): void {
   for (const at of Object.values(g.attributes) as BufferAttribute[]) {
     at.clearUpdateRanges();
     at.addUpdateRange(0, b.verts * at.itemSize);

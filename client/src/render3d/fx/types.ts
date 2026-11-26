@@ -56,7 +56,7 @@ export interface DrawnFig {
   mouth?: V3;
   nostril?: V3;
   /** A built figure's points (the lich's staff gem, eyes and chest) and its levels (#358); world, tiles, the height stretched. `undefined` for every other figure. */
-  gem?: V3; eyes?: V3; chest?: V3; magic?: { gem: number; flare: number };
+  gem?: V3; eyes?: V3; chest?: V3; magic?: { gem: number; flare: number; chest?: number; mouth?: number };
   /** Facing, world rad: a model's drawn yaw, else the aim. */
   yaw: number;
   /** World y the swoosh lies at: the model's shoulder, the card's hand. */
