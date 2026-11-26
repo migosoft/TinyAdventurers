@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRecovery } from './recover';
+import { createRecovery, MAX_FAILURES, WINDOW_MS } from './recover';
 
 /** A rebuild the test settles by hand; each call gets its own promise. */
 function controllable() {
@@ -102,6 +102,76 @@ describe('recovery', () => {
     c.pending[1].resolve();
     await flush();
     expect(c.pending.length).toBe(2);
+    expect(r.busy).toBe(false);
+  });
+});
+
+describe('bounded recovery (#313)', () => {
+  /** A rebuild that always works and records which backend it was asked for. */
+  function recorder() {
+    const asked: boolean[] = [];
+    return { asked, rebuild: async (webgl: boolean): Promise<void> => { asked.push(webgl); } };
+  }
+  const setup = (webgl = false) => {
+    const rec = recorder();
+    const events: string[] = [];
+    let t = 0;
+    const r = createRecovery(rec.rebuild, async () => {}, () => {}, {
+      webgl, now: () => t,
+      onFallback: () => events.push('fallback'),
+      onGiveUp: () => events.push('giveup'),
+    });
+    return { rec, events, r, at: (ms: number) => { t = ms; } };
+  };
+
+  it('single losses, far apart, rebuild on the same backend', async () => {
+    const s = setup();
+    for (let i = 0; i < 5; i++) {
+      s.at(i * (WINDOW_MS + 1));
+      s.r.lost();
+      await flush();
+    }
+    expect(s.rec.asked).toEqual([false, false, false, false, false]);
+    expect(s.events).toEqual([]);
+  });
+
+  it('repeated losses switch to WebGL2, and the next rebuild asks for it', async () => {
+    const s = setup();
+    for (let i = 0; i < MAX_FAILURES; i++) {
+      s.at(i * 1000);
+      s.r.lost();
+      await flush();
+    }
+    expect(s.events).toEqual(['fallback']);
+    expect(s.rec.asked).toEqual([false, false, true]);
+    expect(s.r.gaveUp).toBe(false);
+  });
+
+  it('losses on WebGL2 that exhaust the bound stop the recovery with an error', async () => {
+    const s = setup(true);
+    for (let i = 0; i < MAX_FAILURES + 2; i++) {
+      s.at(i * 1000);
+      s.r.lost();
+      await flush();
+    }
+    expect(s.events).toEqual(['giveup']);
+    expect(s.rec.asked).toEqual([true, true]); // the third loss gave up before rebuilding; later ones do nothing
+    expect(s.r.gaveUp).toBe(true);
+    expect(s.r.busy).toBe(false);
+  });
+
+  it('failed rebuilds count too: WebGPU, then WebGL2, then the end', async () => {
+    const asked: boolean[] = [];
+    const events: string[] = [];
+    const r = createRecovery(async (webgl) => { asked.push(webgl); throw new Error('no'); }, async () => {}, () => {}, {
+      now: () => 0,
+      onFallback: () => events.push('fallback'),
+      onGiveUp: () => events.push('giveup'),
+    });
+    r.lost(); // the loss itself is the first failure
+    await flush();
+    expect(asked).toEqual([false, false, true, true, true]);
+    expect(events).toEqual(['fallback', 'giveup']);
     expect(r.busy).toBe(false);
   });
 });

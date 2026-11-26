@@ -197,9 +197,7 @@ export async function startHost(
     else lostEarly = true;
   };
 
-  async function rebuild(): Promise<void> {
-    if (stopped) return;
-    const g = ++gen;
+  function disposeView(): void {
     if (viewLive && view) {
       viewLive = false;
       const old = view;
@@ -210,12 +208,24 @@ export async function startHost(
         console.warn('Disposing the lost view failed:', e);
       }
     }
+  }
+
+  async function rebuild(forceWebGL: boolean): Promise<void> {
+    if (stopped) return;
+    const g = ++gen;
+    disposeView();
     // A fresh canvas every attempt: the old one may hold a dead context. It takes the old one's place in the DOM.
     const next = document.createElement('canvas');
     next.className = 'r3d';
     canvas.replaceWith(next);
     canvas = next;
-    const v = await deps.createView(next, assets!, stage!.world, { forceWebGL: initial.backend === 'webgl' }, lostFrom(g));
+    let v: View;
+    try {
+      v = await deps.createView(next, assets!, stage!.world, { forceWebGL }, lostFrom(g));
+    } catch (e) {
+      if (stopped) return; // a failure after stop() is not the device's
+      throw e;
+    }
     if (stopped) {
       v.dispose(); // stop() came while the view was being made
       return;
@@ -224,12 +234,27 @@ export async function startHost(
     viewLive = true;
     cw = 0; // setSize again for the current canvas size
     ch = 0;
-    backendName = v.backend;
+    backendName = fellBack && v.backend !== 'WebGPU' ? 'WebGL2 fallback (WebGPU failed)' : v.backend;
     state.backend = backendName;
     readout = '';
     stage!.built?.(v);
   }
-  const recovery: Recovery = createRecovery(rebuild);
+  // The bound of the recovery (#313): WebGPU that keeps failing is replaced by WebGL2; WebGL2 that keeps failing ends it.
+  let fellBack = false;
+  const recovery: Recovery = createRecovery(rebuild, undefined, undefined, {
+    webgl: initial.backend === 'webgl',
+    onWebGL: () => backendName.startsWith('WebGL2'), // three's own fallback already is WebGL2: nothing to switch to
+    onFallback: () => {
+      fellBack = true;
+    },
+    onGiveUp: (reason) => {
+      if (stopped) return;
+      disposeView(); // the frame loop must not touch the dead renderer
+      backendName = 'Graphics device failed';
+      state.backend = backendName;
+      showError(el, `The graphics device keeps failing (${reason}).`, false);
+    },
+  });
 
   // The one path of every params change (the panel, F3, the stage): it keeps `params`, the panel's copy, the address bar and
   // what follows `params.stats` (the readout's visibility, the timer) in step.
@@ -419,8 +444,8 @@ export async function startHost(
     state.zoom = zoom;
     state.zoomRange = { start, ...zoomLimits(w, h, start) };
     // While the view is being rebuilt the stage keeps stepping; only the drawing waits.
-    const restoring = recovery.busy || !view;
-    const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;
+    const restoring = recovery.busy || !view || recovery.gaveUp;
+    const text = recovery.gaveUp ? 'Graphics device failed' : restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;
     if (text !== readout) {
       readout = text;
       panel.setReadout(text);
