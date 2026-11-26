@@ -249,10 +249,10 @@ export function createRunStage(
           if (session.started) {
             loading.hide();
             runView.treeBudgetMs = TREE_BUDGET_MS;
-            runView.warm = false;
           }
         }
       }
+      if (!loading.visible) runView.warm = false; // however the screen hid (also at RunEnded)
       runView.drawing = !building;
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)

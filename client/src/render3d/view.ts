@@ -677,7 +677,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   let warmChunks: Mesh[] = [];
   const setChunksWarm = (on: boolean): void => {
     for (const m of warmChunks) m.frustumCulled = true;
-    warmChunks = on ? [...allChunks.map((list) => list.find(Boolean)?.mesh).filter((m): m is Mesh => !!m), ...trees.onePerMaterial(), ...coverLayer.onePerMaterial()] : [];
+    warmChunks = on ? [...allChunks.map((list) => list.find(Boolean)?.mesh).filter((m): m is Mesh => !!m), ...trees.onePerMaterial(), ...coverLayer.onePerMaterial(), ...bridgeWarm] : [];
     for (const m of warmChunks) m.frustumCulled = false;
     chunksWarm = on;
   };
@@ -749,9 +749,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return g;
   });
   const bridgeMats = bridges.length ? [bridgeMaterial(lighting, sight), bridgeCasterMaterial()] : [];
+  const bridgeWarm: Mesh[] = []; // the first scene and sun mesh, for the warm-up (#434)
   for (const g of bridges) {
-    scene.add(new Mesh(g, bridgeMats[0]));
-    if (hasSun) sunScene.add(new Mesh(g, bridgeMats[1]));
+    const m = new Mesh(g, bridgeMats[0]);
+    scene.add(m);
+    if (!bridgeWarm.length) bridgeWarm.push(m);
+    if (hasSun) {
+      const s = new Mesh(g, bridgeMats[1]);
+      sunScene.add(s);
+      if (bridgeWarm.length < 2) bridgeWarm.push(s);
+    }
   }
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
@@ -1233,6 +1240,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (look.mode !== 'off') {
         const dq = discQuads(f.see?.openers ?? [], f.cam, look);
         maskDiscs.set({ position: dq.position, uv: dq.uv, near: dq.near }, dq.count * 6);
+        if (f.warm) maskDiscs.warm();
         const mw = Math.max(1, Math.ceil(f.plan.targetW / 4)), mh = Math.max(1, Math.ceil(f.plan.targetH / 4));
         if (mask.width !== mw || mask.height !== mh) mask.setSize(mw, mh);
         renderer.setRenderTarget(mask);

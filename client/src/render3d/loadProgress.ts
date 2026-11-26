@@ -9,7 +9,7 @@ export interface LoadParts {
   waiting: { ready: number; total: number } | null; // the last `Loading`, null before one
 }
 
-export const WARM_FRAMES = 2;
+export const WARM_FRAMES = 3; // the last one may hide the screen before it draws: two warm draws (canvas and pool path) still happen (#434)
 export const LOAD_WEIGHTS = { assets: 0.1, cover: 0.3, stone: 0.3, trees: 0.25, shaders: 0.05 };
 
 export function loadState(p: LoadParts): { fraction: number; line: string; ready: boolean } {

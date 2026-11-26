@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadState, type LoadParts } from './loadProgress';
+import { loadState, WARM_FRAMES, type LoadParts } from './loadProgress';
 
 const none: LoadParts = { assets: false, cover: 0, stone: null, trees: null, warmFrames: 0, waiting: null };
 
@@ -23,13 +23,13 @@ describe('loadState', () => {
     const warming = loadState({ ...done, warmFrames: 1 });
     expect(warming.line).toBe('Preparing shaders…');
     expect(warming.ready).toBe(false);
-    expect(loadState({ ...done, warmFrames: 2 })).toEqual({ fraction: 1, line: 'Waiting for players…', ready: true });
-    expect(loadState({ ...done, warmFrames: 2, waiting: { ready: 1, total: 2 } }).line).toBe(
+    expect(loadState({ ...done, warmFrames: WARM_FRAMES })).toEqual({ fraction: 1, line: 'Waiting for players…', ready: true });
+    expect(loadState({ ...done, warmFrames: WARM_FRAMES, waiting: { ready: 1, total: 2 } }).line).toBe(
       'Waiting for players (1 of 2 ready)…',
     );
   });
 
   it('a dungeon without trees is ready', () => {
-    expect(loadState({ ...none, assets: true, cover: 1, stone: 1, warmFrames: 2 }).ready).toBe(true);
+    expect(loadState({ ...none, assets: true, cover: 1, stone: 1, warmFrames: WARM_FRAMES }).ready).toBe(true);
   });
 });
