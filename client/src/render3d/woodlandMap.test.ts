@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { PLANT_KINDS } from '../game/vegetation';
-import { BRUSH_LANE, BRUSH_LANE_PLANTS, brushWalk, DEAD_TREE, KNIGHT_START, LEAF_ROW, ROAD_ROWS, SHAPE_ROW, WOODLAND_H, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, WOODLAND_W, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, BRUSH_LANE_PLANTS, brushWalk, DEAD_TREE, KNIGHT_START, LEAF_ROW, ROAD_ROWS, SHAPE_ROW, WILLOW, WOODLAND_H, WOODLAND_STAGE_PLANTS, WOODLAND_W, woodlandStageMap } from './woodlandMap';
 
 describe('the woodland stage map', () => {
   const map = woodlandStageMap();
@@ -67,14 +67,11 @@ describe('the line-ups on the woodland stage', () => {
     expect(map.get(DEAD_TREE.x, DEAD_TREE.z)).toBe(TILE_ID.Trunk);
   });
 
-  it('has one dead tree of its own and a willow apart from the server kinds', () => {
+  it('has one dead tree of its own and one living willow', () => {
     expect(at(DEAD_TREE.x, DEAD_TREE.z)![7]).toBe(true);
-    expect(WOODLAND_STAGE_EXTRA).toHaveLength(1);
-    const w = WOODLAND_STAGE_EXTRA[0];
-    expect(w.form).toBe('willow');
-    expect(w.dead).toBe(false);
-    expect(map.get(Math.floor(w.x), Math.floor(w.z))).toBe(TILE_ID.Trunk);
-    expect(PLANT_KINDS as readonly string[]).not.toContain('willow');
+    const willows = WOODLAND_STAGE_PLANTS.filter((p) => PLANT_KINDS[p[0]] === 'willow');
+    expect(willows).toEqual([at(WILLOW.x, WILLOW.z)]);
+    expect(willows[0][7]).toBe(false);
   });
 });
 

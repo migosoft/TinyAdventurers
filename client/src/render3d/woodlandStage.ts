@@ -31,7 +31,7 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
 import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
-import { BRUSH_LANE, BRUSH_LANE_PLANTS, KNIGHT_START, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, brushWalk, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, BRUSH_LANE_PLANTS, KNIGHT_START, WOODLAND_STAGE_PLANTS, brushWalk, woodlandStageMap } from './woodlandMap';
 import { StageBrush } from './brushStage';
 import { Forest, TREE_BUDGET_MS } from './trees/forest';
 import { treeSpecOf } from './trees/spec';
@@ -111,7 +111,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   };
 
   // The trees are grown by `step` a few per frame.
-  const forest = new Forest([...WOODLAND_STAGE_PLANTS.map(treeSpecOf), ...WOODLAND_STAGE_EXTRA, ...(p.brush ? BRUSH_LANE_PLANTS : [])], map, LEAF_PALETTE.Summer);
+  const forest = new Forest([...WOODLAND_STAGE_PLANTS.map(treeSpecOf), ...(p.brush ? BRUSH_LANE_PLANTS : [])], map, LEAF_PALETTE.Summer);
 
   const critters = new Critters3d(map, GROUND_SEED);
   const fireflies = new Fireflies(GROUND_SEED);

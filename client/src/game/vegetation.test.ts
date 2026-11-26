@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, COVE_TREE_SCALE, DEFAULT_LIGHT, PLANT_KINDS, type Drawn, type PlantKind, type Rgba, coveTree, drawPlant, drawTree, lightVector, plantLook } from './vegetation';
+import { COVE_TREE_FOOT, COVE_TREE_SCALE, DEFAULT_LIGHT, DRAWN_KINDS, PLANT_KINDS, type Drawn, type PlantKind, type Rgba, coveTree, drawPlant, drawTree, lightVector, plantLook } from './vegetation';
 import { PLANT_KIND } from '../generated/defs';
 import type { PlantInfo } from '../generated/PlantInfo';
 
 /** Every picture a plant can take: the wire kinds, and the bare tree a dead plant is drawn as. */
-const LOOKS: readonly PlantKind[] = [...PLANT_KINDS, 'bare'];
+const LOOKS: readonly PlantKind[] = [...DRAWN_KINDS, 'bare'];
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -255,8 +255,8 @@ describe('vegetation', () => {
   });
 
   it('PLANT_KINDS matches the server', () => {
-    // The wire id is the index; the server's `PlantKind` in woodland.rs has the same five, pinned by its test `plant_kind_ids_match_the_client`.
-    expect(PLANT_KINDS).toEqual(['round', 'wide', 'tall', 'conifer', 'bush']);
+    // The wire id is the index; the server's `PlantKind` in woodland.rs has the same six, pinned by its test `plant_kind_ids_match_the_client`.
+    expect(PLANT_KINDS).toEqual(['round', 'wide', 'tall', 'conifer', 'bush', 'willow']);
   });
 
   it('a dead plant is drawn as the bare tree, a living one by its kind', () => {
@@ -409,7 +409,7 @@ describe('vegetation', () => {
     it('bare trees cast whole, the rest in parts', () => {
       expect(drawPlant('bare', 3, 100).shape!.cast).toBe('whole');
       expect(drawPlant('bare', 3, 100).shape!.clumps).toEqual([]);
-      for (const kind of PLANT_KINDS) if (kind !== 'bare') expect(drawPlant(kind, 3, 100).shape!.cast).toBe('parts');
+      for (const kind of DRAWN_KINDS) if (kind !== 'bare') expect(drawPlant(kind, 3, 100).shape!.cast).toBe('parts');
     });
   });
 });

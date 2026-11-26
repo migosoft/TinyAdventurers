@@ -199,6 +199,8 @@ describe('the willow', () => {
       const t = buildTree(spec('willow', s)), ps = patchesOf(t);
       expect(Math.min(...ps.map((p) => p.y))).toBeLessThan(0.25 * t.height);
       expect(t.height).toBeLessThanOrEqual(SUN_TOP);
+      // the woodland's willows by the pond: WILLOW_SCALE in woodland.rs (#438)
+      for (const sc of [100, 130]) expect(buildTree(spec('willow', s, sc)).height).toBeLessThanOrEqual(SUN_TOP);
       const reach = Math.max(...ps.map((p) => Math.hypot(p.x, p.z)));
       expect(t.radius).toBeGreaterThanOrEqual(reach);
       expect(t.radius).toBeLessThanOrEqual(reach + SWAY.leafy + 0.2 + 1e-6);

@@ -36,7 +36,7 @@ const BUSHES: [number, number][] = [[7, 2], [13, 1], [19, 2], [25, 1], [31, 2], 
 export const LEAF_ROW = { z: 22, xs: [3, 8, 13, 18, 23], seed: 301, leaf: [0, 25, 50, 75, 100] } as const;
 export const SHAPE_ROW = { z: 10, xs: [4, 8, 12, 17, 22, 27, 32, 35, 38], seeds: [311, 312, 313] } as const;
 export const DEAD_TREE = { x: 29, z: 22, seed: 331 } as const;
-const WILLOW = { x: 36, z: 19, seed: 341 } as const;
+export const WILLOW = { x: 36, z: 19, seed: 341 } as const;
 
 /** The brush lane (#331, `?r3d=woodland&brush=1`): a bush on the grass row `z` with a small round tree beside it; the knight paces east and west through the bush, 3 tiles each way, one round per `period` seconds. */
 export const BRUSH_LANE = { z: 6, bush: { x: 20.5, z: 6.5, seed: 351 }, tree: { tx: 22, tz: 5, seed: 352 }, reach: 3, period: 6 } as const;
@@ -67,7 +67,7 @@ export function woodlandStageMap(brush = false): TileMap {
   return new TileMap(WOODLAND_W, WOODLAND_H, tiles);
 }
 
-/** Every plant kind and a dead tree, the feet near the bottom of their tile (px): trees on the Trunk tiles, bushes on the Thicket tiles. */
+/** Every plant kind (the willow too) and a dead tree, the feet near the bottom of their tile (px): trees on the Trunk tiles, bushes on the Thicket tiles. */
 export const WOODLAND_STAGE_PLANTS: PlantInfo[] = [
   ...TREES.map(([kind, x, mirrored, dead], i): PlantInfo => [PLANT_KINDS.indexOf(kind), x * TILE + TILE / 2, TREE_Z * TILE + 12, 101 + i, 100, mirrored, dead ? 0 : 100, dead]),
   ...BUSHES.map(([x, z], i): PlantInfo => [PLANT_KINDS.indexOf('bush'), x * TILE + TILE / 2, z * TILE + 12, 201 + i, 100, i % 2 === 1, 100, false]),
@@ -76,11 +76,7 @@ export const WOODLAND_STAGE_PLANTS: PlantInfo[] = [
   // The shape row: round, wide and tall at three seeds each.
   ...SHAPE_ROW.xs.map((x, i): PlantInfo => [PLANT_KINDS.indexOf((['round', 'wide', 'tall'] as const)[Math.floor(i / 3)]), x * TILE + TILE / 2, SHAPE_ROW.z * TILE + 12, SHAPE_ROW.seeds[i % 3], 100, false, 100, false]),
   [PLANT_KINDS.indexOf('tall'), DEAD_TREE.x * TILE + TILE / 2, DEAD_TREE.z * TILE + 12, DEAD_TREE.seed, 100, false, 0, true],
-];
-
-/** Plants the server never sends: the willow, for the dev page only (it is no plant kind). */
-export const WOODLAND_STAGE_EXTRA: TreeSpec[] = [
-  { form: 'willow', x: WILLOW.x + 0.5, z: WILLOW.z + 12 / TILE, seed: WILLOW.seed, scalePct: 100, mirrored: false, leaf: 1, dead: false },
+  [PLANT_KINDS.indexOf('willow'), WILLOW.x * TILE + TILE / 2, WILLOW.z * TILE + 12, WILLOW.seed, 100, false, 100, false],
 ];
 
 /** The brush lane's bush on a grass tile and a small round tree beside it (a tree's low crown is part of its build); only with `brush=1`. */
