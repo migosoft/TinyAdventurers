@@ -228,6 +228,8 @@ pub struct WoodlandInfo {
     pub palette: u8,
     /// The pond with its streams and bridges, if the seed has one (#360).
     pub pond: Option<PondInfo>,
+    /// The road's centre line in tiles, one value per column (#430).
+    pub road: Vec<f64>,
 }
 
 /// A stream in flow order: points in px; `inflow` runs into the pond, else out of it.
@@ -284,6 +286,7 @@ impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
                 .collect(),
             sun: SunInfo::from(w.sun),
             palette: w.palette as u8,
+            road: w.road.clone(),
             pond: w.pond.as_ref().map(|p| PondInfo {
                 seed: p.seed,
                 blobs: p.blobs.iter().map(|b| [b.cx, b.cy, b.rx, b.ry]).collect(),
@@ -583,6 +586,14 @@ mod tests {
     use crate::defs::abilities::AbilityId;
     use crate::defs::items::EquipSlot;
     use crate::defs::loadout::Source;
+
+    #[test]
+    fn the_road_line_travels() {
+        let (_, w) = crate::dungeon::woodland::generate(1);
+        let info = WoodlandInfo::from(&w);
+        assert_eq!(info.road, w.road);
+        assert_eq!(info.road.len(), crate::dungeon::woodland::WOODLAND_W as usize);
+    }
 
     #[test]
     fn the_pond_travels() {

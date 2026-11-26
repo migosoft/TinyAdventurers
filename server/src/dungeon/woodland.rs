@@ -176,6 +176,8 @@ pub struct Woodland {
     pub palette: LeafPalette,
     /// The pond, if the seed has one.
     pub pond: Option<Pond>,
+    /// The road's centre line: `centre(x)` in tiles for every column `0..WOODLAND_W` (the Road tiles lie within 1.5 of it).
+    pub road: Vec<f64>,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     ellipses: Vec<[f64; 4]>,
@@ -941,7 +943,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(edge);
     let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
     let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, pond, ellipses };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, pond, road: (0..WOODLAND_W).map(centre).collect(), ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()), stone: vec![] };
     (layout, wl)
 }
@@ -964,6 +966,24 @@ mod tests {
     }
     fn tiles_of(r: Rect) -> impl Iterator<Item = (i32, i32)> {
         (r.y..r.y + r.h).flat_map(move |y| (r.x..r.x + r.w).map(move |x| (x, y)))
+    }
+
+    #[test]
+    fn the_road_line_is_the_roads() {
+        each(|seed, l, w| {
+            assert_eq!(w.road.len(), WOODLAND_W as usize);
+            for y in 0..WOODLAND_H {
+                for x in 0..WOODLAND_W {
+                    let near = (y as f64 - w.road[x as usize]).abs() <= 1.5;
+                    let t = l.map.get(x, y);
+                    if t == Tile::Road as u8 {
+                        assert!(near, "seed {seed}: road tile {x},{y} off the line");
+                    } else if near && (3..=WOODLAND_H - 4).contains(&y) {
+                        assert!(t == Tile::Barrier as u8 && (x == WALL_W || x == WALL_E), "seed {seed}: tile {x},{y} on the line is not road");
+                    }
+                }
+            }
+        });
     }
 
     #[test]

@@ -15,4 +15,8 @@ palette: number,
 /**
  * The pond with its streams and bridges, if the seed has one (#360).
  */
-pond: PondInfo | null, };
+pond: PondInfo | null, 
+/**
+ * The road's centre line in tiles, one value per column (#430).
+ */
+road: Array<number>, };
