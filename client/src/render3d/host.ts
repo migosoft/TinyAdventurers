@@ -197,7 +197,7 @@ export async function startHost(
     else lostEarly = true;
   };
 
-  async function rebuild(): Promise<void> {
+  async function rebuild(forceWebGL: boolean): Promise<void> {
     if (stopped) return;
     const g = ++gen;
     if (viewLive && view) {
@@ -215,7 +215,7 @@ export async function startHost(
     next.className = 'r3d';
     canvas.replaceWith(next);
     canvas = next;
-    const v = await deps.createView(next, assets!, stage!.world, { forceWebGL: initial.backend === 'webgl' }, lostFrom(g));
+    const v = await deps.createView(next, assets!, stage!.world, { forceWebGL }, lostFrom(g));
     if (stopped) {
       v.dispose(); // stop() came while the view was being made
       return;
@@ -224,12 +224,22 @@ export async function startHost(
     viewLive = true;
     cw = 0; // setSize again for the current canvas size
     ch = 0;
-    backendName = v.backend;
+    backendName = fellBack && v.backend !== 'WebGPU' ? 'WebGL2 fallback (WebGPU failed)' : v.backend;
     state.backend = backendName;
     readout = '';
     stage!.built?.(v);
   }
-  const recovery: Recovery = createRecovery(rebuild);
+  // The bound of the recovery (#313): WebGPU that keeps failing is replaced by WebGL2; WebGL2 that keeps failing ends it.
+  let fellBack = false;
+  const recovery: Recovery = createRecovery(rebuild, undefined, undefined, {
+    webgl: initial.backend === 'webgl',
+    onFallback: () => {
+      fellBack = backendName === 'WebGPU'; // already on three's own WebGL2 fallback: nothing to announce
+    },
+    onGiveUp: (reason) => {
+      showError(el, `The graphics device keeps failing (${reason}).`, false);
+    },
+  });
 
   // The one path of every params change (the panel, F3, the stage): it keeps `params`, the panel's copy, the address bar and
   // what follows `params.stats` (the readout's visibility, the timer) in step.
@@ -419,8 +429,8 @@ export async function startHost(
     state.zoom = zoom;
     state.zoomRange = { start, ...zoomLimits(w, h, start) };
     // While the view is being rebuilt the stage keeps stepping; only the drawing waits.
-    const restoring = recovery.busy || !view;
-    const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;
+    const restoring = recovery.busy || !view || recovery.gaveUp;
+    const text = recovery.gaveUp ? 'Graphics device failed' : restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom.toFixed(2)} · render ${plan.targetW}×${plan.targetH}`;
     if (text !== readout) {
       readout = text;
       panel.setReadout(text);
