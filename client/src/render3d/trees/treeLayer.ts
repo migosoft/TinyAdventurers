@@ -108,13 +108,6 @@ export class TreeLayer {
 
   get paletteTexture(): DataTexture | null { return this.palette; }
 
-  /** One mesh of each material held (the view's warm-up draws them though off screen, #434). */
-  onePerMaterial(): Mesh[] {
-    const seen = new Map<unknown, Mesh>();
-    for (const l of this.meshes.values()) for (const { mesh } of l) if (!seen.has(mesh.material)) seen.set(mesh.material, mesh);
-    return [...seen.values()];
-  }
-
   /** Takes the frame's changed chunks (all of them for a new layer) and sets the shared uniforms. */
   sync(f: TreeFrame): void {
     // Another forest has other chunks: start over (a forest keeps its own maps for its life).

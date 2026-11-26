@@ -671,13 +671,15 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     scene.add(ceiling);
   }
   const chunks = { total: chunkTotal(), drawn: 0 };
-  // The warm-up (#434) draws one chunk mesh of each kind though it is off screen (frustum culling off), then puts it back.
+  // The warm-up (#434) draws every mesh of the scene and the sun's scene though off screen (frustum culling off), then puts it back:
+  // each material compiles and each geometry uploads under the loading screen; a geometry's first upload in a run frame stalled WebGL2 (#437).
   let chunksWarm = false;
   let warmDraws = 0;
   let warmChunks: Mesh[] = [];
   const setChunksWarm = (on: boolean): void => {
     for (const m of warmChunks) m.frustumCulled = true;
-    warmChunks = on ? [...allChunks.map((list) => list.find(Boolean)?.mesh).filter((m): m is Mesh => !!m), ...trees.onePerMaterial(), ...coverLayer.onePerMaterial(), ...bridgeWarm] : [];
+    warmChunks = [];
+    if (on) for (const s of [scene, sunScene]) s.traverse((o) => { if ((o as Mesh).isMesh && o.frustumCulled) warmChunks.push(o as Mesh); });
     for (const m of warmChunks) m.frustumCulled = false;
     chunksWarm = on;
   };
@@ -749,16 +751,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return g;
   });
   const bridgeMats = bridges.length ? [bridgeMaterial(lighting, sight), bridgeCasterMaterial()] : [];
-  const bridgeWarm: Mesh[] = []; // the first scene and sun mesh, for the warm-up (#434)
   for (const g of bridges) {
     const m = new Mesh(g, bridgeMats[0]);
     scene.add(m);
-    if (!bridgeWarm.length) bridgeWarm.push(m);
-    if (hasSun) {
-      const s = new Mesh(g, bridgeMats[1]);
-      sunScene.add(s);
-      if (bridgeWarm.length < 2) bridgeWarm.push(s);
-    }
+    if (hasSun) sunScene.add(new Mesh(g, bridgeMats[1]));
   }
   // The 3D figures (#338): the shared stone and sky pictures are made when the first model is drawn.
   let figureTex: ReturnType<typeof figureLooks> | null = null;
