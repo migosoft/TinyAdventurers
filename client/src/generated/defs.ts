@@ -1541,7 +1541,8 @@ export const PLANT_KIND = {
   "Conifer": 3,
   "Round": 0,
   "Tall": 2,
-  "Wide": 1
+  "Wide": 1,
+  "Willow": 5
 } as const;
 
 export const ENEMY_KINDS = {

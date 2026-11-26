@@ -11,7 +11,7 @@ import { SUN_MAP, fitSunMap, mistLightOf, sky, sunView } from './sun';
 import { footprint } from './lights';
 import type { FrameInput } from './view';
 import { WIND } from './wind';
-import { BRUSH_LANE, brushWalk, WOODLAND_STAGE_EXTRA, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { BRUSH_LANE, brushWalk, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
 import { createWoodlandStage, woodlandEnts } from './woodlandStage';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -88,7 +88,7 @@ describe('the ?r3d=woodland stage', () => {
     window.__r3d = { backend: 'test', frames: 0, renderSize: [0, 0], zoom: 1 };
     const { run } = setup('?r3d=woodland');
     run(1, 0.016);
-    expect(window.__r3d.plants!.total).toBe(WOODLAND_STAGE_PLANTS.length + WOODLAND_STAGE_EXTRA.length);
+    expect(window.__r3d.plants!.total).toBe(WOODLAND_STAGE_PLANTS.length);
     expect(window.__r3d.plants!.built).toBeGreaterThan(0);
     delete window.__r3d;
   });

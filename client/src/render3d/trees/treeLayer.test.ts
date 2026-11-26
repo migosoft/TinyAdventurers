@@ -374,6 +374,7 @@ describe('chunkGeometry', () => {
   // Re-recorded once by #427: the demo woodland is the larger level with the road's clearing, groves and bush clumps (63 chunks, 36 before).
   // Re-recorded once by #360: the demo seeds got ponds, so their forests were drawn anew (63 chunks).
   // Re-recorded once by #431: bigger ponds keep trees from more ground (63 chunks).
+  // Re-recorded once by #438: willows at the demo seed's pond, and the trees and bushes keep their room (63 chunks).
   it('uploads the demo woodland unchanged', () => {
     const lvl = (demo as unknown as { w: number; h: number; woodland: { plants: PlantInfo[]; palette: number } }[])[0];
     const f = new Forest(lvl.woodland.plants.map(treeSpecOf), { w: lvl.w, h: lvl.h }, lvl.woodland.palette);
@@ -387,6 +388,6 @@ describe('chunkGeometry', () => {
       h = fnv([h, k, ...sums], true);
     }
     expect(chunks.size).toBe(63);
-    expect(h.toString(16)).toBe('5c29907e');
+    expect(h.toString(16)).toBe('c05b96d7');
   }, 60_000);
 });

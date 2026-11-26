@@ -94,6 +94,20 @@ const POND_BRIDGE_PCT: u32 = 70;
 // balancing
 const TREE_SHORE_GAP: i32 = 2;
 
+/// Willows (#438) roll from their own stream, so the other plants keep their rolls.
+const WILLOW_SALT: u64 = 0x5749_4c4c_4f57;
+/// Willows per pond, their size, the room no other plant takes (tiles, as `Placed`), the least gap between two
+/// willows, how far from the trunk the nearest water lies at most and the thicket and a stream's line at least
+/// (Chebyshev, tiles).
+// balancing
+const WILLOWS: std::ops::RangeInclusive<usize> = 1..=3;
+const WILLOW_SCALE: std::ops::RangeInclusive<u8> = 100..=130;
+const WILLOW_SPACING: f64 = 3.5;
+const WILLOW_GAP: f64 = 6.0;
+const WILLOW_SHORE: i32 = 2;
+const WILLOW_THICKET_GAP: i32 = 3;
+const WILLOW_STREAM_GAP: i32 = 3;
+
 /// The run's sun: which side it stands on (-1 west, +1 east) and how high.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Sun {
@@ -111,6 +125,7 @@ crate::defs::enum_list::listed_enum! {
         Tall = 2,
         Conifer = 3,
         Bush = 4,
+        Willow = 5,
     }
 }
 
@@ -152,8 +167,7 @@ pub struct Pond {
     pub bridges: Vec<Bridge>,
     pub seed: u32,
     pub blobs: Vec<Blob>,
-    /// The bounding rect of the pond and its streams; read by the tests.
-    #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
+    /// The bounding rect of the pond and its streams.
     pub bounds: Rect,
 }
 
@@ -556,6 +570,45 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
     None
 }
 
+/// 1 to 3 willows on the pond's dry shore: water within `WILLOW_SHORE`, open ground (no road, water or trunk) on
+/// every side of the trunk, outside the start and the clearings, no thicket, stream line or bridge end near it,
+/// clear of the road as every tree. Fewer when the shore has no room.
+fn place_willows(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, pond: &Pond, bridge_zone: &HashSet<(i32, i32)>, start: Rect, ellipses: &[[f64; 4]], used: &mut HashSet<u32>) -> Vec<Plant> {
+    let mut rng = ChaCha8Rng::seed_from_u64(seed ^ WILLOW_SALT);
+    let near = |x: i32, y: i32, d: i32, f: &dyn Fn(i32, i32) -> bool| (-d..=d).any(|dy| (-d..=d).any(|dx| f(x + dx, y + dy)));
+    let stream: HashSet<(i32, i32)> = pond.streams.iter().flat_map(|s| path_tiles(&s.points)).collect();
+    let b = pond.bounds;
+    let mut cand: Vec<(i32, i32)> = (b.y - WILLOW_SHORE..b.y + b.h + WILLOW_SHORE)
+        .flat_map(|y| (b.x - WILLOW_SHORE..b.x + b.w + WILLOW_SHORE).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            playable_x(x)
+                && !start.contains_tile(x, y)
+                && !ellipses.iter().any(|e| in_ellipse(e, x, y))
+                && (-1..=1).all(|dy| (-1..=1).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8))
+                && near(x, y, WILLOW_SHORE, &|x, y| is_water_tile(map.get(x, y)))
+                && !near(x, y, WILLOW_THICKET_GAP, &|x, y| map.get(x, y) == Tile::Thicket as u8)
+                && !near(x, y, WILLOW_STREAM_GAP, &|x, y| stream.contains(&(x, y)))
+                && !near(x, y, 1, &|x, y| bridge_zone.contains(&(x, y)))
+        })
+        .collect();
+    cand.shuffle(&mut rng);
+    let n = rng.gen_range(WILLOWS);
+    let mut out: Vec<Plant> = vec![];
+    for (x, y) in cand {
+        if out.len() == n {
+            break;
+        }
+        let foot = jitter(&mut rng, x, y);
+        // the road's clearing, as for every tree
+        let road = (foot.y - (centre(x) + 0.5) * TILE).abs() / TILE;
+        if road >= ROAD_CLEAR && out.iter().all(|w| w.foot.dist(foot) >= WILLOW_GAP * TILE) {
+            let (scale_pct, mirrored, seed) = (rng.gen_range(WILLOW_SCALE), rng.gen_bool(0.5), fresh_seed(&mut rng, used));
+            out.push(Plant { kind: PlantKind::Willow, foot, seed, scale_pct, mirrored, leaf_pct: WOODLAND_FOLIAGE.leaf_pct, dead: false });
+        }
+    }
+    out
+}
+
 fn tile_of(p: (f64, f64)) -> (i32, i32) {
     (p.0.floor() as i32, p.1.floor() as i32)
 }
@@ -657,9 +710,14 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let line = |x: i32| (centre(x) + 0.5) * TILE;
     let mut used = HashSet::new();
     let mut plants: Vec<Plant> = vec![];
+    let mut placed = Placed::new();
+    // 3c. Willows (#438): only at the pond's shore; they go first, so the trees and bushes keep their room.
+    let willows = pond.as_ref().map_or(vec![], |p| place_willows(seed, &map, &centre, p, &bridge_zone, start, &ellipses, &mut used));
+    for w in &willows {
+        placed.add(w.foot, WILLOW_SPACING);
+    }
 
     // 4. Roadside trees.
-    let mut placed = Placed::new();
     let mut tiles: Vec<(i32, i32)> = (0..h)
         .flat_map(|y| (0..w).map(move |x| (x, y)))
         .filter(|&(x, y)| {
@@ -673,7 +731,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         })
         .collect();
     tiles.shuffle(&mut rng);
-    let mut trees: Vec<Plant> = vec![];
+    let mut trees: Vec<Plant> = willows;
     let lone: Vec<bool> = tiles.iter().map(|_| rng.gen_ratio(1, ROAD_SPARSE_ONE_IN)).collect();
     // Groves (#427): beyond the road's clearing the trees stand in clumps with open grass between them, so the
     // forest reads lush with fewer plants. (centre x, centre y, radius; tiles)
@@ -1192,6 +1250,7 @@ mod tests {
             Conifer,
             Bush,
             Bare,
+            Willow,
         }
         #[derive(Debug)]
         #[allow(dead_code)] // read through Debug
@@ -1213,6 +1272,7 @@ mod tests {
                     super::PlantKind::Tall => PlantKind::Tall,
                     super::PlantKind::Conifer => PlantKind::Conifer,
                     super::PlantKind::Bush => PlantKind::Bush,
+                    super::PlantKind::Willow => PlantKind::Willow,
                 },
                 foot: p.foot,
                 seed: p.seed,
@@ -1244,8 +1304,8 @@ mod tests {
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
         // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
-        // Re-pinned in #431: bigger ponds, more footbridges.
-        assert_eq!(got, vec![395257610060224234, 299138770362770087, 16032900516294525890, 16187434898333408880, 1831013090409208476]);
+        // Re-pinned in #431: bigger ponds, more footbridges. Re-pinned in #438: willows at the pond (seed 42 keeps its value).
+        assert_eq!(got, vec![3475023259742059176, 12101050213717879184, 11048658168964646419, 9361667727841432891, 1831013090409208476]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
@@ -1391,10 +1451,11 @@ mod tests {
 
     #[test]
     fn trees_keep_two_tiles_from_the_shore() {
-        each(|seed, l, _| {
+        each(|seed, l, w| {
+            let willows: HashSet<(i32, i32)> = w.plants.iter().filter(|p| p.kind == PlantKind::Willow).map(|p| Map::tile_of(p.foot)).collect();
             for y in 0..WOODLAND_H {
                 for x in 0..WOODLAND_W {
-                    if l.map.get(x, y) == Tile::Trunk as u8 {
+                    if l.map.get(x, y) == Tile::Trunk as u8 && !willows.contains(&(x, y)) {
                         for dy in -TREE_SHORE_GAP..=TREE_SHORE_GAP {
                             for dx in -TREE_SHORE_GAP..=TREE_SHORE_GAP {
                                 assert!(!is_water(l, x + dx, y + dy), "seed {seed}: trunk {x},{y} near water");
@@ -1404,6 +1465,34 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// #438: willows grow at a pond's shore only, 1 to 3 each, on dry ground, standing as trunks, clear of the
+    /// bridge ends and the stream mouths.
+    #[test]
+    fn every_pond_has_one_to_three_willows_on_its_shore() {
+        let mut counts = [0; 4];
+        each(|seed, l, w| {
+            let willows: Vec<&Plant> = w.plants.iter().filter(|p| p.kind == PlantKind::Willow).collect();
+            let Some(p) = &w.pond else {
+                assert!(willows.is_empty(), "seed {seed}: a willow without a pond");
+                return;
+            };
+            assert!(WILLOWS.contains(&willows.len()), "seed {seed}: {} willows", willows.len());
+            counts[willows.len()] += 1;
+            let zone = zone_of(w);
+            let mouths: Vec<(i32, i32)> = p.streams.iter().map(|s| tile_of(if s.inflow { *s.points.last().unwrap() } else { s.points[0] })).collect();
+            for wl in willows {
+                let (x, y) = Map::tile_of(wl.foot);
+                assert_eq!(l.map.get(x, y), Tile::Trunk as u8, "seed {seed}: willow {x},{y} is no trunk");
+                let near = |d: i32, f: &dyn Fn(i32, i32) -> bool| (-d..=d).any(|dy| (-d..=d).any(|dx| f(x + dx, y + dy)));
+                assert!(near(WILLOW_SHORE, &|x, y| is_water(l, x, y)), "seed {seed}: willow {x},{y} away from the shore");
+                assert!(!near(1, &|x, y| is_water(l, x, y) || zone.contains(&(x, y))), "seed {seed}: willow {x},{y} by the water's edge or a bridge end");
+                assert!(mouths.iter().all(|m| (m.0 - x).abs().max((m.1 - y).abs()) > WILLOW_STREAM_GAP), "seed {seed}: willow {x},{y} at a stream mouth");
+                assert!(WILLOW_SCALE.contains(&wl.scale_pct) && !wl.dead);
+            }
+        });
+        eprintln!("ponds with 1/2/3 willows: {:?}", &counts[1..]);
     }
 
     #[test]
@@ -1544,16 +1633,17 @@ mod tests {
 
     #[test]
     fn plant_kind_ids_match_the_client() {
-        // client/src/game/vegetation.ts PLANT_KINDS has 5 entries; vegetation.test.ts pins the same
-        // no `_` arm: a sixth variant fails to compile here
+        // client/src/game/vegetation.ts PLANT_KINDS has 6 entries; vegetation.test.ts pins the same
+        // no `_` arm: a seventh variant fails to compile here
         let id = |k: PlantKind| match k {
             PlantKind::Round => 0,
             PlantKind::Wide => 1,
             PlantKind::Tall => 2,
             PlantKind::Conifer => 3,
             PlantKind::Bush => 4,
+            PlantKind::Willow => 5,
         };
-        for k in [PlantKind::Round, PlantKind::Wide, PlantKind::Tall, PlantKind::Conifer, PlantKind::Bush] {
+        for k in PlantKind::ALL {
             assert_eq!(k as u8, id(k));
         }
     }

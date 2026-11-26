@@ -14,11 +14,15 @@ export { DEFAULT_LIGHT, drawBush };
 export type { Drawn, Light, PlantShape, Rgba };
 export type Shape = 'round' | 'wide' | 'tall' | 'conifer' | 'bare';
 export type PlantKind = Shape | 'bush';
+/** A plant kind on the wire: the 2D kinds and the willow (#438), which only the 3D view grows. */
+export type WireKind = PlantKind | 'willow';
 /** Index = wire id; the server's `PlantKind` (woodland.rs) has the same order. A dead tree is not a kind: it is drawn as 'bare' (`plantLook`). */
-export const PLANT_KINDS: readonly PlantKind[] = ['round', 'wide', 'tall', 'conifer', 'bush'];
+export const PLANT_KINDS: readonly WireKind[] = ['round', 'wide', 'tall', 'conifer', 'bush', 'willow'];
+/** The kinds the 2D drawing knows. */
+export const DRAWN_KINDS = PLANT_KINDS.filter((k): k is PlantKind => k !== 'willow');
 
 /** The picture a plant is drawn as: the bare tree when it is dead, else its kind. */
-export function plantLook(p: PlantInfo): PlantKind {
+export function plantLook(p: PlantInfo): WireKind {
   return p[7] ? 'bare' : PLANT_KINDS[p[0]];
 }
 
