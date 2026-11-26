@@ -18,8 +18,15 @@ import { ARM, BONE, J, PIVOT, RIG, SLOT, SLOTS, hang, mul, placeBones, rotAxis, 
 /**
  * `unit`: game px per builder unit (the head's top, 31.7 units, is 54 px). The buffer sizes are the builder's counts plus a quarter.
  * `curl`: rad a finger's knuckle and its second joint turn at `curl` 1.
+ * The swept tubes (the tail's skin, a wing's arm bone, a wing's finger bone): `rings` round and along, `cap` how far the rounded ends
+ * reach (a share of the end radius), `line` the outline width in the spike's px (`LINE_UNIT`); `capRings`: rings of a rounded end,
+ * as `models/tubes.ts`. `tail.band`: the band of the rock skin the tail reads. The ring counts are what the cost is tuned by.
  */
-export const DEMON = { unit: 54 / 31.7, top: 54, hem: 12, bodyVerts: 39400, bodyIndices: 206900, hullVerts: 34100, hullIndices: 181700, curl: [1.1, 1.3] } as const;
+export const DEMON = {
+  unit: 54 / 31.7, top: 54, hem: 12, bodyVerts: 39400, bodyIndices: 206900, hullVerts: 34100, hullIndices: 181700, curl: [1.1, 1.3],
+  capRings: 5,
+  tail: { rings: [14, 40], cap: 0.5, line: 0.45, band: 1 }, wingArm: { rings: [8, 10], cap: 0.6, line: 0.35 }, wingFinger: { rings: [8, 16], cap: 0.6, line: 0.35 },
+} as const;
 
 /**
  * A wing laid out flat in its own plane, half folded (the spike's): `s` out along the span from the root, `h` up, in units of `size`.
@@ -37,6 +44,10 @@ export const WING_FLAT = {
   arm: [1.15, 0.8], finger: [0.7, 0.3], thumb: [0.25, 1],
   /** Cells of a panel of the webbing: from the wrist out to the edge, and from bone to bone. */
   cells: [14, 10],
+  /** The webbing's inner edge: its shares down the arm (wrist to root) and down the back (root to `backEnd`). */
+  inner: [0.45, 0.55],
+  /** The fold's shape across a panel: one bow, plus this much of a three-fold ripple. */
+  ripple: 0.3,
 } as const;
 
 export interface DemonOut {
@@ -49,8 +60,7 @@ export interface DemonOut {
 }
 
 // ---------------------------------------------------------------- where each piece lies in the buffers
-/** Rounded-end rings of a swept tube, as `models/tubes.ts`. */
-const CAP = 5;
+const CAP = DEMON.capRings;
 interface Swept { v0: number; i0: number; h0: number; hi0: number; N: number; K: number; cap: number; line: number }
 const NT = WING_FLAT.cells[0], NW = WING_FLAT.cells[1], PANEL = (NT + 1) * (NW + 1), WEB_VERTS = 4 * PANEL, WEB_INDICES = 4 * NT * NW * 6;
 let nv = 0, ni = 0, hv = 0, hi = 0;
@@ -60,14 +70,15 @@ PARTS.forEach((p, i) => {
   nv += p.position.length / 3; ni += p.index.length;
   if (p.line > 0) { hv += p.position.length / 3; hi += p.index.length; }
 });
-const swept = (N: number, K: number, cap: number, line: number): Swept => {
+const swept = (o: { rings: readonly [number, number]; cap: number; line: number }): Swept => {
+  const K = o.rings[0], N = o.rings[1], cap = o.cap, line = o.line;
   const verts = (N + 1 + 2 * CAP) * (K + 1) + 2, indices = (N + 2 * CAP + 1) * K * 6, T = { v0: nv, i0: ni, h0: hv, hi0: hi, N, K, cap, line: line * LINE_UNIT };
   nv += verts; ni += indices; hv += verts; hi += indices;
   return T;
 };
-const TAIL_S = swept(40, 14, 0.5, 0.45);
+const TAIL_S = swept(DEMON.tail);
 const WINGS = [1, -1].map((sd) => {
-  const arm = swept(10, 8, 0.6, 0.35), fingers = [0, 1, 2, 3].map(() => swept(16, 8, 0.6, 0.35)), web = nv, webIndex = ni;
+  const arm = swept(DEMON.wingArm), fingers = [0, 1, 2, 3].map(() => swept(DEMON.wingFinger)), web = nv, webIndex = ni;
   nv += WEB_VERTS; ni += WEB_INDICES;
   return { sd: sd as 1 | -1, arm, fingers, web, webIndex };
 });
@@ -118,7 +129,7 @@ export function newDemonOut(): DemonOut {
       for (let t = 0; t < p.index.length; t++) hull.index[PHI[i] + t] = PH[i] + p.index[t];
     }
   });
-  tubeStatic(body, hull, TAIL_S, 0, 1, 0xffffff);
+  tubeStatic(body, hull, TAIL_S, 0, DEMON.tail.band, 0xffffff);
   for (const w of WINGS) {
     tubeStatic(body, hull, w.arm, 0, -1, WING_BONE);
     for (const f of w.fingers) tubeStatic(body, hull, f, 0, -1, WING_BONE);
@@ -218,7 +229,7 @@ function normals(b: BuiltBuf, v0: number, v1: number, i0: number, i1: number): v
 }
 
 const TRIG = new Map<number, Float64Array>();
-for (const K of [8, 14]) { const t = new Float64Array((K + 1) * 2); for (let k = 0; k <= K; k++) { t[k * 2] = Math.cos(2 * Math.PI * k / K); t[k * 2 + 1] = Math.sin(2 * Math.PI * k / K); } TRIG.set(K, t); }
+for (const K of [DEMON.tail.rings[0], DEMON.wingArm.rings[0], DEMON.wingFinger.rings[0]]) { const t = new Float64Array((K + 1) * 2); for (let k = 0; k <= K; k++) { t[k * 2] = Math.cos(2 * Math.PI * k / K); t[k * 2 + 1] = Math.sin(2 * Math.PI * k / K); } TRIG.set(K, t); }
 // the ring's first axis, carried from ring to ring so a tube never twists, however it bends
 let NX = 0, NY = 0, NZ = 0;
 function ring(b: BuiltBuf, v: number, K: number, trig: Float64Array, cx: number, cy: number, cz: number, tx: number, ty: number, tz: number, r: number): void {
@@ -288,7 +299,7 @@ function aim(M: Float32Array, f: number, ox: number, oy: number, oz: number, xx:
 // ---------------------------------------------------------------- the webbing
 // per column of a panel: how far the edge hangs in between the bones, and how deep the fold behind the wing is there
 const ARCW = new Float64Array(NW + 1), HANG = new Float64Array(NW + 1);
-for (let c = 0; c <= NW; c++) { const w = c / NW; ARCW[c] = 4 * w * (1 - w); HANG[c] = Math.sin(Math.PI * w) + 0.3 * Math.sin(3 * Math.PI * w); }
+for (let c = 0; c <= NW; c++) { const w = c / NW; ARCW[c] = 4 * w * (1 - w); HANG[c] = Math.sin(Math.PI * w) + WING_FLAT.ripple * Math.sin(3 * Math.PI * w); }
 let AX = 0, AY = 0, AZ = 0;
 /** A point of the webbing's ray `i` at `t`: a finger (0..3, wrist to tip), or the inner edge (4: from the wrist down the arm to the root, then down the back). */
 function ray(M: Float32Array, wf: number, i: number, t: number): void {
@@ -300,7 +311,7 @@ function ray(M: Float32Array, wf: number, i: number, t: number): void {
     AZ = FC[c + 8] + w * (FC[c + 9] + w * (FC[c + 10] + w * FC[c + 11]));
     return;
   }
-  const a = t < 0.45 ? wf + 6 : wf, c = t < 0.45 ? wf : wf + W_BACK * 3, k = t < 0.45 ? t / 0.45 : (t - 0.45) / 0.55;
+  const arm = WING_FLAT.inner[0], a = t < arm ? wf + 6 : wf, c = t < arm ? wf : wf + W_BACK * 3, k = t < arm ? t / arm : (t - arm) / WING_FLAT.inner[1];
   AX = M[a] + (M[c] - M[a]) * k; AY = M[a + 1] + (M[c + 1] - M[a + 1]) * k; AZ = M[a + 2] + (M[c + 2] - M[a + 2]) * k;
 }
 /**
