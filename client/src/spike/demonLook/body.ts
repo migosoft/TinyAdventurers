@@ -8,18 +8,20 @@ const lerp = (a: V, b: V, t: number): V => [a[0] + (b[0] - a[0]) * t, a[1] + (b[
 const mx = (s: number, v: V): V => [s * v[0], v[1], v[2]];
 
 // Joints of the left side; the right side is the mirror.
-const S: V = [0.5, 2.14, -0.02], E: V = [0.76, 1.58, -0.02], W: V = [0.96, 1.05, 0], KN: V = [1.01, 0.86, 0];
+const S: V = [0.45, 2.13, -0.03], E: V = [0.69, 1.57, -0.03], W: V = [0.87, 1.04, 0], KN: V = [0.92, 0.85, 0];
 const HP: V = [0.22, 1.24, 0], KNEE: V = [0.3, 0.72, 0.12], AN: V = [0.3, 0.28, -0.1], BA: V = [0.31, 0.07, 0.1];
 const TAIL: V[] = [[0, 1.2, -0.2], [0, 1.02, -0.5], [0, 0.75, -0.8], [0, 0.5, -1.08], [0, 0.32, -1.38], [0, 0.3, -1.7]];
-const WR: V = [0.2, 2.15, -0.2], WE: V = [0.75, 2.85, -0.5], WW: V = [1.25, 3.75, -0.55], WHIP: V = [0.22, 1.35, -0.24];
+// The wing arm, as a bat's: shoulder, a short upper arm to the elbow, a long forearm up to the wrist; HM and FM bow the two bones.
+const WR: V = [0.2, 2.15, -0.2], WE: V = [1.05, 2.55, -0.55], WW: V = [1.2, 3.8, -0.5], WHIP: V = [0.22, 1.35, -0.24];
+const HM: V = [0.62, 2.4, -0.4], FM: V = [1.16, 3.18, -0.55];
 /** The four wing fingers: the middle joint and the tip. */
 const FINGER: [V, V][] = [
-  [[2.3, 3.55, -0.7], [2.82, 2.3, -0.62]],
-  [[1.98, 2.95, -0.74], [2.32, 1.55, -0.66]],
-  [[1.56, 2.6, -0.76], [1.76, 1.0, -0.7]],
-  [[1.2, 2.45, -0.7], [1.14, 0.95, -0.6]],
+  [[2.25, 3.6, -0.68], [2.8, 2.35, -0.62]],
+  [[1.95, 2.95, -0.72], [2.32, 1.55, -0.66]],
+  [[1.56, 2.6, -0.74], [1.76, 1.0, -0.7]],
+  [[1.22, 2.45, -0.7], [1.16, 0.95, -0.6]],
 ];
-export const EYE: V = [0.075, 2.478, 0.3], MOUTH: V = [0, 2.365, 0.36];
+export const EYE: V = [0.078, 2.495, 0.32], MOUTH: V = [0, 2.365, 0.36];
 
 const DEFS: [string, string | null, V][] = [
   ['hips', null, [0, 1.3, -0.04]], ['waist', 'hips', [0, 1.5, -0.03]], ['chest', 'waist', [0, 1.74, -0.03]],
@@ -55,14 +57,16 @@ function prims(id: (n: string) => number): Prim[] {
   const P: Prim[] = [
     ball([0, 1.28, -0.03], [0.31, 0.19, 0.21], id('hips'), sk(0.3, 0.1)),
     ball([0, 1.55, 0.01], [0.29, 0.25, 0.2], id('waist'), sk(0.8)),
-    ball([0, 1.9, -0.02], [0.4, 0.34, 0.26], id('chest'), sk(1)),
-    ball([0, 2.16, -0.1], [0.42, 0.17, 0.2], id('chest'), sk(0.2)),
+    ball([0, 1.9, -0.02], [0.35, 0.34, 0.25], id('chest'), sk(1)),
+    ball([0, 2.15, -0.1], [0.35, 0.16, 0.19], id('chest'), sk(0.2)),
     cone([0, 2.16, 0], [0, 2.4, 0.08], 0.17, 0.14, id('neck'), sk(0.3)),
-    ball([0, 2.5, 0.12], [0.16, 0.17, 0.19], id('head'), sk(0.1)),
+    ball([0, 2.5, 0.12], [0.175, 0.18, 0.2], id('head'), sk(0.1)),
+    cone([0, 2.34, 0.3], [0, 2.2, 0.37], 0.06, 0.012, id('jaw'), sk(0), 0.02),
+    cone([0, 2.5, 0.31], [0, 2.4, 0.39], 0.035, 0.03, id('head'), sk(0), 0.02),
+    cone([0, 2.66, 0.24], [0, 2.93, 0.17], 0.07, 0.008, id('head'), HORN, 0.015),
     cone([-0.11, 2.53, 0.265], [0.11, 2.53, 0.265], 0.045, 0.0449, id('head'), sk(0), 0.03),
     ball([0, 2.43, 0.27], [0.095, 0.075, 0.1], id('head'), sk(0), 0.04),
     ball([0, 2.335, 0.24], [0.095, 0.045, 0.11], id('jaw'), sk(0), 0.02),
-    cone([0, 2.66, 0.2], [0, 2.64, -0.02], 0.045, 0.03, id('head'), [0, 0.5, 0, 0], 0.03),
     { ...ball(MOUTH, [0.085, 0.018, 0.07], 0, sk(0), 0.01), sub: true },
   ];
   for (const s of [1, -1]) {
@@ -70,16 +74,15 @@ function prims(id: (n: string) => number): Prim[] {
     const m = (v: V) => mx(s, v);
     const c = (a: V, b: V, ra: number, rb: number, bone: string, tag: Tag, k?: number) => P.push(cone(m(a), m(b), ra, rb, n(bone), tag, k));
     const e = (a: V, r: V, bone: string, tag: Tag, k?: number) => P.push(ball(m(a), r, n(bone), tag, k));
-    P.push({ ...cone(m([0.045, 2.468, 0.31]), m([0.105, 2.495, 0.29]), 0.024, 0.028, 0, sk(0), 0.015), sub: true });
-    P.push(ball(m([0.2, 2.0, 0.14]), [0.23, 0.16, 0.11], id('chest'), sk(1)), ball(m([0.3, 1.82, -0.1]), [0.16, 0.28, 0.16], id('chest'), sk(0.3)));
+    P.push({ ...cone(m([0.04, 2.478, 0.325]), m([0.115, 2.512, 0.3]), 0.014, 0.018, 0, sk(0), 0.012), sub: true });
+    P.push(ball(m([0.17, 2.0, 0.14]), [0.2, 0.16, 0.11], id('chest'), sk(1)), ball(m([0.26, 1.82, -0.1]), [0.15, 0.28, 0.16], id('chest'), sk(0.3)));
     // arm
     const mid = lerp(S, E, 0.5);
-    e(add(S, [0.03, 0, 0]), [0.2, 0.19, 0.19], 'upperArm', sk(0.4));
+    e(add(S, [0.02, 0, 0]), [0.165, 0.17, 0.165], 'upperArm', sk(0.4));
     c(S, E, 0.15, 0.115, 'upperArm', sk(0.25));
     e(add(mid, [0, 0.03, 0.07]), [0.11, 0.2, 0.1], 'upperArm', sk(0.25));
     e(add(mid, [0.02, 0, -0.07]), [0.1, 0.2, 0.09], 'upperArm', sk(0.1));
-    c(add(S, [0.06, 0.13, -0.03]), add(S, [0.2, 0.37, -0.08]), 0.06, 0.006, 'upperArm', HORN, 0.04);
-    c(add(S, [0.14, 0.06, -0.08]), add(S, [0.33, 0.2, -0.16]), 0.05, 0.006, 'upperArm', HORN, 0.04);
+    c(add(S, [0.07, 0.11, -0.05]), add(S, [0.19, 0.28, -0.12]), 0.05, 0.006, 'upperArm', HORN, 0.04);
     c(add(E, [0.02, 0, -0.1]), add(E, [0.07, 0.08, -0.27]), 0.05, 0.006, 'upperArm', HORN, 0.03);
     c(E, W, 0.125, 0.08, 'foreArm', sk(0.2, 0.1));
     e(add(lerp(E, W, 0.3), [0.03, 0, 0]), [0.12, 0.19, 0.12], 'foreArm', sk(0.2, 0.1));
@@ -107,10 +110,16 @@ function prims(id: (n: string) => number): Prim[] {
       c(BA, tip, 0.065, 0.05, 'toes', sk(0, 0.8), 0.03);
       c(tip, [BA[0] + d[0] * 0.36, 0.012, BA[2] + d[2] * 0.36], 0.04, 0.005, 'toes', TIP, 0.015);
     }
-    // horns: thick, out from the temples, then forward and down round the face; and a pointed ear behind each
-    const horn: [V, number][] = [[[0.13, 2.56, 0.1], 0.085], [[0.32, 2.66, 0.04], 0.075], [[0.5, 2.62, 0.12], 0.06], [[0.58, 2.5, 0.28], 0.045], [[0.54, 2.42, 0.44], 0.028], [[0.46, 2.42, 0.56], 0.008]];
-    for (let i = 0; i + 1 < horn.length; i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 2 ? TIP : HORN, 0.02));
-    P.push(cone(m([0.15, 2.56, 0]), m([0.27, 2.72, -0.08]), 0.05, 0.035, id('head'), HORN, 0.02), cone(m([0.27, 2.72, -0.08]), m([0.33, 2.9, -0.1]), 0.035, 0.006, id('head'), HORN, 0.02));
+    // horns: very thick at the base, out and a little forward and down, then bending up to a point
+    const horn: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5, 0.2], 0.122], [[0.5, 2.45, 0.27], 0.112], [[0.68, 2.47, 0.3], 0.097], [[0.8, 2.58, 0.28], 0.08], [[0.86, 2.74, 0.22], 0.058], [[0.86, 2.9, 0.16], 0.034], [[0.82, 3.05, 0.11], 0.008]];
+    for (let i = 0; i + 1 < horn.length; i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
+    // armour plates over the forehead and crown, each lapping over the next toward the back, the outer rows onto the horns' bases
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 4; i++) {
+      if (row === 0 && s < 0) continue;
+      const th = 0.45 + i * 0.62 + row * 0.2, x = row * (0.115 + 0.012 * i), lift = 0.012 - row * 0.004;
+      const y = 2.5 + (0.18 + lift) * Math.sin(th) - row * 0.035, z = 0.12 + (0.2 + lift) * Math.cos(th);
+      P.push(ball(m([x, y, z]), [0.085 - row * 0.012, 0.02 + 0.06 * Math.abs(Math.cos(th)), 0.02 + 0.075 * Math.sin(th)], id('head'), sk(0), 0.006));
+    }
   }
   return P;
 }
@@ -177,7 +186,7 @@ function tube(b: Buf, pts: V[], radii: number[], bones: number[], tag: (u: numbe
 }
 
 type Curve = { at(u: number): { p: THREE.Vector3; w: Wt } };
-function sheet(b: Buf, A: Curve, B: Curve, panel: number, scallop: number, bulge: number, NS = 16, NT = 30) {
+function sheet(b: Buf, A: Curve, B: Curve, panel: number, scallop: number, bulge: number, NS = 40, NT = 44) {
   const v0 = b.n;
   for (let it = 0; it <= NT; it++) for (let is = 0; is <= NS; is++) {
     const s = is / NS, t = it / NT, tt = t * (1 - scallop * Math.sin(Math.PI * s));
@@ -194,32 +203,42 @@ function sheet(b: Buf, A: Curve, B: Curve, panel: number, scallop: number, bulge
 export interface Built { body: THREE.BufferGeometry; tubes: THREE.BufferGeometry; web: THREE.BufferGeometry; cloth: THREE.BufferGeometry; ms: number; verts: number }
 export function build(r: Rig): Built {
   const t0 = performance.now();
-  const sk = skin(prims(r.id), [-1.2, -0.06, -0.5], [1.2, 3.0, 0.7], 0.008);
+  const sk = skin(prims(r.id), [-1.2, -0.06, -0.5], [1.2, 3.12, 0.7], 0.008);
   const body = geometry(sk.position, sk.index, sk.info, sk.skinIndex, sk.skinWeight);
 
   const tubes = new Buf(), web = new Buf(), cloth = new Buf();
-  const LEATHER: Tag = [0, 0.6, 0, 0.3];
+  const LEATHER: Tag = [2, 0, 0, 0];
   tube(tubes, TAIL, [0.15, 0.12, 0.09, 0.065, 0.04, 0.008], [0, 1, 2, 3, 4].map((i) => r.id(`tail${i}`)), (u) => [0.15 * (1 - u), u > 0.9 ? 1 : 0, u > 0.93 ? 1 : 0, 0.3], 8, 14);
+  // the strap round the hips that the cloth hangs from
+  const strap: V[] = [];
+  for (let i = 0; i <= 16; i++) { const a = (i / 16) * Math.PI * 2; strap.push([0.3 * Math.sin(a), 1.41 - 0.035 * Math.cos(a), 0.225 * Math.cos(a) - 0.01]); }
+  tube(tubes, strap, strap.map(() => 0.04), strap.slice(1).map(() => r.id('hips')), () => LEATHER, 3, 8);
   for (const [side, s] of [['L', 1], ['R', -1]] as const) {
     const n = (name: string) => r.id(name + side), m = (v: V) => mx(s, v);
-    tube(tubes, [WR, WE, WW].map(m), [0.1, 0.075, 0.055], [n('wing1'), n('wing2')], () => LEATHER);
-    tube(tubes, [WW, add(WW, [0.06, 0.2, 0.08]), add(WW, [0.02, 0.4, 0.14])].map(m), [0.05, 0.03, 0.004], [n('wing2'), n('wing2')], (u) => [0, 1, u > 0.7 ? 1 : 0, 0], 4, 8);
+    const w1 = n('wing1'), w2 = n('wing2');
+    // bones with thick joint ends: upper arm, forearm, thumb claw, and fingers with a knuckle
+    tube(tubes, [WR, HM, WE].map(m), [0.1, 0.06, 0.085], [w1, w1], () => LEATHER, 8, 10);
+    tube(tubes, [WE, FM, WW].map(m), [0.09, 0.05, 0.075], [w2, w2], () => LEATHER, 8, 10);
+    tube(tubes, [WW, add(WW, [0.06, 0.2, 0.08]), add(WW, [0.02, 0.4, 0.14])].map(m), [0.05, 0.03, 0.004], [w2, w2], (u) => [0, 1, u > 0.7 ? 1 : 0, 0], 4, 8);
     const fingers = FINGER.map((f, i) => {
-      const pts = [WW, f[0], f[1]].map(m), bones = [n(`wf${i}a`), n(`wf${i}b`)];
-      tube(tubes, pts, [0.045, 0.03, 0.006], bones, () => LEATHER, 10, 8);
-      return chain(pts, bones);
+      const pts = [WW, lerp(WW, f[0], 0.5), f[0], lerp(f[0], f[1], 0.5), f[1]].map(m), a = n(`wf${i}a`), b = n(`wf${i}b`);
+      pts[1][1] += 0.04; pts[3][0] += s * 0.05;
+      tube(tubes, pts, [0.055, 0.028, 0.04, 0.02, 0.005], [a, a, b, b], () => LEATHER, 6, 8);
+      return chain(pts, [a, a, b, b]);
     });
     for (let i = 0; i < 3; i++) sheet(web, fingers[i], fingers[i + 1], i, 0.2, 0.07);
-    const back = chain([WW, WE, WR, WHIP].map(m), [n('wing2'), n('wing1'), r.id('chest')], (f) => [[r.id('chest'), 1 - f], [r.id('hips'), f]]);
-    sheet(web, fingers[3], back, 3, 0.12, 0.05);
+    const arm = [WW, FM, WE, HM, WR].map(m);
+    sheet(web, fingers[3], chain([...arm, m(WHIP)], [w2, w2, w1, w1, r.id('chest')], (f) => [[r.id('chest'), 1 - f], [r.id('hips'), f]]), 3, 0.12, 0.05);
+    // the skin in front of the elbow, from the shoulder to the wrist
+    sheet(web, chain([...arm].reverse(), [w1, w1, w2, w2]), chain([WR, [0.74, 2.95, -0.38], WW].map(m), [w1, w2]), 4, 0, 0, 8, 24);
   }
   // loincloth, front and back: hangs from the hips
   const hips: Wt = [[r.id('hips'), 1]];
-  for (const [z, panel] of [[0.215, 0], [-0.25, 1]] as const) {
-    const v0 = cloth.n, NS = 10, NT = 16;
+  for (const [z, panel] of [[0.235, 0], [-0.25, 1]] as const) {
+    const v0 = cloth.n, NS = 12, NT = 22;
     for (let it = 0; it <= NT; it++) for (let is = 0; is <= NS; is++) {
-      const s = is / NS, t = it / NT, half = 0.19 - 0.07 * t, x = (s * 2 - 1) * half;
-      cloth.push(new THREE.Vector3(x, 1.24 - 0.72 * t, z + Math.sign(z) * (0.03 * Math.sin(t * 2.5) - 1.6 * x * x * (1 - t))), panel + s, t, [0, 0, 0, 0], hips);
+      const s = is / NS, t = it / NT, half = 0.17 - 0.05 * t, x = (s * 2 - 1) * half;
+      cloth.push(new THREE.Vector3(x, 1.4 - 0.86 * t, z + Math.sign(z) * (0.03 * Math.sin(t * 2.5) - 1.6 * x * x * (1 - t))), panel + s, t, [0, 0, 0, 0], hips);
     }
     for (let it = 0; it < NT; it++) for (let is = 0; is < NS; is++) { const a = v0 + it * (NS + 1) + is; cloth.idx.push(a, a + 1, a + NS + 1, a + 1, a + NS + 2, a + NS + 1); }
   }

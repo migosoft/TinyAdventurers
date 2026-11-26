@@ -15,8 +15,8 @@ function both(p: Pose): Pose {
 
 const STAND = both({
   hips: [0.06, 0.1, 0], waist: [0.12, -0.04, 0], chest: [0.2, -0.08, 0], neck: [0.25, 0.04, 0], head: [-0.4, 0.1, 0.04], jaw: [0.12, 0, 0],
-  clavL: [0, -0.28, 0.12], upperArmL: [-0.22, 0, 0.16], foreArmL: [-0.5, 0, -0.3], handL: [-0.15, 0, -0.1], fingersL: [0, 0, -0.45],
-  upperArmR: [-0.1, 0, -0.22], foreArmR: [-0.62, 0, 0.36],
+  clavL: [0, -0.06, 0.05], upperArmL: [-0.1, 0, -0.04], foreArmL: [-0.26, 0, -0.1], handL: [-0.05, 0, 0.03], fingersL: [0, 0, -0.35],
+  upperArmR: [-0.03, 0, 0.02], foreArmR: [-0.34, 0, 0.13],
   thighL: [-0.5, 0.22, 0.16], shinL: [0.8, 0, 0], thighR: [-0.3, -0.16, -0.14], shinR: [0.6, 0, 0],
   tail0: [0.1, 0, 0], tail2: [-0.2, 0, 0], tail3: [-0.25, 0, 0], tail4: [-0.3, 0, 0],
   wing1L: [-0.42, -0.08, -0.05],
@@ -35,8 +35,11 @@ const WIND: Pose = {
 const STRIKE: Pose = {
   hips: [0.05, 0.25, 0], chest: [0.3, 0.55, 0], head: [0, -0.35, 0], jaw: [0.35, 0, 0], upperArmR: [-1.5, 0, 0.35], foreArmR: [0.3, 0, 0], fingersR: [0, 0, -0.4], upperArmL: [0.45, 0, 0.2],
 };
-/** How far each wing finger closes toward the body when the wing folds (left wing). */
-const FOLD = [0.5, 1.3, 1.7, 1.9];
+/**
+ * Folding, as a bat's wing does, only at its joints (left wing, rad at full fold): the upper arm drops, the elbow closes so the
+ * wrist stands up beside the shoulder, each finger swings down at the wrist into a closed bundle, the knuckles straighten.
+ */
+const FOLD = { arm: -1.31, elbow: 1.52, wrist: [-1.29, -0.77, -0.45, -0.31], knuckle: [0.6, 0.3, 0, 0] };
 
 export interface State { fly: number; look: number; attack: number; fold: number }
 const ease = (x: number) => { const c = Math.min(1, Math.max(0, x)); return c * c * (3 - 2 * c); };
@@ -47,6 +50,9 @@ function twist(b: THREE.Bone, axis: THREE.Vector3, angle: number) {
   b.parent!.getWorldQuaternion(q);
   b.quaternion.premultiply(q2.setFromAxisAngle(ax.copy(axis).applyQuaternion(q.invert()), angle));
 }
+
+/** The wing beat's phase at a time. */
+export const beat = (t: number) => t * Math.PI * 2 * 1.5;
 
 export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number, s: State) {
   const fly = ease(s.fly), cur: Pose = {};
@@ -74,19 +80,22 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
   // folding the wings (on the ground)
   const fold = s.fold * (1 - fly);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
-    cur['wing1' + side][2] -= m * 0.12 * fold; cur['wing2' + side][2] -= m * 1.9 * fold;
-    FOLD.forEach((a, i) => { cur[`wf${i}a` + side][2] += m * a * fold; });
+    cur['wing1' + side][2] += m * FOLD.arm * fold; cur['wing2' + side][2] += m * FOLD.elbow * fold;
+    for (let i = 0; i < 4; i++) {
+      cur[`wf${i}a` + side][2] += m * (FOLD.wrist[i] * fold + 0.03 * Math.sin(t * 0.7 + i * 1.3));
+      cur[`wf${i}b` + side][2] += m * (FOLD.knuckle[i] * fold + 0.04 * Math.sin(t * 0.9 + i * 0.8 + 2));
+    }
   }
   for (const b of r.bones) { const a = cur[b.name]; b.rotation.set(a[0], a[1], a[2]); b.position.copy(rest.get(b)!); }
 
-  const phi = t * Math.PI * 2 * 1.5;
+  const phi = beat(t);
   r.root.position.y += -0.14 * (1 - fly) + 0.012 * br + fly * (1.0 - 0.07 * Math.sin(phi - 0.4)) - 0.1 * strike;
   r.root.position.z += 0.15 * strike - 0.05 * wind;
   r.root.updateMatrixWorld(true);
 
   // the wings: a slow sway on the ground, a flare with the strike, the beat in the air; each joint further out lags
   const fwd = v.set(0, 0, 1).applyQuaternion(r.by.chest.getWorldQuaternion(q)).clone();
-  const lift = (lag: number) => 0.04 * Math.sin(t * 0.8 - lag) * (1 - fly) + fly * Math.sin(phi - lag);
+  const lift = (lag: number) => 0.08 * Math.sin(t * 0.8 - lag) * (1 - fly) + fly * Math.sin(phi - lag);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
     twist(r.by['wing1' + side], fwd, m * (0.5 * lift(0) + 0.15 * fly + 0.25 * strike - 0.1 * wind));
     twist(r.by['wing2' + side], fwd, m * 0.3 * lift(0.7));

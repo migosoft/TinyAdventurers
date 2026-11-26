@@ -7,8 +7,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { build, rig } from './body';
-import { sheetMaterial, skinMaterial, uTime } from './materials';
-import { animate, type State } from './pose';
+import { sheetMaterial, skinMaterial, uBillow, uFold, uLCol, uLPos, uTime } from './materials';
+import { animate, beat, type State } from './pose';
 
 const url = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -22,7 +22,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], back: [5, 5, -12, 2.2], close: [1.2, 3.4, 4.6, 2.1] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], back: [5, 5, -12, 2.2], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -61,7 +61,7 @@ const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.2, 1.5), new THREE.Me
 pillar.position.set(-1.6, 1.6, -3.4); pillar.castShadow = pillar.receiveShadow = true; scene.add(pillar);
 
 const torch = new THREE.PointLight(0xff8a3a, 16, 30, 1.8);
-torch.position.set(-0.6, 2.6, -2.4); torch.castShadow = true; torch.shadow.mapSize.set(2048, 2048); torch.shadow.bias = -0.003; torch.shadow.normalBias = 0.03;
+torch.position.set(-0.6, 2.6, -2.4); torch.castShadow = true; torch.shadow.mapSize.set(2048, 2048); torch.shadow.bias = -0.006; torch.shadow.normalBias = 0.07;
 scene.add(torch);
 const flame = new THREE.Sprite(new THREE.SpriteMaterial({
   map: canvasTexture(64, 64, (g) => { const gr = g.createRadialGradient(32, 38, 2, 32, 32, 30); gr.addColorStop(0, '#fff3c0'); gr.addColorStop(0.3, '#ffa030'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }),
@@ -125,6 +125,9 @@ function frame() {
   st.fly = to(st.fly, mode === 'fly' ? 1 : 0, 1.6); st.look = to(st.look, mode === 'look' ? 1 : 0, 3);
   if (st.attack >= 0) st.attack = pinned ?? st.attack + dt;
   uTime.value = time;
+  const fl01 = st.fly * st.fly * (3 - 2 * st.fly);
+  uFold.value = st.fold * (1 - fl01); uBillow.value = -fl01 * Math.cos(beat(time));
+  [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
   lava.position.copy(r.by.chest.getWorldPosition(chestAt)).add(new THREE.Vector3(0, 0.1, 0.6));
   const fl = 0.9 + 0.1 * Math.sin(time * 11) * Math.sin(time * 7.3);
