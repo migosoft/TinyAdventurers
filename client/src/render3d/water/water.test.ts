@@ -4,7 +4,7 @@ import { FIGURES } from '../../game/anim/defs';
 import { KIND } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
-import { WATER_LEVEL } from '../dips/shape';
+import { WATER_LEVEL, isWater } from '../dips/shape';
 import type { PondInfo } from '../../generated/PondInfo';
 import demo from '../../generated/pond-demo.json';
 import { FISH, FISH_CAP, FISH_STRIDE, Fish } from '../pond/fish';
@@ -304,7 +304,8 @@ describe('Water3d on a woodland pond (#360)', () => {
 
   it('a deck is dry: a dash along a bridge throws no spray, but one beside it does', () => {
     const { view } = pondMap(3);
-    const [bx, bz, bw, bh] = (demo[3].woodland!.pond as unknown as PondInfo).bridges[0].rect;
+    const b = (demo[3].woodland!.pond as unknown as PondInfo).bridges[0];
+    const [bx, bz, bw, bh] = b.rect;
     const dash = (x: number, z: number) => {
       const w = new Water3d(view, rng);
       let sprays = 0, live = 0;
@@ -314,7 +315,10 @@ describe('Water3d on a woodland pond (#360)', () => {
     const on = dash(bx + bw / 2, bz + bh / 2);
     expect(on.sprays).toBe(0);
     expect(on.live).toBe(0);
-    expect(dash(bx - 1.5, bz + bh / 2).sprays).toBeGreaterThan(20);
+    // beside the deck: the centre of a water tile next to it (a deck has water on both sides of at least one of its tiles)
+    const side = Array.from({ length: Math.max(bw, bh) }, (_, i) => (b.along_x ? [bx + i + 0.5, bz - 0.5] : [bx - 0.5, bz + i + 0.5]))
+      .find(([x, z]) => isWater(view.get(Math.floor(x), Math.floor(z))))!;
+    expect(dash(side[0], side[1]).sprays).toBeGreaterThan(20);
   });
 
   it('a map without a pond has no fish and no mouth rings', () => {

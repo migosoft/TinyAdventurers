@@ -173,11 +173,15 @@ describe('pondField (#360)', () => {
     const f = pondField(rules, pond);
     setPondField(view, f);
     const [x, z, w, h] = pond.bridges[0].rect;
+    const ax = pond.bridges[0].along_x; // past the end along the deck, beside it across
     expect(DECK_Y).toBe(0.14);
     expect(walkBedAt(view, x + w / 2, z + h / 2)).toBe(DECK_Y);
-    expect(f.deckAt(x + w / 2, z + h + 0.4)).toBe(DECK_Y); // half a tile past the end
-    expect(f.deckAt(x + w / 2, z + h + 0.6)).toBeNull();
-    expect(walkBedAt(view, x - 1.5, z + h / 2)).toBeLessThan(0); // the water beside the deck
+    expect(ax ? f.deckAt(x + w + 0.4, z + h / 2) : f.deckAt(x + w / 2, z + h + 0.4)).toBe(DECK_Y); // half a tile past the end
+    expect(ax ? f.deckAt(x + w + 0.6, z + h / 2) : f.deckAt(x + w / 2, z + h + 0.6)).toBeNull();
+    // the water beside the deck: the centre of a water tile next to it (water lies on both sides of at least one deck tile)
+    const side = Array.from({ length: Math.max(w, h) }, (_, i) => (ax ? [x + i + 0.5, z - 0.5] : [x - 0.5, z + i + 0.5]))
+      .find(([sx, sz]) => isWater(view.get(Math.floor(sx), Math.floor(sz))))!;
+    expect(walkBedAt(view, side[0], side[1])).toBeLessThan(0);
     expect(bedAt(view, x + w / 2, z + h / 2)).toBeLessThan(0); // the bed runs on under it
     expect(surfaceAt(view, x + w / 2, z + h / 2)).toBe(WATER_LEVEL);
   });

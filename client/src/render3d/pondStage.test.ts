@@ -83,7 +83,8 @@ describe('the ?r3d=pond stage (#360)', () => {
   });
 
   it('hands the water its fish and the mouth\'s rings; a pinned clock shows them as they are after that time', () => {
-    const live = (f: FrameInput): number => Array.from({ length: 16 }, (_, i) => f.water!.ripples![i * 4 + 2]).filter((age) => age >= 0).length;
+    // the mouth's live rings (a frog's rings have another strength)
+    const live = (f: FrameInput): number => Array.from({ length: 16 }, (_, i) => i * 4).filter((k) => f.water!.ripples![k + 2] >= 0 && f.water!.ripples![k + 3] === Math.fround(MOUTH_RING.strength)).length;
     // running: the fish swim from frame to frame
     const { run } = setup('?r3d=pond&pond=1');
     const a = Array.from(run(1, 0.016).water!.fish!);

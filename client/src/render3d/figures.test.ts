@@ -24,7 +24,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapFollowed, snapGround, viewRay, type Cam } from './camera';
-import { bedAt, depthFade, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
+import { bedAt, depthFade, isWater, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SINK } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, SHADE_FADE, SPECTRE_FORM, SPECTRE_SINK, untinted, type FigureOut } from './figures';
@@ -2163,9 +2163,12 @@ describe('Figures3d on a bridge (#360)', () => {
     const { out } = onDeck(false);
     expect(out.shadows.n).toBe(1);
     expect(ys(out.shadows as unknown as CardBuf)[0]).toBeCloseTo(SHADOW_Y + DECK_Y, 6);
-    // beside the bridge, in the water, it has none
+    // beside the bridge, in the water, it has none (the centre of a water tile next to the deck)
+    const ax = pond.bridges[0].along_x;
+    const side = Array.from({ length: Math.max(bw, bh) }, (_, i) => (ax ? [bx + i + 0.5, bz - 0.5] : [bx - 0.5, bz + i + 0.5]))
+      .find(([x, z]) => isWater(view.get(Math.floor(x), Math.floor(z))))!;
     const fg = new Figures3d({ ...init(), map: view }, frames, bounds);
-    const wet = fg.frame(frame([ent(10, KIND.Knight, { x: (bx - 1.5) * TILE, y: (bz + bh / 2) * TILE })]), cam());
+    const wet = fg.frame(frame([ent(10, KIND.Knight, { x: side[0] * TILE, y: side[1] * TILE })]), cam());
     expect(wet.shadows.n).toBe(0);
   });
 
