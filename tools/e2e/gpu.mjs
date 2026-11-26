@@ -51,6 +51,8 @@ export async function printGpu(page) {
     const gl = document.createElement('canvas').getContext('webgl2');
     const ext = gl?.getExtension('WEBGL_debug_renderer_info');
     const webgl = gl ? (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : 'none';
+    // Free the context now (#366): left to the garbage collector, its teardown later waits up to ~330 ms for the busy GPU process, in a measured frame.
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
     let webgpu = 'none';
     try {
       const a = await navigator.gpu?.requestAdapter();
