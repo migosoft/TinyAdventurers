@@ -159,6 +159,8 @@ export class RunView3d implements RunView {
   treeBudgetMs = TREE_BUDGET_MS;
   /** False while the loading screen covers a level still being built: the frame steps everything (trees too) but does not draw (#322). */
   drawing = true;
+  /** True while the loading screen covers a built level: the frames also draw one of everything a run can show (`FrameInput.warm`, #434). */
+  warm = false;
   /** Trees grown of all, 0..1; null without a forest. */
   get treeProgress(): number | null {
     return this.forest ? (this.forest.total ? this.forest.built / this.forest.total : 1) : null;
@@ -550,7 +552,7 @@ export class RunView3d implements RunView {
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam: drawCam, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
       },
       c.timer,

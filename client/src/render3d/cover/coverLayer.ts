@@ -39,6 +39,9 @@ export class CoverLayer {
 
   get meshCount(): number { return this.meshes.length; }
 
+  /** One mesh of each material held (the view's warm-up draws them though off screen, #434). */
+  onePerMaterial(): Mesh[] { return [this.materials.sheet, this.materials.bushel].map((m) => this.meshes.find((x) => x.material === m)).filter((x): x is Mesh => !!x); }
+
   /** Builds every chunk's meshes and uploads the image; throws GroundTooLargeError above `limit` (the layer is then empty). */
   set(r: CoverResult, limit: number, floorY?: (x: number, z: number) => number): void {
     this.clear();

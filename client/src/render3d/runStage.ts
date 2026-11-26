@@ -237,6 +237,7 @@ export function createRunStage(
         const trees = runView.treeProgress;
         const built = job.done && stoneRun.done && (trees === null || trees >= 1);
         building = !built;
+        runView.warm = built; // the first drawn frames also draw one of everything (#434)
         if (built && c.view) warmFrames++;
         const s = loadState({
           assets: true, cover: job.progress, stone: world.stone ? (stoneRun.done ? 1 : sp ? sp.done / sp.total : 0) : null, trees, warmFrames,
@@ -251,6 +252,7 @@ export function createRunStage(
           }
         }
       }
+      if (!loading.visible) runView.warm = false; // however the screen hid (also at RunEnded)
       runView.drawing = !building;
       runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.frameMs); // the raw time: the session clamps it itself (#312)
