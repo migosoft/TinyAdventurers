@@ -1,5 +1,6 @@
 // The sway of #306 in TSL: the same formula as `sway` in wind.ts, as a vertex offset.
-import { Fn, If, Loop, clamp, float, length, max, min, pow, select, sin, smoothstep, uniform, uniformArray, vec2, vec3 } from 'three/tsl';
+import { Fn, If, Loop, clamp, float, length, max, min, pow, select, sin, smoothstep, uniform, vec2, vec3 } from 'three/tsl';
+import { sharedArray } from './sharedArray';
 import { Vector4 } from 'three/webgpu';
 import { SWAY_WAVE, WIND_DIR } from './wind';
 import { BRUSH, type Brusher } from './brush';
@@ -29,7 +30,7 @@ export function swayNode(foot: N, y: N, h: N, amp: N, t: N, on: N): N {
 export interface BrushUniforms { a: N; b: N; n: N; t: N }
 
 export function makeBrushUniforms(): BrushUniforms {
-  const rows = () => uniformArray(Array.from({ length: BRUSH.cap }, () => new Vector4()), 'vec4');
+  const rows = () => sharedArray(Array.from({ length: BRUSH.cap }, () => new Vector4()), 'vec4');
   return { a: rows(), b: rows(), n: uniform(0, 'int'), t: uniform(0) };
 }
 

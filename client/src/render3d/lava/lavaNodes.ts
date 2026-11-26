@@ -5,7 +5,8 @@
 // light of lightNodes.ts. The shimmer re-draws the scene behind the air over the lava with a small rising wobble. The numbers are the
 // approved mockup's unless a comment says otherwise; its colours were tuned under a tone map, which the lava applies to itself (`GLOW`).
 import { MeshBasicNodeMaterial, Texture, Vector4, type NodeMaterial } from 'three/webgpu';
-import { Fn, If, Loop, attribute, dot, exp, float, floor, fract, length, max, mix, positionLocal, positionWorld, screenUV, sin, smoothstep, sqrt, step, texture, uniform, uniformArray, vec2, vec3, vec4 } from 'three/tsl';
+import { Fn, If, Loop, attribute, dot, exp, float, floor, fract, length, max, mix, positionLocal, positionWorld, screenUV, sin, smoothstep, sqrt, step, texture, uniform, vec2, vec3, vec4 } from 'three/tsl';
+import { sharedArray } from '../sharedArray';
 import type { Sight } from '../sightNodes';
 import type { ViewToward } from '../materials';
 import { fbm2, hash21, hash22, vnoise2 } from '../noiseNodes';
@@ -102,8 +103,8 @@ export interface LavaMaterial {
 export function lavaMaterial(sight: Sight): LavaMaterial {
   const time = uniform(0);
   // A free slot has age -1 (a stale size adds nothing: only the age says whether a slot is live); a free stir has strength 0.
-  const bub = uniformArray(Array.from({ length: BUBBLE_CAP }, () => new Vector4(0, 0, -1, 0)), 'vec4');
-  const stir = uniformArray(Array.from({ length: STIR_CAP }, () => new Vector4()), 'vec4');
+  const bub = sharedArray(Array.from({ length: BUBBLE_CAP }, () => new Vector4(0, 0, -1, 0)), 'vec4');
+  const stir = sharedArray(Array.from({ length: STIR_CAP }, () => new Vector4()), 'vec4');
   const shore: N = attribute('shore', 'vec2');
   const END = BUBBLE.swell + BUBBLE.pop;
 

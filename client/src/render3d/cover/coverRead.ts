@@ -3,7 +3,8 @@
 // cover too, and coverNodes itself imports `materials.ts`.
 import { Vector2, Vector4 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { clamp, float, floor, int, ivec2, max, mod, select, texture, uniform, uniformArray, vec2 } from 'three/tsl';
+import { clamp, float, floor, int, ivec2, max, mod, select, texture, uniform, vec2 } from 'three/tsl';
+import { sharedArray } from '../sharedArray';
 import { COVER_KINDS } from './kinds';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
@@ -66,13 +67,13 @@ export function coverHeightNode(s: CoverShared, xz: N): N {
   return coverTexel(s, floor(vec2(xz).mul(16))).h.div(16).mul(s.gh).mul(s.on);
 }
 
-const look = uniformArray(COVER_KINDS.map((k) => new Vector4(k.sway, k.footShade, k.darken, k.maxH)), 'vec4');
+const look = sharedArray(COVER_KINDS.map((k) => new Vector4(k.sway, k.footShade, k.darken, k.maxH)), 'vec4');
 /** The bushel tones, three per kind in kind order, as colours in 0..1 (the kinds hold the palette's 0..255 ints). */
 export function bushelToneTable(): [number, number, number][] {
   return COVER_KINDS.flatMap((k) => (k.bushels?.tones ?? [[255, 255, 255], [255, 255, 255], [255, 255, 255]]).map(([r, g, b]): [number, number, number] => [r / 255, g / 255, b / 255]));
 }
-const tones = uniformArray(bushelToneTable().map(([r, g, b]) => new Vector4(r, g, b, 0)), 'vec4');
-const bushelSway = uniformArray(COVER_KINDS.map((k) => new Vector4(k.bushels?.sway ?? 0, 0, 0, 0)), 'vec4');
+const tones = sharedArray(bushelToneTable().map(([r, g, b]) => new Vector4(r, g, b, 0)), 'vec4');
+const bushelSway = sharedArray(COVER_KINDS.map((k) => new Vector4(k.bushels?.sway ?? 0, 0, 0, 0)), 'vec4');
 
 /** A kind id (a float node, maybe a varying that interpolated to 0.99999994) as a table index: rounded, never truncated. */
 export function kindSlot(id: N): N {
