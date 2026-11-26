@@ -8,6 +8,7 @@ import type { PageButton } from './panel';
 import type { Stage, StageCtx } from './host';
 import { createKit, directRunner } from './models/kit';
 import { createDemonStage, demonMap, parseDemon } from './demonStage';
+import { DEMON_DEV } from './demon/figure';
 import { DEMON_ACTS } from './demonScript';
 import { TERRAIN } from '../game/terrain-layers';
 import type { FrameInput } from './view';
@@ -92,6 +93,16 @@ describe('the ?r3d=demon stage', () => {
     expect(last!.lavaPool).toBeDefined();
     expect((window as unknown as { __r3d: { built: number; demonMs: number } }).__r3d.built).toBe(1);
     expect((window as unknown as { __r3d: { demonMs: number } }).__r3d.demonMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('&fold= pins the wings; &two=1 draws a second demon', async () => {
+    expect(parseDemon('?fold=0.5')).toMatchObject({ fold: 0.5, two: false });
+    const r = make('?r3d=demon&two=1&fold=1');
+    let last: FrameInput | undefined;
+    await r.wait(() => { last = r.step(1)[0]; return built(last) === 2; });
+    expect(new Set(last!.models!.built!.map((b) => b.owner)).size).toBe(2);
+    expect(DEMON_DEV.fold).toBe(1);
+    DEMON_DEV.fold = null;
   });
 
   it('faces the knight unless &face= fixes the aim', async () => {
