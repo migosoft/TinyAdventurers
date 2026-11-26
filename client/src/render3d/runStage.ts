@@ -12,6 +12,7 @@ import { atlasBounds } from './atlasBounds';
 import { loadState } from './loadProgress';
 import { COVER_BUDGET_MS, coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
+import { roadEdge, setRoadEdge } from '../game/woodland/road';
 import { pondField, pondViewMap, setPondField } from './pond/pondField';
 import { stoneField } from './stone/field';
 import { paintDone } from './stone/paint';
@@ -120,6 +121,8 @@ export function createRunStage(
   // if a woodland level ever changes tiles
   const viewMap = pond ? pondViewMap(session.map, pond) : session.map;
   if (pond) setPondField(viewMap, pondField(session.map, pond, viewMap));
+  // The road is drawn along the generator's centre line, not by its tiles (#430).
+  if (info.woodland) setRoadEdge(viewMap, roadEdge(info.woodland.road, pond?.bridges ?? [], info.woodland.seed));
   const runView = new RunView3d({ ...session.viewInit(), map: viewMap }, assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
   const spawn = { x: info.spawn_x / TILE, z: info.spawn_y / TILE };

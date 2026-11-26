@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
 import { BASE, PATCH } from '../covemath';
+import type { RoadEdge } from './road';
 import { BANK, flowerSpots, GRASS, GROUND_TILES, GroundPainter, groundKindAt, groundOf, kindRows, paintGround, ROAD, THICKET, type Shore } from './ground';
 
 // 12 x 6 tiles: thicket top row, road in columns 4..7 of rows 1..4, grass elsewhere, a wall at the bottom right
@@ -110,6 +111,76 @@ function kindsOf(m: TileMap, seed: number): Uint8Array {
   return out;
 }
 const centre = (p: number): number => (p + 0.5) / TILE;
+
+// The drawn road (#430): a slanted band, 1.5 tiles to either side of y = 3 + x / 4, over Road tiles laid in steps.
+const CREEP_PX = 3;
+const SLANT: RoadEdge = { insideAt: (x, y) => 1.5 - Math.abs(y - (3 + x / 4)), lineAt: (x) => 3 + x / 4 };
+function slantMap(): TileMap {
+  const t = new Uint8Array(W * H).fill(TILE_ID.Floor);
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) if (Math.abs(y + 0.5 - (3 + (x + 0.5) / 4)) < 1.5) t[y * W + x] = TILE_ID.Road;
+  return new TileMap(W, H, t);
+}
+const roadKinds = (m: TileMap, seed: number, shore?: Shore, road?: RoadEdge): Uint8Array => {
+  const w = m.w * TILE, out = new Uint8Array(w * m.h * TILE), rows = kindRows(m, seed, shore, road);
+  for (let ty = 0; ty < m.h; ty++) rows(ty, out.subarray(ty * TILE * w, (ty + 1) * TILE * w));
+  return out;
+};
+
+describe('the drawn road (#430)', () => {
+  it('no staircase: the road edge moves at most 2 px between neighbouring columns', () => {
+    const m = slantMap(), w = m.w * TILE, k = roadKinds(m, 4, undefined, SLANT);
+    // the first px of a column that starts a run of 6 road px (the dither's loose px along the edge do not count)
+    const top = (x: number) => { for (let y = 0; y < m.h * TILE - 6; y++) if ([0, 1, 2, 3, 4, 5].every((d) => k[(y + d) * w + x] === ROAD)) return y; return -1; };
+    let worst = 0, tile = 0;
+    // the edge frays by the dither (a px or two, as the tile borders did), so it is read as the mean of 4 columns
+    const edge = (x: number) => (top(x) + top(x + 1) + top(x + 2) + top(x + 3)) / 4;
+    for (let x = 2 * TILE; x < 20 * TILE; x++) { worst = Math.max(worst, Math.abs(edge(x) - edge(x - 1))); expect(top(x)).toBeGreaterThan(0); }
+    expect(worst).toBeLessThanOrEqual(2);
+    // the tile paint steps a whole tile
+    const kt = roadKinds(m, 4);
+    const topT = (x: number) => { for (let y = 0; y < m.h * TILE; y++) if (kt[y * w + x] === ROAD) return y; return -1; };
+    for (let x = 2 * TILE; x < 20 * TILE; x++) tile = Math.max(tile, Math.abs(topT(x) - topT(x - 1)));
+    expect(tile).toBeGreaterThanOrEqual(TILE);
+  });
+
+  it('the line decides: road px where it is inside, grass on a Road tile it has left', () => {
+    const m = slantMap(), k = roadKinds(m, 4, undefined, SLANT), w = m.w * TILE;
+    for (let y = 0; y < m.h * TILE; y++) for (let x = 0; x < w; x++) {
+      const v = SLANT.insideAt(centre(x), centre(y));
+      if (v > 0) expect(k[y * w + x]).toBe(ROAD);
+      else if (v < -CREEP_PX / TILE) expect(k[y * w + x]).toBe(GRASS);
+    }
+  });
+
+  it('no flower on the drawn road, and flowers grow on the Road tile corners it has left', () => {
+    const m = slantMap(), spots = flowerSpots(m, 5, undefined, SLANT);
+    for (const s of spots) {
+      expect(groundKindAt(m, 5, s.x, s.y, undefined, SLANT)).toBe(GRASS);
+      expect(SLANT.insideAt(centre(s.x), centre(s.y))).toBeLessThan(0);
+    }
+    expect(spots.some((s) => m.get(Math.floor(s.x / TILE), Math.floor(s.y / TILE)) === TILE_ID.Road)).toBe(true);
+  });
+
+  it('the bank wins over the road', () => {
+    const m = pondMap(), flat: RoadEdge = { insideAt: (_x, y) => 2 - Math.abs(y - 6.5), lineAt: () => 6.5 };
+    const k = roadKinds(m, 4, SHORE, flat), w = m.w * TILE;
+    let wet = 0;
+    for (let y = 0; y < m.h * TILE; y++) for (let x = 0; x < w; x++) if (SHORE.shoreAt(centre(x), centre(y)) > 0) { wet++; expect(k[y * w + x]).toBe(BANK); }
+    expect(wet).toBeGreaterThan(1000);
+  });
+
+  it('a road deck keeps its road paint where the line is far away', () => {
+    const m = pondMap(), far: RoadEdge = { insideAt: () => -5, lineAt: () => 11 };
+    const k = roadKinds(m, 4, { ...SHORE, decks: [{ x0: 18, z0: 1, x1: 21, z1: 4, road: true }] }, far), w = m.w * TILE;
+    for (let y = 1 * TILE; y < 4 * TILE; y++) for (let x = 18 * TILE; x < 21 * TILE; x++) expect(k[y * w + x]).toBe(ROAD);
+  });
+
+  it('without an edge the paint is as before', () => {
+    const m = slantMap();
+    expect(Buffer.from(paintGround(m, 7, undefined, undefined).data).equals(Buffer.from(paintGround(m, 7).data))).toBe(true);
+    expect(roadKinds(m, 4).some((v) => v === ROAD)).toBe(true);
+  });
+});
 
 describe('the bank (#360)', () => {
   it('a woodland without a shore paints as before, water tiles or not', () => {

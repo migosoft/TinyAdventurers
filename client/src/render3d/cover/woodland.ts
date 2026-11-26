@@ -3,6 +3,7 @@
 import { TILE_ID } from '../../generated/defs';
 import { BANK, GRASS, GroundPainter, kindRows, NONE, THICKET, type Shore } from '../../game/woodland/ground';
 import { pondFieldOf } from '../dips/shape';
+import { roadEdgeOf } from '../../game/woodland/road';
 import { bandOrder } from '../../game/woodland/settle';
 import { TILE, TileMap } from '../../sim/map';
 import { COVER } from './kinds';
@@ -22,7 +23,8 @@ function remapped(map: TileMap, from: number[], to: number): TileMap {
 export function woodlandSource(map: TileMap, seed: number, spawnRow: number, shore: Shore | undefined = pondFieldOf(map)): CoverSource {
   const bare = new GroundPainter(remapped(map, [TILE_ID.Floor, TILE_ID.Trunk, TILE_ID.Thicket], TILE_ID.Road), seed, shore);
   const cover = new GroundPainter(remapped(map, [TILE_ID.Road], TILE_ID.Floor), seed, shore);
-  const rowKinds = kindRows(map, seed, shore);
+  // the two painters' map copies are all road or all grass, so only the kinds (what grows) follow the drawn road (#430)
+  const rowKinds = kindRows(map, seed, shore, roadEdgeOf(map));
   const w = map.w * TILE, h = map.h * TILE;
   const grow = new Uint8Array(w * h), allow = new Uint8Array(w * h);
   const row = new Uint8Array(w * TILE);

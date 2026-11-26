@@ -24,7 +24,7 @@ import type { PondInfo } from '../generated/PondInfo';
 
 const ROWS = ['#####', '#...#', '#####'];
 const BIG = Array.from({ length: 40 }, () => '.'.repeat(40));
-const WOODLAND = { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 }, pond: null } as unknown as RunStartInfo['woodland'];
+const WOODLAND = { seed: 1, road: [1, 1, 1, 1, 1], end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 }, pond: null } as unknown as RunStartInfo['woodland'];
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
 const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
 

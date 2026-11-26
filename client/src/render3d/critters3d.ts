@@ -3,6 +3,7 @@
 // opaque cards, so the sun lights them and their tiny shadows fall through the cards' sun twin. Shown only where the viewer sees.
 import { BEE_COLOURS, BEES_PER_PATCH, beeParams, beePos, butterflyHomes, flowerPatches, flyParams, flyPos, type BeeParams, type Butterfly, type FlyParams, type Pt, type Rect } from '../game/woodland/critterMath';
 import { flowerSpots } from '../game/woodland/ground';
+import { roadEdgeOf } from '../game/woodland/road';
 import { TILE, type TileMap } from '../sim/map';
 import { pondFieldOf } from './dips/shape';
 import type { Cam } from './camera';
@@ -41,7 +42,7 @@ export class Critters3d {
   private readonly pt: Pt = { x: 0, y: 0 };
 
   constructor(map: TileMap, seed: number) {
-    flowerPatches(flowerSpots(map, seed, pondFieldOf(map))).forEach((f, p) => {
+    flowerPatches(flowerSpots(map, seed, pondFieldOf(map), roadEdgeOf(map))).forEach((f, p) => {
       for (let b = 0; b < BEES_PER_PATCH; b++) this.bees.push({ f, q: beeParams(p * BEES_PER_PATCH + b, seed) });
     });
     butterflyHomes(map, seed).forEach(({ bounds, colour }, i) => this.flyers.push({ bounds, colour, q: flyParams(i, seed, bounds) }));

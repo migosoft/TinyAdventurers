@@ -3,6 +3,7 @@ import { TILE_ID } from '../../generated/defs';
 import { BASE, EDGE, FLOWERS, PATCH, type Rgb } from '../../game/covemath';
 import { BANK, GroundPainter, groundKindAt, kindRow, kindRows, type Shore, paintGround, THICK_0, THICK_1 } from '../../game/woodland/ground';
 import { TILE, TileMap } from '../../sim/map';
+import { setRoadEdge } from '../../game/woodland/road';
 import { setPondField, type PondField } from '../pond/pondField';
 import { woodlandSource } from './woodland';
 
@@ -82,6 +83,22 @@ describe('woodlandSource', () => {
   it('leaves paintGround of the original map unchanged', () => {
     expect(Buffer.from(paintGround(m, SEED).data).equals(before)).toBe(true);
     expect(m.get(5, 3)).toBe(TILE_ID.Road);
+  });
+});
+
+describe('woodlandSource with a drawn road (#430)', () => {
+  it('nothing grows on the drawn road, and a Road tile the line has left grows grass', () => {
+    const m = mapOf();
+    // the line runs along y = 3 with 1 tile to either side: tile rows 2 and 3 are on it, rows 4 and 5 (Road tiles) are off it
+    setRoadEdge(m, { insideAt: (_x, y) => 1 - Math.abs(y - 3), lineAt: () => 3 });
+    const src = woodlandSource(m, SEED, 3);
+    src.prep.forEach((u) => u());
+    const px = (tx: number, ty: number, lx = 8, ly = 8) => (ty * TILE + ly) * src.w + tx * TILE + lx;
+    expect(src.grow[px(5, 2)]).toBe(0);
+    expect(src.grow[px(5, 3)]).toBe(0);
+    expect(src.grow[px(5, 5, 8, 12)]).toBe(1);
+    expect(src.grow[px(6, 5)]).toBe(1);
+    expect(src.allow[px(5, 3)]).toBe(1);
   });
 });
 

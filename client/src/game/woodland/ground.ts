@@ -9,6 +9,7 @@ import { TILE_ID } from '../../generated/defs';
 import { TILE, type TileMap } from '../../sim/map';
 import type { Rgba } from '../vegetation';
 import { BASE, EDGE, FLOWERS, G1, noise, PATCH, rng, type Rgb } from '../covemath';
+import type { RoadEdge } from './road';
 
 /** The tiles the woodland paints itself (the dungeon tile art is skipped there): the pond's water tiles too, whose bank and bed are painted (#360). */
 export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk, TILE_ID.Barrier, TILE_ID.ShallowWater, TILE_ID.DeepWater]);
@@ -31,6 +32,9 @@ const WET_TILES = 1.75;
 const SHORES = new WeakMap<Uint8Array, Shore>();
 /** How far a stronger ground creeps into a weaker one (px). */
 const CREEP = 3;
+/** The drawn road's edges of the tile kinds that have one (`kinds`); NEAR_ROAD flags a tile that can hold road px: the road's half-width is under 1.78 tiles, a tile's half-diagonal is 0.71, and the dither adds CREEP px. */
+const ROADS = new WeakMap<Uint8Array, RoadEdge>();
+const NEAR_ROAD = 16, ROAD_NEAR = -0.71 - CREEP / TILE;
 /** How far the bank reaches onto the land at most (px, under a tile): beside a pond and beside a stream; the pond's reach is full where `Shore.bodyAt` is at least BODY_NEAR. */
 const POND_REACH = 15, STREAM_REACH = 4.5, BODY_NEAR = 0.1;
 /** The bank's edge wobbles between this share of the reach and all of it, over lattice cells of BANK_WOBBLE px, and frays over BANK_FRINGE px. */
@@ -73,15 +77,21 @@ export function groundOf(map: TileMap, x: number, y: number): number {
   return kindOf(west !== TILE_ID.Barrier && west !== TILE_ID.Void ? west : map.get(x + 1, y));
 }
 
-/** The tiles' kinds. With a shore, the tiles its water or bank can reach carry WET (read a kind through `& KIND`) and the array remembers the shore. */
-function kinds(map: TileMap, shore?: Shore): Uint8Array {
+/**
+ * The tiles' kinds. With a shore, the tiles its water or bank can reach carry WET (read a kind through `& KIND`) and the array remembers the shore.
+ * With a road edge (#430) the Road tiles count as grass, and the tiles the drawn road can reach carry NEAR_ROAD.
+ */
+function kinds(map: TileMap, shore?: Shore, road?: RoadEdge): Uint8Array {
   const { w, h } = map;
   const k = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) k[y * w + x] = groundOf(map, x, y);
-  if (!shore) return k;
-  for (const d of shore.decks ?? []) if (d.road) for (let y = d.z0; y < d.z1; y++) for (let x = d.x0; x < d.x1; x++) if (k[y * w + x] === GRASS) k[y * w + x] = ROAD;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (k[y * w + x] !== NONE && shore.bankAt(x + 0.5, y + 0.5) < WET_TILES) k[y * w + x] |= WET;
-  SHORES.set(k, shore);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const g = groundOf(map, x, y); k[y * w + x] = road && g === ROAD ? GRASS : g; }
+  if (shore) for (const d of shore.decks ?? []) if (d.road) for (let y = d.z0; y < d.z1; y++) for (let x = d.x0; x < d.x1; x++) if (k[y * w + x] === GRASS) k[y * w + x] = ROAD;
+  if (shore) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (k[y * w + x] !== NONE && shore.bankAt(x + 0.5, y + 0.5) < WET_TILES) k[y * w + x] |= WET;
+  if (shore) SHORES.set(k, shore);
+  if (road) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (k[y * w + x] !== NONE && road.insideAt(x + 0.5, y + 0.5) > ROAD_NEAR) k[y * w + x] |= NEAR_ROAD;
+    ROADS.set(k, road);
+  }
   return k;
 }
 
@@ -121,6 +131,8 @@ function pixelKind(k: Uint8Array, w: number, h: number, tx: number, ty: number, 
     if (d + hash(x, y, seed + 3) * BANK_FRINGE < reach && !(d > TUFT_FROM && wobble(x, y, TUFT_STEP, seed + 17) < TUFT_NEAR + (TUFT_FAR - TUFT_NEAR) * (d / reach))) return BANK;
   }
   if (own === ROAD) return own;
+  // the drawn road (#430), under the bank: inside its edge, frayed by the dither as the tile borders are
+  if (raw & NEAR_ROAD && ROADS.get(k)!.insideAt((x + 0.5) / TILE, (y + 0.5) / TILE) * TILE + CREEP * (1 - hash(x, y, seed)) > 0) return ROAD;
   // deeper than CREEP px inside the tile, no neighbour tile is near enough to creep in
   const lx = x - tx * TILE, ly = y - ty * TILE;
   if (lx >= CREEP - 1 && lx <= TILE - CREEP && ly >= CREEP - 1 && ly <= TILE - CREEP) return own;
@@ -148,15 +160,15 @@ function grassAt(k: Uint8Array, w: number, h: number, seed: number, x: number, y
 }
 
 /** The ground kind (NONE, GRASS, THICKET, ROAD, BANK) that pixel (x, y) shows, creeping edges included. */
-export function groundKindAt(map: TileMap, seed: number, x: number, y: number, shore?: Shore): number {
+export function groundKindAt(map: TileMap, seed: number, x: number, y: number, shore?: Shore, road?: RoadEdge): number {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return NONE;
-  return pixelKind(kinds(map, shore), map.w, map.h, tx, ty, x, y, seed);
+  return pixelKind(kinds(map, shore, road), map.w, map.h, tx, ty, x, y, seed);
 }
 
 /** A `kindRow` reader that fixes the map's tile kinds now (one pass), so a source built at one moment stays consistent. */
-export function kindRows(map: TileMap, seed: number, shore?: Shore): (ty: number, out: Uint8Array) => void {
-  const k = kinds(map, shore);
+export function kindRows(map: TileMap, seed: number, shore?: Shore, road?: RoadEdge): (ty: number, out: Uint8Array) => void {
+  const k = kinds(map, shore, road);
   const w = map.w * TILE;
   return (ty, out) => {
     for (let ly = 0; ly < TILE; ly++) for (let x = 0; x < w; x++) out[ly * w + x] = pixelKind(k, map.w, map.h, x >> 4, ty, x, ty * TILE + ly, seed);
@@ -169,8 +181,8 @@ export function kindRow(map: TileMap, seed: number, ty: number, out: Uint8Array)
 }
 
 /** Flower spots (px, the flower's own pixel; it and its four neighbours show grass), about one per FLOWER_AREA px² of grass, never on road, thicket or a bank. */
-export function flowerSpots(map: TileMap, seed: number, shore?: Shore): { x: number; y: number }[] {
-  const k = kinds(map, shore);
+export function flowerSpots(map: TileMap, seed: number, shore?: Shore, road?: RoadEdge): { x: number; y: number }[] {
+  const k = kinds(map, shore, road);
   const r = rng(seed * 7919 + 41);
   const out: { x: number; y: number }[] = [];
   const per = (TILE * TILE) / FLOWER_AREA;
@@ -207,12 +219,12 @@ export class GroundPainter {
   private nBedBig: (x: number, y: number) => number;
 
   /** `shore`: the pond's drawn shore (#360); without one no bank is painted. */
-  constructor(private map: TileMap, private seed: number, private shore?: Shore) {
+  constructor(private map: TileMap, private seed: number, private shore?: Shore, private road?: RoadEdge) {
     this.w = map.w * TILE;
     this.h = map.h * TILE;
     this.rows = map.h;
     this.data = new Uint8ClampedArray(this.w * this.h * 4);
-    this.k = kinds(map, shore);
+    this.k = kinds(map, shore, road);
     this.kindAt = new Uint8Array(this.w * this.h);
     this.nGrass = noise(seed * 3 + 17, 26);
     this.nDirt = noise(seed * 5 + 9, 14);
@@ -317,7 +329,7 @@ export class GroundPainter {
   /** Flowers on the grass (single pixel with a stem, a third are small crosses). */
   flowers(): void {
     const rf = rng(this.seed * 17 + 5);
-    for (const s of flowerSpots(this.map, this.seed, this.shore)) {
+    for (const s of flowerSpots(this.map, this.seed, this.shore, this.road)) {
       const c = FLOWERS[Math.floor(rf() * FLOWERS.length)];
       if (rf() < 0.35) { this.put(s.x - 1, s.y, c); this.put(s.x + 1, s.y, c); this.put(s.x, s.y - 1, c); this.put(s.x, s.y + 1, G1); this.put(s.x, s.y, FLOWERS[1]); }
       else { this.put(s.x, s.y, c); this.put(s.x, s.y + 1, G1); }
@@ -326,8 +338,8 @@ export class GroundPainter {
 }
 
 /** The whole map in px (map.w·16 × map.h·16). */
-export function paintGround(map: TileMap, seed: number, shore?: Shore): Rgba {
-  const p = new GroundPainter(map, seed, shore);
+export function paintGround(map: TileMap, seed: number, shore?: Shore, road?: RoadEdge): Rgba {
+  const p = new GroundPainter(map, seed, shore, road);
   for (let ty = 0; ty < p.rows; ty++) p.band(ty);
   p.blades();
   p.flowers();
