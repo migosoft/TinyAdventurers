@@ -13,7 +13,7 @@ pub struct Blob {
     pub ry: f64,
 }
 
-pub const DEEP_IN: f64 = 1.6; // balancing
+pub const DEEP_IN: f64 = 2.4; // balancing
 const WOBBLE_AMP: f64 = 0.6; // balancing
 const WOBBLE_WAVE: f64 = 4.0; // balancing
 const PATH_STEP: f64 = 3.0; // balancing

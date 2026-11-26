@@ -63,10 +63,10 @@ const POND_SALT: u64 = 0x504f_4e44_3336_30;
 const POND_PCT: u32 = 60;
 const POND_TRIES: usize = 30;
 const POND_BLOBS: std::ops::RangeInclusive<usize> = 2..=4;
-const POND_FIRST_RX: std::ops::RangeInclusive<f64> = 3.5..=6.0;
-const POND_FIRST_RY: std::ops::RangeInclusive<f64> = 2.5..=4.0;
-const POND_NEXT_RX: std::ops::RangeInclusive<f64> = 2.0..=4.5;
-const POND_NEXT_RY: std::ops::RangeInclusive<f64> = 2.0..=3.5;
+const POND_FIRST_RX: std::ops::RangeInclusive<f64> = 5.0..=8.0;
+const POND_FIRST_RY: std::ops::RangeInclusive<f64> = 3.5..=5.5;
+const POND_NEXT_RX: std::ops::RangeInclusive<f64> = 3.0..=6.0;
+const POND_NEXT_RY: std::ops::RangeInclusive<f64> = 3.0..=4.5;
 const POND_NEXT_AT: std::ops::RangeInclusive<f64> = 0.5..=0.9;
 const POND_ROAD_GAP: std::ops::RangeInclusive<f64> = 5.0..=8.0;
 /// Placement: columns kept free after the start and before the end ellipse, a water tile's distance from the
@@ -89,7 +89,7 @@ const STREAM_APART: i32 = 8;
 const STREAM_STRAIGHT: i32 = 3;
 /// The chance of a bridge over a narrow arm of the pond.
 // balancing
-const POND_BRIDGE_PCT: u32 = 40;
+const POND_BRIDGE_PCT: u32 = 70;
 /// Trees keep this far (Chebyshev) from any water.
 // balancing
 const TREE_SHORE_GAP: i32 = 2;
@@ -494,20 +494,20 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
         let used: HashSet<(i32, i32)> = [&inflow, &outflow].into_iter().flatten().flat_map(|s| s.tiles.iter().chain(&s.wide).copied()).collect();
         let mut bridge: Option<(Bridge, Vec<(i32, i32)>)> = None;
         if rng.gen_range(0..100) < POND_BRIDGE_PCT {
-            // a straight line of 2 to 4 shallow tiles with Floor at both ends
+            // a straight line of 2 to 5 shallow tiles with Floor at both ends
             let shallow = |x: i32, y: i32| pond_map.get(x, y) == Tile::ShallowWater as u8 && water.contains(&(x, y)) && !used.contains(&(x, y));
             let dry = |x: i32, y: i32| pond_map.get(x, y) == floor && playable_x(x) && !used.contains(&(x, y));
             let mut lines: Vec<(Bridge, Vec<(i32, i32)>)> = vec![];
             for &(x, y) in &tiles {
                 for (dx, dy) in [(1, 0), (0, 1)] {
-                    let k = (0..=4).take_while(|&k| shallow(x + dx * k, y + dy * k)).count() as i32;
+                    let k = (0..=5).take_while(|&k| shallow(x + dx * k, y + dy * k)).count() as i32;
                     // a plank has water on both long sides of at least one of its tiles
                     let wet = |x: i32, y: i32| is_water_tile(pond_map.get(x, y));
                     let across = (0..k).any(|i| {
                         let (px, py) = (x + dx * i, y + dy * i);
                         wet(px + dy, py + dx) && wet(px - dy, py - dx)
                     });
-                    if (2..=4).contains(&k) && across && dry(x - dx, y - dy) && dry(x + dx * k, y + dy * k) {
+                    if (2..=5).contains(&k) && across && dry(x - dx, y - dy) && dry(x + dx * k, y + dy * k) {
                         let rect = Rect { x, y, w: if dx == 1 { k } else { 1 }, h: if dy == 1 { k } else { 1 } };
                         lines.push((Bridge { rect, along_x: dx == 1, road: false }, (0..k).map(|i| (x + dx * i, y + dy * i)).collect()));
                     }
@@ -1224,7 +1224,8 @@ mod tests {
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
         // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
-        assert_eq!(got, vec![262704624205756269, 8904440953177393501, 11368231502334707319, 2764633660331206483, 1831013090409208476]);
+        // Re-pinned in #431: bigger ponds, more footbridges.
+        assert_eq!(got, vec![395257610060224234, 299138770362770087, 16032900516294525890, 16187434898333408880, 1831013090409208476]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
@@ -1278,6 +1279,36 @@ mod tests {
         each(|_, _, w| n += w.pond.is_some() as u64);
         eprintln!("ponds: {n} of {SEEDS}");
         assert!((SEEDS * 40 / 100..=SEEDS * 70 / 100).contains(&n), "{n} of {SEEDS} seeds have a pond");
+    }
+
+    /// #431: bigger ponds, wide shallow shelves, a footbridge in about half of the ponds.
+    #[test]
+    fn ponds_are_big_shallow_and_often_bridged() {
+        let (mut n, mut bridged, mut streams) = (0u64, 0u64, [0u64; 3]);
+        let (mut spans, mut waters, mut deeps, mut shares) = (vec![], vec![], vec![], vec![]);
+        each(|_, l, w| {
+            let Some(p) = &w.pond else { return };
+            n += 1;
+            bridged += p.bridges.iter().any(|b| !b.road) as u64;
+            streams[p.streams.len()] += 1;
+            spans.push(p.blobs.iter().map(|b| b.cx + b.rx).fold(f64::MIN, f64::max) - p.blobs.iter().map(|b| b.cx - b.rx).fold(f64::MAX, f64::min));
+            let body = pond_body(l, w);
+            let deep = body.iter().filter(|&&(x, y)| l.map.get(x, y) == Tile::DeepWater as u8).count();
+            waters.push(body.len() as f64);
+            deeps.push(deep as f64);
+            shares.push(deep as f64 / body.len().max(1) as f64);
+        });
+        let q = |v: &mut Vec<f64>, f: f64| {
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v[((v.len() - 1) as f64 * f).round() as usize]
+        };
+        let (s, wt, d) = ([q(&mut spans, 0.1), q(&mut spans, 0.5), q(&mut spans, 0.9)], [q(&mut waters, 0.1), q(&mut waters, 0.5), q(&mut waters, 0.9)], [q(&mut deeps, 0.1), q(&mut deeps, 0.5), q(&mut deeps, 0.9)]);
+        let share = q(&mut shares, 0.5);
+        eprintln!("ponds {n}, span p10/med/p90 {s:?}, water {wt:?}, deep {d:?}, deep share med {share:.2}, bridged {bridged} ({}%), streams 0/1/2 {streams:?}", bridged * 100 / n);
+        assert!((SEEDS * 55 / 100..=SEEDS * 65 / 100).contains(&n), "{n} ponds");
+        assert!(s[1] >= 13.0, "median span {}", s[1]);
+        assert!((n * 40 / 100..=n * 60 / 100).contains(&bridged), "{bridged} bridged of {n}");
+        assert!(share <= 0.35, "median deep share {share}");
     }
 
     #[test]
@@ -1396,7 +1427,7 @@ mod tests {
                 n += 1;
                 let r = b.rect;
                 let (len, wid) = if b.along_x { (r.w, r.h) } else { (r.h, r.w) };
-                assert!((2..=4).contains(&len) && wid == 1, "seed {seed}: deck {r:?}");
+                assert!((2..=5).contains(&len) && wid == 1, "seed {seed}: deck {r:?}");
                 assert!(tiles_of(r).all(|(x, y)| l.map.get(x, y) == Tile::Floor as u8), "seed {seed}: deck is not Floor");
                 let side = |x: i32, y: i32| if b.along_x { [(x, y - 1), (x, y + 1)] } else { [(x - 1, y), (x + 1, y)] };
                 assert!(tiles_of(r).any(|(x, y)| side(x, y).iter().all(|&(sx, sy)| is_water(l, sx, sy))), "seed {seed}: no water beside the deck");
