@@ -159,21 +159,21 @@ export class TreeLayer {
 
   /**
    * Compiles the falling leaves' program once, before the first trees come, so it does not add to the frame they appear in: a leaf that is gone
-   * is put in the scene for the compile and taken out again. The renderer keeps the program. Needs the materials (made by the first `sync`).
+   * is compiled alone, against the scene's lights (`targetScene`). The renderer keeps the program. Needs the materials (made by the first `sync`).
+   * Only that mesh (#366): compiling the whole scene built the visible meshes' programs a second time, asynchronously, racing the frames'
+   * own builds; the copy that finished last replaced the cached one, so the next mesh of that material to come into view compiled a new pipeline (a 50-70 ms frame).
    */
-  async warm(renderer: { compileAsync(scene: Scene, camera: Camera): Promise<unknown> }, camera: Camera): Promise<void> {
+  async warm(renderer: { compileAsync(scene: Mesh, camera: Camera, targetScene: Scene): Promise<unknown> }, camera: Camera): Promise<void> {
     if (!this.mats || this.warmed) return;
     this.warmed = true;
     const one: LeafBuf = { start: [0, 0, 0], params: [100, 0, 2, 0], sway: [0], foot: [0, 0], leaf: [0], look: [1, 0, 1, 0], n: 1 }; // threshold 2: gone
     const mesh = new Mesh(leafGeometry(one), this.mats.leaf);
     mesh.frustumCulled = false;
-    this.scene.add(mesh);
     try {
-      await renderer.compileAsync(this.scene, camera);
+      await renderer.compileAsync(mesh, camera, this.scene);
     } catch {
       // The program is then compiled by the first draw, as without the warm-up.
     } finally {
-      this.scene.remove(mesh);
       mesh.geometry.dispose();
     }
   }

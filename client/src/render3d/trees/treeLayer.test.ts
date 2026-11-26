@@ -315,17 +315,22 @@ describe('TreeLayer', () => {
       expect(leafMeshes(scene)[0].geometry.getAttribute('position').count).toBeGreaterThan(n1);
     });
 
-    it('warms the leaf program once: a gone leaf is in the scene during the compile and out after it', async () => {
+    it('warms the leaf program once: only a gone leaf is compiled, against the scene, which it never joins (#366)', async () => {
       const { l, scene } = layer(true);
-      const seen: number[] = [];
-      const renderer = { compileAsync: async (s: Scene) => { seen.push(s.children.length); } };
+      const seen: [Mesh, Scene, number][] = [];
+      const renderer = { compileAsync: async (m: Mesh, _c: Camera, s: Scene) => { seen.push([m, s, s.children.length]); } };
       await l.warm(renderer, new Camera()); // no materials yet: nothing
       expect(seen).toEqual([]);
       l.sync(frame(built(1)));
       const n = scene.children.length;
       await l.warm(renderer, new Camera());
       await l.warm(renderer, new Camera());
-      expect(seen).toEqual([n + 1]);
+      expect(seen).toHaveLength(1);
+      const [m, s, during] = seen[0];
+      expect(s).toBe(scene);
+      expect(during).toBe(n);
+      expect(m.parent).toBeNull();
+      expect(m.material).toBe(leafMeshes(scene)[0].material);
       expect(scene.children).toHaveLength(n);
     });
 
