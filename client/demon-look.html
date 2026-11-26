@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPIKE: the demon's smooth look (#379)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #050302; overflow: hidden; }
+  canvas { display: block; }
+  #panel { position: fixed; left: 8px; bottom: 8px; color: #d8c8b0; font: 13px system-ui, sans-serif; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  #panel button { background: #2a1c14; color: inherit; border: 1px solid #6a4a30; border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
+  #panel button:hover { background: #3a281c; }
+</style>
+</head>
+<body>
+<div id="panel"></div>
+<script type="module" src="/src/spike/demonLook/main.ts"></script>
+</body>
+</html>
