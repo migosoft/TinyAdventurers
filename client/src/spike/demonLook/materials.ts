@@ -64,8 +64,8 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uRune, uRunesOn: { value: on('runes') ? 1 : 0 }, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uPoly: { value: [...CREST, ...TAIL_BLADE, ...Array(40).fill([0, 0])].slice(0, 40).map((q) => new THREE.Vector2(q[0], q[1])) }, uPolyN: { value: new THREE.Vector3(on('blades') && on('crest') ? CREST.length : 0, on('blades') && on('spikes') ? TAIL_BLADE.length : 0, HORN_BREAK) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn; uniform float uRune; uniform float uRunesOn; uniform vec2 uPoly[40]; uniform vec3 uPolyN;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uRune, uRunesOn: { value: on('runes') ? 1 : 0 }, uGazeOn: { value: on('gaze') ? 1 : 0 }, uEyesOn: { value: on('eyes') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uPoly: { value: [...CREST, ...TAIL_BLADE, ...Array(40).fill([0, 0])].slice(0, 40).map((q) => new THREE.Vector2(q[0], q[1])) }, uPolyN: { value: new THREE.Vector3(on('blades') && on('crest') ? CREST.length : 0, on('blades') && on('spikes') ? TAIL_BLADE.length : 0, HORN_BREAK) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn; uniform float uRune; uniform float uRunesOn; uniform float uEyesOn; uniform vec2 uPoly[40]; uniform vec3 uPolyN;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
     // How far a point of the body's middle plane (z, y) lies from a blade's rim: from and n pick the outline.
@@ -231,7 +231,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
     #define UG uGazeOn
     vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
-    vec3 e0 = e - vec3(uGaze.x*0.032, uGaze.y*0.004, 0.);
+    vec3 e0 = e - vec3(uGaze.x*mix(0.032, 0.017, uEyesOn), uGaze.y*0.004, 0.);
     e.xy = vec2(e.x*cos(sl)+e.y*sin(sl), -e.x*sin(sl)+e.y*cos(sl));
     float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011*(1.-0.45*uGaze.z),mix(0.07,0.03,UG))));
     e0.xy = vec2(e0.x*cos(sl)+e0.y*sin(sl), -e0.x*sin(sl)+e0.y*cos(sl));
@@ -243,7 +243,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     // with real teeth: the glow fills whatever lies inside the mouth, behind them
     vec3 q2 = (p - uMouth - vec3(0.,0.02,-0.06))/vec3(0.125,0.06,0.13);
     maw = mix(maw, (1.-smoothstep(0.6, 1., length(q2))) * (1.-smoothstep(0.2, 0.5, open)) * (1.-vInfo.y) * 0.7, uTeeth);
-    dEmit += (eye*mix(vec3(1.,0.5,0.1)*3.2, vec3(1.,0.3,0.04)*1.6, uGaze.z > -0.5 ? UG : 0.) + core*vec3(1.,0.9,0.7)*5.*UG + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
+    dEmit += (eye*mix(vec3(1.,0.5,0.1)*3.2, mix(vec3(1.,0.3,0.04)*1.6, vec3(1.,0.36,0.05)*3.0, uEyesOn), uGaze.z > -0.5 ? UG : 0.) + core*vec3(1.,0.9,0.7)*5.*UG + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
     dAlb *= 1.-0.8*max(eye, maw);
     // the teeth: smooth near-black blades, a little paler toward the point
     float tooth = step(0.9, vInfo.y*vInfo.w);

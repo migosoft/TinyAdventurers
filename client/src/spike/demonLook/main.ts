@@ -6,7 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { build, rig } from './body';
+import { EYE, build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBeat, uGaze, uRune, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
 import { OPTS, on } from './opts';
@@ -97,6 +97,17 @@ const sword = on('sword') ? makeSword(scene, r.by.handR, new THREE.Vector3(0.0, 
 const embers = on('embers') ? makeEmbers(scene, r.by.chest, r.by.jaw) : null;
 const chain = on('chain') ? makeChain(r.by.foreArmL, new THREE.Vector3(0.15, -0.44, 0.025), new THREE.Vector3(0.18, -0.53, 0.03)) : null;
 const headLocal = new THREE.Vector3();
+// light spilling out of each eye socket: a small soft glow just in front of it, which the head hides from behind and which
+// fades as the face turns away, so the eyes still read when the brow covers the slits
+const eyeGlows: THREE.Sprite[] = [];
+if (on('eyeglow')) {
+  const tex = canvasTexture(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,150,60,1)'); gr.addColorStop(0.35, 'rgba(255,70,10,0.45)'); gr.addColorStop(1, 'rgba(255,40,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+  for (const s of [1, -1]) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    sp.position.set(s * (EYE[0] + 0.012), EYE[1] - 2.38 - 0.012, EYE[2] - 0.06 + 0.035); sp.scale.set(0.15, 0.075, 1); sp.material.rotation = 0;
+    r.by.head.add(sp); eyeGlows.push(sp);
+  }
+}
 let beatPhase = 0, squint = 0;
 
 const composer = new EffectComposer(renderer);
@@ -160,6 +171,7 @@ function frame() {
   r.by.head.worldToLocal(headLocal.copy(camera.position)).normalize();
   const aph = st.attack >= 0 ? st.attack % 2.4 : 9;
   squint += ((aph < 0.6 ? 1 : 0) - squint) * (pinned !== null ? 1 : Math.min(1, dt * 6));
+  for (const sp of eyeGlows) sp.material.opacity = 0.75 * Math.max(0, headLocal.z + 0.25) ** 0.7 * (1 - 0.4 * squint) * (0.9 + 0.1 * Math.sin(time * 3.1));
   uGaze.value.set(Math.max(-1, Math.min(1, headLocal.x * 1.6)), Math.max(-1, Math.min(1, headLocal.y * 1.6)), squint);
   const runeTo = Math.max(aph < 1.0 ? 1 : 0, bph < 2.4 ? 1 : 0);
   uRune.value += (runeTo - uRune.value) * (pinned !== null ? 1 : Math.min(1, dt * (runeTo ? 5 : 1.2)));
