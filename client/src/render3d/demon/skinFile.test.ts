@@ -26,6 +26,7 @@ describe('the skin file', () => {
       expect(max(r[k].info, s[k].info), k).toBeLessThanOrEqual(1 / 127);
       expect(max(r[k].normal, s[k].normal), k).toBeLessThanOrEqual(1 / 127);
     }
+    expect(new Set(r.iron.info.filter((_, i) => i % 4 === 0))).toEqual(new Set([0, 1, 2]));
     expect(skinFileHash(buf)).toBe(1234);
   });
 
@@ -33,7 +34,11 @@ describe('the skin file', () => {
     const flipped = buf.slice(0), bumped = buf.slice(0);
     new Uint8Array(flipped)[0] ^= 1;
     new DataView(bumped).setUint32(4, SKIN_VERSION + 1, true);
-    for (const bad of [buf.slice(0, 100), buf.slice(0, buf.byteLength - 4), flipped, bumped, new ArrayBuffer(3)]) expect(() => decodeSkin(bad)).toThrow();
+    // the body's `solid` sits in the first part's header, at byte 12 + 8
+    const past = buf.slice(0), odd = buf.slice(0);
+    new DataView(past).setUint32(20, s.body.index.length + 3, true);
+    new DataView(odd).setUint32(20, s.body.solid! + 1, true);
+    for (const bad of [past, odd, buf.slice(0, 100), buf.slice(0, buf.byteLength - 4), flipped, bumped, new ArrayBuffer(3)]) expect(() => decodeSkin(bad)).toThrow();
   });
 
   it('a failed fetch leaves the skin null and warns once', async () => {

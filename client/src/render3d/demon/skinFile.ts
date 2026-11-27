@@ -59,6 +59,7 @@ export function decodeSkin(buf: ArrayBuffer): DemonSkin {
   for (const k of PARTS) {
     need(PART_HEAD);
     const nv = dv.getUint32(o, true), ni = dv.getUint32(o + 4, true), solid = dv.getUint32(o + 8, true), hasUv = dv.getUint32(o + 12, true) === 1;
+    if (solid !== NO_SOLID && (solid > ni || solid % 3)) throw new Error('demon skin: bad solid');
     o += PART_HEAD;
     need(nv * 12 + (hasUv ? nv * 8 : 0) + ni * 4 + nv * 16);
     const position = new Float32Array(buf.slice(o, o + nv * 12)); o += nv * 12;

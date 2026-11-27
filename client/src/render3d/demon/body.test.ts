@@ -53,6 +53,13 @@ describe('the demon skin', () => {
     expect(s.iron.uv).toBeNull();
   });
 
+  it('tags the iron in info.x: 0 the grip, 1 the sword iron, 2 the cuff and chain', () => {
+    const { iron } = s, nv = iron.position.length / 3, x = (v: number) => iron.info[v * 4];
+    expect(new Set(Array.from({ length: nv }, (_, v) => x(v)))).toEqual(new Set([0, 1, 2]));
+    for (let v = 0; v < nv; v++) expect(x(v), `${v}`).toBe(v < 64 ? 0 : iron.skinIndex[v * 4] === B.handR ? 1 : 2);
+    expect(Array.from({ length: nv }, (_, v) => x(v)).filter((t) => t === 1).length).toBe(24 + 27 + 27 + 60);
+  });
+
   it("the blade's edge runs from the grip along the blade", () => {
     const a = BLADE.edge(0), z = BLADE.edge(1);
     expect(Math.hypot(z[0] - a[0], z[1] - a[1], z[2] - a[2])).toBeGreaterThan(BLADE.len * 0.9);

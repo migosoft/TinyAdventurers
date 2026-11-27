@@ -356,16 +356,16 @@ function sheet(b: Buf, A: Curve, Bc: Curve, panel: number, scallop: number, bulg
   }
 }
 
-/** Moves the triangles that are crystal (horn-tagged, not the spine's plates, the crest or the tail's blade) behind the rest; returns the new index and where they start. */
+/** Moves the triangles that are crystal (horn-tagged, not the spine's plates or the crest; the tail's blade is in the tail part) behind the rest; returns the new index and where they start. */
 function splitCrystal(position: Float32Array, info: Float32Array, index: Uint32Array): { index: Uint32Array; solid: number } {
   const flat = (v: number) => Math.abs(position[v * 3]) <= 0.03 + 0.01;
-  const onBlade = (v: number, pts: [number, number][]) => flat(v) && outline(pts, position[v * 3 + 2], position[v * 3 + 1]) < 0.01;
+  const onCrest = (v: number) => flat(v) && outline(CREST, position[v * 3 + 2], position[v * 3 + 1]) < 0.01;
   const crystal = (t: number): boolean => {
     const v = [index[t], index[t + 1], index[t + 2]];
     if (!v.every((i) => info[i * 4 + 1] > 0.5)) return false;
     // the plates are tagged 0.9, a horn 1: a triangle with no point above that is armour
     if (!v.some((i) => info[i * 4 + 1] > 0.95)) return false;
-    return !v.every((i) => onBlade(i, CREST)) && !v.every((i) => onBlade(i, TAIL_BLADE));
+    return !v.every((i) => onCrest(i));
   };
   const rest: number[] = [], last: number[] = [];
   for (let t = 0; t < index.length; t += 3) (crystal(t) ? last : rest).push(index[t], index[t + 1], index[t + 2]);
@@ -400,17 +400,20 @@ export const BLADE: { readonly len: 1.9; readonly bend: 0.46; edge(u: number): V
 };
 const HAND_R: V = mx(-1, W);
 
-/** Merges placed three.js shapes, each on one bone, into one part; `to` is where the bone's frame lies in the model. */
-function placed(shapes: { g: THREE.BufferGeometry; m: THREE.Matrix4; bone: number; to: V }[], keepUv: boolean): SkinPart {
+/** A three.js shape on one bone; `to` is where the bone's frame lies in the model; `tag` goes into every point's info.x. */
+interface Shape { g: THREE.BufferGeometry; m: THREE.Matrix4; bone: number; to: V; tag: number }
+/** Merges placed shapes into one part. */
+function placed(shapes: Shape[], keepUv: boolean): SkinPart {
+  const info: number[] = [];
   const pos: number[] = [], nor: number[] = [], idx: number[] = [], uv: number[] = [], si: number[] = [], sw: number[] = [];
-  for (const { g, m, bone, to } of shapes) {
+  for (const { g, m, bone, to, tag } of shapes) {
     g.applyMatrix4(new THREE.Matrix4().makeTranslation(to[0], to[1], to[2]).multiply(m));
     const v0 = pos.length / 3, p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv, ix = g.index;
-    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i)); uv.push(u.getX(i), u.getY(i)); si.push(bone, 0, 0, 0); sw.push(1, 0, 0, 0); }
+    for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i)); uv.push(u.getX(i), u.getY(i)); si.push(bone, 0, 0, 0); sw.push(1, 0, 0, 0); info.push(tag, 0, 0, 0); }
     // the icosahedron has no index: its points are already triangle after triangle
     for (let i = 0; i < (ix ? ix.count : p.count); i++) idx.push(v0 + (ix ? ix.getX(i) : i));
   }
-  return part(new Float32Array(pos), Uint32Array.from(idx), new Float32Array(pos.length / 3 * 4), si, new Float32Array(sw), keepUv ? new Float32Array(uv) : null, new Float32Array(nor));
+  return part(new Float32Array(pos), Uint32Array.from(idx), new Float32Array(info), si, new Float32Array(sw), keepUv ? new Float32Array(uv) : null, new Float32Array(nor));
 }
 
 function bladeGeometry(): THREE.BufferGeometry {
@@ -426,22 +429,23 @@ function bladeGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-function ironShapes(): { g: THREE.BufferGeometry; m: THREE.Matrix4; bone: number; to: V }[] {
+/** The iron's flat colour is info.x: 0 the leather grip, 1 the sword's iron (guard, horns, pommel), 2 the cuff and the chain. */
+function ironShapes(): Shape[] {
   const hand = id('handR'), at = (x: number, y: number, z: number, rx = 0) => new THREE.Matrix4().multiplyMatrices(SWORD, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, 0)), new THREE.Vector3(1, 1, 1)));
-  const out: { g: THREE.BufferGeometry; m: THREE.Matrix4; bone: number; to: V }[] = [
-    { g: new THREE.CylinderGeometry(0.036, 0.042, 0.4, 10), m: at(0, 0, -0.06, Math.PI / 2), bone: hand, to: HAND_R },
-    { g: new THREE.BoxGeometry(0.07, 0.34, 0.05), m: at(0, -0.04, 0.14, 0.25), bone: hand, to: HAND_R },
-    { g: new THREE.ConeGeometry(0.035, 0.16, 6), m: at(0, 0.17, 0.2, 1.1), bone: hand, to: HAND_R },
-    { g: new THREE.ConeGeometry(0.035, 0.16, 6), m: at(0, -0.25, 0.14, 2.3), bone: hand, to: HAND_R },
-    { g: new THREE.IcosahedronGeometry(0.06, 0), m: at(0, 0, -0.29), bone: hand, to: HAND_R },
+  const out: Shape[] = [
+    { g: new THREE.CylinderGeometry(0.036, 0.042, 0.4, 10), m: at(0, 0, -0.06, Math.PI / 2), bone: hand, to: HAND_R, tag: 0 },
+    { g: new THREE.BoxGeometry(0.07, 0.34, 0.05), m: at(0, -0.04, 0.14, 0.25), bone: hand, to: HAND_R, tag: 1 },
+    { g: new THREE.ConeGeometry(0.035, 0.16, 6), m: at(0, 0.17, 0.2, 1.1), bone: hand, to: HAND_R, tag: 1 },
+    { g: new THREE.ConeGeometry(0.035, 0.16, 6), m: at(0, -0.25, 0.14, 2.3), bone: hand, to: HAND_R, tag: 1 },
+    { g: new THREE.IcosahedronGeometry(0.06, 0), m: at(0, 0, -0.29), bone: hand, to: HAND_R, tag: 1 },
   ];
   // the shackle on the left forearm and the chain's links, each on its own bone; link i hangs from link i - 1
   const cuffQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...CUFF_ALONG).normalize());
-  out.push({ g: new THREE.TorusGeometry(0.105, 0.03, 8, 20), m: new THREE.Matrix4().compose(new THREE.Vector3(...CUFF_AT), cuffQ, new THREE.Vector3(1, 1, 2.2)), bone: id('foreArmL'), to: E });
+  out.push({ g: new THREE.TorusGeometry(0.105, 0.03, 8, 20), m: new THREE.Matrix4().compose(new THREE.Vector3(...CUFF_AT), cuffQ, new THREE.Vector3(1, 1, 2.2)), bone: id('foreArmL'), to: E, tag: 2 });
   for (let i = 0; i < CHAIN_LINKS; i++) {
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), i % 2 ? Math.PI / 2 : 0);
     const pivot: V = [HANG_AT[0], HANG_AT[1] - 0.03 - 0.075 * i, HANG_AT[2]];
-    out.push({ g: new THREE.TorusGeometry(0.036, 0.011, 6, 14, i === 5 ? Math.PI * 1.35 : Math.PI * 2), m: new THREE.Matrix4().compose(new THREE.Vector3(pivot[0], pivot[1] - 0.04, pivot[2]), q, new THREE.Vector3(1, 1.45, 1)), bone: id(`chain${i}`), to: E });
+    out.push({ g: new THREE.TorusGeometry(0.036, 0.011, 6, 14, i === 5 ? Math.PI * 1.35 : Math.PI * 2), m: new THREE.Matrix4().compose(new THREE.Vector3(pivot[0], pivot[1] - 0.04, pivot[2]), q, new THREE.Vector3(1, 1.45, 1)), bone: id(`chain${i}`), to: E, tag: 2 });
   }
   return out;
 }
@@ -503,6 +507,6 @@ export function buildDemonSkin(cell = 0.008): DemonSkin {
     }
     for (let it = 0; it < NT; it++) for (let is = 0; is < NS; is++) { const a = v0 + it * (NS + 1) + is; cloth.idx.push(a, a + 1, a + NS + 1, a + 1, a + NS + 2, a + NS + 1); }
   }
-  const bladeShape = { g: bladeGeometry(), m: new THREE.Matrix4().multiplyMatrices(SWORD, BLADE_AT), bone: id('handR'), to: HAND_R };
+  const bladeShape = { g: bladeGeometry(), m: new THREE.Matrix4().multiplyMatrices(SWORD, BLADE_AT), bone: id('handR'), to: HAND_R, tag: 0 };
   return { body, tail, tubes: tubes.part(), web: web.part(), cloth: cloth.part(), blade: placed([bladeShape], true), iron: placed(ironShapes(), false) };
 }
