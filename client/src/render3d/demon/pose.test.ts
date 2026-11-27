@@ -28,7 +28,7 @@ function head(m: DemonMem): [number, number, number] {
   return [bones[o] + bones[o + 6] * up, bones[o + 1] + bones[o + 7] * up, bones[o + 2] + bones[o + 8] * up];
 }
 const REST = restPose().joints;
-const W = { claws: CONST.DEMON_CLEAVE_WINDUP, tail: CONST.DEMON_TAIL_WINDUP, swoop: CONST.DEMON_SWOOP_WINDUP, cast: CONST.DEMON_CAST_WINDUP, breath: CONST.DEMON_BREATH_WINDUP };
+const W = { claws: CONST.DEMON_CLAW_WINDUP, tail: CONST.DEMON_TAIL_WINDUP, swoop: CONST.DEMON_SWOOP_WINDUP, cast: CONST.DEMON_CAST_WINDUP, breath: CONST.DEMON_BREATH_WINDUP };
 
 describe('demonPose: the rows', () => {
   it('counts lengths in the builder\'s units', () => {
@@ -70,7 +70,7 @@ describe('demonPose: the rows', () => {
     play(m, ANIM.Melee, W.claws - 0.06 + 1 / FPS, W.claws + P.claws.strike / 2);
     expect(j[J.armR + ARM.swing]).toBeGreaterThan(0.8);
     expect(j[J.armR + ARM.curl]).toBeLessThan(-0.3);
-    play(m, ANIM.Melee, W.claws + P.claws.strike / 2, W.claws + CONST.DEMON_CLEAVE_RECOVER);
+    play(m, ANIM.Melee, W.claws + P.claws.strike / 2, W.claws + CONST.DEMON_CLAW_RECOVER);
     stand(m, 1);
     expect(j[J.armR + ARM.swing]).toBeCloseTo(REST[J.armR + ARM.swing], 1);
     // the next one is the left arm's, mirrored
@@ -87,7 +87,7 @@ describe('demonPose: the rows', () => {
   it('claws throw the weight: the hips go back before they go forward, and the trunk swings past its rest', () => {
     const m = newDemonMem();
     let back = 0, backAt = 0, fwd = 0, fwdAt = 0;
-    play(m, ANIM.Melee, 0, W.claws + CONST.DEMON_CLEAVE_RECOVER, {}, (t) => {
+    play(m, ANIM.Melee, 0, W.claws + CONST.DEMON_CLAW_RECOVER, {}, (t) => {
       const x = m.pose.joints[J.hipsX];
       if (x < back) { back = x; backAt = t; }
       if (x > fwd) { fwd = x; fwdAt = t; }

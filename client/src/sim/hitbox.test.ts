@@ -7,8 +7,8 @@ describe('shot hitboxes', () => {
   it('cover the upper body of tall figures', () => {
     expect(shotHits(KIND.Ogre, 0, 0, false, 0, -18, 3)).toBe(true);
     expect(shotHits(KIND.Ogre, 0, 0, false, 0, -32, 3)).toBe(false);
-    expect(shotHits(KIND.Demon, 0, 0, false, 0, -45, 3)).toBe(true);
-    expect(shotHits(KIND.Demon, 0, 0, false, 0, -70, 3)).toBe(false);
+    expect(shotHits(KIND.FireDemon, 0, 0, false, 0, -45, 3)).toBe(true);
+    expect(shotHits(KIND.FireDemon, 0, 0, false, 0, -70, 3)).toBe(false);
   });
 
   it('keep small figures round', () => {

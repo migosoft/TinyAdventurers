@@ -332,7 +332,7 @@ mod tests {
 
     /// A lone ranger, a wolf, a Hostile orc, and a Neutral orc beside the hero (indices of the last two).
     fn fixture() -> (Run, usize, usize, usize) {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
@@ -421,8 +421,8 @@ mod tests {
         run.monsters[ni].hp = hp;
         let at = run.monsters[ni].pos;
         let fireball = Damage::new(10.0, kind_split(EntityKind::Fireball));
-        explode(&mut run, at, 30.0, fireball, Side::Friendly, Some(0), 0, false, 20.0, 30);
-        explode(&mut run, at, 30.0, dmg(), Side::Hostile, None, 4, false, 20.0, 30);
+        explode(&mut run, at, 30.0, fireball, Side::Friendly, Some(0), 0, false, 20.0, 30, None);
+        explode(&mut run, at, 30.0, dmg(), Side::Hostile, None, 4, false, 20.0, 30, None);
         assert_eq!(run.monsters[ni].hp, hp);
         assert_eq!(run.monsters[ni].knock, Vec2::ZERO);
     }
@@ -551,14 +551,14 @@ mod tests {
         let ki = run.monster_idx(id).unwrap();
         run.monsters[ki].side = Side::Neutral;
         let (animal_hp, knight_hp) = (run.monsters[ni].hp, run.monsters[ki].hp);
-        explode(&mut run, spot, 30.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30);
+        explode(&mut run, spot, 30.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30, None);
         assert!(run.monsters[ni].hp < animal_hp, "the animal is hit");
         assert!(run.monsters[ni].knock != Vec2::ZERO, "and pushed");
         assert_eq!(run.monsters[ki].hp, knight_hp, "the knight is spared");
         assert_eq!(run.monsters[ki].knock, Vec2::ZERO);
         // An enemy's blast hits both kinds of Neutral the same way.
         let (animal_hp, knight_hp) = (run.monsters[ni].hp, run.monsters[ki].hp);
-        explode(&mut run, spot, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 20.0, 30);
+        explode(&mut run, spot, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 20.0, 30, None);
         assert!(run.monsters[ni].hp < animal_hp);
         assert_eq!(run.monsters[ki].hp, knight_hp);
     }
@@ -599,7 +599,7 @@ mod tests {
         assert!(run.monsters[ni].hp < hp, "the arrow hit it");
         assert!(run.monsters[ni].grudge.heroes);
         // A dash.
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(6.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();

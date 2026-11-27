@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn roles_follow_the_fields() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let orc = run.spawn_enemy(EnemyType::OrcWarrior, Vec2::new(100.0, 100.0), None);
         let orc = run.monster_idx(orc).unwrap();
         assert_eq!(role(&run.monsters[orc]), Role::Hunter);

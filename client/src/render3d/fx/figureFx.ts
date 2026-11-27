@@ -42,7 +42,7 @@ const RELEASE_WINDOW = 0.1;
 /** The swoosh of a melee swing (or the dragon's tail), at the swing's own reach and arc: armed or not, card or model. */
 function swoosh(T: FxTris, f: DrawnFig): void {
   const a = f.anim;
-  if ((a !== ANIM.Melee && a !== ANIM.Tail) || f.bite >= 0) return;
+  if ((a !== ANIM.Melee && a !== ANIM.Cleave && a !== ANIM.Tail) || f.bite >= 0) return;
   const d = f.def, tail = a === ANIM.Tail, sw = tail ? d.tail : d.swing;
   if (!sw) return;
   if (tail && d.weapon) return;

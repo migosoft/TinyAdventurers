@@ -11,7 +11,8 @@ const idle = (o: Partial<BuiltIn> = {}): BuiltIn => ({ anim: ANIM.Idle, animT: 0
 
 describe('DEMON_FIGURE', () => {
   it('is the figure of the demon kind: 54 px tall, its own picture', () => {
-    expect(builtOf(KIND.Demon)).toBe(DEMON_FIGURE);
+    expect(builtOf(KIND.FireDemon)).toBe(DEMON_FIGURE);
+    expect(builtOf(KIND.IceDemon)).toBe(DEMON_FIGURE);
     expect(DEMON_FIGURE).toMatchObject({ key: 'demon', picture: 'demon', unit: DEMON.unit, hem: DEMON.hem });
     expect(DEMON_FIGURE.top).toBe(54);
   });

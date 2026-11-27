@@ -16,7 +16,6 @@ export const KIND = {
   "Chort": 20,
   "Crystal": 83,
   "Deer": 28,
-  "Demon": 30,
   "DireWolf": 23,
   "Disciple": 17,
   "Dragon": 32,
@@ -24,14 +23,20 @@ export const KIND = {
   "ElvenRanger": 3,
   "FireBolt": 59,
   "FireBreath": 56,
+  "FireDemon": 30,
   "FireOrb": 57,
   "FirePatch": 70,
   "Fireball": 51,
+  "FrostBall": 69,
   "FrostBolt": 55,
+  "FrostBreath": 67,
+  "FrostOrb": 68,
+  "FrostPatch": 73,
   "Ghost": 24,
   "GloomBolt": 60,
   "GoblinArcher": 10,
   "HolyGround": 71,
+  "IceDemon": 34,
   "Imp": 19,
   "Judgement": 64,
   "Knight": 26,
@@ -63,6 +68,7 @@ export const ANIM = {
   "Breath": 8,
   "Cast": 4,
   "Channel": 7,
+  "Cleave": 17,
   "Dash": 5,
   "Gaze": 14,
   "Idle": 0,
@@ -123,11 +129,13 @@ export const CONST = {
   "DEMON_BREATH_WINDUP": 0.8,
   "DEMON_CAST_RECOVER": 0.35,
   "DEMON_CAST_WINDUP": 0.5,
-  "DEMON_CLEAVE_KNOCK": 56.0,
-  "DEMON_CLEAVE_RECOVER": 0.3,
-  "DEMON_CLEAVE_WINDUP": 0.45,
+  "DEMON_CLAW_KNOCK": 56.0,
+  "DEMON_CLAW_RECOVER": 0.3,
+  "DEMON_CLAW_WINDUP": 0.45,
   "DEMON_FLIGHT": 3.5,
   "DEMON_LAND": 0.6,
+  "DEMON_SCIMITAR_RECOVER": 0.5,
+  "DEMON_SCIMITAR_WINDUP": 0.8,
   "DEMON_SMASH_RADIUS": 40.0,
   "DEMON_SWOOP_KNOCK": 64.0,
   "DEMON_SWOOP_RECOVER": 0.25,
@@ -358,6 +366,15 @@ export const ABILITIES = {
     "shape": "Projectile",
     "slot": "Secondary"
   },
+  "Cleave": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Cleave",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Secondary"
+  },
   "Consecrate": {
     "arcs": false,
     "classes": [
@@ -419,6 +436,24 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "Swing",
     "slot": "Primary"
+  },
+  "FrostBall": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Frost Ball",
+    "ranged": true,
+    "shape": "Blast",
+    "slot": "Secondary"
+  },
+  "FrostBreath": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Frost Breath",
+    "ranged": false,
+    "shape": "Breath",
+    "slot": "Secondary"
   },
   "FrostNova": {
     "arcs": false,
@@ -571,6 +606,15 @@ export const ABILITIES = {
     "classes": [],
     "hero": false,
     "name": "Ring of Fire",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "RingOfFrost": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Ring of Frost",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Secondary"
@@ -745,6 +789,12 @@ export const ITEMS = {
     "name": "Bone Staff",
     "slot": "Melee"
   },
+  "BurningScimitar": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Burning Scimitar",
+    "slot": "Melee"
+  },
   "Cleaver": {
     "classes": [
       "Wizard",
@@ -829,6 +879,12 @@ export const ITEMS = {
     "kind": "Bow",
     "name": "Hunter's Bow",
     "slot": "Ranged"
+  },
+  "IceScimitar": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Ice Scimitar",
+    "slot": "Melee"
   },
   "Knife": {
     "classes": [
@@ -1120,6 +1176,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   "33": {
     "h": 12.0,
     "r": 4.0
+  },
+  "34": {
+    "h": 58.0,
+    "r": 11.0
   },
   "80": {
     "h": 0.0,
@@ -1462,6 +1522,14 @@ export const ABILITY_RUNES: Partial<Record<AbilityId, { look: number; primary: b
     "look": 0,
     "primary": false
   },
+  "FrostBall": {
+    "look": 1,
+    "primary": false
+  },
+  "FrostBreath": {
+    "look": 1,
+    "primary": false
+  },
   "FrostNova": {
     "look": 1,
     "primary": false
@@ -1504,6 +1572,10 @@ export const ABILITY_RUNES: Partial<Record<AbilityId, { look: number; primary: b
   },
   "RingOfFire": {
     "look": 0,
+    "primary": false
+  },
+  "RingOfFrost": {
+    "look": 1,
     "primary": false
   },
   "ShadowBolt": {
@@ -1769,10 +1841,11 @@ export const TAG_NAME: Record<number, string> = {
   27: "Bunny",
   28: "Deer",
   29: "Stag",
-  30: "Demon",
+  30: "Fire Demon",
   31: "Lich",
   32: "Dragon",
   33: "Boar",
+  34: "Ice Demon",
   80: "Chest",
   81: "Barrel",
 };

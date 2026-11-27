@@ -24,7 +24,7 @@ export const WINGS_ACT = {
 
 /** An attack's anim runs through its wind-up, its strike and its recovery; the loop then stands until `period`. */
 const ATTACKS = {
-  claws: { anim: ANIM.Melee, secs: CONST.DEMON_CLEAVE_WINDUP + CONST.DEMON_CLEAVE_RECOVER, period: 2 },
+  claws: { anim: ANIM.Melee, secs: CONST.DEMON_CLAW_WINDUP + CONST.DEMON_CLAW_RECOVER, period: 2 },
   tail: { anim: ANIM.Tail, secs: CONST.DEMON_TAIL_WINDUP + CONST.DEMON_TAIL_RECOVER, period: 2.4 },
   cast: { anim: ANIM.Cast, secs: CONST.DEMON_CAST_WINDUP + CONST.DEMON_CAST_RECOVER, period: 2 },
   breath: { anim: ANIM.Breath, secs: CONST.DEMON_BREATH_WINDUP + CONST.DEMON_BREATH_TIME, period: 3.6 },

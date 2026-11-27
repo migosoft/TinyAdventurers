@@ -416,7 +416,7 @@ mod tests {
 
     /// The `anim_ms` of the first projectile sent to hero 0, after the hero fired the primary and the shot flew 10 ticks.
     fn shot_anim_ms(class: ClassId) -> (u16, f64) {
-        let mut run = test_run(&[class], BossId::Demon);
+        let mut run = test_run(&[class], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         run.players[0].aim_dist = 260.0;
@@ -440,7 +440,7 @@ mod tests {
 
     #[test]
     fn a_monster_in_the_dark_is_sent_and_marked_until_lit() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
         assert_eq!(mark(&mut run, id), Some(true), "in sight but dark");
@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     fn a_barrel_on_unlit_floor_is_sent_in_the_dark_and_not_as_a_near_solid() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         dark_view(&mut run, 0.0);
         let id = barrel_east(&mut run, 40.0);
         assert_eq!(mark(&mut run, id), Some(true), "in sight but dark: sent, marked");
@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn a_blind_hero_is_sent_the_barrels_it_cannot_see_but_would_bump_into() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         dark_view(&mut run, 0.0);
         run.lights.fill();
         let (near, far) = (barrel_east(&mut run, 20.0), barrel_east(&mut run, 80.0));
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn an_elf_sees_eighteen_tiles_far() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.clear();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 2..=ty + 2 {
@@ -526,7 +526,7 @@ mod tests {
 
     #[test]
     fn friendly_always_sent_neutral_only_in_view() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         run.lights.fill();
         let near = Map::center_of(tx + 2, ty);
@@ -553,7 +553,7 @@ mod tests {
 
     #[test]
     fn events_in_the_dark_are_sent_and_marked_unless_on_a_hero() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
@@ -582,7 +582,7 @@ mod tests {
 
     #[test]
     fn cast_is_dark_where_unseen() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn hurt_and_heal_on_a_hero_are_marked_as_hero_events() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.events.clear();
         run.on_hero.clear();
         run.hurt_player(0, crate::defs::damage::Damage::physical(5.0));
@@ -636,7 +636,7 @@ mod tests {
 
     #[test]
     fn a_dark_viewer_is_sent_a_monster_in_a_fire_patch_glow_unmarked_and_one_just_outside_it_marked() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
@@ -657,7 +657,7 @@ mod tests {
 
     #[test]
     fn a_spectator_gets_the_viewed_heros_darkvision() {
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (px, py) = (run.players[0].mv.x, run.players[0].mv.y);
         run.players[1].mv.x = px;
@@ -682,7 +682,7 @@ mod tests {
     fn the_snapshot_names_the_charmer_only_while_the_charm_is_on() {
         use crate::defs::effects::EffectKind;
         use crate::run::effects::{Apply, Creature};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
         let mut charmed_by = |run: &mut Run| {
@@ -714,7 +714,7 @@ mod tests {
 
     #[test]
     fn recolouring_a_moving_light_shows_in_the_snapshot_without_an_event() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn phasing_monster_is_flagged_incorporeal_in_the_snapshot() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
         let mi = run.monster_idx(id).unwrap();
@@ -751,7 +751,7 @@ mod tests {
 
     #[test]
     fn a_calm_animal_is_sent_neutral_with_the_wild_flag_a_grudging_boar_hostile() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         let boar = run.spawn_enemy(EnemyType::Boar, Map::center_of(tx + 3, ty), None);
         let knight = run.spawn_enemy(EnemyType::Knight, Map::center_of(tx + 3, ty + 1), None);
@@ -773,7 +773,7 @@ mod tests {
     #[test]
     fn invisible_monster_is_not_in_any_snapshot() {
         use crate::defs::effects::{EffectKind, EffectLook};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
         let mi = run.monster_idx(id).unwrap();
@@ -795,7 +795,7 @@ mod tests {
     #[test]
     fn invisible_ally_hero_is_still_sent_to_the_party() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
         let (_tx, _ty) = dark_view(&mut run, 1.0);
         run.players[1].effects.add(EffectKind::Invisible, 30.0);
         let dark = dark_of(&run);
@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn a_trunk_hides_a_monster_behind_it() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Trunk);
         let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
@@ -825,7 +825,7 @@ mod tests {
 
     #[test]
     fn a_creature_inside_a_trunk_tile_is_seen() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         run.layout.map.set(tx + 3, ty, crate::dungeon::Tile::Trunk);
         let id = run.spawn_enemy(EnemyType::Ghost, Map::center_of(tx + 3, ty), None);
@@ -838,7 +838,7 @@ mod tests {
 
     #[test]
     fn monsters_outside_fov_are_not_sent() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let near = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(20.0, 0.0), None);
@@ -873,7 +873,7 @@ mod tests {
 
     #[test]
     fn torches_are_sent_in_sight_lit_or_not_and_not_out_of_sight() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let near = crate::dungeon::TorchSpawn { wall: (tx + 3, ty), side: crate::dungeon::TorchSide::Face, lit: true, kind: crate::dungeon::WallLight::Torch };
         let far = crate::dungeon::TorchSpawn { wall: (tx + 12, ty), side: crate::dungeon::TorchSide::Face, lit: true, kind: crate::dungeon::WallLight::Torch };
@@ -902,7 +902,7 @@ mod tests {
 
     /// A GoblinArcher `dx` tiles east of a hero with the given darkvision, on open unlit floor.
     fn dark_monster_marked(darkvision: f64, dx: i32) -> Option<bool> {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, darkvision);
         let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + dx, ty), None);
         mark(&mut run, id)
@@ -917,7 +917,7 @@ mod tests {
     #[test]
     fn full_darkvision_unmarks_a_monster_on_an_unlit_tile_in_sight() {
         assert_eq!(dark_monster_marked(1.0, 4), Some(false));
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Wall);
         let p = run.players[0].pos();
@@ -935,7 +935,7 @@ mod tests {
 
     #[test]
     fn a_big_figure_is_sent_and_marked_by_its_corners() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let p = Map::center_of(tx + 4, ty);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, p, None);
@@ -976,7 +976,7 @@ mod tests {
     #[test]
     fn a_chest_in_the_dark_is_sent_and_marked() {
         use crate::run::objects::ObjState;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let id = run.spawn_object(EntityKind::Chest, Map::center_of(tx + 3, ty), ObjState::Chest { opened: None });
         assert_eq!(mark(&mut run, id), Some(true), "in sight, on an unlit tile");
@@ -986,7 +986,7 @@ mod tests {
 
     #[test]
     fn an_enemy_shot_in_the_dark_is_marked_a_hero_shot_never() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let from = Map::center_of(tx + 3, ty);
         crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, 100.0));
@@ -1026,7 +1026,7 @@ mod tests {
     fn snapshots_carry_effects_and_the_own_timers() {
         use crate::defs::effects::EffectKind;
         use crate::run::effects::Creature;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.apply_effect(Creature::Player(0), EffectKind::Slowed, Some(2.0));
@@ -1045,7 +1045,7 @@ mod tests {
     #[test]
     fn a_paused_magic_effect_is_sent_paused_and_leaves_the_entity_bit_off() {
         use crate::defs::effects::{EffectKind, EffectLook};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.players[0].effects.anti_magic = true;
@@ -1064,7 +1064,7 @@ mod tests {
     #[test]
     fn an_unpaused_effect_is_sent_unpaused_with_no_paused_sources() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.players[0].effects.add(EffectKind::Slowed, 10.0);
@@ -1078,7 +1078,7 @@ mod tests {
     #[test]
     fn a_hero_under_anti_magic_sends_its_magic_sources_as_paused() {
         use crate::run::effects::Creature;
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.players[0].build.nodes.push(crate::defs::trees::NodeId::PU5);
@@ -1095,7 +1095,7 @@ mod tests {
         use crate::defs::effects::EffectKind;
         use crate::run::effects::Creature;
         let seen = |blind: bool| {
-            let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+            let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
             run.players[0].tx = Some(tx);
             run.players[0].darkvision = Some(1.0);

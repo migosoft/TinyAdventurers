@@ -46,7 +46,7 @@ export const IMPACT = { x: 10.8, z: 8.2 };
 export const TARGETS: [number, number][] = [[10.4, 7.4], [11.5, 8.3], [10.6, 9.1]];
 export const CASTER_ID = 100, TARGET_ID = 110;
 /** The bosses of the corner, in the bay. */
-const BOSSES: [number, number, number][] = [[KIND.Lich, 3.5, 6], [KIND.Dragon, 7, 6.5], [KIND.Demon, 10.5, 6], [KIND.Ogre, 12, 9]];
+const BOSSES: [number, number, number][] = [[KIND.Lich, 3.5, 6], [KIND.Dragon, 7, 6.5], [KIND.FireDemon, 10.5, 6], [KIND.Ogre, 12, 9]];
 
 export type FxGroup = 'spells' | 'booms' | 'shots' | 'figures' | 'bosses' | 'hazards' | 'status' | 'objects';
 export const FX_GROUPS: FxGroup[] = ['spells', 'booms', 'shots', 'figures', 'bosses', 'hazards', 'status', 'objects'];
@@ -292,7 +292,7 @@ function bossRows(): FxRow[] {
     boss('dragon tail', KIND.Dragon, hold(ANIM.Tail, 0.3, 1), 3, { x: 7.5 }),
     boss('dragon landing', KIND.Dragon, hold(ANIM.Land, 0.3, 1), 3),
     boss('ogre slam', KIND.Ogre, hold(ANIM.Slam, 0.3, 1.2), 3),
-    boss('demon claw', KIND.Demon, hold(ANIM.Melee, 0.3, 0.8), 2.5),
+    boss('demon claw', KIND.FireDemon, hold(ANIM.Melee, 0.3, 0.8), 2.5),
   ];
 }
 

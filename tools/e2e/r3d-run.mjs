@@ -4,7 +4,7 @@
 // Usage: node r3d-run.mjs [baseUrl] [outDir] [dungeon|woodland]
 // Frame rate (woodland): FPS_S=10 [FPS_ONLY=1] [PHASE=walk|turn] [GLPROF=1] [TRACE=file.json] BACKEND=webgpu|webgl R3D_W=2560 R3D_H=1280 R3D_QUERY="&quality=high" GPU=uncapped WAIT_MS=... (see the sampling block). DV=1|2: the run's pictures with darkvision 50 % or 100 % (F4).
 // Dungeon: waits (WAIT_MS) for the F3 line `stone <done> of <total>` to be complete and prints `stone painted ...` with the time and the longest frame (#380).
-// BOSS=lich|dragon|demon: picks that boss in the room before the start (the boss decides the dungeon's stone: laid, natural rock, both; default: the room's own Random).
+// BOSS=firedemon|icedemon|lich|dragon: picks that boss in the room before the start (the boss decides the dungeon's stone: laid, natural rock, both; default: the room's own Random).
 // ZOOM=far|near|start: the mouse wheel zooms to the farthest or closest zoom (or stays at the start zoom) before the pictures and FPS_S, so the pictures and FPS_S use it (#376). It prints the glide's frame times; ZOOM_PASSES=3 zooms there, back and there again (a hitch only in pass 1 is a first-use cost).
 // Set BROWSER to a Chrome/Edge executable (e.g. /usr/bin/brave-browser). GPU=1: a visible window on the discrete card, printing the GPU in use (GPU=uncapped: no frame limit). The account is deleted at the end, also on failure.
 import { decode } from '../../client/node_modules/@msgpack/msgpack/dist.esm/index.mjs';
@@ -101,8 +101,8 @@ try {
     await page.waitForSelector('.level-card.level-woodland.selected');
   }
   if (process.env.BOSS) {
-    const short = { lich: 'Lich', dragon: 'Red Dragon', demon: 'Red Demon' }[process.env.BOSS];
-    if (!short) throw new Error(`BOSS=${process.env.BOSS}: expected lich, dragon or demon`);
+    const short = { lich: 'Vael, the Undying Lich', dragon: 'Ignathrax, the Red Dragon', firedemon: 'Kharzul, Lord of Cinders', icedemon: 'Ysskar, Lord of Rime' }[process.env.BOSS];
+    if (!short) throw new Error(`BOSS=${process.env.BOSS}: expected firedemon, icedemon, lich or dragon (not demon)`);
     const card = page.locator('.boss-card', { has: page.locator(`b:text-is("${short}")`) });
     await card.click();
     await page.waitForSelector('.boss-card.selected b:text-is("' + short + '")');

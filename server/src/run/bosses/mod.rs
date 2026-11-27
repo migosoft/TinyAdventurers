@@ -38,7 +38,8 @@ pub trait BossBehaviour: Send {
 
 pub fn create(id: BossId) -> Box<dyn BossBehaviour> {
     match id {
-        BossId::Demon => Box::new(demon::Demon::default()),
+        BossId::FireDemon => Box::new(demon::Demon::of(AbilityId::FireBreath, AbilityId::Fireball, AbilityId::RingOfFire)),
+        BossId::IceDemon => Box::new(demon::Demon::of(AbilityId::FrostBreath, AbilityId::FrostBall, AbilityId::RingOfFrost)),
         BossId::Lich => Box::new(lich::Lich::default()),
         BossId::Dragon => Box::new(dragon::Dragon::default()),
     }
@@ -144,7 +145,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_boss_held_mid_action_reacts_like_any_monster() {
-        let (mut run, bi) = arena(BossId::Demon, 0.0, Vec2::new(100.0, 0.0));
+        let (mut run, bi) = arena(BossId::FireDemon, 0.0, Vec2::new(100.0, 0.0));
         run.monsters[bi].ai.acting = true; // its script was mid-action when the hold began
         run.monsters[bi].effects.add(EffectKind::Petrified, 5.0);
         run.step();

@@ -1,7 +1,8 @@
 //! Horned red demon: it uses the abilities of its kit and decides which, when and where to aim. Strike with
-//! its claws (the cleave), Swoop (a charge on foot), Ring of Fire, Tail Whip against heroes behind it,
-//! Fireball, Fire Breath and, on landing, Smash. Among the attacks it can use it picks at random; the tail
-//! goes first when a foe is behind. Every 10-14 s it takes off and hovers after the party: only Fireball and
+//! its claws, Cleave with its scimitar (from 3 s), Swoop (a charge on foot), Ring of Fire, Tail Whip against heroes behind it,
+//! Fireball, Fire Breath and, on landing, Smash (the ice demon's twins: Frost Ball, Frost Breath, Ring of Frost, asked
+//! by role: `breath`, `ball`, `ring`). Among the attacks it can use it picks at random; the tail
+//! goes first when a foe is behind. Every 10-14 s it takes off and hovers after the party: only the ball and
 //! the breath then. The numbers (damage, reach, push, wind-up, cooldown) are the kit's. Each attack's
 //! animation starts with its wind-up and runs on through a short recovery, so the client plays wind-up,
 //! strike and recovery frames.
@@ -22,6 +23,7 @@ use rand::Rng;
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
     Claw,
+    Scimitar,
     Tail,
     SwoopWindup,
     /// The dash runs (`Monster.dash`) until it ends.
@@ -42,32 +44,38 @@ pub struct Demon {
     /// Seconds before the script may first choose each ability: when it opens, not how an ability works. It
     /// only gates the script's decision; the kit's cooldowns (`cds`) are the uses' alone.
     opening: Vec<(AbilityId, f64)>,
+    /// The kit's abilities in the three roles that differ between the fire and the ice demon.
+    breath: AbilityId,
+    ball: AbilityId,
+    ring: AbilityId,
 }
 
-impl Default for Demon {
-    fn default() -> Self {
+impl Demon {
+    pub fn of(breath: AbilityId, ball: AbilityId, ring: AbilityId) -> Demon {
         Demon {
             flight: Flight::new(FlightTimes { takeoff: DEMON_TAKEOFF, air: DEMON_FLIGHT, land: DEMON_LAND, every: DEMON_FLIGHT_EVERY }, DEMON_FLIGHT_FIRST),
             action: None,
             swoop_dir: Vec2::ZERO,
-            opening: OPENING.to_vec(),
+            // How long (s) after the fight starts each ability may first be used.
+            opening: vec![
+                (AbilityId::Strike, 1.0),
+                (AbilityId::Cleave, 3.0),
+                (AbilityId::TailWhip, 2.0),
+                (AbilityId::Swoop, 4.0),
+                (ball, 5.0),
+                (breath, 6.0),
+                (ring, 7.0),
+            ],
+            breath,
+            ball,
+            ring,
         }
     }
 }
-
-/// How long (s) after the fight starts each ability may first be used.
-const OPENING: [(AbilityId, f64); 6] = [
-    (AbilityId::Strike, 1.0),
-    (AbilityId::TailWhip, 2.0),
-    (AbilityId::Swoop, 4.0),
-    (AbilityId::Fireball, 5.0),
-    (AbilityId::FireBreath, 6.0),
-    (AbilityId::RingOfFire, 7.0),
-];
 /// How far (px, centre distance) a hero must be for the swoop to start.
 const SWOOP_FROM: f64 = 50.0;
-/// The cleave starts this far (px) inside its reach, like the enemies' swings.
-const CLEAVE_SLACK: f64 = 6.0;
+/// The claws and the scimitar start this far (px) inside their reach, like the enemies' swings.
+const CLAW_SLACK: f64 = 6.0;
 /// The tail whip starts this far (px) inside its reach.
 const TAIL_SLACK: f64 = 2.0;
 /// Hovering, it does not chase heroes closer than this.
@@ -124,7 +132,11 @@ impl BossBehaviour for Demon {
             match action {
                 Action::Claw => {
                     use_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
-                    self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));
+                    self.action = Some((Action::Recover, DEMON_CLAW_RECOVER));
+                }
+                Action::Scimitar => {
+                    use_in_pose(run, bi, AbilityId::Cleave, ahead(run, bi));
+                    self.action = Some((Action::Recover, DEMON_SCIMITAR_RECOVER));
                 }
                 Action::Tail => {
                     use_in_pose(run, bi, AbilityId::TailWhip, ahead(run, bi));
@@ -135,13 +147,13 @@ impl BossBehaviour for Demon {
                     self.action = Some((Action::Swoop, 0.0));
                 }
                 Action::Cast(id) => {
-                    let at = if id == AbilityId::Fireball { target(run, bi).map_or_else(|| ahead(run, bi), |(_, ppos, _)| ppos) } else { ahead(run, bi) };
+                    let at = if id == self.ball { target(run, bi).map_or_else(|| ahead(run, bi), |(_, ppos, _)| ppos) } else { ahead(run, bi) };
                     use_in_pose(run, bi, id, at);
                     self.action = Some((Action::Recover, DEMON_CAST_RECOVER));
                 }
                 Action::BreathWindup => {
-                    use_in_pose(run, bi, AbilityId::FireBreath, ahead(run, bi));
-                    self.action = Some((Action::Breath, kit(run, bi, AbilityId::FireBreath).duration));
+                    use_in_pose(run, bi, self.breath, ahead(run, bi));
+                    self.action = Some((Action::Breath, kit(run, bi, self.breath).duration));
                 }
                 Action::Breath | Action::Recover => set_anim(run, bi, Anim::Idle),
                 Action::Swoop => {}
@@ -164,42 +176,47 @@ impl BossBehaviour for Demon {
         let to_target = pos.angle_to(ppos);
         // The head follows the hero; the body turns only for an attack it wants to start.
         run.monsters[bi].look_to = Some(to_target);
-        let cleave_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLEAVE_SLACK;
-        let breath = kit(run, bi, AbilityId::FireBreath);
+        let claw_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLAW_SLACK;
+        let scimitar_from = kit(run, bi, AbilityId::Cleave).range + PLAYER_RADIUS - CLAW_SLACK;
+        let breath = kit(run, bi, self.breath);
         let usable = |id: AbilityId| ready(run, bi, &self.opening, id);
         let mut picks: Vec<AbilityId> = Vec::new();
-        if !air && usable(AbilityId::Strike) && dist <= cleave_from {
+        if !air && usable(AbilityId::Strike) && dist <= claw_from {
             picks.push(AbilityId::Strike);
+        }
+        if !air && usable(AbilityId::Cleave) && dist <= scimitar_from {
+            picks.push(AbilityId::Cleave);
         }
         if !air && usable(AbilityId::Swoop) && dist > SWOOP_FROM {
             picks.push(AbilityId::Swoop);
         }
-        if usable(AbilityId::FireBreath) && dist < breath.range {
-            picks.push(AbilityId::FireBreath);
+        if usable(self.breath) && dist < breath.range {
+            picks.push(self.breath);
         }
-        if usable(AbilityId::Fireball) {
-            picks.push(AbilityId::Fireball);
+        if usable(self.ball) {
+            picks.push(self.ball);
         }
-        if !air && usable(AbilityId::RingOfFire) {
-            picks.push(AbilityId::RingOfFire);
+        if !air && usable(self.ring) {
+            picks.push(self.ring);
         }
         picks.retain(|&id| face_for(run, bi, ppos, id));
         if !picks.is_empty() {
             let id = picks[run.rng.gen_range(0..picks.len())];
-            let cast_time = kit(run, bi, AbilityId::RingOfFire).windup;
+            let cast_time = kit(run, bi, self.ring).windup;
             match id {
                 AbilityId::Strike => self.start(run, bi, Action::Claw, id, kit(run, bi, id).windup, Anim::Melee),
+                AbilityId::Cleave => self.start(run, bi, Action::Scimitar, id, kit(run, bi, id).windup, Anim::Cleave),
                 AbilityId::Swoop => {
                     self.swoop_dir = (ppos - pos).norm();
                     self.start(run, bi, Action::SwoopWindup, id, kit(run, bi, id).windup, Anim::Dash);
                 }
-                AbilityId::FireBreath => self.start(run, bi, Action::BreathWindup, id, breath.windup, Anim::Breath),
-                AbilityId::Fireball | AbilityId::RingOfFire => self.start(run, bi, Action::Cast(id), id, cast_time, Anim::Cast),
+                _ if id == self.breath => self.start(run, bi, Action::BreathWindup, id, breath.windup, Anim::Breath),
+                _ if id == self.ball || id == self.ring => self.start(run, bi, Action::Cast(id), id, cast_time, Anim::Cast),
                 other => unreachable!("the demon's pick has no start for {other:?}"),
             }
             return;
         }
-        let walk = if air { dist > HOVER_KEEP } else { dist > cleave_from * 0.8 };
+        let walk = if air { dist > HOVER_KEEP } else { dist > claw_from * 0.8 };
         if walk {
             let speed = run.monsters[bi].speed;
             path_toward(run, bi, ppos, speed, dt);
@@ -223,13 +240,22 @@ mod tests {
     use crate::run::DT;
     use rand::SeedableRng;
 
-    const SIX: [AbilityId; 6] = [AbilityId::Strike, AbilityId::Swoop, AbilityId::RingOfFire, AbilityId::TailWhip, AbilityId::Fireball, AbilityId::FireBreath];
+    const SEVEN: [AbilityId; 7] = [AbilityId::Strike, AbilityId::Cleave, AbilityId::Swoop, AbilityId::RingOfFire, AbilityId::TailWhip, AbilityId::Fireball, AbilityId::FireBreath];
 
     /// A demon run with heroes at `offs` from the demon; only the abilities named are ready (of the six the
     /// script chooses from; Smash is the landing's), no opening waits, the first flight far away.
     fn demon_with_heroes(offs: &[Vec2], ready: &[AbilityId]) -> (Run, Demon, usize) {
+        demon_run(BossId::FireDemon, offs, ready)
+    }
+
+    /// The same for the ice demon: its three role abilities are the cold ones.
+    fn ice_demon_with_heroes(offs: &[Vec2], ready: &[AbilityId]) -> (Run, Demon, usize) {
+        demon_run(BossId::IceDemon, offs, ready)
+    }
+
+    fn demon_run(boss: BossId, offs: &[Vec2], ready: &[AbilityId]) -> (Run, Demon, usize) {
         let classes = vec![ClassId::Paladin; offs.len()];
-        let mut run = test_run(&classes, BossId::Demon);
+        let mut run = test_run(&classes, boss);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].dormant = false;
         run.monsters[bi].aim = 0.0;
@@ -238,14 +264,23 @@ mod tests {
             p.mv.x = at.x + off.x;
             p.mv.y = at.y + off.y;
         }
-        for id in SIX {
+        let mut d = if boss == BossId::IceDemon { ice_demon() } else { fire_demon() };
+        d.opening = Vec::new();
+        for id in [AbilityId::Strike, AbilityId::Cleave, AbilityId::Swoop, d.ring, AbilityId::TailWhip, d.ball, d.breath] {
             if !ready.contains(&id) {
                 run.monsters[bi].cds.start(id, 99.0);
             }
         }
-        let mut d = Demon { opening: Vec::new(), ..Demon::default() };
         d.flight.t = 99.0;
         (run, d, bi)
+    }
+
+    fn fire_demon() -> Demon {
+        Demon::of(AbilityId::FireBreath, AbilityId::Fireball, AbilityId::RingOfFire)
+    }
+
+    fn ice_demon() -> Demon {
+        Demon::of(AbilityId::FrostBreath, AbilityId::FrostBall, AbilityId::RingOfFrost)
     }
 
     fn demon_with(off: Vec2, ready: &[AbilityId]) -> (Run, Demon, usize) {
@@ -286,6 +321,58 @@ mod tests {
         assert_eq!(tail.split, DamageSplit::pure(DamageType::Physical));
         assert_eq!(windup(&run, bi, AbilityId::Swoop), 0.6, "the claws' wind-up");
         assert!(kit(&run, bi, AbilityId::Smash).radius > 0.0);
+    }
+
+    #[test]
+    fn the_claw_is_unchanged_and_the_scimitar_is_its_own_blow() {
+        let (run, _, bi) = demon_with(Vec2::new(20.0, 0.0), &[]);
+        let (claw, blade) = (kit(&run, bi, AbilityId::Strike), kit(&run, bi, AbilityId::Cleave));
+        assert_eq!((claw.windup, claw.range), (0.45, 24.0 + 11.0), "today's numbers");
+        assert_eq!((blade.windup, blade.cd_steps.base, blade.range),(0.8, 4.0, 34.0 + 11.0));
+        assert!(blade.damage > claw.damage);
+    }
+
+    /// Plays a demon beside a hero for `secs`, the hero kept alive; the animations seen, each with the time it first showed.
+    fn anims_seen(ready: &[AbilityId], secs: f64) -> (Run, Vec<(Anim, f64)>) {
+        let (mut run, mut d, bi) = demon_with_heroes(&[Vec2::new(20.0, 0.0)], ready);
+        d.opening = fire_demon().opening;
+        let mut seen: Vec<(Anim, f64)> = Vec::new();
+        for i in 0..(secs / DT) as usize {
+            let cdt = run.monsters[bi].effects.cooldown_dt(DT);
+            run.monsters[bi].cds.tick(cdt);
+            d.tick(&mut run, DT);
+            run.players[0].hp = run.players[0].max_hp;
+            let a = run.monsters[bi].anim;
+            if !seen.iter().any(|(s, _)| *s == a) {
+                seen.push((a, i as f64 * DT));
+            }
+        }
+        (run, seen)
+    }
+
+    #[test]
+    fn the_scimitar_opens_at_three_seconds_and_plays_its_own_anim() {
+        let (_, seen) = anims_seen(&[AbilityId::Cleave], 2.9);
+        assert!(seen.iter().all(|(a, _)| *a != Anim::Cleave), "no scimitar before its opening: {seen:?}");
+        let (_, seen) = anims_seen(&[AbilityId::Strike, AbilityId::Cleave], 30.0);
+        let first = |anim: Anim| seen.iter().find(|(a, _)| *a == anim).map(|(_, t)| *t);
+        assert!(first(Anim::Melee).is_some(), "the claws are used: {seen:?}");
+        assert!(first(Anim::Cleave).expect("the scimitar is used") >= 2.9, "{seen:?}");
+    }
+
+    #[test]
+    fn the_burning_scimitar_singes_and_the_claws_do_not() {
+        use crate::defs::effects::EffectKind;
+        let hit_by = |id: AbilityId| {
+            let (mut run, mut d, bi) = demon_with(Vec2::new(20.0, 0.0), &[id]);
+            run.monsters[bi].cds.start(AbilityId::Smash, 99.0);
+            let w = kit(&run, bi, id).windup;
+            ticks(&mut run, &mut d, w + 2.0 * DT);
+            assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(id));
+            run.players[0].effects.has(EffectKind::Singed)
+        };
+        assert!(hit_by(AbilityId::Cleave), "the scimitar singes");
+        assert!(!hit_by(AbilityId::Strike), "the claws do not");
     }
 
     #[test]
@@ -417,7 +504,7 @@ mod tests {
 
     #[test]
     fn in_the_air_only_fireball_and_breath() {
-        let (mut run, mut d, bi) = flying_demon_with(&[Vec2::new(20.0, 0.0)], &SIX);
+        let (mut run, mut d, bi) = flying_demon_with(&[Vec2::new(20.0, 0.0)], &SEVEN);
         let hp = run.players[0].hp;
         let mut seen = Vec::new();
         for _ in 0..(3.0 / DT) as usize {
@@ -440,7 +527,7 @@ mod tests {
     #[test]
     fn the_pick_is_among_usable_attacks_only() {
         let first = |dist: f64, seed: u64| {
-            let (mut run, mut d, _) = demon_with(Vec2::new(dist, 0.0), &SIX);
+            let (mut run, mut d, _) = demon_with(Vec2::new(dist, 0.0), &SEVEN);
             run.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
             d.tick(&mut run, DT);
             d.action.map(|(a, _)| a).expect("it starts something")
@@ -459,9 +546,9 @@ mod tests {
 
     #[test]
     fn it_waits_its_opening_delays() {
-        assert_eq!(Demon::default().flight.t, DEMON_FLIGHT_FIRST);
-        let (mut run, _, _) = demon_with(Vec2::new(20.0, 0.0), &SIX);
-        let mut d = Demon::default();
+        assert_eq!(fire_demon().flight.t, DEMON_FLIGHT_FIRST);
+        let (mut run, _, _) = demon_with(Vec2::new(20.0, 0.0), &SEVEN);
+        let mut d = fire_demon();
         d.flight.t = 99.0;
         ticks(&mut run, &mut d, 0.9);
         assert!(d.action.is_none(), "nothing before 1 s");
@@ -492,14 +579,14 @@ mod tests {
     #[test]
     fn the_cleave_lights_a_barrel_in_front() {
         use crate::run::objects::{Barrel, ObjState};
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].aim = 0.0;
         let pos = run.monsters[bi].pos;
         run.spawn_object(EntityKind::Barrel, pos + Vec2::new(34.0, 0.0), ObjState::Barrel(Barrel::new()));
         run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-34.0, 0.0), ObjState::Barrel(Barrel::new()));
-        let mut d = Demon { action: Some((Action::Claw, DT / 2.0)), ..Demon::default() };
+        let mut d = Demon { action: Some((Action::Claw, DT / 2.0)), ..fire_demon() };
         d.tick(&mut run, DT);
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
         assert_eq!(lit, vec![true, false], "in front, not behind");
@@ -524,7 +611,7 @@ mod tests {
         assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Strike));
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed away");
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "the strike frames play out");
-        ticks(&mut run, &mut d, DEMON_CLEAVE_RECOVER + 3.0 * DT);
+        ticks(&mut run, &mut d, DEMON_CLAW_RECOVER + 3.0 * DT);
         assert_ne!(run.monsters[bi].anim, Anim::Melee, "back to idle or walking after the recovery");
     }
 
@@ -608,12 +695,234 @@ mod tests {
     }
 
     #[test]
+    fn the_ice_kit_mirrors_the_fire_kit() {
+        use crate::defs::damage::{kind_split, DamageSplit, DamageType::{Cold, Magical}};
+        let (fire, _, fb) = demon_with(Vec2::new(20.0, 0.0), &[]);
+        let (ice, _, ib) = ice_demon_with_heroes(&[Vec2::new(20.0, 0.0)], &[]);
+        for (f, i) in [(AbilityId::FireBreath, AbilityId::FrostBreath), (AbilityId::Fireball, AbilityId::FrostBall), (AbilityId::RingOfFire, AbilityId::RingOfFrost)] {
+            let (f, i) = (kit(&fire, fb, f), kit(&ice, ib, i));
+            assert_eq!((f.damage, f.cooldown, f.range, f.windup, f.duration), (i.damage, i.cooldown, i.range, i.windup, i.duration));
+        }
+        // The whole definition but the name, the id, the projectile kind and the classes.
+        let bare = |id: AbilityId| format!("{:?}", ab::AbilityDef { id: AbilityId::Strike, name: "", own: ab::OwnStats { kind: None, ..ab::def(id).own }, classes: &[], ..ab::def(id) });
+        for (f, i) in [(AbilityId::FireBreath, AbilityId::FrostBreath), (AbilityId::Fireball, AbilityId::FrostBall), (AbilityId::RingOfFire, AbilityId::RingOfFrost)] {
+            assert_eq!(bare(f), bare(i), "{i:?}");
+        }
+        assert_eq!(kind_split(EntityKind::FrostOrb), DamageSplit::split(&[(Cold, 0.7), (Magical, 0.3)]));
+        assert_eq!(kind_split(EntityKind::FrostBall), DamageSplit::split(&[(Cold, 0.7), (Magical, 0.2)]));
+        assert_eq!(kind_split(EntityKind::FrostBreath), DamageSplit::pure(Cold));
+        assert_eq!(kind_split(EntityKind::FrostPatch), DamageSplit::split(&[(Cold, 0.4), (Magical, 0.6)]));
+    }
+
+    #[test]
+    fn the_ice_demon_never_uses_a_fire_ability() {
+        use crate::defs::looks::RuneLook;
+        let (mut run, mut d, bi) = ice_demon_with_heroes(&[Vec2::new(60.0, 0.0)], &[AbilityId::FrostBreath, AbilityId::FrostBall, AbilityId::RingOfFrost]);
+        d.opening = ice_demon().opening;
+        let (mut casts, mut most_orbs, mut balls, mut patches) = (0, 0, 0, 0);
+        for _ in 0..(60.0 / DT) as usize {
+            let cdt = run.monsters[bi].effects.cooldown_dt(DT);
+            run.monsters[bi].cds.tick(cdt);
+            d.tick(&mut run, DT);
+            tick_channel(&mut run, bi, DT);
+            run.players[0].hp = run.players[0].max_hp;
+            for (e, _) in run.events.drain(..) {
+                if let Ev::Cast { look, .. } = e {
+                    casts += 1;
+                    assert_eq!(look, RuneLook::Cold as u8, "a cold cast");
+                }
+            }
+            for p in &run.projectiles {
+                assert!(!matches!(p.kind, EntityKind::FireOrb | EntityKind::Fireball | EntityKind::FireBreath), "{:?}", p.kind);
+            }
+            most_orbs = most_orbs.max(run.projectiles.iter().filter(|p| p.kind == EntityKind::FrostOrb).count());
+            balls += run.projectiles.iter().filter(|p| p.kind == EntityKind::FrostBall).count();
+            run.projectiles.clear();
+            assert!(run.hazards.iter().all(|h| h.kind != EntityKind::FirePatch));
+            patches = patches.max(run.hazards.iter().filter(|h| h.kind == EntityKind::FrostPatch).count());
+        }
+        assert!(casts > 3, "it cast: {casts}");
+        assert_eq!(most_orbs, 16, "the ring");
+        assert!(balls > 0 && patches > 0, "balls {balls}, patches {patches}");
+    }
+
+    /// Plays the real fight with only `id` ready until a blast has gone off; the kinds and colours of the flashes then alive.
+    fn flashes_after_a_blast(boss: BossId, id: AbilityId) -> Vec<(crate::defs::lights::LightKind, crate::defs::lights::Colour)> {
+        let (mut run, mut d, bi) = demon_run(boss, &[Vec2::new(90.0, 0.0)], &[id]);
+        let radius = kit(&run, bi, id).radius;
+        for _ in 0..(8.0 / DT) as usize {
+            run.events.clear();
+            d.tick(&mut run, DT);
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            // The ball's own radius: the landing's Smash is a Boom too.
+            if run.events.iter().any(|(e, _)| matches!(e, Ev::Boom { r, .. } if *r == radius as f32)) {
+                return run.lights.sources.iter().filter(|s| s.expires.is_some()).map(|s| (s.kind, s.colour)).collect();
+            }
+        }
+        panic!("no blast in 8 s");
+    }
+
+    #[test]
+    fn the_frost_ball_flashes_cold_and_the_fireball_stays_a_blast() {
+        use crate::defs::lights::LightKind;
+        let ice = flashes_after_a_blast(BossId::IceDemon, AbilityId::FrostBall);
+        assert!(ice.contains(&(LightKind::Magic, ab::NOVA_TINT)), "{ice:?}");
+        assert!(!ice.iter().any(|f| f.0 == LightKind::Blast), "no orange flash: {ice:?}");
+        let fire = flashes_after_a_blast(BossId::FireDemon, AbilityId::Fireball);
+        assert!(fire.iter().any(|f| f.0 == LightKind::Blast) &&!fire.iter().any(|f| f.0 == LightKind::Magic), "{fire:?}");
+    }
+
+    #[test]
+    fn the_ice_claws_and_scimitar_are_cold() {
+        use crate::defs::damage::DamageType::Cold;
+        use crate::defs::effects::EffectKind;
+        let (mut run, mut d, bi) = ice_demon_with_heroes(&[Vec2::new(20.0, 0.0)], &[AbilityId::Cleave]);
+        assert!((kit(&run, bi, AbilityId::Strike).split.share(Cold) - 0.2).abs() < 1e-9);
+        run.monsters[bi].cds.start(AbilityId::Smash, 99.0);
+        let w = kit(&run, bi, AbilityId::Cleave).windup;
+        ticks(&mut run, &mut d, w + 2.0 * DT);
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Cleave));
+        assert!(run.players[0].effects.has(EffectKind::Chilled), "the scimitar chills");
+    }
+
+    /// Seconds left of `kind` on hero 0, if it is on.
+    fn left_of(run: &Run, kind: crate::defs::effects::EffectKind) -> Option<f64> {
+        run.players[0].effects.list().iter().find(|a| a.kind == kind).map(|a| a.left)
+    }
+
+    #[test]
+    fn the_frost_breath_freezes_and_lets_go() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{scaled_secs, EffectKind::Frozen};
+        let (mut run, mut d, bi) = ice_demon_with_heroes(&[Vec2::new(40.0, 0.0)], &[AbilityId::FrostBreath]);
+        let (mut first_frozen, mut channel_ended, mut last_renewal, mut gone, mut peak) = (None, None, None, None, 0.0_f64);
+        let mut prev = 0.0;
+        for i in 0..(6.0 / DT) as usize {
+            d.tick(&mut run, DT);
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            let t = (i + 1) as f64 * DT;
+            if channel_ended.is_some() && run.monsters[bi].channel.is_some() {
+                break; // its cooldown is over: the next breath is another test
+            }
+            let left = left_of(&run, Frozen).unwrap_or(0.0);
+            if left > 0.0 && first_frozen.is_none() {
+                first_frozen = Some(t);
+            }
+            if run.monsters[bi].channel.is_none() && first_frozen.is_some() && channel_ended.is_none() {
+                channel_ended = Some(t);
+            }
+            if left > prev + 1e-9 {
+                last_renewal = Some(t);
+                peak = peak.max(left);
+                assert!(channel_ended.is_none() || t <= channel_ended.unwrap() + 1e-9, "a new Frozen after the channel ended, at {t}");
+            }
+            if left == 0.0 && prev > 0.0 && gone.is_none() {
+                gone = Some(t);
+            }
+            prev = left;
+        }
+        let (first, ended, renewed, gone) = (first_frozen.expect("frozen"), channel_ended.expect("the channel ended"), last_renewal.unwrap(), gone.expect("the ice let go"));
+        assert!(first <= windup(&run, bi, AbilityId::FrostBreath) + 0.3, "frozen by the first pulse: {first}");
+        assert!(renewed <= ended + 1e-9);
+        let power = run.last_hit.clone().expect("a hit").power.max(crate::defs::effects::TYPE_EFFECT_POWER);
+        let expected = scaled_secs(2.0, power, run.players[0].sheet.attrs.get(Attr::Con));
+        assert!((peak - expected).abs() < 2.0 * DT, "each pulse renews the full time: {peak} against {expected}");
+        assert!((gone - renewed - expected).abs() < 2.0 * DT, "free {} s after the last pulse, expected {expected}", gone - renewed);
+    }
+
+    #[test]
+    fn a_frost_patch_chills_and_never_freezes() {
+        use crate::defs::effects::EffectKind::{Chilled, Frozen};
+        use crate::defs::{abilities as dab, kinds::EntityKind::FrostPatch};
+        use crate::dungeon::{Map, Tile};
+        let (mut run, _, _) = ice_demon_with_heroes(&[Vec2::new(0.0, 0.0)], &[]);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 2..=ty + 2 {
+            for x in tx - 1..=tx + 14 {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+        let walk = |run: &mut Run, mx: i8| -> f64 {
+            let (before, seq) = (run.players[0].pos().x, run.players[0].ack + 1);
+            run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx, ..Default::default() });
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            run.players[0].pos().x - before
+        };
+        for _ in 0..3 {
+            walk(&mut run, 0);
+        }
+        let free_step = walk(&mut run, 1);
+        assert!(free_step > 0.5, "a hero walks: {free_step}");
+        let at = run.players[0].pos();
+        crate::run::spawn_patch_of(&mut run, FrostPatch, at, dab::BREATH_PATCH_RADIUS, dab::BREATH_PATCH_SECS, dab::BREATH_PATCH_DAMAGE, crate::run::Side::Hostile, None);
+        let mut chilled = false;
+        for _ in 0..(1.0 / DT) as usize {
+            walk(&mut run, 0);
+            assert!(!run.players[0].effects.has(Frozen), "a patch never freezes");
+            chilled |= run.players[0].effects.has(Chilled);
+        }
+        assert!(chilled, "standing on the patch chills");
+        // Out of the ice on the hero's own legs, at 70 % speed.
+        let reach = dab::BREATH_PATCH_RADIUS + crate::run::classes::PLAYER_RADIUS;
+        let mut steps = 0;
+        while run.players[0].pos().dist(at) < reach {
+            let step = walk(&mut run, 1);
+            assert!(!run.players[0].effects.has(Frozen));
+            if run.players[0].effects.has(Chilled) {
+                assert!((step - 0.7 * free_step).abs() < 1e-6, "chilled step {step} against {free_step}");
+            }
+            steps += 1;
+            assert!(steps < 120 && !run.hazards.is_empty(), "the hero walks out before the patch is gone");
+        }
+        let mut free_at = None;
+        for i in 0..(10.0 / DT) as usize {
+            walk(&mut run, 0);
+            assert!(!run.players[0].effects.has(Frozen));
+            if !run.players[0].effects.has(Chilled) && free_at.is_none() {
+                free_at = Some(i);
+            }
+        }
+        assert!(free_at.is_some(), "the chill wears off");
+    }
+
+    /// Plays the real fight with only `id` ready until hero 0 is Frozen; the hit that last landed on it.
+    fn frozen_by(id: AbilityId, at: Vec2) -> What {
+        let (mut run, mut d, _) = ice_demon_with_heroes(&[at], &[id]);
+        // The boss hall has chasms: the hero stands on floor, or it falls and is never frozen.
+        let bi = boss_idx(&run).unwrap();
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        for y in ty - 6..=ty + 6 {
+            for x in tx - 6..=tx + 6 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        for _ in 0..(8.0 / DT) as usize {
+            d.tick(&mut run, DT);
+            run.step();
+            if run.players[0].effects.has(crate::defs::effects::EffectKind::Frozen) {
+                return run.last_hit.clone().expect("a hit").why.what;
+            }
+        }
+        panic!("{id:?} never froze the hero");
+    }
+
+    #[test]
+    fn the_frost_ball_and_the_orbs_freeze() {
+        assert_eq!(frozen_by(AbilityId::FrostBall, Vec2::new(90.0, 0.0)), What::Ability(AbilityId::FrostBall));
+        assert_eq!(frozen_by(AbilityId::RingOfFrost, Vec2::new(60.0, 0.0)), What::Ability(AbilityId::RingOfFrost));
+    }
+
+    #[test]
     fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
-        crate::run::bosses::tests::hit_from_behind(BossId::Demon);
+        crate::run::bosses::tests::hit_from_behind(BossId::FireDemon);
     }
 
     #[test]
     fn a_boss_looks_to_where_it_lost_a_hero() {
-        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::Demon);
+        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::FireDemon);
     }
 }

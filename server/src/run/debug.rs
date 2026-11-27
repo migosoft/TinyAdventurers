@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn f9_makes_a_debug_hero_mortal_and_immortal_again() {
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Barbarian], BossId::FireDemon);
         // Not in debug mode: ignored.
         run.set_immortal(0, false);
         assert!(!run.players[0].mortal);
@@ -344,7 +344,7 @@ mod tests {
 
     #[test]
     fn notice_circles_list_only_creatures_at_the_dodge_tier() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         crate::run::ai::tests::open_floor(&mut run);
         run.monsters.clear();
         let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn debug_cones_list_every_living_creature_with_its_cone() {
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
         crate::run::ai::tests::open_floor(&mut run);
         run.monsters.clear();
         run.debug = true;
@@ -396,7 +396,7 @@ mod tests {
 
     #[test]
     fn the_debug_toggle_sets_darkvision_and_the_snapshot_carries_it() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
         run.debug = true;
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn the_debug_toggle_is_ignored_in_a_normal_run() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let before = run.players[0].darkvision;
         run.set_darkvision(0, 1.0);
         assert_eq!(run.players[0].darkvision, before);
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn a_nan_darkvision_ratio_changes_nothing() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug = true;
         run.set_darkvision(0, f32::NAN);
         assert_eq!(run.players[0].darkvision, None);
@@ -426,7 +426,7 @@ mod tests {
 
     #[test]
     fn leaving_debug_resets_the_darkvision_override() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug = true;
         run.set_darkvision(0, 0.5);
         run.set_debug(0, false);
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn debug_effect_applies_to_the_own_hero_only_in_a_debug_run() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug_effect(0, EffectKind::Sleep as u8);
         assert!(run.players[0].effects.list().is_empty());
         run.debug = true;
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn f8_charms_the_own_hero_with_the_nearest_enemy() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let here = run.players[0].pos();
         crate::run::ai::tests::open_floor(&mut run);
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn f8_charm_without_an_enemy_does_nothing() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.clear();
         run.debug = true;
         run.debug_effect(0, EffectKind::Charmed as u8);
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn debug_effect_is_magic() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug = true;
         run.debug_effect(0, EffectKind::Sleep as u8);
         assert!(run.players[0].effects.list().iter().all(|a| a.magical) && !run.players[0].effects.list().is_empty());
@@ -488,7 +488,7 @@ mod tests {
     fn debug_incorporeal_only_in_debug_runs() {
         use crate::defs::damage::DamageType;
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let here = run.players[0].pos();
         let far = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(200.0, 0.0), None);
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn debug_anti_magic_only_in_debug_runs() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug_anti_magic(0);
         assert!(!run.players[0].effects.anti_magic, "nothing in a normal run");
         run.debug = true;
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn debug_dispel_pauses_own_positive_magic() {
         use crate::defs::effects::EffectKind;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.debug_effect(0, EffectKind::Accelerated as u8);
         run.debug_dispel(0);
         assert!(run.players[0].effects.list().iter().all(|a| a.dispel <= 0.0), "nothing in a normal run");

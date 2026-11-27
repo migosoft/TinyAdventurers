@@ -847,7 +847,7 @@ mod tests {
     #[test]
     fn a_charmed_boss_pauses_its_pattern() {
         use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
-        let (mut run, bi) = boss_run(BossId::Demon, 100.0);
+        let (mut run, bi) = boss_run(BossId::FireDemon, 100.0);
         let ticks = Arc::new(AtomicUsize::new(0));
         run.level.boss_mut().unwrap().behaviour = Some(Box::new(Counter(ticks.clone())));
         steps(&mut run, 5);
@@ -869,7 +869,7 @@ mod tests {
     #[test]
     fn a_charmed_boss_fights_hostiles_with_its_kit() {
         use crate::defs::damage::What;
-        for boss in [BossId::Demon, BossId::Dragon] {
+        for boss in [BossId::FireDemon, BossId::Dragon] {
             let (mut run, bi) = boss_run(boss, 60.0);
             let kit: Vec<_> = run.monsters[bi].kit.iter().map(|a| a.id).collect();
             assert!(!kit.is_empty());
@@ -903,7 +903,7 @@ mod tests {
 
     #[test]
     fn killing_a_charmed_boss_wins() {
-        let (mut run, bi) = boss_run(BossId::Demon, 100.0);
+        let (mut run, bi) = boss_run(BossId::FireDemon, 100.0);
         charm(&mut run, bi, 0, 5.0);
         run.step();
         assert!(is_on(&run.monsters[bi]));

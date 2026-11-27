@@ -81,7 +81,7 @@ describe('the ?r3d=demon stage', () => {
     expect(lights.filter((l) => l.kind === LIGHT_KIND.Lava)).toHaveLength(16);
   });
 
-  it('draws one built demon of KIND.Demon with its hull once its picture is painted, the lava with it', async () => {
+  it('draws one built demon of KIND.FireDemon with its hull once its picture is painted, the lava with it', async () => {
     const r = make('?r3d=demon');
     expect(built(r.step(1)[0])).toBe(0); // the picture is not painted yet: the demon is its card
     let last: FrameInput | undefined;

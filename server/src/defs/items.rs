@@ -134,6 +134,10 @@ super::enum_list::listed_enum! {
         BoarTusks = 58,
         // The demon's tail (#379): the dragon's tail, a little weaker.
         DemonTail = 59,
+        // The demons' second blow and the ice demon's claws (#442): monster-only.
+        BurningScimitar = 60,
+        IceClaws = 61,
+        IceScimitar = 62,
     }
 }
 
@@ -415,6 +419,9 @@ pub fn def(id: ItemId) -> ItemDef {
         I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
         I::DemonTail => item("Demon Tail", "", winding(melee(K::Tail, 20.0, 3.0, 2.40, 40.0, phys(), at(22, 14)), 22.0, 0.40), NONE, &[], &[]),
         I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
+        I::IceClaws => item("Ice Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, DamageSplit::split(&[(DamageType::Cold, 0.2)]), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
+        I::BurningScimitar => item("Burning Scimitar", "weapon_machete", winding(melee(K::Sword, 45.0, 4.0, 2.80, 40.0, DamageSplit::split(&[(DamageType::Heat, 0.3), (DamageType::Magical, 0.2)]), at(22, 14)), 34.0, 0.80), NONE, &[], &[]),
+        I::IceScimitar => item("Ice Scimitar", "weapon_machete", winding(melee(K::Sword, 45.0, 4.0, 2.80, 40.0, DamageSplit::split(&[(DamageType::Cold, 0.3), (DamageType::Magical, 0.2)]), at(22, 14)), 34.0, 0.80), NONE, &[], &[]),
         // Drains STR (Weakened) for as long as its wielder's CHA gives; no hero holds it (natural weapons never equip).
         I::GhostTouch => item("Ghost Touch", "", winding(melee(K::Touch, 6.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),
         // Drains CON (Frail) for as long as its wielder's CHA gives; like Ghost Touch no hero holds it.
@@ -615,6 +622,17 @@ mod tests {
                     ItemBase::Ranged(_, r) => assert_eq!(r.windup, 0.0, "{id:?}"),
                     _ => {}
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn no_class_can_hold_a_scimitar() {
+        use crate::protocol::ClassId;
+        for id in [ItemId::BurningScimitar, ItemId::IceScimitar, ItemId::IceClaws] {
+            assert!(!hero_can_hold(&def(id)), "{id:?}");
+            for class in ClassId::ALL {
+                assert!(crate::progress::Progress::new(class).grant_item(class, id).is_err(), "{id:?} for {class:?}");
             }
         }
     }

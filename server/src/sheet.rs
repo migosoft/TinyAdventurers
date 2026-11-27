@@ -1233,8 +1233,8 @@ mod tests {
         }
         near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attr_sources(EnemyType::Necromancer).total()), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
         near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attr_sources(EnemyType::Summoner).total()), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
-        let k = kit(KitSource::Boss(BossId::Demon), bosses::attr_sources(BossId::Demon).total());
-        assert_eq!((bosses::attr_sources(BossId::Demon).total().get(Attr::Cha), bosses::attr_sources(BossId::Demon).total().get(Attr::Dex)), (20, 14));
+        let k = kit(KitSource::Boss(BossId::FireDemon), bosses::attr_sources(BossId::FireDemon).total());
+        assert_eq!((bosses::attr_sources(BossId::FireDemon).total().get(Attr::Cha), bosses::attr_sources(BossId::FireDemon).total().get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
         let k = kit(KitSource::Boss(BossId::Dragon), bosses::attr_sources(BossId::Dragon).total());
@@ -1819,7 +1819,7 @@ mod tests {
             }
         }
         let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attr_sources(BossId::Dragon).total(), &[]);
-        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[]);
+        let demon = kit_for(KitSource::Boss(BossId::FireDemon), &crate::defs::bosses::attr_sources(BossId::FireDemon).total(), &[]);
         let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attr_sources(BossId::Lich).total(), &[]);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
@@ -1860,7 +1860,7 @@ mod tests {
         for (t, v) in enemies_today {
             assert_eq!(enemies::attr_sources(t).total(), a(v), "{t:?}");
         }
-        for (b, v) in [(BossId::Demon, [22, 14, 20, 14, 16, 20]), (BossId::Lich, [10, 14, 14, 22, 18, 16]), (BossId::Dragon, [24, 10, 22, 16, 14, 20])] {
+        for (b, v) in [(BossId::FireDemon, [22, 14, 20, 14, 16, 20]), (BossId::Lich, [10, 14, 14, 22, 18, 16]), (BossId::Dragon, [24, 10, 22, 16, 14, 20])] {
             assert_eq!(bosses::attr_sources(b).total(), a(v), "{b:?}");
         }
         for (c, v) in [(ClassId::Wizard, [8, 14, 12, 15, 13, 10]), (ClassId::Paladin, [15, 8, 13, 10, 12, 14]),

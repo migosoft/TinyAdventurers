@@ -196,7 +196,7 @@ describe('Hud', () => {
     const old = (s: ReturnType<typeof snapOf>) => {
       const b = s.boss!;
       const d = document.createElement('div');
-      d.innerHTML = `<div class="bname">${BOSS_TEXT[b.kind as 'Lich'].name} ${b.immune ? '<b class="chip immune">Immune</b>' : ''}</div><div class="bbar"><div class="fill"></div></div>`;
+      d.innerHTML = `<div class="bname">${BOSS_TEXT[b.kind as 'Lich'].short} ${b.immune ? '<b class="chip immune">Immune</b>' : ''}</div><div class="bbar"><div class="fill"></div></div>`;
       d.querySelector<HTMLElement>('.fill')!.style.width = `${(b.hp / b.max_hp) * 100}%`; // same serialisation as the live box
       return d.innerHTML;
     };

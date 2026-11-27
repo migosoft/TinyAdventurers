@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn dungeon_lava_is_lit_from_the_start() {
-        let run = crate::run::tests::test_run(&[ClassId::Paladin], BossId::Demon); // lava theme
+        let run = crate::run::tests::test_run(&[ClassId::Paladin], BossId::FireDemon); // lava theme
         let lava = run.layout.map.tiles.iter().filter(|&&t| t == Tile::Lava as u8).count();
         assert!(lava > 0);
         let lights = run.lights.sources.iter().filter(|s| s.kind == LightKind::Lava).count();

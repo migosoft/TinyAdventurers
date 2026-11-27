@@ -426,9 +426,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
 pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
     use EnemyType::*;
     match (boss, t) {
-        (BossId::Demon, SkeletonArcher) => Imp,
-        (BossId::Demon, SkeletonWarrior) => Chort,
-        (BossId::Demon, Necromancer) => Summoner,
+        (BossId::FireDemon | BossId::IceDemon, SkeletonArcher) => Imp,
+        (BossId::FireDemon | BossId::IceDemon, SkeletonWarrior) => Chort,
+        (BossId::FireDemon | BossId::IceDemon, Necromancer) => Summoner,
         _ => t,
     }
 }
@@ -438,7 +438,7 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
 pub fn haunt_for(boss: BossId) -> Option<EnemyType> {
     match boss {
         BossId::Lich => Some(EnemyType::Ghost),
-        BossId::Demon => Some(EnemyType::Shade),
+        BossId::FireDemon | BossId::IceDemon => Some(EnemyType::Shade),
         BossId::Dragon => None,
     }
 }
@@ -491,7 +491,7 @@ pub fn races(t: EnemyType) -> &'static [Race] {
         Ogre => &[Race::Ogre],
         Bunny | Deer | Stag | Boar => &[Race::Animal],
         Mimic => &[Race::Mimic],
-        Imp | Chort | SummonedImp => &[Race::Demon],
+        Imp | Chort | SummonedImp => &[Race::Demon, Race::Fire],
         Ghost | Shade => &[Race::Undead, Race::Incorporeal],
     }
 }
@@ -717,7 +717,7 @@ mod tests {
     #[test]
     fn only_the_dragon_has_no_haunt() {
         assert_eq!(haunt_for(BossId::Lich), Some(EnemyType::Ghost));
-        assert_eq!(haunt_for(BossId::Demon), Some(EnemyType::Shade));
+        assert_eq!(haunt_for(BossId::FireDemon), Some(EnemyType::Shade));
         assert_eq!(haunt_for(BossId::Dragon), None);
     }
 
@@ -736,9 +736,9 @@ mod tests {
             (Summoner, &[Race::Human]),
             (Disciple, &[Race::Human]),
             (Mimic, &[Race::Mimic]),
-            (Imp, &[Race::Demon]),
-            (SummonedImp, &[Race::Demon]),
-            (Chort, &[Race::Demon]),
+            (Imp, &[Race::Demon, Race::Fire]),
+            (SummonedImp, &[Race::Demon, Race::Fire]),
+            (Chort, &[Race::Demon, Race::Fire]),
             (Ogre, &[Race::Ogre]),
             (Ghost, &[Race::Undead, Race::Incorporeal]),
             (Shade, &[Race::Undead, Race::Incorporeal]),

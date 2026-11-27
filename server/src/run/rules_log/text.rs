@@ -50,9 +50,10 @@ fn hazard_name(k: EntityKind) -> &'static str {
         HolyGround => "Holy Ground",
         Roots => "Roots",
         FirePatch => "fire",
+        FrostPatch => "frost",
         Wizard | Paladin | Barbarian | ElvenRanger | GoblinArcher | SkeletonWarrior | SkeletonArcher | OrcWarrior | OrcArcher | Necromancer
-        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | Ghost | Shade | Knight | Bunny | Deer | Stag | Boar | DireWolf | Demon | Lich | Dragon | Missile | Fireball | Bolt
-        | Arrow | ShadowBolt | FrostBolt | FireBreath | FireOrb | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | CharmOrb | ChainSpark
+        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | Ghost | Shade | Knight | Bunny | Deer | Stag | Boar | DireWolf | FireDemon | IceDemon | Lich | Dragon | Missile | Fireball | Bolt
+        | Arrow | ShadowBolt | FrostBolt | FireBreath | FireOrb | FrostBreath | FrostOrb | FrostBall | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | CharmOrb | ChainSpark
         | Judgement | ThrownAxe | Chest | Barrel | Torch | Crystal => "hazard",
     }
 }
@@ -174,6 +175,8 @@ fn race_name(r: Race) -> &'static str {
         Race::Object => "object",
         Race::Incorporeal => "incorporeal",
         Race::Animal => "animal",
+        Race::Fire => "fire",
+        Race::Ice => "ice",
     }
 }
 

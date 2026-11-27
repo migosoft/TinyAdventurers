@@ -305,6 +305,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   const still = asleep || stone || iced;
   if (!still) switch (s.anim) {
     case ANIM.Melee:
+    case ANIM.Cleave:
     case ANIM.Tail: {
       const tail = s.anim === ANIM.Tail;
       // Own frames: the strike comes after the wind-up, drawn by the frames.
@@ -385,7 +386,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
 /** The weapon's frame, size, origin, position, rotation and alpha for the figure's mount. */
 function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean): WeaponPose {
   const t = s.animT;
-  const isMelee = s.anim === ANIM.Melee;
+  const isMelee = s.anim === ANIM.Melee || s.anim === ANIM.Cleave;
   const hx = (d.handX ?? 3) * sgn;
   const ax = Math.cos(s.screenAim);
   const ay = Math.sin(s.screenAim);

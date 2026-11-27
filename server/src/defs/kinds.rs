@@ -36,11 +36,12 @@ pub enum EntityKind {
     /// The deer's twin with antlers: its own type, the deer's numbers.
     Stag = 29,
     // Bosses
-    Demon = 30,
+    FireDemon = 30,
     Lich = 31,
     Dragon = 32,
     /// Wildlife (#227): fights back when hit (the next free monster id after the bosses).
     Boar = 33,
+    IceDemon = 34,
     // Projectiles
     Missile = 50,
     Fireball = 51,
@@ -65,12 +66,18 @@ pub enum EntityKind {
     ThrownAxe = 65,
     /// Charm: the Wizard's charm orb.
     CharmOrb = 66,
+    /// The ice demon's frost: the twins of the breath, the ring's orb and the Fireball (#442).
+    FrostBreath = 67,
+    FrostOrb = 68,
+    FrostBall = 69,
     // Hazards
     FirePatch = 70,
     /// Consecrate: holy ground that hurts enemies.
     HolyGround = 71,
     /// Entangle: roots that bind enemies.
     Roots = 72,
+    /// The ice demon's breath leaves these: it chills, never freezes.
+    FrostPatch = 73,
     // Props
     Chest = 80,
     Barrel = 81,
@@ -89,7 +96,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 52] = [
+    pub const ALL: [EntityKind; 57] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -114,10 +121,11 @@ impl EntityKind {
         EntityKind::Bunny,
         EntityKind::Deer,
         EntityKind::Stag,
-        EntityKind::Demon,
+        EntityKind::FireDemon,
         EntityKind::Lich,
         EntityKind::Dragon,
         EntityKind::Boar,
+        EntityKind::IceDemon,
         EntityKind::Missile,
         EntityKind::Fireball,
         EntityKind::Bolt,
@@ -135,9 +143,13 @@ impl EntityKind {
         EntityKind::ChainSpark,
         EntityKind::Judgement,
         EntityKind::ThrownAxe,
+        EntityKind::FrostBreath,
+        EntityKind::FrostOrb,
+        EntityKind::FrostBall,
         EntityKind::FirePatch,
         EntityKind::HolyGround,
         EntityKind::Roots,
+        EntityKind::FrostPatch,
         EntityKind::Chest,
         EntityKind::Barrel,
         EntityKind::Torch,
@@ -164,7 +176,7 @@ impl EntityKind {
             Lich => 28.0,
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
-            Demon => 58.0,
+            FireDemon | IceDemon => 58.0,
             // 12 opaque rows plus the 1-px idle bob (client/scripts/spectre-frames.ts).
             Ghost | Shade => 13.0,
             // Opaque rows of the pack's idle frame f0 (the Mimic: open frame f0), first guesses (#321).
@@ -206,6 +218,8 @@ super::enum_list::listed_enum! {
         Ambush = 15,
         /// The wind-up of a summoning (Raise Dead, Summon Imps).
         Summon = 16,
+        /// The demons' scimitar blow (#442): the melee frames and swing with their own wind-up.
+        Cleave = 17,
     }
 }
 
@@ -230,7 +244,7 @@ mod tests {
 
     #[test]
     fn the_summon_wind_up_has_its_own_anim() {
-        assert_eq!(Anim::COUNT, 17);
+        assert_eq!(Anim::COUNT, 18);
         assert_eq!(Anim::Summon as u8, 16);
     }
 

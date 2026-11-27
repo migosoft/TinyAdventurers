@@ -39,7 +39,7 @@ impl Theme {
     /// water, the dragon's natural rock with water, the demon's zones of both with lava.
     pub fn for_boss(boss: BossId) -> Theme {
         match boss {
-            BossId::Demon => Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones },
+            BossId::FireDemon | BossId::IceDemon => Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones },
             BossId::Dragon => Theme { liquid: Liquid::Water, stone: StoneLayout::Rock },
             BossId::Lich => Theme { liquid: Liquid::Water, stone: StoneLayout::Laid },
         }
@@ -1535,6 +1535,6 @@ mod tests {
     fn for_boss_sets_liquid_and_stone() {
         assert_eq!(Theme::for_boss(BossId::Lich), Theme { liquid: Liquid::Water, stone: StoneLayout::Laid });
         assert_eq!(Theme::for_boss(BossId::Dragon), Theme { liquid: Liquid::Water, stone: StoneLayout::Rock });
-        assert_eq!(Theme::for_boss(BossId::Demon), Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones });
+        assert_eq!(Theme::for_boss(BossId::FireDemon), Theme { liquid: Liquid::Lava, stone: StoneLayout::Zones });
     }
 }

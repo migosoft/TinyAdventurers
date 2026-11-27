@@ -60,7 +60,7 @@ describe('dragon frames', () => {
 });
 
 describe('demon frames', () => {
-  const M = FIGURES[KIND.Demon];
+  const M = FIGURES[KIND.FireDemon];
   const at = (anim: number, animT: number, flags = 0, moving = false) => pickFrame(M, { anim, animT, flags }, 0, 0, moving);
 
   it('idles and walks', () => {
@@ -69,11 +69,19 @@ describe('demon frames', () => {
   });
 
   it('cleaves: wind-up with the telegraph, the swing just before the hit, impact after it', () => {
-    const w = CONST.DEMON_CLEAVE_WINDUP;
+    const w = CONST.DEMON_CLAW_WINDUP;
     expect(at(ANIM.Melee, w / 2)).toEqual({ frame: 'demon_cleave_anim_f0', lift: 0, windup: true });
     expect(at(ANIM.Melee, w - 0.02)).toEqual({ frame: 'demon_cleave_anim_f1', lift: 0, windup: false });
     expect(at(ANIM.Melee, w + 0.01).frame).toBe('demon_cleave_anim_f2');
-    expect(at(ANIM.Melee, w + CONST.DEMON_CLEAVE_RECOVER).frame).toBe('demon_cleave_anim_f4');
+    expect(at(ANIM.Melee, w + CONST.DEMON_CLAW_RECOVER).frame).toBe('demon_cleave_anim_f4');
+  });
+
+  it('the scimitar plays the claws\' frames on its own wind-up and recovery', () => {
+    const w = CONST.DEMON_SCIMITAR_WINDUP;
+    expect(at(ANIM.Cleave, w / 2)).toEqual({ frame: 'demon_cleave_anim_f0', lift: 0, windup: true });
+    expect(at(ANIM.Cleave, w - 0.02)).toEqual({ frame: 'demon_cleave_anim_f1', lift: 0, windup: false });
+    expect(at(ANIM.Cleave, w + 0.01).frame).toBe('demon_cleave_anim_f2');
+    expect(at(ANIM.Cleave, w + CONST.DEMON_SCIMITAR_RECOVER).frame).toBe('demon_cleave_anim_f4');
   });
 
   it('charges: crouch, two looping frames, the stop', () => {

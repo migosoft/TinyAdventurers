@@ -67,7 +67,7 @@ export interface BuiltFigure {
 }
 
 /** The built figures by entity kind: the lich (#358) and the demon (#379). */
-export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE, [KIND.Demon]: DEMON_FIGURE };
+export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE, [KIND.FireDemon]: DEMON_FIGURE, [KIND.IceDemon]: DEMON_FIGURE };
 export const builtOf = (kind: number): BuiltFigure | null => BUILT_OF_KIND[kind] ?? null;
 
 /**

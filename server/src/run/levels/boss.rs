@@ -90,7 +90,7 @@ pub fn spawn(run: &mut Run) {
         is_boss: true,
         dormant: true,
         hiding: false,
-        mover: if prof.traits.phasing { Mover::Incorporeal } else if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
+        mover: if prof.traits.phasing { Mover::Incorporeal } else if matches!(boss_id, BossId::FireDemon | BossId::IceDemon) { Mover::Demon } else { Mover::Enemy },
         airborne: false,
         knock: Vec2::ZERO,
         sinking: None,
@@ -152,7 +152,8 @@ pub fn check_arena(run: &mut Run) {
             m.dormant = false;
         }
         let text = match enc(run).boss_id {
-            BossId::Demon => "A demon awakens!",
+            BossId::FireDemon => "Kharzul, Lord of Cinders, awakens!",
+            BossId::IceDemon => "Ysskar, Lord of Rime, awakens!",
             BossId::Lich => "The lich rises - slay its disciples!",
             BossId::Dragon => "The dragon awakens!",
         };

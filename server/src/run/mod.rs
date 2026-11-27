@@ -185,7 +185,11 @@ pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage
 
 /// A fire patch of `side` (what the ground hurts follows it), made by the hero `owner` (an entity id) if any.
 pub fn spawn_fire_patch_of(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
-    let kind = EntityKind::FirePatch;
+    spawn_patch_of(run, EntityKind::FirePatch, pos, radius, life, damage, side, owner);
+}
+
+/// A patch of ground damage of `kind` (`FirePatch` or `FrostPatch`): its damage follows the kind's split.
+pub fn spawn_patch_of(run: &mut Run, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
     run.spawn_hazard(kind, pos, radius, life, side, owner, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
@@ -1824,7 +1828,8 @@ pub mod tests {
         // this proves the rest of the setup is unchanged by them.
         // 2026-11-21, crystals (#380): in rock the server drops a torch of a sunlit room instead of keeping it unlit, and the cove's animal spots keep 16 px clear of every torch in `layout.torches`. Dragon dungeons are all rock and demon dungeons partly, so their cove animals stand elsewhere (seeds 0, 3 and 5; ids unchanged). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
-        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
+        // 2026-11-27, the coin for fire or ice (#442): a random demon dungeon draws one more number from the run's rng, so seeds 0, 3, 4 and 5 differ. Re-recorded once, on purpose.
+        assert_eq!(got, vec![5680271024938382979, 9378562978013154725, 18111976853352986814, 6484346504937147637, 1727094064867014888, 242591783256590688]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1860,7 +1865,8 @@ pub mod tests {
             .collect();
         // Same re-recording as `level_setup_is_unchanged` (crystals, #380).
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
-        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
+        // 2026-11-27, the coin for fire or ice (#442): same as in `level_setup_is_unchanged`.
+        assert_eq!(got, vec![5680271024938382979, 9378562978013154725, 18111976853352986814, 6484346504937147637, 1727094064867014888, 242591783256590688]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1906,7 +1912,10 @@ pub mod tests {
         // 2026-11-21, crystals (#380): the demon's (first) and dragon's (third) values differ. Those dungeons are rock or part rock, where the server drops a torch of a sunlit room instead of keeping it unlit; the cove's animal spots keep 16 px clear of every torch in `layout.torches`, so the wild animals (in the hash) stand elsewhere. Proved before re-recording: with the drop switched off, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): creatures see in a cone on their head's direction and turn at limited speeds, so all three fights play out differently. Re-recorded once, on purpose.
-        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294]);
+        // 2026-11-27, the ice demon (#442): a fourth value (BossId::ALL has four); it moves again when its own kit comes.
+        // 2026-11-27, the demon's second blow (#442): the scimitar (Cleave) joins the demon's kit and script, so the fire demon's (first) and, sharing its kit until its own comes, the ice demon's (fourth) values differ. Lich and dragon unchanged. Re-recorded once, on purpose.
+        // 2026-11-27, the ice kit (#442): the ice demon has its own cold abilities, claws, scimitar and script roles, so only its (fourth) value differs. Re-recorded once, on purpose.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
     }
 
     #[test]
@@ -1928,7 +1937,10 @@ pub mod tests {
         // Same re-recording as in the test without the log (crystals, #380).
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // Same re-recording as in the test without the log (facing vision, #341).
-        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294]);
+        // 2026-11-27, the ice demon (#442): a fourth value, as in the test without the log.
+        // 2026-11-27, the demon's second blow (#442): the same re-recording as in the test without the log.
+        // 2026-11-27, the ice kit (#442): only the ice demon's (fourth) value differs (its own abilities, weapons and script roles); the same re-recording as in the test without the log.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
@@ -1985,7 +1997,7 @@ pub mod tests {
 
     /// `fight`, with the rules log forced on or not.
     fn fight_with_log(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool, log: bool) -> Run {
-        let mut run = test_run(&[class], BossId::Demon);
+        let mut run = test_run(&[class], BossId::FireDemon);
         run.log.forced = log;
         run.monsters.retain(|m| m.is_boss);
         // The fight's ids from a fixed base, so the haunts removed above (how many, #199) leave no trace in the hash.
@@ -2051,7 +2063,7 @@ pub mod tests {
     #[test]
     fn awards_go_to_characters_in_both_kinds_of_run() {
         for debug in [false, true] {
-            let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+            let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
             run.debug = debug;
             run.players[0].character = Some(5);
             run.players[0].xp = 40;
@@ -2064,7 +2076,7 @@ pub mod tests {
 
     #[test]
     fn debug_messages_do_nothing_in_a_normal_run() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         assert!(!run.debug);
         run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::DebugDarkvision { ratio: 1.0 } });
         run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::DebugEffect { kind: 0 } });
@@ -2080,7 +2092,7 @@ pub mod tests {
 
     #[test]
     fn a_debug_run_puts_every_hero_in_debug_mode_and_still_banks() {
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
         run.debug = true;
         for pi in 0..2 {
             run.players[pi].character = Some(pi as i32 + 1);
@@ -2126,7 +2138,7 @@ pub mod tests {
 
     #[test]
     fn touching_a_chest_opens_it_once_and_pays_the_party() {
-        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
         run.monsters.clear(); // keep the test about the chest
         let pos = run.layout.player_spawns[0] + Vec2::new(40.0, 0.0);
         let id = run.spawn_object(EntityKind::Chest, pos, objects::ObjState::Chest { opened: None });
@@ -2151,7 +2163,7 @@ pub mod tests {
     #[test]
     fn a_mimic_is_hiding_not_dormant_and_the_boss_is_dormant_not_hiding() {
         let run = (1..200)
-            .map(|seed| test_run_seed(&[ClassId::Paladin], BossId::Demon, seed))
+            .map(|seed| test_run_seed(&[ClassId::Paladin], BossId::FireDemon, seed))
             .find(|r| r.monsters.iter().any(|m| m.etype == Some(EnemyType::Mimic)))
             .expect("some seed has a mimic");
         let mimics: Vec<&Monster> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Mimic)).collect();
@@ -2162,7 +2174,7 @@ pub mod tests {
 
     #[test]
     fn mimic_sleeps_until_touched_then_waits_before_hunting() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let pos = run.layout.player_spawns[0] + Vec2::new(60.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Mimic, pos, None);
@@ -2310,7 +2322,7 @@ pub mod tests {
 
     #[test]
     fn bosses_are_never_pushed() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
         let from = run.monsters[bi].pos - Vec2::new(10.0, 0.0);
         run.knock_monster(bi, from, 40.0, PUSH_STR);
@@ -2482,7 +2494,7 @@ pub mod tests {
 
     #[test]
     fn only_demons_are_lava_walkers() {
-        let demon = test_run(&[ClassId::Paladin], BossId::Demon);
+        let demon = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let boss = demon.monsters.iter().find(|m| m.is_boss).unwrap();
         assert_eq!(boss.mover, Mover::Demon);
         assert!(demon.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
@@ -2491,8 +2503,21 @@ pub mod tests {
     }
 
     #[test]
+    fn the_ice_demon_walks_through_lava() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::IceDemon);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        assert_eq!(run.monsters[bi].mover, Mover::Demon);
+        let (tx, ty) = dungeon::Map::tile_of(run.monsters[bi].pos);
+        run.layout.map.set(tx, ty, Tile::Lava);
+        let at = dungeon::Map::center_of(tx, ty);
+        assert!(!run.layout.map.blocks_at(at, run.monsters[bi].mover), "lava does not stop it");
+        assert!(run.layout.map.blocks_at(at, Mover::Enemy), "but it stops an ordinary monster");
+        assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
+    }
+
+    #[test]
     fn mimic_moves_only_while_airborne() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let start = run.layout.player_spawns[0];
         let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None);
@@ -2575,7 +2600,7 @@ pub mod tests {
         use crate::defs::effects::EffectKind;
         use crate::run::effects::Creature;
         let left = |effect: Option<EffectKind>| {
-            let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+            let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
             if let Some(k) = effect {
                 run.apply_effect(Creature::Player(0), k, Some(10.0));
             }
@@ -2594,7 +2619,7 @@ pub mod tests {
     fn a_running_cooldown_is_not_rescaled_when_haste_starts() {
         use crate::defs::effects::EffectKind;
         use crate::run::effects::Creature;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.players[0].cd1 = 1.0;
         for _ in 0..10 {
             walk(&mut run, 0, None);

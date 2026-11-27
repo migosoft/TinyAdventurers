@@ -71,7 +71,7 @@ fn export_defs() {
     // The dragon's telegraphs: the numbers of the abilities in its kit.
     let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Dragon).total(), &[]);
     let dragon_ability = |id: AbilityId| dragon_kit.get(id).expect("the dragon uses it").clone();
-    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Demon).total(), &[]);
+    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::FireDemon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::FireDemon).total(), &[]);
     let demon_ability = |id: AbilityId| demon_kit.get(id).expect("the demon uses it").clone();
     let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Lich).total(), &[]);
     let lich_ability = |id: AbilityId| lich_kit.get(id).expect("the lich casts it").clone();
@@ -121,11 +121,13 @@ fn export_defs() {
     });
     // A second object: one json! with all of them hits the macro recursion limit.
     let demon = json!({
-        "DEMON_CLEAVE_WINDUP": demon_ability(AbilityId::Strike).windup,
+        "DEMON_CLAW_WINDUP": demon_ability(AbilityId::Strike).windup,
+        "DEMON_SCIMITAR_WINDUP": demon_ability(AbilityId::Cleave).windup,
         "DEMON_SWOOP_WINDUP": demon_ability(AbilityId::Swoop).windup,
         "DEMON_SWOOP_TIME": demon_ability(AbilityId::Swoop).duration,
         "DEMON_CAST_WINDUP": demon_ability(AbilityId::RingOfFire).windup,
-        "DEMON_CLEAVE_RECOVER": bosses::DEMON_CLEAVE_RECOVER,
+        "DEMON_CLAW_RECOVER": bosses::DEMON_CLAW_RECOVER,
+        "DEMON_SCIMITAR_RECOVER": bosses::DEMON_SCIMITAR_RECOVER,
         "DEMON_SWOOP_RECOVER": bosses::DEMON_SWOOP_RECOVER,
         "DEMON_CAST_RECOVER": bosses::DEMON_CAST_RECOVER,
         "DEMON_TAIL_WINDUP": demon_ability(AbilityId::TailWhip).windup,
@@ -138,7 +140,7 @@ fn export_defs() {
         "DEMON_FLIGHT": bosses::DEMON_FLIGHT,
         "DEMON_LAND": bosses::DEMON_LAND,
         "DEMON_SMASH_RADIUS": demon_ability(AbilityId::Smash).radius,
-        "DEMON_CLEAVE_KNOCK": demon_ability(AbilityId::Strike).push,
+        "DEMON_CLAW_KNOCK": demon_ability(AbilityId::Strike).push,
         "DEMON_SWOOP_KNOCK": demon_ability(AbilityId::Swoop).push,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());

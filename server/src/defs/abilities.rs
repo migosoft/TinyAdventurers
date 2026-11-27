@@ -97,6 +97,14 @@ super::enum_list::listed_enum! {
         SummonImps = 40,
         /// A Wizard's orb that charms a monster to fight for the caster for a while.
         Charm = 41,
+        /// The demons' scimitar blow: a Sword secondary, monsters only (#442).
+        Cleave = 42,
+        /// The ice demon's cone of frost, which leaves frost patches (#442).
+        FrostBreath = 43,
+        /// The ice demon's ball of frost: the Fireball's twin.
+        FrostBall = 44,
+        /// The ice demon's ring of frost orbs.
+        RingOfFrost = 45,
     }
 }
 
@@ -373,6 +381,7 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::MagicMissile => "Fast arcane bolts.",
         AbilityId::Fireball => "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
         AbilityId::Strike => "A sweeping blow with your melee weapon.",
+        AbilityId::Cleave => "A wide, slow blow with a sword.",
         AbilityId::HolyLight => "Heals you and the allies close to you.",
         AbilityId::Charge => "Dash toward the cursor, hitting everything in the way.",
         AbilityId::Shoot => "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
@@ -402,6 +411,9 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::Smash => "A blow all around the user that pushes everything away.",
         AbilityId::Swoop => "A long rush that hurts each enemy it passes once and pushes it hard.",
         AbilityId::RingOfFire => "Sixteen fire orbs flung out in a ring.",
+        AbilityId::FrostBreath => "A cone of frost held for a moment, leaving frost patches on the ground.",
+        AbilityId::FrostBall => "Explodes where it lands in a burst of cold, hurting everything nearby and pushing the light ones back.",
+        AbilityId::RingOfFrost => "Sixteen orbs of frost flung out in a ring.",
         AbilityId::Nova => "A burst of dark power that hurts and pushes everything around the caster.",
         AbilityId::GloomBolts => "Five bolts of gloom in a fan.",
         AbilityId::BlindingCurse => "A slow orb that blinds what it hits.",
@@ -556,10 +568,24 @@ pub fn def(id: AbilityId) -> AbilityDef {
             backward: true,
             ..base("Tail Whip", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
         },
+        Cleave => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Sword])],
+            ..base("Cleave", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
         FireBreath => AbilityDef {
             weapon_mult: WeaponMult { arc: Some(2.0 * BREATH_HALF_ARC), ..WeaponMult::ONE },
             own: OwnStats { windup: 0.8, ..own(6.0, 6.5, 115.0, 0.0, 0.0, 1.4, Some(EntityKind::FireBreath), 20) },
             ..base("Fire Breath", Secondary, C::Innate, Uses::Nothing, false, Shape::Breath, NO_OWN, &[])
+        },
+        FrostBreath => AbilityDef {
+            weapon_mult: WeaponMult { arc: Some(2.0 * BREATH_HALF_ARC), ..WeaponMult::ONE },
+            own: OwnStats { windup: 0.8, ..own(6.0, 6.5, 115.0, 0.0, 0.0, 1.4, Some(EntityKind::FrostBreath), 20) },
+            ..base("Frost Breath", Secondary, C::Innate, Uses::Nothing, false, Shape::Breath, NO_OWN, &[])
+        },
+        FrostBall => base("Frost Ball", Secondary, C::Spell, Uses::Nothing, true, Shape::Blast, OwnStats { push: FIREBALL_PUSH, ..own(45.0, 6.0, 260.0, 140.0, 38.0, 0.0, Some(EntityKind::FrostBall), 15) }, &[]),
+        RingOfFrost => AbilityDef {
+            own: OwnStats { windup: 0.5, count: 16, spread: std::f64::consts::TAU, ..own(12.0, 9.0, 231.0, 105.0, 3.0, 0.0, Some(EntityKind::FrostOrb), 20) },
+            ..base("Ring of Frost", Secondary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         Smash => AbilityDef {
             weapon_mult: WeaponMult { damage: 1.1, ..WeaponMult::ONE },

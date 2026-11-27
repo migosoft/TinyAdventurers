@@ -49,7 +49,7 @@ The keys sit in the same place on every keyboard layout: on a German (QWERTZ) ke
 
 **Ground cover.** The meadow's grass and the cove's grass carpet are soft and a little tall: heroes and creatures stand a little in it, and tufts of tall grass grow in clusters, most of all in the thicket. Paths and roads are bare ground. In the dungeon some rooms carry moss (low, darker green), growing from corners and along wall feet; other rooms stay bare stone. Moss is the same for everyone in a party and differs from run to run.
 
-**The dungeon's stone.** A dungeon is built of **laid stone** (blocks of brown, grey and sandstone masonry; some stand a little higher or lower than their neighbours, and the walls have a carved band, so a torch's light catches every edge), of **natural rock** (a cave, with leaning rock faces, rock columns and an uneven floor), or of both, depending on the run: at present the lich's dungeon is all laid stone, the Red Dragon's all cave and the Red Demon's has stretches of both. Where one turns into the other, the masonry breaks up block by block along a corridor. Some laid rooms have a **summoning circle** or a **mosaic** set into the floor or a drain grate, and some caves have small **puddles** of water. The puddles, the cracks and the floor's patterns are only for looks: you walk straight across them, nobody wades in a puddle (feet only stir it: small rings spread where someone steps through), and none of it changes anything in play. Open ground is exactly as wide as it looks. (Deep pools, lava and chasms are terrain and work as described below.)
+**The dungeon's stone.** A dungeon is built of **laid stone** (blocks of brown, grey and sandstone masonry; some stand a little higher or lower than their neighbours, and the walls have a carved band, so a torch's light catches every edge), of **natural rock** (a cave, with leaning rock faces, rock columns and an uneven floor), or of both, depending on the run: at present the lich's dungeon is all laid stone, the Red Dragon's all cave and the demon lords' have stretches of both. Where one turns into the other, the masonry breaks up block by block along a corridor. Some laid rooms have a **summoning circle** or a **mosaic** set into the floor or a drain grate, and some caves have small **puddles** of water. The puddles, the cracks and the floor's patterns are only for looks: you walk straight across them, nobody wades in a puddle (feet only stir it: small rings spread where someone steps through), and none of it changes anything in play. Open ground is exactly as wide as it looks. (Deep pools, lava and chasms are terrain and work as described below.)
 
 **The air.** The dungeon's air is only for looks: dust drifts in the light (and shows only where light falls), torches smoke, lava smokes and throws sparks, a pool drips and rings, and a thin haze lies low over the floor. Where the ceiling has a crack, **sunlight** falls through it as a pale shaft of light onto a bright patch on the floor; a hero or creature standing in the shaft cuts a gap into it, and a passing cloud dims it. Nothing of this shows in places you cannot see. On the woodland, pollen drifts in the air instead.
 
@@ -161,7 +161,7 @@ The Elven Ranger's wolf is a companion of its own kind, summoned with the right 
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - **Sounds show in the dark.** The wolf's "grrrr", spoken words and the sleeping "Z" are drawn above the darkness, in dark letters with a light outline, so you notice them even where you can see nothing else.
 - Numbers and health bars on heroes and the wolf show even in the dark; numbers and health bars on enemies show only where you can see the enemy.
-- **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
+- **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the demon lords) and the **Red Dragon** see you in the dark as well as in the light.
 - **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
 
 ## Where creatures look
@@ -256,8 +256,8 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 | Orc warrior | about a tile (20 px) |
 | Ogre: club / ground slam | almost 2 tiles (28 px) for both; the slam hits everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
-| Red Demon: cleave / swoop | a long way (about 3.5 / 4 tiles) |
-| Red Demon: tail swipe / landing slam / Fireball | 2.5 tiles (40 px) / about 3.5 tiles (56 px), everyone in the circle / about a tile (20 px) |
+| Demon lords: claw / scimitar / swoop | a long way (about 3.5 tiles) / 2.5 tiles (40 px) / about 4 tiles |
+| Demon lords: tail swipe / landing slam / Fireball or Frost Ball | 2.5 tiles (40 px) / about 3.5 tiles (56 px), everyone in the circle / about a tile (20 px) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
 | Red Dragon: landing smash / Fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 | Lich: Nova | only the Wizard, 16 px (the lich's STR is only 10) |
@@ -310,13 +310,14 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Enemy | Resists | Weak to |
 |---|---|---|
 | Skeletons, raised skeletons, the Lich | physical 10 %, **poison completely** (the Lich: physical about half, magical 40 %) | heat 10 % more |
-| Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
+| Imps, chorts, summoners, Kharzul | **heat completely**, magical 20 % (Kharzul 40 %) | cold |
+| Ysskar | **cold completely**, magical 40 % | heat |
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
 | Barrels and chests | physical half, poison completely | |
 
 - **Incorporeal creatures** (Ghosts and Shades) have no solid body: an attack they fully resist goes right through them, with no damage, no side effect and no push, and arrows fly on. **Only magic hurts them, and a little extra** (10 % more). A mixed attack does only its magic part. Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, your wolf, gazes and Chain Spark's jumps ignore them, and monsters cannot see an invisible hero either. Being invisible gives them no protection of its own: an area attack or War Cry that could hurt or frighten them still does. A hit shows them again, even a hit that does no damage, and so does a harmful effect that takes hold. An effect they shrug off does not. They also show themselves when they attack; healing and buffs do not. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
-- Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
-- The Red Demon's claws and the Red Dragon's claws are partly fire.
+- Fire does nothing to the fire demons (imps, chorts, summoners, Kharzul) or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more. Cold does nothing to Ysskar, and fire hurts it more.
+- Kharzul's claws and scimitar and the Red Dragon's claws are partly fire; Ysskar's claws and scimitar are partly cold.
 - Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.
 - Armour comes from the armour you wear, not from XP.
 
@@ -333,7 +334,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 
 - The Barbarian's **dash jumps** deep water, chasms and lava. Only where the dash ends counts: land on solid ground.
 - No chasm is wider than 3 tiles, so a dash can always clear it.
-- **Demons** (imps, chorts, summoners and the Red Demon) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
+- **Demons** (imps, chorts, summoners, Kharzul and Ysskar) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
 - Shots and sight pass over all terrain.
 - Enemies can fall, drown and burn too, if a **barrel blast** pushes them in (see Explosive barrels).
 - In debug mode (test accounts only) a hero who falls or drowns climbs back out onto the last safe tile.
@@ -344,18 +345,22 @@ The boss sleeps in a large hall at the far end of the dungeon. Each run has one 
 
 **Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon, the dragon and the lich can **knock you in** (see Knockback).
 
-**The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its cleave, swoop, tail swipe and landing slam can knock you in.
+**The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its claw, scimitar, swoop, tail swipe and landing slam can knock you in.
 
-### The Red Demon
+### The demon lords: Kharzul and Ysskar
+A demon dungeon ends with one of two demon lords, chosen at random: **Kharzul, Lord of Cinders**, a fire demon, or **Ysskar, Lord of Rime**, an ice demon. They fight with the same moves; Kharzul's are fire, Ysskar's are cold. Kharzul shrugs off fire and fears cold; Ysskar shrugs off cold and fears fire.
+
 Every attack shows its pose first, while the demon flashes red: that is your moment to step away. It does not follow a fixed order: whenever it is free, it picks one of the attacks it can use at that moment, at random.
-- **Cleave:** a wide claw sweep in front of it.
+- **Claw:** a quick claw sweep with its left hand.
+- **Scimitar:** a great curved blade in its right hand, burning (Kharzul) or icy (Ysskar). It draws the blade back for almost a second before the wide, long blow: step out of reach while it winds up. The blade's fire singes you, its ice chills you. It swings it only every few seconds.
 - **Tail swipe:** anyone who sneaks up behind it gets lashed and flung away (2.5 tiles). The demon swipes at once, without turning, and never from the air. The tail is physical damage.
 - **Swoop:** lowers its horns and charges across the hall at a hero.
-- Both the cleave (**Strike** with its demon claws) and the **Swoop** hurl you back a long way.
-- **Ring of Fire:** fireballs fly out in every direction.
-- **Fireball:** the Wizard's spell, which the demon casts too: it points a hand at a hero and an exploding ball flies. It pushes you a little.
-- **Fire Breath:** it flings its arms wide and breathes a cone of fire that **leaves burning ground** behind. The breath does not push.
-- **Flight:** every 10 to 14 seconds it takes off, rising over its shadow, and hovers after the party for a few seconds. **Swords, axes, the dagger, the dash and pushes can't reach it in the air**; bolts, missiles and spells still hit. In the air it casts Fireballs and breathes fire from above, and it **flies over chasms, deep water and lava**; only walls and the force field of the boss hall stop it. It never lands in a hole: it comes down on the nearest ground that holds it.
+- The claw (**Strike**) and the **Swoop** hurl you back a long way; the scimitar (**Cleave**) pushes less (2.5 tiles).
+- **Ring of Fire / Ring of Frost:** fireballs or frost orbs fly out in every direction.
+- **Fireball / Frost Ball:** it points its left hand at a hero and an exploding ball flies. It pushes you a little.
+- **Fire Breath / Frost Breath:** it flings its arms wide and breathes a cone of fire that **leaves burning ground** behind, or of frost that **leaves frozen ground**. The breath does not push.
+- **Ysskar's cold freezes:** its Frost Breath, Frost Ball and the orbs of its Ring of Frost **freeze** you for 2 seconds (no moving, no attacking, no turning), and the breath keeps freezing you while you stand in it. The frozen ground only **chills** (you walk at 70 % speed): you can always walk off it.
+- **Flight:** every 10 to 14 seconds it takes off, rising over its shadow, and hovers after the party for a few seconds. **Swords, axes, the dagger, the dash and pushes can't reach it in the air**; bolts, missiles and spells still hit. In the air it casts its balls and breathes from above, and it **flies over chasms, deep water and lava**; only walls and the force field of the boss hall stop it. It never lands in a hole: it comes down on the nearest ground that holds it.
 - **Landing slam:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away a long way (56 px, as far as its claws).
 - It never gets angrier: the demon fights the same from the first hit to the last.
 

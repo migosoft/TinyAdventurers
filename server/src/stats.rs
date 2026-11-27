@@ -499,7 +499,7 @@ mod tests {
     fn record(account: i32, character: i32, outcome: Outcome, debug: bool) -> RunRecord {
         RunRecord {
             level: LevelId::Dungeon,
-            boss: Some(BossId::Demon),
+            boss: Some(BossId::FireDemon),
             outcome,
             duration_s: 120.0,
             debug,
@@ -550,7 +550,7 @@ mod tests {
         assert_eq!((d7.runs, d7.defeats), (3, 1));
         assert_eq!((d7.kills, d7.deaths), (12, 1), "leaving the abandoned run is not a death");
         assert_eq!(s.totals.runs, 3);
-        let demon = s.level_runs.iter().find(|b| b.level == "Dungeon" && b.boss.as_deref() == Some("Demon")).unwrap();
+        let demon = s.level_runs.iter().find(|b| b.level == "Dungeon" && b.boss.as_deref() == Some("FireDemon")).unwrap();
         assert_eq!((demon.runs, demon.victories, demon.defeats), (3, 1, 1));
         let barb = s.classes.iter().find(|c| c.class == ClassId::Barbarian).unwrap();
         assert_eq!((barb.characters, barb.played), (1, 3));
@@ -574,7 +574,7 @@ mod tests {
         sqlx::query("INSERT INTO runs (started_at, boss, outcome, duration_s, players, debug) VALUES (now(), 'Lich', 'victory', 60, 1, false)").execute(&db).await.unwrap();
         let s = overview(&db, Live::default()).await.unwrap();
         let find = |boss: Option<&str>| s.level_runs.iter().find(|r| r.level == "Dungeon" && r.boss.as_deref() == boss).map(|r| r.runs);
-        assert_eq!((find(Some("Demon")), find(None), find(Some("Lich"))), (Some(1), Some(1), Some(1)));
+        assert_eq!((find(Some("FireDemon")), find(None), find(Some("Lich"))), (Some(1), Some(1), Some(1)));
         let d = player(&db, a, &|_| false, &|_| false).await.unwrap().unwrap();
         assert!(d.recent_runs.iter().any(|r| r.level == "Dungeon" && r.boss.is_none()));
     }

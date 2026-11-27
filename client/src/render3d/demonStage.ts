@@ -1,6 +1,6 @@
 // The stage of the ?r3d=demon page (#379): the built demon on the game's own code, no server. The lich's boss hall (`createHallStage`:
 // the torches on the pillars, the knight on WASD, the frame loop and the pinned replay) with a lava pool and a chasm, and the demon an
-// entity of `KIND.Demon` whose state is what a run would send (`demonAct`, demonScript.ts). It looks at the knight:
+// entity of `KIND.FireDemon` whose state is what a run would send (`demonAct`, demonScript.ts). It looks at the knight:
 // its body turns to him, or with `&face=` only its head; the acts `walk` and `swoop` go there and back on a fixed line.
 // Query: `&act=` (demonScript.ts), `&at=<s>` (pins the act's clock, seconds of its loop), `&face=<deg>` (a fixed aim), `&t=<s>` (pins the
 // page's clock: the stage steps to it from rest in steps of 1/30 s, then holds still), `&zoom=`, `&light=work`,
@@ -57,7 +57,7 @@ export function createDemonStage(assets: Assets, p: R3dParams, search: string, h
   const actClock = (t: number): number => (opts.at !== null ? opts.at - (pin! - t) : t - state.origin);
 
   return createHallStage(assets, p, demonMap(), {
-    name: 'demon', picture: builtOf(KIND.Demon)!.picture, at: demon, pin, slow: opts.slow,
+    name: 'demon', picture: builtOf(KIND.FireDemon)!.picture, at: demon, pin, slow: opts.slow,
     buttons: (now) => [
       ...DEMON_ACTS.map((a) => ({ name: a, pressed: () => state.act === a, press: () => { state.act = a; state.origin = now(); } })),
       toggle('Frozen', 'frozen'), toggle('Chilled', 'chilled'), toggle('Stone', 'stone'),
@@ -75,7 +75,7 @@ export function createDemonStage(assets: Assets, p: R3dParams, search: string, h
       DEMON_DEV.fold = demonDev(state.act, actClock(t)).fold ?? opts.fold;
       if (!opts.demon) return { ents: [], drain: null };
       const effects = (state.frozen ? 1 << EFFECT.Frozen : 0) | (state.chilled ? 1 << EFFECT.Chilled : 0) | (state.stone ? 1 << EFFECT.Petrified : 0);
-      const one = (id: number, dx: number): EntState => fxEnt(id, KIND.Demon, demon.x + demon.ox + dx, demon.z + demon.oz, { side: SIDE.Hostile, aim: demon.aim, head: demon.head, ...demonAct(state.act, actClock(t)), effects });
+      const one = (id: number, dx: number): EntState => fxEnt(id, KIND.FireDemon, demon.x + demon.ox + dx, demon.z + demon.oz, { side: SIDE.Hostile, aim: demon.aim, head: demon.head, ...demonAct(state.act, actClock(t)), effects });
       return { ents: opts.two ? [one(BOSS_ID, 0), one(BOSS_ID + 2, -3)] : [one(BOSS_ID, 0)], drain: null };
     },
     label: (clock) => `demon (#379): ${state.act}; act ${actClock(clock).toFixed(2)} of ${actPeriod(state.act).toFixed(2)} s; t ${clock.toFixed(2)} s; WASD moves the knight`,

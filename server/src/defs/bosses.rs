@@ -29,7 +29,9 @@ pub fn def(id: BossId) -> BossDef {
     use AbilityId::*;
     use ItemId::*;
     match id {
-        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire, TailWhip, Fireball, FireBreath, Smash], weapons: &[DemonClaws, DemonTail] },
+        // The ice demon holds the fire demon's kit until its own weapons and abilities come (#442).
+        BossId::FireDemon => BossDef { id, kind: EntityKind::FireDemon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Cleave, Swoop, RingOfFire, TailWhip, Fireball, FireBreath, Smash], weapons: &[DemonClaws, BurningScimitar, DemonTail] },
+        BossId::IceDemon => BossDef { id, kind: EntityKind::IceDemon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Cleave, Swoop, RingOfFrost, TailWhip, FrostBall, FrostBreath, Smash], weapons: &[IceClaws, IceScimitar, DemonTail] },
         BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attr_mods: Attributes::new(0, 4, 4, 12, 8, 6), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
         BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attr_mods: Attributes::new(14, 0, 12, 6, 4, 10), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
@@ -37,7 +39,8 @@ pub fn def(id: BossId) -> BossDef {
 
 /// The recovery after each demon attack (s), shared with the client: the animation starts with the ability's
 /// wind-up (from its kit) and the strike frames play out in this short recovery. The abilities' own numbers are the kit's.
-pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
+pub const DEMON_CLAW_RECOVER: f64 = 0.3;
+pub const DEMON_SCIMITAR_RECOVER: f64 = 0.5;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
 pub const DEMON_TAIL_RECOVER: f64 = 0.5;
 /// After Fireball or Ring of Fire.
@@ -69,7 +72,8 @@ pub const DRAGON_FLIGHT_EVERY: (f64, f64) = (10.0, 12.0);
 /// The races of each boss.
 pub fn races(id: BossId) -> &'static [Race] {
     match id {
-        BossId::Demon => &[Race::Demon],
+        BossId::FireDemon => &[Race::Demon, Race::Fire],
+        BossId::IceDemon => &[Race::Demon, Race::Ice],
         BossId::Lich => &[Race::Undead],
         BossId::Dragon => &[Race::Dragon],
     }
@@ -92,7 +96,7 @@ pub fn profile(id: BossId) -> Profile {
     use super::effects::{EffectKind::*, EffectResistances as Fx};
     // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
     let adj = match id {
-        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: BOSS_VISION, turn: Some(0.5), ..Adjust::NONE },
+        BossId::FireDemon | BossId::IceDemon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: BOSS_VISION, turn: Some(0.5), ..Adjust::NONE },
         BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Blind, 1.0), (Petrified, 0.5)]), vision: BOSS_VISION, ..Adjust::NONE },
         BossId::Dragon => Adjust {
             res: Resistances::of(&[(Heat, 1.0)]),
@@ -124,8 +128,17 @@ mod tests {
             assert_eq!(def(id).weight, 40.0, "{id:?}");
         }
         assert_eq!(attr_sources(BossId::Lich).total().get(Attr::Int), 22);
-        assert_eq!(attr_sources(BossId::Demon).total(), Attributes::new(22, 14, 20, 14, 16, 20));
+        assert_eq!(attr_sources(BossId::FireDemon).total(), Attributes::new(22, 14, 20, 14, 16, 20));
         assert_eq!(attr_sources(BossId::Dragon).total(), Attributes::new(24, 10, 22, 16, 14, 20));
         assert_eq!(attr_sources(BossId::Lich).total(), Attributes::new(10, 14, 14, 22, 18, 16));
+    }
+
+    #[test]
+    fn the_ice_demon_is_the_fire_demon_but_for_its_race() {
+        let (f, i) = (def(BossId::FireDemon), def(BossId::IceDemon));
+        assert_eq!((f.hp, f.radius, f.speed, f.weight, f.attr_mods), (i.hp, i.radius, i.speed, i.weight, i.attr_mods));
+        assert_eq!((f.kind, i.kind), (EntityKind::FireDemon, EntityKind::IceDemon));
+        assert_eq!(races(BossId::IceDemon), &[Race::Demon, Race::Ice]);
+        assert_eq!(profile(BossId::IceDemon).turn, profile(BossId::FireDemon).turn);
     }
 }

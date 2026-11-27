@@ -785,9 +785,24 @@ mod tests {
         l.handle(guest, ClientMsg::SetReady { ready: true });
         l.handle(host, ClientMsg::StartRun);
         assert!(l.rooms[&rid].run_tx.is_some(), "run started");
-        l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::Demon) });
+        l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::FireDemon) });
         assert_eq!(l.rooms[&rid].boss, Some(BossId::Lich), "fixed once started");
         assert!(l.character_busy(10) && l.character_busy(20));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_boss_name_is_refused_and_the_room_stays() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let host = join(&mut l, 1, ClassId::Wizard);
+        l.handle(host, ClientMsg::CreateRun { name: "r".into() });
+        let rid = l.conns[&host].room.unwrap();
+        l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::Lich) });
+        // An old tab still sends the boss by its former name.
+        let old = rmp_serde::to_vec_named(&serde_json::json!({ "t": "SelectBoss", "boss": "Demon" })).unwrap();
+        assert!(crate::protocol::decode(&old).is_none(), "refused at decoding");
+        assert_eq!(l.rooms[&rid].boss, Some(BossId::Lich));
+        assert_eq!(l.conns[&host].room, Some(rid), "still in the room");
     }
 
     #[tokio::test]

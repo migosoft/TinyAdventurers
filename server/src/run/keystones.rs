@@ -131,8 +131,12 @@ mod tests {
 
     /// A run of one hero of `class` who owns `nodes`, on open floor with no monsters but the boss.
     fn run_of(class: ClassId, nodes: &[NodeId]) -> Run {
+        run_against(class, nodes, BossId::FireDemon)
+    }
+
+    fn run_against(class: ClassId, nodes: &[NodeId], boss: BossId) -> Run {
         let build = Build { nodes: nodes.to_vec(), extra: Attributes::new(0, 0, 0, 16, 16, 0), ..Build::start(class) };
-        let mut run = test_run_with(&[(class, build)], BossId::Demon);
+        let mut run = test_run_with(&[(class, build)], boss);
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 2..=tx + 14 {
@@ -239,14 +243,16 @@ mod tests {
     }
 
     #[test]
-    fn radiant_counts_against_a_demon_boss() {
-        let mut run = run_of(ClassId::Paladin, &[NodeId::PU5]);
-        let bi = run.monsters.iter().position(|m| m.is_boss).expect("the Demon boss");
-        assert!(run.monsters[bi].races.contains(&Race::Demon));
-        let judge = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Judgement));
-        assert!(outgoing(&run, 0, bi, &judge).contains(&(Keystone::Radiant, 1.2)));
-        let strike = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Strike));
-        assert!(outgoing(&run, 0, bi, &strike).is_empty(), "Strike is not innate");
+    fn radiant_counts_both_demons() {
+        for boss in [BossId::FireDemon, BossId::IceDemon] {
+            let run = run_against(ClassId::Paladin, &[NodeId::PU5], boss);
+            let bi = run.monsters.iter().position(|m| m.is_boss).expect("the Demon boss");
+            assert!(run.monsters[bi].races.contains(&Race::Demon), "{boss:?}");
+            let judge = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Judgement));
+            assert!(outgoing(&run, 0, bi, &judge).contains(&(Keystone::Radiant, 1.2)), "{boss:?}");
+            let strike = hero_hit(&run, DamageSplit::physical(), What::Ability(AbilityId::Strike));
+            assert!(outgoing(&run, 0, bi, &strike).is_empty(), "Strike is not innate: {boss:?}");
+        }
     }
 
     #[test]

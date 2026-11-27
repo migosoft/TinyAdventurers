@@ -489,7 +489,7 @@ mod tests {
         let want = |b| match b {
             BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5), (Fear, 1.0), (Charmed, 1.0)]),
             BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0), (Charmed, 0.5)]),
-            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0), (Fear, 1.0), (Charmed, 0.5)]),
+            BossId::FireDemon | BossId::IceDemon => EffectResistances::of(&[(Sleep, 1.0), (Fear, 1.0), (Charmed, 0.5)]),
         };
         for b in BossId::ALL {
             assert_eq!(bosses::profile(b).effect_res, want(b), "{b:?}");
