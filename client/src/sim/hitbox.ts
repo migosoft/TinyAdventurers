@@ -1,27 +1,23 @@
-// Port of `Monster::shot_dist` (server/src/run/entities.rs): where a hero's shot
-// meets a monster. Shots are drawn SHOT_HEIGHT px above their ground point and
-// figures stand up from their feet, so a tall figure is a capsule reaching north.
+// Port of the server's hit cylinder (server/src/run/entities.rs `hit_radius`, server/src/run/arc.rs
+// `shot_touches`): every creature is hit through one upright cylinder of radius
+// max(body radius, SHOT_MIN_RADIUS) and the height it is drawn at.
 import { CONST, HITBOX } from '../generated/defs';
 import { arcTouches } from './arc';
 
-/** Distance from a shot at (px, py) to the body of a monster of `kind` standing at (x, y); null for kinds shots don't hit. */
-export function shotDist(kind: number, x: number, y: number, airborne: boolean, px: number, py: number): number | null {
+/** Radius of the hit cylinder of `kind`; null for kinds shots don't hit. */
+export function hitRadius(kind: number): number | null {
   const hb = HITBOX[kind];
-  if (!hb) return null;
-  const lift = airborne ? CONST.DRAGON_LIFT : 0;
-  const reach = Math.max(0, hb.h + lift - CONST.SHOT_HEIGHT - hb.r);
-  const cy = Math.min(Math.max(py, y - reach), y);
-  return Math.hypot(px - x, py - cy);
+  return hb ? Math.max(hb.r, CONST.SHOT_MIN_RADIUS) : null;
 }
 
-/** Whether an arcing shot at (px, py) at height `z` meets the body of that monster (server `arc_touches` with `shot_top`). */
+/** Whether an arcing shot at (px, py) at height `z` meets that monster (server `shot_touches`, arcing). */
 export function arcHits(kind: number, x: number, y: number, airborne: boolean, px: number, py: number, z: number, shotR: number): boolean {
-  const hb = HITBOX[kind];
-  return !!hb && arcTouches(x, y, hb.r, hb.h + (airborne ? CONST.DRAGON_LIFT : 0), px, py, z, shotR);
+  const r = hitRadius(kind);
+  return r !== null && arcTouches(x, y, r, HITBOX[kind].h + (airborne ? CONST.DRAGON_LIFT : 0), px, py, z, shotR);
 }
 
-/** Whether a shot of radius `shotR` at (px, py) touches that monster. */
-export function shotHits(kind: number, x: number, y: number, airborne: boolean, px: number, py: number, shotR: number): boolean {
-  const d = shotDist(kind, x, y, airborne, px, py);
-  return d !== null && d < HITBOX[kind].r + shotR;
+/** Whether a flat shot of radius `shotR` at (px, py) touches that monster; its height does not matter. */
+export function shotHits(kind: number, x: number, y: number, px: number, py: number, shotR: number): boolean {
+  const r = hitRadius(kind);
+  return r !== null && Math.hypot(px - x, py - y) < r + shotR;
 }
