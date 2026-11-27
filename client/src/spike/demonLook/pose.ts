@@ -128,6 +128,22 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
       for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * off * (i ? 0.45 : 0.9);
     }
   }
+  if (on('fingers')) {
+    // every finger bends at three joints of its own: the hand's one curl is shared out (the little finger closes most, the
+    // index least), the fingers spread as the hand opens, and each flexes a little in its own time; the free hand now and
+    // then closes slowly into a claw and opens again, the sword hand only tightens its grip
+    for (const [side, m] of [['L', -1], ['R', 1]] as const) {
+      const curl = m * cur['fingers' + side][2], grip = side === 'R' && on('sword'); cur['fingers' + side] = [0, 0, 0];
+      const clench = grip ? 0.04 * Math.sin(t * 1.3) : 0.55 * Math.exp(-(((((t + 3) % 8.7) - 5) / 0.9) ** 2)) * (1 - 0.6 * wind);
+      for (let i = 0; i < 4; i++) {
+        const w = [1.25, 1.1, 1, 0.85][i], idle = grip ? 0 : 0.1 * Math.sin(t * 0.8 + i * 1.3 + m) + 0.05 * Math.sin(t * 1.9 + i * 2.1);
+        const c = Math.max(-0.5, (curl + clench) * w + idle), open = Math.max(0, 1 - Math.max(0, c));
+        cur[`f${i}a` + side] = [(i - 1.5) * -0.07 * open * m, 0, m * c * 0.55]; cur[`f${i}b` + side] = [0, 0, m * Math.max(-0.1, c) * 0.72]; cur[`f${i}c` + side] = [0, 0, m * Math.max(-0.1, c) * 0.48];
+      }
+      const tc = curl + clench;
+      cur['th0' + side] = [0.25 * tc * m, 0, m * tc * 0.3]; cur['th1' + side] = [0.5 * tc * m, 0, m * tc * 0.35];
+    }
+  }
   const out = breathOut(s.breath);
   if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }
   // folding the wings (on the ground)

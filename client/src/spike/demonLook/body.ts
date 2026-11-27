@@ -53,6 +53,16 @@ export const HORN_BREAK = (() => {
 // The wing arm, as a bat's: shoulder, a short upper arm to the elbow, a long forearm up to the wrist; HM and FM bow the two bones.
 const WR: V = [0.2, 2.15, -0.2], WE: V = [1.05, 2.55, -0.55], WW: V = [1.2, 3.8, -0.5], WHIP: V = [0.22, 1.35, -0.24];
 const HM: V = [0.62, 2.4, -0.4], FM: V = [1.16, 3.18, -0.55];
+/**
+ * The hand's four fingers, index to little: knuckle, two joints and the claw's point. Jointed (`fingers`), each has its own
+ * length, the knuckles lie on an arc and the fingers fan a little; otherwise four equal fingers side by side on one bone.
+ */
+export const DIGITS: V[][] = [-0.066, -0.022, 0.022, 0.066].map((z, i) => {
+  const J = on('fingers'), len = J ? [0.94, 1.08, 1.0, 0.8][3 - i] : 1, fan = J ? z * 0.22 : 0, k0: V = [KN[0], KN[1] + (J ? [0.004, -0.012, -0.005, 0.014][3 - i] : 0), z];
+  const p1 = add(k0, [0.02 * len, -0.11 * len, fan]), p2 = add(p1, [-0.01 * len, -0.1 * len, fan]);
+  return [k0, p1, p2, add(p2, [-0.04 * len, -0.13 * len, fan * 0.5])];
+});
+const THUMB: V[] = [add(W, [-0.03, -0.08, 0.07]), add(W, [-0.08, -0.18, 0.12]), add(W, [-0.11, -0.28, 0.14])];
 /** The four wing fingers: the middle joint and the tip. */
 const FINGER: [V, V][] = [
   [[2.25, 3.6, -0.68], [2.8, 2.35, -0.62]],
@@ -72,6 +82,10 @@ const DEFS: [string, string | null, V][] = [
 for (const [side, s] of [['L', 1], ['R', -1]] as const) {
   const d = (n: string, p: string, v: V) => DEFS.push([n + side, p, mx(s, v)]);
   d('clav', 'chest', [0.14, 2.06, 0]); d('upperArm', 'clav' + side, S); d('foreArm', 'upperArm' + side, E); d('hand', 'foreArm' + side, W); d('fingers', 'hand' + side, KN);
+  if (on('fingers')) {
+    DIGITS.forEach((f, i) => { d(`f${i}a`, 'hand' + side, f[0]); d(`f${i}b`, `f${i}a` + side, f[1]); d(`f${i}c`, `f${i}b` + side, f[2]); });
+    d('th0', 'hand' + side, THUMB[0]); d('th1', 'th0' + side, THUMB[1]);
+  }
   d('thigh', 'hips', HP); d('shin', 'thigh' + side, KNEE); d('foot', 'shin' + side, AN); d('toes', 'foot' + side, BA);
   d('wing1', 'chest', WR); d('wing2', 'wing1' + side, WE);
   FINGER.forEach((f, i) => { d(`wf${i}a`, 'wing2' + side, WW); d(`wf${i}b`, `wf${i}a` + side, f[0]); });
@@ -217,15 +231,14 @@ function prims(id: (n: string) => number): Prim[] {
     c(E, W, 0.125, 0.08, 'foreArm', sk(0.2, 0.1));
     e(add(lerp(E, W, 0.3), [0.03, 0, 0]), [0.12, 0.19, 0.12], 'foreArm', sk(0.2, 0.1));
     e(add(W, [0.03, -0.1, 0]), [0.07, 0.1, 0.055], 'hand', sk(0.1, 0.2), 0.03);
-    for (const z of [-0.066, -0.022, 0.022, 0.066]) {
-      const k0: V = [KN[0], KN[1], z], p1 = add(k0, [0.02, -0.11, 0]), p2 = add(p1, [-0.01, -0.1, 0]);
+    for (let fi = 0; fi < 4; fi++) {
+      const [k0, p1, p2, p3] = DIGITS[fi], z = k0[2], J = on('fingers'), fa = J ? `f${fi}a` : 'fingers', fb = J ? `f${fi}b` : 'fingers', fc = J ? `f${fi}c` : 'fingers';
       if (on('spikes')) c(add(k0, [0.01, 0.01, 0]), add(k0, [0.075, 0.035, 0]), 0.022, 0.003, 'hand', HORN, 0.012);
       c(add(W, [0.03, -0.12, z * 0.6]), k0, 0.04, 0.034, 'hand', sk(0, 0.3), 0.02);
-      c(k0, p1, 0.034, 0.03, 'fingers', sk(0, 0.4), 0.015); c(p1, p2, 0.03, 0.024, 'fingers', sk(0, 0.5), 0.015);
-      c(p2, add(p2, [-0.04, -0.13, 0]), 0.022, 0.004, 'fingers', TIP, 0.01);
+      c(k0, p1, 0.034, 0.03, fa, sk(0, 0.4), 0.015); c(p1, p2, 0.03, 0.024, fb, sk(0, 0.5), 0.015);
+      c(p2, p3, 0.022, 0.004, fc, TIP, 0.01);
     }
-    const t0 = add(W, [-0.03, -0.08, 0.07]), t1 = add(t0, [-0.05, -0.1, 0.05]);
-    c(t0, t1, 0.036, 0.028, 'hand', sk(0, 0.4), 0.02); c(t1, add(t1, [-0.03, -0.1, 0.02]), 0.024, 0.004, 'hand', TIP, 0.01);
+    c(THUMB[0], THUMB[1], 0.036, 0.028, on('fingers') ? 'th0' : 'hand', sk(0, 0.4), 0.02); c(THUMB[1], THUMB[2], 0.024, 0.004, on('fingers') ? 'th1' : 'hand', TIP, 0.01);
     // leg
     P.push(ball(m(add(HP, [0.02, 0.02, -0.12])), [0.17, 0.17, 0.14], id('hips'), sk(0.1, 0.1)));
     c(HP, KNEE, 0.21, 0.14, 'thigh', sk(0.15, 0.2));
