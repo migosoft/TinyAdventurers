@@ -48,7 +48,7 @@ export const HORN_PATH: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5,
 export const HORN_BREAK = (() => {
   let len = 0, to = 0;
   for (let i = 0; i + 1 < HORN_PATH.length; i++) { const a = HORN_PATH[i][0], b = HORN_PATH[i + 1][0], l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]); len += l; if (i < 5) to += l; }
-  return on('asym') && on('break') ? to / len : -1;
+  return on('asym') && on('brokenhorn') && on('break') ? to / len : -1;
 })();
 // The wing arm, as a bat's: shoulder, a short upper arm to the elbow, a long forearm up to the wrist; HM and FM bow the two bones.
 const WR: V = [0.2, 2.15, -0.2], WE: V = [1.05, 2.55, -0.55], WW: V = [1.2, 3.8, -0.5], WHIP: V = [0.22, 1.35, -0.24];
@@ -257,8 +257,8 @@ function prims(id: (n: string) => number): Prim[] {
     // horns: very thick at the base, out and a little forward and down, then bending up to a point
     const horn = HORN_PATH;
     // the left horn is broken off short (an old fight)
-    for (let i = 0; i + 1 < horn.length - (on('asym') && s > 0 ? 2 : 0); i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
-    if (on('asym') && on('break') && s > 0) {
+    for (let i = 0; i + 1 < horn.length - (on('asym') && on('brokenhorn') && s > 0 ? 2 : 0); i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
+    if (on('asym') && on('brokenhorn') && on('break') && s > 0) {
       const A = horn[4][0], B = horn[5][0], C = horn[6][0], ax = norm([C[0] - B[0], C[1] - B[1], C[2] - B[2]]);
       const u = norm(cross(ax, [0, 0, 1])), w = cross(ax, u);
       P.push(cone(B, C, horn[5][1], horn[6][1], id('head'), HORN, 0.02)); // the horn's own shape runs on; the break cuts it off

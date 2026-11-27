@@ -9,7 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { EYE, HORN_PATH, build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBeat, uGaze, uRune, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
-import { ICE, OPTS, on } from './opts';
+import { ICE, OFF, OPTS, on } from './opts';
 import { makeSword } from './sword';
 import { makeChain, makeEmbers } from './extras';
 
@@ -136,7 +136,7 @@ const label = document.createElement('label'); label.textContent = ' fold wings 
 // every adaptation can be switched off again (the page builds the demon anew)
 for (const o of OPTS) {
   const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on(o);
-  c.onchange = () => { const u = new URL(location.href); if (c.checked) u.searchParams.delete(o); else u.searchParams.set(o, '0'); location.href = u.href; };
+  c.onchange = () => { const u = new URL(location.href); if (c.checked !== OFF.includes(o)) u.searchParams.delete(o); else u.searchParams.set(o, c.checked ? '1' : '0'); location.href = u.href; };
   const l = document.createElement('label'); l.append(' ', c, o); panel.append(l);
 }
 const note = document.createElement('span'); note.textContent = ` built in ${Math.round(built.ms)} ms, ${built.verts} points; drag to turn, wheel to zoom`; panel.append(note);

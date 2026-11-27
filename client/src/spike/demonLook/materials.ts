@@ -40,7 +40,7 @@ vec3 bumped(vec3 n, vec3 viewPos, float hx, float hy, float face){
   vec3 g=sign(det)*(hx*r1+hy*r2); vec3 o=abs(det)*n-g; return dot(o,o)>1e-20 ? normalize(o) : n; }
 `;
 
-interface Patch { key: string; uniforms: Record<string, { value: unknown }>; decl: string; vertex?: string; fdecl?: string; surface: string; late?: string }
+interface Patch { key: string; uniforms: Record<string, { value: unknown }>; decl: string; vertex?: string; fdecl?: string; surface: string; late?: string; ice?: string }
 function patch(m: THREE.MeshStandardMaterial, p: Patch) {
   m.customProgramCacheKey = () => p.key + (ICE ? 'ice' : ''); // three shares a program between materials whose hook has the same source
   m.onBeforeCompile = (sh) => {
@@ -50,7 +50,7 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvRest = position; vInfo = aInfo; vSt = uv;\n${p.vertex ?? ''}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\nuniform float uTime; varying vec3 vRest; varying vec4 vInfo; varying vec2 vSt;\nvec3 dAlb; vec3 dEmit; vec3 dThin; float dRough; float dHx; float dHy;\n${NOISE}\n${p.decl}\n${p.fdecl ?? ''}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n{ ${p.surface} }\n${ICE ? 'float rime = smoothstep(0.45, 0.7, fbm(vRest*6.5 + 3.)); dAlb = mix(dAlb.bgr*vec3(1.3,1.4,1.6) + vec3(0.012,0.02,0.03), vec3(0.5,0.62,0.74), 0.4*rime); dRough = mix(dRough*0.62, 0.9, rime); dThin = dThin.bgr;' : ''}\ndiffuseColor.rgb = dAlb;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n{ ${p.surface}\n${ICE ? p.ice ?? 'float rime = smoothstep(0.45, 0.7, fbm(vRest*6.5 + 3.)); dAlb = mix(dAlb.bgr*vec3(1.3,1.4,1.6) + vec3(0.012,0.02,0.03), vec3(0.5,0.62,0.74), 0.4*rime); dRough = mix(dRough*0.62, 0.9, rime); dThin = dThin.bgr;' : ''} }\ndiffuseColor.rgb = dAlb;`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = dRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = bumped(normal, -vViewPosition, dHx, dHy, faceDirection);')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${p.late ?? ''}\n${ICE ? 'dEmit = dEmit.bgr*vec3(0.75,1.,1.1);' : ''}\ntotalEmissiveRadiance += dEmit;`)
@@ -128,6 +128,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float plate = smoothstep(0.015, 0.16, edge), scale = smoothstep(0.0, 0.3, v2.x);
       gEdge = edge; gRnd = v1.y; gPlate = plate;
       float rock = plate*(0.9 + 0.4*v1.y + 1.3*tilt) + scale*(0.1 + 0.3*limb) + n*0.3;
+      ${ICE && on('iceblocks') ? 'rock = smoothstep(0.008, 0.055, edge)*(1.1 + 0.5*v1.y + 3.4*tilt) + n*0.03;' : ''}
       float streak = fbm(p0*vec3(26.,9.,26.));
       float wr = fbm(p0*vec3(46.,12.,46.));
       // the great horns: ridges running their length (with a slow twist), fine ribs across, both dying out toward the hot tip
@@ -249,6 +250,22 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float tooth = step(0.9, vInfo.y*vInfo.w);
     dAlb = mix(dAlb, mix(vec3(0.008,0.006,0.006), vec3(0.085,0.065,0.055), smoothstep(0.45, 1., vSt.x)), tooth);
     dRough = mix(dRough, 0.42, tooth);`,
+    // the ice demon's skin: blocks of ice, each a flat tilted face, clear and dark in the middle, frosted white along its edges,
+    // with pale breaks inside; the spikes, spurs and claws are ice crystals that hold a little light
+    ice: !on('iceblocks') ? undefined : /* glsl */ `
+    float body = (1.-vInfo.y)*(1.-leather), rimI = 1.-smoothstep(0.015, 0.12, gEdge);
+    float brk = smoothstep(0.6, 0.66, fbm(p*vec3(9.,3.,9.) + gRnd*20.)) * (1.-rimI);
+    vec3 blockC = mix(vec3(0.035,0.085,0.16), vec3(0.27,0.42,0.56), clamp(0.15 + 0.75*gRnd, 0., 1.));
+    blockC = mix(blockC, vec3(0.68,0.79,0.88), 0.6*rimI + 0.3*brk);
+    blockC *= mix(0.25, 1., smoothstep(0.3, 0.95, open)) * (1. - 0.5*dk*uDark) * (1. - 0.8*max(eye, maw)) * (1. - 0.35*limb);
+    vec3 other = dAlb.bgr*vec3(1.3,1.4,1.6) + vec3(0.012,0.02,0.03);
+    float cry = vInfo.y * (1.-onHorn) * (1.-tooth) * (1.-step(0.5, isCrest + isBlade)) * (1.-leather);
+    float facet = floor(fbm(p*13.)*5.)/5.;
+    vec3 cryC = mix(vec3(0.08,0.22,0.4), vec3(0.72,0.9,1.), clamp(0.25 + 0.5*vInfo.z + 0.6*facet, 0., 1.));
+    dAlb = mix(mix(other, blockC, body), cryC, cry);
+    dRough = mix(mix(dRough*0.62, mix(0.14, 0.6, max(rimI, brk)), body), 0.1, cry);
+    dEmit *= mix(1., 0.6, body);
+    dEmit += cry * vec3(0.9,0.5,0.14) * 0.3 * (0.5 + 0.8*facet);`,
   });
 }
 
@@ -279,6 +296,8 @@ export function sheetMaterial(wing: boolean): THREE.MeshStandardMaterial {
     float bone = smoothstep(0.12, 0., min(s, 1.-s));
     vec3 web = mix(vec3(0.36,0.03,0.028), vec3(0.13,0.012,0.016), clamp(0.1+0.5*t+0.5*fine, 0., 1.));
     web *= 1.-0.35*vein; web = mix(web, vec3(0.1,0.02,0.02), bone*0.7);
+    float mid = pow(max(sin(3.14159*s), 0.), 0.7) * smoothstep(0., 0.22, t) * (1.-smoothstep(0.68, 1., t));
+    if (${on('calmweb') ? 1 : 0} == 1) web = mix(${ICE ? 'vec3(0.03,0.06,0.115), vec3(0.17,0.27,0.4)' : 'vec3(0.06,0.008,0.01), vec3(0.3,0.03,0.026)'}, mid);
     vec3 hide = mix(vec3(0.16,0.07,0.045), vec3(0.07,0.035,0.03), fine) * (1.-0.5*t);
     dAlb = mix(mix(hide, web, uWing), vec3(0.02,0.015,0.015), burn);
     float h0 = (fine*0.4 + vein*0.4) * 0.008;
@@ -286,7 +305,9 @@ export function sheetMaterial(wing: boolean): THREE.MeshStandardMaterial {
     dRough = 0.85 - 0.25*uWing*(1.-burn);
     dEmit = vec3(0.);
     // how much light gets through: less at the veins, beside the bones and where it is burnt
-    dThin = vec3(1.,0.13,0.05) * uWing * (1.-burn) * (1.-0.6*vein) * (1.-0.8*bone) * (0.35+0.9*fine*fine) * (0.5+0.5*t);`,
+    dThin = vec3(1.,0.13,0.05) * uWing * (1.-burn) * (1.-0.6*vein) * (1.-0.8*bone) * (0.35+0.9*fine*fine) * (0.5+0.5*t);
+    if (${on('calmweb') ? 1 : 0} == 1) { dThin = ${ICE ? 'vec3(0.2,0.45,0.9)' : 'vec3(1.,0.13,0.05)'} * uWing * (1.-burn) * (1.-0.8*bone) * (0.4 + 0.6*mid); h0 = vein*0.0012; dHx = dFdx(h0); dHy = dFdy(h0); }`,
+    ice: on('calmweb') ? 'if (uWing < 0.5) { dAlb = dAlb.bgr*vec3(1.2,1.3,1.5); }' : undefined,
     late: /* glsl */ `
     // light from behind comes through the thin skin
     for (int i = 0; i < 3; i++) {
