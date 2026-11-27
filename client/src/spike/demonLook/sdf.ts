@@ -10,6 +10,10 @@ export interface Prim {
   a: V; b?: V; ra: number; rb: number; r?: V;
   /** How softly it melts into what is already there. */
   k: number; bone: number; tag: Tag; sub?: boolean;
+  /** A slab with rounded edges instead: half sizes, its turn as a matrix (rows), the rounding. */
+  box?: { h: V; m: number[]; round: number };
+  /** How far this shape's bone pulls on the skin beside it, if not the usual reach. */
+  wr?: number;
   c: V; br: number;
 }
 
@@ -21,8 +25,21 @@ export function ball(a: V, r: V, bone: number, tag: Tag, k = 0.06): Prim {
   return { a, r, ra: 0, rb: 0, k, bone, tag, c: a, br: Math.max(r[0], r[1], r[2]) };
 }
 
+/** A thin plate: turned about x, then y, then z of its own (`rot`), so its own z is the plate's normal. */
+export function slab(c: V, h: V, rot: V, bone: number, tag: Tag, k = 0.005, round = 0.006): Prim {
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(rot[0]), Math.sin(rot[0]), Math.cos(rot[1]), Math.sin(rot[1]), Math.cos(rot[2]), Math.sin(rot[2])];
+  // R = Rx * Ry * Rz
+  const m = [cy * cz, -cy * sz, sy, sx * sy * cz + cx * sz, -sx * sy * sz + cx * cz, -sx * cy, -cx * sy * cz + sx * sz, cx * sy * sz + sx * cz, cx * cy];
+  return { a: c, ra: 0, rb: 0, k, bone, tag, c, br: Math.hypot(h[0], h[1], h[2]) + round, box: { h, m, round } };
+}
+
 function dist(p: Prim, x: number, y: number, z: number): number {
   const ax = x - p.a[0], ay = y - p.a[1], az = z - p.a[2];
+  if (p.box) {
+    const { h, m, round } = p.box;
+    const qx = Math.abs(m[0] * ax + m[3] * ay + m[6] * az) - h[0], qy = Math.abs(m[1] * ax + m[4] * ay + m[7] * az) - h[1], qz = Math.abs(m[2] * ax + m[5] * ay + m[8] * az) - h[2];
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - round;
+  }
   if (p.r) {
     const r = p.r;
     const k0 = Math.hypot(ax / r[0], ay / r[1], az / r[2]);
@@ -131,7 +148,7 @@ export function skin(prims: Prim[], lo: V, hi: V, h: number, reach = 0.09): Skin
   // What each point of the skin is made of: the shapes near it give its bones and its tag.
   const nv = pos.length / 3;
   const info = new Float32Array(nv * 4), skinIndex = new Uint16Array(nv * 4), skinWeight = new Float32Array(nv * 4);
-  const solid = prims.filter((p) => !p.sub);
+  const solid = prims.filter((p) => !p.sub), subs = prims.filter((p) => p.sub), E = 0.004;
   const ds = new Float32Array(solid.length);
   const byBone = new Map<number, number>();
   for (let v = 0; v < nv; v++) {
@@ -146,11 +163,18 @@ export function skin(prims: Prim[], lo: V, hi: V, h: number, reach = 0.09): Skin
     let tw = 0;
     const tg = [0, 0, 0, 0];
     for (let n = 0; n < solid.length; n++) {
-      const w = Math.max(0, 1 - (ds[n] - dmin) / reach) ** 2;
+      const w = Math.max(0, 1 - (ds[n] - dmin) / (solid[n].wr ?? reach)) ** 2;
       if (w > 0) byBone.set(solid[n].bone, (byBone.get(solid[n].bone) ?? 0) + w);
       const t = Math.max(0, 1 - (ds[n] - dmin) / 0.025) ** 2;
       if (t > 0) { tw += t; for (let c = 0; c < 4; c++) tg[c] += t * solid[n].tag[c]; }
     }
+    // how open the skin is here: 1 on a free surface, less in a crease between two parts
+    const near = solid.filter((_, n) => ds[n] < 1e3).concat(subs);
+    const f = (dx: number, dy: number, dz: number) => field(near, x + dx, y + dy, z + dz);
+    let gx = f(E, 0, 0) - f(-E, 0, 0), gy = f(0, E, 0) - f(0, -E, 0), gz = f(0, 0, E) - f(0, 0, -E);
+    const gl = Math.hypot(gx, gy, gz) || 1; gx /= gl; gy /= gl; gz /= gl;
+    let open = 0;
+    for (const hh of [0.03, 0.07, 0.12]) open += Math.min(1, Math.max(0, f(gx * hh, gy * hh, gz * hh) / hh)) / 3;
     const top = [...byBone].sort((a, b) => b[1] - a[1]).slice(0, 4);
     const sum = top.reduce((s, e) => s + e[1], 0);
     for (let c = 0; c < 4; c++) {
@@ -158,6 +182,7 @@ export function skin(prims: Prim[], lo: V, hi: V, h: number, reach = 0.09): Skin
       skinWeight[v * 4 + c] = (top[c]?.[1] ?? 0) / sum;
       info[v * 4 + c] = tg[c] / tw;
     }
+    info[v * 4] = open;
   }
   return { position: new Float32Array(pos), index: new Uint32Array(idx), info, skinIndex, skinWeight };
 }

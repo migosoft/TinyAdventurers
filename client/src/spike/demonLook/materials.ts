@@ -7,6 +7,8 @@ import { EYE, MOUTH } from './body';
 export const uTime = { value: 0 };
 /** How far the wings are folded (deeper pleats), and how hard the air pushes the skin in a wing beat (-1..1). */
 export const uFold = { value: 0 }, uBillow = { value: 0 };
+/** 0..1: the breath weapon's heat in the throat. */
+export const uBreath = { value: 0 };
 /** The lights that shine through the wings: world places, and colour times strength. */
 export const uLPos = { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] };
 export const uLCol = { value: [new THREE.Color(), new THREE.Color(), new THREE.Color()] };
@@ -53,8 +55,8 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth;',
+    key: 'skin', uniforms: { uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate;
     // The relief at a point of the resting body. Mirrored left to right, so the plates read as grown armour.
@@ -86,8 +88,16 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     vec3 horn = mix(mix(vec3(0.035,0.028,0.028), vec3(0.2,0.11,0.08), streak*streak), vec3(0.5,0.36,0.22), vInfo.z*0.45);
     float wr = fbm(p*vec3(46.,12.,46.));
     vec3 hide = mix(vec3(0.05,0.022,0.02), vec3(0.2,0.07,0.05), wr*wr);
-    dAlb = mix(mix(rock, horn, vInfo.y*0.6), hide, leather);
-    dRough = mix(mix(mix(0.9, 0.55, gPlate), 0.38, vInfo.y), 0.5, leather);
+    // the great horns: near black at the base, lighter along the middle, black again toward the tip, and the tip itself hot metal
+    float onHorn = vInfo.y * step(2.42, p.y) * step(p.y, 3.12) * step(abs(p.x), 1.0) * smoothstep(0.07, 0.12, abs(p.x));
+    float hu = clamp((abs(p.x)-0.1)/0.76, 0., 1.)*0.55 + clamp((p.y-2.5)/0.55, 0., 1.)*0.45;
+    float ramp = smoothstep(0.14, 0.42, hu) * (1.-smoothstep(0.5, 0.78, hu));
+    horn = mix(horn, mix(vec3(0.01,0.008,0.008), vec3(0.19,0.12,0.09)*(0.6+0.8*streak), ramp), onHorn);
+    dAlb = mix(mix(rock, horn, max(vInfo.y*0.6, onHorn)), hide, leather);
+    // darker where two parts of the body meet
+    float open = mix(clamp(vInfo.x, 0., 1.), 1., leather);
+    dAlb *= mix(0.12, 1., smoothstep(0.3, 0.95, open));
+    dRough = mix(mix(mix(0.98, 0.86, gPlate), 0.72, vInfo.y), 0.8, leather);
     // lava in the grooves: hottest on the chest, fading out over belly, hips, shoulders and limbs; breathing slowly up the body
     vec3 gq = (p - vec3(0.,1.84,0.06)) / vec3(0.5,0.72,0.5);
     float glow = max(exp(-dot(gq,gq)*1.2), 0.07*(1.-limb)) * (1.-vInfo.y) * (1.-leather);
@@ -96,16 +106,18 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float pulse = 0.72+0.28*sin(uTime*1.6 - p.y*3.5);
     dEmit = crack*crack*patchy*pow(glow, 0.7)*pulse * mix(vec3(1.,0.14,0.01), vec3(1.,0.55,0.12), crack*crack*glow) * 2.4;
     dEmit += (1.-smoothstep(0.0, 0.2, gEdge))*patchy*glow*glow * vec3(0.5,0.06,0.0);
-    dEmit += vInfo.z * vec3(1.,0.3,0.04) * 0.1;
+    dEmit += vInfo.z * vec3(1.,0.3,0.04) * 0.1 * (1.-onHorn);
+    float hot = smoothstep(0.8, 1., hu) * onHorn;
+    dEmit += (hot*hot*vec3(1.,0.25,0.02)*1.8 + smoothstep(0.94, 1., hu)*onHorn*vec3(1.,0.7,0.3)*1.2) * (0.85+0.15*sin(uTime*2.1+p.x*4.));
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
     vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
     e.xy = vec2(e.x*cos(sl)+e.y*sin(sl), -e.x*sin(sl)+e.y*cos(sl));
     float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.058,0.014,0.07)));
     float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.058,0.022,0.07)));
-    vec3 q = (p-uMouth)/vec3(0.095,0.03,0.08);
+    vec3 q = (p-uMouth)/vec3(0.095,0.034,0.14);
     float fang = abs(fract(p.x*24.)-0.5)*2.;
     float maw = (1.-smoothstep(0.5, 1., length(q))) * step(abs(q.y)*1.5, fang);
-    dEmit += (eye*vec3(1.,0.5,0.1)*3.2 + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*2.) * (0.85+0.15*sin(uTime*3.1));
+    dEmit += (eye*vec3(1.,0.5,0.1)*3.2 + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
     dAlb *= 1.-0.8*max(eye, maw);`,
   });
 }

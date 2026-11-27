@@ -7,8 +7,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { build, rig } from './body';
-import { sheetMaterial, skinMaterial, uBillow, uFold, uLCol, uLPos, uTime } from './materials';
-import { animate, beat, type State } from './pose';
+import { sheetMaterial, skinMaterial, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
+import { animate, beat, breathOut, type State } from './pose';
 
 const url = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -22,7 +22,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], back: [5, 5, -12, 2.2], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -73,6 +73,7 @@ const key = new THREE.PointLight(0xffc890, 90, 40, 1.8); key.position.set(-4.5, 
 const rim = new THREE.PointLight(0xff8050, 30, 40, 1.8); rim.position.set(5, 5, -6); scene.add(rim);
 scene.add(new THREE.HemisphereLight(0x5a4c40, 0x120c08, 0.35));
 const lava = new THREE.PointLight(0xff5a10, 0.7, 4, 2); scene.add(lava);
+const fire = new THREE.PointLight(0xff7a20, 0, 8, 2); scene.add(fire);
 
 // ---- the demon
 const r = rig();
@@ -102,10 +103,10 @@ addEventListener('resize', resize); resize();
 
 // ---- the panel
 let mode = url.get('mode') ?? 'stand';
-const st: State = { fly: mode === 'fly' ? 1 : 0, look: mode === 'look' ? 1 : 0, attack: -1, fold: Number(url.get('fold') ?? 0) };
+const st: State = { fly: mode === 'fly' ? 1 : 0, look: mode === 'look' ? 1 : 0, attack: -1, breath: -1, fold: Number(url.get('fold') ?? 0) };
 const panel = document.getElementById('panel')!;
-for (const m of ['stand', 'look', 'attack', 'fly']) {
-  const b = document.createElement('button'); b.textContent = m; b.onclick = () => { mode = m; st.attack = m === 'attack' ? 0 : -1; };
+for (const m of ['stand', 'look', 'attack', 'breath', 'fly']) {
+  const b = document.createElement('button'); b.textContent = m; b.onclick = () => { mode = m; st.attack = m === 'attack' ? 0 : -1; st.breath = m === 'breath' ? 0 : -1; };
   panel.append(b);
 }
 const fold = document.createElement('input'); fold.type = 'range'; fold.min = '0'; fold.max = '1'; fold.step = '0.01'; fold.value = String(st.fold);
@@ -115,6 +116,7 @@ const note = document.createElement('span'); note.textContent = ` built in ${Mat
 
 const pinned = url.has('t') ? Number(url.get('t')) : null;
 if (mode === 'attack') st.attack = 0;
+if (mode === 'breath') st.breath = 0;
 const clock = new THREE.Clock();
 let time = 0;
 const chestAt = new THREE.Vector3();
@@ -124,12 +126,15 @@ function frame() {
   const to = (x: number, target: number, rate: number) => (pinned !== null ? target : x + (target - x) * Math.min(1, dt * rate));
   st.fly = to(st.fly, mode === 'fly' ? 1 : 0, 1.6); st.look = to(st.look, mode === 'look' ? 1 : 0, 3);
   if (st.attack >= 0) st.attack = pinned ?? st.attack + dt;
+  if (st.breath >= 0) st.breath = pinned ?? st.breath + dt;
+  uBreath.value = breathOut(st.breath);
   uTime.value = time;
   const fl01 = st.fly * st.fly * (3 - 2 * st.fly);
   uFold.value = st.fold * (1 - fl01); uBillow.value = -fl01 * Math.cos(beat(time));
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
   lava.position.copy(r.by.chest.getWorldPosition(chestAt)).add(new THREE.Vector3(0, 0.1, 0.6));
+  fire.position.copy(r.by.jaw.getWorldPosition(chestAt)).add(new THREE.Vector3(0, -0.1, 0.5)); fire.intensity = 1.0 * uBreath.value * (0.8 + 0.2 * Math.sin(time * 23));
   const fl = 0.9 + 0.1 * Math.sin(time * 11) * Math.sin(time * 7.3);
   torch.intensity = 16 * fl; flame.scale.set(0.5 * fl, 0.75 * fl, 1);
   composer.render();

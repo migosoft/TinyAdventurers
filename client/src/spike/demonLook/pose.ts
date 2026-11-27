@@ -15,7 +15,7 @@ function both(p: Pose): Pose {
 
 const STAND = both({
   hips: [0.06, 0.1, 0], waist: [0.12, -0.04, 0], chest: [0.2, -0.08, 0], neck: [0.25, 0.04, 0], head: [-0.4, 0.1, 0.04], jaw: [0.12, 0, 0],
-  clavL: [0, -0.06, 0.05], upperArmL: [-0.1, 0, -0.04], foreArmL: [-0.26, 0, -0.1], handL: [-0.05, 0, 0.03], fingersL: [0, 0, -0.35],
+  clavL: [0, -0.06, 0], upperArmL: [-0.1, 0, -0.04], foreArmL: [-0.26, 0, -0.1], handL: [-0.05, 0, 0.03], fingersL: [0, 0, -0.35],
   upperArmR: [-0.03, 0, 0.02], foreArmR: [-0.34, 0, 0.13],
   thighL: [-0.5, 0.22, 0.16], shinL: [0.8, 0, 0], thighR: [-0.3, -0.16, -0.14], shinR: [0.6, 0, 0],
   tail0: [0.1, 0, 0], tail2: [-0.2, 0, 0], tail3: [-0.25, 0, 0], tail4: [-0.3, 0, 0],
@@ -32,6 +32,9 @@ const FLY = both({
 const WIND: Pose = {
   hips: [0, -0.2, 0], chest: [-0.1, -0.45, 0], head: [0, 0.3, 0], upperArmR: [0.5, 0, -0.8], foreArmR: [-1.0, 0, 0], fingersR: [0, 0, -0.3],
 };
+// The breath weapon: a breath in (head and chest back), then the head thrust forward with the jaw wide open.
+const INHALE: Pose = { waist: [-0.08, 0, 0], chest: [-0.16, 0, 0], neck: [-0.12, 0, 0], head: [-0.2, 0, 0], jaw: [0.1, 0, 0], upperArmL: [0.15, 0, 0.1], upperArmR: [0.15, 0, -0.1] };
+const BREATHE: Pose = { hips: [0.05, 0, 0], waist: [0.05, 0, 0], chest: [0.06, 0, 0], neck: [0.1, 0, 0], head: [-0.22, 0, 0], jaw: [0.85, 0, 0], upperArmL: [0.3, 0, 0.18], upperArmR: [0.3, 0, -0.18], foreArmL: [-0.2, 0, 0], foreArmR: [-0.2, 0, 0] };
 const STRIKE: Pose = {
   hips: [0.05, 0.25, 0], chest: [0.3, 0.55, 0], head: [0, -0.35, 0], jaw: [0.35, 0, 0], upperArmR: [-1.5, 0, 0.35], foreArmR: [0.3, 0, 0], fingersR: [0, 0, -0.4], upperArmL: [0.45, 0, 0.2],
 };
@@ -41,7 +44,9 @@ const STRIKE: Pose = {
  */
 const FOLD = { arm: -1.31, elbow: 1.52, wrist: [-1.29, -0.77, -0.45, -0.31], knuckle: [0.6, 0.3, 0, 0] };
 
-export interface State { fly: number; look: number; attack: number; fold: number }
+export interface State { fly: number; look: number; attack: number; fold: number; breath: number }
+/** How open the throat is (0..1) at a time into the breath's loop. */
+export function breathOut(b: number): number { const ph = b % 3.6; return b < 0 || ph < 0.6 ? 0 : ph < 2.4 ? ease((ph - 0.6) / 0.18) : 1 - ease((ph - 2.4) / 0.6); }
 const ease = (x: number) => { const c = Math.min(1, Math.max(0, x)); return c * c * (3 - 2 * c); };
 
 const q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), ax = new THREE.Vector3(), v = new THREE.Vector3();
@@ -77,6 +82,8 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
     strike = ph < 0.5 ? 0 : ph < 0.85 ? 1 - (1 - Math.min(1, (ph - 0.5) / 0.12)) ** 3 : 1 - ease((ph - 0.85) / 0.75);
     addTo(WIND, wind); addTo(STRIKE, strike);
   }
+  const out = breathOut(s.breath);
+  if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }
   // folding the wings (on the ground)
   const fold = s.fold * (1 - fly);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
@@ -97,7 +104,7 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
   const fwd = v.set(0, 0, 1).applyQuaternion(r.by.chest.getWorldQuaternion(q)).clone();
   const lift = (lag: number) => 0.08 * Math.sin(t * 0.8 - lag) * (1 - fly) + fly * Math.sin(phi - lag);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
-    twist(r.by['wing1' + side], fwd, m * (0.5 * lift(0) + 0.15 * fly + 0.25 * strike - 0.1 * wind));
+    twist(r.by['wing1' + side], fwd, m * (0.5 * lift(0) + 0.15 * fly + 0.25 * strike - 0.1 * wind + 0.18 * out));
     twist(r.by['wing2' + side], fwd, m * 0.3 * lift(0.7));
     for (let i = 0; i < 4; i++) { twist(r.by[`wf${i}a` + side], fwd, m * 0.18 * lift(1.2)); twist(r.by[`wf${i}b` + side], fwd, m * 0.25 * lift(1.7)); }
   }
