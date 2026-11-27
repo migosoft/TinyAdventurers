@@ -9,7 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { EYE, HORN_PATH, build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBeat, uGaze, uRune, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
-import { OPTS, on } from './opts';
+import { ICE, OPTS, on } from './opts';
 import { makeSword } from './sword';
 import { makeChain, makeEmbers } from './extras';
 
@@ -75,8 +75,8 @@ flame.position.copy(torch.position); flame.scale.set(0.5, 0.75, 1); scene.add(fl
 const key = new THREE.PointLight(0xffc890, 90, 40, 1.8); key.position.set(-4.5, 6.5, 6); scene.add(key);
 const rim = new THREE.PointLight(0xff8050, 30, 40, 1.8); rim.position.set(5, 5, -6); scene.add(rim);
 scene.add(new THREE.HemisphereLight(0x5a4c40, 0x120c08, 0.35));
-const lava = new THREE.PointLight(0xff5a10, 0.7, 4, 2); scene.add(lava);
-const fire = new THREE.PointLight(0xff7a20, 0, 8, 2); scene.add(fire);
+const lava = new THREE.PointLight(ICE ? 0x1a8cff : 0xff5a10, 0.7, 4, 2); scene.add(lava);
+const fire = new THREE.PointLight(ICE ? 0x40b0ff : 0xff7a20, 0, 8, 2); scene.add(fire);
 
 // ---- the demon
 const r = rig();
@@ -101,7 +101,7 @@ const headLocal = new THREE.Vector3();
 // fades as the face turns away, so the eyes still read when the brow covers the slits
 const eyeGlows: THREE.Sprite[] = [];
 if (on('eyeglow')) {
-  const tex = canvasTexture(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,150,60,1)'); gr.addColorStop(0.35, 'rgba(255,70,10,0.45)'); gr.addColorStop(1, 'rgba(255,40,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+  const tex = canvasTexture(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, ICE ? 'rgba(60,150,255,1)' : 'rgba(255,150,60,1)'); gr.addColorStop(0.35, ICE ? 'rgba(10,70,255,0.45)' : 'rgba(255,70,10,0.45)'); gr.addColorStop(1, ICE ? 'rgba(0,40,255,0)' : 'rgba(255,40,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
   for (const s of [1, -1]) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
     sp.position.set(s * (EYE[0] + 0.012), EYE[1] - 2.38 - 0.012, EYE[2] - 0.06 + 0.035); sp.scale.set(0.15, 0.075, 1); sp.material.rotation = 0;
@@ -129,6 +129,7 @@ for (const m of ['stand', 'look', 'attack', 'breath', 'fly']) {
   const b = document.createElement('button'); b.textContent = m; b.onclick = () => { mode = m; st.attack = m === 'attack' ? 0 : -1; st.breath = m === 'breath' ? 0 : -1; };
   panel.append(b);
 }
+{ const b = document.createElement('button'); b.textContent = ICE ? 'fire demon' : 'ice demon'; b.onclick = () => { const u = new URL(location.href); if (ICE) u.searchParams.delete('kind'); else u.searchParams.set('kind', 'ice'); location.href = u.href; }; panel.append(b); }
 const fold = document.createElement('input'); fold.type = 'range'; fold.min = '0'; fold.max = '1'; fold.step = '0.01'; fold.value = String(st.fold);
 fold.oninput = () => { st.fold = Number(fold.value); };
 const label = document.createElement('label'); label.textContent = ' fold wings '; label.append(fold); panel.append(label);

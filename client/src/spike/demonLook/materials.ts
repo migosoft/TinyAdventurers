@@ -3,7 +3,7 @@
 // thin torn skin of the wings, which lets light through and hangs in pleats.
 import * as THREE from 'three';
 import { CREST, EYE, HORN_BREAK, HORN_PATH, MOUTH, TAIL_BLADE } from './body';
-import { on } from './opts';
+import { ICE, on } from './opts';
 
 export const uTime = { value: 0 };
 /** How far the wings are folded (deeper pleats), and how hard the air pushes the skin in a wing beat (-1..1). */
@@ -42,7 +42,7 @@ vec3 bumped(vec3 n, vec3 viewPos, float hx, float hy, float face){
 
 interface Patch { key: string; uniforms: Record<string, { value: unknown }>; decl: string; vertex?: string; fdecl?: string; surface: string; late?: string }
 function patch(m: THREE.MeshStandardMaterial, p: Patch) {
-  m.customProgramCacheKey = () => p.key; // three shares a program between materials whose hook has the same source
+  m.customProgramCacheKey = () => p.key + (ICE ? 'ice' : ''); // three shares a program between materials whose hook has the same source
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, p.uniforms, { uTime });
     sh.vertexShader = sh.vertexShader
@@ -50,10 +50,10 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvRest = position; vInfo = aInfo; vSt = uv;\n${p.vertex ?? ''}`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\nuniform float uTime; varying vec3 vRest; varying vec4 vInfo; varying vec2 vSt;\nvec3 dAlb; vec3 dEmit; vec3 dThin; float dRough; float dHx; float dHy;\n${NOISE}\n${p.decl}\n${p.fdecl ?? ''}`)
-      .replace('#include <color_fragment>', `#include <color_fragment>\n{ ${p.surface} }\ndiffuseColor.rgb = dAlb;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n{ ${p.surface} }\n${ICE ? 'float rime = smoothstep(0.45, 0.7, fbm(vRest*6.5 + 3.)); dAlb = mix(dAlb.bgr*vec3(1.3,1.4,1.6) + vec3(0.012,0.02,0.03), vec3(0.5,0.62,0.74), 0.4*rime); dRough = mix(dRough*0.62, 0.9, rime); dThin = dThin.bgr;' : ''}\ndiffuseColor.rgb = dAlb;`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = dRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = bumped(normal, -vViewPosition, dHx, dHy, faceDirection);')
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${p.late ?? ''}\ntotalEmissiveRadiance += dEmit;`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${p.late ?? ''}\n${ICE ? 'dEmit = dEmit.bgr*vec3(0.75,1.,1.1);' : ''}\ntotalEmissiveRadiance += dEmit;`)
       // one invalid pixel (a NaN) is smeared by the bloom into a big black box: never let one out
       .replace('#include <opaque_fragment>', 'if (any(isnan(outgoingLight)) || any(isinf(outgoingLight)) || !(dot(outgoingLight, outgoingLight) < 1e8)) outgoingLight = vec3(0.);\n#include <opaque_fragment>');
   };

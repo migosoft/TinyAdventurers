@@ -1,6 +1,7 @@
 // SPIKE (#441): things that make the demon live and hot: embers rising from the cracks, smoke from the mouth, and a broken
 // shackle with a few links of chain on the left wrist.
 import * as THREE from 'three';
+import { ICE } from './opts';
 
 interface P { age: number; life: number; pos: THREE.Vector3; vel: THREE.Vector3; size: number; seed: number }
 function cloud(scene: THREE.Scene, max: number, additive: boolean) {
@@ -11,7 +12,7 @@ function cloud(scene: THREE.Scene, max: number, additive: boolean) {
     uniforms: { uPx }, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, transparent: true,
     vertexShader: 'attribute vec4 aCol; attribute float aSize; uniform float uPx; varying vec4 vCol; void main(){ vCol = aCol; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = aSize*uPx/-mv.z; gl_Position = projectionMatrix*mv; }',
     fragmentShader: additive
-      ? 'varying vec4 vCol; void main(){ float a = max(0., 1.-length(gl_PointCoord-0.5)*2.); gl_FragColor = vec4(vCol.rgb*a*a*vCol.a, 1.); }'
+      ? 'varying vec4 vCol; void main(){ float a = max(0., 1.-length(gl_PointCoord-0.5)*2.); gl_FragColor = vec4((vCol.rgb*a*a*vCol.a)' + (ICE ? '.bgr' : '') + ', 1.); }'
       : 'varying vec4 vCol; void main(){ float a = max(0., 1.-length(gl_PointCoord-0.5)*2.); gl_FragColor = vec4(vCol.rgb, a*a*vCol.a); }',
   }));
   pts.frustumCulled = false; scene.add(pts);
@@ -25,7 +26,7 @@ export function makeEmbers(scene: THREE.Scene, chest: THREE.Bone, jaw: THREE.Bon
   return (dt: number, time: number, px: number, breath: number) => {
     em.uPx.value = sm.uPx.value = px;
     eDue += dt * 16; sDue += dt * (2 + 22 * breath) * (0.4 + 0.6 * Math.max(0, Math.sin(time * 1.3)));
-    while (eDue > 1) { eDue--; if (em.parts.length < em.max) em.parts.push({ age: 0, life: 1.4 + rnd() * 2, pos: chest.localToWorld(v.set((rnd() - 0.5) * 0.6, -0.25 + rnd() * 0.6, 0.18 + rnd() * 0.1)).clone(), vel: new THREE.Vector3((rnd() - 0.5) * 0.15, 0.25 + rnd() * 0.4, 0.1 + rnd() * 0.15), size: 0.012 + rnd() * 0.022, seed: rnd() * 20 }); }
+    while (eDue > 1) { eDue--; if (em.parts.length < em.max) em.parts.push({ age: 0, life: 1.4 + rnd() * 2, pos: chest.localToWorld(v.set((rnd() - 0.5) * 0.6, -0.25 + rnd() * 0.6, 0.18 + rnd() * 0.1)).clone(), vel: new THREE.Vector3((rnd() - 0.5) * 0.15, (ICE ? -0.5 : 1) * (0.25 + rnd() * 0.4), 0.1 + rnd() * 0.15), size: 0.012 + rnd() * 0.022, seed: rnd() * 20 }); }
     while (sDue > 1) { sDue--; if (sm.parts.length < sm.max) sm.parts.push({ age: 0, life: 1.2 + rnd() * 1.2, pos: jaw.localToWorld(v.set((rnd() < 0.5 ? -1 : 1) * 0.07, 0.02, 0.14)).clone(), vel: new THREE.Vector3((rnd() - 0.5) * 0.08, 0.22 + rnd() * 0.15, 0.12), size: 0.08 + rnd() * 0.06, seed: rnd() * 20 }); }
     for (const [c, ember] of [[em, true], [sm, false]] as const) {
       let n = 0;
