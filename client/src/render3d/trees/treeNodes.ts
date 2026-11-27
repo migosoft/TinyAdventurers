@@ -181,9 +181,9 @@ const paletteAt = (palette: Texture, level: N, row: N): N => texture(palette, ve
  * The light on a tree surface, for the crowns and the falling leaves alike: the scene's light at `P` with normal `nl`, the sun's shadow map read at
  * `Ps` (the caller's point nudged off the surface), and the light's brightness. Each is a variable so a later read reuses it; `name` makes their names.
  */
-function treeLightAt(lighting: Lighting, hasSun: boolean, o: { P: N; Ps: N; nl: N; foot: N; name: string }): { lit: { rgb: N; dv: N }; b: N } {
+function treeLightAt(lighting: Lighting, hasSun: boolean, o: { P: N; Ps: N; nl: N; name: string }): { lit: { rgb: N; dv: N }; b: N } {
   const ndl = mix(max(dot(o.nl, lighting.sun.dir), 0), float(1), 0.3); // first guess: the wrap
-  const lit0 = lighting.lightAt(o.P, o.nl, 0.35, { sun: hasSun ? { Ps: o.Ps, ndl } : undefined, selfFoot: o.foot }); // first guess: wrap 0.35
+  const lit0 = lighting.lightAt(o.P, o.nl, 0.35, { sun: hasSun ? { Ps: o.Ps, ndl } : undefined }); // first guess: wrap 0.35
   const lit = { rgb: lit0.rgb.toVar(`${o.name}Lit`), dv: lit0.dv.toVar(`${o.name}Dv`) };
   return { lit, b: dot(lit.rgb, vec3(0.2126, 0.7152, 0.0722)).toVar(`${o.name}Bright`) };
 }
@@ -267,7 +267,7 @@ export function treeMaterials(o: {
     const Ps = cell.add(0.5).div(16).add(off).add(nl.mul(0.05)).add(sunDir.mul(0.05)); // first guess: both nudges
     const unseen = sight.unseenAt(foot);
     // Variables: the light is written once, where it is first read (the shadow map at the top level), and every later read reuses it.
-    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, foot, name: 'tree' });
+    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, name: 'tree' });
 
     // The main light's direction for the crown's form: the sun, or straight up without one.
     const ld: N = hasSun ? sunDir : vec3(0, 1, 0);
@@ -394,7 +394,7 @@ export function leafMaterial(o: {
     const nl = vec3(0, 1, 0);
     const Ps = truePos.add(nl.mul(0.05)).add(lighting.sun.dir.mul(0.05)); // first guess: both nudges, as the tree's
     const unseen = sight.unseenAt(foot);
-    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, foot, name: 'leaf' });
+    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, name: 'leaf' });
     const tone = treeToneNode(lighting, hasSun, b);
     const level = select(shared.plain.greaterThan(0.5), float(2), leafLevel(tone.step));
     const pal = paletteAt(palette, level, float(RAMP.leaf)).toVar('leafPalette');

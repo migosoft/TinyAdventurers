@@ -18,9 +18,9 @@ import { ceilingMaterial, waterMaterial } from './water/waterNodes';
 import { lavaMaterial, shimmerMaterial } from './lava/lavaNodes';
 import { bushelMaterial, coverSheetMaterial, makeCoverShared } from './cover/coverNodes';
 
-const lit = () => {
+const lit = (plants = false) => {
   const heights = new DataTexture(new Uint8Array(12), 4, 3);
-  return makeLighting(heights, { w: 4, h: 3 }, new Texture());
+  return makeLighting(heights, { w: 4, h: 3 }, new Texture(), { plants });
 };
 
 // The air's vertex layouts (airQuads.ts); the builders read the attributes from the geometry.
@@ -42,9 +42,9 @@ const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
 };
 
 /** Each material of the view, built against one `Sight`. */
-function materials(): { name: string; m: NodeMaterial; world: boolean; attrs?: [string, number][] }[] {
+function materials(plants = false): { name: string; m: NodeMaterial; world: boolean; attrs?: [string, number][] }[] {
   const sight = makeSight();
-  const l = lit();
+  const l = lit(plants);
   const toward = viewTowardUniform();
   const t = new Texture();
   // The tree's depth pass stipples by the sight value at the foot; its colour pass ends with the sight step. The sun's pass is depth only and never hidden (plants are scenery).
@@ -138,8 +138,18 @@ describe('the uniform buffers of the WebGPU shaders', () => {
     }
   });
 
-  it('the shaft march fits too', async () => {
+  it('with the cove\'s plant shadows (#333) none needs more either', () => {
+    for (const { name, m, attrs } of materials(true)) {
+      const code = fragment(WGSLNodeBuilder, m, { geometry: geometryOf(attrs) });
+      expect((code.match(/var<uniform>/g) ?? []).length, name).toBeLessThanOrEqual(LIMIT);
+    }
+  });
+
+  it('the shaft march fits too, with plant shadows as well', async () => {
     const { makeShaftPass } = await import('./air/shaftNodes');
+    const withPlants = makeShaftPass(lit(true), makeSight());
+    expect((fragment(WGSLNodeBuilder, withPlants.march).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);
+    withPlants.dispose();
     const pass = makeShaftPass(lit(), makeSight());
     expect((fragment(WGSLNodeBuilder, pass.march).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);
     expect((fragment(WGSLNodeBuilder, pass.composite).match(/var<uniform>/g) ?? []).length).toBeLessThanOrEqual(LIMIT);

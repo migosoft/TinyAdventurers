@@ -154,3 +154,51 @@ export function packTable(plan: ShadowPlan, perRow: number, flip: boolean, into:
     into.set([C[0], C[1], C[2], id, R[0], R[1], R[2], ext[0], U[0], U[1], U[2], ext[1], F[0], F[1], F[2], ext[2]], o);
   }
 }
+
+/** Depth biases (window depth, first guesses, set by eye in Task 5): a point light's face and a crack's tile. */
+export const PLANT_BIAS = 0.0015;
+export const CRACK_BIAS = 0.0005;
+
+/**
+ * The CPU twin of the shader's soft compare (`plantShadowNodes.ts` mirrors it line by line): the four texels around (u, v) of tile `id`
+ * (tiles of `atlasTexels / perRow` texels, row 0 on top), each a 0/1 compare (lit when its depth is not nearer than `depth - bias`), mixed by
+ * the bilinear weights; every texel is clamped inside the tile. `v` is unflipped; the table's flip flag mirrors it (the sun's rule).
+ */
+function softCompare(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, id: number, u: number, v: number, depth: number, bias: number): number {
+  const perRow = table[0], T = atlasTexels / perRow;
+  const col = id % perRow, row = Math.floor(id / perRow);
+  const fu = Math.min(Math.max(u, 0), 1) * T - 0.5;
+  const fv = (table[2] > 0.5 ? 1 - v : v);
+  const fvv = Math.min(Math.max(fv, 0), 1) * T - 0.5;
+  const x0 = Math.floor(fu), y0 = Math.floor(fvv), wx = fu - x0, wy = fvv - y0;
+  const cl = (k: number): number => Math.min(Math.max(k, 0), T - 1);
+  const at = (dx: number, dy: number): number => (read(col * T + cl(x0 + dx), row * T + cl(y0 + dy)) >= depth - bias ? 1 : 0);
+  const top = at(0, 0) * (1 - wx) + at(1, 0) * wx, bot = at(0, 1) * (1 - wx) + at(1, 1) * wx;
+  return top * (1 - wy) + bot * wy;
+}
+
+/** 1 (lit) or less where a plant shadows P from the light at L (light slot `slot`): the face by the major axis of P - L, one soft compare. A slot without a tile, or an empty table, is lit and reads nothing. */
+export function pointVisAt(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, P: Vec3, slot: number, L: Vec3): number {
+  if (table[1] < 0.5) return 1;
+  const d: Vec3 = [P[0] - L[0], P[1] - L[1], P[2] - L[2]];
+  const ax = Math.abs(d[0]), ay = Math.abs(d[1]), az = Math.abs(d[2]);
+  const face = ax >= ay && ax >= az ? (d[0] >= 0 ? 0 : 1) : ay >= az ? (d[1] >= 0 ? 2 : 3) : d[2] >= 0 ? 4 : 5;
+  const id = table[(1 + 2 * slot) * 4 + face];
+  if (id < 0) return 1;
+  const c = faceCoord(d, face);
+  return softCompare(table, read, atlasTexels, id, c.u, c.v, c.depth, PLANT_BIAS);
+}
+
+/** The same for crack slot `slot`: the tile's box at P; a point outside it, a slot without a tile or an empty table is lit and reads nothing. */
+export function crackVisAt(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, P: Vec3, slot: number): number {
+  if (table[1] < 0.5) return 1;
+  const o = (1 + 2 * LIGHT_CAP + 4 * slot) * 4;
+  const id = table[o + 3];
+  if (id < 0) return 1;
+  const cam: TileCam = {
+    C: [table[o], table[o + 1], table[o + 2]], R: [table[o + 4], table[o + 5], table[o + 6]], U: [table[o + 8], table[o + 9], table[o + 10]],
+    F: [table[o + 12], table[o + 13], table[o + 14]], ext: [table[o + 7], table[o + 11], table[o + 15]], persp: false,
+  };
+  const c = crackCoord(cam, P);
+  return c.inside ? softCompare(table, read, atlasTexels, id, c.u, c.v, c.depth, CRACK_BIAS) : 1;
+}

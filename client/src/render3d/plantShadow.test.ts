@@ -5,7 +5,7 @@ import { CRACK_CAP } from './air/cracks';
 import { CHASM_BED } from './dips/shape';
 import { LIGHT_CAP, type Light } from './light';
 import { sunCamera } from './sunNodes';
-import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, faceHits, packTable, planTiles, type PlantBound } from './plantShadow';
+import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, faceHits, packTable, planTiles, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
 
 const light = (x: number, y: number, z: number, shadow = true, radius = 6): Light => ({ x, y, z, radius, r: 1, g: 1, b: 1, shadow, skip: -1 });
 const crack = (fx: number, fz: number): Crack => ({
@@ -152,5 +152,105 @@ describe('packTable', () => {
     expect(t[s + 16 + 3]).toBe(-1); // crack slot 1: no tile
     expect(t[TABLE_LEN * 4 - 1]).not.toBe(7);
     expect(CRACK_CAP).toBeGreaterThan(1);
+  });
+});
+
+// The CPU twin of the shader's lookups (`plantShadowNodes.ts` mirrors it line by line).
+describe('the lookup twin', () => {
+  const T = 8, perRow = 2, size = T * perRow;
+  /** An atlas of `size` x `size` texels, all empty (1), with `set` writing single texels. */
+  const atlas = (): { read: (x: number, y: number) => number; set: (x: number, y: number, d: number) => void; seen: [number, number][] } => {
+    const a = new Float32Array(size * size).fill(1), seen: [number, number][] = [];
+    return { read: (x, y) => { seen.push([x, y]); return a[y * size + x]; }, set: (x, y, d) => { a[y * size + x] = d; }, seen };
+  };
+  const table = (plan: ReturnType<typeof planTiles>, flip = false): Float32Array => { const t = new Float32Array(TABLE_LEN * 4); packTable(plan, perRow, flip, t); return t; };
+  const L: [number, number, number] = [10, 2, 10];
+  const facePlan = () => planTiles([light(...L)], [], [plant(12, 10, 0.5, 3)], 4);
+  const fill = (a: ReturnType<typeof atlas>, tile: number, x: number, y: number, depth: number, w = 1): void => {
+    for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) a.set((tile % perRow) * T + x + i, Math.floor(tile / perRow) * T + y + j, depth);
+  };
+
+  it('point: a texel nearer than the receiver shadows it; an empty one leaves it lit', () => {
+    const plan = facePlan();
+    const id = plan.lightFaces[0]; // +x
+    expect(id).toBeGreaterThanOrEqual(0);
+    const P: [number, number, number] = [14, 2, 10];
+    const c = faceCoord([P[0] - L[0], P[1] - L[1], P[2] - L[2]], 0);
+    const a = atlas();
+    expect(pointVisAt(table(plan), a.read, size, P, 0, L)).toBe(1);
+    fill(a, id, 0, 0, 0, T); // the whole tile holds something nearer
+    expect(pointVisAt(table(plan), a.read, size, P, 0, L)).toBe(0);
+    expect(c.depth).toBeGreaterThan(0 + PLANT_BIAS);
+  });
+  it('point: a tile of -1 is lit and reads nothing', () => {
+    const a = atlas();
+    expect(pointVisAt(table(planTiles([light(...L)], [], [plant(30, 30)], 4)), a.read, size, [14, 2, 10], 0, L)).toBe(1);
+    expect(a.seen).toHaveLength(0);
+  });
+  it('point: an empty plan (tileCount 0) is lit', () => {
+    const t = new Float32Array(TABLE_LEN * 4);
+    expect(pointVisAt(t, () => 0, size, [14, 2, 10], 0, L)).toBe(1);
+  });
+  it('point: the flip reads the mirrored row, and every read stays inside the tile', () => {
+    const plan = facePlan();
+    const id = plan.lightFaces[0];
+    const P: [number, number, number] = [14, 2.9, 10]; // above the axis: v > 0.5
+    const c = faceCoord([P[0] - L[0], P[1] - L[1], P[2] - L[2]], 0);
+    for (const flip of [false, true]) {
+      const a = atlas();
+      expect(pointVisAt(table(plan, flip), a.read, size, P, 0, L)).toBe(1);
+      const row = Math.floor((flip ? 1 - c.v : c.v) * T);
+      const mid = Math.floor(c.u * T);
+      expect(a.seen.some(([x, y]) => x === (id % perRow) * T + mid && y === Math.floor(id / perRow) * T + row), `flip ${flip}`).toBe(true);
+      for (const [x, y] of a.seen) {
+        expect(x).toBeGreaterThanOrEqual((id % perRow) * T); expect(x).toBeLessThan((id % perRow) * T + T);
+        expect(y).toBeGreaterThanOrEqual(Math.floor(id / perRow) * T); expect(y).toBeLessThan(Math.floor(id / perRow) * T + T);
+      }
+    }
+  });
+  it('point: the 2x2 softening gives a share between 0 and 1 on a one-texel edge', () => {
+    const plan = facePlan();
+    const id = plan.lightFaces[0];
+    const P: [number, number, number] = [14, 2, 10];
+    const c = faceCoord([P[0] - L[0], P[1] - L[1], P[2] - L[2]], 0);
+    const a = atlas();
+    fill(a, id, Math.floor(c.u * T - 0.5), Math.floor(c.v * T - 0.5), 0, 1); // one blocker texel of the four
+    const v = pointVisAt(table(plan), a.read, size, P, 0, L);
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThan(1);
+  });
+
+  const cp = () => planTiles([], [crack(10, 10)], [plant(10.3, 10.1, 0.5, 1.5)], 4);
+  it('crack: a blocker in the tile shadows a point inside; the same point outside the box is lit', () => {
+    const plan = cp();
+    const cam = plan.tiles[0].cam;
+    const P: [number, number, number] = [10.2, 0.5, 10];
+    expect(crackCoord(cam, P).inside).toBe(true);
+    const a = atlas();
+    fill(a, 0, 0, 0, 0, T);
+    expect(crackVisAt(table(plan), a.read, size, P, 0)).toBe(0);
+    const far: [number, number, number] = [P[0] + 20, P[1], P[2]];
+    expect(crackCoord(cam, far).inside).toBe(false);
+    const b = atlas();
+    fill(b, 0, 0, 0, 0, T);
+    expect(crackVisAt(table(plan), b.read, size, far, 0)).toBe(1);
+    expect(b.seen).toHaveLength(0);
+  });
+  it('crack: an empty texel is lit, a slot without a tile is lit, the bias is smaller than the face bias', () => {
+    const plan = cp();
+    expect(crackVisAt(table(plan), atlas().read, size, [10.2, 0.5, 10], 0)).toBe(1);
+    expect(crackVisAt(table(plan), () => 0, size, [10.2, 0.5, 10], 3)).toBe(1); // slot 3 has no tile
+    expect(CRACK_BIAS).toBeLessThan(PLANT_BIAS);
+  });
+  it('crack: the flip reads the mirrored row', () => {
+    const plan = cp();
+    const P: [number, number, number] = [10.2, 0.9, 10];
+    const c = crackCoord(plan.tiles[0].cam, P);
+    for (const flip of [false, true]) {
+      const a = atlas();
+      crackVisAt(table(plan, flip), a.read, size, P, 0);
+      const row = Math.floor((flip ? 1 - c.v : c.v) * T);
+      expect(a.seen.some(([, y]) => y === row), `flip ${flip}`).toBe(true);
+    }
   });
 });
