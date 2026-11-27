@@ -1024,7 +1024,7 @@ export class Figures3d {
     // A flier's body hangs above its foot: the body, its points and what is listed for the effects go up with it; the oval and the lamp outline stay on the floor.
     const yb = y + ((dr.lift ?? 0) * scale) / this.cp;
     out.built.push({
-      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, bones: dr.bones, temper: dr.temper, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
+      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, bones: dr.bones, temper: dr.temper, paint: dr.paint, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
       dark, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     });
 

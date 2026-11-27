@@ -1,7 +1,7 @@
 // The demon's meshes in the view (#379, #442): the skin is static geometry (made once per layer from the skin file, shared by every
 // owner); per owner seven meshes (body, tail, tubes, web, cloth, blade, iron) with that owner's material and its own bone matrices,
 // which the instance carries (`BuiltInst.bones`). No hull, no id pass. A view built after a lost device makes its own layer and geometry.
-import { BufferAttribute, BufferGeometry, Matrix4, Mesh, type Scene } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, Matrix4, Mesh, type MeshBasicNodeMaterial, type Scene } from 'three/webgpu';
 import type { BuiltInst } from '../built';
 import { packLook } from '../models/instances';
 import { FIGURE_ORDER } from '../models/nodes';
@@ -20,12 +20,17 @@ interface Res {
   gone: number; stamp: number;
 }
 
-function geometryOf(p: SkinPart): BufferGeometry {
+/** The owner's material of a part: body, tail and tubes share the skin's. */
+export const materialOf = (m: DemonMats, part: (typeof SKIN_PARTS)[number]): MeshBasicNodeMaterial =>
+  (part === 'body' || part === 'tail' || part === 'tubes' ? m.skin : m[part]);
+
+export function geometryOf(p: SkinPart): BufferGeometry {
   const g = new BufferGeometry();
   g.setAttribute('position', new BufferAttribute(p.position, 3));
   g.setAttribute('normal', new BufferAttribute(p.normal, 3));
   g.setAttribute('info', new BufferAttribute(p.info, 4));
-  if (p.uv) g.setAttribute('uv', new BufferAttribute(p.uv, 2));
+  // body and tail have no uv; the skin's material reads the teeth's (in the tubes), so they get zeros
+  g.setAttribute('uv', new BufferAttribute(p.uv ?? new Float32Array((p.position.length / 3) * 2), 2));
   g.setAttribute('skinIndex', new BufferAttribute(Uint16Array.from(p.skinIndex), 4));
   g.setAttribute('skinWeight', new BufferAttribute(p.skinWeight, 4));
   g.setIndex(new BufferAttribute(p.index, 1));
@@ -68,6 +73,7 @@ export class DemonLayer implements BuiltLayer {
       u.seen.value.set(s[4], s[5], s[6], s[7]);
       u.flags.value.set(s[8], s[9], s[10], s[11]);
       u.levels.value.set(i.levels[0], i.levels[1], i.levels[2], i.levels[3]);
+      if (i.paint) { u.pose.life.value.fromArray(i.paint, 0); u.pose.beat.value.fromArray(i.paint, 4); u.pose.gaze.value.fromArray(i.paint, 8); }
       const src = i.bones;
       for (let b = 0; b < BONES; b++) { const e = r.mats4[b].elements; for (let k = 0; k < 16; k++) e[k] = src[b * 16 + k]; }
       for (const m of r.meshes) m.visible = true;
@@ -93,8 +99,8 @@ export class DemonLayer implements BuiltLayer {
     let r = this.owners.get(i.owner);
     if (!r) {
       const mats = this.make(i.temper === -1 ? 'ice' : 'fire');
-      const meshes = geoms.map((g) => {
-        const m = new Mesh(g, mats.mat);
+      const meshes = geoms.map((g, k) => {
+        const m = new Mesh(g, materialOf(mats, SKIN_PARTS[k]));
         m.frustumCulled = false;
         m.renderOrder = FIGURE_ORDER;
         this.scene.add(m);

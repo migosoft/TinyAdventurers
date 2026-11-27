@@ -45,6 +45,8 @@ export interface BuiltInst {
   bones?: Float32Array;
   /** `BuiltDrawn.temper`: which material the layer makes (-1 cold). */
   temper?: 1 | -1;
+  /** `BuiltDrawn.paint`: what the builder's own paint reads this frame. */
+  paint?: Float32Array;
   sight: { hard: number; soft: number }; reach: number;
 }
 
@@ -58,6 +60,8 @@ export interface BuiltDrawn {
   bones?: Float32Array;
   /** 1 hot, -1 cold. */
   temper?: 1 | -1;
+  /** What the figure's own paint reads this frame (the demon: `PAINT_OF` in demon/figure.ts); the layer copies it into its uniforms. */
+  paint?: Float32Array;
   /** Builder units the body hangs above its foot (flight). */
   lift?: number;
   /** Builder units, model frame. */

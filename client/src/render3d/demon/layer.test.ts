@@ -6,7 +6,7 @@ import { FIGURE_ORDER, makeFigureShared } from '../models/nodes';
 import { newBuiltBuf, type BuiltInst } from '../built';
 import { BONES, buildDemonSkin } from './body';
 import { demonMaterials, type DemonMats } from './nodes';
-import { DemonLayer, SKIN_PARTS } from './layer';
+import { DemonLayer, SKIN_PARTS, geometryOf } from './layer';
 import { setDemonSkin } from './skinFile';
 
 const shared = makeFigureShared();
@@ -28,13 +28,35 @@ const meshes = (s: Scene): Mesh[] => s.children.filter((c): c is Mesh => (c as M
 const slotOf = (id: number): number => id + 10;
 
 describe('DemonLayer', () => {
-  it('draws no id pass and no hull: seven meshes an owner, all with its one material', () => {
+  it('the pose uniforms hold the instance\'s paint values; an instance without them leaves them', () => {
+    const mats: DemonMats[] = [];
+    const layer = new DemonLayer(new Scene(), (k) => { const m = make(k); mats.push(m); return m; });
+    const paint = Float32Array.from({ length: 12 }, (_, i) => i + 1);
+    layer.frame([inst(1, { paint })], slotOf);
+    const u = mats[0].u.pose;
+    expect(u.life.value.toArray()).toEqual([1, 2, 3, 4]);
+    expect(u.beat.value.toArray()).toEqual([5, 6, 7, 8]);
+    expect(u.gaze.value.toArray()).toEqual([9, 10, 11, 12]);
+    layer.frame([inst(1)], slotOf);
+    expect(u.life.value.toArray()).toEqual([1, 2, 3, 4]);
+    layer.dispose();
+  });
+
+  it('body and tail get an empty uv stream (the skin\'s material reads the teeth\'s)', () => {
+    const skin = buildDemonSkin(0.2);
+    expect(skin.body.uv).toBeNull();
+    const g = geometryOf(skin.body);
+    expect(g.getAttribute('uv').count).toBe(g.getAttribute('position').count);
+    expect(geometryOf(skin.tubes).getAttribute('uv').array).toBe(skin.tubes.uv);
+  });
+
+  it('draws no id pass and no hull: seven meshes an owner, with its five materials', () => {
     const scene = new Scene(), layer = new DemonLayer(scene, make);
     expect((layer as { ids?: boolean }).ids).toBeUndefined();
     layer.frame([inst(1)], slotOf);
     const ms = meshes(scene);
     expect(ms.length).toBe(SKIN_PARTS.length);
-    expect(new Set(ms.map((m) => m.material)).size).toBe(1);
+    expect(new Set(ms.map((m) => m.material)).size).toBe(5);
     expect(new Set(ms.map((m) => m.geometry)).size).toBe(7);
     for (const m of ms) { expect(m.frustumCulled).toBe(false); expect(m.visible).toBe(true); expect(m.renderOrder).toBe(FIGURE_ORDER); }
     expect(layer.drawn).toBe(1);

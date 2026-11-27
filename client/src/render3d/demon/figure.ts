@@ -6,7 +6,7 @@ import { newBuiltBuf, type BuiltBuf, type BuiltDrawn, type BuiltFigure, type Bui
 import { ANIM, CONST, EFFECT } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import { BLADE, BONES, BONE_DEFS, B, EYE, MOUTH, buildDemonSkin } from './body';
-import { chainSwing, demonPose, newDemonMem, restPose, type DemonMem } from './pose';
+import { DEMON_POSE, chainSwing, demonPose, newDemonMem, restPose, type DemonMem } from './pose';
 import { SKEL, onBone, placeBones } from './skeleton';
 import { demonSkin } from './skinFile';
 
@@ -16,6 +16,10 @@ export { DEMON_DEV } from './pose';
 export const DEMON = { unit: 54 / SKEL.crown, top: 54, hem: 12 } as const;
 /** The seconds a full turn of the glow's pulse takes. */
 const PULSE = 4;
+/** Where `BuiltDrawn.paint` holds what the paint reads (three uniforms of four floats: nodes.ts `PoseUniforms`). */
+export const PAINT_OF = { clock: 0, fold: 1, billow: 2, breath: 3, heart: 4, chargeAt: 5, charge: 6, rune: 7, gazeX: 8, gazeY: 9, squint: 10 } as const;
+/** The seconds the throat's glow takes to go out after the breath (the spike's). */
+const BREATH_OUT = 0.6;
 
 /** What one demon keeps between frames: the pose's memory (its clock is the one the glow's pulse runs on), the bone matrices, what `draw` hands back. */
 interface DemonFigMem { mem: DemonMem; bones: Float32Array; drawn: BuiltDrawn; built: boolean }
@@ -35,7 +39,7 @@ function newMem(temper: 1 | -1): () => DemonFigMem {
   return () => {
     const bones = new Float32Array(BONES * 16);
     const drawn: BuiltDrawn = {
-      body: newBuiltBuf(0, 0), glow: null, levels: [0, 1, 1, 0], yaw: 0, lift: 0, bones, temper,
+      body: newBuiltBuf(0, 0), glow: null, levels: [0, 1, 1, 0], yaw: 0, lift: 0, bones, temper, paint: new Float32Array(12),
       anchors: { hand: v3(), mouth: v3(), chest: v3(), eyes: v3(), eyeL: v3(), eyeR: v3(), blade: BLADE_U.map(v3) },
       halos: [], magic: { gem: 0, flare: 0, chest: 0, mouth: 0 },
     };
@@ -48,7 +52,8 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
   const stone = has(s.effects, EFFECT.Petrified), held = stone || has(s.effects, EFFECT.Frozen);
   const pose = demonPose(s, dt, mem);
   // a held pose is the one the matrices already show (not before the first placing)
-  if (!(held && m.built)) {
+  const fresh = !(held && m.built);
+  if (fresh) {
     placeBones(pose, m.bones);
     m.built = true;
     const b = m.bones;
@@ -58,6 +63,16 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
     // the chain swings behind where the wrist went (model x is the builder's front, model z its right)
     onBone(b, B.foreArmL, HANG, HUNG);
     chainSwing(mem, -HUNG[2], HUNG[0], dt);
+  }
+  // what the paint reads; a held demon keeps what it showed
+  if (fresh) {
+    const w = d.paint!, O = PAINT_OF;
+    w[O.clock] = pose.clock; w[O.fold] = pose.fold; w[O.billow] = pose.billow;
+    // how open the throat is: up as the jaw opens, out slowly after the breath
+    const open = s.anim === ANIM.Breath ? Math.min(1, Math.max(0, (s.animT - CONST.DEMON_BREATH_WINDUP) / DEMON_POSE.breath.open)) : 0;
+    w[O.breath] = s.anim === ANIM.Breath ? open * open * (3 - 2 * open) : Math.max(0, w[O.breath] - dt / BREATH_OUT);
+    w[O.heart] = pose.heart; w[O.chargeAt] = pose.charge[0]; w[O.charge] = pose.charge[1]; w[O.rune] = pose.rune;
+    w[O.gazeX] = pose.gaze[0]; w[O.gazeY] = pose.gaze[1]; w[O.squint] = pose.gaze[2];
   }
   const phase = (mem.t / PULSE) % 1;
   d.yaw = mem.face;
