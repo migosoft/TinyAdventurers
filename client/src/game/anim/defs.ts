@@ -201,6 +201,9 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.Arrow]: { frame: 'weapon_arrow', scale: 0.6 },
   [KIND.ShadowBolt]: { glow: 0x40e060, scale: 1, trail: 0x205a20 },
   [KIND.FrostBolt]: { glow: 0x9ae0ff, scale: 1, trail: 0xe0f8ff },
+  // The ice demon's orb and ball look like the Frost Bolt until they have their own (#442).
+  [KIND.FrostOrb]: { glow: 0x9ae0ff, scale: 1, trail: 0xe0f8ff },
+  [KIND.FrostBall]: { glow: 0x9ae0ff, scale: 1, trail: 0xe0f8ff },
   [KIND.GloomBolt]: { glow: 0x9a50f0, scale: 1.1, trail: 0x5a1a8a, gloom: true },
   [KIND.FireOrb]: { glow: 0xff8030, scale: 0.9, trail: 0xff8030 },
   [KIND.FireBolt]: { glow: 0xff7020, scale: 0.7, trail: 0xffb040 },
@@ -223,9 +226,9 @@ export function isPlayerKind(k: number): boolean {
 export function isProjectileKind(k: number): boolean {
   return k >= KIND.Missile && k < KIND.FirePatch;
 }
-/** Ground hazards: burning ground, consecrated ground, entangling roots. Keep in step with the server's `q_aim_or_radius` (`wire.rs`). */
+/** Ground hazards: burning ground, frost, consecrated ground, entangling roots. Keep in step with the server's `q_aim_or_radius` (`wire.rs`). */
 export function isHazardKind(k: number): boolean {
-  return k === KIND.FirePatch || k === KIND.HolyGround || k === KIND.Roots;
+  return k === KIND.FirePatch || k === KIND.FrostPatch || k === KIND.HolyGround || k === KIND.Roots;
 }
 /** A wind-up anim: the plain one or the summoning's (the server's `Anim::Windup` and `Anim::Summon`). */
 export const isWindup = (anim: number): boolean => anim === ANIM.Windup || anim === ANIM.Summon;

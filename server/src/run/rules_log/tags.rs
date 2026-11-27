@@ -73,7 +73,7 @@ pub fn tag_name(kind: EntityKind) -> Option<&'static str> {
         Chest => Some("Chest"),
         Barrel => Some("Barrel"),
         Wizard | Paladin | Barbarian | ElvenRanger | Missile | Fireball | Bolt | Arrow | ShadowBolt | FrostBolt | FireBreath | FireOrb
-        | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | CharmOrb | ChainSpark | Judgement | ThrownAxe | FirePatch | HolyGround
+        | FrostBreath | FrostOrb | FrostBall | FrostPatch | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | CharmOrb | ChainSpark | Judgement | ThrownAxe | FirePatch | HolyGround
         | Roots | Torch | Crystal => None,
     }
 }

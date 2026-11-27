@@ -27,7 +27,11 @@ export const KIND = {
   "FireOrb": 57,
   "FirePatch": 70,
   "Fireball": 51,
+  "FrostBall": 69,
   "FrostBolt": 55,
+  "FrostBreath": 67,
+  "FrostOrb": 68,
+  "FrostPatch": 73,
   "Ghost": 24,
   "GloomBolt": 60,
   "GoblinArcher": 10,
@@ -433,6 +437,24 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Primary"
   },
+  "FrostBall": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Frost Ball",
+    "ranged": true,
+    "shape": "Blast",
+    "slot": "Secondary"
+  },
+  "FrostBreath": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Frost Breath",
+    "ranged": false,
+    "shape": "Breath",
+    "slot": "Secondary"
+  },
   "FrostNova": {
     "arcs": false,
     "classes": [
@@ -584,6 +606,15 @@ export const ABILITIES = {
     "classes": [],
     "hero": false,
     "name": "Ring of Fire",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "RingOfFrost": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Ring of Frost",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Secondary"
@@ -1491,6 +1522,14 @@ export const ABILITY_RUNES: Partial<Record<AbilityId, { look: number; primary: b
     "look": 0,
     "primary": false
   },
+  "FrostBall": {
+    "look": 1,
+    "primary": false
+  },
+  "FrostBreath": {
+    "look": 1,
+    "primary": false
+  },
   "FrostNova": {
     "look": 1,
     "primary": false
@@ -1533,6 +1572,10 @@ export const ABILITY_RUNES: Partial<Record<AbilityId, { look: number; primary: b
   },
   "RingOfFire": {
     "look": 0,
+    "primary": false
+  },
+  "RingOfFrost": {
+    "look": 1,
     "primary": false
   },
   "ShadowBolt": {

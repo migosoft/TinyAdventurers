@@ -68,7 +68,7 @@ pub fn kind_light(k: EntityKind) -> Option<(LightKind, Option<Colour>)> {
         K::Fireball | K::FireBolt | K::FireOrb | K::DragonFireball | K::FireBreath | K::FirePatch => Some((LightKind::Fire, None)),
         K::Missile | K::ChainSpark => Some((LightKind::Magic, None)),
         K::Judgement | K::HolyGround => Some((LightKind::Holy, None)),
-        K::FrostBolt => Some((LightKind::Magic, Some(0x78c8ff))),
+        K::FrostBolt | K::FrostBreath | K::FrostOrb | K::FrostBall | K::FrostPatch => Some((LightKind::Magic, Some(0x78c8ff))),
         K::ShadowBolt | K::GloomBolt => Some((LightKind::Magic, Some(0xaa3cdc))),
         K::BlindOrb => Some((LightKind::Magic, Some(0x6a3c8c))),
         K::SleepOrb => Some((LightKind::Magic, Some(0xc080ff))),

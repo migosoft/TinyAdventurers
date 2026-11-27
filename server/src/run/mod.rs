@@ -185,7 +185,11 @@ pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage
 
 /// A fire patch of `side` (what the ground hurts follows it), made by the hero `owner` (an entity id) if any.
 pub fn spawn_fire_patch_of(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
-    let kind = EntityKind::FirePatch;
+    spawn_patch_of(run, EntityKind::FirePatch, pos, radius, life, damage, side, owner);
+}
+
+/// A patch of ground damage of `kind` (`FirePatch` or `FrostPatch`): its damage follows the kind's split.
+pub fn spawn_patch_of(run: &mut Run, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
     run.spawn_hazard(kind, pos, radius, life, side, owner, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
@@ -1910,7 +1914,8 @@ pub mod tests {
         // 2026-11-24, facing vision (#341): creatures see in a cone on their head's direction and turn at limited speeds, so all three fights play out differently. Re-recorded once, on purpose.
         // 2026-11-27, the ice demon (#442): a fourth value (BossId::ALL has four); it moves again when its own kit comes.
         // 2026-11-27, the demon's second blow (#442): the scimitar (Cleave) joins the demon's kit and script, so the fire demon's (first) and, sharing its kit until its own comes, the ice demon's (fourth) values differ. Lich and dragon unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 5220512608260745949]);
+        // 2026-11-27, the ice kit (#442): the ice demon has its own cold abilities, claws, scimitar and script roles, so only its (fourth) value differs. Re-recorded once, on purpose.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
     }
 
     #[test]
@@ -1934,7 +1939,8 @@ pub mod tests {
         // Same re-recording as in the test without the log (facing vision, #341).
         // 2026-11-27, the ice demon (#442): a fourth value, as in the test without the log.
         // 2026-11-27, the demon's second blow (#442): the same re-recording as in the test without the log.
-        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 5220512608260745949]);
+        // 2026-11-27, the ice kit (#442): only the ice demon's (fourth) value differs (its own abilities, weapons and script roles); the same re-recording as in the test without the log.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s

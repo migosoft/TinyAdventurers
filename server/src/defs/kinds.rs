@@ -66,12 +66,18 @@ pub enum EntityKind {
     ThrownAxe = 65,
     /// Charm: the Wizard's charm orb.
     CharmOrb = 66,
+    /// The ice demon's frost: the twins of the breath, the ring's orb and the Fireball (#442).
+    FrostBreath = 67,
+    FrostOrb = 68,
+    FrostBall = 69,
     // Hazards
     FirePatch = 70,
     /// Consecrate: holy ground that hurts enemies.
     HolyGround = 71,
     /// Entangle: roots that bind enemies.
     Roots = 72,
+    /// The ice demon's breath leaves these: it chills, never freezes.
+    FrostPatch = 73,
     // Props
     Chest = 80,
     Barrel = 81,
@@ -90,7 +96,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 53] = [
+    pub const ALL: [EntityKind; 57] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -137,9 +143,13 @@ impl EntityKind {
         EntityKind::ChainSpark,
         EntityKind::Judgement,
         EntityKind::ThrownAxe,
+        EntityKind::FrostBreath,
+        EntityKind::FrostOrb,
+        EntityKind::FrostBall,
         EntityKind::FirePatch,
         EntityKind::HolyGround,
         EntityKind::Roots,
+        EntityKind::FrostPatch,
         EntityKind::Chest,
         EntityKind::Barrel,
         EntityKind::Torch,

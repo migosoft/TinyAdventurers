@@ -38,7 +38,8 @@ pub trait BossBehaviour: Send {
 
 pub fn create(id: BossId) -> Box<dyn BossBehaviour> {
     match id {
-        BossId::FireDemon | BossId::IceDemon => Box::new(demon::Demon::default()),
+        BossId::FireDemon => Box::new(demon::Demon::of(AbilityId::FireBreath, AbilityId::Fireball, AbilityId::RingOfFire)),
+        BossId::IceDemon => Box::new(demon::Demon::of(AbilityId::FrostBreath, AbilityId::FrostBall, AbilityId::RingOfFrost)),
         BossId::Lich => Box::new(lich::Lich::default()),
         BossId::Dragon => Box::new(dragon::Dragon::default()),
     }

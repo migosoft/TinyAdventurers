@@ -48,7 +48,7 @@ pub fn default_look(id: AbilityId) -> Look {
     match id {
         HolyLight => look(1, Some(LightKind::Holy), None),
         GroundSlam | Smash => look(5, None, None),
-        FrostNova => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
+        FrostNova | RingOfFrost | FrostBall => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
         WarCry => look(11, None, None),
         RingOfFire => look(2, None, None),
         Nova => look(6, None, None),
@@ -56,7 +56,7 @@ pub fn default_look(id: AbilityId) -> Look {
         Purify => look(13, Some(LightKind::Holy), None),
         Smite => look(0, Some(LightKind::Holy), None),
         MagicMissile | Fireball | Strike | Cleave | Charge | Shoot | SummonWolf | FrostShard | ChainSpark | Judgement | Hurl | Volley | Whirl | FlankingThrust | PoisonCoat | Consecrate
-        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | GloomBolts | BlindingCurse | SleepMist | Charm | StoneGaze | Touch | Vanish | RaiseDead | SummonImps => look(0, None, None),
+        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | FrostBreath | Swoop | GloomBolts | BlindingCurse | SleepMist | Charm | StoneGaze | Touch | Vanish | RaiseDead | SummonImps => look(0, None, None),
     }
 }
 
@@ -66,7 +66,7 @@ fn rune(id: AbilityId) -> Option<RuneLook> {
     use RuneLook::*;
     Some(match id {
         Fireball | FireBolt | FireBreath | RingOfFire | SummonImps => Fire,
-        FrostShard | FrostNova => Cold,
+        FrostShard | FrostNova | FrostBreath | FrostBall | RingOfFrost => Cold,
         MagicMissile | ChainSpark | Haste | SleepMist | Charm => Arcane,
         HolyLight | Judgement | Purify | Consecrate => Holy,
         ShadowBolt | Nova | GloomBolts | BlindingCurse | StoneGaze | Vanish | RaiseDead => Gloom,

@@ -350,6 +350,11 @@ pub fn kind_split(kind: EntityKind) -> DamageSplit {
         K::FireBolt | K::FireOrb => DamageSplit::split(&[(Heat, 0.7), (Magical, 0.3)]),
         K::FrostBolt => DamageSplit::pure(Cold),
         K::DragonFireball | K::FireBreath | K::FirePatch => DamageSplit::pure(Heat),
+        K::FrostOrb => DamageSplit::split(&[(Cold, 0.7), (Magical, 0.3)]),
+        K::FrostBall => DamageSplit::split(&[(Cold, 0.7), (Magical, 0.2)]),
+        K::FrostBreath => DamageSplit::pure(Cold),
+        // On purpose under half cold: the patch chills and must never freeze.
+        K::FrostPatch => DamageSplit::split(&[(Cold, 0.4), (Magical, 0.6)]),
         _ => DamageSplit::physical(),
     }
 }
