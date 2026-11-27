@@ -15,6 +15,7 @@ import {
   NoToneMapping,
   NodeMaterial,
   OrthographicCamera,
+  PerspectiveCamera,
   QuadMesh,
   RedFormat,
   RGBAFormat,
@@ -57,6 +58,8 @@ import type { AirParts } from './air/airParts';
 import { cardMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
+import { PLANT_FAR, PLANT_NEAR, TABLE_LEN, atlasLayout, packTable, planTiles, tileRect, type PlantBound } from './plantShadow';
+import { HIDDEN_CAP } from './trees/treeNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
@@ -110,6 +113,8 @@ export interface WorldInput {
   taken?: Taken;
   /** A dev page's switch (`?r3d=pond&dry=1`, #360): no water surface is built, so the beds show dry. */
   dry?: boolean;
+  /** The level has a cove (#333): the shaders look up the plants' shadow tiles. Without it they carry nothing of it. */
+  cove?: boolean;
 }
 /** The marks of a world (the same for the same world every time): what the view places, and what a stage's moss keeps clear of. */
 export const marksOf = (world: WorldInput): Marks => (world.stone && world.taken ? placeMarks(world.map, world.stone, world.taken) : noMarks());
@@ -173,6 +178,12 @@ export interface FrameInput {
   cover?: CoverFrame;
   /** The cracks of the Daylight lights near the view (#307; `selectCracks` + `crackOf`); absent = none. */
   cracks?: readonly Crack[];
+  /**
+   * The cove's plant shadows (#333); absent or null: no pass, no cost. `plants`: the bounds of the plants that can cast (tiles); `hidden`: the feet of
+   * the unseen ones (they cast nothing; at most `HIDDEN_CAP`); `tile`: a tile's side in px; `cap`: the most tiles drawn. `lights` and `cracks` above are
+   * the lists the lighting packs its uniforms from: the plan reads them in the same order.
+   */
+  plantShadows?: { plants: readonly PlantBound[]; hidden: readonly { x: number; z: number }[]; tile: number; cap: number } | null;
   /** The light shafts through the cracks (#307); absent = off. The pass also needs at least one crack. */
   shafts?: boolean;
   /** The air (#307): the simulation's parts for this frame and the haze (`on`, `t` seconds for its drift); absent or null = none. */
@@ -265,6 +276,9 @@ class DynMesh {
     this.mesh.geometry.dispose();
   }
 }
+/** Whether the frame draws the plant shadow tiles: asked for, with the Wall shadows switch on. */
+const plantShadowsOn = (f: FrameInput): boolean => !!f.plantShadows && f.shadows;
+
 export interface View {
   readonly backend: 'WebGPU' | 'WebGL2 fallback';
   /** Device px. */
@@ -299,6 +313,8 @@ export interface View {
   readonly figuresDrawn?: Readonly<{ figures: number; draws: number }>;
   /** Built figures (the lich, the demon) the last frame drew (for `window.__r3d.builtDrawn`). */
   readonly builtDrawn?: number;
+  /** The plant shadow tiles the last frame drew (#333; 0 without the pass), for measuring. */
+  readonly plantTiles?: number;
 }
 
 /** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
@@ -407,7 +423,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const groundStart = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
   pixelTexture(groundStart);
   const aw = assets.image.naturalWidth, ah = assets.image.naturalHeight;
-  const lighting = makeLighting(heights, map, atlas, { sun: world.painted });
+  const lighting = makeLighting(heights, map, atlas, { sun: world.painted, plants: !!world.cove });
   // The see-through mask: a quarter of the scene's size, half floats (red: opening strength, green: depth, alpha: coverage), linear so the
   // discs' soft edges stay soft; resized in place (`setSize` keeps the texture object the wall shader holds).
   const mask = new RenderTarget(1, 1, { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
@@ -744,7 +760,25 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
   // The brushers (#331): one set of uniforms for the bushes and the bushels, written every frame.
   const brush = makeBrushUniforms();
-  const trees = new TreeLayer(scene, hasSun ? sunScene : null, null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush }));
+  // The cove's plant shadows (#333): the tiles of one depth atlas, drawn from the casters' own scene. The depth is read with a texel load (no compare function).
+  const castScene = world.cove ? new Scene() : null;
+  let plantTarget: RenderTarget | null = null;
+  let plantDepth: DepthTexture | null = null;
+  let plantTable: Float32Array | null = null;
+  let plantTiles = 0;
+  let plantLive = false;
+  const plantPersp = new PerspectiveCamera(90, 1, PLANT_NEAR, PLANT_FAR);
+  let plantOrtho: OrthographicCamera | null = null;
+  const plantTargetFor = (size: number): DepthTexture => {
+    if (!plantTarget || plantTarget.width !== size) {
+      plantTarget?.dispose();
+      plantDepth?.dispose();
+      plantDepth = new DepthTexture(size, size);
+      plantTarget = new RenderTarget(size, size, { depthBuffer: true, depthTexture: plantDepth, format: RedFormat, generateMipmaps: false });
+    }
+    return plantDepth!;
+  };
+  const trees = new TreeLayer(scene, hasSun ? sunScene : null, castScene, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush, cast: !!castScene }));
   // The pond's wooden bridges (#360): one static mesh a deck in the opaque scene (layer 0, so the water's mirror shows it), and the
   // same geometry in the sun's pass. A map without a pond's field builds nothing, not even the materials.
   const bridges = bridgesOf(pondFieldOf(map)).map((a) => {
@@ -1001,6 +1035,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     get figuresDrawn() {
       return figures.drawn;
+    },
+    get plantTiles() {
+      return plantTiles;
     },
     get builtDrawn() {
       let n = 0;
@@ -1265,6 +1302,60 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         renderer.render(sunScene, sunCam);
         timer?.lap('sun');
       }
+      // The plant shadow tiles (#333). `f.lights` and `f.cracks` are what the lighting packed above, so the tiles' slots are the shader's.
+      plantTiles = 0;
+      if (castScene && plantShadowsOn(f)) {
+        const ps = f.plantShadows!;
+        const plan = planTiles(f.lights, f.cracks ?? [], ps.plants, ps.cap);
+        const { perRow, size } = atlasLayout(ps.tile, ps.cap);
+        plantTable ??= new Float32Array(TABLE_LEN * 4);
+        if (plan.tiles.length > 0) {
+          const depth = plantTargetFor(size);
+          for (let i = 0; i < HIDDEN_CAP; i++) {
+            const h = ps.hidden[i];
+            (trees.shared.hidden.array[i] as Vector4).set(h ? h.x : 0, h ? h.z : 0, h ? 1 : 0, 0);
+          }
+          const rt = plantTarget!;
+          const autoClear = renderer.autoClear;
+          // Three reads a render target's own viewport and scissor, in px from the top left. One clear for the whole atlas: WebGPU would clear the
+          // attachment again on every render with autoClear on, wiping the tiles drawn before.
+          renderer.setRenderTarget(rt);
+          rt.scissorTest = false;
+          renderer.clearDepth();
+          renderer.autoClear = false;
+          rt.scissorTest = true;
+          plan.tiles.forEach((t, i) => {
+            const r = tileRect(i, perRow, ps.tile);
+            rt.viewport.set(r.x, r.y, r.w, r.h);
+            rt.scissor.set(r.x, r.y, r.w, r.h);
+            let cam: PerspectiveCamera | OrthographicCamera;
+            if (t.cam.persp) {
+              plantPersp.position.set(...t.cam.C);
+              plantPersp.up.set(...t.cam.U);
+              plantPersp.lookAt(t.cam.C[0] + t.cam.F[0], t.cam.C[1] + t.cam.F[1], t.cam.C[2] + t.cam.F[2]);
+              plantPersp.updateMatrixWorld(true);
+              cam = plantPersp;
+            } else cam = plantOrtho = sunCamera({ ...t.cam, size: 0, texel: 0 }, plantOrtho ?? undefined);
+            renderer.render(castScene, cam);
+          });
+          rt.scissorTest = false;
+          rt.viewport.set(0, 0, size, size);
+          rt.scissor.set(0, 0, size, size);
+          renderer.autoClear = autoClear;
+          packTable(plan, perRow, SUN_FLIP_V, plantTable);
+          lighting.plants?.set(plantTable, depth, size);
+          plantTiles = plan.tiles.length;
+          plantLive = true;
+        } else {
+          plantTable.fill(0); // tile count 0: every lookup is lit
+          if (plantDepth) lighting.plants?.set(plantTable, plantDepth, plantTarget!.width);
+        }
+        timer?.lap('plantShadows');
+      } else if (plantTable && plantDepth && plantLive) {
+        plantTable.fill(0); // the pass went off: the table says no tiles, every lookup is lit
+        lighting.plants?.set(plantTable, plantDepth, plantTarget!.width);
+        plantLive = false;
+      }
       // The light shafts (#307): the depth of the opaque scene at the art size, then the march into the shaft target. The composite comes after the picture.
       const sp = shaftPlan(f);
       const sh = sp ? shaftsFor(sp) : null;
@@ -1436,6 +1527,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         mask.dispose();
         sunTarget?.dispose();
         sunDepth?.dispose();
+        plantTarget?.dispose();
+        plantDepth?.dispose();
         sunStandIn.dispose();
         casterMaterial?.dispose();
         trees.dispose();

@@ -5,7 +5,7 @@ import { CRACK_CAP } from './air/cracks';
 import { CHASM_BED } from './dips/shape';
 import { LIGHT_CAP, type Light } from './light';
 import { sunCamera } from './sunNodes';
-import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, faceHits, packTable, planTiles, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
+import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, atlasLayout, faceHits, packTable, tileRect, planTiles, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
 
 const light = (x: number, y: number, z: number, shadow = true, radius = 6): Light => ({ x, y, z, radius, r: 1, g: 1, b: 1, shadow, skip: -1 });
 const crack = (fx: number, fz: number): Crack => ({
@@ -252,5 +252,29 @@ describe('the lookup twin', () => {
       const row = Math.floor((flip ? 1 - c.v : c.v) * T);
       expect(a.seen.some(([, y]) => y === row), `flip ${flip}`).toBe(true);
     }
+  });
+});
+
+describe('the atlas', () => {
+  it('atlasLayout: perRow = ceil(sqrt(cap)), a side of perRow tiles', () => {
+    expect(atlasLayout(256, 16)).toEqual({ perRow: 4, size: 1024 });
+    expect(atlasLayout(128, 10)).toEqual({ perRow: 4, size: 512 });
+    expect(atlasLayout(64, 1)).toEqual({ perRow: 1, size: 64 });
+  });
+  it('tileRect: row 0 on top, tiles left to right', () => {
+    expect(tileRect(0, 3, 64)).toEqual({ x: 0, y: 0, w: 64, h: 64 });
+    expect(tileRect(4, 3, 64)).toEqual({ x: 64, y: 64, w: 64, h: 64 });
+    expect(tileRect(8, 3, 64)).toEqual({ x: 128, y: 128, w: 64, h: 64 });
+  });
+  it('a receiver past PLANT_FAR (depth clamped to 1) is shadowed by a texel below 1', () => {
+    const T = 4, perRow = 1, size = T;
+    const L: [number, number, number] = [0, 2, 0];
+    const plan = planTiles([light(...L)], [], [plant(2, 0, 0.5, 3)], 1);
+    const t = new Float32Array(TABLE_LEN * 4);
+    packTable(plan, perRow, false, t);
+    const P: [number, number, number] = [PLANT_FAR + 5, 2, 0];
+    expect(faceCoord([P[0], 0, 0], 0).depth).toBe(1);
+    expect(pointVisAt(t, () => 0.5, size, P, 0, L)).toBe(0);
+    expect(pointVisAt(t, () => 1, size, P, 0, L)).toBe(1);
   });
 });

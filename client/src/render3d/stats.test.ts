@@ -41,7 +41,7 @@ describe('statsText3d', () => {
   });
 
   it('names the systems in order', () => {
-    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'plants', 'lights', 'sight', 'air', 'sun', 'shafts', 'mirror', 'upload', 'models', 'scene', 'present', 'hud']);
+    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'plants', 'lights', 'sight', 'air', 'sun', 'plantShadows', 'shafts', 'mirror', 'upload', 'models', 'scene', 'present', 'hud']);
   });
 
   it('counts the air lap in the update total, the shafts lap not', () => {

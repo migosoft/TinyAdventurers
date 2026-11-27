@@ -33,8 +33,8 @@ export function makePlantShadow(): PlantShadow {
   const soft = (id: N, u: N, v: N, depth: N, bias: number): N => {
     const perRow = head.x;
     const T = uAtlas.div(perRow);
-    const col = id.sub(floor(id.div(perRow)).mul(perRow));
-    const row = floor(id.div(perRow));
+    const row = floor(id.add(0.5).div(perRow)); // as the twin: the +0.5 keeps an inexact division in the right row
+    const col = id.sub(row.mul(perRow));
     const fu = clamp(u, 0, 1).mul(T).sub(0.5);
     const fv = clamp(select(head.z.greaterThan(0.5), float(1).sub(v), v), 0, 1).mul(T).sub(0.5);
     const x0 = floor(fu), y0 = floor(fv);

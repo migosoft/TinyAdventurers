@@ -155,6 +155,17 @@ export function packTable(plan: ShadowPlan, perRow: number, flip: boolean, into:
   }
 }
 
+/** The atlas for `cap` tiles of `tile` px: `perRow` tiles a row, `size` px a side. */
+export function atlasLayout(tile: number, cap: number): { perRow: number; size: number } {
+  const perRow = Math.ceil(Math.sqrt(cap));
+  return { perRow, size: perRow * tile };
+}
+/** Tile `i`'s rectangle in the atlas (px, origin top left: what a render target's viewport reads, row 0 on top). */
+export function tileRect(i: number, perRow: number, tile: number): { x: number; y: number; w: number; h: number } {
+  const row = Math.floor(i / perRow);
+  return { x: (i - row * perRow) * tile, y: row * tile, w: tile, h: tile };
+}
+
 /** Depth biases (window depth, first guesses, set by eye in Task 5): a point light's face and a crack's tile. */
 export const PLANT_BIAS = 0.0015;
 export const CRACK_BIAS = 0.0005;
@@ -166,7 +177,7 @@ export const CRACK_BIAS = 0.0005;
  */
 function softCompare(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, id: number, u: number, v: number, depth: number, bias: number): number {
   const perRow = table[0], T = atlasTexels / perRow;
-  const col = id % perRow, row = Math.floor(id / perRow);
+  const row = Math.floor((id + 0.5) / perRow), col = id - row * perRow; // the +0.5 keeps an inexact GPU division from landing in the wrong row
   const fu = Math.min(Math.max(u, 0), 1) * T - 0.5;
   const fv = (table[2] > 0.5 ? 1 - v : v);
   const fvv = Math.min(Math.max(fv, 0), 1) * T - 0.5;
