@@ -69,7 +69,11 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       for (int i = 0; i < 7; i++) {
         vec3 a = uHorn[i].xyz, ab = uHorn[i+1].xyz - a; float L = length(ab), t = clamp(dot(p-a, ab)/(L*L), 0., 1.);
         vec3 d = p - (a + ab*t); float dd = length(d);
-        if (dd < best) { best = dd; vec3 T = ab/L, N = normalize(vec3(0.,0.,1.) - T*T.z), B = cross(T, N);
+        if (dd < best) { best = dd; vec3 T = ab/L;
+          // the direction turns smoothly from one stretch of the horn into the next, so the ridges do not jump at a bend
+          vec3 Tp = i > 0 ? normalize(a - uHorn[i-1].xyz) : T, Tn = i < 6 ? normalize(uHorn[i+2].xyz - uHorn[i+1].xyz) : T;
+          T = normalize(t < 0.5 ? mix(normalize(Tp+T), T, t*2.) : mix(T, normalize(T+Tn), t*2.-1.));
+          vec3 N = normalize(vec3(0.,0.,1.) - T*T.z), B = cross(T, N);
           gHu = (acc + t*L)/tot; gHa = atan(dot(d, B), dot(d, N)); gHd = dd - mix(uHorn[i].w, uHorn[i+1].w, t); }
         acc += L;
       }
@@ -96,7 +100,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float ridge = pow(0.5 + 0.5*cos(gHa*9. + gHu*5.), 1.6), rib = 0.5 + 0.5*cos(gHu*150. + 0.6*sin(gHa*3.));
       gRidge = mix(0.5, ridge, oh*fade);
       float hornH = (ridge*1.5 + rib*0.3)*fade + streak*0.2;
-      return mix(mix(mix(rock, streak*0.5, vInfo.y*0.55), hornH, oh), wr*0.7, leather) * 0.013;
+      return mix(mix(mix(rock, streak*0.5, vInfo.y*0.55), hornH, oh), wr*0.7, leather) * 0.013 * (1. - step(0.9, vInfo.y*vInfo.w));
     }`,
     surface: /* glsl */ `
     vec3 p = vRest;
@@ -132,6 +136,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     // lava in the grooves: hottest on the chest, fading out over belly, hips, shoulders and limbs; breathing slowly up the body
     vec3 gq = (p - vec3(0.,1.84,0.06)) / vec3(0.5,0.72,0.5);
     float glow = max(exp(-dot(gq,gq)*1.2), 0.07*(1.-limb)) * (1.-vInfo.y) * (1.-leather);
+    vec3 mz = (p - vec3(0.,2.4,0.3))/vec3(0.15,0.1,0.13); glow *= 1. - uTeeth*exp(-dot(mz,mz)*1.3); // the grin is the muzzle's only light
     float patchy = smoothstep(0.3, 0.55, fbm(p*2.6+7.) + glow*0.75 - 0.12);
     float crack = 1.-smoothstep(0.0, mix(0.02, 0.075, glow), gEdge);
     float pulse = 0.72+0.28*sin(uTime*1.6 - p.y*3.5);
@@ -152,7 +157,11 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     vec3 q2 = (p - uMouth - vec3(0.,0.02,-0.06))/vec3(0.125,0.06,0.13);
     maw = mix(maw, (1.-smoothstep(0.6, 1., length(q2))) * (1.-smoothstep(0.2, 0.5, open)) * (1.-vInfo.y) * 0.7, uTeeth);
     dEmit += (eye*vec3(1.,0.5,0.1)*3.2 + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
-    dAlb *= 1.-0.8*max(eye, maw);`,
+    dAlb *= 1.-0.8*max(eye, maw);
+    // the teeth: smooth near-black blades, a little paler toward the point
+    float tooth = step(0.9, vInfo.y*vInfo.w);
+    dAlb = mix(dAlb, mix(vec3(0.008,0.006,0.006), vec3(0.085,0.065,0.055), smoothstep(0.45, 1., vSt.x)), tooth);
+    dRough = mix(dRough, 0.42, tooth);`,
   });
 }
 

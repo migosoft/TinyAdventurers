@@ -3,6 +3,7 @@
 // A stance names the left bones; the right ones are the mirror unless it names them too.
 import * as THREE from 'three';
 import type { Rig } from './body';
+import { on } from './opts';
 
 type A = [number, number, number];
 type Pose = Record<string, A>;
@@ -42,6 +43,8 @@ const STRIKE: Pose = {
  * Folding, as a bat's wing does, only at its joints (left wing, rad at full fold): the upper arm drops, the elbow closes so the
  * wrist stands up beside the shoulder, each finger swings down at the wrist into a closed bundle, the knuckles straighten.
  */
+/** In the air the wing opens all the way: the arm lifts, the elbow straightens, the fingers fan out, the knuckles straighten. */
+const SPREAD = on('spread') ? { arm: 0.5, elbow: -0.25, wrist: [0.45, 0.3, 0.16, 0.04], knuckle: [-0.15, -0.1, -0.05, 0] } : { arm: 0, elbow: 0, wrist: [0, 0, 0, 0], knuckle: [0, 0, 0, 0] };
 const FOLD = { arm: -1.31, elbow: 1.52, wrist: [-1.29, -0.77, -0.45, -0.31], knuckle: [0.6, 0.3, 0, 0] };
 
 export interface State { fly: number; look: number; attack: number; fold: number; breath: number }
@@ -87,10 +90,10 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
   // folding the wings (on the ground)
   const fold = s.fold * (1 - fly);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
-    cur['wing1' + side][2] += m * FOLD.arm * fold; cur['wing2' + side][2] += m * FOLD.elbow * fold;
+    cur['wing1' + side][2] += m * (FOLD.arm * fold + SPREAD.arm * fly); cur['wing2' + side][2] += m * (FOLD.elbow * fold + SPREAD.elbow * fly);
     for (let i = 0; i < 4; i++) {
-      cur[`wf${i}a` + side][2] += m * (FOLD.wrist[i] * fold + 0.03 * Math.sin(t * 0.7 + i * 1.3));
-      cur[`wf${i}b` + side][2] += m * (FOLD.knuckle[i] * fold + 0.04 * Math.sin(t * 0.9 + i * 0.8 + 2));
+      cur[`wf${i}a` + side][2] += m * (FOLD.wrist[i] * fold + SPREAD.wrist[i] * fly + 0.03 * Math.sin(t * 0.7 + i * 1.3));
+      cur[`wf${i}b` + side][2] += m * (FOLD.knuckle[i] * fold + SPREAD.knuckle[i] * fly + 0.04 * Math.sin(t * 0.9 + i * 0.8 + 2));
     }
   }
   for (const b of r.bones) { const a = cur[b.name]; b.rotation.set(a[0], a[1], a[2]); b.position.copy(rest.get(b)!); }

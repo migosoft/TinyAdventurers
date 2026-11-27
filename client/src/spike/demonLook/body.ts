@@ -319,7 +319,7 @@ export function build(r: Rig): Built {
     const tooth = (t: number, up: boolean, len: number) => {
       const p = at(t), n = norm([p[0], 0, p[2] - 0.2]), dy = up ? 1 : -1;
       const base: V = [s * (p[0] - n[0] * 0.017), p[1] + dy * 0.02, p[2] - n[2] * 0.017], tip: V = [s * (p[0] - n[0] * 0.006), p[1] - dy * len, p[2] - n[2] * 0.006];
-      tube(tubes, [base, tip], [0.013 + len * 0.1, 0.0012], [r.id(up ? 'head' : 'jaw')], () => [1, 1, 0, 0], 4, 7);
+      tube(tubes, [base, tip], [0.013 + len * 0.1, 0.0012], [r.id(up ? 'head' : 'jaw')], () => [1, 1, 0, 1], 5, 12);
     };
     [[0.07, 0.03], [0.24, 0.034], [0.42, 0.056], [0.58, 0.036], [0.73, 0.03], [0.87, 0.024]].forEach(([t, l]) => { if (s > 0 || t > 0.02) tooth(t, true, l); });
     [[0.155, 0.03], [0.33, 0.046], [0.5, 0.034], [0.655, 0.03], [0.8, 0.024]].forEach(([t, l]) => tooth(t, false, l));
