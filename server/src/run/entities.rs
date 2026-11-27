@@ -484,13 +484,9 @@ impl Monster {
         }
     }
 
-    /// Distance from a flying shot at ground point `p` to this monster's body,
-    /// to compare with `radius` plus the shot's radius (mirrored in
-    /// `client/src/sim/hitbox.ts` for the shot the client draws). Shots are drawn
-    /// `SHOT_HEIGHT` px above their ground point and figures stand up from their
-    /// feet, so a tall figure is a capsule reaching north from `pos`, not a circle.
-    pub fn shot_dist(&self, p: Vec2) -> f64 {
-        self.shot_dist_at(self.pos, p)
+    /// The radius of its hit cylinder: its body radius, at least `SHOT_MIN_RADIUS`.
+    pub fn hit_radius(&self) -> f64 {
+        hit_radius(self.radius)
     }
 
     /// The height of its top above the ground, where an arcing shot passes over it (the dragon is lifted).
@@ -498,13 +494,14 @@ impl Monster {
         self.kind.body_height() + if self.airborne { DRAGON_LIFT } else { 0.0 }
     }
 
-    /// `shot_dist` as if this monster stood at `at`: the one hit capsule, shared by the real hit and the dodge.
-    pub fn shot_dist_at(&self, at: Vec2, p: Vec2) -> f64 {
-        let lift = if self.airborne { DRAGON_LIFT } else { 0.0 };
-        let reach = (self.kind.body_height() + lift - SHOT_HEIGHT - self.radius).max(0.0);
-        let y = p.y.clamp(at.y - reach, at.y);
-        p.dist(Vec2::new(at.x, y))
-    }
+}
+
+/// The smallest radius of any creature's hit cylinder (px): a thin body is still easy to hit.
+pub const SHOT_MIN_RADIUS: f64 = 6.0;
+
+/// The radius of the upright hit cylinder of a body of radius `body_r` (its height is `body_height`).
+pub fn hit_radius(body_r: f64) -> f64 {
+    body_r.max(SHOT_MIN_RADIUS)
 }
 
 /// How far above their ground point projectiles are drawn (px; `GameScene`).

@@ -1,10 +1,10 @@
 //! Dodging, part 1: which in-flight shots threaten a monster. `course_hit` replays a shot's flight with the
-//! rules of `abilities::advance_projectile`, and judges a hit by `Monster::shot_dist_at`, the capsule of the real
+//! rules of `abilities::advance_projectile`, and judges a hit by `arc::shot_touches`, the hit cylinder of the real
 //! hit, so a dodge that clears `course_hit` is never hit anyway.
 
 use super::effects::Creature;
 use super::abilities::{aim_reached, shot_takes, stopping_object};
-use super::entities::{Dodge, Monster, Pierce};
+use super::entities::{hit_radius, Dodge, Monster, Pierce};
 use super::targets::{self, Side};
 use super::{perception, Run};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -55,14 +55,14 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
             p = a.land;
         }
         let z = arc.map(|(a, t)| super::arc::shot_z(a.flight, t));
-        let touches = |body: Vec2, r: f64, top: f64, flat: f64| super::arc::shot_touches(z, body, r, top, p, pr.radius, flat);
+        let touches = |body: Vec2, r: f64, top: f64| super::arc::shot_touches(z, body, r, top, p, pr.radius);
         if aim_reached(pr, p) || run.layout.map.opaque_at(p) || stopping_object(run, p, pr.radius).is_some() {
             return None;
         }
         // Who the real flight takes here: a shot of the enemies' side takes heroes first, then monsters in order; a
         // heroes' shot takes monsters in order, then a hero on the enemy side. `at` stands in for this monster.
-        let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && touches(run.monsters[j].pos, run.monsters[j].radius, run.monsters[j].shot_top(), run.monsters[j].shot_dist(p));
-        let takes_hero = || run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && touches(o.pos(), PLAYER_RADIUS, o.kind().body_height(), o.pos().dist(p)));
+        let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && touches(run.monsters[j].pos, run.monsters[j].hit_radius(), run.monsters[j].shot_top());
+        let takes_hero = || run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && touches(o.pos(), hit_radius(PLAYER_RADIUS), o.kind().body_height()));
         let heroes_first = pr.side != Side::Friendly;
         if !flies_through {
             if heroes_first && takes_hero() {
@@ -72,7 +72,7 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
                 return None;
             }
         }
-        let hit = super::arc::shot_touches(z, at, m.radius, m.shot_top(), p, pr.radius + extra, m.shot_dist_at(at, p));
+        let hit = super::arc::shot_touches(z, at, m.hit_radius(), m.shot_top(), p, pr.radius + extra);
         if hit {
             return Some(s);
         }
@@ -327,7 +327,7 @@ mod tests {
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
         fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
         let pr = &run.projectiles[0];
-        let (r_orc, r_arrow, speed) = (run.monsters[mi].radius, pr.radius, pr.vel.len());
+        let (r_orc, r_arrow, speed) = (run.monsters[mi].hit_radius(), pr.radius, pr.vel.len());
         let t = threats(&run, mi);
         assert_eq!(t.len(), 1);
         assert_eq!(t[0].shot, pr.id);
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn extra_widens_the_hit_test_for_a_near_miss() {
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
-        let r = run.monsters[mi].radius + 2.0 + 1.0; // passes 1 px past the real hit (south side)
+        let r = run.monsters[mi].hit_radius() + 2.0 + 1.0; // passes 1 px past the real hit (south side)
         fire(&mut run, AbilityId::Shoot, r.atan2(50.0), 50.0);
         let pos = run.monsters[mi].pos;
         assert!(course_hit(&run, 0, mi, pos, 0.0).is_none(), "a near miss with the real test");
@@ -495,26 +495,25 @@ mod tests {
     }
 
     #[test]
-    fn the_capsule_matches_the_hit() {
-        // `arcs`: an arcing arrow meets a plain circle (the real hit does the same), a flat bolt the capsule.
-        for (class, ability, arcs) in [(ClassId::Wizard, AbilityId::MagicMissile, false), (ClassId::ElvenRanger, AbilityId::Shoot, true)] {
-            let (mut run, mi) = fixture(class, 60.0);
-            run.monsters[mi].kind = EntityKind::Lich;
-            run.monsters[mi].radius = 8.0;
-            run.monsters[mi].hp = 40.0; // the shot is a threat to it
-            // The shot flies level with the hero, 11 px north of the Lich's feet: outside a plain circle of radius
-            // 8 + the shot's, inside the capsule that reaches 12 px north.
-            run.monsters[mi].pos.y += 11.5;
-            fire(&mut run, ability, 0.0, 60.0);
-            let m = &run.monsters[mi];
-            assert_eq!(run.projectiles[0].arc.is_some(), arcs);
-            assert!(11.5 > m.radius + run.projectiles[0].radius, "a plain circle would miss");
-            assert_eq!(threats(&run, mi).len(), usize::from(!arcs), "{ability:?}: the replay");
-            let hp = run.monsters[mi].hp;
-            for _ in 0..60 {
-                run.step();
+    fn the_cylinder_matches_the_hit() {
+        // The replay and the real flight share one hit cylinder, for a flat bolt and an arcing arrow alike.
+        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::ElvenRanger, AbilityId::Shoot)] {
+            for (off, hit) in [(-4.0, true), (1.0, false)] {
+                let (mut run, mi) = fixture(class, 60.0);
+                run.monsters[mi].kind = EntityKind::Lich;
+                run.monsters[mi].radius = 8.0;
+                run.monsters[mi].hp = 40.0; // the shot is a threat to it
+                // The shot flies level with the hero, `off` px inside (-) or outside (+) the cylinder's reach.
+                fire(&mut run, ability, 0.0, 60.0);
+                run.monsters[mi].pos.y += run.monsters[mi].hit_radius() + run.projectiles[0].radius + off;
+                assert_eq!(threats(&run, mi).len(), usize::from(hit), "{ability:?}: the replay");
+                let hp = run.monsters[mi].hp;
+                // Only the shots fly: the monster stays where the replay saw it.
+                for _ in 0..60 {
+                    crate::run::abilities::tick_projectiles(&mut run, 1.0 / crate::run::TICK_HZ);
+                }
+                assert_eq!(run.monsters[mi].hp < hp, hit, "{ability:?}: the real hit agrees");
             }
-            assert_eq!(run.monsters[mi].hp < hp, !arcs, "{ability:?}: the real hit agrees");
         }
     }
 

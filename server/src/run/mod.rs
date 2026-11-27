@@ -2038,14 +2038,16 @@ pub mod tests {
         let wizard = fight(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true);
         let paladin = fight(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false);
         // 2026-11-07, dodging (#220): goblin archers (INT 10) step aside from shots they see coming, so the third goblin survives hurt.
-        assert!(matches!(enemies(&ranger)[..], [(true, hp)] if hp < 24.0), "the two weak goblins fall, the third is hurt");
+        // 2026-11-27, one hit cylinder per creature (#323): the goblin archers' hit radius is 6 (was 4), so the third no longer steps clear in time and all three fall.
+        assert!(enemies(&ranger).is_empty(), "all three goblins fall");
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
         // 2026-11-21, crystals (#380): `fight` runs in a demon dungeon, partly rock, where the server drops a torch of a sunlit room; the cove's animal spots keep clear of torches, so the wild animals in the hash stand elsewhere. The fights themselves are unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): `fight` runs in a demon dungeon, partly rock; the cove's animals in the hash stand elsewhere, the fights themselves are unchanged (the asserts above). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): values unchanged. `fight` now turns its enemies to face the hero (they would otherwise face east, away from it and unable to see it); with that the fights play out as before.
-        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
+        // 2026-11-27, one hit cylinder per creature (#323): the ranger's fight (the first value) differs, the goblin archers' hit radius being 6 (was 4) so all three fall; the wizard's and the paladin's are unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, [15748663038908748737, 3820251856311624491, 858296736700943210]);
     }
 
     #[test]
@@ -2057,7 +2059,8 @@ pub mod tests {
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
         // Same re-recording as in the test without the log (crystals, #380).
         // 2026-11-23, torch caves (#391): `fight` runs in a demon dungeon, partly rock; the cove's animals in the hash stand elsewhere, the fights themselves are unchanged (the asserts above). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
-        assert_eq!(got, [17891591712672026376, 3820251856311624491, 858296736700943210]);
+        // 2026-11-27, one hit cylinder per creature (#323): the ranger's fight (the first value) differs, the goblin archers' hit radius being 6 (was 4) so all three fall; the wizard's and the paladin's are unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, [15748663038908748737, 3820251856311624491, 858296736700943210]);
     }
 
     #[test]

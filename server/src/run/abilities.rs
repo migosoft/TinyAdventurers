@@ -1246,14 +1246,14 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         }
         let pr = &run.projectiles[i];
         let z = pr.z();
-        // An arcing shot hits what its height meets; a flat one the capsule up to the body's top.
+        // An arcing shot hits what its height meets; a flat one the whole hit cylinder.
         let monster = || {
             run.monsters
                 .iter()
                 .enumerate()
                 .position(|(mi, m)| {
                     shot_takes(run, pr, Creature::Monster(mi))
-                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), m.pos, m.radius, m.shot_top(), pos, pr.radius, m.shot_dist(pos))
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), m.pos, m.hit_radius(), m.shot_top(), pos, pr.radius)
                 })
                 .map(Creature::Monster)
         };
@@ -1263,7 +1263,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
                 .enumerate()
                 .position(|(pi, p)| {
                     shot_takes(run, pr, Creature::Player(pi))
-                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), p.pos(), PLAYER_RADIUS, p.kind().body_height(), pos, pr.radius, p.pos().dist(pos))
+                        && super::arc::shot_touches(pr.arc.is_some().then_some(z), p.pos(), super::entities::hit_radius(PLAYER_RADIUS), p.kind().body_height(), pos, pr.radius)
                 })
                 .map(Creature::Player)
         };
@@ -2069,30 +2069,46 @@ mod tests {
     }
 
     #[test]
-    fn shots_hit_the_upper_body_of_tall_figures() {
+    fn shots_hit_the_cylinder_not_the_capsule() {
         let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let pos = run.players[0].pos() + Vec2::new(40.0, 0.0);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.spawn_enemy(EnemyType::Ogre, pos, None);
         let mi = run.monsters.len() - 1;
         let hp = run.monsters[mi].hp;
-        // The ogre is drawn 26 px tall; a shot at its chest (drawn 8 px above its ground point) hits.
+        // The ogre's cylinder has radius 10 (+ the shot's 3): 12 px off the centre hits.
+        missile_past(&mut run, mi, 12.0);
+        assert!(run.monsters[mi].hp < hp, "inside the cylinder");
+        // 18 px north was a hit with the old capsule.
+        let hp = run.monsters[mi].hp;
         missile_past(&mut run, mi, 18.0);
-        assert!(run.monsters[mi].hp < hp, "chest hit");
-        // Above its head: a miss.
-        let hp = run.monsters[mi].hp;
-        missile_past(&mut run, mi, 32.0);
-        assert_eq!(run.monsters[mi].hp, hp, "over its head");
-        // The demon (58 px) is hit up to its horns.
-        let demon = run.monsters.iter().find(|m| m.kind == EntityKind::FireDemon).unwrap();
-        assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 45.0)) < demon.radius);
-        assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 70.0)) > demon.radius + 3.0);
-        // Small figures keep their round hitbox.
+        assert_eq!(run.monsters[mi].hp, hp, "outside the cylinder");
+        // A thin body (radius 4) has the minimum radius 6: 8 px off hits.
         let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
-        let mi = put_monster_near(&mut run, 0, 40.0);
-        let hp = run.monsters[mi].hp;
-        missile_past(&mut run, mi, 16.0);
-        assert_eq!(run.monsters[mi].hp, hp, "over the orc's head");
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 100.0);
+        missile_past(&mut run, mi, 8.0);
+        assert!(run.monsters[mi].hp < 100.0, "the minimum radius");
+    }
+
+    #[test]
+    fn an_enemy_shot_hits_a_hero_through_the_minimum_radius() {
+        let reach = super::super::entities::hit_radius(PLAYER_RADIUS) + 3.0;
+        for (off, hit) in [(reach - 0.1, true), (reach + 0.1, false)] {
+            let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
+            run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+            let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 100.0, 100.0);
+            let hp = run.players[0].hp;
+            let a = ResolvedAbility { damage: 5.0, speed: 230.0, range: 230.0, radius: 3.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Missile), ..run.players[0].sheet.primary.clone() };
+            spawn_shot(&mut run, Creature::Monster(mi), &a, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), None, 0.0, None);
+            // Standing still right beside the hero, so the one test is at the exact distance.
+            run.projectiles[0].pos = run.players[0].pos() + Vec2::new(0.0, -off);
+            run.projectiles[0].vel = Vec2::new(0.0, 0.0);
+            for _ in 0..3 {
+                tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            }
+            assert_eq!(run.players[0].hp < hp, hit, "off {off}");
+        }
     }
 
     #[test]
@@ -4405,7 +4421,7 @@ mod tests {
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let gi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 70.0, 1000.0);
         // Its edge is 0.5 px out of the arrow's reach at the landing point.
-        run.monsters[gi].pos.x += run.monsters[gi].radius + run.players[0].sheet.primary.radius + 0.5;
+        run.monsters[gi].pos.x += run.monsters[gi].hit_radius() + run.players[0].sheet.primary.radius + 0.5;
         run.players[0].aim = 0.0;
         run.players[0].aim_dist = 70.0;
         try_use(&mut run, 0, true, 1);
