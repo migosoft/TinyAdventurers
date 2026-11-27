@@ -541,6 +541,8 @@ pub struct Projectile {
     /// Explosion radius on impact (0 = none) and its effect kind.
     pub explode_r: f64,
     pub explode_k: u8,
+    /// The light the explosion flashes (`None`: the blast's) and its colour (`None`: the kind's).
+    pub explode_flash: Option<(crate::defs::lights::LightKind, Option<crate::defs::lights::Colour>)>,
     /// Push (px) of the explosion on the foes it hits, and the STR it pushes with: the user's, taken at
     /// spawn so a shot that outlives its user still pushes.
     pub push: f64,

@@ -1139,6 +1139,7 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
         crit: false,
         explode_r,
         explode_k: look.boom,
+        explode_flash: look.light.map(|l| (l, look.tint)),
         push: a.push,
         push_str: a.push_str,
         target,
@@ -1301,10 +1302,10 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
-    let flight = pr.vel;
+    let (flight, flash) = (pr.vel, pr.explode_flash);
     let src = shot_credit(run, side, owner);
     if explode_r > 0.0 {
-        explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
+        explode_flashing(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
         return;
     }
     let Some(c) = target else { return };
@@ -1422,10 +1423,10 @@ fn overkill_left(run: &Run, c: Creature, damage: &Damage) -> Option<f64> {
 fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (side, owner, damage, crit, explode_r, k, push, push_str) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str);
+    let (side, owner, damage, crit, explode_r, k, push, push_str, flash) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.explode_flash);
     if explode_r > 0.0 {
         let src = shot_credit(run, side, owner);
-        explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
+        explode_flashing(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
     } else {
         crate::run::objects::hurt_object(run, oi, damage, shot_owner(run, side, owner));
     }
@@ -1436,10 +1437,16 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
 /// `push_str` against their weight, whoever shot it. It never moves a boss, an ally of the shooter's side or
 /// a mimic still hiding.
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32) {
+    explode_flashing(run, pos, r, damage, side, src, k, crit, push, push_str, None);
+}
+
+/// `explode` with the flash of a shot's own look (`Projectile::explode_flash`); `None` is the blast's.
+pub fn explode_flashing(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32, flash: Option<(LightKind, Option<lights::Colour>)>) {
     let heroes = side == Side::Friendly;
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!heroes).then_some(pos));
-    run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
+    let (kind, colour) = flash.unwrap_or((LightKind::Blast, None));
+    run.add_tinted_flash(kind, colour, pos, lights::BLAST_FLASH);
     match side {
         Side::Friendly => {
             let hits: Vec<(usize, bool)> = run

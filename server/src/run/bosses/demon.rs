@@ -703,6 +703,11 @@ mod tests {
             let (f, i) = (kit(&fire, fb, f), kit(&ice, ib, i));
             assert_eq!((f.damage, f.cooldown, f.range, f.windup, f.duration), (i.damage, i.cooldown, i.range, i.windup, i.duration));
         }
+        // The whole definition but the name, the id, the projectile kind and the classes.
+        let bare = |id: AbilityId| format!("{:?}", ab::AbilityDef { id: AbilityId::Strike, name: "", own: ab::OwnStats { kind: None, ..ab::def(id).own }, classes: &[], ..ab::def(id) });
+        for (f, i) in [(AbilityId::FireBreath, AbilityId::FrostBreath), (AbilityId::Fireball, AbilityId::FrostBall), (AbilityId::RingOfFire, AbilityId::RingOfFrost)] {
+            assert_eq!(bare(f), bare(i), "{i:?}");
+        }
         assert_eq!(kind_split(EntityKind::FrostOrb), DamageSplit::split(&[(Cold, 0.7), (Magical, 0.3)]));
         assert_eq!(kind_split(EntityKind::FrostBall), DamageSplit::split(&[(Cold, 0.7), (Magical, 0.2)]));
         assert_eq!(kind_split(EntityKind::FrostBreath), DamageSplit::pure(Cold));
@@ -739,6 +744,33 @@ mod tests {
         assert!(casts > 3, "it cast: {casts}");
         assert_eq!(most_orbs, 16, "the ring");
         assert!(balls > 0 && patches > 0, "balls {balls}, patches {patches}");
+    }
+
+    /// Plays the real fight with only `id` ready until a blast has gone off; the kinds and colours of the flashes then alive.
+    fn flashes_after_a_blast(boss: BossId, id: AbilityId) -> Vec<(crate::defs::lights::LightKind, crate::defs::lights::Colour)> {
+        let (mut run, mut d, bi) = demon_run(boss, &[Vec2::new(90.0, 0.0)], &[id]);
+        let radius = kit(&run, bi, id).radius;
+        for _ in 0..(8.0 / DT) as usize {
+            run.events.clear();
+            d.tick(&mut run, DT);
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            // The ball's own radius: the landing's Smash is a Boom too.
+            if run.events.iter().any(|(e, _)| matches!(e, Ev::Boom { r, .. } if *r == radius as f32)) {
+                return run.lights.sources.iter().filter(|s| s.expires.is_some()).map(|s| (s.kind, s.colour)).collect();
+            }
+        }
+        panic!("no blast in 8 s");
+    }
+
+    #[test]
+    fn the_frost_ball_flashes_cold_and_the_fireball_stays_a_blast() {
+        use crate::defs::lights::LightKind;
+        let ice = flashes_after_a_blast(BossId::IceDemon, AbilityId::FrostBall);
+        assert!(ice.contains(&(LightKind::Magic, ab::NOVA_TINT)), "{ice:?}");
+        assert!(!ice.iter().any(|f| f.0 == LightKind::Blast), "no orange flash: {ice:?}");
+        let fire = flashes_after_a_blast(BossId::FireDemon, AbilityId::Fireball);
+        assert!(fire.iter().any(|f| f.0 == LightKind::Blast) &&!fire.iter().any(|f| f.0 == LightKind::Magic), "{fire:?}");
     }
 
     #[test]

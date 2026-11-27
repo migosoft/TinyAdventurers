@@ -48,7 +48,9 @@ pub fn default_look(id: AbilityId) -> Look {
     match id {
         HolyLight => look(1, Some(LightKind::Holy), None),
         GroundSlam | Smash => look(5, None, None),
-        FrostNova | RingOfFrost | FrostBall => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
+        // The ring bursts without a flash, like the fire ring; the ball's explosion flashes cold (`Projectile::explode_flash`).
+        RingOfFrost => look(10, None, None),
+        FrostNova | FrostBall => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
         WarCry => look(11, None, None),
         RingOfFire => look(2, None, None),
         Nova => look(6, None, None),
