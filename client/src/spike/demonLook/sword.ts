@@ -137,7 +137,7 @@ export function makeSword(scene: THREE.Scene, hand: THREE.Bone, grip: THREE.Vect
     light.intensity = 2.6 * (0.85 + 0.15 * Math.sin(time * 17) * Math.sin(time * 5.3));
     world(0.8, tmp); tipVel.copy(tmp).sub(prev).divideScalar(Math.max(dt, 1e-3)); prev.copy(tmp);
     if (tipVel.length() > 30) tipVel.set(0, 0, 0);
-    flameDue += dt * (on('flames') ? (FIRE ? 50 : 110) : 260); dripDue += dt * (3.2 + tipVel.length() * 2.5);
+    flameDue += dt * (on('flames') ? (FIRE ? 50 : 110) : 260); dripDue += ICE ? 0 : dt * (3.2 + tipVel.length() * 2.5); // the ice blade does not drip
     while (flameDue > 1 && parts.length < MAX - 30) {
       flameDue--;
       const u = 0.06 + 0.94 * Math.sqrt(rnd()), p = blade.localToWorld(spine(u).lerp(edgeAt(u), rnd()));
