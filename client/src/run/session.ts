@@ -367,7 +367,7 @@ export class RunSession {
     const pick = shape === 'Projectile' || shape === 'Blast' ? this.view?.pointerPick() ?? null : null;
     if (a && pick) {
       const r = aimAt(this.pred.state, pick);
-      return ground ? { aim: r.aim, dist: r.dist + pick.r + a.radius } : r;
+      return ABILITIES[a.id].arcs ? { aim: r.aim, dist: r.dist + pick.r + a.radius } : r;
     }
     const wp = this.view?.pointerWorld(ground) ?? null;
     if (wp) return aimAt(this.pred.state, wp);

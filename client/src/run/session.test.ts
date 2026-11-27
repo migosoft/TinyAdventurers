@@ -512,6 +512,11 @@ describe('RunSession frame', () => {
       expect(sent.aim).toBeCloseTo(Math.atan2(30, 60));
       expect(sent.aim_dist).toBeCloseTo(Math.hypot(60, 30));
     });
+    it("a Blast aims at the picked creature's foot", () => {
+      const { sent } = fire(ability('Fireball', { range: 150, speed: 200, ranged: true, cooldown: 0.5 }), (h) => ({ x: h.x + 60, y: h.y + 30, r: 6 }));
+      expect(sent.aim).toBeCloseTo(Math.atan2(30, 60));
+      expect(sent.aim_dist).toBeCloseTo(Math.hypot(60, 30));
+    });
     it("an arcing shot lands past the picked creature's far edge", () => {
       const { r, hero } = fire(shoot, (h) => ({ x: h.x + 80, y: h.y, r: 6 }));
       expect(r.session['shots'].live[0].land![0]).toBeCloseTo(hero.x + 80 + 6 + shoot.radius, 6);
