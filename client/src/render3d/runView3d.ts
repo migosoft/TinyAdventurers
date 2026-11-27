@@ -55,7 +55,7 @@ import { FxPass } from './fx/pass';
 import { Shake, blastFalloff, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
-import { reflects, shimmers } from './params';
+import { plantShadowOf, reflects, shimmers, type R3dParams } from './params';
 import { Lava3d, type LavaCues, type LavaIn } from './lava/lava';
 
 const TILE = 16;
@@ -179,7 +179,6 @@ export class RunView3d implements RunView {
   private coverField: CoverField | null = null;
   private readonly groundOf = (x: number, z: number, r: number): number => this.coverField!.topAt(x, z, r, this.groundGh);
   private groundGh = 1;
-  private coveCasters: ShadowCaster[] = [];
   private readonly frames: FrameRects;
   private hourNow = 0;
   private sunPx = 0;
@@ -225,7 +224,6 @@ export class RunView3d implements RunView {
       this.cove = new Cove3d(init.info.cove, frames);
       // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns are bushels of the cover layer.
       this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer, this.cove.builder());
-      this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
     this.fx = new Effects3d(init.map);
@@ -507,10 +505,7 @@ export class RunView3d implements RunView {
       ];
       const sel = selectLights(cands, lightView(fp, cam), focus, c.params.lcap);
       lights = sel.list;
-      // The cove's bushes cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
-      const mask = this.mask;
-      const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
-      casters = selectCasters(cove.length > 0 ? [...fo.casters, ...cove] : fo.casters, lights, c.params.ccap);
+      casters = selectCasters(fo.casters, lights, c.params.ccap);
       assignSkips(lights, casters);
       if (this.field.version !== this.lavaSeen) {
         this.lavaSeen = this.field.version;
@@ -553,7 +548,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam: drawCam, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now), plantShadows: this.plantShadowsIn(c.params),
       },
       c.timer,
     );
@@ -562,6 +557,15 @@ export class RunView3d implements RunView {
   }
 
   /** The crystals and wall torches of this frame (reused object): a crystal whose light is off is broken (#380), a torch out (#391); a rebuilt view learns it on its first frame. */
+  /** The cove's plant shadows of this frame (#333): the plants built so far, and the feet the viewer does not see (the mask of the last frame), which cast nothing. Null without a cove. */
+  private plantShadowsIn(p: R3dParams): FrameInput['plantShadows'] {
+    const size = plantShadowOf(p);
+    if (!this.cove || !size) return null;
+    const plants = this.cove.plants();
+    const hidden = p.sight ? plants.filter((b) => hiddenAt(this.mask, b.x, b.z)) : [];
+    return { plants, hidden, ...size };
+  }
+
   private readonly wallLightFrame = { off: (id: number): boolean => this.field.lights.get(id)?.on === false, now: 0 };
   private wallLightsIn(now: number): { off: (id: number) => boolean; now: number } {
     this.wallLightFrame.now = now;

@@ -6,7 +6,7 @@ import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { project, type Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
-import { CAST_ID0, COVE_PIXIES, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
+import { COVE_PIXIES, Cove3d, PIXIE_LIGHT, Pixies3d, coveWillow } from './cove3d';
 import { Forest } from './trees/forest';
 import type { TreeSpec } from './trees/spec';
 import { makeLighting } from './lightNodes';
@@ -155,26 +155,19 @@ describe('Cove3d', () => {
     expect(new Cove3d(cove, frames).bushelSpots()).toEqual(spots);
   });
 
-  it('casts the willow with CAST_ID0 sized to it and one caster per bush, each keeping its id from the plant order', () => {
-    const k = c.casters();
-    expect(k).toHaveLength(1 + c.bushes().length);
-    const built = buildTree(c.tree());
-    expect(k[0].id).toBe(CAST_ID0);
-    expect(k[0].w).toBeCloseTo(2 * built.radius, 6);
-    expect(k[0].y1).toBeCloseTo(built.height, 6);
-    expect(k[0].x).toBeCloseTo(c.tree().x, 6);
-    expect(k[0].z).toBeCloseTo(c.tree().z, 6);
-    expect(k[0].u1 - k[0].u0).toBe(frames.cove_tree.w);
-    const bushIds = small.map((p, i) => ({ p, i })).filter(({ p }) => p.frame.startsWith('cove_bush')).map(({ i }) => CAST_ID0 - 1 - i);
-    expect(k.slice(1).map((e) => e.id)).toEqual(bushIds);
-    expect(new Set(k.map((e) => e.id)).size).toBe(k.length);
-    for (const e of k) {
-      expect(e.id).toBeLessThan(0);
-      expect(e.w).toBeGreaterThan(0);
-      expect(e.y1).toBeGreaterThan(e.y0);
-      expect(e.u1).toBeGreaterThan(e.u0);
-      expect(e.v1).toBeGreaterThan(e.v0);
-    }
+  it('bounds the willow at once and each bush once the builder has built it (#333)', () => {
+    const cv = new Cove3d(cove, frames);
+    const built = buildTree(cv.tree());
+    expect(cv.plants()).toEqual([{ x: cv.tree().x, z: cv.tree().z, r: built.radius, h: built.height }]);
+    const build = cv.builder();
+    const bushes = cv.bushes();
+    expect(bushes.length).toBeGreaterThan(1);
+    const b0 = build(bushes[0]);
+    const after = cv.plants();
+    expect(after).toHaveLength(2);
+    expect(after[1]).toEqual({ x: bushes[0].x, z: bushes[0].z, r: b0.radius, h: b0.height });
+    bushes.forEach((b) => build(b));
+    expect(cv.plants()).toHaveLength(1 + bushes.length);
   });
 
   it('has 7 pixie lights without shadows, at the pixies', () => {
