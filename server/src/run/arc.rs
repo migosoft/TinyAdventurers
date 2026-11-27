@@ -23,7 +23,7 @@ pub fn arc_touches(body: Vec2, body_r: f64, top: f64, p: Vec2, z: f64, shot_r: f
 /// Whether a shot touches a creature's hit cylinder (radius `hit_r`, height `top`): `z` is the shot's height, or
 /// None for a flat shot, which meets the whole cylinder. The real flight and the dodge's replay share it.
 pub fn shot_touches(z: Option<f64>, body: Vec2, hit_r: f64, top: f64, p: Vec2, shot_r: f64) -> bool {
-    p.dist(body) < hit_r + shot_r && z.map_or(true, |z| z < top)
+    z.map_or(p.dist(body) < hit_r + shot_r, |z| arc_touches(body, hit_r, top, p, z, shot_r))
 }
 
 /// Whether an arc of `flight` seconds has landed after `flown` seconds.
