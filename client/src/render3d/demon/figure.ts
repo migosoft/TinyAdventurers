@@ -12,7 +12,7 @@ import { buildDemon, DEMON, demonRest, newDemonOut, type DemonOut } from './shap
 export { DEMON_DEV } from './pose';
 
 /** What one demon keeps between frames: the pose's memory (its clock is the one the glow's pulse runs on), the buffers, what `draw` hands back. */
-interface DemonFigMem { mem: DemonMem; out: DemonOut; drawn: BuiltDrawn }
+interface DemonFigMem { mem: DemonMem; out: DemonOut; drawn: BuiltDrawn; built: boolean }
 
 function newMem(): DemonFigMem {
   const out = newDemonOut(), an = out.anchors;
@@ -21,14 +21,15 @@ function newMem(): DemonFigMem {
     anchors: { hand: an.hand, mouth: an.mouth, chest: an.chest, eyes: an.eyes },
     halos: [], magic: { gem: 0, flare: 0, chest: 0, mouth: 0 },
   };
-  return { mem: newDemonMem(), out, drawn };
+  return { mem: newDemonMem(), out, drawn, built: false };
 }
 
 function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
   const m = memory as DemonFigMem, d = m.drawn, mem = m.mem;
   const stone = has(s.effects, EFFECT.Petrified), held = stone || has(s.effects, EFFECT.Frozen);
   const pose = demonPose(s, dt, mem);
-  buildDemon(pose, m.out);
+  // a held pose is the one the buffers already show (not before the first build)
+  if (!(held && m.built)) { buildDemon(pose, m.out); m.built = true; }
 
   const phase = (mem.t / DEMON_GLOW.period) % 1;
   d.yaw = mem.face;

@@ -11,6 +11,7 @@ import { CONST, EFFECT, KIND, SIDE } from '../generated/defs';
 import { TERRAIN } from '../game/terrain-layers';
 import { builtOf } from './built';
 import { DEMON_DEV } from './demon/figure';
+import { DEMON_POSE } from './demon/pose';
 import { actPeriod, DEMON_ACTS, demonAct, demonDev, type DemonAct } from './demonScript';
 import type { EntState } from '../game/world';
 import { fxEnt } from './fxStage';
@@ -25,7 +26,7 @@ const POOLS: HallPool[] = [
   { x0: 7, x1: 10, z0: 12, z1: 15, tile: TERRAIN.Chasm },
 ];
 /** The facing of an act that goes there and back (`walk`, `swoop`), and the furthest the head turns after the knight (rad). */
-const WAY = (30 * Math.PI) / 180, HEAD = 1.4, TILE = CONST.TILE;
+const WAY = (30 * Math.PI) / 180, HEAD = DEMON_POSE.neck, TILE = CONST.TILE;
 const FX_NAMES =['frozen', 'chilled', 'stone'] as const;
 type FxName = (typeof FX_NAMES)[number];
 
@@ -65,7 +66,7 @@ export function createDemonStage(assets: Assets, p: R3dParams, search: string, h
     sim(_dt, t, knight): void {
       const dev = demonDev(state.act, actClock(t)), toKnight = Math.atan2(knight.z - demon.z, knight.x - demon.x);
       // an act that goes there and back keeps its line; with a fixed aim the head alone follows the knight, as in a run
-      const face = opts.face ?? (dev.along !== 0 || state.act === 'walk' || state.act === 'swoop' ? WAY : toKnight);
+      const face = opts.face ?? (state.act === 'walk' || state.act === 'swoop' ? WAY : toKnight);
       demon.aim = face + dev.turn;
       demon.head = opts.face === null ? 0 : Math.max(-HEAD, Math.min(HEAD, Math.atan2(Math.sin(toKnight - demon.aim), Math.cos(toKnight - demon.aim))));
       demon.ox = (Math.cos(face) * dev.along) / TILE; demon.oz = (Math.sin(face) * dev.along) / TILE;

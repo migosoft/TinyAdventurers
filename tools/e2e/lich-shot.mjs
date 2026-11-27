@@ -90,23 +90,23 @@ for (const s of shots) {
   }
 }
 
-// A lost device: the stage's kit lives on, so the new view makes its own layer and picture from it; the draws before and after are equal.
+// A lost device: the stage's kit lives on, so the new view makes its own layer and picture from it; the built layers' drawn count before and after is equal.
 if (!only || only.test('lose')) {
   let p = null;
   try {
     p = await open(`&t=3${'&act=nova&at=1.3'}`, 'lose', zoom, true);
     await p.waitForTimeout(800);
     await snap(p, 'lose-before');
-    const before = await p.evaluate(() => ({ built: window.__r3d.built, draws: window.__r3d.models.draws }));
+    const before = await p.evaluate(() => ({ built: window.__r3d.built, drawn: window.__r3d.builtDrawn }));
     console.log(`lose: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
     const f0 = await p.evaluate(() => window.__r3d.frames);
     await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
     await p.waitForTimeout(1500);
-    const after = await p.evaluate(() => ({ built: window.__r3d.built, draws: window.__r3d.models.draws }));
+    const after = await p.evaluate(() => ({ built: window.__r3d.built, drawn: window.__r3d.builtDrawn }));
     await snap(p, 'lose-after');
-    console.log(`lose: built ${before.built} before, ${after.built} after; draws ${before.draws} before, ${after.draws} after`);
+    console.log(`lose: built ${before.built} before, ${after.built} after; built layers drew ${before.drawn} before, ${after.drawn} after`);
     if (!(after.built >= 1)) errs.push('lose: no built lich after the loss');
-    if (after.draws !== before.draws) errs.push(`lose: ${before.draws} draws before the loss, ${after.draws} after`);
+    if (!(before.drawn >= 1) || after.drawn !== before.drawn) errs.push(`lose: the built layer drew ${before.drawn} before the loss, ${after.drawn} after`);
     errs.push(...p._mine.splice(0));
   } catch (e) {
     errs.push(`lose: ${e.message}`);

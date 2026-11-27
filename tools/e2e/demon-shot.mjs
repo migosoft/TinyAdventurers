@@ -1,6 +1,6 @@
 // Check shots of the built demon (#379) in the ?r3d=demon page: every act as a strip of six instants (the flight twelve), `stand` from four
-// sides, the effects, the wings' fold, the work light, the breath and a cast, wading in the lava's rim, two demons, and a lost device (the
-// draws before and after equal). Every page is pinned (`&at=<s>` into the act's loop, which pins `&t=3`), so a shot is the same picture every
+// sides, the effects, the wings' fold, the work light, the breath and a cast, wading at the lava's edge, two demons, and a lost device (the
+// built layer's drawn count before and after equal). Every page is pinned (`&at=<s>` into the act's loop, which pins `&t=3`), so a shot is the same picture every
 // time. Fails on a console error, a "3D model <key>: ..." / "built figure <key>: ..." warning, a device-lost warning (but in the `lose` run) and a
 // page whose `window.__r3d.built` stays below 1.
 // Usage: node demon-shot.mjs [baseUrl] [outDir] [mode]     mode: webgl (default) or webgpu
@@ -38,9 +38,9 @@ shots.push({ name: 'cast-fx', q: `&act=cast&at=0.7${T}` });
 shots.push({ name: 'front-zoom8', q: `&zoom=8&face=90${T}`, zoom: '8' });
 shots.push({ name: 'back-zoom8', q: `&zoom=8&face=270${T}`, zoom: '8' });
 // The lava pool is tiles x 19..22, z 10..13 of the hall's map.
-shots.push({ name: 'wading', q: `&px=20.5&pz=11.5${T}` });
-shots.push({ name: 'wading-zoom8', q: `&px=20.5&pz=11.5&zoom=8&face=90${T}`, zoom: '8' });
-shots.push({ name: 'two', q: `&two=1&act=claws&at=0.6${T}` });
+shots.push({ name: 'wading', q: `&px=19.3&pz=11.5${T}` });
+shots.push({ name: 'wading-zoom8', q: `&px=19.3&pz=11.5&zoom=8&face=90${T}`, zoom: '8' });
+shots.push({ name: 'two', q: `&two=1&act=claws&at=0.6${T}`, built: 2 });
 
 const b = await launch(mode);
 // GPU=1 launches one start line for both modes: the page's own `backend` parameter then picks WebGL2 (webgl) or WebGPU (auto).
@@ -83,7 +83,7 @@ for (const s of shots) {
     await snap(p, s.name);
     const r = await p.evaluate(() => ({ built: window.__r3d.built, demonMs: window.__r3d.demonMs, draws: window.__r3d.models?.draws, fx: window.__r3d.fx }));
     console.log(`${s.name}: ${((Date.now() - t0) / 1000).toFixed(1)} s, built ${r.built}, demonMs ${r.demonMs?.toFixed(2)}, draws ${r.draws}, fx tris ${r.fx?.tris} dropped ${r.fx?.dropped}`);
-    if (!(r.built >= 1)) errs.push(`${s.name}: no built demon`);
+    if (!(r.built >= (s.built ?? 1))) errs.push(`${s.name}: ${r.built} built demons, ${s.built ?? 1} expected`);
     errs.push(...p._mine.splice(0));
   } catch (e) {
     errs.push(`${s.name}: ${e.message}`);
@@ -93,23 +93,23 @@ for (const s of shots) {
   }
 }
 
-// A lost device: the stage's kit lives on, so the new view makes its own layer and picture from it; the draws before and after are equal.
+// A lost device: the stage's kit lives on, so the new view makes its own layer and picture from it; the built layers' drawn count (the demon's layer) before and after are equal.
 if (!only || only.test('lose')) {
   let p = null;
   try {
     p = await open(`&t=3${'&act=claws&at=0.6'}`, 'lose', zoom, true);
     await p.waitForTimeout(800);
     await snap(p, 'lose-before');
-    const before = await p.evaluate(() => ({ built: window.__r3d.built, draws: window.__r3d.models.draws }));
+    const before = await p.evaluate(() => ({ built: window.__r3d.built, drawn: window.__r3d.builtDrawn }));
     console.log(`lose: forceLoss() returned ${await p.evaluate(() => window.__r3d.forceLoss())}`);
     const f0 = await p.evaluate(() => window.__r3d.frames);
     await p.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
     await p.waitForTimeout(1500);
-    const after = await p.evaluate(() => ({ built: window.__r3d.built, draws: window.__r3d.models.draws }));
+    const after = await p.evaluate(() => ({ built: window.__r3d.built, drawn: window.__r3d.builtDrawn }));
     await snap(p, 'lose-after');
-    console.log(`lose: built ${before.built} before, ${after.built} after; draws ${before.draws} before, ${after.draws} after`);
+    console.log(`lose: built ${before.built} before, ${after.built} after; built layers drew ${before.drawn} before, ${after.drawn} after`);
     if (!(after.built >= 1)) errs.push('lose: no built demon after the loss');
-    if (after.draws !== before.draws) errs.push(`lose: ${before.draws} draws before the loss, ${after.draws} after`);
+    if (!(before.drawn >= 1) || after.drawn !== before.drawn) errs.push(`lose: the built layer drew ${before.drawn} before the loss, ${after.drawn} after`);
     errs.push(...p._mine.splice(0));
   } catch (e) {
     errs.push(`lose: ${e.message}`);

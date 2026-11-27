@@ -297,6 +297,8 @@ export interface View {
   readonly meshes: number;
   /** What the 3D figure layer drew in the last frame: instances and the id, piece and hull draws (#338, #364; for `window.__r3d.models`). */
   readonly figuresDrawn?: Readonly<{ figures: number; draws: number }>;
+  /** Built figures (the lich, the demon) the last frame drew (for `window.__r3d.builtDrawn`). */
+  readonly builtDrawn?: number;
 }
 
 /** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
@@ -773,11 +775,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   });
   // The built figures (#358): one layer per built key, made when the first instance of the key arrives (and its picture is ready). A new
   // key (#377, #379) is one more entry here. A view built after a lost device makes its own layers and pictures from the kit.
-  // `mips`: whether the picture gets mip levels. Both do: without them the demon's thin cracks sparkle where the figure is drawn small
-  // (its material sorts the filtered alpha by ranges, demon/glow.ts).
-  const builtFactories: Record<string, { mips: boolean; layer: (paint: Texture) => BuiltLayer }> = {
-    lich: { mips: true, layer: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER) },
-    demon: { mips: true, layer: (paint) => new DemonLayer(scene, idScene, () => demonMaterials({ lighting, sight, shared: figures.shared, paint, idTex: idTarget.texture })) },
+  // Both pictures keep their mip levels: without them the demon's thin cracks sparkle where the figure is drawn small (its material sorts
+  // the filtered alpha by ranges, demon/glow.ts).
+  const builtFactories: Record<string, (paint: Texture) => BuiltLayer> = {
+    lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER),
+    demon: (paint) => new DemonLayer(scene, idScene, () => demonMaterials({ lighting, sight, shared: figures.shared, paint, idTex: idTarget.texture })),
   };
   const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
   const builtByKey = new Map<string, BuiltInst[]>();
@@ -790,7 +792,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       let e = builtLayers.get(key);
       if (!e && list.length > 0 && f && builtFactories[key]) {
         const img = f.kit.picture(key);
-        if (img) { const paint = imageTexture(img, { mips: builtFactories[key].mips }); builtLayers.set(key, e = { layer: builtFactories[key].layer(paint), paint }); }
+        if (img) { const paint = imageTexture(img, { mips: true }); builtLayers.set(key, e = { layer: builtFactories[key](paint), paint }); }
       }
       e?.layer.frame(list, (id) => slotOf.get(id) ?? -1);
     }
@@ -999,6 +1001,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     get figuresDrawn() {
       return figures.drawn;
+    },
+    get builtDrawn() {
+      let n = 0;
+      for (const e of builtLayers.values()) n += e.layer.drawn;
+      return n;
     },
     tileChanged(x, z) {
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;

@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ANIM, CONST, EFFECT, FLAG, KIND } from '../../generated/defs';
 import { builtOf, type BuiltIn } from '../built';
 import { DEMON_DEV, DEMON_FIGURE } from './figure';
 import { WING } from './wings';
-import { DEMON, demonRest } from './shape';
+import { buildDemon, DEMON, demonRest } from './shape';
+
+vi.mock('./shape', async (orig) => { const o = await orig<typeof import('./shape')>(); return { ...o, buildDemon: vi.fn(o.buildDemon) }; });
 
 const idle = (o: Partial<BuiltIn> = {}): BuiltIn => ({ anim: ANIM.Idle, animT: 0, effects: 0, flags: 0, aim: 0, look: null, x: 3, z: 4, ...o });
 
@@ -89,5 +91,22 @@ describe('DEMON_FIGURE', () => {
     const r = DEMON_FIGURE.rest();
     expect(r.verts).toBe(demonRest().body.verts);
     expect(r.indices).toBeGreaterThan(0);
+  });
+
+  it('does not rebuild a held (frozen or stone) demon, builds its first frame, and builds again on the thaw; memories are separate', () => {
+    const builds = vi.mocked(buildDemon);
+    for (const fx of [EFFECT.Frozen, EFFECT.Petrified]) {
+      const a = DEMON_FIGURE.newMem(), b = DEMON_FIGURE.newMem();
+      DEMON_FIGURE.draw(idle(), 0.016, a);
+      builds.mockClear();
+      DEMON_FIGURE.draw(idle({ effects: 1 << fx }), 0.016, a);
+      DEMON_FIGURE.draw(idle({ effects: 1 << fx }), 0.016, a);
+      expect(builds).toHaveBeenCalledTimes(0);
+      DEMON_FIGURE.draw(idle({ effects: 1 << fx }), 0.016, b);
+      DEMON_FIGURE.draw(idle({ effects: 1 << fx }), 0.016, b);
+      expect(builds).toHaveBeenCalledTimes(1);
+      DEMON_FIGURE.draw(idle(), 0.016, a);
+      expect(builds).toHaveBeenCalledTimes(2);
+    }
   });
 });

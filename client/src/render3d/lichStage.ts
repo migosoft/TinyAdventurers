@@ -246,6 +246,7 @@ export function createHallStage(assets: Assets, p: R3dParams, map: ReturnType<ty
         r.built = fo.built.length; r[`${boss.name}Ms`] = meanMs; r.figures = figures.count; r.lights = { list: lights.length, inView: lights.length }; r.casters = casters.length;
         r.fx = { records: fx.records, tris: pass.triCount, dropped: pass.droppedTotal };
         r.models = readout(c.view.figuresDrawn ?? { figures: 0, draws: 0 }, clock);
+        r.builtDrawn = c.view.builtDrawn ?? 0;
       }
       c.timer.renderStart();
       return c.view.draw(

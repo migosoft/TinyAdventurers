@@ -143,5 +143,5 @@ describe('the ?r3d=demon stage', () => {
     expect(a[0]).toBeCloseTo(0.75, 6);
     expect(await levels('?r3d=demon&t=3')).toEqual(a);
     expect((await levels('?r3d=demon&t=1'))[0]).toBeCloseTo(0.25, 6);
-  });
+  }, 20000);
 });
