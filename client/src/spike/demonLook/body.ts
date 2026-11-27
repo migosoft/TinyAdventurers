@@ -103,6 +103,10 @@ const PLATE: Tag = [0, 0.9, 0, 0];
 function tailPrims(id: (n: string) => number): Prim[] {
   const P: Prim[] = [];
   for (let i = 0; i < 5; i++) P.push(cone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1], id(`tail${i}`), i === 4 ? [0, 1, 1, 0] : [0, 0, 0, 0.3], 0.05));
+  if (on('spikes')) { // a blade at the tail's end
+    const d = norm([0, TAIL[5][1] - TAIL[4][1], TAIL[5][2] - TAIL[4][2]]), bl = plate(lerp(TAIL[4], TAIL[5], 0.72), [0.2, 0.075, 0.007], d, [1, 0, 0], id('tail4'), [0, 1, 1, 0], 0.012);
+    bl.box!.rhomb = true; P.push(bl);
+  }
   if (!on('spine')) return P;
   const rays: Ray[] = [];
   for (let i = 0; i < 5; i++) for (let f = i ? 0 : 0.45; f < (i === 4 ? 0.55 : 1); f += 0.02) {
@@ -165,12 +169,15 @@ function prims(id: (n: string) => number): Prim[] {
     e(add(mid, [0, 0.03, 0.07]), [0.11, 0.2, 0.1], 'upperArm', sk(0.25));
     e(add(mid, [0.02, 0, -0.07]), [0.1, 0.2, 0.09], 'upperArm', sk(0.1));
     c(add(S, [0.07, 0.11, -0.05]), add(S, [0.19, 0.28, -0.12]), 0.05, 0.006, 'upperArm', HORN, 0.04);
+    if (on('spikes')) for (const [a, b] of [[[0.06, 2.3, 0.31], [0.085, 2.235, 0.345]], [[0.092, 2.31, 0.24], [0.14, 2.25, 0.255]], [[0.09, 2.325, 0.17], [0.15, 2.28, 0.15]]] as [V, V][])
+      P.push({ ...cone(m(a), m(b), 0.02, 0.003, id('jaw'), HORN, 0.01), wr: 0.02 });
     c(add(E, [0.02, 0, -0.1]), add(E, [0.07, 0.08, -0.27]), 0.05, 0.006, 'upperArm', HORN, 0.03);
     c(E, W, 0.125, 0.08, 'foreArm', sk(0.2, 0.1));
     e(add(lerp(E, W, 0.3), [0.03, 0, 0]), [0.12, 0.19, 0.12], 'foreArm', sk(0.2, 0.1));
     e(add(W, [0.03, -0.1, 0]), [0.07, 0.1, 0.055], 'hand', sk(0.1, 0.2), 0.03);
     for (const z of [-0.066, -0.022, 0.022, 0.066]) {
       const k0: V = [KN[0], KN[1], z], p1 = add(k0, [0.02, -0.11, 0]), p2 = add(p1, [-0.01, -0.1, 0]);
+      if (on('spikes')) c(add(k0, [0.01, 0.01, 0]), add(k0, [0.075, 0.035, 0]), 0.022, 0.003, 'hand', HORN, 0.012);
       c(add(W, [0.03, -0.12, z * 0.6]), k0, 0.04, 0.034, 'hand', sk(0, 0.3), 0.02);
       c(k0, p1, 0.034, 0.03, 'fingers', sk(0, 0.4), 0.015); c(p1, p2, 0.03, 0.024, 'fingers', sk(0, 0.5), 0.015);
       c(p2, add(p2, [-0.04, -0.13, 0]), 0.022, 0.004, 'fingers', TIP, 0.01);
@@ -194,7 +201,8 @@ function prims(id: (n: string) => number): Prim[] {
     }
     // horns: very thick at the base, out and a little forward and down, then bending up to a point
     const horn = HORN_PATH;
-    for (let i = 0; i + 1 < horn.length; i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
+    // the left horn is broken off short (an old fight)
+    for (let i = 0; i + 1 < horn.length - (on('asym') && s > 0 ? 2 : 0); i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
     // armour over the forehead and crown: a crest of tall kites up the middle, each lapping over the next toward the back, its
     // lowest point between the eyes; rows of kites beside it running onto the horns' bases; and a heavy brow plate over each
     // eye, low at the middle and rising outward, whose edge leaves the eye a slit

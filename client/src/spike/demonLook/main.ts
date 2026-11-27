@@ -7,10 +7,11 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { build, rig } from './body';
-import { sheetMaterial, skinMaterial, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
+import { sheetMaterial, skinMaterial, uBeat, uGaze, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
 import { OPTS, on } from './opts';
 import { makeSword } from './sword';
+import { makeChain, makeEmbers } from './extras';
 
 const url = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -93,6 +94,10 @@ for (const [geo, mat] of [[built.body, skinMat], [built.tail, skinMat], [built.t
 scene.add(demon);
 
 const sword = on('sword') ? makeSword(scene, r.by.handR, new THREE.Vector3(0.0, -0.2, 0)) : null;
+const embers = on('embers') ? makeEmbers(scene, r.by.chest, r.by.jaw) : null;
+const chain = on('chain') ? makeChain(r.by.foreArmL, new THREE.Vector3(0.15, -0.44, 0.025), new THREE.Vector3(0.18, -0.53, 0.03)) : null;
+const headLocal = new THREE.Vector3();
+let beatPhase = 0, squint = 0;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -145,6 +150,17 @@ function frame() {
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
   const px = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+  // the heart: slow at rest, fast in a fight; the breath's charge climbs while he draws breath
+  beatPhase = pinned !== null ? pinned * 0.85 : beatPhase + dt * (st.attack >= 0 ? 1.7 : st.breath >= 0 ? 1.4 : mode === 'fly' ? 1.2 : 0.85);
+  const bph = st.breath >= 0 ? st.breath % 3.6 : 9;
+  uBeat.value.set(beatPhase, Math.min(1, bph / 0.62), bph < 0.75 ? Math.min(1, bph * 5) * Math.min(1, (0.75 - bph) * 8) : 0);
+  // the eyes follow whoever is watching (the camera), and narrow as a blow is drawn
+  r.by.head.worldToLocal(headLocal.copy(camera.position)).normalize();
+  const aph = st.attack >= 0 ? st.attack % 2.4 : 9;
+  squint += ((aph < 0.6 ? 1 : 0) - squint) * (pinned !== null ? 1 : Math.min(1, dt * 6));
+  uGaze.value.set(Math.max(-1, Math.min(1, headLocal.x * 1.6)), Math.max(-1, Math.min(1, headLocal.y * 1.6)), squint);
+  if (embers) embers(dt, time, px, uBreath.value);
+  if (chain) chain(dt, time);
   if (sword) { if (!warmed) { warmed = true; for (let i = 0; i < 90; i++) sword.update(1 / 30, time, px); } sword.update(dt, time, px); }
   lava.position.copy(r.by.chest.getWorldPosition(chestAt)).add(new THREE.Vector3(0, 0.1, 0.6));
   fire.position.copy(r.by.jaw.getWorldPosition(chestAt)).add(new THREE.Vector3(0, -0.1, 0.5)); fire.intensity = 1.0 * uBreath.value * (0.8 + 0.2 * Math.sin(time * 23));

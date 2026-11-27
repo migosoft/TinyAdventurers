@@ -10,6 +10,10 @@ export const uTime = { value: 0 };
 export const uFold = { value: 0 }, uBillow = { value: 0 };
 /** 0..1: the breath weapon's heat in the throat. */
 export const uBreath = { value: 0 };
+/** x: the heartbeat's phase (beats so far), y: where the breath's charge is on its way up (0 belly, 1 throat), z: its strength. */
+export const uBeat = { value: new THREE.Vector3() };
+/** x, y: where the eyes look (-1..1), z: how far they narrow. */
+export const uGaze = { value: new THREE.Vector3() };
 /** The lights that shine through the wings: world places, and colour times strength. */
 export const uLPos = { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] };
 export const uLCol = { value: [new THREE.Color(), new THREE.Color(), new THREE.Color()] };
@@ -58,10 +62,16 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
+    // How much a point lies in a joint or a hollow (the plates are small scales there).
+    float joints(vec3 pa){ float j = 0.; vec3 q;
+      #define JT(c, r) q = (pa - c)/r; j = max(j, exp(-dot(q, q)));
+      JT(vec3(0.69,1.57,-0.03), vec3(0.16)) JT(vec3(0.87,1.04,0.), vec3(0.14)) JT(vec3(0.36,1.95,0.), vec3(0.14,0.18,0.18)) JT(vec3(0.3,0.72,0.06), vec3(0.16))
+      JT(vec3(0.3,0.28,-0.1), vec3(0.14)) JT(vec3(0.2,1.27,0.08), vec3(0.2,0.1,0.2)) JT(vec3(0.,2.28,0.02), vec3(0.22,0.1,0.22)) JT(vec3(0.24,1.52,0.), vec3(0.1,0.12,0.25))
+      return j; }
     // Where a point is on the great horn: how far along it (0 base, 1 tip), the angle round it, and how far outside its skin.
     void hornAt(vec3 p){
       float best = 1e9, acc = 0., tot = 0.;
@@ -84,8 +94,11 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float leather = step(1.5, vInfo.x), limb = vInfo.w;
       // the armour proper: the front of the torso, where the plates keep their rows
       float front = smoothstep(-0.05, 0.12, p0.z) * smoothstep(1.2, 1.4, p0.y) * smoothstep(2.25, 2.1, p0.y) * smoothstep(0.5, 0.36, p.x);
-      vec2 v1 = voro(p*vec3(6.2,7.4,6.2)+vec3(0.,0.35,3.), mix(0.8, 0.3, front));
+      // two sizes of plate: big ones on the broad muscles, small scales in the joints and hollows, changing over a narrow band
+      float jit = mix(0.8, 0.3, front), small = smoothstep(0.35, 0.6, joints(p)) * (1.-front) * uOpt.w;
+      vec2 v1 = voro(p*vec3(6.2,7.4,6.2)*mix(1., 0.88, uOpt.w)+vec3(0.,0.35,3.), jit);
       float tilt = dot(cellR, hash3(cellId+5.)-0.5);
+      if (small > 0.) { vec2 vs = voro(p*vec3(6.2,7.4,6.2)*1.9+vec3(0.,0.35,3.), 0.8); v1 = mix(v1, vs, small); tilt = mix(tilt, 0.5*dot(cellR, hash3(cellId+5.)-0.5), small); }
       float edge = min(v1.x, mix(8., p.x*9., front));
       vec2 v2 = voro(p*vec3(19.,23.,19.), 0.7);
       float n = fbm(p0*5.);
@@ -118,6 +131,8 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float hu = gHu;
     float ramp = smoothstep(0.22, 0.4, hu) * (1.-smoothstep(0.46, 0.64, hu)) * (0.45 + 0.75*gRidge);
     horn = mix(horn, mix(vec3(0.01,0.008,0.008), vec3(0.19,0.12,0.09)*(0.6+0.8*streak), ramp), onHorn);
+    // cooled crust: the middles of the plates greyed with ash, in patches
+    rock = mix(rock, vec3(0.115,0.108,0.104)*(0.7+0.6*n), uOpt.z * smoothstep(0.1, 0.3, gEdge) * smoothstep(0.35, 0.65, fbm(p*3.1+2.)) * 0.6 * (1.-limb));
     dAlb = mix(mix(rock, horn, max(vInfo.y*0.6, onHorn)), hide, leather);
     // darker where two parts of the body meet
     float open = mix(clamp(vInfo.x, 0., 1.), 1., leather);
@@ -140,15 +155,33 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float patchy = smoothstep(0.3, 0.55, fbm(p*2.6+7.) + glow*0.75 - 0.12);
     float crack = 1.-smoothstep(0.0, mix(0.02, 0.075, glow), gEdge);
     float pulse = 0.72+0.28*sin(uTime*1.6 - p.y*3.5);
+    // a heart beats in the chest: each beat (a double knock) runs outward through the cracks
+    float hb = fract(uBeat.x - length(p - vec3(0.06,1.95,0.1))*0.55);
+    float knock = exp(-pow((hb-0.1)/0.06, 2.)) + 0.6*exp(-pow((hb-0.34)/0.07, 2.));
+    pulse = mix(pulse, 0.55 + 0.85*knock, uOpt.x);
+    // before the breath, light climbs from the belly to the throat
+    float charge = uBeat.z * exp(-pow((p.y - mix(1.3, 2.4, uBeat.y))/0.16, 2.)) * smoothstep(-0.05, 0.1, p.z) * uOpt.x;
+    glow = max(glow, charge*(1.-vInfo.y)*(1.-leather)); pulse += 1.6*charge;
     dEmit = crack*crack*patchy*pow(max(glow, 0.), 0.7)*pulse * mix(vec3(1.,0.14,0.01), vec3(1.,0.55,0.12), crack*crack*glow) * 2.4;
     dEmit += (1.-smoothstep(0.0, 0.2, gEdge))*patchy*glow*glow * vec3(0.5,0.06,0.0);
     dEmit += vInfo.z * vec3(1.,0.3,0.04) * 0.1 * (1.-onHorn);
+    // an old wound across the chest that never closed: the fire shows through it
+    vec2 sa = vec2(-0.27,2.08), sb = vec2(0.2,1.72), sp = p.xy + 0.012*vec2(fbm(p*18.), fbm(p*18.+5.)) - sa;
+    float st = clamp(dot(sp, sb-sa)/dot(sb-sa, sb-sa), 0., 1.), sd = length(sp - (sb-sa)*st);
+    float onChest = step(0.05, p.z) * step(p.z, 0.4) * step(abs(p.x), 0.34) * step(1.6, p.y) * step(p.y, 2.15) * uOpt.y * (1.-vInfo.y);
+    float scar = (1.-smoothstep(0.003, 0.004 + 0.011*sin(st*3.14159), sd)) * onChest;
+    dEmit += scar * vec3(1.,0.5,0.14) * 1.3 * (0.7+0.3*pulse);
+    dAlb *= 1. - 0.6*(1.-smoothstep(0.015, 0.045, sd)) * onChest;
     float hot = smoothstep(0.8, 1., hu) * onHorn;
     dEmit += (hot*hot*vec3(1.,0.25,0.02)*1.8 + smoothstep(0.94, 1., hu)*onHorn*vec3(1.,0.7,0.3)*1.2) * (0.85+0.15*sin(uTime*2.1+p.x*4.));
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
     vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
+    #define UG uGazeOn
+    vec3 e0 = e - vec3(uGaze.x*0.032, uGaze.y*0.004, 0.);
     e.xy = vec2(e.x*cos(sl)+e.y*sin(sl), -e.x*sin(sl)+e.y*cos(sl));
-    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011,0.07)));
+    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011*(1.-0.45*uGaze.z),0.07)));
+    e0.xy = vec2(e0.x*cos(sl)+e0.y*sin(sl), -e0.x*sin(sl)+e0.y*cos(sl));
+    float core = (1.-smoothstep(0.3, 1., length(e0/vec3(0.02,0.012,0.07)))) * eye * step(0.5, dot(uGaze, uGaze) + 1.) ;
     float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.062,0.018,0.07)));
     vec3 q = (p-uMouth)/vec3(0.095,0.034,0.14);
     float fang = abs(fract(p.x*24.)-0.5)*2.;
@@ -156,7 +189,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     // with real teeth: the glow fills whatever lies inside the mouth, behind them
     vec3 q2 = (p - uMouth - vec3(0.,0.02,-0.06))/vec3(0.125,0.06,0.13);
     maw = mix(maw, (1.-smoothstep(0.6, 1., length(q2))) * (1.-smoothstep(0.2, 0.5, open)) * (1.-vInfo.y) * 0.7, uTeeth);
-    dEmit += (eye*vec3(1.,0.5,0.1)*3.2 + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
+    dEmit += (eye*mix(vec3(1.,0.5,0.1)*3.2, vec3(1.,0.3,0.04)*1.6, uGaze.z > -0.5 ? UG : 0.) + core*vec3(1.,0.9,0.7)*5.*UG + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
     dAlb *= 1.-0.8*max(eye, maw);
     // the teeth: smooth near-black blades, a little paler toward the point
     float tooth = step(0.9, vInfo.y*vInfo.w);

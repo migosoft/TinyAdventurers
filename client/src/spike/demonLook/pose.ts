@@ -87,10 +87,19 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
     strike = ph < 0.5 ? 0 : ph < 0.85 ? 1 - (1 - Math.min(1, (ph - 0.5) / 0.12)) ** 3 : 1 - ease((ph - 0.85) / 0.75);
     addTo(WIND, wind); addTo(STRIKE, strike);
   }
+  if (on('life')) {
+    // weight shifting from foot to foot, the jaw working, a snarl as the blow is drawn, heaving after it, the wings resettling
+    const roll = 0.035 * Math.sin(t * 0.5) * (1 - fly);
+    cur.hips[2] += roll; cur.thighL[2] -= roll; cur.thighR[2] -= roll; cur.waist[2] -= roll * 0.6; cur.chest[2] -= roll * 0.5; cur.head[2] += roll * 0.4;
+    cur.jaw[0] += 0.06 * Math.max(0, Math.sin(t * 0.7)) ** 2 + 0.3 * wind + 0.15 * strike;
+    if (s.attack >= 0) { const ph = s.attack % 2.4, after = ph > 0.9 ? Math.exp(-(ph - 0.9) * 1.6) : 0; cur.chest[0] += 0.05 * after * Math.sin(ph * 9); cur.clavL[2] += 0.05 * after * Math.sin(ph * 9); cur.clavR[2] -= 0.05 * after * Math.sin(ph * 9); }
+    for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += 0.1 * Math.sin(t * 0.5 - 0.6 - i * 0.5) * (1 - fly);
+  }
   const out = breathOut(s.breath);
   if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }
   // folding the wings (on the ground)
-  const fold = s.fold * (1 - fly);
+  const shrug = on('life') ? 0.14 * Math.exp(-((((t % 7.5) - 6) / 0.35) ** 2)) : 0;
+  const fold = Math.min(1, s.fold + shrug) * (1 - fly);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
     cur['wing1' + side][2] += m * (FOLD.arm * fold + SPREAD.arm * fly); cur['wing2' + side][2] += m * (FOLD.elbow * fold + SPREAD.elbow * fly);
     for (let i = 0; i < 4; i++) {
