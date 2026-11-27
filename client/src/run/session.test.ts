@@ -496,6 +496,36 @@ describe('RunSession frame', () => {
     });
   });
 
+  describe('the aim at the picked creature (#323)', () => {
+    const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const magic = ability('MagicMissile', { projectile: KIND.Missile, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const fire = (a: ReturnType<typeof ability>, pick: (h: { x: number; y: number }) => { x: number; y: number; r: number } | null) => {
+      const r = running(() => ({ ...idle, primary: true }), { abilities: [a, ability('SummonWolf')] });
+      const hero = r.session['pred'].state;
+      r.view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y });
+      r.view.pick = pick(hero);
+      r.session.frame(STEP_MS);
+      return { r, hero, sent: inputs(r.net)[0] };
+    };
+    it("a flat shot aims at the picked creature's foot", () => {
+      const { sent } = fire(magic, (h) => ({ x: h.x + 60, y: h.y + 30, r: 6 }));
+      expect(sent.aim).toBeCloseTo(Math.atan2(30, 60));
+      expect(sent.aim_dist).toBeCloseTo(Math.hypot(60, 30));
+    });
+    it("an arcing shot lands past the picked creature's far edge", () => {
+      const { r, hero } = fire(shoot, (h) => ({ x: h.x + 80, y: h.y, r: 6 }));
+      expect(r.session['shots'].live[0].land![0]).toBeCloseTo(hero.x + 80 + 6 + shoot.radius, 6);
+    });
+    it('an arcing shot at the range edge lands at the range', () => {
+      const { r, hero } = fire(shoot, (h) => ({ x: h.x + 147, y: h.y, r: 6 }));
+      expect(r.session['shots'].live[0].land![0]).toBeCloseTo(hero.x + shoot.range, 6);
+    });
+    it('a ground-aimed ability ignores the pick', () => {
+      const { sent } = fire(ability('Entangle', { range: 150, ranged: true, cooldown: 0.5 }), (h) => ({ x: h.x + 60, y: h.y + 30, r: 6 }));
+      expect(sent.aim_dist).toBe(100);
+    });
+  });
+
   it('the shots seen on the server end the predicted copy when they are gone', () => {
     const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 20, range: 150, ranged: true, cooldown: 5 });
     let fire = true;

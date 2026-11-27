@@ -137,5 +137,7 @@ export interface RunView {
    *  the screen, then onto the ground; with `ground` the true ground point under the pointer (arcing shots, #321).
    *  Null: no pointer (outside the canvas, before the first frame, during a middle-mouse drag). */
   pointerWorld(ground?: boolean): { x: number; y: number } | null;
+  /** The hostile creature's hit cylinder under the pointer (#323): its foot and hit radius, simulation px. Null: no pointer or none under it. */
+  pointerPick(): { x: number; y: number; r: number } | null;
   destroy(): void;
 }
