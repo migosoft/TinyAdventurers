@@ -17,6 +17,8 @@ export interface Prim {
    * rim and swelling to `mid` over the width `bev` (a ground edge).
    */
   poly?: { pts: [number, number][]; edge: number; mid: number; bev: number };
+  /** Any other shape: its own distance. */
+  fn?: (x: number, y: number, z: number) => number;
   /** How far this shape's bone pulls on the skin beside it, if not the usual reach. */
   wr?: number;
   c: V; br: number;
@@ -63,6 +65,7 @@ export function outline(pts: [number, number][], u: number, v: number): number {
 
 function dist(p: Prim, x: number, y: number, z: number): number {
   const ax = x - p.a[0], ay = y - p.a[1], az = z - p.a[2];
+  if (p.fn) return p.fn(x, y, z);
   if (p.poly) {
     const d2 = outline(p.poly.pts, z, y), f = Math.min(1, Math.max(0, -d2 / p.poly.bev));
     const qz = Math.abs(x) - (p.poly.edge + (p.poly.mid - p.poly.edge) * f * f * (3 - 2 * f));

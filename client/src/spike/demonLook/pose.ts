@@ -83,11 +83,11 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
   if (on('whip')) {
     // a slow wave runs down the tail and grows toward the blade, a quicker ripple on top of it, the blade lifting and sinking;
     // now and then the end flicks, to one side and then the other
-    const n = Math.floor(t / 5.3), ft = t - n * 5.3 - 3.6, dir = n % 2 ? -1 : 1;
+    const n = Math.floor(t / 9.1), ft = t - n * 9.1 - 6.2, dir = n % 2 ? -1 : 1;
     for (let i = 0; i < N; i++) {
       const u = (i + 1) / N, flick = Math.exp(-(((ft - u * 0.22) / 0.13) ** 2)) - 0.7 * Math.exp(-(((ft - 0.3 - u * 0.22) / 0.2) ** 2));
-      cur[`tail${i}`][1] += per * ((0.08 + 0.2 * u) * Math.sin(t * 1.15 - u * 4.4) + 0.09 * u * Math.sin(t * 2.5 - u * 7.5 + 1) + 0.55 * u * u * flick * dir);
-      cur[`tail${i}`][0] += per * ((0.03 + 0.09 * u) * Math.sin(t * 0.83 - u * 3.6 + 2) + 0.22 * u * u * Math.max(0, flick));
+      cur[`tail${i}`][1] += per * ((0.04 + 0.1 * u) * Math.sin(t * 0.6 - u * 3.2) + 0.3 * u * u * flick * dir);
+      cur[`tail${i}`][0] += per * ((0.015 + 0.045 * u) * Math.sin(t * 0.45 - u * 2.6 + 2) + 0.1 * u * u * Math.max(0, flick));
     }
   } else for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * 0.14 * Math.sin(t * 0.9 - i * per * 0.7);
   // looking round: the turn is shared by chest, neck and head
@@ -107,7 +107,7 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
     cur.hips[2] += roll; cur.thighL[2] -= roll; cur.thighR[2] -= roll; cur.waist[2] -= roll * 0.6; cur.chest[2] -= roll * 0.5; cur.head[2] += roll * 0.4;
     cur.jaw[0] += 0.06 * Math.max(0, Math.sin(t * 0.7)) ** 2 + 0.3 * wind + 0.15 * strike;
     if (s.attack >= 0) { const ph = s.attack % 2.4, after = ph > 0.9 ? Math.exp(-(ph - 0.9) * 1.6) : 0; cur.chest[0] += 0.05 * after * Math.sin(ph * 9); cur.clavL[2] += 0.05 * after * Math.sin(ph * 9); cur.clavR[2] -= 0.05 * after * Math.sin(ph * 9); }
-    for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * 0.1 * Math.sin(t * 0.5 - 0.6 - i * per * 0.5) * (1 - fly);
+    if (!on('whip')) for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * 0.1 * Math.sin(t * 0.5 - 0.6 - i * per * 0.5) * (1 - fly);
   }
   if (on('life')) {
     // the tail trails behind a turn of the body and whips after it
@@ -118,7 +118,7 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
       let lead = yaw;
       for (let i = 0; i < N; i++) {
         const u = i / N;
-        headingVel[i] += ((lead - heading[i]) * (90 - 55 * u) - headingVel[i] * (7 - 3.5 * u)) * dt; heading[i] += headingVel[i] * dt;
+        headingVel[i] += ((lead - heading[i]) * (120 - 50 * u) - headingVel[i] * (16 - 4 * u)) * dt; heading[i] += headingVel[i] * dt;
         cur[`tail${i}`][1] += Math.max(-0.7, Math.min(0.7, heading[i] - lead)) * (i ? 1 : 1.4);
         lead = heading[i];
       }

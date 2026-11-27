@@ -246,16 +246,21 @@ function prims(id: (n: string) => number): Prim[] {
     // the left horn is broken off short (an old fight)
     for (let i = 0; i + 1 < horn.length - (on('asym') && s > 0 ? 2 : 0); i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
     if (on('asym') && on('break') && s > 0) {
-      // the break: the stump runs on a little and is split off by three slanting cuts, which leave splinters with sharp edges;
-      // the horn's core is hollowed out, and glows (the paint)
       const A = horn[4][0], B = horn[5][0], C = horn[6][0], ax = norm([C[0] - B[0], C[1] - B[1], C[2] - B[2]]);
-      const u = norm(cross(ax, [0, 0, 1])), w = cross(ax, u), E = lerp(B, C, 0.9);
-      P.push(cone(B, E, horn[5][1], horn[5][1] * 0.8 + horn[6][1] * 0.2, id('head'), HORN, 0.02));
-      for (const [f, cu, cw] of [[0.02, 1.9, 0.3], [0.22, -1.5, 1.3], [0.12, -0.9, -2.0]]) {
-        const n = norm([ax[0] + u[0] * cu + w[0] * cw, ax[1] + u[1] * cu + w[1] * cw, ax[2] + u[2] * cu + w[2] * cw]), q = lerp(B, C, f);
-        P.push({ ...plate([q[0] + n[0] * 0.2, q[1] + n[1] * 0.2, q[2] + n[2] * 0.2], [0.2, 0.2, 0.2], u, n, 0, HORN, 0.003, 0), sub: true });
-      }
-      P.push({ ...cone(lerp(A, B, 0.55), lerp(B, C, 0.5), 0.004, 0.036, 0, HORN, 0.004), sub: true });
+      const u = norm(cross(ax, [0, 0, 1])), w = cross(ax, u);
+      P.push(cone(B, C, horn[5][1], horn[6][1], id('head'), HORN, 0.02)); // the horn's own shape runs on; the break cuts it off
+      // snapped like metal or crystal: one clean, slightly slanting face across the stump, and round its rim a ring of sharp
+      // three-cornered shards of different heights left standing; [angle round the horn, height, half width (rad)]
+      void A;
+      const R = horn[5][1], shards = [[0.3, 0.048, 0.5], [1.3, 0.018, 0.4], [2.1, 0.036, 0.45], [3.4, 0.012, 0.35], [4.3, 0.058, 0.55], [5.5, 0.024, 0.4]], q = lerp(B, C, 0.12);
+      const fn = (x: number, y: number, z: number) => {
+        const d: V = [x - q[0], y - q[1], z - q[2]], a = dot(d, ax), ru = dot(d, u), rw = dot(d, w), r = Math.hypot(ru, rw), phi = Math.atan2(rw, ru);
+        let h = 0;
+        for (const [p0, H, W] of shards) { let da = Math.abs(phi - p0) % (2 * Math.PI); if (da > Math.PI) da = 2 * Math.PI - da; h = Math.max(h, H * Math.max(0, 1 - da / W)); }
+        const rim = Math.min(1, Math.max(0, (r / R - 0.42) / 0.3));
+        return Math.max(0.45 * (0.25 * ru + h * rim - a), Math.hypot(d[0], d[1], d[2]) - 0.27);
+      };
+      P.push({ a: q, ra: 0, rb: 0, k: 0.0015, bone: 0, tag: HORN, c: q, br: 0.27, fn, sub: true });
     }
     // armour over the forehead and crown: a crest of tall kites up the middle, each lapping over the next toward the back, its
     // lowest point between the eyes; rows of kites beside it running onto the horns' bases; and a heavy brow plate over each

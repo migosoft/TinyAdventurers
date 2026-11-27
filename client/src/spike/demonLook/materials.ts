@@ -220,7 +220,11 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float hb = uPolyN.z, near = smoothstep(hb-0.13, hb+0.02, hu) * onHorn, core = smoothstep(0.006, 0.03, -gHd) * smoothstep(hb-0.1, hb-0.02, hu) * vInfo.y;
       float fl = 0.7 + 0.3*fbm(p*30. + vec3(0., uTime*0.8, 0.));
       dAlb *= 1. - 0.75*near;
-      dEmit += core * mix(vec3(1.,0.16,0.01)*0.55, vec3(1.,0.6,0.2)*1.5, smoothstep(0.014, 0.045, -gHd)) * fl;
+      // the fracture: flat glassy faces, each a little brighter or darker than the next, hot veins between them
+      // the fracture: a glassy face, hot in the middle, with fine straight lines running out from it as on snapped metal
+      float hack = pow(abs(sin(gHa*6. + 3.*fbm(p*9.))), 14.) * smoothstep(0.035, 0.012, -gHd);
+      dAlb = mix(dAlb, vec3(0.05,0.03,0.03), core); dRough = mix(dRough, 0.2, core);
+      dEmit += core * (vec3(1.,0.17,0.015)*0.4 + smoothstep(0.018, 0.05, -gHd)*vec3(1.,0.5,0.14)*0.8 + hack*vec3(1.,0.45,0.1)*0.5) * fl;
       dEmit += near*near * (1.-core) * (1.-gRidge) * vec3(1.,0.2,0.02) * 0.3 * fl;
     }
     dEmit += (hot*hot*vec3(1.,0.25,0.02)*1.8 + smoothstep(0.94, 1., hu)*onHorn*vec3(1.,0.7,0.3)*1.2) * (0.85+0.15*sin(uTime*2.1+p.x*4.));

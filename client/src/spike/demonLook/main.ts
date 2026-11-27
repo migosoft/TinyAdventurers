@@ -150,7 +150,7 @@ function frame() {
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
   // ?aim=<bone>&off=x_y_z: look at a bone from beside it (check shots)
-  if (!aimed && url.has('aim')) { aimed = true; const o = (url.get('off') ?? '1_0.3_1').split('_').map(Number); r.by[url.get('aim')!].getWorldPosition(controls.target); camera.position.copy(controls.target).add(new THREE.Vector3(o[0], o[1], o[2])); controls.update(); }
+  if (!aimed && url.has('aim')) { aimed = true; const o = (url.get('off') ?? '1_0.3_1').split('_').map(Number); const at = (url.get('at') ?? '0_0_0').split('_').map(Number); r.by[url.get('aim')!].localToWorld(controls.target.set(at[0], at[1], at[2])); camera.position.copy(controls.target).add(new THREE.Vector3(o[0], o[1], o[2])); controls.update(); }
   const px = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
   // the heart: slow at rest, fast in a fight; the breath's charge climbs while he draws breath
   beatPhase = pinned !== null ? pinned * 0.85 : beatPhase + dt * (st.attack >= 0 ? 1.7 : st.breath >= 0 ? 1.4 : mode === 'fly' ? 1.2 : 0.85);
