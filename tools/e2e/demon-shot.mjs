@@ -19,7 +19,7 @@ const zoom = process.env.ZOOM ?? '4';
 mkdirSync(out, { recursive: true });
 
 // The acts: [name, first s, last s, instants] of the act's loop (the server's times: demonScript.ts).
-const STRIPS = [['stand', 0, 3.5], ['walk', 0.4, 2.8], ['claws', 0, 0.9], ['tail', 0, 1.1], ['swoop', 0.3, 2.0], ['cast', 0, 1.1], ['breath', 0, 2.5], ['hurt', 0.9, 1.2], ['broken', 0, 0.6], ['wings', 0.4, 12.4]];
+const STRIPS = [['stand', 0, 3.5], ['walk', 0.4, 2.8], ['claws', 0, 0.9], ['scimitar', 0.3, 1.5], ['tail', 0, 1.1], ['swoop', 0.3, 2.0], ['cast', 0, 1.1], ['breath', 0, 2.5], ['hurt', 0.9, 1.2], ['broken', 0, 0.6], ['wings', 0.4, 12.4]];
 const at = (a, b, n, i) => (a + ((b - a) * i) / (n - 1)).toFixed(2);
 const T = '&t=3';
 const shots = [];

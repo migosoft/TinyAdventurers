@@ -1,157 +1,221 @@
-// The demon's pose (#379): what a snapshot says about the demon (anim, animT, flags, effects, aim, look, its place) turned into what the
-// builder reads: the skeleton's joints, a target for each wing (the wing follows it as a chain, wings.ts), the tail's links, the lift.
-// Every clock is the memory's own. Pure; a frame allocates nothing.
+// The demon's pose (#379, #442): what a snapshot says about the demon (anim, animT, flags, effects, aim, look, its place) turned into what
+// `placeBones` reads: the joints' controls on top of the spike's stances, how far the stance is the flying one, the beat's phase, a
+// target for each wing (the wing follows it as a chain, wings.ts), the tail's joints, the chain's swing, and what the paint reads (the
+// heart, the breath's charge, the runes, the gaze). Every clock is the memory's own. Pure; a frame allocates nothing.
 //
 // How a frame is made (`demonPose`): the facing follows the aim as a critically damped spring and the walk phase moves with the way the
 // foot point really travelled; the anim's target pose is built on the standing (or the hovering) one, so every attack starts at it; a
 // new anim keeps how far the pose shown last was off its target and lets that difference die away (the cross-fade); the wings, the
 // tail and the hanging legs follow as chains; on top come the head's turn, the flinch and the settling after a landing.
-// The demon is massive: every row leans the other way first, moves the hips before the trunk and the arms, and carries past its end.
+// What each anim does when is #379's (the phases, the server's times, the memory); the stances, the scimitar blow, the beat, the tail's
+// and the fingers' own motion and the breath's head are the spike's (#441), with its numbers.
 import { ANIM, CONST, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import type { BuiltIn } from '../built';
-import { ARM, FOOT, J, JOINTS, LEAN, RIG, ROLL, TURN, setRest } from './skeleton';
-import { beatTarget, chainStep, newWing, WING, wingStep, type WingState, type WingTarget } from './wings';
-
-/** The tail's links: a swing travels down them. */
-export const TAIL_LINKS = 6;
+import { TAIL_N } from './body';
+import { ARM, FLY_FEET, FOOT, J, JOINTS, LEAN, RIG, ROLL, SKEL, TURN, WINGS } from './skeleton';
+import { chainStep, newWing, WING, wingStep, type WingState, type WingTarget } from './wings';
 
 export interface DemonPose {
-  /** The skeleton's joint values, by `J` (skeleton.ts): rad, and builder units for the hips' place and the foot points. */
+  /** The skeleton's joint values, by `J` (skeleton.ts): rad, and pose units for the hips' place and the foot points; what the pose adds to the stance. */
   joints: Float32Array;
   wingR: WingState; wingL: WingState;
-  /** Per link [yaw (+ to the demon's right), pitch (+ up)]: rad away from the link's rest direction, in the hips' frame. All equal: the tail turns as a whole. */
+  /** Per link [yaw (+ to the demon's right), pitch (+ up)]: rad the rows turn the tail, in the hips' frame; a swing travels down the links. */
   tail: Float32Array;
-  /** Builder units the body hangs above the floor, without the beat's bob (that is in the hips). The view lifts the figure; the builder reads it only for the feet (the toes hang in the air). */
+  /** Per tail joint [yaw, pitch]: rad the joint itself is turned (the tail's own curve and life, the rows' swing, the lag behind a turn). */
+  tailJ: Float32Array;
+  /** Per link of the chain on the left wrist [rad about the front axis, rad about the left axis]. */
+  chain: Float32Array;
+  /** Pose units the body hangs above the floor, without the beat's bob (that is in the hips). The view lifts the figure; the skeleton reads it only for the feet (the toes hang in the air). */
   lift: number;
   /** The glow of the eyes and the mouth: 1 at rest. */
   heat: number;
-  /** The hand the `hand` anchor follows: 1 the right, -1 the left. */
+  /** The hand the `hand` anchor follows: always the left (-1); the right holds the scimitar. */
   caster: 1 | -1;
+  /** 0 the standing stance, 1 the flying one. */
+  fly: number;
+  /** The wing beat's phase, 0..1: 0 the top of the stroke, `WING.down` its bottom. */
+  beat: number;
+  /** How hard the air pushes the wings' skin, -1..1: above 0 in the down stroke (0 on the ground). */
+  billow: number;
+  /** How far the wings are folded, 0..1, for the skin's pleats. */
+  fold: number;
+  /** [x, y, squint]: where the eyes look in the head's own frame, -1..1 each (x + to the demon's left, y + up), and how far they are narrowed, 0..1. */
+  gaze: [number, number, number];
+  /** How bright the runes burn, 0..1: up in an attack and through a breath. */
+  rune: number;
+  /** Heart beats since the demon was first seen (its fraction is the beat's phase): slow at rest, fast in a fight. */
+  heart: number;
+  /** The breath's charge in the throat: [how far it has climbed, 0..1; its strength, 0..1]. [1, 0] when it draws no breath. */
+  charge: [number, number];
+  /** The figure's clock, s: the fingers' and the wing fingers' own small motion runs on it. */
+  clock: number;
 }
 
 const DEG = Math.PI / 180;
 
 /**
- * Every tuning number of the poses. Angles rad, lengths builder units, times s.
- * - `armOut`, `elbow`: the standing arms. `px`: builder units per game px.
+ * Every tuning number of the poses. Angles rad, lengths pose units, times s.
+ * - `elbow`: the bend the rows' elbow numbers count from. `px`: pose units per game px.
  * - `ease`: the cross-fade after a new anim; `easeFrom`: the same after the anim named (a heavy move is caught slowly).
  * - `lift`: how high the body hangs in the air; `liftAtTakeoff`: its share at the take-off's end; `bob`: the rise and fall with the
- *   beat, crest to trough, highest at the beat's phase `bobAt`; `labour`: the first beats after a take-off (how many, their share of
- *   the beat's length, how much deeper they reach and bob).
+ *   beat, crest to trough, highest at the beat's phase `bobAt` (the spike's); `labour`: the first beats after a take-off (how many,
+ *   their share of the beat's length, how much deeper they reach and bob).
  * - `faceRate`: 1/s of the facing's spring; `turnMax`: the most turning speed (rad/s) the wings and the tail feel; `headRate`, `neck`,
- *   `headShare` (chest, neck, head), `headRoll` (per rad of turn), `headKeep` (how much of the trunk's own turn the head takes back),
- *   `airLook`: the look down in the air.
+ *   `headShare` (chest, neck, head), `headRoll` (per rad of turn), `headKeep` (how much of the trunk's own turn the head takes back).
  * - `hurt`: the flinch's length; `hurtHead`, `hurtChest`: how far the blow pushes the head's middle (at the height `headMid`) and the
  *   shoulders; `hurtWing`: how far the wings flick open.
  * - `stride`: the body's way per footfall; `turnStep`: rad turned per footfall; `gait`: 1/s the stride comes and goes, and the footfalls a
  *   second below which it stands.
- * - `stand`, `walk`, `claws`, `tail`, `swoop`, `cast`, `breath`, `air`, `takeoff`, `land`, `settle`: the rows' angles and times (the
- *   server's times are `CONST.DEMON_*`).
+ * - `seen`: the longest a row's clock runs on by itself while no new animT arrives (a lost snapshot).
+ * - `stand` (the spike's life), `walk`, `claws`, `scimitar` (the spike's blow), `tail`, `swoop`, `cast`, `breath`, `air`, `takeoff`,
+ *   `land`, `settle`: the rows' angles and times (the server's times are `CONST.DEMON_*`). `tailOwn`, `chain`, `life`: the tail's own
+ *   motion, the wrist chain's swing, and what the paint reads.
  */
 export const DEMON_POSE = {
-  armOut: 0.16, elbow: 0.5, px: 31.7 / 54,
-  ease: 0.15,
+  elbow: 0.5, px: 31.7 / 54,
+  ease: 0.15, easeAir: 0.4,
   easeFrom: { [ANIM.Land]: 0.45, [ANIM.Dash]: 0.5, [ANIM.Melee]: 0.4, [ANIM.Cleave]: 0.4, [ANIM.Tail]: 0.4, [ANIM.Cast]: 0.3, [ANIM.Breath]: 0.45, [ANIM.TakeOff]: 0.3 } as Record<number, number>,
-  lift: (17 * 31.7) / 54, liftAtTakeoff: 0.6, bob: 2.4, bobAt: 0.46, labour: { beats: 2, pace: 0.85, deep: 1.15, bob: 1.8 },
-  faceRate: 4, turnMax: 2.5, headRate: 5, neck: 1.4, headShare: [0.15, 0.35, 0.5], headRoll: 0.12, headKeep: 0.8, airLook: 20 * DEG,
+  lift: (17 * 31.7) / 54, liftAtTakeoff: 0.6, bob: 0.14 / SKEL.perPose, bobAt: 0.5 + 0.4 / (2 * Math.PI), labour: { beats: 2, pace: 0.85, deep: 1.15, bob: 1.8 },
+  faceRate: 4, turnMax: 2.5, headRate: 5, neck: 1.4, headShare: [0.15, 0.35, 0.5], headRoll: 0.12, headKeep: 0.8,
   hurt: 0.22, hurtHead: 1.2, hurtChest: 0.4, hurtWing: 0.08, headMid: 29.8,
   stride: 20, turnStep: Math.PI / 2, gait: { rate: 5, min: 0.08 },
+  seen: 0.25,
   stand: {
-    breath: 3.4, breathHips: 0.22, breathChest: 0.035, breathArms: 0.03, breathWing: [0.045, 0.025],
-    shift: 9, shiftZ: 1.1, shiftRoll: 0.035, tail: [0.2, 5.3], tailDroop: 0.04,
-    drift: [0.03, 0.025], resettle: [7.5, 1.5, 0.5, 0.3],
+    /** Breathing (rad/s): the chest fills, the waist gives, the shoulders and the hips rise. The head wanders: [rad, rad/s] its turn and its nod. */
+    breath: 1.3, chest: 0.025, waist: 0.012, shrug: 0.03, hips: 0.012 / SKEL.perPose, head: [0.05, 0.43], nod: [0.03, 0.61],
+    /** The weight goes from foot to foot ([rad, rad/s]; the waist, the chest and the head take a share back); the jaw works. */
+    shift: [0.035, 0.5], back: [0.6, 0.5, 0.4], jaw: [0.06, 0.7],
+    /** The folded wings stretch a little now and then: every `every` s (up to `late` s late) for `for` s, open to the fold `to`. */
+    stretch: { every: 7.5, late: 1.5, for: 1.4, to: 0.75 },
   },
   walk: {
     /** The share of a leg's cycle its foot stands; how far ahead of the hips the stride's middle lies; the swinging foot's height. */
     stance: 0.5, ahead: 2.5, up: 3.2, toeOff: 0.55,
     low: 1.4, drop: 1.5, dropAt: 0.07, lean: 6 * DEG, sway: 1.3, roll: 0.04, twist: 0.1, arms: 0.3, elbows: 0.15,
-    nod: 0.06, nodAt: 0.16, tail: 0.28, tailBounce: 0.1, wings: 0.14, wingsAt: 0.12,
+    nod: 0.06, nodAt: 0.16, tail: 0.28, tailBounce: 0.1, wings: 0.05, wingsAt: 0.12,
   },
   claws: {
     /** The strike's length (it is at its middle when the server's blow lands); how far the wind-up reaches. */
     strike: 0.12, back: 2.4, into: 3.4, low: 1.2, hipsTurn: [0.28, 0.2], chestTurn: [0.5, 0.5], lean: [0.1, 0.3],
-    arm: { back: [-0.5, 1.9, -1.3, 1.3], through: [1.25, 0.35, 0.9, 0.35], other: [0.35, -0.5] }, spread: -0.7,
-    step: 4.5, stepUp: 1.6, wing: { fold: 0.3, sweep: 0.3, jerk: 0.35 },
+    arm: { back: [-0.6, 1.1, -0.4, 1.3], through: [1.45, 0.25, 0.5, 0.2], other: [0.2, -0.3] }, spread: -0.7,
+    step: 4.5, stepUp: 1.6, wing: { fold: 0.8, sweep: 0.2, jerk: 0.25 },
+  },
+  scimitar: {
+    /** The spike's blow, its own clock: drawn back until `wind`, thrown across within `strike`, held until `held`, back at rest at `end`. */
+    wind: 0.5, strike: 0.12, held: 0.85, end: 1.6, late: 0.2,
+    /** Drawn back, then thrown across: the hips' and the chest's turn (+ right) and lean, the sword arm [swing, out, elbow], the other arm [swing, out]. */
+    back: { hips: 0.2, chest: [0.45, -0.1], arm: [-0.5, 0.8, 1.0], jaw: 0.3, wing: -0.1, hipsX: -0.05 / SKEL.perPose },
+    across: { hips: [-0.25, 0.05], chest: [-0.55, 0.3], arm: [1.5, -0.35, -0.3], other: [-0.45, 0.2], jaw: 0.5, wing: 0.25, hipsX: 0.15 / SKEL.perPose, hipsY: -0.1 / SKEL.perPose },
+    /** Heaving after the blow: from the spike's clock `from`, [rad, rad/s, 1/s it dies at]. */
+    heave: { from: 0.9, by: [0.05, 9, 1.6] },
   },
   tail: {
     coil: 1.0, whip: 1.9, up: 0.22, hips: [0.3, 0.55], chest: 0.5, low: 1.6, wide: 1.6, hop: 0.9,
-    wing: { raise: 25 * DEG, fold: 0.5 }, arms: 0.35, rates: [44, 38, 32, 27, 22, 18],
+    wing: { raise: 25 * DEG, fold: 0.7 }, arms: 0.35, rates: [44, 38, 32, 27, 22, 18],
   },
   swoop: {
     crouch: 4.8, bow: 0.3, armsBack: 0.6, wingUp: { fold: 0.05, raise: 35 * DEG },
     lean: 0.95, low: 3.2, legs: [-9, 3.4], arms: [1.75, 0.3, 0.15], head: 0.75, tail: 0.45,
     glide: { fold: 0, raise: 8 * DEG, sweep: 15 * DEG, pitch: -75 * DEG },
-    brake: { fold: 0, raise: 60 * DEG, sweep: -8 * DEG, pitch: 12 * DEG }, back: 0.22, knees: 6.2, feet: 4.5,
+    brake: { fold: 0, raise: 50 * DEG, sweep: -8 * DEG, pitch: 12 * DEG }, back: 0.22, knees: 6.2, feet: 4.5,
   },
-  cast: { rise: 0.46, hold: 0.62, arm: [1.08, 0.12, 0, 0.1], airArm: [0.8, 0.12, 0, 0.1], wrist: -0.35, spread: -0.8, dip: 0.07, turn: 0.12, wing: 0.34 },
+  cast: { rise: 0.46, hold: 0.62, arm: [1.15, 0.2, 0, -0.1], airArm: [0.9, 0.2, 0, 0.3], wrist: -0.35, spread: -0.6, dip: 0.07, turn: 0.12, wing: 0.85 },
   breath: {
-    back: [0.2, 0.3, 0.32], hips: 1.2, fill: 0.14, heat: 1.8, forward: [0.2, 0.16, 0.08], head: -0.18, into: 1.8,
-    tremble: [0.02, 38, 0.035, 31], wing: { raise: 25 * DEG, fold: 0.25 }, arms: [0.3, 0.25], flicker: 0.12,
+    /** The spike's breath: in (waist, chest, neck, head back; the arms [swing, out]), then out (hips, waist, chest, neck forward, the head up, the jaw wide; the arms [swing, out, elbow]); its own times `in`, `turn`, `open`, and the wings' lift. */
+    inhale: { trunk: [-0.08, -0.16, -0.12, -0.2], jaw: 0.1, arms: [-0.15, 0.1] },
+    out: { trunk: [0.05, 0.05, 0.06, 0.1, -0.22], jaw: 0.85, arms: [-0.3, 0.18, 0.2], wing: 0.18 },
+    in: 0.5 / 0.6, turn: 0.15, open: 0.18,
+    heat: 1.8, tremble: [0.02, 38, 0.035, 31], fold: 0.8, flicker: 0.12,
   },
   air: {
-    /** The hanging right foot (off the standing foot point) and how much higher and further forward the left is drawn up. */
-    hang: [-1.6, -3.2], tuck: [2, 4], swing: 11, legRates: [7, 5], legSwing: 0.03, legLean: 0.8,
-    rock: 0.07, arms: [0.12, 0.24, 0.7], head: [0.14, 0.2], tail: [-0.3, 0.035],
+    swing: 11, legRates: [7, 5], legSwing: 0.03, legLean: 0.8,
     lean: 12 * DEG, leanAt: 30, velRate: 4, sweep: 0.5,
   },
   takeoff: {
-    gather: 0.28, crouch: 5.2, bow: [0.3, 0.16], arms: [0.25, 1.35], tail: 0.3, wing: { raise: 70 * DEG, low: -40 * DEG, lead: 0.06 },
-    slow: 1.3, throwArms: [-0.75, 0.2], whip: -0.75, toes: 2.6, look: 0.22,
+    gather: 0.28, crouch: 5.2, bow: [0.3, 0.16], arms: [0.25, 1.35], tail: 0.3, wing: 0.65,
+    slow: 1.3, throwArms: [-0.75, 0.2], whip: -0.75,
+    /** How high the toes are off the floor at its end, how far the legs are then turned into the flying stance, and the s of the climb in which they are drawn up into it. */
+    toes: 2.6, legs: 0.35, tuck: 0.5,
   },
   land: {
-    wing: { fold: 0, raise: 22 * DEG, sweep: 0.12, pitch: -75 * DEG }, fall: 2.2, reach: [0.18, 0.55], stand: 2.6, arms: [0.55, 0.3],
+    wing: { fold: 0, raise: 22 * DEG, sweep: 0.12 }, flat: 1.0, fall: 2.2, reach: [0.18, 0.55], stand: 2.6, arms: [0.55, 0.3],
     bow: 0.14, look: 0.25, tail: 0.35,
   },
   settle: {
     /** The knees give `deep` within `in` and come up until `up`; the second, smaller settling `again` around `at` for `for`; the whole is over at `end`. */
     deep: 6, in: 0.3, up: 1.05, again: 1.4, at: 1.35, for: 0.6, end: 1.8,
-    bow: 0.3, nod: 0.42, nodLate: 0.06, tail: 0.65, wing: { down: 0.6, open: 0.3, shake: [0.07, 42, 5] },
+    bow: 0.3, nod: 0.42, nodLate: 0.06, tail: 0.65, wing: { down: 0.3, open: 0.3, shake: [0.07, 42, 5] },
+  },
+  tailOwn: {
+    /** The tail's curve as five stretches' turns upward, standing (carried, curled up toward the blade) and streaming in the air. */
+    stand: [0.24, 0.12, 0.12, 0.12, 0], fly: [-0.5, -0.1, 0, 0.2, 0.3],
+    /** A slow wave runs down it and grows toward the blade ([rad at the root, more at the tip, rad/s, rad along it, phase]), sideways and up. */
+    wave: [0.04, 0.1, 0.6, 3.2, 0], lift: [0.015, 0.045, 0.45, 2.6, 2],
+    /** Now and then the end flicks, to one side and then the other: every `every` s, `at` s into it. */
+    flick: { every: 9.1, at: 6.2, yaw: 0.3, pitch: 0.1, run: 0.22, snap: 0.13, back: [0.7, 0.3, 0.2] },
+    /** Every joint follows the one before on a spring of its own, softer toward the end: [stiffness, less at the tip, damping, less at the tip], the most a joint lags, and how much more the root does. */
+    whip: [120, 50, 16, 4], most: 0.7, root: 1.4, chest: 0.6,
+  },
+  chain: { pull: 0.9, stiff: 30, damp: 2.2, wild: 20, most: 0.9, link: [0.25, 0.06], idle: [0.02, 1.1] },
+  life: {
+    /** Heart beats a second: at rest, flying, breathing fire, in a fight. */
+    heart: [0.85, 1.2, 1.4, 1.7],
+    /** The runes: how long after an attack's blow they still burn, 1/s they flare up and die down at. The eyes narrow until `squint` s after the blow, at `squintRate` 1/s. */
+    runeFor: 0.5, runeRates: [5, 1.2], squint: 0.1, squintRate: 6,
+    /** The gaze: how far a rad off the head's own line turns the eyes; how far down they look at a hero from the ground and from the air. */
+    gaze: 1.6, down: [-0.3, -0.6],
+    /** The breath's charge on the spike's breath clock: it has climbed the throat at `climbed`, and its strength rises within `up` and is gone by `gone`. */
+    charge: { climbed: 0.62, up: 0.2, gone: 0.75, fall: 8 },
   },
 } as const;
 
 /** The dev page's hand on the wings (the act `wings`, demonStage.ts): a fold their target takes instead of the pose's. null in a run. */
 export const DEMON_DEV: { fold: number | null } = { fold: null };
 
-export function restPose(): DemonPose {
-  const joints = new Float32Array(JOINTS);
-  for (const [a, f, sd] of [[J.armR, J.footR, 1], [J.armL, J.footL, -1]] as const) {
-    joints[a + ARM.out] = DEMON_POSE.armOut; joints[a + ARM.elbow] = DEMON_POSE.elbow;
-    joints[f + FOOT.x] = RIG.sole[0]; joints[f + FOOT.y] = RIG.sole[1]; joints[f + FOOT.z] = sd * RIG.legZ;
-  }
-  return { joints, wingR: newWing(WING.rest), wingL: newWing(WING.rest), tail: new Float32Array(TAIL_LINKS * 2), lift: 0, heat: 1, caster: 1 };
-}
+const P = DEMON_POSE;
+const PER = 5 / TAIL_N;
 
-setRest(restPose().joints);
+export function restPose(): DemonPose {
+  const joints = new Float32Array(JOINTS), tailJ = new Float32Array(TAIL_N * 2);
+  for (const [f, sd] of [[J.footR, 1], [J.footL, -1]] as const) { joints[f + FOOT.x] = RIG.sole[0]; joints[f + FOOT.y] = RIG.sole[1]; joints[f + FOOT.z] = sd * RIG.legZ; }
+  for (let i = 0; i < TAIL_N; i++) tailJ[i * 2 + 1] = P.tailOwn.stand[Math.floor(i * PER)] * PER;
+  return {
+    joints, wingR: newWing(WING.rest), wingL: newWing(WING.rest), tail: new Float32Array(TAIL_N * 2), tailJ, chain: new Float32Array(12), lift: 0, heat: 1, caster: -1,
+    fly: 0, beat: 0, billow: 0, fold: WING.rest.fold, gaze: [0, P.life.down[0], 0], rune: 0, heart: 0, charge: [1, 0], clock: 0,
+  };
+}
 
 /**
  * What one demon keeps between frames. `t`: its clock; `face`, `faceV`: the drawn facing and its speed; `head`, `headV`: the head's
  * turn; `walk`: the walk phase in cycles (two footfalls each); `gait`, `go`: how much it steps, and how much of that is a stride;
  * `beat`: the wings' phase; `climb`: s in the air since a take-off (large: at full height); `landT`: s since it touched down;
- * `from`: how far the pose shown last was off the new anim's target (joints, lift, heat), fading for `easeFor` since `fromT`;
- * `base`: the faded joints, under the head, the flinch and the settling; `turn`: which arm is next (claws and casts take turns),
- * `side`: the one in use; `vx`, `vz`: the eased speed over the floor (units/s); `legs`: the hanging legs' swing ([right, left] pairs
- * of chainStep); `wr`, `wl`: scratch, the wings' targets.
+ * `from`: how far the pose shown last was off the new anim's target (joints, lift, heat, fly), fading for `easeFor` since `fromT`;
+ * `base`: the faded joints, under the head, the flinch and the settling; `seen`: s since the animT last changed (a row's clock runs
+ * on by it); `vx`, `vz`: the eased speed over the floor (units/s); `legs`: the hanging legs' swing ([right, left] pairs of chainStep);
+ * `whip`, `whipV`: the tail joints' headings behind the body's turn; `hang`, `swing`, `swingV`: where the chain hung last frame, how
+ * far it swings and how fast; `wr`, `wl`: scratch, the wings' targets.
  */
 export interface DemonMem {
   started: boolean; t: number; face: number; faceV: number; head: number; headV: number; walk: number; gait: number; go: number; lastX: number; lastZ: number;
-  lastAnim: number; lastAnimT: number; airborne: boolean; beat: number; climb: number; landT: number; fromT: number; from: DemonPose; easeFor: number;
-  hurtT: number; hurtDir: number; lastHurt: boolean; turn: 1 | -1; side: 1 | -1; vx: number; vz: number;
-  base: Float32Array; tailV: Float32Array; legs: Float32Array; legsV: Float32Array; wr: WingTarget; wl: WingTarget;
+  lastAnim: number; lastAnimT: number; seen: number; airborne: boolean; beat: number; climb: number; landT: number; fromT: number; from: DemonPose; easeFor: number;
+  hurtT: number; hurtDir: number; lastHurt: boolean; vx: number; vz: number;
+  base: Float32Array; tailV: Float32Array; legs: Float32Array; legsV: Float32Array; whip: Float32Array; whipV: Float32Array;
+  hang: [number, number] | null; swing: [number, number]; swingV: [number, number]; wr: WingTarget; wl: WingTarget;
   pose: DemonPose; target: DemonPose;
 }
 
 export function newDemonMem(): DemonMem {
   return {
     started: false, t: 0, face: 0, faceV: 0, head: 0, headV: 0, walk: 0, gait: 0, go: 0, lastX: 0, lastZ: 0,
-    lastAnim: ANIM.Idle, lastAnimT: 0, airborne: false, beat: 0, climb: 99, landT: 99, fromT: 99, from: restPose(), easeFor: DEMON_POSE.ease,
-    hurtT: -1, hurtDir: 0, lastHurt: false, turn: 1, side: 1, vx: 0, vz: 0,
-    base: new Float32Array(JOINTS), tailV: new Float32Array(TAIL_LINKS * 2), legs: new Float32Array(4), legsV: new Float32Array(4), wr: { ...WING.rest }, wl: { ...WING.rest },
+    lastAnim: ANIM.Idle, lastAnimT: 0, seen: 0, airborne: false, beat: 0, climb: 99, landT: 99, fromT: 99, from: restPose(), easeFor: DEMON_POSE.ease,
+    hurtT: -1, hurtDir: 0, lastHurt: false, vx: 0, vz: 0,
+    base: new Float32Array(JOINTS), tailV: new Float32Array(TAIL_N * 2), legs: new Float32Array(4), legsV: new Float32Array(4), whip: new Float32Array(TAIL_N), whipV: new Float32Array(TAIL_N),
+    hang: null, swing: [0, 0], swingV: [0, 0], wr: { ...WING.rest }, wl: { ...WING.rest },
     pose: restPose(), target: restPose(),
   };
 }
 
-const P = DEMON_POSE;
 const REST = restPose().joints;
 const TAU = 2 * Math.PI;
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
@@ -162,6 +226,9 @@ const frac = (x: number): number => x - Math.floor(x);
 const hash = (n: number): number => frac(Math.sin(n * 12.9898 + 4.1) * 43758.5453);
 /** A footfall's jolt over the step's phase `w`: 1 at the lowest point, a little after the foot lands. */
 const dip = (w: number, at: number): number => Math.pow(0.5 + 0.5 * Math.cos(TAU * (w - at)), 1.5);
+/** The tail's ten links at the rates of #379's six: the same time root to tip. */
+const overTail = (r: readonly number[]): number[] => Array.from({ length: TAIL_N }, (_, i) => (r[Math.floor((i * r.length) / TAIL_N)] * TAIL_N) / r.length);
+const TAIL_RATES = overTail(WING.tailRates), WHIP_RATES = overTail(P.tail.rates);
 
 /** A critically damped spring's step, exact for any `dt`: `x` (and its speed `v`) towards 0. The result is in `SX`, `SV`. */
 let SX = 0, SV = 0;
@@ -170,8 +237,8 @@ function spring(x: number, v: number, rate: number, dt: number): void {
   SX = (x + k) * e; SV = (v - rate * k) * e;
 }
 
-/** The tail's root this frame (the links follow it). */
-let tailYaw = 0, tailPitch = 0;
+/** The tail's root this frame (the links follow it), and how far the stance is the flying one. */
+let tailYaw = 0, tailPitch = 0, flyT = 0;
 /** A wing's target goes `w` of the way to what `to` names. */
 const wing = (T: WingTarget, w: number, to: { readonly fold?: number; readonly raise?: number; readonly sweep?: number; readonly pitch?: number }): void => {
   if (to.fold !== undefined) T.fold += (to.fold - T.fold) * w;
@@ -186,22 +253,24 @@ const arm = (q: Float32Array, a: number, w: number, to: readonly number[]): void
 };
 
 // ---------------------------------------------------------------- the rows
-/** Standing: slow deep breaths, the weight shifting from leg to leg, the tail swaying; the wings never still. */
-function stand(q: Float32Array, m: DemonMem): void {
-  const A = P.stand, t = m.t, b = Math.sin((TAU * t) / A.breath), sh = Math.sin((TAU * t) / A.shift), shift = sh * Math.abs(sh);
+/** What it does standing and flying alike (the spike's life): it breathes, the head wanders a little, the jaw works. */
+function life(q: Float32Array, t: number): void {
+  const A = P.stand, br = Math.sin(t * A.breath), jaw = Math.max(0, Math.sin(t * A.jaw[1]));
   q.set(REST);
-  q[J.hipsY] -= A.breathHips * b; q[J.chest + LEAN] -= A.breathChest * b; q[J.spine + LEAN] -= A.breathChest * 0.5 * b;
-  q[J.armR + ARM.out] += A.breathArms * b; q[J.armL + ARM.out] += A.breathArms * b;
-  q[J.hipsZ] += A.shiftZ * shift; q[J.hips + ROLL] += A.shiftRoll * shift; q[J.spine + ROLL] -= A.shiftRoll * shift;
-  tailYaw = A.tail[0] * Math.sin((TAU * t) / A.tail[1]); tailPitch = -A.tailDroop * b;
-  // each wing rises and opens a little with the breath, drifts on its own, and resettles now and then
-  const R = A.resettle, n = Math.floor(t / R[0]), since = t - n * R[0] - hash(n) * R[1], re = bell(since / R[2]);
-  for (let i = 0; i < 2; i++) {
-    const T = i === 0 ? m.wr : m.wl;
-    T.fold = WING.rest.fold - A.breathWing[1] * b + A.drift[1] * Math.sin(t * (0.31 + i * 0.09) + i * 2.1); T.raise = WING.rest.raise + A.breathWing[0] * b + A.drift[0] * Math.sin(t * (0.43 - i * 0.11) + 1 + i);
-    T.sweep = WING.rest.sweep + A.drift[0] * Math.sin(t * (0.23 + i * 0.07) + 3 * i); T.pitch = WING.rest.pitch;
-    T.fold += (R[3] - T.fold) * re;
-  }
+  q[J.chest + LEAN] += A.chest * br; q[J.spine + LEAN] -= A.waist * br; q[J.shrug] += A.shrug * br; q[J.hipsY] += A.hips * br;
+  q[J.head + TURN] -= A.head[0] * Math.sin(t * A.head[1]); q[J.head + LEAN] += A.nod[0] * Math.sin(t * A.nod[1] + 1);
+  q[J.jaw] += (A.jaw[0] * jaw * jaw) / RIG.jawOpen;
+}
+
+/** Standing: slow breaths, the weight going from foot to foot; the wings folded, stretching a little now and then. */
+function stand(q: Float32Array, m: DemonMem): void {
+  const A = P.stand, t = m.t, roll = A.shift[0] * Math.sin(t * A.shift[1]);
+  life(q, t);
+  flyT = 0;
+  q[J.hips + ROLL] += roll; q[J.spine + ROLL] -= A.back[0] * roll; q[J.chest + ROLL] -= A.back[1] * roll; q[J.head + ROLL] += A.back[2] * roll;
+  tailYaw = 0; tailPitch = 0;
+  const R = A.stretch, n = Math.floor(t / R.every), fold = WING.rest.fold + (R.to - WING.rest.fold) * bell((t - n * R.every - hash(n) * R.late) / R.for);
+  for (let i = 0; i < 2; i++) { const T = i === 0 ? m.wr : m.wl; T.fold = fold; T.raise = WING.rest.raise; T.sweep = WING.rest.sweep; T.pitch = WING.rest.pitch; }
 }
 
 /** Walking, and stepping round in a turn: slow long steps, the body dropping onto each footfall, the jolt running up to the head, the wings and the tail. */
@@ -230,9 +299,9 @@ function gait(q: Float32Array, m: DemonMem): void {
   m.wr.raise -= bounce; m.wl.raise -= bounce;
 }
 
-/** Claws: the weight onto the back leg, a step into the strike, the swing carrying the trunk past the target, the recovery catching it. */
-function claws(q: Float32Array, m: DemonMem, t: number, g: number, W: number, R: number): void {
-  const A = P.claws, sd = m.side, a = sd > 0 ? J.armR : J.armL, o = sd > 0 ? J.armL : J.armR;
+/** Claws, always the left hand's: the weight onto the back leg, a step into the strike, the swing carrying the trunk past the target, the recovery catching it. */
+function claws(q: Float32Array, m: DemonMem, t: number, g: number): void {
+  const A = P.claws, W = CONST.DEMON_CLAW_WINDUP, R = CONST.DEMON_CLAW_RECOVER, sd = -1, a = J.armL, o = J.armR;
   const w = S(0, W * 0.85, t), k = S(W - A.strike / 2, W + A.strike / 2, t), r = S(W + A.strike, W + R + 0.2, t), back = w * (1 - k), thru = k * (1 - r);
   q[J.hipsX] += (-A.back * back + A.into * thru) * g; q[J.hipsY] -= A.low * (back + thru) * g;
   q[J.hips + TURN] += sd * (A.hipsTurn[0] * back - A.hipsTurn[1] * thru) * g;
@@ -244,13 +313,32 @@ function claws(q: Float32Array, m: DemonMem, t: number, g: number, W: number, R:
   q[a + ARM.curl] += A.spread * Math.max(late, thru); q[a + ARM.thumb] += A.spread * Math.max(late, thru);
   q[o + ARM.swing] += A.arm.other[0] * late + A.arm.other[1] * thru;
   // the far foot steps into the strike and comes back in the recovery
-  const f = sd > 0 ? J.footL : J.footR, out = S(W - 0.2, W, t), home = S(W + 0.14, W + R, t);
+  const f = J.footR, out = S(W - 0.2, W, t), home = S(W + 0.14, W + R, t);
   q[f + FOOT.x] += A.step * (out - home) * g; q[f + FOOT.y] += A.stepUp * (bell(out) + bell(home)) * g;
   if (g > 0) {
-    const T = sd > 0 ? m.wr : m.wl;
-    T.fold += (A.wing.fold - T.fold) * late; T.sweep += A.wing.sweep * late;
+    m.wl.fold += (A.wing.fold - m.wl.fold) * late; m.wl.sweep += A.wing.sweep * late;
     m.wr.sweep -= A.wing.jerk * thru; m.wl.sweep -= A.wing.jerk * thru;
   }
+}
+
+const ease = (x: number): number => S(0, 1, x);
+/** The scimitar blow, the right arm's (the spike's attack on the server's times): drawn back within the wind-up, thrown across at its end, held, and heaving after it. */
+function scimitar(q: Float32Array, m: DemonMem, t: number, g: number): void {
+  const A = P.scimitar, W = CONST.DEMON_SCIMITAR_WINDUP, R = CONST.DEMON_SCIMITAR_RECOVER, a = J.armR, from = W - A.strike / 2;
+  // the spike's clock: its wind-up stretched to the server's (the blow lands in the middle of the strike), the rest to the recovery
+  const ph = t < from ? (A.wind * t) / from : t < from + A.strike ? A.wind + t - from : A.wind + A.strike + ((t - from - A.strike) * (A.end - A.wind - A.strike)) / (R + A.late - A.strike / 2);
+  const wind = ph < A.wind ? ease(ph / A.wind) : 1 - ease((ph - A.wind) / A.strike);
+  const strike = ph < A.wind ? 0 : ph < A.held ? 1 - Math.pow(1 - Math.min(1, (ph - A.wind) / A.strike), 3) : 1 - ease((ph - A.held) / (A.end - A.held));
+  const B = A.back, X = A.across;
+  q[J.hips + TURN] += B.hips * wind + X.hips[0] * strike; q[J.hips + LEAN] += X.hips[1] * strike;
+  q[J.chest + TURN] += B.chest[0] * wind + X.chest[0] * strike; q[J.chest + LEAN] += B.chest[1] * wind + X.chest[1] * strike;
+  q[a + ARM.swing] += B.arm[0] * wind + X.arm[0] * strike; q[a + ARM.out] += B.arm[1] * wind + X.arm[1] * strike; q[a + ARM.elbow] += B.arm[2] * wind + X.arm[2] * strike;
+  q[J.armL + ARM.swing] += X.other[0] * strike; q[J.armL + ARM.out] += X.other[1] * strike;
+  q[J.jaw] += (B.jaw * wind + X.jaw * strike) / RIG.jawOpen;
+  q[J.hipsX] += (B.hipsX * wind + X.hipsX * strike) * g; q[J.hipsY] += X.hipsY * strike * g;
+  if (ph > A.heave.from) { const h = A.heave.by[0] * Math.exp(-(ph - A.heave.from) * A.heave.by[2]) * Math.sin(ph * A.heave.by[1]); q[J.chest + LEAN] += h; q[J.shrug] += h; }
+  const lift = B.wing * wind + X.wing * strike;
+  m.wr.raise += lift; m.wl.raise += lift;
 }
 
 /** Tail whip: the feet set wide, the tail coils to one side with the hips turned against it, then whips round behind. */
@@ -265,7 +353,7 @@ function tailWhip(q: Float32Array, m: DemonMem, t: number): void {
   q[J.armR + ARM.out] += A.arms * (coil + thru); q[J.armL + ARM.out] += A.arms * (coil + thru);
   q[J.armR + ARM.swing] += A.arms * (coil - thru); q[J.armL + ARM.swing] -= A.arms * (coil - thru);
   const up = w * (1 - S(W + 0.3, W + CONST.DEMON_TAIL_RECOVER + 0.1, t));
-  wing(m.wr, up, { raise: A.wing.raise, fold: A.wing.fold }); wing(m.wl, up, { raise: A.wing.raise, fold: A.wing.fold });
+  wing(m.wr, up, A.wing); wing(m.wl, up, A.wing);
 }
 
 /** Swoop: a long crouch with the wings opening, the low glide with the claws ahead and the legs trailing, the braking slide into deep knees. */
@@ -289,31 +377,31 @@ function swoop(q: Float32Array, m: DemonMem, t: number): void {
   }
 }
 
-/** Casting: the one light thing it does; the arm still rises slowly and falls back by its weight. */
+/** Casting, with the left hand: the one light thing it does; the arm still rises slowly and falls back by its weight. */
 function cast(q: Float32Array, m: DemonMem, t: number, g: number): void {
-  const A = P.cast, sd = m.side, a = sd > 0 ? J.armR : J.armL, end = CONST.DEMON_CAST_WINDUP + CONST.DEMON_CAST_RECOVER;
+  const A = P.cast, sd = -1, a = J.armL, end = CONST.DEMON_CAST_WINDUP + CONST.DEMON_CAST_RECOVER;
   const fall = clamp((t - A.hold) / (end + 0.12 - A.hold), 0, 1), up = S(0, A.rise, t) * (1 - fall * fall), dipped = bell(t / (A.rise * 0.7));
   arm(q, a, up, g > 0 ? A.arm : A.airArm);
   q[a + ARM.wristBend] += A.wrist * up; q[a + ARM.curl] += A.spread * up; q[a + ARM.thumb] += A.spread * up;
   // the shoulder dips away before the arm comes up, then the chest turns a little behind the arm
   q[J.chest + TURN] += sd * A.turn * (dipped * 0.8 - up); q[J.chest + ROLL] += sd * A.dip * (dipped - up * 0.5); q[J.hipsX] -= 0.6 * up * g;
-  if (g > 0) { const T = sd > 0 ? m.wr : m.wl; T.fold += (A.wing - T.fold) * up; }
+  if (g > 0) m.wl.fold += (A.wing - m.wl.fold) * up;
 }
 
-/** Fire Breath: the head back and the chest filling, then the lean into it with the jaw wide open, trembling. Returns the glow of the face. */
+/** Fire Breath (the spike's, on the server's times): a breath in with the head and the chest back, then the head thrust forward with the jaw wide open, trembling. Returns the glow of the face. */
 function breath(q: Float32Array, m: DemonMem, t: number, g: number): number {
-  const A = P.breath, W = CONST.DEMON_BREATH_WINDUP, w = S(0, W * 0.85, t), c = S(W - 0.1, W + 0.12, t), back = w * (1 - c), tr = c * Math.sin(m.t * A.tremble[1]);
-  q[J.spine + LEAN] += (-A.back[0] * back + A.forward[0] * c) * (0.4 + 0.6 * g); q[J.chest + LEAN] += -A.fill * back + A.forward[1] * c;
-  q[J.neck + LEAN] += -A.back[1] * back + A.forward[2] * c; q[J.head + LEAN] += -A.back[2] * back + A.head * c + A.tremble[0] * tr;
-  q[J.head + ROLL] += A.tremble[0] * c * Math.sin(m.t * A.tremble[1] * 0.73);
-  q[J.hipsX] += (-A.hips * back + A.into * c) * g; q[J.hipsY] -= 0.8 * c * g;
-  q[J.jaw] = Math.max(q[J.jaw], 0.25 * S(W * 0.5, W * 0.9, t), c);
+  const A = P.breath, W = CONST.DEMON_BREATH_WINDUP, I = A.inhale, O = A.out;
+  const inn = t < W ? ease(t / (W * A.in)) : 1 - ease((t - W) / A.turn), out = t < W ? 0 : ease((t - W) / A.open), tr = out * Math.sin(m.t * A.tremble[1]);
+  q[J.hips + LEAN] += O.trunk[0] * out; q[J.spine + LEAN] += I.trunk[0] * inn + O.trunk[1] * out; q[J.chest + LEAN] += I.trunk[1] * inn + O.trunk[2] * out;
+  q[J.neck + LEAN] += I.trunk[2] * inn + O.trunk[3] * out; q[J.head + LEAN] += I.trunk[3] * inn + O.trunk[4] * out + A.tremble[0] * tr;
+  q[J.head + ROLL] += A.tremble[0] * out * Math.sin(m.t * A.tremble[1] * 0.73);
+  q[J.jaw] += (I.jaw * inn + O.jaw * out) / RIG.jawOpen;
   for (let i = 0; i < 2; i++) {
     const a = i === 0 ? J.armR : J.armL;
-    q[a + ARM.out] += A.arms[0] * w; q[a + ARM.swing] += -A.arms[1] * back + A.arms[1] * c; q[a + ARM.curl] -= 0.4 * c;
-    if (g > 0) { const T = i === 0 ? m.wr : m.wl; wing(T, w, A.wing); T.raise += A.tremble[2] * c * Math.sin(m.t * A.tremble[3] + i * 1.7); }
+    q[a + ARM.swing] += I.arms[0] * inn + O.arms[0] * out; q[a + ARM.out] += I.arms[1] * inn + O.arms[1] * out; q[a + ARM.elbow] += O.arms[2] * out;
+    if (g > 0) { const T = i === 0 ? m.wr : m.wl; T.fold += (A.fold - T.fold) * Math.max(inn, out); T.raise += O.wing * out + A.tremble[2] * out * Math.sin(m.t * A.tremble[3] + i * 1.7); }
   }
-  return 1 + (A.heat - 1) * w + A.flicker * tr;
+  return 1 + (A.heat - 1) * Math.max(inn, out) + A.flicker * tr;
 }
 
 /** How far the body is above (+) or below its mean height at the beat's phase, and how fast it rises (units per beat), for `deep` times the bob. */
@@ -323,75 +411,72 @@ function bob(phase: number, deep: number): void {
   BOB = a * Math.cos(x); BOBV = -a * TAU * Math.sin(x);
 }
 
-/** In the air: hanging on the wings, sagging between the strokes; one leg drawn up, the other long; leaning into the way it flies. */
+/** In the air: the spike's flying stance, riding the beat; one leg drawn up, the other trailing; leaning into the way it flies. */
 function hover(q: Float32Array, m: DemonMem, labour: number): void {
-  const A = P.air, t = m.t, b = Math.sin((TAU * t) / P.stand.breath);
-  q.set(REST);
+  const A = P.air;
+  life(q, m.t);
+  flyT = 1;
   bob(m.beat, 1 + (P.labour.bob - 1) * labour);
   q[J.hipsY] += BOB;
-  // the trunk rocks back on the down stroke; the arms hang a little forward and bent
-  const down = Math.cos(TAU * (m.beat - WING.down / 2));
-  q[J.spine + LEAN] -= A.rock * (0.4 + 0.6 * down); q[J.chest + LEAN] -= P.stand.breathChest * b;
-  q[J.neck + LEAN] += A.head[0] + A.rock * 0.5 * down; q[J.head + LEAN] += A.head[1];
   for (let i = 0; i < 2; i++) {
-    const a = i === 0 ? J.armR : J.armL, f = i === 0 ? J.footR : J.footL;
-    q[a + ARM.swing] += A.arms[0] + 0.05 * down; q[a + ARM.out] += A.arms[1] * (0.6 + 0.4 * i) - 0.04 * down; q[a + ARM.elbow] += (A.arms[2] - P.elbow) * (1 - 0.3 * i);
-    q[f + FOOT.x] += A.hang[0] + i * A.tuck[0]; q[f + FOOT.y] += A.hang[1] + i * A.tuck[1];
+    const f = i === 0 ? J.footR : J.footL, F = FLY_FEET[i], k = P.takeoff.legs + (1 - P.takeoff.legs) * S(0, P.takeoff.tuck, m.climb);
+    // after a take-off the legs are still long, the toes just off the floor: they are drawn up in the climb
+    q[f + FOOT.x] += F[0] * k; q[f + FOOT.y] += F[1] + (P.takeoff.toes - P.lift * P.liftAtTakeoff - F[1]) * (1 - S(0, P.takeoff.tuck, m.climb)) + BOB; q[f + FOOT.z] += F[2] * k; q[f + FOOT.toes] += F[3] * k;
   }
   // flying, it leans into its way and the wings sweep with it
   const cf = Math.cos(m.face), sf = Math.sin(m.face), fwd = clamp((m.vx * cf + m.vz * sf) / A.leanAt, -1, 1), side = clamp((-m.vx * sf + m.vz * cf) / A.leanAt, -1, 1);
   q[J.hips + LEAN] += A.lean * fwd; q[J.hips + ROLL] += A.lean * side;
-  tailYaw = P.stand.tail[0] * Math.sin((TAU * t) / P.stand.tail[1]) - 0.5 * A.lean * side; tailPitch = A.tail[0] + A.tail[1] * BOBV + 1.2 * A.lean * fwd;
-  beatTarget(m.beat, m.wr);
-  if (labour > 0) { const mid = (WING.stroke.raise[0] + WING.stroke.raise[1]) / 2; m.wr.raise = mid + (m.wr.raise - mid) * (1 + (P.labour.deep - 1) * labour); }
-  m.wr.sweep += A.sweep * A.lean * fwd;
-  m.wl.fold = m.wr.fold; m.wl.raise = m.wr.raise; m.wl.sweep = m.wr.sweep; m.wl.pitch = m.wr.pitch;
-  m.wr.raise -= 0.6 * A.lean * side; m.wl.raise += 0.6 * A.lean * side;
+  tailYaw = -0.5 * A.lean * side; tailPitch = 1.2 * A.lean * fwd;
+  // the beat itself turns the bones (skeleton.ts); the first laboured strokes reach deeper
+  const deep = (P.labour.deep - 1) * labour * WINGS.beat[0][0] * Math.cos(TAU * m.beat), sweep = A.sweep * A.lean * fwd;
+  m.wr.fold = m.wl.fold = 0; m.wr.pitch = m.wl.pitch = 0; m.wr.sweep = m.wl.sweep = sweep;
+  m.wr.raise = deep - 0.6 * A.lean * side; m.wl.raise = deep + 0.6 * A.lean * side;
 }
 
-const GATHER: WingTarget = { fold: 0, raise: 0, sweep: 0, pitch: 0 };
-/** Taking off: a deep crouch while the wings rise and open, then the legs and one hard down stroke push the weight off the floor. Returns the lift. */
+/** Taking off: a deep crouch while the wings open and rise, then the legs and one hard down stroke push the weight off the floor. Returns the lift. */
 function takeOff(q: Float32Array, m: DemonMem, t: number): number {
   const A = P.takeoff, G = A.gather, u = clamp((t - G) / (CONST.DEMON_TAKEOFF - G), 0, 1), w = S(0, G * 0.9, t), push = u * u * (3 - 2 * u), down = w * (1 - S(0, 0.7, u));
   // the body starts slowly, and at the anim's end it hangs at the top of its hop (the beat's bob takes it on from there)
   const lift = P.lift * P.liftAtTakeoff * S(0, 1, Math.pow(u, A.slow));
+  // the stroke: from the top to the bottom of the beat while the stance goes over to the flying one
   if (u > 0) m.beat = WING.down * u;
+  flyT = push;
   bob(WING.down * u, P.labour.bob);
   q[J.hipsY] += -A.crouch * w * (1 - push) + BOB * push; q[J.hipsX] -= 1.2 * down;
-  q[J.spine + LEAN] += A.bow[0] * down - 0.06 * push; q[J.chest + LEAN] += A.bow[1] * down - 0.05 * push; q[J.neck + LEAN] += 0.1 * down - A.look * push;
+  q[J.spine + LEAN] += A.bow[0] * down; q[J.chest + LEAN] += A.bow[1] * down; q[J.neck + LEAN] += 0.1 * down;
   for (let i = 0; i < 2; i++) {
-    const a = i === 0 ? J.armR : J.armL, f = i === 0 ? J.footR : J.footL, off = S(0.6, 1, u);
+    const a = i === 0 ? J.armR : J.armL, f = i === 0 ? J.footR : J.footL, off = S(0.6, 1, u), F = FLY_FEET[i], k = A.legs * off;
     q[a + ARM.swing] += A.arms[0] * w * (1 - push) + A.throwArms[0] * push; q[a + ARM.elbow] += (A.arms[1] - P.elbow) * w * (1 - push) + (A.throwArms[1] - P.elbow) * push; q[a + ARM.out] += 0.2 * push;
     // the feet stay on the floor while the legs stretch, and leave it last
-    q[f + FOOT.y] += -lift + (A.toes + i * P.air.tuck[1] * 0.4) * off; q[f + FOOT.x] += (P.air.hang[0] + i * P.air.tuck[0] * 0.4) * off;
+    q[f + FOOT.x] += F[0] * k; q[f + FOOT.y] += -lift + (A.toes + BOB) * off; q[f + FOOT.z] += F[2] * k; q[f + FOOT.toes] += F[3] * k;
   }
   tailPitch += A.tail * down + A.whip * bell(u * 0.9);
-  for (let i = 0; i < 2; i++) {
-    const T = i === 0 ? m.wr : m.wl;
-    // the stroke's target runs ahead of the push by the chain's lag, so the wing itself is down when the anim ends
-    const uw = clamp((t - G + A.wing.lead) / (CONST.DEMON_TAKEOFF - G - A.wing.lead), 0, 1);
-    if (uw > 0) { beatTarget(WING.down * uw, T); T.raise = A.wing.raise + (A.wing.low - A.wing.raise) * S(0, 1, uw); } else { beatTarget(0, GATHER); GATHER.raise = A.wing.raise; wing(T, S(0, (G - A.wing.lead) * 0.9, t), GATHER); }
-  }
+  // the wings open and go up in the crouch; as the stance becomes the flying one, the beat (at its top when the push begins) carries them
+  for (let i = 0; i < 2; i++) { const T = i === 0 ? m.wr : m.wl; T.fold += (0 - T.fold) * w; T.raise += A.wing * w * (1 - push); }
   return lift;
 }
 
-/** Landing: the wings up and broad against the air, the body dropping faster and faster, the legs reaching for the floor. Returns the lift. */
+/** Landing: the wings held up and broad against the air, the body dropping faster and faster, the legs reaching for the floor. Returns the lift. */
 function land(q: Float32Array, m: DemonMem, t: number): number {
   const A = P.land, u = clamp(t / CONST.DEMON_LAND, 0, 1), lift = P.lift * (1 - Math.pow(u, A.fall)), w = S(0, 0.3, u), r = S(A.reach[0] / CONST.DEMON_LAND, A.reach[1] / CONST.DEMON_LAND, u);
+  flyT = 1 - r;
   q[J.hipsY] += (A.stand - q[J.hipsY] + REST[J.hipsY]) * r;
   q[J.spine + LEAN] += A.bow * w; q[J.neck + LEAN] += A.look * w;
   for (let i = 0; i < 2; i++) {
     const a = i === 0 ? J.armR : J.armL, f = i === 0 ? J.footR : J.footL;
     q[a + ARM.out] += A.arms[0] * w; q[a + ARM.swing] += A.arms[1] * w;
-    q[f + FOOT.x] += (REST[f + FOOT.x] - q[f + FOOT.x]) * r; q[f + FOOT.y] += (-lift - q[f + FOOT.y]) * r;
+    q[f + FOOT.x] += (REST[f + FOOT.x] - q[f + FOOT.x]) * r; q[f + FOOT.z] += (REST[f + FOOT.z] - q[f + FOOT.z]) * r; q[f + FOOT.toes] += (REST[f + FOOT.toes] - q[f + FOOT.toes]) * r;
+    q[f + FOOT.y] += (-lift - q[f + FOOT.y]) * r;
   }
   tailPitch += A.tail * w;
-  wing(m.wr, w, A.wing); wing(m.wl, w, A.wing);
+  // the wings keep their face down while the stance comes upright again
+  for (let i = 0; i < 2; i++) { const T = i === 0 ? m.wr : m.wl; wing(T, w, A.wing); T.pitch = -A.flat * r; }
   return lift;
 }
 
 /** Standing and walking are one pose (the steps come and go with the way travelled): a change between them is no new anim. */
 const ATTACK = (anim: number): boolean => anim !== ANIM.Idle && anim !== ANIM.Move;
+const BLOW = (anim: number): number => (anim === ANIM.Cleave ? CONST.DEMON_SCIMITAR_WINDUP : anim === ANIM.Melee ? CONST.DEMON_CLAW_WINDUP : anim === ANIM.Tail ? CONST.DEMON_TAIL_WINDUP : -1);
 
 /** The pose of this frame, written into the memory's own objects (no allocation). */
 export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
@@ -420,11 +505,12 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   }
   m.lastX = s.x; m.lastZ = s.z;
 
-  // a new anim (or the same attack begun again): the arms take turns, the clocks of the flight start
+  // a new anim (or the same attack begun again): the clocks of the flight start
   const acts = ATTACK(s.anim), again = !first && acts && s.anim === m.lastAnim && s.animT < m.lastAnimT - 1e-4;
   const changed = first || again || air !== m.airborne || (s.anim !== m.lastAnim && (acts || ATTACK(m.lastAnim)));
-  if (changed && (s.anim === ANIM.Melee || s.anim === ANIM.Cleave || s.anim === ANIM.Cast)) { m.side = m.turn; m.turn = m.turn > 0 ? -1 : 1; }
-  const t = s.animT, flying = air && s.anim !== ANIM.Land;
+  // snapshots bring a new animT every other tick, or later when one is lost: a row's clock runs on by the client's own time meanwhile (the lich's rule)
+  m.seen = jump || !acts || s.anim !== m.lastAnim || s.animT !== m.lastAnimT ? 0 : Math.min(P.seen, m.seen + dt);
+  const t = s.animT + m.seen, flying = air && s.anim !== ANIM.Land;
   if (!first && m.lastAnim === ANIM.Land && s.anim !== ANIM.Land && !air && m.lastAnimT > CONST.DEMON_LAND * 0.8) m.landT = 0; else if (!jump) m.landT += dt; else m.landT = 99;
   if (flying) {
     if (!first && !m.airborne && m.lastAnim === ANIM.TakeOff) { m.climb = 0; m.beat = WING.down; } else if (jump) m.climb = 99; else m.climb += dt;
@@ -432,18 +518,20 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   }
   const labourFor = P.labour.beats * P.labour.pace * WING.beat, labour = flying ? 1 - S(labourFor * 0.6, labourFor, m.climb) : 0;
   if (flying && !jump && !(m.climb === 0)) m.beat = frac(m.beat + dt / (WING.beat * (1 + (P.labour.pace - 1) * labour)));
+  // landing, the beat runs on to the top of its stroke and the wings stay up there
+  else if (s.anim === ANIM.Land && !jump && m.beat > 0) { m.beat += dt / WING.beat; if (m.beat >= 1) m.beat = 0; }
 
   // the target pose of the anim, on the standing or the hovering one
   let lift = 0, heat = 1;
   const g = flying ? 0 : 1;
   if (flying) { hover(q, m, labour); lift = P.lift * (P.liftAtTakeoff + (1 - P.liftAtTakeoff) * S(0, labourFor, m.climb)); }
-  else if (s.anim === ANIM.Land) { m.beat = 0; hover(q, m, 0); q[J.hipsY] -= BOB; lift = land(q, m, t); }
+  else if (s.anim === ANIM.Land) { if (jump) m.beat = 0; hover(q, m, 0); for (let i = 0; i < 2; i++) q[(i === 0 ? J.footR : J.footL) + FOOT.y] -= BOB; q[J.hipsY] -= BOB; lift = land(q, m, t); }
   else { stand(q, m); if (s.anim === ANIM.TakeOff) lift = takeOff(q, m, t); else if (!acts) gait(q, m); }
-  if (s.anim === ANIM.Melee) claws(q, m, t, g, CONST.DEMON_CLAW_WINDUP, CONST.DEMON_CLAW_RECOVER);
-  else if (s.anim === ANIM.Cleave) claws(q, m, t, g, CONST.DEMON_SCIMITAR_WINDUP, CONST.DEMON_SCIMITAR_RECOVER);
+  if (s.anim === ANIM.Melee) claws(q, m, t, g);
+  else if (s.anim === ANIM.Cleave) scimitar(q, m, t, g);
   else if (s.anim === ANIM.Tail) tailWhip(q, m, t);
   else if (s.anim === ANIM.Dash) swoop(q, m, t);
-  else if (s.anim === ANIM.Cast) { cast(q, m, t, g); pose.caster = m.side; }
+  else if (s.anim === ANIM.Cast) cast(q, m, t, g);
   else if (s.anim === ANIM.Breath) heat = breath(q, m, t, g);
 
   // the cross-fade: how far the pose shown last was off the new target dies away
@@ -451,12 +539,13 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   if (jump) m.fromT = 99;
   else if (changed) {
     for (let i = 0; i < JOINTS; i++) F.joints[i] = base[i] - q[i];
-    F.lift = pose.lift - lift; F.heat = pose.heat - heat;
-    m.fromT = 0; m.easeFor = P.easeFrom[m.lastAnim] ?? P.ease;
+    F.lift = pose.lift - lift; F.heat = pose.heat - heat; F.fly = pose.fly - flyT;
+    // off the floor or onto it without the anim for it (the dev page; a take-off missed): caught slowly
+    m.fromT = 0; m.easeFor = P.easeFrom[m.lastAnim] ?? (air !== m.airborne ? P.easeAir : P.ease);
   } else m.fromT += dt;
   const left = 1 - S(0, m.easeFor, m.fromT);
   for (let i = 0; i < JOINTS; i++) base[i] = q[i] + F.joints[i] * left;
-  pose.lift = Math.max(0, lift + F.lift * left); pose.heat = heat + F.heat * left;
+  pose.lift = Math.max(0, lift + F.lift * left); pose.heat = heat + F.heat * left; pose.fly = clamp(flyT + F.fly * left, 0, 1);
   pose.joints.set(base);
   const j = pose.joints;
 
@@ -504,13 +593,84 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
     wingStep(i === 0 ? pose.wingR : pose.wingL, T, cdt);
   }
   // a whip is quick down the whole tail; any other swing takes its time to reach the tip
-  chainStep(pose.tail, m.tailV, tailYaw + turn * WING.turn.tail, tailPitch, s.anim === ANIM.Tail ? P.tail.rates : WING.tailRates, cdt);
+  chainStep(pose.tail, m.tailV, tailYaw + turn * WING.turn.tail, tailPitch, s.anim === ANIM.Tail ? WHIP_RATES : TAIL_RATES, cdt);
   if (flying || s.anim === ANIM.Land) {
     const A = P.air, swing = flying ? A.legSwing * BOBV - A.legLean * base[J.hips + LEAN] : 0, k = s.anim === ANIM.Land ? 1 - S(P.land.reach[0], P.land.reach[1], t) : 1;
     chainStep(m.legs, m.legsV, -A.legLean * base[J.hips + ROLL], swing, A.legRates, cdt);
     for (let i = 0; i < 2; i++) { j[(i === 0 ? J.footR : J.footL) + FOOT.x] -= Math.sin(m.legs[i * 2 + 1]) * A.swing * k; j[(i === 0 ? J.footR : J.footL) + FOOT.z] += Math.sin(m.legs[i * 2]) * A.swing * k; }
   } else { m.legs.fill(0); m.legsV.fill(0); }
 
-  m.lastAnim = s.anim; m.lastAnimT = t; m.airborne = air; m.started = true;
+  tailJoints(pose, m, -(base[J.hips + TURN] + P.tailOwn.chest * base[J.chest + TURN]), jump ? 0 : dt, jump);
+  alive(pose, m, s, t, flying, jump, dt);
+  pose.beat = m.beat; pose.clock = m.t;
+  pose.billow = pose.fly * Math.sin(TAU * m.beat); pose.fold = (pose.wingR.hand.fold + pose.wingL.hand.fold) / 2;
+
+  m.lastAnim = s.anim; m.lastAnimT = s.animT; m.airborne = air; m.started = true;
   return pose;
+}
+
+/**
+ * The tail's joints (the spike's): its own curve, standing or streaming; a slow wave that grows toward the blade and a flick of the
+ * end now and then; each joint trailing the body's own turn `lead` (rad to the left) on a spring, softer toward the end, so a turn runs
+ * down the tail as down a whip; and the rows' swing, link after link (`pose.tail`).
+ */
+function tailJoints(pose: DemonPose, m: DemonMem, lead: number, dt: number, jump: boolean): void {
+  const A = P.tailOwn, N = TAIL_N, t = m.t, fly = pose.fly, J2 = pose.tailJ, L = pose.tail, K = A.flick;
+  const n = Math.floor(t / K.every), ft = t - n * K.every - K.at, dir = n % 2 ? -1 : 1;
+  if (jump) { m.whip.fill(lead); m.whipV.fill(0); }
+  else if (dt > 0) {
+    const steps = Math.ceil(dt / WING.step - 1e-6), h = dt / steps;
+    for (let s = 0; s < steps; s++) for (let i = 0, to = lead; i < N; i++) {
+      const u = i / N;
+      m.whipV[i] += ((to - m.whip[i]) * (A.whip[0] - A.whip[1] * u) - m.whipV[i] * (A.whip[2] - A.whip[3] * u)) * h; m.whip[i] += m.whipV[i] * h;
+      to = m.whip[i];
+    }
+  }
+  for (let i = 0, to = lead; i < N; i++) {
+    const u = (i + 1) / N, k = Math.floor(i * PER), a = (ft - u * K.run) / K.snap, b = (ft - K.back[1] - u * K.run) / K.back[2], flick = Math.exp(-a * a) - K.back[0] * Math.exp(-b * b);
+    J2[i * 2] = PER * ((A.wave[0] + A.wave[1] * u) * Math.sin(t * A.wave[2] - u * A.wave[3] + A.wave[4]) + K.yaw * u * u * flick * dir)
+      + clamp(m.whip[i] - to, -A.most, A.most) * (i ? 1 : A.root) + L[i * 2] - (i ? L[i * 2 - 2] : 0);
+    J2[i * 2 + 1] = PER * (A.stand[k] + (A.fly[k] - A.stand[k]) * fly + (A.lift[0] + A.lift[1] * u) * Math.sin(t * A.lift[2] - u * A.lift[3] + A.lift[4]) + K.pitch * u * u * Math.max(0, flick))
+      + L[i * 2 + 1] - (i ? L[i * 2 - 1] : 0);
+    to = m.whip[i];
+  }
+}
+
+/** What the paint reads (the spike's `frame()`): the heart, the breath's charge, the runes, the eyes. */
+function alive(pose: DemonPose, m: DemonMem, s: BuiltIn, t: number, flying: boolean, jump: boolean, dt: number): void {
+  const A = P.life, blow = BLOW(s.anim), fire = s.anim === ANIM.Breath, step = jump ? 0 : dt;
+  pose.heart += step * A.heart[blow >= 0 || s.anim === ANIM.Dash ? 3 : fire ? 2 : flying ? 1 : 0];
+  if (fire) {
+    // the spike's breath clock: 0.6 s of breath in, on the server's wind-up
+    const W = CONST.DEMON_BREATH_WINDUP, b = t < W ? (0.6 * t) / W : 0.6 + t - W, C = A.charge;
+    pose.charge[0] = Math.min(1, b / C.climbed); pose.charge[1] = b < C.gone ? Math.min(1, b / C.up) * Math.min(1, (C.gone - b) * C.fall) : 0;
+  } else { pose.charge[0] = 1; pose.charge[1] = 0; }
+  const rune = (blow >= 0 && t < blow + A.runeFor) || (fire && t < CONST.DEMON_BREATH_WINDUP + CONST.DEMON_BREATH_TIME) ? 1 : 0;
+  pose.rune = jump ? rune : pose.rune + (rune - pose.rune) * Math.min(1, dt * A.runeRates[rune ? 0 : 1]);
+  // the eyes follow the hero it looks at, as far as the head has not turned to him yet, and narrow as a blow is drawn
+  const squint = (s.anim === ANIM.Cleave || s.anim === ANIM.Melee) && t < blow + A.squint ? 1 : 0;
+  pose.gaze[0] = s.look === null ? 0 : clamp(-Math.sin(wrap(s.look - m.face) - m.head) * A.gaze, -1, 1);
+  pose.gaze[1] = A.down[0] + (A.down[1] - A.down[0]) * pose.fly;
+  pose.gaze[2] = jump ? squint : pose.gaze[2] + (squint - pose.gaze[2]) * Math.min(1, dt * A.squintRate);
+}
+
+/**
+ * The chain on the left wrist (the spike's): it hangs straight down and swings behind the arm's movement. `x`, `z`: where it hangs
+ * from this frame, in the figure's own frame (builder units, x to the left, z to the front), read off the bones just placed; the
+ * swing shows on the next frame's bones.
+ */
+export function chainSwing(m: DemonMem, x: number, z: number, dt: number): void {
+  const A = P.chain, c = m.pose.chain, sw = m.swing, v = m.swingV;
+  if (!(dt > 0)) return;
+  if (m.hang === null || dt > WING.maxDt) { m.hang ??= [x, z]; sw[0] = sw[1] = v[0] = v[1] = 0; }
+  else {
+    const ax = (x - m.hang[0]) / Math.max(dt, 1e-3), az = (z - m.hang[1]) / Math.max(dt, 1e-3);
+    // a jump of the arm (a new pose shown at once) pulls nothing
+    if (Math.abs(ax) + Math.abs(az) < A.wild) { v[0] += (-ax * A.pull - sw[0] * A.stiff - v[0] * A.damp) * dt; v[1] += (-az * A.pull - sw[1] * A.stiff - v[1] * A.damp) * dt; }
+    sw[0] += v[0] * dt; sw[1] += v[1] * dt;
+    const far = Math.hypot(sw[0], sw[1]);
+    if (far > A.most) { sw[0] *= A.most / far; sw[1] *= A.most / far; }
+  }
+  m.hang[0] = x; m.hang[1] = z;
+  for (let i = 0; i < 6; i++) { const k = A.link[0] + A.link[1] * i; c[i * 2] = -sw[0] * k + A.idle[0] * Math.sin(m.t * A.idle[1] + i); c[i * 2 + 1] = sw[1] * k; }
 }

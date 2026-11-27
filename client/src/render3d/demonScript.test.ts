@@ -40,7 +40,7 @@ describe('the demon\'s acts (?r3d=demon)', () => {
 
   it('the attacks: the server\'s anim from the wind-up through the recovery, for the server\'s times, then standing', () => {
     const rows: Array<[Parameters<typeof demonAct>[0], number, number]> = [
-      ['claws', ANIM.Melee, CONST.DEMON_CLAW_WINDUP + CONST.DEMON_CLAW_RECOVER], ['tail', ANIM.Tail, CONST.DEMON_TAIL_WINDUP + CONST.DEMON_TAIL_RECOVER],
+      ['claws', ANIM.Melee, CONST.DEMON_CLAW_WINDUP + CONST.DEMON_CLAW_RECOVER], ['scimitar', ANIM.Cleave, CONST.DEMON_SCIMITAR_WINDUP + CONST.DEMON_SCIMITAR_RECOVER], ['tail', ANIM.Tail, CONST.DEMON_TAIL_WINDUP + CONST.DEMON_TAIL_RECOVER],
       ['cast', ANIM.Cast, CONST.DEMON_CAST_WINDUP + CONST.DEMON_CAST_RECOVER], ['breath', ANIM.Breath, CONST.DEMON_BREATH_WINDUP + CONST.DEMON_BREATH_TIME], ['broken', ANIM.Dash, 0.25],
     ];
     for (const [act, anim, secs] of rows) {

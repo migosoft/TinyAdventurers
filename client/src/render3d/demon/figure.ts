@@ -6,7 +6,7 @@ import { newBuiltBuf, type BuiltBuf, type BuiltDrawn, type BuiltFigure, type Bui
 import { ANIM, CONST, EFFECT } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import { BLADE, BONES, BONE_DEFS, B, EYE, MOUTH, buildDemonSkin } from './body';
-import { demonPose, newDemonMem, restPose, type DemonMem } from './pose';
+import { chainSwing, demonPose, newDemonMem, restPose, type DemonMem } from './pose';
 import { SKEL, onBone, placeBones } from './skeleton';
 import { demonSkin } from './skinFile';
 
@@ -27,6 +27,8 @@ const HAND_R = at('handR');
 // bind points the anchors ride on (builder frame): the knuckles of the left hand, the mouth, the chest bone's pivot, the eyes, the blade's edge
 const PALM = at('fingersL'), CHEST = at('chest');
 const EYE_R: V3 = [-EYE[0], EYE[1], EYE[2]], EYES: V3 = [0, EYE[1], EYE[2]];
+/** Where the wrist chain hangs from: a little above its first link's bind place, on the left forearm. */
+const HANG: V3 = [at('chain0')[0], at('chain0')[1] + 0.03, at('chain0')[2]], HUNG: V3 = [0, 0, 0];
 const EDGE = BLADE_U.map((u): V3 => { const e = BLADE.edge(u); return [HAND_R[0] + e[0], HAND_R[1] + e[1], HAND_R[2] + e[2]]; });
 
 function newMem(temper: 1 | -1): () => DemonFigMem {
@@ -53,6 +55,9 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
     onBone(b, B.fingersL, PALM, a.hand); onBone(b, B.jaw, MOUTH, a.mouth!); onBone(b, B.chest, CHEST, a.chest!);
     onBone(b, B.head, EYE, a.eyeL!); onBone(b, B.head, EYE_R, a.eyeR!); onBone(b, B.head, EYES, a.eyes!);
     for (let i = 0; i < EDGE.length; i++) onBone(b, B.handR, EDGE[i], a.blade![i]);
+    // the chain swings behind where the wrist went (model x is the builder's front, model z its right)
+    onBone(b, B.foreArmL, HANG, HUNG);
+    chainSwing(mem, -HUNG[2], HUNG[0], dt);
   }
   const phase = (mem.t / PULSE) % 1;
   d.yaw = mem.face;
@@ -66,14 +71,10 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
 }
 
 let rested: BuiltBuf | null = null;
-/**
- * The coarse skin (cell 0.04) of the body and the tail, skinned on the CPU by the stance, once: the lamp outline's shape.
- * shortcut: the wings are left out, so the shadow caster has none (spread as the stance leaves them they are 84 px tall and the
- * atlas would pass 2048 px); task 8 folds them in the stance and adds them back here.
- */
+/** The coarse skin (cell 0.04) of the body, the tail and the folded wings, skinned on the CPU by the rest pose, once: the lamp outline's shape. */
 function rest(): BuiltBuf {
   if (rested) return rested;
-  const skin = buildDemonSkin(0.04), parts = [skin.body, skin.tail];
+  const skin = buildDemonSkin(0.04), parts = [skin.body, skin.tail, skin.tubes, skin.web];
   const bones = new Float32Array(BONES * 16);
   placeBones(restPose(), bones);
   const verts = parts.reduce((n, p) => n + p.position.length / 3, 0), indices = parts.reduce((n, p) => n + p.index.length, 0);
@@ -93,7 +94,8 @@ function rest(): BuiltBuf {
         onBone(bones, part.skinIndex[k * 4 + j], p, q);
         x += q[0] * w; y += q[1] * w; z += q[2] * w;
       }
-      out.position[(v + k) * 3] = x; out.position[(v + k) * 3 + 1] = y; out.position[(v + k) * 3 + 2] = z;
+      // the folded wings' longest fingers reach under the floor (as in the spike): the outline ends at the floor
+      out.position[(v + k) * 3] = x; out.position[(v + k) * 3 + 1] = Math.max(0, y); out.position[(v + k) * 3 + 2] = z;
     }
     for (let k = 0; k < part.index.length; k++) out.index[i + k] = part.index[k] + v;
     v += n; i += part.index.length;

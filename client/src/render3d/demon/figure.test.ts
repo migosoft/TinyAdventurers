@@ -78,7 +78,7 @@ describe('the demon figures', () => {
   });
 
   it('beats its wings and hangs in the air while airborne, trails a turn, holds all of it frozen or stone, and takes the dev page\'s fold', () => {
-    const m = DEMON_FIGURE.newMem() as { mem: { pose: { wingR: { arm: { raise: number; sweep: number; fold: number } }; wingL: { arm: { sweep: number } }; tail: Float32Array; lift: number } } };
+    const m = DEMON_FIGURE.newMem() as { mem: { pose: { wingR: { arm: { raise: number; sweep: number; fold: number } }; wingL: { arm: { sweep: number } }; tail: Float32Array; lift: number; beat: number; fly: number } } };
     const pose = m.mem.pose;
     const run = (o: Partial<BuiltIn>, frames: number, aimStep = 0): void => { for (let i = 0; i < frames; i++) DEMON_FIGURE.draw(idle({ ...o, aim: (aim += aimStep) }), 1 / 60, m); };
     let aim = 0;
@@ -86,8 +86,9 @@ describe('the demon figures', () => {
     expect(Math.abs(pose.wingR.arm.raise - WING.rest.raise)).toBeLessThan(0.12);   // at rest, but for the breath and the drift
     expect(pose.lift).toBe(0);
     let lo = 9, hi = -9;
-    for (let i = 0; i < 140; i++) { run({ flags: FLAG.AIRBORNE }, 1); lo = Math.min(lo, pose.wingR.arm.raise); hi = Math.max(hi, pose.wingR.arm.raise); }
-    expect(hi - lo).toBeGreaterThan(1);
+    for (let i = 0; i < 140; i++) { run({ flags: FLAG.AIRBORNE }, 1); lo = Math.min(lo, pose.beat); hi = Math.max(hi, pose.beat); }
+    expect(hi - lo).toBeGreaterThan(0.95);   // the beat's phase runs through
+    expect(pose.fly).toBe(1);
     expect(pose.lift).toBeGreaterThan(9);
     expect(DEMON_FIGURE.draw(idle({ flags: FLAG.AIRBORNE }), 1 / 60, m).lift).toBeCloseTo(pose.lift * SKEL.perPose, 9);   // builder units
     for (const fx of [EFFECT.Frozen, EFFECT.Petrified]) {

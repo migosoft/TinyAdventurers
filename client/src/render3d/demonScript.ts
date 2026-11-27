@@ -6,8 +6,8 @@ import { ANIM, CONST, FLAG } from '../generated/defs';
 import type { EntState } from '../game/world';
 import { WING } from './demon/wings';
 
-export type DemonAct = 'stand' | 'walk' | 'claws' | 'tail' | 'swoop' | 'cast' | 'breath' | 'fly' | 'hurt' | 'broken' | 'wings';
-export const DEMON_ACTS: readonly DemonAct[] = ['stand', 'walk', 'claws', 'tail', 'swoop', 'cast', 'breath', 'fly', 'hurt', 'broken', 'wings'];
+export type DemonAct = 'stand' | 'walk' | 'claws' | 'scimitar' | 'tail' | 'swoop' | 'cast' | 'breath' | 'fly' | 'hurt' | 'broken' | 'wings';
+export const DEMON_ACTS: readonly DemonAct[] = ['stand', 'walk', 'claws', 'scimitar', 'tail', 'swoop', 'cast', 'breath', 'fly', 'hurt', 'broken', 'wings'];
 
 /** The standing loop's length (s): one pulse of the glow. */
 const STAND = 4;
@@ -25,6 +25,7 @@ export const WINGS_ACT = {
 /** An attack's anim runs through its wind-up, its strike and its recovery; the loop then stands until `period`. */
 const ATTACKS = {
   claws: { anim: ANIM.Melee, secs: CONST.DEMON_CLAW_WINDUP + CONST.DEMON_CLAW_RECOVER, period: 2 },
+  scimitar: { anim: ANIM.Cleave, secs: CONST.DEMON_SCIMITAR_WINDUP + CONST.DEMON_SCIMITAR_RECOVER, period: 2.6 },
   tail: { anim: ANIM.Tail, secs: CONST.DEMON_TAIL_WINDUP + CONST.DEMON_TAIL_RECOVER, period: 2.4 },
   cast: { anim: ANIM.Cast, secs: CONST.DEMON_CAST_WINDUP + CONST.DEMON_CAST_RECOVER, period: 2 },
   breath: { anim: ANIM.Breath, secs: CONST.DEMON_BREATH_WINDUP + CONST.DEMON_BREATH_TIME, period: 3.6 },
