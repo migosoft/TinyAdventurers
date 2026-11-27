@@ -2,21 +2,25 @@
 // flames rise from it and molten metal gathers on the edge, drips, and cools in small puddles on the floor.
 import * as THREE from 'three';
 
-const LEN = 1.75, BEND = 0.42;
+const LEN = 1.9, BEND = 0.46;
 const sm = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 /** The blade in its own space: z runs along it, y is the back (the edge is down), x its thickness. */
 const spine = (u: number) => new THREE.Vector3(0, BEND * u * u, LEN * u);
-const width = (u: number) => (0.11 + 0.13 * sm(0, 0.72, u)) * (1 - sm(0.74, 1, u) ** 1.4) + 0.004;
+const width = (u: number) => (0.08 + 0.085 * sm(0, 0.6, u)) * (1 - sm(0.55, 1, u)) ** 1.25 + 0.0015;
+/** Barbs on the blade's back, growing toward the point: each rises slowly and drops off sharply. */
+const barb = (u: number) => { if (u < 0.3 || u > 0.93) return 0; const f = ((u - 0.3) * 9.5) % 1; return 0.05 * sm(0.3, 0.6, u) * (1 - sm(0.8, 0.93, u)) * (f < 0.8 ? f / 0.8 : (1 - f) / 0.2); };
+/** Small teeth along the edge. */
+const tooth = (u: number) => { const f = (u * 34) % 1; return 0.012 * sm(0.1, 0.3, u) * (1 - sm(0.85, 0.97, u)) * Math.abs(f - 0.5) * 2; };
 function edgeAt(u: number): THREE.Vector3 {
   const t = new THREE.Vector3(0, 2 * BEND * u, LEN).normalize();
   return spine(u).add(new THREE.Vector3(0, -t.z, t.y).multiplyScalar(width(u)));
 }
 
 function bladeGeometry(): THREE.BufferGeometry {
-  const N = 48, pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const N = 220, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let i = 0; i <= N; i++) {
-    const u = i / N, s = spine(u), e = edgeAt(u), th = 0.024 * (1 - 0.7 * u);
-    pos.push(th, s.y, s.z, -th, s.y, s.z, 0, e.y, e.z); uv.push(u, 0, u, 0, u, 1);
+    const u = i / N, s = spine(u), e = edgeAt(u), th = 0.02 * (1 - 0.8 * u), b = barb(u), t = tooth(u);
+    pos.push(th, s.y + b, s.z, -th, s.y + b, s.z, 0, e.y - t, e.z); uv.push(u, 0, u, 0, u, 1);
     if (i) { const a = (i - 1) * 3, b = i * 3; idx.push(a, a + 2, b, b, a + 2, b + 2, a + 1, b + 1, a + 2, b + 1, b + 2, a + 2, a, b, a + 1, b, b + 1, a + 1); }
   }
   const g = new THREE.BufferGeometry();
@@ -39,9 +43,9 @@ function bladeMaterial(): THREE.MeshStandardMaterial {
         float bn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
           return mix(mix(bh(i), bh(i+vec2(1,0)), f.x), mix(bh(i+vec2(0,1)), bh(i+vec2(1,1)), f.x), f.y); }`)
       .replace('#include <emissivemap_fragment>', /* glsl */ `#include <emissivemap_fragment>
-        // heat: the back near the hilt is dark iron, the edge and the point are white-hot, and the glow crawls like melt
+        // heat: the whole blade glows, orange at the back, white-hot at the edge and the point, and the glow crawls like melt
         float flow = bn(vec2(vBl.x*9. - uTime*0.7, vBl.y*3. + uTime*0.25))*0.6 + bn(vec2(vBl.x*23. - uTime*1.3, vBl.y*7.))*0.4;
-        float heat = clamp(0.12 + 0.62*pow(vBl.y, 1.3) + 0.38*vBl.x + 0.45*(flow - 0.5), 0., 1.);
+        float heat = clamp(0.6 + 0.3*pow(vBl.y, 1.3) + 0.2*vBl.x + 0.4*(flow - 0.5), 0., 1.);
         vec3 hot = mix(vec3(0.25,0.012,0.0), vec3(1.0,0.22,0.02), smoothstep(0.2, 0.5, heat));
         hot = mix(hot, vec3(1.0,0.72,0.3), smoothstep(0.5, 0.75, heat));
         hot = mix(hot, vec3(1.0,0.97,0.88), smoothstep(0.75, 0.97, heat));
