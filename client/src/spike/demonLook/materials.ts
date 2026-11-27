@@ -2,7 +2,7 @@
 // the skin when the bones move): armour plates of rock with lava in the grooves, horn, the leather of the wing bones, and the
 // thin torn skin of the wings, which lets light through and hangs in pleats.
 import * as THREE from 'three';
-import { EYE, HORN_PATH, MOUTH } from './body';
+import { CREST, EYE, HORN_BREAK, HORN_PATH, MOUTH, TAIL_BLADE } from './body';
 import { on } from './opts';
 
 export const uTime = { value: 0 };
@@ -64,10 +64,15 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uRune, uRunesOn: { value: on('runes') ? 1 : 0 }, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn; uniform float uRune; uniform float uRunesOn;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uRune, uRunesOn: { value: on('runes') ? 1 : 0 }, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uPoly: { value: [...CREST, ...TAIL_BLADE, ...Array(40).fill([0, 0])].slice(0, 40).map((q) => new THREE.Vector2(q[0], q[1])) }, uPolyN: { value: new THREE.Vector3(on('blades') && on('crest') ? CREST.length : 0, on('blades') && on('spikes') ? TAIL_BLADE.length : 0, HORN_BREAK) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn; uniform float uRune; uniform float uRunesOn; uniform vec2 uPoly[40]; uniform vec3 uPolyN;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
+    // How far a point of the body's middle plane (z, y) lies from a blade's rim: from and n pick the outline.
+    float rimD(vec2 q, int from, int n){ float d = 1e9;
+      for (int i = 0; i < 40; i++) { if (i >= n) break;
+        vec2 a = uPoly[from+i], b = uPoly[from + (i+1 == n ? 0 : i+1)], e = b-a, w = q-a; w -= e*clamp(dot(w, e)/dot(e, e), 0., 1.); d = min(d, dot(w, w)); }
+      return sqrt(d); }
     // Runes cut into the outside of the forearm: how far a point is from the nearest stroke (m); 1 where there is none.
     float seg(vec2 q, vec2 a, vec2 b){ vec2 d = b-a; return length(q-a - d*clamp(dot(q-a, d)/dot(d, d), 0., 1.)); }
     float runeDist(vec3 pa){
@@ -169,6 +174,17 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     DK(vec3(0.,1.15,-0.25), vec3(0.15)) DK(vec3(0.08,2.5,0.3), vec3(0.09,0.04,0.06)) DK(vec3(0.,2.28,0.2), vec3(0.12,0.05,0.12))
     dAlb *= 1. - 0.65*dk*uDark*(1.-onHorn);
     dRough = mix(mix(mix(0.98, 0.86, gPlate), 0.72, vInfo.y), 0.8, leather);
+    // the two blades: near black along the rim, paling inward; the crest to dark horn, the tail's blade to old bone, with faint
+    // growth lines following the rim
+    float isCrest = step(0.5, uPolyN.x) * step(2.58, p.y) * step(abs(p.x), 0.05), isBlade = step(0.5, uPolyN.y) * step(p.z, -1.3) * step(p.y, 1.2);
+    if (isCrest + isBlade > 0.5) {
+      float bd = isCrest > 0.5 ? rimD(p.zy, 0, int(uPolyN.x)) : rimD(p.zy, int(uPolyN.x > 0.5 ? uPolyN.x : ${CREST.length}.), int(uPolyN.y));
+      float m = smoothstep(0.35, 0.75, vInfo.y), rings = 0.86 + 0.14*cos(bd*330. + 2.*streak), grain = 0.75 + 0.5*streak;
+      vec3 crestC = mix(vec3(0.012,0.009,0.009), vec3(0.3,0.19,0.13)*grain, smoothstep(0.003, 0.045, bd));
+      vec3 boneC = mix(mix(vec3(0.02,0.014,0.012), vec3(0.24,0.14,0.085), smoothstep(0.002, 0.022, bd)), vec3(0.62,0.53,0.38)*grain, smoothstep(0.014, 0.06, bd));
+      dAlb = mix(dAlb, (isCrest > 0.5 ? crestC : boneC) * rings, m);
+      dRough = mix(dRough, mix(0.32, 0.62, smoothstep(0.0, 0.03, bd)), m);
+    }
     // lava in the grooves: hottest on the chest, fading out over belly, hips, shoulders and limbs; breathing slowly up the body
     vec3 gq = (p - vec3(0.,1.84,0.06)) / vec3(0.5,0.72,0.5);
     float glow = max(exp(-dot(gq,gq)*1.2), 0.07*(1.-limb)) * (1.-vInfo.y) * (1.-leather);
@@ -199,6 +215,14 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     dEmit += scar * vec3(1.,0.5,0.14) * 1.3 * (0.7+0.3*pulse);
     dAlb *= 1. - 0.6*(1.-smoothstep(0.015, 0.045, sd)) * onChest;
     float hot = smoothstep(0.8, 1., hu) * onHorn;
+    // the broken horn: charred toward the break, and the core laid open glows like the inside of a coal
+    if (uPolyN.z > 0. && p.x > 0.) {
+      float hb = uPolyN.z, near = smoothstep(hb-0.13, hb+0.02, hu) * onHorn, core = smoothstep(0.006, 0.03, -gHd) * smoothstep(hb-0.1, hb-0.02, hu) * vInfo.y;
+      float fl = 0.7 + 0.3*fbm(p*30. + vec3(0., uTime*0.8, 0.));
+      dAlb *= 1. - 0.75*near;
+      dEmit += core * mix(vec3(1.,0.16,0.01)*0.55, vec3(1.,0.6,0.2)*1.5, smoothstep(0.014, 0.045, -gHd)) * fl;
+      dEmit += near*near * (1.-core) * (1.-gRidge) * vec3(1.,0.2,0.02) * 0.3 * fl;
+    }
     dEmit += (hot*hot*vec3(1.,0.25,0.02)*1.8 + smoothstep(0.94, 1., hu)*onHorn*vec3(1.,0.7,0.3)*1.2) * (0.85+0.15*sin(uTime*2.1+p.x*4.));
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
     #define UG uGazeOn

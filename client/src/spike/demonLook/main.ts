@@ -25,11 +25,11 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], sword: [-4.5, 2.2, 4.2, 1.1], arm: [3.4, 2.2, 1.6, 1.25], crest: [2.6, 3.3, 1.4, 2.4], crestside: [-2.4, 3.5, -1.2, 2.5], wingj: [3.5, 4.6, -4.5, 3.0], hand: [-2.6, 1.6, 1.6, 0.9], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, number[]> = { tailtip: [2.6, 1.1, -3.4, 0.6, 0, -1.9], tailside: [5.5, 1.6, -1.6, 0.7, 0, -1.2], brk: [1.9, 3.3, 1.6, 2.8, 0.8, 0.2], crestprofile: [-3.4, 2.9, 0.6, 2.78, 0, 0.05], game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], sword: [-4.5, 2.2, 4.2, 1.1], arm: [3.4, 2.2, 1.6, 1.25], crest: [2.6, 3.3, 1.4, 2.4], crestside: [-2.4, 3.5, -1.2, 2.5], wingj: [3.5, 4.6, -4.5, 3.0], hand: [-2.6, 1.6, 1.6, 0.9], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, cam[3], 0);
+controls.target.set(cam[4] ?? 0, cam[3], cam[5] ?? 0);
 controls.update();
 
 // ---- the hall: a slab floor, a pillar with a torch
@@ -135,7 +135,7 @@ if (mode === 'breath') st.breath = 0;
 const clock = new THREE.Clock();
 let time = 0;
 const chestAt = new THREE.Vector3();
-let warmed = false;
+let warmed = false, aimed = false;
 function frame() {
   const dt = Math.min(0.05, clock.getDelta());
   time = pinned ?? time + dt;
@@ -149,6 +149,8 @@ function frame() {
   uFold.value = st.fold * (1 - fl01); uBillow.value = -fl01 * Math.cos(beat(time));
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
+  // ?aim=<bone>&off=x_y_z: look at a bone from beside it (check shots)
+  if (!aimed && url.has('aim')) { aimed = true; const o = (url.get('off') ?? '1_0.3_1').split('_').map(Number); r.by[url.get('aim')!].getWorldPosition(controls.target); camera.position.copy(controls.target).add(new THREE.Vector3(o[0], o[1], o[2])); controls.update(); }
   const px = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
   // the heart: slow at rest, fast in a fight; the breath's charge climbs while he draws breath
   beatPhase = pinned !== null ? pinned * 0.85 : beatPhase + dt * (st.attack >= 0 ? 1.7 : st.breath >= 0 ? 1.4 : mode === 'fly' ? 1.2 : 0.85);

@@ -1,7 +1,7 @@
 // SPIKE (#379): the demon's skeleton and its shapes. Left is +x, up +y, the front +z; about 2.7 units tall to the crown.
 // The bind pose stands upright with the arms a little out and the wings spread; every stance is bone turns on top (pose.ts).
 import * as THREE from 'three';
-import { ball, cone, field, kite, skin, slab, type Prim, type Tag, type V } from './sdf';
+import { ball, blade, cone, field, kite, skin, slab, type Prim, type Tag, type V } from './sdf';
 import { on } from './opts';
 
 const add = (a: V, b: V): V => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -11,12 +11,45 @@ const mx = (s: number, v: V): V => [s * v[0], v[1], v[2]];
 // Joints of the left side; the right side is the mirror.
 const S: V = [0.45, 2.07, -0.03], E: V = [0.69, 1.57, -0.03], W: V = [0.87, 1.04, 0], KN: V = [0.92, 0.85, 0];
 const HP: V = [0.22, 1.24, 0], KNEE: V = [0.3, 0.72, 0.12], AN: V = [0.3, 0.28, -0.1], BA: V = [0.31, 0.07, 0.1];
-const TAIL: V[] = on('tail')
+const TAIL5: V[] = on('tail')
   ? [[0, 1.2, -0.2], [0, 1.02, -0.52], [0, 0.74, -0.86], [0, 0.47, -1.2], [0, 0.3, -1.62], [0, 0.36, -2.15]]
   : [[0, 1.2, -0.2], [0, 1.02, -0.5], [0, 0.75, -0.8], [0, 0.5, -1.08], [0, 0.32, -1.38], [0, 0.3, -1.7]];
-const TAIL_R = on('tail') ? [0.15, 0.115, 0.08, 0.05, 0.026, 0.003] : [0.15, 0.12, 0.09, 0.065, 0.04, 0.008];
+const TAIL_R5 = on('tail') ? [0.15, 0.115, 0.08, 0.05, 0.026, 0.003] : [0.15, 0.12, 0.09, 0.065, 0.04, 0.008];
+// a supple tail has twice the joints: a joint more in the middle of every stretch, on a smooth curve through the old ones
+const TAIL: V[] = [], TAIL_R: number[] = [];
+for (let i = 0; i < 6; i++) {
+  TAIL.push(TAIL5[i]); TAIL_R.push(TAIL_R5[i]);
+  if (!on('whip') || i === 5) continue;
+  const a = TAIL5[Math.max(0, i - 1)], b = TAIL5[i], c = TAIL5[i + 1], e = TAIL5[Math.min(5, i + 2)];
+  TAIL.push([0, (-a[1] + 9 * b[1] + 9 * c[1] - e[1]) / 16, (-a[2] + 9 * b[2] + 9 * c[2] - e[2]) / 16]); TAIL_R.push((TAIL_R5[i] + TAIL_R5[i + 1]) / 2);
+}
+/** How many joints the tail has. */
+export const TAIL_N = TAIL.length - 1;
+/** The outlines of the two blades in the body's middle plane, as [z, y] points: the crest on the head, the blade at the tail's end. */
+export const CREST: [number, number][] = [], TAIL_BLADE: [number, number][] = [];
+{
+  // the crest: a row of teeth raked back, each taller than the one before, the last a long hooked point
+  const sk = (th: number, r: number): [number, number] => [0.12 + 0.21 * r * Math.cos(th), 2.5 + 0.19 * r * Math.sin(th)];
+  const rake = [-0.42, 0.91], teeth: [number, number, number][] = [[0.3, 0.72, 0.06], [0.72, 1.12, 0.1], [1.12, 1.56, 0.155], [1.56, 2.1, 0.25]];
+  CREST.push(sk(0.25, 1));
+  for (const [a, b, h] of teeth) {
+    const up = (th: number, f: number): [number, number] => { const q = sk(th, 1.1); return [q[0] + rake[0] * h * f, q[1] + rake[1] * h * f]; };
+    CREST.push(up(a + (b - a) * 0.4, 0.62), up(b - 0.04, 1), up(b + 0.03, 0.42));
+  }
+  CREST.push(sk(2.35, 1), sk(2.2, 0.7), sk(1.3, 0.7), sk(0.4, 0.7));
+  // the tail's blade: a barbed spearhead of bone, long and drawn out to a needle point
+  const A = TAIL5[4], B = TAIL5[5], L = Math.hypot(B[1] - A[1], B[2] - A[2]), dz = (B[2] - A[2]) / L, dy = (B[1] - A[1]) / L;
+  const at = (s: number, w: number): [number, number] => [A[2] + dz * (0.3 * L + s) - dy * w, A[1] + dy * (0.3 * L + s) + dz * w];
+  for (const [s, w] of [[0, 0.014], [0.035, 0.03], [-0.04, 0.092], [0.09, 0.082], [0.22, 0.052], [0.36, 0.024], [0.52, 0], [0.36, -0.022], [0.22, -0.046], [0.09, -0.07], [-0.03, -0.078], [0.035, -0.028], [0, -0.014]]) TAIL_BLADE.push(at(s, w));
+}
 /** The left horn's middle line and its radius there, base to tip (the paint follows it too). */
 export const HORN_PATH: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5, 0.2], 0.122], [[0.5, 2.45, 0.27], 0.112], [[0.68, 2.47, 0.3], 0.097], [[0.8, 2.58, 0.28], 0.08], [[0.86, 2.74, 0.22], 0.058], [[0.86, 2.9, 0.16], 0.034], [[0.82, 3.05, 0.11], 0.008]];
+/** How far along the horn (0 base, 1 tip) the left one is broken off; -1 if it is whole or the break is the old blunt one. */
+export const HORN_BREAK = (() => {
+  let len = 0, to = 0;
+  for (let i = 0; i + 1 < HORN_PATH.length; i++) { const a = HORN_PATH[i][0], b = HORN_PATH[i + 1][0], l = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]); len += l; if (i < 5) to += l; }
+  return on('asym') && on('break') ? to / len : -1;
+})();
 // The wing arm, as a bat's: shoulder, a short upper arm to the elbow, a long forearm up to the wrist; HM and FM bow the two bones.
 const WR: V = [0.2, 2.15, -0.2], WE: V = [1.05, 2.55, -0.55], WW: V = [1.2, 3.8, -0.5], WHIP: V = [0.22, 1.35, -0.24];
 const HM: V = [0.62, 2.4, -0.4], FM: V = [1.16, 3.18, -0.55];
@@ -34,7 +67,7 @@ export const EYE: V = [0.078, 2.495, 0.32], MOUTH: V = [0, 2.365, 0.36];
 const DEFS: [string, string | null, V][] = [
   ['hips', null, [0, 1.3, -0.04]], ['waist', 'hips', [0, 1.5, -0.03]], ['chest', 'waist', [0, 1.74, -0.03]],
   ['neck', 'chest', [0, 2.2, 0]], ['head', 'neck', [0, 2.38, 0.06]], ['jaw', 'head', [0, 2.37, 0.16]],
-  ...TAIL.slice(0, 5).map((p, i): [string, string, V] => [`tail${i}`, i ? `tail${i - 1}` : 'hips', p]),
+  ...TAIL.slice(0, TAIL_N).map((p, i): [string, string, V] => [`tail${i}`, i ? `tail${i - 1}` : 'hips', p]),
 ];
 for (const [side, s] of [['L', 1], ['R', -1]] as const) {
   const d = (n: string, p: string, v: V) => DEFS.push([n + side, p, mx(s, v)]);
@@ -102,19 +135,22 @@ const PLATE: Tag = [0, 0.9, 0, 0];
 /** The tail: its own skin, long and thin to a point, with the spine's chevrons running on to the tip. */
 function tailPrims(id: (n: string) => number): Prim[] {
   const P: Prim[] = [];
-  for (let i = 0; i < 5; i++) P.push(cone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1], id(`tail${i}`), i === 4 ? [0, 1, 1, 0] : [0, 0, 0, 0.3], 0.05));
-  if (on('spikes')) { // a blade at the tail's end
-    const d = norm([0, TAIL[5][1] - TAIL[4][1], TAIL[5][2] - TAIL[4][2]]), bl = plate(lerp(TAIL[4], TAIL[5], 0.72), [0.2, 0.075, 0.007], d, [1, 0, 0], id('tail4'), [0, 1, 1, 0], 0.012);
+  const N = TAIL_N, last = id(`tail${N - 1}`);
+  for (let i = 0; i < N; i++) P.push(cone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1], id(`tail${i}`), i >= N - N / 5 ? [0, 1, on('blades') ? 0 : 1, 0] : [0, 0, 0, 0.3], 0.05));
+  if (on('spikes') && on('blades')) P.push(blade(TAIL_BLADE, 0.007, 0.024, 0.05, last, [0, 1, 0, 0], 0.012));
+  else if (on('spikes')) { // a blade at the tail's end
+    const d = norm([0, TAIL5[5][1] - TAIL5[4][1], TAIL5[5][2] - TAIL5[4][2]]), bl = plate(lerp(TAIL5[4], TAIL5[5], 0.72), [0.2, 0.075, 0.007], d, [1, 0, 0], last, [0, 1, 1, 0], 0.012);
     bl.box!.rhomb = true; P.push(bl);
   }
   if (!on('spine')) return P;
-  const rays: Ray[] = [];
-  for (let i = 0; i < 5; i++) for (let f = i ? 0 : 0.45; f < (i === 4 ? 0.55 : 1); f += 0.02) {
+  const rays: Ray[] = [], base = P.filter((q) => !q.poly);
+  for (let i = 0; i < N; i++) for (let f = 0; f < 1; f += 0.02 * N / 5) {
+    if ((i + f) / N < 0.09 || (i + f) / N > 0.91) continue;
     const p = lerp(TAIL[i], TAIL[i + 1], f), T = norm([0, TAIL[i + 1][1] - TAIL[i][1], TAIL[i + 1][2] - TAIL[i][2]]), U: V = [0, -T[2], T[1]];
     const r = TAIL_R[i] + (TAIL_R[i + 1] - TAIL_R[i]) * f;
     rays.push({ o: [0, p[1] + U[1] * 0.4, p[2] + U[2] * 0.4], d: [0, -U[1], -U[2]], bone: id(`tail${i}`), size: 0.85 * r + 0.012 });
   }
-  return [...P, ...chevrons(P, rays, PLATE)];
+  return [...P, ...chevrons(base, rays, PLATE)];
 }
 
 function prims(id: (n: string) => number): Prim[] {
@@ -134,7 +170,8 @@ function prims(id: (n: string) => number): Prim[] {
     { ...ball([0, 2.365, on('teeth') ? 0.29 : 0.31], on('teeth') ? [0.075, 0.018, 0.1] : [0.085, 0.02, 0.13], 0, sk(0), 0.01), sub: true },
   ];
   // the crest: an arrowhead of a plate standing on the middle of the head, rising from the forehead back and up to a point
-  if (on('crest')) {
+  if (on('crest') && on('blades')) P.push(blade(CREST, 0.007, 0.022, 0.045, id('head'), HORN, 0.012));
+  else if (on('crest')) {
     const d = norm([0, 0.86, -0.5]);
     for (const [c, h] of [[[0, 2.73, 0.155], [0.27, 0.1, 0.012]], [[0, 2.64, 0.2], [0.14, 0.125, 0.016]]] as [V, V][]) { const pl = plate(c, h, d, [1, 0, 0], id('head'), HORN, 0.012); pl.box!.rhomb = true; P.push(pl); }
   }
@@ -208,6 +245,18 @@ function prims(id: (n: string) => number): Prim[] {
     const horn = HORN_PATH;
     // the left horn is broken off short (an old fight)
     for (let i = 0; i + 1 < horn.length - (on('asym') && s > 0 ? 2 : 0); i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
+    if (on('asym') && on('break') && s > 0) {
+      // the break: the stump runs on a little and is split off by three slanting cuts, which leave splinters with sharp edges;
+      // the horn's core is hollowed out, and glows (the paint)
+      const A = horn[4][0], B = horn[5][0], C = horn[6][0], ax = norm([C[0] - B[0], C[1] - B[1], C[2] - B[2]]);
+      const u = norm(cross(ax, [0, 0, 1])), w = cross(ax, u), E = lerp(B, C, 0.9);
+      P.push(cone(B, E, horn[5][1], horn[5][1] * 0.8 + horn[6][1] * 0.2, id('head'), HORN, 0.02));
+      for (const [f, cu, cw] of [[0.02, 1.9, 0.3], [0.22, -1.5, 1.3], [0.12, -0.9, -2.0]]) {
+        const n = norm([ax[0] + u[0] * cu + w[0] * cw, ax[1] + u[1] * cu + w[1] * cw, ax[2] + u[2] * cu + w[2] * cw]), q = lerp(B, C, f);
+        P.push({ ...plate([q[0] + n[0] * 0.2, q[1] + n[1] * 0.2, q[2] + n[2] * 0.2], [0.2, 0.2, 0.2], u, n, 0, HORN, 0.003, 0), sub: true });
+      }
+      P.push({ ...cone(lerp(A, B, 0.55), lerp(B, C, 0.5), 0.004, 0.036, 0, HORN, 0.004), sub: true });
+    }
     // armour over the forehead and crown: a crest of tall kites up the middle, each lapping over the next toward the back, its
     // lowest point between the eyes; rows of kites beside it running onto the horns' bases; and a heavy brow plate over each
     // eye, low at the middle and rising outward, whose edge leaves the eye a slit

@@ -12,6 +12,11 @@ export interface Prim {
   k: number; bone: number; tag: Tag; sub?: boolean;
   /** A slab with rounded edges instead: half sizes, its turn as a matrix (rows), the rounding. */
   box?: { h: V; m: number[]; round: number; rhomb?: boolean };
+  /**
+   * A blade standing in the body's middle plane (x = 0) instead: its outline as [z, y] points, half as thick as `edge` at the
+   * rim and swelling to `mid` over the width `bev` (a ground edge).
+   */
+  poly?: { pts: [number, number][]; edge: number; mid: number; bev: number };
   /** How far this shape's bone pulls on the skin beside it, if not the usual reach. */
   wr?: number;
   c: V; br: number;
@@ -38,8 +43,31 @@ export function kite(c: V, h: V, rot: V, bone: number, tag: Tag, k = 0.005, roun
   const p = slab(c, h, rot, bone, tag, k, round); p.box!.rhomb = true; return p;
 }
 
+export function blade(pts: [number, number][], edge: number, mid: number, bev: number, bone: number, tag: Tag, k = 0.01): Prim {
+  let cz = 0, cy = 0; for (const q of pts) { cz += q[0] / pts.length; cy += q[1] / pts.length; }
+  const c: V = [0, cy, cz];
+  return { a: c, ra: 0, rb: 0, k, bone, tag, c, br: Math.max(...pts.map((q) => Math.hypot(q[0] - cz, q[1] - cy))) + mid, poly: { pts, edge, mid, bev } };
+}
+/** How far a point of the plane lies from an outline (negative inside). */
+export function outline(pts: [number, number][], u: number, v: number): number {
+  let d = 1e9, s = 1;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const ex = pts[j][0] - pts[i][0], ey = pts[j][1] - pts[i][1], wx = u - pts[i][0], wy = v - pts[i][1];
+    const t = Math.min(1, Math.max(0, (wx * ex + wy * ey) / (ex * ex + ey * ey))), bx = wx - ex * t, by = wy - ey * t;
+    d = Math.min(d, bx * bx + by * by);
+    const c1 = v >= pts[i][1], c2 = v < pts[j][1], c3 = ex * wy > ey * wx;
+    if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) s = -s;
+  }
+  return s * Math.sqrt(d);
+}
+
 function dist(p: Prim, x: number, y: number, z: number): number {
   const ax = x - p.a[0], ay = y - p.a[1], az = z - p.a[2];
+  if (p.poly) {
+    const d2 = outline(p.poly.pts, z, y), f = Math.min(1, Math.max(0, -d2 / p.poly.bev));
+    const qz = Math.abs(x) - (p.poly.edge + (p.poly.mid - p.poly.edge) * f * f * (3 - 2 * f));
+    return Math.hypot(Math.max(d2, 0), Math.max(qz, 0)) + Math.min(Math.max(d2, qz), 0);
+  }
   if (p.box) {
     const { h, m, round } = p.box;
     const qx = Math.abs(m[0] * ax + m[3] * ay + m[6] * az) - h[0], qy = Math.abs(m[1] * ax + m[4] * ay + m[7] * az) - h[1], qz = Math.abs(m[2] * ax + m[5] * ay + m[8] * az) - h[2];

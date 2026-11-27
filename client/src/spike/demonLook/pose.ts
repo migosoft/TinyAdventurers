@@ -2,7 +2,7 @@
 // x tips a spine bone forward and swings a hanging limb back, y turns to the demon's left, z lifts the left side.
 // A stance names the left bones; the right ones are the mirror unless it names them too.
 import * as THREE from 'three';
-import type { Rig } from './body';
+import { TAIL_N, type Rig } from './body';
 import { on } from './opts';
 
 type A = [number, number, number];
@@ -19,14 +19,12 @@ const STAND = both({
   clavL: [0, -0.06, 0], upperArmL: [-0.1, 0, -0.04], foreArmL: [-0.26, 0, -0.1], handL: [-0.05, 0, 0.03], fingersL: [0, 0, -0.35],
   upperArmR: [-0.03, 0, 0.02], foreArmR: [-0.34, 0, 0.13],
   thighL: [-0.5, 0.22, 0.16], shinL: [0.8, 0, 0], thighR: [-0.3, -0.16, -0.14], shinR: [0.6, 0, 0],
-  tail0: [0.1, 0, 0], tail2: [-0.2, 0, 0], tail3: [-0.25, 0, 0], tail4: [-0.3, 0, 0],
   wing1L: [-0.42, -0.08, -0.05],
 });
 const FLY = both({
   hips: [0.38, 0, 0], waist: [-0.05, 0, 0], chest: [-0.12, 0, 0], neck: [-0.05, 0, 0], head: [-0.25, 0, 0], jaw: [0.25, 0, 0],
   clavL: [0, -0.1, 0.1], upperArmL: [-0.35, 0, 0.45], foreArmL: [-0.9, 0, -0.2], handL: [-0.2, 0, 0], fingersL: [0, 0, -0.7],
   thighL: [0.15, 0.1, 0.1], shinL: [0.55, 0, 0], footL: [0.7, 0, 0], thighR: [-1.0, -0.1, -0.1], shinR: [1.5, 0, 0], footR: [0.5, 0, 0],
-  tail0: [-0.5, 0, 0], tail1: [-0.1, 0, 0], tail3: [0.2, 0, 0], tail4: [0.3, 0, 0],
   wing1L: [1.0, 0, -0.45],
 });
 // the sword hand: the fingers closed round the grip, the arm carrying the blade a little forward
@@ -64,19 +62,34 @@ function twist(b: THREE.Bone, axis: THREE.Vector3, angle: number) {
 /** The wing beat's phase at a time. */
 export const beat = (t: number) => t * Math.PI * 2 * 1.5;
 
+// The tail's own curve, as five stretches' turns upward (shared out over its joints): on the ground and in the air. Supple
+// (`whip`), it is carried: lifted at the root and curled up toward the blade, instead of hanging.
+const TAIL_STAND = on('whip') ? [0.24, 0.12, 0.12, 0.12, 0] : [0.1, 0, -0.2, -0.25, -0.3], TAIL_FLY = [-0.5, -0.1, 0, 0.2, 0.3];
 let lastT = 0, follow = 0, lagVel = 0;
+const heading = new Float32Array(TAIL_N), headingVel = new Float32Array(TAIL_N);
 export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number, s: State) {
   const fly = ease(s.fly), cur: Pose = {};
   for (const b of r.bones) {
     const a = STAND[b.name] ?? [0, 0, 0], f = FLY[b.name] ?? [0, 0, 0];
     cur[b.name] = [a[0] + (f[0] - a[0]) * fly, a[1] + (f[1] - a[1]) * fly, a[2] + (f[2] - a[2]) * fly];
   }
+  const N = TAIL_N, per = 5 / N;
+  for (let i = 0; i < N; i++) { const j = Math.floor(i * per); cur[`tail${i}`][0] += (TAIL_STAND[j] + (TAIL_FLY[j] - TAIL_STAND[j]) * fly) * per; }
   const addTo = (p: Pose, w: number) => { for (const k in p) for (let c = 0; c < 3; c++) cur[k][c] += p[k][c] * w; };
   // breathing, the tail, the head's small life
   const br = Math.sin(t * 1.3);
   cur.chest[0] += 0.025 * br; cur.waist[0] -= 0.012 * br; cur.clavL[2] += 0.03 * br; cur.clavR[2] -= 0.03 * br;
   cur.head[1] += 0.05 * Math.sin(t * 0.43); cur.head[0] += 0.03 * Math.sin(t * 0.61 + 1);
-  for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += 0.14 * Math.sin(t * 0.9 - i * 0.7);
+  if (on('whip')) {
+    // a slow wave runs down the tail and grows toward the blade, a quicker ripple on top of it, the blade lifting and sinking;
+    // now and then the end flicks, to one side and then the other
+    const n = Math.floor(t / 5.3), ft = t - n * 5.3 - 3.6, dir = n % 2 ? -1 : 1;
+    for (let i = 0; i < N; i++) {
+      const u = (i + 1) / N, flick = Math.exp(-(((ft - u * 0.22) / 0.13) ** 2)) - 0.7 * Math.exp(-(((ft - 0.3 - u * 0.22) / 0.2) ** 2));
+      cur[`tail${i}`][1] += per * ((0.08 + 0.2 * u) * Math.sin(t * 1.15 - u * 4.4) + 0.09 * u * Math.sin(t * 2.5 - u * 7.5 + 1) + 0.55 * u * u * flick * dir);
+      cur[`tail${i}`][0] += per * ((0.03 + 0.09 * u) * Math.sin(t * 0.83 - u * 3.6 + 2) + 0.22 * u * u * Math.max(0, flick));
+    }
+  } else for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * 0.14 * Math.sin(t * 0.9 - i * per * 0.7);
   // looking round: the turn is shared by chest, neck and head
   const yaw = 0.95 * Math.sin(t * 0.9) * s.look;
   cur.chest[1] += 0.18 * yaw; cur.neck[1] += 0.36 * yaw; cur.head[1] += 0.46 * yaw; cur.head[2] -= 0.1 * yaw; cur.head[0] += 0.1 * Math.sin(t * 1.7) * s.look;
@@ -94,14 +107,26 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
     cur.hips[2] += roll; cur.thighL[2] -= roll; cur.thighR[2] -= roll; cur.waist[2] -= roll * 0.6; cur.chest[2] -= roll * 0.5; cur.head[2] += roll * 0.4;
     cur.jaw[0] += 0.06 * Math.max(0, Math.sin(t * 0.7)) ** 2 + 0.3 * wind + 0.15 * strike;
     if (s.attack >= 0) { const ph = s.attack % 2.4, after = ph > 0.9 ? Math.exp(-(ph - 0.9) * 1.6) : 0; cur.chest[0] += 0.05 * after * Math.sin(ph * 9); cur.clavL[2] += 0.05 * after * Math.sin(ph * 9); cur.clavR[2] -= 0.05 * after * Math.sin(ph * 9); }
-    for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += 0.1 * Math.sin(t * 0.5 - 0.6 - i * 0.5) * (1 - fly);
+    for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * 0.1 * Math.sin(t * 0.5 - 0.6 - i * per * 0.5) * (1 - fly);
   }
   if (on('life')) {
     // the tail trails behind a turn of the body and whips after it
     const yaw = cur.hips[1] + 0.6 * cur.chest[1], dt = Math.min(0.05, Math.max(0, t - lastT)); lastT = t;
-    lagVel += ((yaw - follow) * 38 - lagVel * 4.5) * dt; follow += lagVel * dt;
-    const off = Math.max(-1, Math.min(1, follow - yaw));
-    for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += off * (i ? 0.45 : 0.9);
+    if (on('whip')) {
+      // every joint follows the one before it on a spring of its own, softer toward the end: a turn of the body runs down the
+      // tail as a whip does, and the end swings past and back
+      let lead = yaw;
+      for (let i = 0; i < N; i++) {
+        const u = i / N;
+        headingVel[i] += ((lead - heading[i]) * (90 - 55 * u) - headingVel[i] * (7 - 3.5 * u)) * dt; heading[i] += headingVel[i] * dt;
+        cur[`tail${i}`][1] += Math.max(-0.7, Math.min(0.7, heading[i] - lead)) * (i ? 1 : 1.4);
+        lead = heading[i];
+      }
+    } else {
+      lagVel += ((yaw - follow) * 38 - lagVel * 4.5) * dt; follow += lagVel * dt;
+      const off = Math.max(-1, Math.min(1, follow - yaw));
+      for (let i = 0; i < N; i++) cur[`tail${i}`][1] += per * off * (i ? 0.45 : 0.9);
+    }
   }
   const out = breathOut(s.breath);
   if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }
