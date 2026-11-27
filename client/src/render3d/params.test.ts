@@ -239,8 +239,8 @@ describe('toSearch', () => {
 
 describe('plantShadowOf', () => {
   it('gives the tile size by quality and nothing on Fast or with the wall shadows off (#333)', () => {
-    expect(plantShadowOf({ shadows: true, quality: 'high' })).toEqual({ tile: 256, cap: 16 });
-    expect(plantShadowOf({ shadows: true, quality: 'balanced' })).toEqual({ tile: 128, cap: 16 });
+    expect(plantShadowOf({ shadows: true, quality: 'high' })).toEqual({ tile: 256, cap: 40 });
+    expect(plantShadowOf({ shadows: true, quality: 'balanced' })).toEqual({ tile: 128, cap: 40 });
     expect(plantShadowOf({ shadows: true, quality: 'fast' })).toBeNull();
     expect(plantShadowOf({ shadows: false, quality: 'high' })).toBeNull();
   });

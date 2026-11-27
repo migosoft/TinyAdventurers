@@ -83,10 +83,10 @@ export function reflects(p: Pick<R3dParams, 'refl' | 'quality'>): boolean {
   return p.refl && p.quality !== 'fast';
 }
 
-/** The cove's plant shadow tiles (#333): null (off) with the Wall shadows switch off or on quality Fast. Tile size in px and the most tiles per frame; first guesses until the measuring. */
+/** The cove's plant shadow tiles (#333): null (off) with the Wall shadows switch off or on quality Fast. Tile size in px and the most tiles per frame. */
 export function plantShadowOf(p: Pick<R3dParams, 'shadows' | 'quality'>): { tile: number; cap: number } | null {
   if (!p.shadows || p.quality === 'fast') return null;
-  return { tile: p.quality === 'high' ? 256 : 128, cap: 16 };
+  return { tile: p.quality === 'high' ? 256 : 128, cap: 40 }; // RTX 3060, 2560x1280: the demo cove wants 36 tiles (WebGPU High 7.2 ms, WebGL2 5.2 ms); tile size barely matters
 }
 
 /** Whether the heat shimmer runs: the switch, and never on quality Fast (#344). */
