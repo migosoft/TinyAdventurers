@@ -2503,6 +2503,19 @@ pub mod tests {
     }
 
     #[test]
+    fn the_ice_demon_walks_through_lava() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::IceDemon);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        assert_eq!(run.monsters[bi].mover, Mover::Demon);
+        let (tx, ty) = dungeon::Map::tile_of(run.monsters[bi].pos);
+        run.layout.map.set(tx, ty, Tile::Lava);
+        let at = dungeon::Map::center_of(tx, ty);
+        assert!(!run.layout.map.blocks_at(at, run.monsters[bi].mover), "lava does not stop it");
+        assert!(run.layout.map.blocks_at(at, Mover::Enemy), "but it stops an ordinary monster");
+        assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
+    }
+
+    #[test]
     fn mimic_moves_only_while_airborne() {
         let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);

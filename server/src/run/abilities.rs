@@ -1305,7 +1305,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let (flight, flash) = (pr.vel, pr.explode_flash);
     let src = shot_credit(run, side, owner);
     if explode_r > 0.0 {
-        explode_flashing(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
+        explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
         return;
     }
     let Some(c) = target else { return };
@@ -1426,7 +1426,7 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     let (side, owner, damage, crit, explode_r, k, push, push_str, flash) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.explode_flash);
     if explode_r > 0.0 {
         let src = shot_credit(run, side, owner);
-        explode_flashing(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
+        explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str, flash);
     } else {
         crate::run::objects::hurt_object(run, oi, damage, shot_owner(run, side, owner));
     }
@@ -1436,12 +1436,8 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
 /// An explosion of a shot of `side`; `push` moves the foes it hits straight away from it (px), with STR
 /// `push_str` against their weight, whoever shot it. It never moves a boss, an ally of the shooter's side or
 /// a mimic still hiding.
-pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32) {
-    explode_flashing(run, pos, r, damage, side, src, k, crit, push, push_str, None);
-}
-
-/// `explode` with the flash of a shot's own look (`Projectile::explode_flash`); `None` is the blast's.
-pub fn explode_flashing(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32, flash: Option<(LightKind, Option<lights::Colour>)>) {
+/// `flash` is a shot's own look (`Projectile::explode_flash`); `None` is the blast's.
+pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32, flash: Option<(LightKind, Option<lights::Colour>)>) {
     let heroes = side == Side::Friendly;
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!heroes).then_some(pos));
@@ -1964,10 +1960,10 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
         let pusher_str = 30; // above every hero's weight + 4
-        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 20.0, pusher_str);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 20.0, pusher_str, None);
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed east, away from the blast");
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
-        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 0.0, 0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 0.0, 0, None);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
     }
 
@@ -2004,7 +2000,7 @@ mod tests {
         // So light that only the "hiding" rule keeps it still.
         run.monsters[mi].weight = 1.0;
         run.monsters[mi].hiding = true;
-        let boom = |run: &mut Run| explode(run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30);
+        let boom = |run: &mut Run| explode(run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30, None);
         boom(&mut run);
         assert_eq!(run.monsters[bi].knock, Vec2::ZERO, "a boss is never pushed, even by STR 30");
         assert_eq!(run.monsters[mi].knock, Vec2::ZERO, "a mimic still hiding is not moved");
@@ -2024,7 +2020,7 @@ mod tests {
         run.monsters[wi].pos = at + Vec2::new(8.0, 0.0);
         run.monsters[wi].weight = 1.0;
         let hp = run.monsters[wi].hp;
-        explode(&mut run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30);
+        explode(&mut run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30, None);
         assert_eq!((run.monsters[wi].knock, run.monsters[wi].hp), (Vec2::ZERO, hp), "the wolf is neither hurt nor pushed");
     }
 
@@ -2109,7 +2105,7 @@ mod tests {
             let id = run.spawn_enemy(t, at, None);
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].hp = 1000.0;
-            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0);
+            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0, None);
             1000.0 - run.monsters[run.monster_idx(id).unwrap()].hp
         };
         // 70 % heat (demons: immune), 20 % magical (demons: 20 %), 10 % physical.
@@ -2135,7 +2131,7 @@ mod tests {
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, None)]), "damage number sent to the whole party");
         run.events.clear();
         let at = run.monsters[mi].pos;
-        explode(&mut run, at, 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at, 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0, None);
         assert!(matches!(run.events[0], (Ev::Boom { .. }, None)), "the hero's explosion too");
         run.events.clear();
         run.hurt_monster(mi, Damage::physical(5.0), false, None);
@@ -2437,7 +2433,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id2 = run.spawn_object(EntityKind::Barrel, at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
-        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0, None);
         assert!(matches!(&run.objects.iter().find(|o| o.id == id2).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()));
     }
 
@@ -3796,7 +3792,7 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].hp = 1000.0;
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
-        explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0, None);
         let mi = run.monster_idx(id).unwrap();
         assert!(run.monsters[mi].hp < 1000.0, "hurt");
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible), "and revealed");
@@ -4538,11 +4534,11 @@ mod tests {
         run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
         let at = run.monsters[gi].pos;
         let heat = Damage::new(20.0, DamageSplit::pure(DamageType::Heat));
-        explode(&mut run, at, 30.0, heat, Side::Friendly, Some(0), 0, false, 20.0, 10);
+        explode(&mut run, at, 30.0, heat, Side::Friendly, Some(0), 0, false, 20.0, 10, None);
         assert_eq!((run.monsters[gi].hp, run.monsters[gi].knock), (100.0, Vec2::ZERO));
         assert!(run.monsters[gi].effects.has(EffectKind::Invisible), "not revealed");
         let magic = Damage::new(20.0, DamageSplit::pure(DamageType::Magical));
-        explode(&mut run, at, 30.0, magic, Side::Friendly, Some(0), 0, false, 0.0, 10);
+        explode(&mut run, at, 30.0, magic, Side::Friendly, Some(0), 0, false, 0.0, 10, None);
         assert!(run.monsters[gi].hp < 100.0, "a Magical blast still hits it");
     }
 
@@ -4989,7 +4985,7 @@ mod hero_sides {
             }),
             ("a fireball blast", |run| {
                 let at = run.players[1].pos();
-                explode(run, at, 30.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Hostile, None, 0, false, 0.0, 0);
+                explode(run, at, 30.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Hostile, None, 0, false, 0.0, 0, None);
             }),
             ("the dragon's breath", |run| {
                 let (bi, at) = (run.monsters.iter().position(|m| m.is_boss).unwrap(), run.players[1].pos());

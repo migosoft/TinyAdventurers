@@ -1065,7 +1065,7 @@ mod tests {
     fn a_blast_points_away_from_its_centre() {
         let (mut run, _) = arena(EnemyType::OrcWarrior);
         let at = run.players[0].pos() + Vec2::new(10.0, 0.0);
-        crate::run::abilities::explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 0, false, 0.0, 0);
+        crate::run::abilities::explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 0, false, 0.0, 0, None);
         let d = run.players[0].hurt_dir.expect("a direction");
         assert!(angle_diff(d, PI).abs() < 1e-6, "away from the centre: {d}");
     }

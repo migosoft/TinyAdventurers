@@ -786,6 +786,136 @@ mod tests {
         assert!(run.players[0].effects.has(EffectKind::Chilled), "the scimitar chills");
     }
 
+    /// Seconds left of `kind` on hero 0, if it is on.
+    fn left_of(run: &Run, kind: crate::defs::effects::EffectKind) -> Option<f64> {
+        run.players[0].effects.list().iter().find(|a| a.kind == kind).map(|a| a.left)
+    }
+
+    #[test]
+    fn the_frost_breath_freezes_and_lets_go() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{scaled_secs, EffectKind::Frozen};
+        let (mut run, mut d, bi) = ice_demon_with_heroes(&[Vec2::new(40.0, 0.0)], &[AbilityId::FrostBreath]);
+        let (mut first_frozen, mut channel_ended, mut last_renewal, mut gone, mut peak) = (None, None, None, None, 0.0_f64);
+        let mut prev = 0.0;
+        for i in 0..(6.0 / DT) as usize {
+            d.tick(&mut run, DT);
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            let t = (i + 1) as f64 * DT;
+            if channel_ended.is_some() && run.monsters[bi].channel.is_some() {
+                break; // its cooldown is over: the next breath is another test
+            }
+            let left = left_of(&run, Frozen).unwrap_or(0.0);
+            if left > 0.0 && first_frozen.is_none() {
+                first_frozen = Some(t);
+            }
+            if run.monsters[bi].channel.is_none() && first_frozen.is_some() && channel_ended.is_none() {
+                channel_ended = Some(t);
+            }
+            if left > prev + 1e-9 {
+                last_renewal = Some(t);
+                peak = peak.max(left);
+                assert!(channel_ended.is_none() || t <= channel_ended.unwrap() + 1e-9, "a new Frozen after the channel ended, at {t}");
+            }
+            if left == 0.0 && prev > 0.0 && gone.is_none() {
+                gone = Some(t);
+            }
+            prev = left;
+        }
+        let (first, ended, renewed, gone) = (first_frozen.expect("frozen"), channel_ended.expect("the channel ended"), last_renewal.unwrap(), gone.expect("the ice let go"));
+        assert!(first <= windup(&run, bi, AbilityId::FrostBreath) + 0.3, "frozen by the first pulse: {first}");
+        assert!(renewed <= ended + 1e-9);
+        let power = run.last_hit.clone().expect("a hit").power.max(crate::defs::effects::TYPE_EFFECT_POWER);
+        let expected = scaled_secs(2.0, power, run.players[0].sheet.attrs.get(Attr::Con));
+        assert!((peak - expected).abs() < 2.0 * DT, "each pulse renews the full time: {peak} against {expected}");
+        assert!((gone - renewed - expected).abs() < 2.0 * DT, "free {} s after the last pulse, expected {expected}", gone - renewed);
+    }
+
+    #[test]
+    fn a_frost_patch_chills_and_never_freezes() {
+        use crate::defs::effects::EffectKind::{Chilled, Frozen};
+        use crate::defs::{abilities as dab, kinds::EntityKind::FrostPatch};
+        use crate::dungeon::{Map, Tile};
+        let (mut run, _, _) = ice_demon_with_heroes(&[Vec2::new(0.0, 0.0)], &[]);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 2..=ty + 2 {
+            for x in tx - 1..=tx + 14 {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+        let walk = |run: &mut Run, mx: i8| -> f64 {
+            let (before, seq) = (run.players[0].pos().x, run.players[0].ack + 1);
+            run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx, ..Default::default() });
+            run.step();
+            run.players[0].hp = run.players[0].max_hp;
+            run.players[0].pos().x - before
+        };
+        for _ in 0..3 {
+            walk(&mut run, 0);
+        }
+        let free_step = walk(&mut run, 1);
+        assert!(free_step > 0.5, "a hero walks: {free_step}");
+        let at = run.players[0].pos();
+        crate::run::spawn_patch_of(&mut run, FrostPatch, at, dab::BREATH_PATCH_RADIUS, dab::BREATH_PATCH_SECS, dab::BREATH_PATCH_DAMAGE, crate::run::Side::Hostile, None);
+        let mut chilled = false;
+        for _ in 0..(1.0 / DT) as usize {
+            walk(&mut run, 0);
+            assert!(!run.players[0].effects.has(Frozen), "a patch never freezes");
+            chilled |= run.players[0].effects.has(Chilled);
+        }
+        assert!(chilled, "standing on the patch chills");
+        // Out of the ice on the hero's own legs, at 70 % speed.
+        let reach = dab::BREATH_PATCH_RADIUS + crate::run::classes::PLAYER_RADIUS;
+        let mut steps = 0;
+        while run.players[0].pos().dist(at) < reach {
+            let step = walk(&mut run, 1);
+            assert!(!run.players[0].effects.has(Frozen));
+            if run.players[0].effects.has(Chilled) {
+                assert!((step - 0.7 * free_step).abs() < 1e-6, "chilled step {step} against {free_step}");
+            }
+            steps += 1;
+            assert!(steps < 120 && !run.hazards.is_empty(), "the hero walks out before the patch is gone");
+        }
+        let mut free_at = None;
+        for i in 0..(10.0 / DT) as usize {
+            walk(&mut run, 0);
+            assert!(!run.players[0].effects.has(Frozen));
+            if !run.players[0].effects.has(Chilled) && free_at.is_none() {
+                free_at = Some(i);
+            }
+        }
+        assert!(free_at.is_some(), "the chill wears off");
+    }
+
+    /// Plays the real fight with only `id` ready until hero 0 is Frozen; the hit that last landed on it.
+    fn frozen_by(id: AbilityId, at: Vec2) -> What {
+        let (mut run, mut d, _) = ice_demon_with_heroes(&[at], &[id]);
+        // The boss hall has chasms: the hero stands on floor, or it falls and is never frozen.
+        let bi = boss_idx(&run).unwrap();
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        for y in ty - 6..=ty + 6 {
+            for x in tx - 6..=tx + 6 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        for _ in 0..(8.0 / DT) as usize {
+            d.tick(&mut run, DT);
+            run.step();
+            if run.players[0].effects.has(crate::defs::effects::EffectKind::Frozen) {
+                return run.last_hit.clone().expect("a hit").why.what;
+            }
+        }
+        panic!("{id:?} never froze the hero");
+    }
+
+    #[test]
+    fn the_frost_ball_and_the_orbs_freeze() {
+        assert_eq!(frozen_by(AbilityId::FrostBall, Vec2::new(90.0, 0.0)), What::Ability(AbilityId::FrostBall));
+        assert_eq!(frozen_by(AbilityId::RingOfFrost, Vec2::new(60.0, 0.0)), What::Ability(AbilityId::RingOfFrost));
+    }
+
     #[test]
     fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
         crate::run::bosses::tests::hit_from_behind(BossId::FireDemon);
