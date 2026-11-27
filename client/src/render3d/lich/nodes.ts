@@ -37,16 +37,17 @@ export interface LichUniforms {
 
 export interface LichMaterials { body: MeshBasicNodeMaterial; claws: MeshBasicNodeMaterial; u: LichUniforms; dispose(): void }
 
-/** The vertex stage shared by both materials (and by the demon's, #379), and the figure point the models' `keepOf` reads. */
-export function vertexOf(shared: FigureShared, u: { root: N; scale: N; tint: N; seen: N; flags: N }, m: MeshBasicNodeMaterial, normals: boolean): FigurePoint {
-  const position = attribute('position', 'vec3');
+/** The vertex stage shared by both materials (and by the demon's, #379, #442), and the figure point the models' `keepOf` reads. */
+export function vertexOf(shared: FigureShared, u: { root: N; scale: N; tint: N; seen: N; flags: N }, m: MeshBasicNodeMaterial, normals: boolean, from?: { P: N; N: N }): FigurePoint {
+  // `from`: a skinned figure's point and normal, already in the model frame (the demon's, nodes.ts there); else the attributes are
+  const position = from ? from.P : attribute('position', 'vec3');
   const c: N = cos(u.root.w), s: N = sin(u.root.w);
   const turn = (v: N): N => vec3(c.mul(v.x).add(s.mul(v.z).mul(YAW_TURN.xFromZ)), v.y, s.mul(v.x).mul(YAW_TURN.zFromX).add(c.mul(v.z)));
   const world: N = turn(position).mul(u.scale).add(vec3(u.root.x, u.root.y, u.root.z));
   // The camera passes stretch y by 1 / cos(pitch); the light, the sight and `keepOf` use the true point.
   m.positionNode = vec3(world.x, world.y.div(shared.cosP), world.z);
   // The claws are not lit and carry no normals.
-  const normal: N = normals ? turn(attribute('normal', 'vec3')) : vec3(0, 1, 0);
+  const normal: N = normals ? turn(from ? from.N : attribute('normal', 'vec3')) : vec3(0, 1, 0);
   const none: N = vec4(0, 0, 0, 0);
   return { world, screen: m.positionNode as N, P: varying(world, 'figPos') as N, N: varying(normal, 'figNormal') as N, tint: u.tint, seen: u.seen, flags: u.flags, extra: none };
 }

@@ -10,7 +10,7 @@
 import { ANIM, CONST, EFFECT, FLAG } from '../../generated/defs';
 import { has } from '../../game/effectBits';
 import type { BuiltIn } from '../built';
-import { ARM, FOOT, J, JOINTS, LEAN, RIG, ROLL, TURN } from './skeleton';
+import { ARM, FOOT, J, JOINTS, LEAN, RIG, ROLL, TURN, setRest } from './skeleton';
 import { beatTarget, chainStep, newWing, WING, wingStep, type WingState, type WingTarget } from './wings';
 
 /** The tail's links: a swing travels down them. */
@@ -121,6 +121,8 @@ export function restPose(): DemonPose {
   }
   return { joints, wingR: newWing(WING.rest), wingL: newWing(WING.rest), tail: new Float32Array(TAIL_LINKS * 2), lift: 0, heat: 1, caster: 1 };
 }
+
+setRest(restPose().joints);
 
 /**
  * What one demon keeps between frames. `t`: its clock; `face`, `faceV`: the drawn facing and its speed; `head`, `headV`: the head's

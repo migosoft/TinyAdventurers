@@ -7,8 +7,10 @@ import { cardHeight, createKit, directRunner, type FigureKit } from './models/ki
 import { BONES } from './models/model';
 import { LICH, LICH_TOP } from './lich/shape';
 import { BUILT_OF_KIND, builtPoint } from './built';
-import { DEMON_FIGURE } from './demon/figure';
-import { DEMON } from './demon/shape';
+import { DEMON, DEMON_FIGURE } from './demon/figure';
+import { buildDemonSkin } from './demon/body';
+import { setDemonSkin } from './demon/skinFile';
+import { LICH_FIGURE } from './lich/figure';
 import { SOUTH } from './models/objectPose3d';
 import { LIE_SINK, sideReach } from './models/pose3d';
 import { variationOf } from './models/variation';
@@ -752,7 +754,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     // The lamp outlines are the atlas's own rects (the fake frames above stand in for the cards only).
     for (const k of [...Object.keys(DESCS), ...Object.keys(TUBE_DESCS)]) frames[outlineFrame(k)] = { ...atlasFrames[outlineFrame(k)].frame };
     // The built figures' outlines are the atlas's rects too.
-    for (const b of Object.values(BUILT_OF_KIND)) frames[outlineFrame(b!.key)] = { ...atlasFrames[outlineFrame(b!.key)].frame };
+    for (const b of Object.values(BUILT_OF_KIND)) frames[outlineFrame(b!.outline ?? b!.key)] = { ...atlasFrames[outlineFrame(b!.outline ?? b!.key)].frame };
     for (const k of BUILT) kit.get(k);
     while (kit.version < BUILT.length) await new Promise((r) => setTimeout(r, 0));
   }, 120000);
@@ -1115,25 +1117,42 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
 
   describe('the demon as a built figure (#379)', () => {
     const demon = (o: Partial<EntState> = {}) => ent(11, KIND.FireDemon, o);
-    const painted = (): FigureKit => ({ ...kit, picture: (k) => (k === 'demon' ? { w: 8, h: 8, data: new Uint8Array(4) } : null) });
+    // the skin file is loaded (a coarse one) unless a test says otherwise; the kit's pictures play no part
+    const painted = (): FigureKit => kit;
     const built = (ents: EntState[], k: FigureKit = painted(), fg = make()) => fg.frame(frame(ents), cam(), look({ kit: k, ...all }));
+    beforeAll(() => { setDemonSkin(buildDemonSkin(0.2)); });
+    afterAll(() => { setDemonSkin(null); });
 
-    it('is a card without models, and the same cards while its picture is not ready', () => {
+    it('a demon is a card until the skin is loaded, and a built figure after', () => {
       const plain = make().frame(frame([demon()]), cam(), look());
       expect(plain.built).toEqual([]);
       expect(owned(plain.cards, 11) + owned(plain.ghosts, 11)).toBeGreaterThan(0);
-      expect(built([demon()], noPicture())).toEqual(plain);
+      const skin = buildDemonSkin(0.2);
+      setDemonSkin(null);
+      vi.stubGlobal('fetch', () => new Promise(() => {}));
+      try {
+        expect(built([demon()])).toEqual(plain);
+        setDemonSkin(skin);
+        expect(built([demon()]).built.length).toBe(1);
+      } finally { vi.unstubAllGlobals(); setDemonSkin(skin); }
     });
 
-    it('with the picture ready: one built instance with its hull, no card, no model, no halo, the hand, mouth and chest and the chest light', () => {
+    it('the lich is unchanged: ready() is its picture', () => {
+      expect(LICH_FIGURE.picture).toBe('lich');
+      expect(LICH_FIGURE.ready(noPicture())).toBe(false);
+      expect(LICH_FIGURE.ready(withPicture())).toBe(true);
+      expect(DEMON_FIGURE.picture).toBeNull();
+    });
+
+    it('with the skin loaded: one built instance with its bones, no card, no model, no halo, the hand, mouth and chest and the chest light', () => {
       const plain = make().frame(frame([demon()]), cam(), look());
       const fg = make(), out = built([demon()], painted(), fg);
       expect(out.built.length).toBe(1);
       const b = out.built[0];
       expect(b).toMatchObject({ key: 'demon', owner: 11, stone: false, glow: null });
       expect(b.scale).toBeCloseTo(DEMON.unit / TILE, 9);
-      expect(b.hull!.verts).toBeGreaterThan(0);
-      expect(b.hull === b.body).toBe(false);   // `===`: `not.toBe` compares the big buffers deeply for its message
+      expect(b.bones!.length).toBe(88 * 16);
+      expect(b.body.verts).toBe(0);
       expect(owned(out.cards, 11) + owned(out.ghosts, 11) + owned(out.decals, 11)).toBe(0);
       expect(out.models).toEqual([]);
       expect(out.glows.n).toBeLessThanOrEqual(plain.glows.n);
@@ -1176,8 +1195,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     it('two demons give two instances with their own buffers', () => {
       const out = built([demon(), ent(13, KIND.FireDemon, { x: at(2) })]);
       expect(out.built.length).toBe(2);
-      expect(out.built[0].body.position === out.built[1].body.position).toBe(false);
-      expect(out.built[0].hull!.position === out.built[1].hull!.position).toBe(false);
+      expect(out.built[0].bones === out.built[1].bones).toBe(false);
     });
   });
 

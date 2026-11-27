@@ -50,7 +50,7 @@ export function buildModelOutlines(width: number): { img: Image; frames: Record<
   });
   // The built figures (#358): the rest pose's body in game px (builder units times the figure's unit); the buffer is the figure's own, read only.
   for (const f of new Set(Object.values(BUILT_OF_KIND))) {
-    if (!f) continue;
+    if (!f || f.outline) continue;
     const b = f.rest();
     const position = new Float32Array(b.verts * 3);
     for (let i = 0; i < position.length; i++) position[i] = b.position[i] * f.unit;

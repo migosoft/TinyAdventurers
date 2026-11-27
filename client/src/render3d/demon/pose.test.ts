@@ -3,8 +3,9 @@ import { ANIM, CONST, EFFECT, FLAG } from '../../generated/defs';
 import type { BuiltIn } from '../built';
 import { actPeriod, DEMON_SPEED, demonAct, demonDev, FLY_ACT } from '../demonScript';
 import { DEMON_POSE as P, demonPose, newDemonMem, restPose, type DemonMem } from './pose';
-import { DEMON } from './shape';
-import { ARM, BONE, BONES, FOOT, J, JOINTS, LEAN, TURN, placeBones } from './skeleton';
+import { B, BONES, BONE_DEFS } from './body';
+import { DEMON } from './figure';
+import { ARM, FOOT, J, JOINTS, LEAN, SKEL, TURN, onBone, placeBones } from './skeleton';
 import { WING } from './wings';
 
 const FPS = 60, AIR = FLAG.AIRBORNE;
@@ -15,25 +16,29 @@ function play(m: DemonMem, anim: number, from: number, to: number, o: Partial<Bu
   for (let i = 0, n = Math.round((to - from) * fps); i <= n; i++) { const t = i === n ? to : from + i / fps; demonPose(inp({ ...o, anim, animT: t }), 1 / fps, m); each?.(t); }
 }
 const stand = (m: DemonMem, secs: number, o: Partial<BuiltIn> = {}, each?: (t: number) => void): void => play(m, ANIM.Idle, 0, secs, o, each);
-const bones = new Float32Array(BONES * 12);
+const bones = new Float32Array(BONES * 16);
+/** Pose units: the skeleton's own are builder units, a pose unit is `SKEL.perPose` of them. */
+const inPose = (p: [number, number, number]): [number, number, number] => [p[0] / SKEL.perPose, p[1] / SKEL.perPose, p[2] / SKEL.perPose];
+const rest = (bone: string): [number, number, number] => BONE_DEFS[B[bone]][2];
 /** A bone's pivot in the model frame. */
-function at(m: DemonMem, bone: number): [number, number, number] {
+function at(m: DemonMem, bone: string): [number, number, number] {
   placeBones(m.pose, bones);
-  return [bones[bone * 12], bones[bone * 12 + 1], bones[bone * 12 + 2]];
+  return inPose(onBone(bones, B[bone], rest(bone), [0, 0, 0]));
 }
 /** The middle of the head: `headMid` up the head's own axis. */
 function head(m: DemonMem): [number, number, number] {
   placeBones(m.pose, bones);
-  const o = BONE.head * 12, up = P.headMid - 27.2;
-  return [bones[o] + bones[o + 6] * up, bones[o + 1] + bones[o + 7] * up, bones[o + 2] + bones[o + 8] * up];
+  const [x, y, z] = rest('head');
+  return inPose(onBone(bones, B.head, [x, y + (P.headMid - 28.2) * SKEL.perPose, z], [0, 0, 0]));
 }
 const REST = restPose().joints;
 const W = { claws: CONST.DEMON_CLAW_WINDUP, tail: CONST.DEMON_TAIL_WINDUP, swoop: CONST.DEMON_SWOOP_WINDUP, cast: CONST.DEMON_CAST_WINDUP, breath: CONST.DEMON_BREATH_WINDUP };
 
 describe('demonPose: the rows', () => {
   it('counts lengths in the builder\'s units', () => {
-    expect(P.px).toBeCloseTo(1 / DEMON.unit, 12);
-    expect(P.lift).toBeCloseTo(17 / DEMON.unit, 12);
+    // the pose's lengths stay in the old skeleton's units (31.7 to the head's top): px per pose unit is the unit's times the skin's
+    expect(P.px).toBeCloseTo(1 / (DEMON.unit * SKEL.perPose), 12);
+    expect(P.lift).toBeCloseTo(17 * P.px, 12);
   });
 
   it('standing: it breathes, shifts its weight and sways its tail, slowly; the wings are never still', () => {
@@ -266,7 +271,7 @@ describe('demonPose: the flight', () => {
     expect(m.pose.joints[J.footL + FOOT.y]).toBeCloseTo(0, 3);
     // the hips: down deep, up, down again a little, then still
     const ys: number[] = [];
-    stand(m, 2.2, {}, () => ys.push(at(m, BONE.hips)[1] - 15.5));
+    stand(m, 2.2, {}, () => ys.push(at(m, 'hips')[1] - 1.3 / SKEL.perPose));
     const turns: number[] = [];
     for (let i = 2; i < ys.length; i++) if ((ys[i - 1] - ys[i - 2]) * (ys[i] - ys[i - 1]) < 0 && Math.abs(ys[i - 1]) > 0.5) turns.push(ys[i - 1]);
     expect(turns.length).toBe(2);
@@ -465,8 +470,8 @@ describe('demonPose: the head, the facing and the flinch', () => {
       let best = [0, 0, 0], chest = [0, 0, 0], far = 0, fold = 9;
       for (let i = 0; i < 20; i++) {
         demonPose(inp({ flags: i < 6 ? FLAG.HURT : 0, hurtDir }), 1 / FPS, m); demonPose(inp(), 1 / FPS, calm);
-        const h0 = head(calm), c0 = at(calm, BONE.armR);
-        const h = head(m), c = at(m, BONE.armR), d = Math.hypot(h[0] - h0[0], h[2] - h0[2]);
+        const h0 = head(calm), c0 = at(calm, 'upperArmR');
+        const h = head(m), c = at(m, 'upperArmR'), d = Math.hypot(h[0] - h0[0], h[2] - h0[2]);
         if (d > far) { far = d; best = [h[0] - h0[0], h[1] - h0[1], h[2] - h0[2]]; chest = [c[0] - c0[0], c[1] - c0[1], c[2] - c0[2]]; }
         fold = Math.min(fold, m.wr.fold);
       }

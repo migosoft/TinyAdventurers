@@ -280,6 +280,9 @@ export class Figures3d {
   private readonly gemPool: MV3[] = [];
   private readonly eyesPool: MV3[] = [];
   private readonly chestPool: MV3[] = [];
+  private readonly eyeLPool: MV3[] = [];
+  private readonly eyeRPool: MV3[] = [];
+  private readonly bladePool: MV3[][] = [];
   private readonly magicPool: Array<{ gem: number; flare: number; chest?: number; mouth?: number }> = [];
   private readonly haloAt: MV3 = [0, 0, 0];
   private readonly haloRgb: MV3 = [0, 0, 0];
@@ -694,9 +697,9 @@ export class Figures3d {
    * cards. A figure that is drawn as cards forgets the model path's last instances (a vanish image would copy stale ones).
    */
   private figure(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): boolean {
-    // A built figure (#358): drawn once its picture is painted; until then (and without models) it falls through to its card.
+    // A built figure (#358): drawn once it is ready (its picture painted, the demon's skin loaded); until then (and without models) it falls through to its card.
     const built = this.models && FIGURES[e.kind] && this.models.is(e) ? builtOf(e.kind) : null;
-    if (built && this.models!.kit.picture(built.picture)) return this.drawBuilt(e, f, cam, out, built);
+    if (built && built.ready(this.models!.kit)) return this.drawBuilt(e, f, cam, out, built);
     const key = this.models && FIGURES[e.kind] && this.models.is(e) ? modelKeyOf(e.kind) : null;
     const m = key ? this.models!.kit.get(key) : null;
     // A built figure's memory (cloth, pose clock) is stale after frames drawn another way (cards or a model): its next built frame is a first sight.
@@ -1021,13 +1024,13 @@ export class Figures3d {
     // A flier's body hangs above its foot: the body, its points and what is listed for the effects go up with it; the oval and the lamp outline stay on the floor.
     const yb = y + ((dr.lift ?? 0) * scale) / this.cp;
     out.built.push({
-      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
+      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, bones: dr.bones, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
       dark, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     });
 
     // The shadow caster: the figure's side outline at the foot (the rest pose's, baked into the atlas); a faller casts none.
     if (pose.alpha >= 1 && this.shadowed(e.id) && !falling) {
-      const card: Card = { frame: outlineFrame(b.key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: sc, tint: [1, 1, 1], mode: 0, alpha: 1 };   // the outline is baked in game px (the builder's unit is in it): only the pose's scale
+      const card: Card = { frame: outlineFrame(b.outline ?? b.key), x, z, lift: this.lifted(y), flip: pose.left, originX: 0.5, footY: 1, scale: sc, tint: [1, 1, 1], mode: 0, alpha: 1 };   // the outline is baked in game px (the builder's unit is in it): only the pose's scale
       const c = casterOf(card, e.id, this.frames, cam);
       if (c) out.casters.push(c);
     }
@@ -1061,6 +1064,13 @@ export class Figures3d {
     if (dr.anchors.chest) lf.chest = builtPoint(dr.anchors.chest, x, z, yb, dr.yaw, scale, stretch, (this.chestPool[slot] ??= [0, 0, 0]));
     if (dr.anchors.mouth) lf.mouth = builtPoint(dr.anchors.mouth, x, z, yb, dr.yaw, scale, stretch, (this.mouthPool[slot] ??= [0, 0, 0]));
     if (dr.anchors.mouth) lf.nostril = builtPoint(dr.anchors.mouth, x, z, yb, dr.yaw, scale, stretch, (this.nostrilPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.eyeL) lf.eyeL = builtPoint(dr.anchors.eyeL, x, z, yb, dr.yaw, scale, stretch, (this.eyeLPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.eyeR) lf.eyeR = builtPoint(dr.anchors.eyeR, x, z, yb, dr.yaw, scale, stretch, (this.eyeRPool[slot] ??= [0, 0, 0]));
+    if (dr.anchors.blade) {
+      const pool = (this.bladePool[slot] ??= dr.anchors.blade.map((): MV3 => [0, 0, 0]));
+      lf.blade = dr.anchors.blade.map((p, k) => builtPoint(p, x, z, yb, dr.yaw, scale, stretch, pool[k]));
+    }
+    if (dr.temper) lf.temper = dr.temper;
     const mg = (this.magicPool[slot] ??= { gem: 0, flare: 0 });
     mg.gem = dr.magic.gem; mg.flare = dr.magic.flare; mg.chest = dr.magic.chest; mg.mouth = dr.magic.mouth;
     lf.magic = mg;

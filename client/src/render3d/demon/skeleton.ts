@@ -1,35 +1,28 @@
-// The demon's skeleton (#379): the bones, where each turns, the joint values a pose holds, and `placeBones`, which turns a pose into
-// one frame per bone. Pure, allocates nothing.
+// The demon's skeleton (#379, #442): the joint values a pose holds, the stance, and `placeBones`, which turns a pose into one skinning
+// matrix per bone of `BONE_DEFS` (body.ts). Pure, allocates nothing after its first call.
 //
-// Model frame: builder units (the spike's description units), the front along +x, up +y, the demon's right +z, the feet at y 0.
-// A frame is 12 floats: where the bone's pivot is (0..2), then the images of the x, y and z axes (3..5, 6..8, 9..11). A part's points
-// are stored relative to its bone's pivot in the rest pose, so a point is `origin + X * x + Y * y + Z * z`.
-// With every joint at 0 the skeleton is the spike's description; the standing demon is `restPose()` (pose.ts).
+// The skin's own units are the builder's (left +x, up +y, front +z, feet at 0, head top at `SKEL.crown`); the matrices turn them into the
+// model frame the built path wants (front +x, up +y, right +z): model x = builder z, model z = -builder x.
+// A matrix is 16 floats, column-major: a bone's rest point -> the model frame (the bone's world matrix times the inverse of its bind matrix).
+import { BONES, BONE_DEFS, B, TAIL_N } from './body';
+import type { V } from './sdf';
 import type { DemonPose } from './pose';
 
-export const BONE = { hips: 0, spine: 1, chest: 2, neck: 3, head: 4, jaw: 5, armR: 6, foreR: 7, handR: 8, armL: 9, foreL: 10, handL: 11,
-  thighR: 12, shinR: 13, footR: 14, thighL: 15, shinL: 16, footL: 17 } as const;
-export const BONES = 18;
-/**
- * Frames the builder derives after the bones (shape.ts), in the same array: per hand five fingers (the thumb last) of two joints each,
- * the five plates riding on the tail, per wing the four finger claws and the thumb's.
- */
-export const SLOT = { finger: 18, tailPlate: 38, wingClaw: 43 } as const;
-export const SLOTS = 53;
+/** Builder units to the head's top; builder units per pose unit (the pose's lengths were made for a 31.7 units tall skeleton). */
+export const SKEL = { crown: 2.68, perPose: 2.68 / 31.7 } as const;
 
-/** The skeleton's measures in the rest pose (x, y; the legs and arms at ±z). `sole`: the foot point, on the floor under the foot. */
+/** The old skeleton's measures in pose units: the rows' language (foot points, the hips' place, the jaw's and the toes' angles) and the wings' root. */
 export const RIG = {
   hip: [0, 15.5], legZ: 4.3, stifle: [3.8, 11.0], hock: [-3.2, 6.2], sole: [1.1, 0],
   spine: [0.3, 17.6], chest: [1.0, 21.4], neck: [2.2, 26.4], head: [2.8, 27.2], jaw: [3.7, 27.6],
   shoulder: [1.8, 26.0], shoulderZ: 4.9 * 1.55 + 1.1, elbow: 6.3, fore: 6.5,
   /** rad the jaw drops at `jaw` 1. */ jawOpen: 0.6,
-  /** rad the flat palm is turned in towards the body (the spike's). */ palmTurn: 0.5,
   /** rad the toes hang on a foot off the floor, and the height (units) from which they hang fully. */ toesHang: (35 * Math.PI) / 180, toesClear: 2.5,
 } as const;
 
 /**
- * Where a pose's joint values lie in `DemonPose.joints`. Angles in rad, places in builder units.
- * - `hipsX..Z`: the hips' place, off the rest.
+ * Where a pose's joint values lie in `DemonPose.joints`. Angles in rad, places in pose units.
+ * - `hipsX..Z`: the hips' place, off the rest (x front, y up, z right).
  * - `hips`, `spine`, `chest`, `neck`, `head`: three values each, `TURN` (+ to the demon's right, as a world yaw), `LEAN` (+ forward), `ROLL` (+ to its right).
  * - `jaw`: 0 shut, 1 wide open.
  * - `armR`, `armL`: eight values each, see `ARM`. The same values give mirrored arms.
@@ -47,122 +40,197 @@ export const ARM = { swing: 0, out: 1, twist: 2, elbow: 3, wristBend: 4, wristTu
 /** A foot's values: the foot point (model frame, y 0 on the floor) and `toes` (rad the toes hang down, on top of the foot rule: flat when planted, hanging `RIG.toesHang` off the floor). */
 export const FOOT = { x: 0, y: 1, z: 2, toes: 3 } as const;
 
-/** Each bone's pivot in the rest pose. */
-export const PIVOT: Float64Array = (() => {
-  const p = new Float64Array(BONES * 3), R = RIG, set = (b: number, x: number, y: number, z: number): void => { p[b * 3] = x; p[b * 3 + 1] = y; p[b * 3 + 2] = z; };
-  set(BONE.hips, R.hip[0], R.hip[1], 0); set(BONE.spine, R.spine[0], R.spine[1], 0); set(BONE.chest, R.chest[0], R.chest[1], 0);
-  set(BONE.neck, R.neck[0], R.neck[1], 0); set(BONE.head, R.head[0], R.head[1], 0); set(BONE.jaw, R.jaw[0], R.jaw[1], 0);
-  for (const [sd, arm, fore, hand, thigh, shin, foot] of [[1, BONE.armR, BONE.foreR, BONE.handR, BONE.thighR, BONE.shinR, BONE.footR], [-1, BONE.armL, BONE.foreL, BONE.handL, BONE.thighL, BONE.shinL, BONE.footL]] as const) {
-    set(arm, R.shoulder[0], R.shoulder[1], sd * R.shoulderZ); set(fore, R.shoulder[0], R.shoulder[1] - R.elbow, sd * R.shoulderZ); set(hand, R.shoulder[0], R.shoulder[1] - R.elbow - R.fore, sd * R.shoulderZ);
-    set(thigh, R.hip[0], R.hip[1], sd * R.legZ); set(shin, R.stifle[0], R.stifle[1], sd * R.legZ); set(foot, R.hock[0], R.hock[1], sd * R.legZ);
-  }
-  return p;
+type E = [number, number, number];
+/** The spike's standing stance: [x, y, z] rad per bone, YXZ order (x tips a spine bone forward and swings a hanging limb back, y turns to the left, z lifts the left side). */
+const STAND: Record<string, E> = {
+  hips: [0.06, 0.1, 0], waist: [0.12, -0.04, 0], chest: [0.2, -0.08, 0], neck: [0.25, 0.04, 0], head: [-0.4, 0.1, 0.04], jaw: [0.12, 0, 0],
+  clavL: [0, -0.06, 0], upperArmL: [-0.1, 0, -0.04], foreArmL: [-0.26, 0, -0.1], handL: [-0.05, 0, 0.03], fingersL: [0, 0, -0.35],
+  upperArmR: [-0.03, 0, 0.02], foreArmR: [-0.34, 0, 0.13],
+  thighL: [-0.5, 0.22, 0.16], shinL: [0.8, 0, 0], thighR: [-0.3, -0.16, -0.14], shinR: [0.6, 0, 0],
+  wing1L: [-0.42, -0.08, -0.05],
+};
+/** `STAND` with the right side mirrored from the left where it names no right bone itself; the tail's curve shared out over its joints. */
+export const STANCE: Record<string, E> = (() => {
+  const o: Record<string, E> = { ...STAND };
+  for (const k in STAND) if (k.endsWith('L') && !(k.slice(0, -1) + 'R' in STAND)) o[k.slice(0, -1) + 'R'] = [STAND[k][0], -STAND[k][1], -STAND[k][2]];
+  const TAIL_STAND = [0.1, 0, -0.2, -0.25, -0.3], per = 5 / TAIL_N;
+  for (let i = 0; i < TAIL_N; i++) o[`tail${i}`] = [TAIL_STAND[Math.floor(i * per)] * per, 0, 0];
+  return o;
 })();
 
-// ---------------------------------------------------------------- rotations: 9 floats, the images of the x, y and z axes
-export function rotX(a: number, o: Float64Array): Float64Array { const c = Math.cos(a), s = Math.sin(a); o[0] = 1; o[1] = 0; o[2] = 0; o[3] = 0; o[4] = c; o[5] = s; o[6] = 0; o[7] = -s; o[8] = c; return o; }
-export function rotY(a: number, o: Float64Array): Float64Array { const c = Math.cos(a), s = Math.sin(a); o[0] = c; o[1] = 0; o[2] = -s; o[3] = 0; o[4] = 1; o[5] = 0; o[6] = s; o[7] = 0; o[8] = c; return o; }
-export function rotZ(a: number, o: Float64Array): Float64Array { const c = Math.cos(a), s = Math.sin(a); o[0] = c; o[1] = s; o[2] = 0; o[3] = -s; o[4] = c; o[5] = 0; o[6] = 0; o[7] = 0; o[8] = 1; return o; }
-/** A turn by `a` about the unit axis (x, y, z). */
-export function rotAxis(x: number, y: number, z: number, a: number, o: Float64Array): Float64Array {
-  const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
-  o[0] = t * x * x + c; o[1] = t * x * y + s * z; o[2] = t * x * z - s * y;
-  o[3] = t * x * y - s * z; o[4] = t * y * y + c; o[5] = t * y * z + s * x;
-  o[6] = t * x * z + s * y; o[7] = t * y * z - s * x; o[8] = t * z * z + c;
-  return o;
+// ---------------------------------------------------------------- scratch (column-major 3x3 rotations, world, builder frame)
+const PARENT = Int16Array.from(BONE_DEFS.map((d) => (d[1] === null ? -1 : B[d[1]])));
+const AT = new Float64Array(BONES * 3), OFF = new Float64Array(BONES * 3);
+BONE_DEFS.forEach((d, i) => { for (let c = 0; c < 3; c++) { AT[i * 3 + c] = d[2][c]; OFF[i * 3 + c] = d[2][c] - (PARENT[i] < 0 ? 0 : BONE_DEFS[PARENT[i]][2][c]); } });
+const WR = new Float64Array(BONES * 9), WP = new Float64Array(BONES * 3);
+const LOCAL = new Float64Array(9), TMP = new Float64Array(9);
+
+/** Rotation of Euler angles in YXZ order (three's), column-major. */
+function euler(x: number, y: number, z: number, o: Float64Array): void {
+  const a = Math.cos(x), b = Math.sin(x), c = Math.cos(y), d = Math.sin(y), e = Math.cos(z), f = Math.sin(z);
+  const ce = c * e, cf = c * f, de = d * e, df = d * f;
+  o[0] = ce + df * b; o[1] = a * f; o[2] = cf * b - de;
+  o[3] = de * b - cf; o[4] = a * e; o[5] = df + ce * b;
+  o[6] = a * d; o[7] = -b; o[8] = a * c;
 }
-/** `o = a * b` (`b` first); `o` is neither of them. */
-export function mul(a: Float64Array, b: Float64Array, o: Float64Array): Float64Array {
+/** `o = a * b`; `o` is neither of them. */
+function mul3(a: Float64Array, b: Float64Array, o: Float64Array): void {
   for (let j = 0; j < 9; j += 3) {
     const x = b[j], y = b[j + 1], z = b[j + 2];
     o[j] = a[0] * x + a[3] * y + a[6] * z; o[j + 1] = a[1] * x + a[4] * y + a[7] * z; o[j + 2] = a[2] * x + a[5] * y + a[8] * z;
   }
-  return o;
 }
-/**
- * The frame `c` hangs on the frame `p` of `f`: its pivot at the point (dx, dy, dz) of `p`, turned by `local` in `p`.
- * `c` and `p` are frame numbers (12 floats each).
- */
-export function hang(f: Float32Array, c: number, p: number, dx: number, dy: number, dz: number, local: Float64Array): void {
-  const a = p * 12, b = c * 12;
-  f[b] = f[a] + f[a + 3] * dx + f[a + 6] * dy + f[a + 9] * dz;
-  f[b + 1] = f[a + 1] + f[a + 4] * dx + f[a + 7] * dy + f[a + 10] * dz;
-  f[b + 2] = f[a + 2] + f[a + 5] * dx + f[a + 8] * dy + f[a + 11] * dz;
-  for (let j = 0; j < 9; j += 3) {
-    const x = local[j], y = local[j + 1], z = local[j + 2];
-    f[b + 3 + j] = f[a + 3] * x + f[a + 6] * y + f[a + 9] * z; f[b + 4 + j] = f[a + 4] * x + f[a + 7] * y + f[a + 10] * z; f[b + 5 + j] = f[a + 5] * x + f[a + 8] * y + f[a + 11] * z;
+/** The shortest turn from the unit vector (ax, ay, az) to (bx, by, bz), written to `o` at `at`. */
+function arc(ax: number, ay: number, az: number, bx: number, by: number, bz: number, o: Float64Array, at: number): void {
+  const x = ay * bz - az * by, y = az * bx - ax * bz, z = ax * by - ay * bx, c = ax * bx + ay * by + az * bz;
+  if (c < -0.999999) {
+    // opposite vectors: a half turn about z (never met by a leg)
+    o[at] = -1; o[at + 1] = 0; o[at + 2] = 0; o[at + 3] = 0; o[at + 4] = -1; o[at + 5] = 0; o[at + 6] = 0; o[at + 7] = 0; o[at + 8] = 1;
+    return;
+  }
+  // I + [v]x + [v]x^2 / (1 + c)
+  const k = 1 / (1 + c);
+  o[at] = 1 + k * (-z * z - y * y); o[at + 1] = z + k * x * y; o[at + 2] = -y + k * x * z;
+  o[at + 3] = -z + k * x * y; o[at + 4] = 1 + k * (-z * z - x * x); o[at + 5] = x + k * y * z;
+  o[at + 6] = y + k * x * z; o[at + 7] = -x + k * y * z; o[at + 8] = 1 + k * (-y * y - x * x);
+}
+
+// ---------------------------------------------------------------- the legs
+const L = (name: string): number => B[name];
+const dist = (a: V, b: V): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const at3 = (n: string): V => BONE_DEFS[L(n)][2];
+const THIGH_LEN = dist(at3('shinL'), at3('thighL')), SHIN_LEN = dist(at3('footL'), at3('shinL'));
+const dirOf = (a: V, b: V, l: number): V => [(b[0] - a[0]) / l, (b[1] - a[1]) / l, (b[2] - a[2]) / l];
+const THIGH_DIR = dirOf(at3('thighL'), at3('shinL'), THIGH_LEN), SHIN_DIR = dirOf(at3('shinL'), at3('footL'), SHIN_LEN);
+/** The ankle's height above the sole, and how far it lies behind the ball of the foot (builder units). */
+const ANKLE_UP = 0.28, BALL = 0.2;
+/** Each leg's ankle in the stance, and the foot point it stands on (builder frame; set at the first call). */
+const REST_ANKLE: V[] = [[0, ANKLE_UP, 0], [0, ANKLE_UP, 0]];
+let restJ: Float32Array | null = null;
+/** The rest pose's joints (pose.ts hands them over when it loads): the controls add only what differs from them. */
+export function setRest(j: Float32Array): void { restJ = j; restAnkles = false; }
+let restAnkles = false;
+
+/** The stance's own turn for a bone, plus what the pose's controls add (`j` minus the rest pose's values). Writes `LOCAL`. */
+function local(i: number, j: Float32Array | null): void {
+  const s = STANCE[BONE_DEFS[i][0]] ?? [0, 0, 0];
+  let x = s[0], y = s[1], z = s[2];
+  if (j) {
+    const r = restJ!, name = BONE_DEFS[i][0], side = name.endsWith('L') ? 1 : name.endsWith('R') ? -1 : 0;
+    const trunk = (at: number): void => { x += j[at + LEAN]; y -= j[at + TURN]; z += j[at + ROLL]; };
+    if (name === 'hips') trunk(J.hips); else if (name === 'waist') trunk(J.spine); else if (name === 'chest') trunk(J.chest); else if (name === 'neck') trunk(J.neck); else if (name === 'head') trunk(J.head);
+    else if (name === 'jaw') x += j[J.jaw] * RIG.jawOpen;
+    else if (side) {
+      // the pose's arms: R is `armR` (+1 there), the spike's left is +x
+      const a = side > 0 ? J.armL : J.armR, d = (k: number): number => j[a + k] - r[a + k];
+      if (name.startsWith('upperArm')) { x -= d(ARM.swing); z += side * d(ARM.out); y -= side * d(ARM.twist); }
+      else if (name.startsWith('foreArm')) x -= d(ARM.elbow);
+      else if (name.startsWith('hand')) { x -= d(ARM.wristBend); y -= side * d(ARM.wristTurn); }
+      else if (name.startsWith('fingers')) z -= side * d(ARM.curl);
+    }
+  }
+  euler(x, y, z, LOCAL);
+}
+
+/** Frame of one frame's work: the world rotations and places of every bone for the pose (null: the stance alone, no leg solve). */
+function solve(pose: DemonPose | null): void {
+  const j = pose ? pose.joints : null, pp = SKEL.perPose;
+  for (let i = 0; i < BONES; i++) {
+    const p = PARENT[i], o = i * 9, q = i * 3;
+    if (j && LEG_FOLLOW[i]) continue;
+    local(i, j);
+    if (p < 0) {
+      // the hips: the pose's place (pose x front, y up, z right) in builder units
+      WP[q] = AT[q] - (j ? j[J.hipsZ] * pp : 0); WP[q + 1] = AT[q + 1] + (j ? j[J.hipsY] * pp : 0); WP[q + 2] = AT[q + 2] + (j ? j[J.hipsX] * pp : 0);
+      for (let k = 0; k < 9; k++) WR[o + k] = LOCAL[k];
+      continue;
+    }
+    const pr = p * 9, pq = p * 3;
+    WP[q] = WP[pq] + WR[pr] * OFF[q] + WR[pr + 3] * OFF[q + 1] + WR[pr + 6] * OFF[q + 2];
+    WP[q + 1] = WP[pq + 1] + WR[pr + 1] * OFF[q] + WR[pr + 4] * OFF[q + 1] + WR[pr + 7] * OFF[q + 2];
+    WP[q + 2] = WP[pq + 2] + WR[pr + 2] * OFF[q] + WR[pr + 5] * OFF[q + 1] + WR[pr + 8] * OFF[q + 2];
+    mul3(WR.subarray(pr, pr + 9) as Float64Array, LOCAL, TMP);
+    for (let k = 0; k < 9; k++) WR[o + k] = TMP[k];
+    if (j && (BONE_DEFS[i][0] === 'thighL' || BONE_DEFS[i][0] === 'thighR')) leg(i, j, pose!.lift);
   }
 }
 
-const A = new Float64Array(9), B = new Float64Array(9), C = new Float64Array(9), L = new Float64Array(9);
-/** A trunk bone's turn: `TURN`, `LEAN`, `ROLL` from `j[at]` on. */
-function trunk(j: Float32Array, at: number): Float64Array {
-  return mul(mul(rotY(-j[at + TURN], A), rotZ(-j[at + LEAN], B), C), rotX(j[at + ROLL], A), L);
-}
-const child = (f: Float32Array, c: number, p: number, local: Float64Array): void =>
-  hang(f, c, p, PIVOT[c * 3] - PIVOT[p * 3], PIVOT[c * 3 + 1] - PIVOT[p * 3 + 1], PIVOT[c * 3 + 2] - PIVOT[p * 3 + 2], local);
-
-// The legs' rest: the thigh's and the shin's lengths and directions, and the hock off the foot point.
-const THIGH = Math.hypot(RIG.stifle[0] - RIG.hip[0], RIG.stifle[1] - RIG.hip[1]), SHIN = Math.hypot(RIG.hock[0] - RIG.stifle[0], RIG.hock[1] - RIG.stifle[1]);
-const T0X = (RIG.stifle[0] - RIG.hip[0]) / THIGH, T0Y = (RIG.stifle[1] - RIG.hip[1]) / THIGH, S0X = (RIG.hock[0] - RIG.stifle[0]) / SHIN, S0Y = (RIG.hock[1] - RIG.stifle[1]) / SHIN;
-const HOCK_X = RIG.hock[0] - RIG.sole[0], HOCK_Y = RIG.hock[1] - RIG.sole[1];
-
-/** A bone of the leg from (ox, oy, oz) along the unit (ax, ay, az) in the plane whose normal is the unit (sx, sy, sz); (rx, ry) its rest direction. */
-function legBone(f: Float32Array, b: number, ox: number, oy: number, oz: number, ax: number, ay: number, az: number, sx: number, sy: number, sz: number, rx: number, ry: number): void {
-  const o = b * 12, nx = sy * az - sz * ay, ny = sz * ax - sx * az, nz = sx * ay - sy * ax;
-  f[o] = ox; f[o + 1] = oy; f[o + 2] = oz;
-  f[o + 3] = ax * rx - nx * ry; f[o + 4] = ay * rx - ny * ry; f[o + 5] = az * rx - nz * ry;
-  f[o + 6] = ax * ry + nx * rx; f[o + 7] = ay * ry + ny * rx; f[o + 8] = az * ry + nz * rx;
-  f[o + 9] = sx; f[o + 10] = sy; f[o + 11] = sz;
-}
-
-/**
- * A leg: the foot stands on its foot point (turned about it by the toes' angle), which gives the hock; the thigh and the shin reach it
- * by two-bone IK from the hip, the knee forward (the hips' front). A hock out of reach leaves the leg straight and takes the foot along.
- * The foot rule: flat on the floor, the toes hanging the higher the foot point is above it (`lift`: how high the whole body hangs).
- */
-function leg(f: Float32Array, j: Float32Array, at: number, sd: number, thigh: number, shin: number, foot: number, lift: number): void {
-  const h = BONE.hips * 12, z = sd * RIG.legZ;
-  const hx = f[h] + f[h + 9] * z, hy = f[h + 1] + f[h + 10] * z, hz = f[h + 2] + f[h + 11] * z;
+/** The bones the leg solve places itself: shin, foot and toes of both legs (solved with the thigh, when there is a pose). */
+const LEG_FOLLOW = BONE_DEFS.map((d) => /^(shin|foot|toes)[LR]$/.test(d[0]));
+const KNEE = new Float64Array(3);
+/** Solves the leg of the thigh bone `t` (shin, foot and toes follow in `BONE_DEFS`' order) to the pose's foot point: two-bone solve from the hip, the knee forward. */
+function leg(t: number, j: Float32Array, lift: number): void {
+  const left = BONE_DEFS[t][0] === 'thighL', at = left ? J.footL : J.footR, side = left ? 0 : 1, pp = SKEL.perPose;
+  const shin = t + 1, foot = t + 2, hips = 0;
   const up = Math.max(0, Math.min(1, (j[at + FOOT.y] + lift) / RIG.toesClear)), toes = j[at + FOOT.toes] + RIG.toesHang * up * up * (3 - 2 * up);
   const c = Math.cos(toes), s = Math.sin(toes);
-  let kx = j[at + FOOT.x] + c * HOCK_X + s * HOCK_Y, ky = j[at + FOOT.y] - s * HOCK_X + c * HOCK_Y, kz = j[at + FOOT.z];
-  let dx = kx - hx, dy = ky - hy, dz = kz - hz;
-  const far = Math.hypot(dx, dy, dz) || 1e-6, d = Math.min(THIGH + SHIN - 1e-4, Math.max(Math.abs(THIGH - SHIN) + 1e-4, far));
+  // the foot point: the rest one plus how far the pose moved it (pose x front, y up, z right); the rest pose's is `restJ`'s
+  const r = restJ!;
+  const fx = (j[at + FOOT.x] - r[at + FOOT.x]) * pp, fy = (j[at + FOOT.y] - r[at + FOOT.y]) * pp, fz = (j[at + FOOT.z] - r[at + FOOT.z]) * pp;
+  const A = REST_ANKLE[side];
+  // the ankle: the foot point turned about the ball by the toes' angle (builder: z front, x left)
+  const bx = A[0] - fz, by = fy, bz = A[2] + BALL + fx;
+  const hx = WP[t * 3], hy = WP[t * 3 + 1], hz = WP[t * 3 + 2];
+  const tx = bx, ty = by + ANKLE_UP * c + BALL * s, tz = bz + ANKLE_UP * s - BALL * c;
+  let dx = tx - hx, dy = ty - hy, dz = tz - hz;
+  const far = Math.hypot(dx, dy, dz) || 1e-6, d = Math.min(THIGH_LEN + SHIN_LEN - 1e-4, Math.max(Math.abs(THIGH_LEN - SHIN_LEN) + 1e-4, far));
   dx /= far; dy /= far; dz /= far;
-  kx = hx + dx * d; ky = hy + dy * d; kz = hz + dz * d;
-  // the knee's side of the hip-to-hock line: the hips' front, or their up when the leg points straight ahead
-  let px = f[h + 3], py = f[h + 4], pz = f[h + 5], dot = px * dx + py * dy + pz * dz;
-  if (Math.abs(dot) > 0.999) { px = f[h + 6]; py = f[h + 7]; pz = f[h + 8]; dot = px * dx + py * dy + pz * dz; }
+  // the knee's side: the hips' front, or their up when the leg points straight ahead
+  let px = WR[hips * 9 + 6], py = WR[hips * 9 + 7], pz = WR[hips * 9 + 8], dot = px * dx + py * dy + pz * dz;
+  if (Math.abs(dot) > 0.999) { px = WR[hips * 9 + 3]; py = WR[hips * 9 + 4]; pz = WR[hips * 9 + 5]; dot = px * dx + py * dy + pz * dz; }
   px -= dx * dot; py -= dy * dot; pz -= dz * dot;
-  const pl = Math.hypot(px, py, pz); px /= pl; py /= pl; pz /= pl;
-  const along = (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d), off = Math.sqrt(Math.max(0, THIGH * THIGH - along * along));
-  const nx = hx + dx * along + px * off, ny = hy + dy * along + py * off, nz = hz + dz * along + pz * off;   // the knee
-  const sx = dy * pz - dz * py, sy = dz * px - dx * pz, sz = dx * py - dy * px;
-  legBone(f, thigh, hx, hy, hz, (nx - hx) / THIGH, (ny - hy) / THIGH, (nz - hz) / THIGH, sx, sy, sz, T0X, T0Y);
-  legBone(f, shin, nx, ny, nz, (kx - nx) / SHIN, (ky - ny) / SHIN, (kz - nz) / SHIN, sx, sy, sz, S0X, S0Y);
-  const o = foot * 12;
-  f[o] = kx; f[o + 1] = ky; f[o + 2] = kz;
-  f[o + 3] = c; f[o + 4] = -s; f[o + 5] = 0; f[o + 6] = s; f[o + 7] = c; f[o + 8] = 0; f[o + 9] = 0; f[o + 10] = 0; f[o + 11] = 1;
+  const pl = Math.hypot(px, py, pz) || 1; px /= pl; py /= pl; pz /= pl;
+  const along = (THIGH_LEN * THIGH_LEN - SHIN_LEN * SHIN_LEN + d * d) / (2 * d), off = Math.sqrt(Math.max(0, THIGH_LEN * THIGH_LEN - along * along));
+  KNEE[0] = hx + dx * along + px * off; KNEE[1] = hy + dy * along + py * off; KNEE[2] = hz + dz * along + pz * off;
+  const ax = hx + dx * d, ay = hy + dy * d, az = hz + dz * d;
+  arc(THIGH_DIR[0], THIGH_DIR[1], THIGH_DIR[2], (KNEE[0] - hx) / THIGH_LEN, (KNEE[1] - hy) / THIGH_LEN, (KNEE[2] - hz) / THIGH_LEN, WR, t * 9);
+  for (let k = 0; k < 3; k++) WP[shin * 3 + k] = KNEE[k];
+  arc(SHIN_DIR[0], SHIN_DIR[1], SHIN_DIR[2], (ax - KNEE[0]) / SHIN_LEN, (ay - KNEE[1]) / SHIN_LEN, (az - KNEE[2]) / SHIN_LEN, WR, shin * 9);
+  // the foot: flat on the floor, turned about the left axis by the toes' angle
+  WP[foot * 3] = ax; WP[foot * 3 + 1] = ay; WP[foot * 3 + 2] = az;
+  const o = foot * 9;
+  WR[o] = 1; WR[o + 1] = 0; WR[o + 2] = 0; WR[o + 3] = 0; WR[o + 4] = c; WR[o + 5] = s; WR[o + 6] = 0; WR[o + 7] = -s; WR[o + 8] = c;
+  // the toes (the next bone) hang on the foot: its place follows
+  const q = (foot + 1) * 3, f = foot * 3;
+  for (let k = 0; k < 9; k++) WR[(foot + 1) * 9 + k] = WR[o + k];
+  WP[q] = WP[f] + WR[o] * OFF[q] + WR[o + 3] * OFF[q + 1] + WR[o + 6] * OFF[q + 2];
+  WP[q + 1] = WP[f + 1] + WR[o + 1] * OFF[q] + WR[o + 4] * OFF[q + 1] + WR[o + 7] * OFF[q + 2];
+  WP[q + 2] = WP[f + 2] + WR[o + 2] * OFF[q] + WR[o + 5] * OFF[q + 1] + WR[o + 8] * OFF[q + 2];
 }
 
-/** Fills `out` (BONES x 12 floats) from the pose: forward from the hips; the legs by IK to the pose's foot points. */
-export function placeBones(pose: DemonPose, out: Float32Array): void {
-  const j = pose.joints, R = trunk(j, J.hips);
-  out[0] = PIVOT[0] + j[J.hipsX]; out[1] = PIVOT[1] + j[J.hipsY]; out[2] = PIVOT[2] + j[J.hipsZ];
-  for (let i = 0; i < 9; i++) out[3 + i] = R[i];
-  child(out, BONE.spine, BONE.hips, trunk(j, J.spine));
-  child(out, BONE.chest, BONE.spine, trunk(j, J.chest));
-  child(out, BONE.neck, BONE.chest, trunk(j, J.neck));
-  child(out, BONE.head, BONE.neck, trunk(j, J.head));
-  child(out, BONE.jaw, BONE.head, rotZ(-j[J.jaw] * RIG.jawOpen, L));
-  for (let side = 0; side < 2; side++) {
-    const sd = side === 0 ? 1 : -1, a = side === 0 ? J.armR : J.armL, arm = side === 0 ? BONE.armR : BONE.armL;
-    child(out, arm, BONE.chest, mul(mul(rotZ(j[a + ARM.swing], A), rotX(-sd * j[a + ARM.out], B), C), rotY(sd * j[a + ARM.twist], A), L));
-    child(out, arm + 1, arm, rotZ(j[a + ARM.elbow], L));
-    // the wrist bends about the line of the knuckles, towards the palm
-    child(out, arm + 2, arm + 1, mul(rotY(sd * j[a + ARM.wristTurn], A), rotAxis(sd * Math.cos(RIG.palmTurn), 0, -Math.sin(RIG.palmTurn), j[a + ARM.wristBend], B), L));
+/** The first call: the stance's own ankles are where the feet stand when every joint is at rest. */
+function init(): void {
+  solve(null);
+  restAnkles = true;
+  for (const [name, k] of [['footL', 0], ['footR', 1]] as const) {
+    const f = L(name) * 3;
+    REST_ANKLE[k] = [WP[f], ANKLE_UP, WP[f + 2]];
   }
-  leg(out, j, J.footR, 1, BONE.thighR, BONE.shinR, BONE.footR, pose.lift);
-  leg(out, j, J.footL, -1, BONE.thighL, BONE.shinL, BONE.footL, pose.lift);
+}
+
+/**
+ * Fills `out` (`BONES` x 16 floats, column-major) from the pose: forward from the hips; the controls on top of the stance; the legs by
+ * two-bone solve to the pose's foot points. Fingers, the wings, the tail's joints and the chain stay at the stance.
+ */
+export function placeBones(pose: DemonPose, out: Float32Array): void {
+  if (!restAnkles) init();
+  solve(pose);
+  for (let i = 0; i < BONES; i++) {
+    const r = i * 9, p = i * 3, m = i * 16;
+    // t = P - R * at, then the builder -> model turn on every column (model (x, y, z) = (z, y, -x))
+    const tx = WP[p] - (WR[r] * AT[p] + WR[r + 3] * AT[p + 1] + WR[r + 6] * AT[p + 2]);
+    const ty = WP[p + 1] - (WR[r + 1] * AT[p] + WR[r + 4] * AT[p + 1] + WR[r + 7] * AT[p + 2]);
+    const tz = WP[p + 2] - (WR[r + 2] * AT[p] + WR[r + 5] * AT[p + 1] + WR[r + 8] * AT[p + 2]);
+    for (let c = 0; c < 3; c++) { out[m + c * 4] = WR[r + c * 3 + 2]; out[m + c * 4 + 1] = WR[r + c * 3 + 1]; out[m + c * 4 + 2] = -WR[r + c * 3]; out[m + c * 4 + 3] = 0; }
+    out[m + 12] = tz; out[m + 13] = ty; out[m + 14] = -tx; out[m + 15] = 1;
+  }
+}
+
+/** A builder-frame rest point carried by bone `bone`'s matrix (in `m`, from `placeBones`) into the model frame; writes `o`. */
+export function onBone(m: Float32Array, bone: number, p: V, o: [number, number, number]): [number, number, number] {
+  const k = bone * 16;
+  o[0] = m[k] * p[0] + m[k + 4] * p[1] + m[k + 8] * p[2] + m[k + 12];
+  o[1] = m[k + 1] * p[0] + m[k + 5] * p[1] + m[k + 9] * p[2] + m[k + 13];
+  o[2] = m[k + 2] * p[0] + m[k + 6] * p[1] + m[k + 10] * p[2] + m[k + 14];
+  return o;
 }

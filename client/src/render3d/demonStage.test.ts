@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams, type R3dParams } from './params';
@@ -9,6 +9,8 @@ import type { Stage, StageCtx } from './host';
 import { createKit, directRunner } from './models/kit';
 import { createDemonStage, demonMap, parseDemon } from './demonStage';
 import { DEMON_DEV } from './demon/figure';
+import { buildDemonSkin } from './demon/body';
+import { setDemonSkin } from './demon/skinFile';
 import { DEMON_ACTS } from './demonScript';
 import { TERRAIN } from '../game/terrain-layers';
 import type { FrameInput } from './view';
@@ -26,6 +28,10 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const n of ['lich', 'big_demon', 'knight_m', 'necromancer', 'imp', 'chort', 'wizzard_m']) for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`${n}_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 for (let i = 0; i < 4; i++) { frames[`necromancer_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 }; }
 const assets = { image: {} as HTMLImageElement, frames };
+
+// the skin file is not fetched here: a coarse skin stands in, so the demon is built from its first frames
+beforeAll(() => { setDemonSkin(buildDemonSkin(0.2)); });
+afterAll(() => { setDemonSkin(null); });
 
 const made: Stage[] = [];
 afterEach(() => { for (const s of made.splice(0)) s.dispose(); delete (window as { __r3d?: unknown }).__r3d; });
@@ -81,14 +87,19 @@ describe('the ?r3d=demon stage', () => {
     expect(lights.filter((l) => l.kind === LIGHT_KIND.Lava)).toHaveLength(16);
   });
 
-  it('draws one built demon of KIND.FireDemon with its hull once its picture is painted, the lava with it', async () => {
+  it('draws one built demon of KIND.FireDemon with its bones once its skin is loaded, the lava with it', async () => {
+    const skin = buildDemonSkin(0.2);
+    setDemonSkin(null);
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
     const r = make('?r3d=demon');
-    expect(built(r.step(1)[0])).toBe(0); // the picture is not painted yet: the demon is its card
+    expect(built(r.step(1)[0])).toBe(0); // the skin is not loaded yet: the demon is its card
+    vi.unstubAllGlobals();
+    setDemonSkin(skin);
     let last: FrameInput | undefined;
     await r.wait(() => { last = r.step(1)[0]; return built(last) === 1; });
     const b = last!.models!.built![0];
     expect(b).toMatchObject({ key: 'demon', owner: 1, stone: false });
-    expect(b.hull!.verts).toBeGreaterThan(0);
+    expect(b.bones!.length).toBe(88 * 16);
     expect(last!.lava).not.toBeNull();
     expect(last!.lavaPool).toBeDefined();
     expect((window as unknown as { __r3d: { built: number; demonMs: number } }).__r3d.built).toBe(1);

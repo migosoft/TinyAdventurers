@@ -32,6 +32,7 @@ import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, selectCasters, selectLights, staticCands, type Cand } from './lights';
 import { actPeriod, LICH_ACTS, lichAct, type LichAct } from './lichScript';
+import type { FigureKit } from './models/kit';
 import { seenOpeners } from './openers';
 import type { PageButton } from './panel';
 import { reflects, shimmers, type R3dParams } from './params';
@@ -104,8 +105,8 @@ export function queryNum(q: URLSearchParams, k: string): number | null {
 export interface HallBoss {
   /** The page's name: the readout `window.__r3d.<name>Ms`. */
   name: string;
-  /** The built figure's picture, which a pinned replay waits for. */
-  picture: string;
+  /** True once the built figure is ready (`BuiltFigure.ready`), which a pinned replay waits for. */
+  ready: (kit: FigureKit) => boolean;
   /** The boss's place (tiles); the camera follows it. */
   at: { x: number; z: number };
   /** The page time a pinned page steps to and holds (s); null: the page runs. */
@@ -211,7 +212,7 @@ export function createHallStage(assets: Assets, p: R3dParams, map: ReturnType<ty
       let dt = c.dt / (boss.slow ?? 1);
       if (pin !== null) {
         // The picture of the built figure arrives off the frame: the replay waits for it, else the boss would be a card for the steps it needs.
-        if (!warmed && c.view && kit.picture(boss.picture)) {
+        if (!warmed && c.view && boss.ready(kit)) {
           warmed = true;
           cam.x = boss.at.x + 0.4; cam.z = boss.at.z - 0.5;
           while (clock < pin - 1e-9) {
@@ -306,7 +307,7 @@ export function createLichStage(assets: Assets, p: R3dParams, search: string, ho
   const actClock = (t: number): number => (opts.at !== null ? opts.at - (pin! - t) : t - state.origin);
 
   return createHallStage(assets, p, lichMap(), {
-    name: 'lich', picture: builtOf(KIND.Lich)!.picture, at: lich, pin,
+    name: 'lich', ready: builtOf(KIND.Lich)!.ready, at: lich, pin,
     buttons: (now) => [
       ...LICH_ACTS.filter((a) => a !== 'glide').map((a) => ({ name: NAMES[a], pressed: () => state.act === a, press: () => { state.act = a; state.origin = now(); } })),
       { name: 'Glide', pressed: () => state.glide, press: () => { state.glide = !state.glide; } },

@@ -2,7 +2,8 @@
 // per-frame data of a built figure (`BuiltInst`, `BuiltDrawn`), and the registry of built figures by kind (`BUILT_OF_KIND`).
 // The registry imports `lich/figure.ts`, which imports only types from here; `lich/shape.ts` uses `newBuiltBuf`.
 import { KIND } from '../generated/defs';
-import { DEMON_FIGURE } from './demon/figure';
+import { DEMON_FIGURE, ICE_DEMON_FIGURE } from './demon/figure';
+import type { FigureKit } from './models/kit';
 import { LICH_FIGURE } from './lich/figure';
 
 export type V3 = [number, number, number];
@@ -40,6 +41,8 @@ export interface BuiltInst {
   /** Four levels the builder's own material reads (the lich: rune, staff rune, wave, spare). */
   levels: [number, number, number, number];
   tint: [number, number, number]; stone: boolean; alpha: number; dark: boolean; cut: boolean; groundY: number;
+  /** A skinned figure's bone matrices (`BuiltDrawn.bones`), copied by the layer each frame; `body` is then empty. */
+  bones?: Float32Array;
   sight: { hard: number; soft: number }; reach: number;
 }
 
@@ -49,26 +52,36 @@ export interface BuiltIn { anim: number; animT: number; effects: number; flags: 
 /** What a built figure hands back: its buffers (owned by its memory, valid until its next `draw`), levels, yaw and the points the view lights and tags. */
 export interface BuiltDrawn {
   body: BuiltBuf; glow: BuiltBuf | null; hull?: BuiltBuf | null; levels: [number, number, number, number]; yaw: number;
+  /** 16 floats a bone, column-major: rest point -> model frame. The layer draws its own static geometry with them; `body` is then empty. */
+  bones?: Float32Array;
+  /** 1 hot, -1 cold. */
+  temper?: 1 | -1;
   /** Builder units the body hangs above its foot (flight). */
   lift?: number;
   /** Builder units, model frame. */
-  anchors: { hand: V3; gem?: V3; eyes?: V3; chest?: V3; mouth?: V3 };
+  anchors: { hand: V3; gem?: V3; eyes?: V3; chest?: V3; mouth?: V3; /** Five points along the blade's edge, grip to tip. */ blade?: V3[]; eyeL?: V3; eyeR?: V3 };
   halos: ReadonlyArray<{ at: V3; r: number; rgb: V3 }>;
   /** `chest`, `mouth`: 0..1 levels of a warm light at that anchor. */
   magic: { gem: number; flare: number; chest?: number; mouth?: number };
 }
 
 export interface BuiltFigure {
-  key: string; picture: string; /** Game px per builder unit. */ unit: number; /** Game px. */ top: number; hem: number;
+  key: string; /** The painted picture the layer reads; null: the figure draws without one. */ picture: string | null; /** Game px per builder unit. */ unit: number; /** Game px. */ top: number; hem: number;
+  /** The key whose outline frame it shares when its own would not fit the atlas (the ice demon's is the fire demon's); else its own. */
+  outline?: string;
   newMem(): unknown;
   draw(s: BuiltIn, dt: number, mem: unknown): BuiltDrawn;
   /** The rest pose's body without loose parts, for the lamp outline. */
   rest(): BuiltBuf;
+  /** True once everything the layer needs is loaded; starts the loading. */
+  ready(kit: FigureKit): boolean;
 }
 
-/** The built figures by entity kind: the lich (#358) and the demon (#379). */
-export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE, [KIND.FireDemon]: DEMON_FIGURE, [KIND.IceDemon]: DEMON_FIGURE };
+/** The built figures by entity kind: the lich (#358) and the demons (#379, #442). */
+export const BUILT_OF_KIND: Partial<Record<number, BuiltFigure>> = { [KIND.Lich]: LICH_FIGURE, [KIND.FireDemon]: DEMON_FIGURE, [KIND.IceDemon]: ICE_DEMON_FIGURE };
 export const builtOf = (kind: number): BuiltFigure | null => BUILT_OF_KIND[kind] ?? null;
+/** The built figure of a key (`BuiltFigure.key`). */
+export const builtWithKey = (key: string): BuiltFigure | null => Object.values(BUILT_OF_KIND).find((f) => f?.key === key) ?? null;
 
 /**
  * A point of a built figure in the world (tiles): `a` in builder units in the model frame, turned by `yaw` (the model's +x goes to

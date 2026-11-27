@@ -57,7 +57,7 @@ export function createDemonStage(assets: Assets, p: R3dParams, search: string, h
   const actClock = (t: number): number => (opts.at !== null ? opts.at - (pin! - t) : t - state.origin);
 
   return createHallStage(assets, p, demonMap(), {
-    name: 'demon', picture: builtOf(KIND.FireDemon)!.picture, at: demon, pin, slow: opts.slow,
+    name: 'demon', ready: builtOf(KIND.FireDemon)!.ready, at: demon, pin, slow: opts.slow,
     buttons: (now) => [
       ...DEMON_ACTS.map((a) => ({ name: a, pressed: () => state.act === a, press: () => { state.act = a; state.origin = now(); } })),
       toggle('Frozen', 'frozen'), toggle('Chilled', 'chilled'), toggle('Stone', 'stone'),

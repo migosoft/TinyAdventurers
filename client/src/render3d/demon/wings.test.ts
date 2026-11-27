@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { restPose } from './pose';
-import { BONE, BONES, FOOT, J, RIG, placeBones } from './skeleton';
 import { WING, WING_PT, beatTarget, chainStep, newWing, newWingFrame, wingBones, wingStep, type WingState, type WingTarget } from './wings';
 
 const at = (f: Float64Array, i: number): number[] => [f[i * 3], f[i * 3 + 1], f[i * 3 + 2]];
@@ -172,50 +170,6 @@ describe('chainStep', () => {
     chainStep(links, vel, -2, 0.25, rates, 5);
     for (let i = 0; i < 6; i++) { expect(links[i * 2]).toBe(-2); expect(links[i * 2 + 1]).toBe(0.25); }
     expect(Array.from(vel)).toEqual(new Array(12).fill(0));
-  });
-});
-
-describe('the legs', () => {
-  const M = new Float32Array(BONES * 12);
-  /** Where the foot bone puts the sole: the foot point. */
-  const sole = (foot: number): number[] => {
-    const o = foot * 12, x = RIG.sole[0] - RIG.hock[0], y = RIG.sole[1] - RIG.hock[1];
-    return [M[o] + M[o + 3] * x + M[o + 6] * y, M[o + 1] + M[o + 4] * x + M[o + 7] * y, M[o + 2] + M[o + 5] * x + M[o + 8] * y];
-  };
-
-  it('stand flat on a planted foot point and hang the toes 35 degrees on a lifted one and in the air', () => {
-    const pose = restPose(), j = pose.joints;
-    placeBones(pose, M);
-    near(sole(BONE.footR), [RIG.sole[0], 0, RIG.legZ], 1e-4);
-    expect(M[BONE.footR * 12 + 4]).toBeCloseTo(0, 6);
-    // the swing: the right foot lifted and forward
-    j[J.footR + FOOT.x] += 3; j[J.footR + FOOT.y] = RIG.toesClear;
-    placeBones(pose, M);
-    near(sole(BONE.footR), [RIG.sole[0] + 3, RIG.toesClear, RIG.legZ], 1e-4);
-    expect(M[BONE.footR * 12 + 4]).toBeCloseTo(-Math.sin(RIG.toesHang), 5);
-    expect(RIG.toesHang).toBeCloseTo((35 * Math.PI) / 180, 9);
-    expect(M[BONE.footL * 12 + 4]).toBeCloseTo(0, 6);   // the planted one stays flat
-    // half way up the toes hang less
-    j[J.footR + FOOT.y] = RIG.toesClear / 2;
-    placeBones(pose, M);
-    expect(-M[BONE.footR * 12 + 4]).toBeGreaterThan(0.1);
-    expect(-M[BONE.footR * 12 + 4]).toBeLessThan(Math.sin(RIG.toesHang) - 0.1);
-    // in the air both hang, the foot points still under the hips
-    const air = restPose();
-    air.lift = 10;
-    placeBones(air, M);
-    for (const [b, sd] of [[BONE.footR, 1], [BONE.footL, -1]]) { expect(M[b * 12 + 4]).toBeCloseTo(-Math.sin(RIG.toesHang), 5); near(sole(b), [RIG.sole[0], 0, sd * RIG.legZ], 1e-4); }
-  });
-
-  it('are straight, not broken, when the foot point is out of reach', () => {
-    const pose = restPose();
-    pose.joints[J.footL + FOOT.y] = -30; pose.joints[J.footL + FOOT.x] = 12;
-    placeBones(pose, M);
-    expect(M.every(Number.isFinite)).toBe(true);
-    const t = BONE.thighL * 12, s = BONE.shinL * 12, f = BONE.footL * 12;
-    const a = [M[s] - M[t], M[s + 1] - M[t + 1], M[s + 2] - M[t + 2]], b = [M[f] - M[s], M[f + 1] - M[s + 1], M[f + 2] - M[s + 2]];
-    const cos = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b));
-    expect(cos).toBeGreaterThan(0.999);
   });
 });
 

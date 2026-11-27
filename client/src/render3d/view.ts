@@ -66,7 +66,7 @@ import type { FigureInst } from './models/instances';
 import type { FigureKit } from './models/kit';
 import { FigureLayer, figureLooks, imageTexture } from './models/layer';
 import { figureMaterials, seeMaterials } from './models/nodes';
-import type { BuiltInst } from './built';
+import { builtWithKey, type BuiltInst } from './built';
 import { LichLayer, type BuiltLayer } from './lich/layer';
 import { lichMaterials } from './lich/nodes';
 import { DemonLayer } from './demon/layer';
@@ -777,22 +777,26 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // key (#377, #379) is one more entry here. A view built after a lost device makes its own layers and pictures from the kit.
   // Both pictures keep their mip levels: without them the demon's thin cracks sparkle where the figure is drawn small (its material sorts
   // the filtered alpha by ranges, demon/glow.ts).
-  const builtFactories: Record<string, (paint: Texture) => BuiltLayer> = {
-    lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER),
-    demon: (paint) => new DemonLayer(scene, idScene, () => demonMaterials({ lighting, sight, shared: figures.shared, paint, idTex: idTarget.texture })),
+  // The fire and the ice demon (#442) share one layer, so they share the skin's geometry; their instances differ in their key.
+  const builtFactories: Record<string, (paint: Texture | null) => BuiltLayer> = {
+    lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint: paint! }), AIR_SKIP_LAYER),
+    demon: () => new DemonLayer(scene, (kind) => demonMaterials({ lighting, sight, shared: figures.shared, kind })),
   };
-  const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
+  const layerOf = (key: string): string => (key === 'iceDemon' ? 'demon' : key);
+  const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture | null }>();
   const builtByKey = new Map<string, BuiltInst[]>();
   const noLayer = new Set<string>();
   const builtFrame = (f: FigureFrame | undefined): void => {
     for (const l of builtByKey.values()) l.length = 0;
-    if (f) for (const i of f.built) { let l = builtByKey.get(i.key); if (!l) builtByKey.set(i.key, l = []); l.push(i); }
+    if (f) for (const i of f.built) { const k = layerOf(i.key); let l = builtByKey.get(k); if (!l) builtByKey.set(k, l = []); l.push(i); }
     for (const [key, list] of builtByKey) {
       if (list.length > 0 && !builtFactories[key] && !noLayer.has(key)) { noLayer.add(key); console.warn(`built figure ${key}: no layer factory in view.ts, nothing is drawn`); }
       let e = builtLayers.get(key);
       if (!e && list.length > 0 && f && builtFactories[key]) {
-        const img = f.kit.picture(key);
-        if (img) { const paint = imageTexture(img, { mips: true }); builtLayers.set(key, e = { layer: builtFactories[key](paint), paint }); }
+        // a figure without a picture (the demon) makes its layer at once: its instances exist only once it is ready
+        const pic = builtWithKey(key)?.picture ?? null, img = pic === null ? null : f.kit.picture(pic);
+        if (pic === null) builtLayers.set(key, e = { layer: builtFactories[key](null), paint: null });
+        else if (img) { const paint = imageTexture(img, { mips: true }); builtLayers.set(key, e = { layer: builtFactories[key](paint), paint }); }
       }
       e?.layer.frame(list, (id) => slotOf.get(id) ?? -1);
     }
@@ -1440,7 +1444,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         casterMaterial?.dispose();
         trees.dispose();
         figures.dispose();
-        for (const e of builtLayers.values()) { e.layer.dispose(); e.paint.dispose(); }
+        for (const e of builtLayers.values()) { e.layer.dispose(); e.paint?.dispose(); }
         builtLayers.clear();
         figureTex?.dispose();
         coverLayer.dispose();

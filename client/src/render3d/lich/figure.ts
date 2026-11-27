@@ -72,4 +72,5 @@ export const LICH_FIGURE: BuiltFigure = {
   newMem,
   draw,
   rest: () => lichRest('caster').body,
+  ready: (kit) => kit.picture('lich') !== null,
 };
