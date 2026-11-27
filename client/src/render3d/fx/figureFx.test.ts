@@ -291,6 +291,18 @@ describe('a built figure\'s anchor points and lights (#358)', () => {
       expect(lights(lich(base))).toHaveLength(0);
     });
 
+    it('a warm light at the chest and at the mouth, by level', () => {
+      const P: [number, number, number] = [5, 0.5, 5];
+      const ls = lights(lich({ chest: P, mouth: P, magic: { gem: 0, flare: 0, chest: 1, mouth: 1 }, alpha: 0.5 }));
+      expect(ls.map((l) => l.id)).toEqual(['lc5', 'lm5']);
+      expect(ls.every((l) => l.radius === 3)).toBe(true);
+      expect(ls[0].r).toBeCloseTo(0.25 * 0.5 * 2, 9); expect(ls[1].r).toBeCloseTo(0.4 * 0.5 * 2, 9);
+      expect(ls[0].g / ls[0].r).toBeCloseTo(0.45, 9);
+      expect(lights(lich({ chest: P, mouth: P, magic: { gem: 0, flare: 0, chest: 0 } }))).toHaveLength(0);
+      expect(lights(lich({ chest: P, mouth: P, magic: { gem: 0, flare: 0 } }))).toHaveLength(0);
+      expect(lights(lich({ chest: P, mouth: P, magic: { gem: 0, flare: 0, chest: 1, mouth: 1 }, effects: 1 << EFFECT.Petrified }))).toHaveLength(0);
+    });
+
     it('a frozen figure\'s gem still shines', () => {
       expect(lights(lich({ gem: GEM, eyes: EYES, magic, effects: 1 << EFFECT.Frozen })).map((l) => l.id)).toEqual(['lg5']);
     });

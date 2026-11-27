@@ -8,6 +8,7 @@ import type { Hud } from '../ui/hud';
 import type { LoadingScreen } from '../ui/loading';
 import { createCoveStage } from './coveStage';
 import { createDemoStage } from './demoStage';
+import { createDemonStage } from './demonStage';
 import { createFxStage } from './fxStage';
 import { createGalleryStage } from './galleryStage';
 import { createLichStage } from './lichStage';
@@ -95,6 +96,12 @@ export async function bootLiquids(el: HTMLElement, search: string): Promise<void
 export async function bootLich(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
   await startHost(el, search, 'demo', (assets, host) => createLichStage(assets, p, search, host));
+}
+
+/** `?r3d=demon` (#379): the built demon in a boss hall with a lava pool and a chasm, no server needed. */
+export async function bootDemon(el: HTMLElement, search: string): Promise<void> {
+  const p = parseParams(search);
+  await startHost(el, search, 'demo', (assets, host) => createDemonStage(assets, p, search, host));
 }
 
 /** `?r3d=stone` (#380): the stonework's level (caves, a border passage, a laid hall and rooms), no server needed. Zoom 2 unless the URL picks one. */

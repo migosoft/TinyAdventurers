@@ -69,6 +69,8 @@ import { figureMaterials, seeMaterials } from './models/nodes';
 import type { BuiltInst } from './built';
 import { LichLayer, type BuiltLayer } from './lich/layer';
 import { lichMaterials } from './lich/nodes';
+import { DemonLayer } from './demon/layer';
+import { demonMaterials } from './demon/nodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -295,6 +297,8 @@ export interface View {
   readonly meshes: number;
   /** What the 3D figure layer drew in the last frame: instances and the id, piece and hull draws (#338, #364; for `window.__r3d.models`). */
   readonly figuresDrawn?: Readonly<{ figures: number; draws: number }>;
+  /** Built figures (the lich, the demon) the last frame drew (for `window.__r3d.builtDrawn`). */
+  readonly builtDrawn?: number;
 }
 
 /** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
@@ -771,8 +775,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   });
   // The built figures (#358): one layer per built key, made when the first instance of the key arrives (and its picture is ready). A new
   // key (#377, #379) is one more entry here. A view built after a lost device makes its own layers and pictures from the kit.
+  // Both pictures keep their mip levels: without them the demon's thin cracks sparkle where the figure is drawn small (its material sorts
+  // the filtered alpha by ranges, demon/glow.ts).
   const builtFactories: Record<string, (paint: Texture) => BuiltLayer> = {
     lich: (paint) => new LichLayer(scene, () => lichMaterials({ lighting, sight, shared: figures.shared, paint }), AIR_SKIP_LAYER),
+    demon: (paint) => new DemonLayer(scene, idScene, () => demonMaterials({ lighting, sight, shared: figures.shared, paint, idTex: idTarget.texture })),
   };
   const builtLayers = new Map<string, { layer: BuiltLayer; paint: Texture }>();
   const builtByKey = new Map<string, BuiltInst[]>();
@@ -994,6 +1001,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     },
     get figuresDrawn() {
       return figures.drawn;
+    },
+    get builtDrawn() {
+      let n = 0;
+      for (const e of builtLayers.values()) n += e.layer.drawn;
+      return n;
     },
     tileChanged(x, z) {
       if (disposed || lost || x < 0 || z < 0 || x >= map.w || z >= map.h) return;
@@ -1329,7 +1341,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         water.setMirror({ picture: mirrorTarget.texture, matrix: mirrorMatrix });
         timer?.lap('mirror');
       } else water.setMirror(null);
-      if (figures.drawn.figures > 0) {
+      let builtIds = false;
+      for (const e of builtLayers.values()) if (e.layer.ids && e.layer.drawn > 0) builtIds = true;
+      if (figures.drawn.figures > 0 || builtIds) {
         // The id pass: the size of the target the picture is drawn into, so the hull's texel fetch hits its own pixel on both backends.
         let iw = p.targetW, ih = p.targetH;
         if (p.direct && !wp.copy) {

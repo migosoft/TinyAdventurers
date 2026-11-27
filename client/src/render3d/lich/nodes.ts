@@ -37,8 +37,8 @@ export interface LichUniforms {
 
 export interface LichMaterials { body: MeshBasicNodeMaterial; claws: MeshBasicNodeMaterial; u: LichUniforms; dispose(): void }
 
-/** The vertex stage shared by both materials, and the figure point the models' `keepOf` reads. */
-function vertexOf(shared: FigureShared, u: { root: N; scale: N; tint: N; seen: N; flags: N }, m: MeshBasicNodeMaterial, normals: boolean): FigurePoint {
+/** The vertex stage shared by both materials (and by the demon's, #379), and the figure point the models' `keepOf` reads. */
+export function vertexOf(shared: FigureShared, u: { root: N; scale: N; tint: N; seen: N; flags: N }, m: MeshBasicNodeMaterial, normals: boolean): FigurePoint {
   const position = attribute('position', 'vec3');
   const c: N = cos(u.root.w), s: N = sin(u.root.w);
   const turn = (v: N): N => vec3(c.mul(v.x).add(s.mul(v.z).mul(YAW_TURN.xFromZ)), v.y, s.mul(v.x).mul(YAW_TURN.zFromX).add(c.mul(v.z)));
