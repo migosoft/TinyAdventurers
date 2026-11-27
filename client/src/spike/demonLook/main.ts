@@ -6,7 +6,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { EYE, build, rig } from './body';
+import { EYE, HORN_PATH, build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBeat, uGaze, uRune, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
 import { OPTS, on } from './opts';
@@ -146,7 +146,19 @@ if (mode === 'breath') st.breath = 0;
 const clock = new THREE.Clock();
 let time = 0;
 const chestAt = new THREE.Vector3();
-let warmed = false, aimed = false;
+let warmed = false, aimed = false, gap = 9;
+const hornPts = [1, -1].flatMap((s) => HORN_PATH.slice(3).map(([p]) => new THREE.Vector3(s * p[0], p[1] - 2.38, p[2] - 0.06)));
+const gA = new THREE.Vector3(), gB = new THREE.Vector3(), gP = new THREE.Vector3(), gL = new THREE.Line3(), gC = new THREE.Vector3();
+/** How near the wing arms' bones come to the horns (m, middle lines): the smallest value since the page opened. */
+function measureGap() {
+  for (const side of ['L', 'R']) {
+    const segs = [['wing1', 'wing2'], ['wing2', 'wf0a'], ...[0, 1, 2, 3].map((i) => ['wf0a', `wf${i}b`])];
+    for (const [a, b] of segs) {
+      gL.set(r.by[a + side].getWorldPosition(gA), r.by[b + side].getWorldPosition(gB));
+      for (const h of hornPts) { r.by.head.localToWorld(gP.copy(h)); gap = Math.min(gap, gL.closestPointToPoint(gP, true, gC).distanceTo(gP)); }
+    }
+  }
+}
 function frame() {
   const dt = Math.min(0.05, clock.getDelta());
   time = pinned ?? time + dt;
@@ -160,6 +172,7 @@ function frame() {
   uFold.value = st.fold * (1 - fl01); uBillow.value = -fl01 * Math.cos(beat(time));
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
+  if (mode === 'fly' && st.fly > 0.95) measureGap();
   // ?aim=<bone>&off=x_y_z: look at a bone from beside it (check shots)
   if (!aimed && url.has('aim')) { aimed = true; const o = (url.get('off') ?? '1_0.3_1').split('_').map(Number); const at = (url.get('at') ?? '0_0_0').split('_').map(Number); r.by[url.get('aim')!].localToWorld(controls.target.set(at[0], at[1], at[2])); camera.position.copy(controls.target).add(new THREE.Vector3(o[0], o[1], o[2])); controls.update(); }
   const px = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
@@ -183,7 +196,7 @@ function frame() {
   const fl = 0.9 + 0.1 * Math.sin(time * 11) * Math.sin(time * 7.3);
   torch.intensity = 16 * fl; flame.scale.set(0.5 * fl, 0.75 * fl, 1);
   composer.render();
-  (window as unknown as { __demon: unknown }).__demon = { frames: renderer.info.render.frame, ms: built.ms, verts: built.verts };
+  (window as unknown as { __demon: unknown }).__demon = { frames: renderer.info.render.frame, gap: Math.round(gap * 1000) / 1000, ms: built.ms, verts: built.verts };
   requestAnimationFrame(frame);
 }
 frame();

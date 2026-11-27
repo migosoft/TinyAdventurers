@@ -146,11 +146,13 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
   }
   const out = breathOut(s.breath);
   if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }
+  const clearW = on('clear') ? 0.44 * fly : 0;
+  if (on('clear')) { cur.head[0] += 0.14 * fly; cur.neck[0] += 0.06 * fly; }
   // folding the wings (on the ground)
   const shrug = on('life') ? 0.14 * Math.exp(-((((t % 7.5) - 6) / 0.35) ** 2)) : 0;
   const fold = Math.min(1, s.fold + shrug) * (1 - fly);
   for (const [side, m] of [['L', 1], ['R', -1]] as const) {
-    cur['wing1' + side][2] += m * (FOLD.arm * fold + SPREAD.arm * fly); cur['wing2' + side][2] += m * (FOLD.elbow * fold + SPREAD.elbow * fly);
+    cur['wing1' + side][2] += m * (FOLD.arm * fold + SPREAD.arm * fly); cur['wing1' + side][1] += m * clearW; cur['wing2' + side][2] += m * (FOLD.elbow * fold + SPREAD.elbow * fly);
     for (let i = 0; i < 4; i++) {
       cur[`wf${i}a` + side][2] += m * (FOLD.wrist[i] * fold + SPREAD.wrist[i] * fly + 0.03 * Math.sin(t * 0.7 + i * 1.3));
       cur[`wf${i}b` + side][2] += m * (FOLD.knuckle[i] * fold + SPREAD.knuckle[i] * fly + 0.04 * Math.sin(t * 0.9 + i * 0.8 + 2));
