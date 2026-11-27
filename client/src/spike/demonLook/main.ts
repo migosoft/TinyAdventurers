@@ -10,6 +10,7 @@ import { build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
 import { OPTS, on } from './opts';
+import { makeSword } from './sword';
 
 const url = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -23,7 +24,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], sword: [-4.5, 2.2, 4.2, 1.1], hand: [-2.6, 1.6, 1.6, 0.9], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -91,6 +92,8 @@ for (const [geo, mat] of [[built.body, skinMat], [built.tail, skinMat], [built.t
 }
 scene.add(demon);
 
+const sword = on('sword') ? makeSword(scene, r.by.handR, new THREE.Vector3(0.0, -0.2, 0)) : null;
+
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.4, 0.4, 1.0);
@@ -127,6 +130,7 @@ if (mode === 'breath') st.breath = 0;
 const clock = new THREE.Clock();
 let time = 0;
 const chestAt = new THREE.Vector3();
+let warmed = false;
 function frame() {
   const dt = Math.min(0.05, clock.getDelta());
   time = pinned ?? time + dt;
@@ -140,6 +144,8 @@ function frame() {
   uFold.value = st.fold * (1 - fl01); uBillow.value = -fl01 * Math.cos(beat(time));
   [torch, key, rim].forEach((l, i) => { uLPos.value[i].copy(l.position); uLCol.value[i].copy(l.color).multiplyScalar(l.intensity); });
   animate(r, rest, time, st);
+  const px = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+  if (sword) { if (!warmed) { warmed = true; for (let i = 0; i < 90; i++) sword.update(1 / 30, time, px); } sword.update(dt, time, px); }
   lava.position.copy(r.by.chest.getWorldPosition(chestAt)).add(new THREE.Vector3(0, 0.1, 0.6));
   fire.position.copy(r.by.jaw.getWorldPosition(chestAt)).add(new THREE.Vector3(0, -0.1, 0.5)); fire.intensity = 1.0 * uBreath.value * (0.8 + 0.2 * Math.sin(time * 23));
   const fl = 0.9 + 0.1 * Math.sin(time * 11) * Math.sin(time * 7.3);

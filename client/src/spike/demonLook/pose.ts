@@ -29,6 +29,8 @@ const FLY = both({
   tail0: [-0.5, 0, 0], tail1: [-0.1, 0, 0], tail3: [0.2, 0, 0], tail4: [0.3, 0, 0],
   wing1L: [1.0, 0, -0.45],
 });
+// the sword hand: the fingers closed round the grip, the arm carrying the blade a little forward
+if (on('sword')) { STAND.fingersR = [0, 0, 1.25]; FLY.fingersR = [0, 0, 1.25]; STAND.foreArmR = [-0.5, 0, 0.1]; STAND.handR = [-0.1, 0, -0.03]; }
 // Added on top of the stance: the right claw drawn back, then thrown across.
 const WIND: Pose = {
   hips: [0, -0.2, 0], chest: [-0.1, -0.45, 0], head: [0, 0.3, 0], upperArmR: [0.5, 0, -0.8], foreArmR: [-1.0, 0, 0], fingersR: [0, 0, -0.3],
