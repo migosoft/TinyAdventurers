@@ -1,7 +1,7 @@
 // SPIKE (#379): the demon's skeleton and its shapes. Left is +x, up +y, the front +z; about 2.7 units tall to the crown.
 // The bind pose stands upright with the arms a little out and the wings spread; every stance is bone turns on top (pose.ts).
 import * as THREE from 'three';
-import { ball, cone, skin, slab, type Prim, type Tag, type V } from './sdf';
+import { ball, cone, kite, skin, slab, type Prim, type Tag, type V } from './sdf';
 
 const add = (a: V, b: V): V => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const lerp = (a: V, b: V, t: number): V => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -62,11 +62,9 @@ function prims(id: (n: string) => number): Prim[] {
     cone([0, 2.16, 0], [0, 2.4, 0.08], 0.17, 0.14, id('neck'), sk(0.3)),
     ball([0, 2.5, 0.12], [0.175, 0.18, 0.2], id('head'), sk(0.1)),
     { ...cone([0, 2.34, 0.3], [0, 2.2, 0.37], 0.06, 0.012, id('jaw'), sk(0), 0.02), wr: 0.02 },
-    cone([0, 2.5, 0.31], [0, 2.4, 0.39], 0.035, 0.03, id('head'), sk(0), 0.02),
     cone([0, 2.66, 0.24], [0, 2.93, 0.17], 0.07, 0.008, id('head'), HORN, 0.015),
     { ...ball([0, 2.43, 0.27], [0.095, 0.075, 0.1], id('head'), sk(0), 0.04), wr: 0.02 },
     { ...ball([0, 2.335, 0.24], [0.095, 0.045, 0.11], id('jaw'), sk(0), 0.02), wr: 0.02 },
-    slab([0, 2.44, 0.352], [0.024, 0.055, 0.018], [-0.3, 0, 0], id('head'), sk(0)),
     { ...ball([0, 2.365, 0.31], [0.085, 0.02, 0.13], 0, sk(0), 0.01), sub: true },
   ];
   for (const s of [1, -1]) {
@@ -113,17 +111,23 @@ function prims(id: (n: string) => number): Prim[] {
     // horns: very thick at the base, out and a little forward and down, then bending up to a point
     const horn: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5, 0.2], 0.122], [[0.5, 2.45, 0.27], 0.112], [[0.68, 2.47, 0.3], 0.097], [[0.8, 2.58, 0.28], 0.08], [[0.86, 2.74, 0.22], 0.058], [[0.86, 2.9, 0.16], 0.034], [[0.82, 3.05, 0.11], 0.008]];
     for (let i = 0; i + 1 < horn.length; i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
-    // armour plates over the forehead and crown: flat diamonds, each with its rear edge lifted over the next toward the back,
-    // the outer rows running onto the horns' bases; a slanted brow over each eye and a cheek plate
+    // armour over the forehead and crown: a crest of tall kites up the middle, each lapping over the next toward the back, its
+    // lowest point between the eyes; rows of kites beside it running onto the horns' bases; and a heavy brow plate over each
+    // eye, low at the middle and rising outward, whose edge leaves the eye a slit
     const C: V = [0, 2.5, 0.12];
-    for (const [phi, thetas, size] of [[0, [0.3, 0.8, 1.3, 1.8, 2.3], 0.085], [0.55, [0.6, 1.1, 1.6, 2.1], 0.078], [1.0, [0.95, 1.5, 2.05], 0.07]] as [number, number[], number][]) {
+    const rows: [number, [number, number, number][]][] = [
+      [0, [[0.08, 0.06, 0.075], [0.5, 0.085, 0.115], [0.95, 0.08, 0.11], [1.4, 0.07, 0.1], [1.85, 0.06, 0.09]]],
+      [0.55, [[0.75, 0.07, 0.1], [1.2, 0.07, 0.095], [1.65, 0.065, 0.09], [2.1, 0.06, 0.085]]],
+      [1.0, [[1.0, 0.06, 0.085], [1.5, 0.06, 0.085], [2.0, 0.055, 0.08]]],
+    ];
+    for (const [phi, plates] of rows) {
       if (phi === 0 && s < 0) continue;
-      for (const th of thetas) {
+      for (const [th, hw, hh] of plates) {
         const d: V = [Math.sin(phi), Math.cos(phi) * Math.sin(th), Math.cos(phi) * Math.cos(th)];
-        P.push(slab(m([C[0] + d[0] * 0.185, C[1] + d[1] * 0.19, C[2] + d[2] * 0.21]), [size, size, 0.017], [-th + 0.24, s * phi, Math.PI / 4], id('head'), sk(0)));
+        P.push(kite(m([C[0] + d[0] * 0.185, C[1] + d[1] * 0.19, C[2] + d[2] * 0.21]), [hw, hh, 0.02], [-th + 0.26, s * phi, s * phi * 0.4], id('head'), sk(0)));
       }
     }
-    P.push(slab(m([0.1, 2.562, 0.285]), [0.085, 0.018, 0.035], [-0.25, s * 0.3, s * 0.42], id('head'), sk(0)));
+    P.push(slab(m([0.115, 2.592, 0.25]), [0.1, 0.055, 0.018], [-0.35, s * 0.4, s * 0.45], id('head'), sk(0)));
     P.push(slab(m([0.125, 2.42, 0.25]), [0.045, 0.06, 0.02], [0, s * 0.95, s * -0.25], id('head'), sk(0)));
   }
   return P;

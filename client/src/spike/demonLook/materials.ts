@@ -114,8 +114,8 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
     vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
     e.xy = vec2(e.x*cos(sl)+e.y*sin(sl), -e.x*sin(sl)+e.y*cos(sl));
-    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.058,0.014,0.07)));
-    float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.058,0.022,0.07)));
+    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011,0.07)));
+    float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.062,0.018,0.07)));
     vec3 q = (p-uMouth)/vec3(0.095,0.034,0.14);
     float fang = abs(fract(p.x*24.)-0.5)*2.;
     float maw = (1.-smoothstep(0.5, 1., length(q))) * step(abs(q.y)*1.5, fang);

@@ -11,7 +11,7 @@ export interface Prim {
   /** How softly it melts into what is already there. */
   k: number; bone: number; tag: Tag; sub?: boolean;
   /** A slab with rounded edges instead: half sizes, its turn as a matrix (rows), the rounding. */
-  box?: { h: V; m: number[]; round: number };
+  box?: { h: V; m: number[]; round: number; rhomb?: boolean };
   /** How far this shape's bone pulls on the skin beside it, if not the usual reach. */
   wr?: number;
   c: V; br: number;
@@ -33,11 +33,20 @@ export function slab(c: V, h: V, rot: V, bone: number, tag: Tag, k = 0.005, roun
   return { a: c, ra: 0, rb: 0, k, bone, tag, c, br: Math.hypot(h[0], h[1], h[2]) + round, box: { h, m, round } };
 }
 
+/** A kite-shaped plate: as `slab`, but a rhombus with half-diagonals h[0] and h[1]. */
+export function kite(c: V, h: V, rot: V, bone: number, tag: Tag, k = 0.005, round = 0.006): Prim {
+  const p = slab(c, h, rot, bone, tag, k, round); p.box!.rhomb = true; return p;
+}
+
 function dist(p: Prim, x: number, y: number, z: number): number {
   const ax = x - p.a[0], ay = y - p.a[1], az = z - p.a[2];
   if (p.box) {
     const { h, m, round } = p.box;
     const qx = Math.abs(m[0] * ax + m[3] * ay + m[6] * az) - h[0], qy = Math.abs(m[1] * ax + m[4] * ay + m[7] * az) - h[1], qz = Math.abs(m[2] * ax + m[5] * ay + m[8] * az) - h[2];
+    if (p.box.rhomb) { // a kite: a rhombus with its corners on the plate's own x and y axes
+      const lx = qx + h[0], ly = qy + h[1], qr = (lx / h[0] + ly / h[1] - 1) * (h[0] * h[1]) / Math.hypot(h[0], h[1]);
+      return Math.hypot(Math.max(qr, 0), Math.max(qz, 0)) + Math.min(Math.max(qr, qz), 0) - round;
+    }
     return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - round;
   }
   if (p.r) {
