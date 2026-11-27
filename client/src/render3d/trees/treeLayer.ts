@@ -92,9 +92,9 @@ export class TreeLayer {
   private readonly dirty = new Set<number>();
   private readonly uploadedAt = new Map<number, number>();
 
-  /** `sunScene`: the sun's pass, or null without a sun. `make` builds the three materials once, from the palette texture and the shared uniforms. `now`: the clock in ms. */
+  /** `sunScene`: the sun's pass, or null without a sun. `castScene`: the plant shadow tiles' pass (#333), or null without a cove. `make` builds the three materials once, from the palette texture and the shared uniforms. `now`: the clock in ms. */
   constructor(
-    private readonly scene: Scene, private readonly sunScene: Scene | null,
+    private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly castScene: Scene | null,
     private readonly make: (palette: Texture, shared: TreeShared) => TreeMaterials,
     private readonly now: () => number = () => performance.now(),
   ) {}
@@ -145,6 +145,7 @@ export class TreeLayer {
       add(mats.depth, this.scene, TREE_ORDER.depth);
       add(mats.colour, this.scene, TREE_ORDER.colour);
       if (this.sunScene && mats.sun) add(mats.sun, this.sunScene, 0);
+      if (this.castScene && mats.cast) add(mats.cast, this.castScene, 0);
       // The falling leaves are their own geometry and one more draw, in the scene only (a leaf casts no shadow).
       if (c.leaves.n > 0) {
         const mesh = new Mesh(leafGeometry(c.leaves, c.bounds), mats.leaf);
@@ -188,7 +189,7 @@ export class TreeLayer {
 
   dispose(): void {
     this.clear();
-    if (this.mats) for (const m of [this.mats.depth, this.mats.colour, this.mats.sun, this.mats.leaf]) m?.dispose();
+    if (this.mats) for (const m of [this.mats.depth, this.mats.colour, this.mats.sun, this.mats.cast, this.mats.leaf]) m?.dispose();
     this.mats = null;
     this.palette?.dispose();
     this.palette = null;

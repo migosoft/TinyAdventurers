@@ -744,7 +744,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // The grown trees (#329): the layer holds the meshes of the forest's chunks in the scene and the sun's scene.
   // The brushers (#331): one set of uniforms for the bushes and the bushels, written every frame.
   const brush = makeBrushUniforms();
-  const trees = new TreeLayer(scene, hasSun ? sunScene : null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush }));
+  const trees = new TreeLayer(scene, hasSun ? sunScene : null, null, (palette, shared) => treeMaterials({ lighting, sight, see: wm.see, mask: mask.texture, palette, shared, hasSun, cover, brush }));
   // The pond's wooden bridges (#360): one static mesh a deck in the opaque scene (layer 0, so the water's mirror shows it), and the
   // same geometry in the sun's pass. A map without a pond's field builds nothing, not even the materials.
   const bridges = bridgesOf(pondFieldOf(map)).map((a) => {

@@ -1,7 +1,7 @@
 // The tree materials in TSL (#329): a depth pre-pass with the leaf cut-outs, a colour pass at equal depth, and the sun's shadow caster.
 // All three build their point from one `treePoint`, so the sway, the leaf collapse and the patch spread cannot drift apart. The colour pass
 // is lit by the scene's own light (`Lighting`, shadow map included) and ends with the sight step; the light's brightness picks the ramp step.
-import { DoubleSide, EqualDepth, MeshBasicNodeMaterial } from 'three/webgpu';
+import { DoubleSide, EqualDepth, MeshBasicNodeMaterial, Vector4 } from 'three/webgpu';
 import type { NodeBuilder } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { Fn, abs, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, mod, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
@@ -10,6 +10,7 @@ import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
 import { hash3 } from '../noiseNodes';
 import { coverHeightNode, type CoverShared } from '../cover/coverRead';
+import { sharedArray } from '../sharedArray';
 import { SWAY, WIND_DIR } from '../wind';
 import { brushNode, gustNode, swayNode, type BrushUniforms } from '../windNodes';
 import { FLUTTER_PX, RAMP, packedLeaf } from './mesh';
@@ -34,11 +35,18 @@ const GONE = [0, -50, 0] as const;
 /** The cell size of the light dabs in art pixels. */
 const DAB_CELL = 2.3;
 
+/** How many plant feet the cast pass can hide at once (first guess). */
+export const HIDDEN_CAP = 8;
+/** A vertex whose plant foot is this near a hidden foot (tiles) is moved away in the cast pass. */
+const HIDDEN_REACH = 0.02;
+
 /** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp; `leafRate`: the dev page's multiplier on how often leaves fall. */
 export function makeTreeShared() {
   return {
     t: uniform(0), windOn: uniform(0), cosP: uniform(1),
     leafOverride: uniform(-1).setName('treeLeafOverride'), plain: uniform(0), leafRate: uniform(1),
+    // Feet (x, z, 1, 0) of the plants the cast pass skips (an unseen plant casts nothing, #333); z-component 0: an empty slot, w unused.
+    hidden: sharedArray(Array.from({ length: HIDDEN_CAP }, () => new Vector4(0, 0, 0, 0)), 'vec4').setName('treeHidden'),
   };
 }
 export type TreeShared = ReturnType<typeof makeTreeShared>;
@@ -47,6 +55,8 @@ export interface TreeMaterials {
   depth: MeshBasicNodeMaterial;
   colour: MeshBasicNodeMaterial;
   sun: MeshBasicNodeMaterial | null;
+  /** The plant shadow tiles' caster (#333): the sun's pass without a sun, minus the plants in `shared.hidden`. Made when `cast` is asked for. */
+  cast: MeshBasicNodeMaterial | null;
   /** The falling leaves: drawn with their own geometry (`leafGeometry`), after the tree colour pass. */
   leaf: MeshBasicNodeMaterial;
 }
@@ -207,6 +217,8 @@ function leafTint(bright: N, warm: N): N {
  */
 export function treeMaterials(o: {
   lighting: Lighting; sight: Sight; see: SeeUniforms; mask: Texture; palette: Texture; shared: TreeShared; hasSun: boolean;
+  /** Make the `cast` material (the cove's plant shadow tiles). */
+  cast?: boolean;
   /** The ground cover (#330): a leaf lies on top of it. */
   cover?: CoverShared;
   /** The brushers of the frame (#331): a bush wiggles where a figure brushes it. */
@@ -311,8 +323,24 @@ export function treeMaterials(o: {
     sun.side = DoubleSide;
   }
 
-  for (const m of [depth, colour, sun]) if (m) m.userData.treePoint = p;
-  return { depth, colour, sun, leaf: leafMaterial(o) };
+  // ---------------------------------------------------------------- the plant shadow tiles' pass (#333)
+  let cast: MeshBasicNodeMaterial | null = null;
+  if (o.cast) {
+    cast = new MeshBasicNodeMaterial();
+    let isHidden: N = float(0).greaterThan(1);
+    for (let i = 0; i < HIDDEN_CAP; i++) {
+      const h: N = shared.hidden.element(i);
+      isHidden = isHidden.or(h.z.greaterThan(0.5).and(abs(s.foot.x.sub(h.x)).lessThan(HIDDEN_REACH)).and(abs(s.foot.y.sub(h.y)).lessThan(HIDDEN_REACH)));
+    }
+    cast.positionNode = select(isHidden, vec3(...GONE), p.sunPosition);
+    cast.colorNode = sun ? sun.colorNode : vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
+    cast.alphaTest = 0.5;
+    cast.colorWrite = false;
+    cast.side = DoubleSide;
+  }
+
+  for (const m of [depth, colour, sun, cast]) if (m) m.userData.treePoint = p;
+  return { depth, colour, sun, cast, leaf: leafMaterial(o) };
 }
 
 /**
