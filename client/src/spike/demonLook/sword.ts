@@ -1,6 +1,7 @@
 // SPIKE (#441): a great burning scimitar in the demon's right hand. The blade is white-hot at the edge and toward the point;
 // flames rise from it and molten metal gathers on the edge, drips, and cools in small puddles on the floor.
 import * as THREE from 'three';
+import { on } from './opts';
 
 const LEN = 1.9, BEND = 0.46;
 const sm = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -90,6 +91,27 @@ export function makeSword(scene: THREE.Scene, hand: THREE.Bone, grip: THREE.Vect
   }));
   cloud.frustumCulled = false; scene.add(cloud);
 
+  // real flames: tongues that leave the blade white-yellow, rise, turn orange, then red, and fray into wisps as they die. Each
+  // is a point whose round shape a drifting noise eats away from the rim as it ages.
+  const FMAX = 900, fl: { age: number; life: number; pos: THREE.Vector3; vel: THREE.Vector3; size: number; seed: number }[] = [];
+  const fg = new THREE.BufferGeometry(), fPos = new Float32Array(FMAX * 3), fDat = new Float32Array(FMAX * 3);
+  fg.setAttribute('position', new THREE.BufferAttribute(fPos, 3)); fg.setAttribute('aDat', new THREE.BufferAttribute(fDat, 3));
+  const fire = new THREE.Points(fg, new THREE.ShaderMaterial({
+    uniforms: { uPx }, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+    vertexShader: 'attribute vec3 aDat; uniform float uPx; varying vec3 vDat; void main(){ vDat = aDat; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = aDat.z*uPx/-mv.z; gl_Position = projectionMatrix*mv; }',
+    fragmentShader: `varying vec3 vDat;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(h(i), h(i+vec2(1.,0.)), f.x), mix(h(i+vec2(0.,1.)), h(i+vec2(1.,1.)), f.x), f.y); }
+      void main(){
+        float k = vDat.x; vec2 pc = gl_PointCoord - 0.5; pc.x *= 1.35; // taller than wide
+        float r = length(pc)*2., n = vn(pc*5. + vec2(vDat.y*17., vDat.y*9. + k*2.5))*0.65 + vn(pc*11. + vDat.y*31.)*0.35;
+        float body = (1.-r)*(0.55 + 0.9*n), a = smoothstep(0.12 + 0.6*k, 0.3 + 0.6*k, body) * min(1., k*10.) * (1.-k*k);
+        vec3 c = mix(mix(vec3(1.,0.55,0.12), vec3(1.,0.24,0.02), smoothstep(0.0, 0.3, k)), vec3(0.55,0.04,0.0), smoothstep(0.4, 0.9, k));
+        gl_FragColor = vec4(c*a*0.14, 1.); }`,
+  }));
+  fire.frustumCulled = false; if (on('flames')) scene.add(fire);
+  let fireDue = 0;
+
   // puddles of metal cooling on the floor
   const SPL = 36, splats: { m: THREE.Mesh; age: number; size: number }[] = [];
   const disc = new THREE.CircleGeometry(1, 14); disc.rotateX(-Math.PI / 2);
@@ -107,7 +129,7 @@ export function makeSword(scene: THREE.Scene, hand: THREE.Bone, grip: THREE.Vect
     light.intensity = 2.6 * (0.85 + 0.15 * Math.sin(time * 17) * Math.sin(time * 5.3));
     world(0.8, tmp); tipVel.copy(tmp).sub(prev).divideScalar(Math.max(dt, 1e-3)); prev.copy(tmp);
     if (tipVel.length() > 30) tipVel.set(0, 0, 0);
-    flameDue += dt * 260; dripDue += dt * (3.2 + tipVel.length() * 2.5);
+    flameDue += dt * (on('flames') ? 110 : 260); dripDue += dt * (3.2 + tipVel.length() * 2.5);
     while (flameDue > 1 && parts.length < MAX - 30) {
       flameDue--;
       const u = 0.06 + 0.94 * Math.sqrt(rnd()), p = blade.localToWorld(spine(u).lerp(edgeAt(u), rnd()));
@@ -117,6 +139,26 @@ export function makeSword(scene: THREE.Scene, hand: THREE.Bone, grip: THREE.Vect
     while (dripDue > 1) {
       dripDue--;
       if (parts.length < MAX) { const u = 0.15 + 0.83 * rnd(); parts.push({ kind: 1, age: 0, life: 0.25 + rnd() * 0.45, pos: world(u, new THREE.Vector3()), vel: new THREE.Vector3(), u, size: 0.05 + 0.04 * rnd(), seed: rnd() }); }
+    }
+    if (on('flames')) {
+      fireDue += dt * 380;
+      while (fireDue > 1 && fl.length < FMAX) {
+        fireDue--;
+        const u = 0.05 + 0.95 * rnd() ** 0.8, p = blade.localToWorld(spine(u).lerp(edgeAt(u), rnd()));
+        fl.push({ age: 0, life: 0.45 + rnd() * 0.55, pos: p, vel: new THREE.Vector3((rnd() - 0.5) * 0.16, 0.5 + rnd() * 0.7, (rnd() - 0.5) * 0.16).addScaledVector(tipVel, 0.3), size: 0.15 + 0.17 * rnd(), seed: rnd() });
+      }
+      fireDue = Math.min(fireDue, 3);
+      let m = 0;
+      for (let i = fl.length - 1; i >= 0; i--) {
+        const p = fl[i]; p.age += dt;
+        if (p.age > p.life) { fl.splice(i, 1); continue; }
+        const k = p.age / p.life;
+        // the tongues sway together and lick sideways as they climb
+        p.vel.x += (Math.sin(time * 7 + p.pos.y * 6) * 0.9 + Math.sin(time * 13 + p.seed * 20) * 0.5) * dt; p.vel.z += Math.cos(time * 6 + p.pos.y * 5) * 0.7 * dt; p.vel.y += 0.5 * dt;
+        p.pos.addScaledVector(p.vel, dt);
+        fPos.set([p.pos.x, p.pos.y, p.pos.z], m * 3); fDat.set([k, p.seed, p.size * (0.7 + 0.9 * Math.min(1, k * 3)) * (1 - 0.35 * k)], m * 3); m++;
+      }
+      fg.setDrawRange(0, m); fg.attributes.position.needsUpdate = fg.attributes.aDat.needsUpdate = true;
     }
     let n = 0;
     for (let i = parts.length - 1; i >= 0; i--) {
