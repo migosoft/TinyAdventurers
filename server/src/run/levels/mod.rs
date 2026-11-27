@@ -171,7 +171,7 @@ mod tests {
             assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Ghost)).all(|m| m.mover == crate::dungeon::Mover::Incorporeal && m.traits.phasing));
             lich_runs += 1;
             lich_with_ghosts += usize::from(!found.is_empty());
-            for boss in [BossId::Dragon, BossId::Demon] {
+            for boss in [BossId::Dragon, BossId::FireDemon] {
                 assert!(ghosts(boss).0.is_empty(), "seed {seed}: {boss:?} has no Ghosts");
             }
         }
@@ -190,8 +190,8 @@ mod tests {
                 assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Shade)).all(|m| m.mover == crate::dungeon::Mover::Incorporeal && m.traits.phasing));
                 found
             };
-            let found = shades(BossId::Demon);
-            assert_eq!(found, generate(seed, Theme::for_boss(BossId::Demon)).haunts, "seed {seed}: a Shade at each haunt, in order");
+            let found = shades(BossId::FireDemon);
+            assert_eq!(found, generate(seed, Theme::for_boss(BossId::FireDemon)).haunts, "seed {seed}: a Shade at each haunt, in order");
             demon_with_shades += usize::from(!found.is_empty());
             for boss in [BossId::Dragon, BossId::Lich] {
                 assert!(shades(boss).is_empty(), "seed {seed}: {boss:?} has no Shades");
@@ -215,15 +215,35 @@ mod tests {
     fn random_boss_uses_the_run_rng_like_before() {
         for seed in 0..12u64 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
-            let want = BossId::ALL[ChaCha8Rng::seed_from_u64(seed ^ 0x5eed).gen_range(0..BossId::ALL.len())];
+            let mut same = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
+            let want = match same.gen_range(0..3) {
+                0 => if same.gen_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
+                1 => BossId::Lich,
+                _ => BossId::Dragon,
+            };
             let (_, level) = Level::build(seed, &LevelChoice::Dungeon { boss: None }, &mut rng);
             assert_eq!(level.boss_id(), Some(want));
         }
     }
 
     #[test]
+    fn a_random_boss_is_a_third_each_and_a_demon_is_fire_or_ice_by_a_coin() {
+        let mut n = std::collections::HashMap::new();
+        for seed in 0..600u64 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
+            let (_, level) = Level::build(seed, &LevelChoice::Dungeon { boss: None }, &mut rng);
+            *n.entry(level.boss_id().unwrap()).or_insert(0) += 1;
+        }
+        let demons = n[&BossId::FireDemon] + n[&BossId::IceDemon];
+        for c in [demons, n[&BossId::Lich], n[&BossId::Dragon]] {
+            assert!((150..=250).contains(&c), "{n:?}");
+        }
+        assert!((60..=140).contains(&n[&BossId::FireDemon]) && (60..=140).contains(&n[&BossId::IceDemon]), "{n:?}");
+    }
+
+    #[test]
     fn a_level_without_rules_uses_the_defaults() {
-        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| !m.is_boss);
         run.level = Level::Test;
         assert!(Level::boss_bar(&run).is_none());

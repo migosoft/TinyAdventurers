@@ -17,7 +17,7 @@ use crate::run::visibility::{dark_range, snapshot_ents, Dark};
 use crate::run::{Run, DT};
 
 fn ranger_with_wolf() -> (Run, u32) {
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     let id = spawn_wolf(&mut run, 0);
     (run, id)
@@ -34,7 +34,7 @@ fn wolf_idx(run: &Run, id: u32) -> usize {
 /// A run with the given heroes (all on the first hero's spot) and the first hero's
 /// wolf `dx` px east of hero `at`.
 fn run_with_wolf_beside(classes: &[ClassId], at: usize, dx: f64) -> (Run, u32) {
-    let mut run = test_run(classes, BossId::Demon);
+    let mut run = test_run(classes, BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     let id = spawn_wolf(&mut run, 0);
     let pos = run.players[0].pos();
@@ -67,7 +67,7 @@ fn wolves(run: &Run) -> Vec<&crate::run::entities::Monster> {
 
 #[test]
 fn right_click_summons_then_heals_and_the_wolf_never_doubles() {
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     press(&mut run, 0, true);
     assert_eq!(wolves(&run).len(), 1);
@@ -89,7 +89,7 @@ fn right_click_summons_then_heals_and_the_wolf_never_doubles() {
 
 #[test]
 fn the_cooldowns_follow_attack_speed() {
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     run.players[0].sheet.secondary.cooldown = 4.0; // attack speed ×2 on the 8 s summon
     press(&mut run, 0, true);
@@ -116,7 +116,7 @@ fn after_the_wolf_falls_the_button_waits_60_s_then_summons() {
 
 #[test]
 fn two_rangers_each_keep_their_own_wolf() {
-    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     press(&mut run, 0, true);
     press(&mut run, 1, true);
@@ -135,7 +135,7 @@ fn two_rangers_each_keep_their_own_wolf() {
 
 #[test]
 fn the_wolf_vanishes_when_its_ranger_falls_or_leaves() {
-    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     press(&mut run, 0, true);
     press(&mut run, 1, true);
@@ -188,7 +188,7 @@ fn wolf_mods_change_the_wolf() {
     let mods = wolf_mods(&[CompanionHpMul(1.25), CompanionDashCooldownAdd(-2.0)]);
     assert_eq!(mods, WolfMods { hp_mul: 1.25, pounce: Some(crate::defs::loadout::AbilityMod::CooldownAdd(-2.0)) });
     assert_eq!(wolf_mods(&[]), WolfMods::NONE);
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     assert_eq!(run.players[0].sheet.wolf, WolfMods::NONE, "the start version");
     run.players[0].sheet.wolf = mods;

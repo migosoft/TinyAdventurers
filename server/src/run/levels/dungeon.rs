@@ -24,7 +24,11 @@ pub struct DungeonLevel {
 impl DungeonLevel {
     /// Picks the boss first (random from the run's rng, as before), then generates its dungeon.
     pub fn build(seed: u64, boss: Option<BossId>, rng: &mut ChaCha8Rng) -> (Layout, DungeonLevel) {
-        let boss_id = boss.unwrap_or_else(|| BossId::ALL[rng.gen_range(0..BossId::ALL.len())]);
+        let boss_id = boss.unwrap_or_else(|| match rng.gen_range(0..3) {
+            0 => if rng.gen_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
+            1 => BossId::Lich,
+            _ => BossId::Dragon,
+        });
         let (layout, parts) = generate(seed, Theme::for_boss(boss_id)).split();
         let encounter = BossEncounter::new(boss_id, *parts.boss_hall(), parts.door);
         (layout, DungeonLevel { rooms: parts.rooms, start: parts.start, boss: encounter, haunts: parts.haunts })

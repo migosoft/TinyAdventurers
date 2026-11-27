@@ -826,7 +826,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_airborne_monster_crosses_a_chasm_and_stops_at_a_wall() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.objects.clear();
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
         let (tx, ty) = Map::tile_of(run.level.boss().unwrap().arena.center_px());
@@ -861,7 +861,7 @@ pub(crate) mod tests {
     #[test]
     fn wide_bosses_reach_every_spot_of_their_hall_around_the_chasms() {
         for seed in 0..24u64 {
-            for boss in [BossId::Demon, BossId::Dragon] {
+            for boss in [BossId::FireDemon, BossId::Dragon] {
                 let mut run = test_run_seed(&[ClassId::Paladin], boss, seed);
                 let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
                 let r = run.level.boss().unwrap().arena;
@@ -893,7 +893,7 @@ pub(crate) mod tests {
     fn a_demons_claw_burns_a_fifth_of_its_damage() {
         use crate::defs::damage::{DamageType, Resistances};
         let hit = |res: Resistances| {
-            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
             run.players[0].res = res;
             let hp = run.players[0].hp;
             let ppos = run.players[0].pos();
@@ -908,7 +908,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_archer_punches_a_hero_in_reach() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let ppos = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::GoblinArcher, ppos - Vec2::new(10.0, 0.0), None);
@@ -935,7 +935,7 @@ pub(crate) mod tests {
     #[test]
     fn only_strong_melee_pushes() {
         let pushes = |t: EnemyType, alt: bool| {
-            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(t, ppos - Vec2::new(12.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
@@ -961,7 +961,7 @@ pub(crate) mod tests {
         const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0, cone: 150.0, neck: 80.0 };
         // The viewer stands east of the hero, looking west.
         const WEST: f64 = std::f64::consts::PI;
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
         assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, WEST, Side::Hostile).is_some());
@@ -981,7 +981,7 @@ pub(crate) mod tests {
 
     #[test]
     fn enemy_never_attacks_unseen_player() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let mi_pos = ppos + Vec2::new(30.0, 0.0);
@@ -1002,7 +1002,7 @@ pub(crate) mod tests {
     fn demon_dungeon_has_demons_instead_of_skeletons() {
         let count = |run: &Run, t: EnemyType| run.monsters.iter().filter(|m| m.etype == Some(t)).count();
         let lich = test_run(&[ClassId::Wizard], BossId::Lich);
-        let demon = test_run(&[ClassId::Wizard], BossId::Demon);
+        let demon = test_run(&[ClassId::Wizard], BossId::FireDemon);
         // Same seed, same map and spawn spots: only the enemy types differ.
         assert_eq!(lich.layout.spawns.len(), demon.layout.spawns.len());
         assert!(count(&lich, EnemyType::SkeletonArcher) + count(&lich, EnemyType::SkeletonWarrior) > 0, "seed has skeletons");
@@ -1175,7 +1175,7 @@ pub(crate) mod tests {
 
     /// A run with a necromancer 60 px from the hero and nothing else but the boss.
     fn necro_in_sight() -> (Run, u32, usize) {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open_floor(&mut run);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
@@ -1760,7 +1760,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_frightened_monster_on_lava_still_walks_out() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
         let (hero, hid) = (run.players[0].pos(), run.players[0].id);
@@ -1784,7 +1784,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_frightened_monster_runs_away_and_does_not_attack() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let (hero, hid) = (run.players[0].pos(), run.players[0].id);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(20.0, 0.0), None);
@@ -1808,7 +1808,7 @@ pub(crate) mod tests {
 
     #[test]
     fn fear_flees_from_the_last_known_spot_when_the_source_is_gone() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
@@ -1853,7 +1853,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_entangled_monster_stays_put_but_still_shoots() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let hero = run.players[0].pos();
         let id = run.spawn_enemy(EnemyType::GoblinArcher, hero + Vec2::new(60.0, 0.0), None);
@@ -1876,7 +1876,7 @@ pub(crate) mod tests {
         use crate::run::effects::Creature;
         // Ticks between a skeleton's first and second hit on the hero.
         let gap = |hasted: bool| {
-            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
             run.monsters.retain(|m| m.is_boss);
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(14.0, 0.0), None);

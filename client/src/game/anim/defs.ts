@@ -146,7 +146,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Chort]: { ...mob('chort'), swing: { ...CLAW, reach: 22 }, handY: 10, attack: 'caster', base: 0xff7020, baseR: 4 },
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 4 },
   [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: { r: CONST.OGRE_SLAM_RADIUS, anim: ANIM.Slam, t: CONST.OGRE_SLAM_WINDUP } },
-  [KIND.Demon]: {
+  [KIND.FireDemon]: {
     idle: demonFrames.idle.prefix,
     run: demonFrames.walk.prefix,
     frames: demonFrames,
@@ -190,6 +190,8 @@ export const FIGURES: Record<number, FigureDef> = {
     scale: 1.2,
   },
 };
+// The ice demon is drawn like the fire demon until it has a look of its own (#442).
+FIGURES[KIND.IceDemon] = FIGURES[KIND.FireDemon];
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. `gloom`: the lich's dark purple shimmer (a flickering glow trailing dark smoke and sparks). */
 export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean; spin?: boolean; /** A frame shot that is magic: the colour of its trail and sparkles in 3D (#407; none yet). */ magic?: number; /** Overrides the air's guess from size and glow; rarely needed. */ air?: { r?: number; heat?: number } }> = {
@@ -228,7 +230,7 @@ export function isHazardKind(k: number): boolean {
 /** A wind-up anim: the plain one or the summoning's (the server's `Anim::Windup` and `Anim::Summon`). */
 export const isWindup = (anim: number): boolean => anim === ANIM.Windup || anim === ANIM.Summon;
 export function isBossKind(k: number): boolean {
-  return k === KIND.Demon || k === KIND.Lich || k === KIND.Dragon;
+  return k === KIND.FireDemon || k === KIND.IceDemon || k === KIND.Lich || k === KIND.Dragon;
 }
 
 /** The weapon frames a hero holds in the run (Ruling 8): a ranged-style figure the ranged item (thrusting with the

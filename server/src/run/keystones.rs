@@ -132,7 +132,7 @@ mod tests {
     /// A run of one hero of `class` who owns `nodes`, on open floor with no monsters but the boss.
     fn run_of(class: ClassId, nodes: &[NodeId]) -> Run {
         let build = Build { nodes: nodes.to_vec(), extra: Attributes::new(0, 0, 0, 16, 16, 0), ..Build::start(class) };
-        let mut run = test_run_with(&[(class, build)], BossId::Demon);
+        let mut run = test_run_with(&[(class, build)], BossId::FireDemon);
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 2..=tx + 14 {

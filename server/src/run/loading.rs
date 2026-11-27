@@ -77,7 +77,7 @@ mod tests {
     }
 
     fn two() -> Run {
-        test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon)
+        test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::FireDemon)
     }
 
     #[test]

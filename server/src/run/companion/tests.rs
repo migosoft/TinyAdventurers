@@ -11,7 +11,7 @@ use crate::run::Run;
 
 /// Three heroes (host first) and an orc that hero 1 recruited.
 fn recruited() -> (Run, usize) {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     let id = run.spawn_enemy(EnemyType::OrcWarrior, Vec2::new(100.0, 100.0), None);
     let mi = run.monster_idx(id).unwrap();
@@ -58,7 +58,7 @@ fn recruiter_is_host_then_next() {
 
 #[test]
 fn summoned_vanishes_with_its_summoner() {
-    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger, ClassId::Wizard], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     let id = crate::run::wolf::spawn_wolf(&mut run, 1);
     run.players[1].alive = false;
@@ -83,7 +83,7 @@ fn recruited_stays_when_its_recruiter_falls() {
 
 /// Open lit floor around the heroes; two heroes (host first).
 fn knight_run() -> Run {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss);
     crate::run::ai::tests::open_floor(&mut run);
     run.lights.fill();

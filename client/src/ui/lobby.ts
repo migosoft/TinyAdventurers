@@ -17,10 +17,11 @@ import { pickLabel, poolFor, samePick } from './hub/model';
 import type { Pick } from '../generated/Pick';
 import { BOSS_TEXT, LEVEL_TEXT, className } from './text';
 
-const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
+const BOSSES: BossId[] = ['FireDemon', 'IceDemon', 'Lich', 'Dragon'];
 /** Figure (atlas frame prefix) and preview scale. */
 const BOSS_FIG: Record<BossId, [figure: string, scale: number]> = {
-  Demon: ['demon', 2],
+  FireDemon: ['demon', 2],
+  IceDemon: ['demon', 2],
   Lich: ['lich', 3],
   Dragon: ['dragon', 2],
 };
@@ -310,7 +311,7 @@ export class Lobby {
         card.append(q);
       }
       const info = document.createElement('div');
-      info.innerHTML = b ? `<b>${BOSS_TEXT[b].short}</b><small>${BOSS_TEXT[b].blurb}</small>` : '<b>Random</b><small>A surprise at the end of the dungeon.</small>';
+      info.innerHTML = b ? `<b>${BOSS_TEXT[b].name}</b><small>${BOSS_TEXT[b].blurb}</small>` : '<b>Random</b><small>A surprise at the end of the dungeon.</small>';
       card.append(info);
       if (isHost) card.onclick = () => this.net.send({ t: 'SelectBoss', boss: b });
       bosses.append(card);

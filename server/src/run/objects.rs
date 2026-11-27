@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn bosses_and_chests_never_move() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let bi = crate::run::bosses::boss_idx(&run).unwrap();
         let at = run.monsters[bi].pos;
@@ -732,7 +732,7 @@ mod tests {
 
     #[test]
     fn the_blast_hurts_a_boss_but_does_not_push_it() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let bi = crate::run::bosses::boss_idx(&run).unwrap();
         let at = run.monsters[bi].pos;

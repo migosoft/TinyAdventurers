@@ -71,7 +71,7 @@ fn export_defs() {
     // The dragon's telegraphs: the numbers of the abilities in its kit.
     let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Dragon).total(), &[]);
     let dragon_ability = |id: AbilityId| dragon_kit.get(id).expect("the dragon uses it").clone();
-    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Demon).total(), &[]);
+    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::FireDemon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::FireDemon).total(), &[]);
     let demon_ability = |id: AbilityId| demon_kit.get(id).expect("the demon uses it").clone();
     let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Lich).total(), &[]);
     let lich_ability = |id: AbilityId| lich_kit.get(id).expect("the lich casts it").clone();

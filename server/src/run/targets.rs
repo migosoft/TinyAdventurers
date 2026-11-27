@@ -332,7 +332,7 @@ mod tests {
 
     /// A lone ranger, a wolf, a Hostile orc, and a Neutral orc beside the hero (indices of the last two).
     fn fixture() -> (Run, usize, usize, usize) {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
@@ -599,7 +599,7 @@ mod tests {
         assert!(run.monsters[ni].hp < hp, "the arrow hit it");
         assert!(run.monsters[ni].grudge.heroes);
         // A dash.
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(6.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();

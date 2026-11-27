@@ -111,7 +111,7 @@ mod tests {
 
     /// A run with only the boss and its minions, a caster of `t` 60 px from the hero.
     fn caster(t: EnemyType) -> (Run, u32, usize, Vec2) {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let id = run.spawn_enemy(t, ppos + Vec2::new(60.0, 0.0), None);

@@ -10,7 +10,7 @@ const idle = (o: Partial<BuiltIn> = {}): BuiltIn => ({ anim: ANIM.Idle, animT: 0
 describe('LICH_FIGURE', () => {
   it('is the figure of the lich kind, with the builder\'s numbers', () => {
     expect(builtOf(KIND.Lich)).toBe(LICH_FIGURE);
-    expect(Object.keys(BUILT_OF_KIND).sort()).toEqual([String(KIND.Demon), String(KIND.Lich)].sort());
+    expect(Object.keys(BUILT_OF_KIND).sort()).toEqual([String(KIND.FireDemon), String(KIND.IceDemon), String(KIND.Lich)].sort());
     expect(builtOf(KIND.Knight)).toBeNull();
     expect(LICH_FIGURE).toMatchObject({ key: 'lich', picture: 'lich', unit: LICH.unit, hem: LICH.hem });
     expect(LICH_FIGURE.top).toBe(LICH_TOP * LICH.unit);

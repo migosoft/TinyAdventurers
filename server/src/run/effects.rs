@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn go_invisible_needs_the_trait() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         run.monsters[mi].traits.invisibility = false;
         assert!(!run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn vanish_makes_magic_invisibility() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
         let e = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Invisible).expect("invisible");
@@ -870,7 +870,7 @@ mod tests {
 
     #[test]
     fn invisibility_cooldown_starts_when_visible() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
         assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0));
@@ -883,7 +883,7 @@ mod tests {
         secs(&mut run, 1.01);
         assert!(run.go_invisible(mi, &[invisible_for(2.0)], 3.0), "5 s: ready");
         // Revealed by a hit at 1 s: the cooldown starts then.
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
         run.monsters[mi].res = Resistances::NONE;
@@ -908,7 +908,7 @@ mod tests {
 
     #[test]
     fn zero_damage_hit_reveals() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         // Fully resisted Physical hit.
         let c = invisible_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn a_hit_on_an_invisible_hero_reveals_it_too() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.players[0].effects.add(EffectKind::Invisible, 30.0);
         run.hurt_player(0, Damage::physical(1.0));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Invisible));
@@ -939,7 +939,7 @@ mod tests {
 
     #[test]
     fn an_invisible_undead_cannot_be_put_to_sleep_and_stays_invisible() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         let c = Creature::Monster(mi);
         assert!(run.go_invisible(mi, &[invisible_for(5.0)], 3.0));
@@ -951,7 +951,7 @@ mod tests {
 
     #[test]
     fn shrugged_off_effect_does_not_reveal() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = invisible_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.monsters[mi].effect_res.set(EffectKind::Fear, 1.0);
@@ -965,7 +965,7 @@ mod tests {
 
     #[test]
     fn effect_ticks_do_not_reveal() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = invisible_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.hurt_monster(mi, Damage::effect_tick(1.0, DamageType::Heat), false, None);
@@ -975,7 +975,7 @@ mod tests {
 
     #[test]
     fn positive_effects_do_not_reveal() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = invisible_ogre(&mut run);
         assert!(run.apply_effect(c, EffectKind::Warded, Some(2.0)));
         assert!(run.has_effect(c, EffectKind::Invisible));
@@ -984,7 +984,7 @@ mod tests {
     #[test]
     fn attacking_reveals() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         run.monsters.retain(|m| m.is_boss);
         let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
@@ -1002,7 +1002,7 @@ mod tests {
 
     #[test]
     fn an_invisible_monster_tells_no_event_to_the_clients() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let inv = EffectKind::Invisible as u8;
@@ -1022,14 +1022,14 @@ mod tests {
 
     #[test]
     fn a_sleeping_curse_does_not_take_on_a_ranger() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         assert!(!run.apply_effect(Creature::Player(0), EffectKind::Sleep, None));
         assert!(run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(1.0)));
     }
 
     #[test]
     fn apply_adds_refreshes_to_the_longer_timer_and_expires() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.events.clear();
         assert!(run.apply_effect(me, EffectKind::Slowed, Some(1.0)));
@@ -1052,7 +1052,7 @@ mod tests {
         for (b, sleep, blind, petrify) in [
             (BossId::Lich, None, None, Some(1.5)),
             (BossId::Dragon, None, Some(1.5), Some(1.5)),
-            (BossId::Demon, None, Some(3.0), Some(3.0)),
+            (BossId::FireDemon, None, Some(3.0), Some(3.0)),
         ] {
             let mut run = test_run(&[ClassId::Wizard], b);
             let c = Creature::Monster(boss(&run));
@@ -1062,7 +1062,7 @@ mod tests {
                 assert_eq!(got, want, "{b:?} {k:?}");
             }
         }
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None);
         let mi = run.monster_idx(id).unwrap();
@@ -1074,14 +1074,14 @@ mod tests {
 
     #[test]
     fn charm_lands_on_a_hero() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         assert!(run.apply_effect(Creature::Player(0), EffectKind::Charmed, Some(3.0)));
         assert!(run.players[0].effects.list().iter().any(|e| e.kind == EffectKind::Charmed));
     }
 
     #[test]
     fn the_knight_cannot_be_charmed() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Knight, at, None);
         let mi = run.monster_idx(id).unwrap();
@@ -1091,7 +1091,7 @@ mod tests {
 
     #[test]
     fn boss_charm_resistances_follow_the_table() {
-        for (b, want) in [(BossId::Lich, None), (BossId::Dragon, Some(1.5)), (BossId::Demon, Some(1.5))] {
+        for (b, want) in [(BossId::Lich, None), (BossId::Dragon, Some(1.5)), (BossId::FireDemon, Some(1.5))] {
             let mut run = test_run(&[ClassId::Wizard], b);
             run.apply_effect(Creature::Monster(boss(&run)), EffectKind::Charmed, Some(3.0));
             let got = run.monsters[boss(&run)].effects.list().iter().find(|a| a.kind == EffectKind::Charmed).map(|a| a.left);
@@ -1101,7 +1101,7 @@ mod tests {
 
     #[test]
     fn a_dead_hero_loses_every_effect() {
-        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::FireDemon);
         run.apply_effect(Creature::Player(0), EffectKind::Sleep, None);
         run.apply_effect(Creature::Player(0), EffectKind::Petrified, None);
         run.hurt_player(0, crate::defs::damage::Damage::physical(10_000.0));
@@ -1144,7 +1144,7 @@ mod tests {
 
     #[test]
     fn slowed_and_accelerated_heroes_walk_at_their_speed() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let x0 = run.players[0].mv.x;
         walk(&mut run, 1);
@@ -1161,10 +1161,10 @@ mod tests {
 
     #[test]
     fn a_petrified_hero_slides_shorter_and_cannot_dash_attack_or_turn() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         open(&mut run);
         let from = run.players[0].pos() - Vec2::new(10.0, 0.0);
-        let mut free = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut free = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         open(&mut free);
         free.knock_player(0, from, 0.0, 40.0, crate::run::tests::PUSH_STR);
         run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
@@ -1186,7 +1186,7 @@ mod tests {
 
     #[test]
     fn petrified_heroes_take_a_quarter_of_physical_and_half_of_magic() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
         let hp = run.players[0].hp;
         run.hurt_player(0, Damage::physical(20.0));
@@ -1199,7 +1199,7 @@ mod tests {
     #[test]
     fn a_blind_monster_sees_no_one_and_an_asleep_one_does_nothing() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::OrcArcher, at, None);
@@ -1227,7 +1227,7 @@ mod tests {
     #[test]
     fn a_blind_hero_is_sent_no_enemies() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(20.0, 0.0);
         run.spawn_enemy(EnemyType::OrcWarrior, at, None);
@@ -1243,7 +1243,7 @@ mod tests {
 
     #[test]
     fn a_hit_applies_its_effect() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy()));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
     }
@@ -1257,7 +1257,7 @@ mod tests {
 
     #[test]
     fn the_stronger_tier_replaces_the_weaker() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         for (weak, strong) in [(EffectKind::Chilled, EffectKind::Frozen), (EffectKind::Singed, EffectKind::Burning), (EffectKind::Tainted, EffectKind::Poisoned)] {
             assert!(run.apply_effect(c, weak, None));
@@ -1271,7 +1271,7 @@ mod tests {
 
     #[test]
     fn a_refused_freeze_leaves_the_chill() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         assert!(run.apply_effect(c, EffectKind::Chilled, None));
         let Creature::Monster(mi) = c else { unreachable!() };
@@ -1286,7 +1286,7 @@ mod tests {
 
     #[test]
     fn fire_and_cold_cancel_across_tiers() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         use EffectKind::*;
         for (cold, heat) in [(Frozen, Singed), (Chilled, Singed), (Frozen, Burning), (Chilled, Burning)] {
@@ -1301,7 +1301,7 @@ mod tests {
 
     #[test]
     fn a_resisted_singe_still_thaws() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.apply_effect(c, EffectKind::Frozen, None);
@@ -1313,7 +1313,7 @@ mod tests {
     #[test]
     fn an_on_hit_effect_always_lands() {
         use rand::RngCore;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mut twin = run.rng.clone();
         for _ in 0..20 {
             let c = fresh_ogre(&mut run);
@@ -1326,7 +1326,7 @@ mod tests {
     #[test]
     fn damage_immunity_does_not_block_the_effect_and_zero_damage_shows_no_number() {
         use crate::defs::damage::Resistances;
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
         run.hurt_player(0, Damage::new(10.0, DamageSplit::pure(DamageType::Magical)).with_effect(sleepy()));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
@@ -1344,7 +1344,7 @@ mod tests {
 
     #[test]
     fn a_hit_applies_every_listed_effect() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::physical(1.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Chilled));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Weakened));
@@ -1352,7 +1352,7 @@ mod tests {
 
     #[test]
     fn a_pure_effect_hit_applies_every_listed_effect() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let hp = run.monsters[mi].hp;
@@ -1365,7 +1365,7 @@ mod tests {
 
     #[test]
     fn the_later_effect_on_one_hit_decides_a_cancel() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.hurt_monster(mi, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Burning)).with_effect(plain_hit(EffectKind::Frozen)), false, Some(0));
@@ -1378,7 +1378,7 @@ mod tests {
 
     #[test]
     fn a_killing_hit_applies_no_listed_effects() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.hurt_monster(mi, Damage::physical(10_000.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)), false, Some(0));
@@ -1388,7 +1388,7 @@ mod tests {
 
     #[test]
     fn an_effect_tick_applies_no_listed_effects() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(plain_hit(EffectKind::Slowed)).with_effect(plain_hit(EffectKind::Blind)));
         assert!(run.players[0].effects.list().is_empty());
     }
@@ -1406,7 +1406,7 @@ mod tests {
 
     #[test]
     fn a_killing_hit_applies_no_effect_and_sleep_survives_damage() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy()));
         run.hurt_player(0, Damage::physical(5.0));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
@@ -1415,7 +1415,7 @@ mod tests {
     }
 
     fn pair(gap: f64) -> crate::run::Run {
-        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos();
         run.players[1].mv.x = at.x + 10.0 + gap; // two 5 px radii plus the gap
@@ -1469,7 +1469,7 @@ mod tests {
 
     #[test]
     fn burning_runs_out_after_its_duration_without_refreshing_itself() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         run.apply_effect(Creature::Player(0), EffectKind::Burning, None);
         let steps = (3.0 / DT).round() as usize;
@@ -1480,7 +1480,7 @@ mod tests {
 
     #[test]
     fn partial_resistance_reduces_each_tick_and_full_resistance_refuses_the_effect() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         run.players[0].res = Resistances::of(&[(DamageType::Heat, 0.5)]);
         run.apply_effect(Creature::Player(0), EffectKind::Burning, None);
@@ -1494,7 +1494,7 @@ mod tests {
 
     #[test]
     fn effect_damage_applies_no_effects() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat));
         assert!(run.players[0].effects.list().is_empty());
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, magical: false, power: 10, look: EffectLook::Plain }));
@@ -1503,7 +1503,7 @@ mod tests {
 
     #[test]
     fn fire_thaws_ice_and_ice_puts_out_fire() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply_effect(me, EffectKind::Frozen, None);
         assert!(!run.apply_effect(me, EffectKind::Burning, None));
@@ -1524,10 +1524,10 @@ mod tests {
             assert!(!run.has_effect(me, EffectKind::Frozen), "{how}: the fire still thaws the ice");
             assert!(!run.has_effect(me, EffectKind::Burning), "{how}: and does not burn");
         };
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.players[0].sheet.attrs = run.players[0].sheet.attrs.plus(crate::defs::attributes::Attributes::new(0, 0, 40, 0, 0, 0));
         frozen_then_fire(&mut run, "saved to 0 s");
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
         frozen_then_fire(&mut run, "immune to heat");
     }
@@ -1535,7 +1535,7 @@ mod tests {
     #[test]
     fn shallow_water_puts_out_fire() {
         use crate::dungeon::Tile;
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
         run.set_tile(tx, ty, Tile::ShallowWater);
@@ -1549,7 +1549,7 @@ mod tests {
     #[test]
     fn burn_ticks_count_in_the_heros_damage_total() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
@@ -1569,7 +1569,7 @@ mod tests {
     #[test]
     fn water_refuses_burning_without_a_flicker() {
         use crate::dungeon::Tile;
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
         run.set_tile(tx, ty, Tile::ShallowWater);
@@ -1583,7 +1583,7 @@ mod tests {
 
     #[test]
     fn frozen_roots_and_ticks_cold() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         run.apply_effect(Creature::Player(0), EffectKind::Frozen, None);
         let fx = &run.players[0].effects;
@@ -1594,7 +1594,7 @@ mod tests {
     #[test]
     fn a_burn_kill_credits_the_last_hero_who_hit() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
@@ -1613,7 +1613,7 @@ mod tests {
     fn mostly_heat_hits_and_lava_set_heroes_on_fire() {
         use crate::defs::damage::kind_split;
         use crate::defs::kinds::EntityKind;
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         open(&mut run);
         run.hurt_player(0, Damage::new(4.0, DamageSplit::split(&[(DamageType::Heat, 0.2)])));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning), "a claw with a fifth of heat does not burn");
@@ -1630,7 +1630,7 @@ mod tests {
     #[test]
     fn heat_immune_creatures_are_never_set_on_fire() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Imp, at, None);
@@ -1669,7 +1669,7 @@ mod tests {
 
     #[test]
     fn lich_sleep_lasts_longer_on_the_paladin() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.hurt_player(0, Damage::physical(0.0).with_effect(lich_sleep()));
         let left = left_of(&run, Creature::Player(0), EffectKind::Sleep).expect("asleep");
         assert!((left - 3.0).abs() < 1e-12, "2 s × (1 + (22 − 12) / 20) = 3 s, got {left}");
@@ -1677,7 +1677,7 @@ mod tests {
 
     #[test]
     fn elves_and_the_wolf_stay_immune_to_sleep() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let id = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(id).unwrap();
@@ -1689,7 +1689,7 @@ mod tests {
 
     #[test]
     fn burning_is_shorter_on_a_tough_hero() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         open(&mut run);
         run.type_effect_hit(Creature::Player(0), &Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
         let left = left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning");
@@ -1703,7 +1703,7 @@ mod tests {
         use crate::defs::trees::NodeId;
         let burn = |nodes: &[NodeId]| {
             let b = Build { nodes: nodes.to_vec(), ..Build::start(ClassId::Barbarian) };
-            let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, b)], BossId::Demon);
+            let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, b)], BossId::FireDemon);
             open(&mut run);
             assert!(run.apply(Creature::Player(0), Apply { power: Some(15), magical: false, ..Apply::plain(EffectKind::Burning, None) }));
             left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning")
@@ -1716,7 +1716,7 @@ mod tests {
     fn effect_resistance_applies_after_the_save() {
         use crate::defs::attributes::Attr;
         use crate::defs::effects::{scaled_secs, EffectResistances};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None);
@@ -1762,7 +1762,7 @@ mod tests {
     #[test]
     fn an_incorporeal_monster_refuses_entangled() {
         use crate::defs::races::{profile, Adjust, Race};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
@@ -1775,7 +1775,7 @@ mod tests {
 
     #[test]
     fn an_effect_names_its_own_save() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let spawn = |run: &mut crate::run::Run, t| {
@@ -1799,7 +1799,7 @@ mod tests {
 
     #[test]
     fn the_look_and_source_ride_on_the_effect() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let (hid, hpos) = (run.players[0].id, run.players[0].pos());
         let vines = Apply { look: EffectLook::Vines, source: Some((hid, hpos)), ..Apply::plain(EffectKind::Entangled, Some(2.0)) };
@@ -1830,7 +1830,7 @@ mod tests {
 
     #[test]
     fn an_on_hit_effect_remembers_its_bestower() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let hero = run.players[0].id;
@@ -1840,7 +1840,7 @@ mod tests {
 
     #[test]
     fn a_split_effect_remembers_its_bestower() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let hero = run.players[0].id;
@@ -1851,7 +1851,7 @@ mod tests {
 
     #[test]
     fn a_sourceless_refresh_keeps_the_bestower() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let hero = run.players[0].id;
@@ -1869,7 +1869,7 @@ mod tests {
 
     #[test]
     fn a_barrel_blast_keeps_the_hero_bestower() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         let hero = run.players[0].id;
@@ -1884,7 +1884,7 @@ mod tests {
     #[test]
     fn a_tick_from_a_gone_bestower_does_not_panic() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.log.forced = true;
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let gid = run.spawn_enemy(EnemyType::GoblinArcher, at, None);
@@ -2003,7 +2003,7 @@ mod tests {
 
     #[test]
     fn a_paused_stronger_tier_still_blocks_its_weaker_tier() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         paused_magic(&mut run, EffectKind::Burning);
         let (outcome, ..) = run.apply_traced(Creature::Player(0), Apply::plain(EffectKind::Singed, Some(3.0)));
         assert_eq!(outcome, EffectOutcome::StrongerOn(EffectKind::Burning));
@@ -2011,7 +2011,7 @@ mod tests {
 
     #[test]
     fn the_start_event_fires_only_when_the_kind_turns_on() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         let starts = |run: &crate::run::Run| run.events.iter().filter(|(e, _)| matches!(e, Ev::Effect { kind: 3, on: true, .. })).count();
         run.events.clear();
@@ -2029,7 +2029,7 @@ mod tests {
 
     #[test]
     fn a_paused_magic_effect_is_still_removed_by_the_removal_paths() {
-        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::FireDemon);
         // Cancelling: cold thaws a paused magic Burning.
         paused_magic(&mut run, EffectKind::Burning);
         let (outcome, ..) = run.apply_traced(Creature::Player(0), Apply::plain(EffectKind::Chilled, Some(3.0)));
@@ -2067,7 +2067,7 @@ mod tests {
 
     #[test]
     fn warded_refuses_the_lichs_spells_only() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let me = Creature::Player(0);
         assert!(run.apply_effect(me, EffectKind::Warded, Some(3.0)));
         for k in [EffectKind::Sleep, EffectKind::Blind, EffectKind::Petrified] {
@@ -2081,7 +2081,7 @@ mod tests {
     #[test]
     fn undead_and_bosses_never_fear_and_demons_fear_half() {
         use crate::defs::enemies::EnemyType;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
@@ -2100,7 +2100,7 @@ mod tests {
 
     #[test]
     fn the_start_event_carries_the_look() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         run.events.clear();
         assert!(run.apply(c, Apply { look: EffectLook::Vines, ..Apply::plain(EffectKind::Entangled, Some(1.0)) }));
@@ -2141,7 +2141,7 @@ mod tests {
 
     #[test]
     fn drains_stack_and_refresh() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let h = Creature::Player(0);
         let str0 = run.players[0].sheet.attrs.get(Attr::Str);
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 20.0, None), EffectOutcome::Added);
@@ -2155,7 +2155,7 @@ mod tests {
         assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 3);
         // Power 30 adds -2 in one touch.
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         drain(&mut run, h, EffectKind::Weakened, 20.0, Some(30));
         assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -2);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 2);
@@ -2163,7 +2163,7 @@ mod tests {
 
     #[test]
     fn the_save_reads_the_current_attribute() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let h = Creature::Player(0);
         let wil = run.players[0].sheet.attrs.get(Attr::Wil);
         let power = 22;
@@ -2180,7 +2180,7 @@ mod tests {
 
     #[test]
     fn a_drain_ending_restores_the_numbers_but_not_hp() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let h = Creature::Player(0);
         let before = run.players[0].sheet.clone();
         for _ in 0..3 {
@@ -2202,7 +2202,7 @@ mod tests {
 
     #[test]
     fn a_drain_never_kills() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let h = Creature::Player(0);
         run.players[0].hp = 3.0;
         assert!(matches!(drain(&mut run, h, EffectKind::Frail, 20.0, Some(300)), EffectOutcome::Added));
@@ -2215,7 +2215,7 @@ mod tests {
     #[test]
     fn monster_drain_rebuilds_its_kit() {
         use crate::defs::abilities::AbilityId;
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
@@ -2234,7 +2234,7 @@ mod tests {
 
     #[test]
     fn a_drained_monster_tracks_its_sources() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
@@ -2256,7 +2256,7 @@ mod tests {
 
     #[test]
     fn monster_hp_floor() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let at = run.players[0].pos();
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::GoblinArcher, at, None);
         let c = Creature::Monster(run.monster_idx(id).unwrap());
@@ -2272,7 +2272,7 @@ mod tests {
 
     #[test]
     fn full_resistance_refuses_the_drain() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.monsters[mi].effect_res.set(EffectKind::Weakened, 1.0);
@@ -2284,7 +2284,7 @@ mod tests {
 
     #[test]
     fn death_wipes_drains_without_panic() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let h = Creature::Player(0);
         drain(&mut run, h, EffectKind::Frail, 20.0, None);
         drain(&mut run, h, EffectKind::Weakened, 20.0, None);
@@ -2296,7 +2296,7 @@ mod tests {
     #[test]
     fn hero_changed_is_sent_on_a_change() {
         use crate::protocol::{encode, ServerMsg};
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         let h = Creature::Player(0);
@@ -2307,7 +2307,7 @@ mod tests {
         assert_eq!(got.to_vec(), want);
         assert!(rx.try_recv().is_err(), "one message");
         // Nothing the hero's numbers do not show: no message.
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(tx);
         run.refresh_attrs(h);
@@ -2319,7 +2319,7 @@ mod tests {
         use crate::defs::attributes::Attributes;
         use crate::defs::enemies::EnemyType;
         use crate::sheet::{monster_numbers, WolfMods};
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let at = run.players[0].pos();
         for t in EnemyType::ALL {
             run.spawn_enemy(t, at, None);
@@ -2338,7 +2338,7 @@ mod tests {
 
     #[test]
     fn vanish_cooldown_pauses_while_invisible_and_runs_on_the_clock() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = ghostly(&mut run);
         run.monsters[mi].invis_cd = 2.0;
         run.apply_effect(Creature::Monster(mi), EffectKind::Invisible, Some(60.0));
@@ -2374,7 +2374,7 @@ mod tests {
     fn would_take_hold_matches_apply() {
         for which in 0..4 {
             for kind in [EffectKind::Sleep, EffectKind::Charmed, EffectKind::Blind, EffectKind::Burning] {
-                let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+                let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
                 open(&mut run);
                 let c = spawn_case(&mut run, which);
                 let h = plain_hit(kind);
@@ -2387,7 +2387,7 @@ mod tests {
 
     #[test]
     fn would_take_hold_changes_nothing() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         open(&mut run);
         let c = spawn_case(&mut run, 0);
         run.apply_effect(c, EffectKind::Frozen, None);

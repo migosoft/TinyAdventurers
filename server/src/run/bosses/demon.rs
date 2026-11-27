@@ -229,7 +229,7 @@ mod tests {
     /// script chooses from; Smash is the landing's), no opening waits, the first flight far away.
     fn demon_with_heroes(offs: &[Vec2], ready: &[AbilityId]) -> (Run, Demon, usize) {
         let classes = vec![ClassId::Paladin; offs.len()];
-        let mut run = test_run(&classes, BossId::Demon);
+        let mut run = test_run(&classes, BossId::FireDemon);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].dormant = false;
         run.monsters[bi].aim = 0.0;
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn the_cleave_lights_a_barrel_in_front() {
         use crate::run::objects::{Barrel, ObjState};
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].aim = 0.0;
@@ -609,11 +609,11 @@ mod tests {
 
     #[test]
     fn a_boss_hit_from_behind_looks_then_turns_to_the_blow() {
-        crate::run::bosses::tests::hit_from_behind(BossId::Demon);
+        crate::run::bosses::tests::hit_from_behind(BossId::FireDemon);
     }
 
     #[test]
     fn a_boss_looks_to_where_it_lost_a_hero() {
-        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::Demon);
+        crate::run::bosses::tests::looks_to_where_it_lost_a_hero(BossId::FireDemon);
     }
 }

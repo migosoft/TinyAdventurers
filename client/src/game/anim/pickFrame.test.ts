@@ -60,7 +60,7 @@ describe('dragon frames', () => {
 });
 
 describe('demon frames', () => {
-  const M = FIGURES[KIND.Demon];
+  const M = FIGURES[KIND.FireDemon];
   const at = (anim: number, animT: number, flags = 0, moving = false) => pickFrame(M, { anim, animT, flags }, 0, 0, moving);
 
   it('idles and walks', () => {

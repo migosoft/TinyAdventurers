@@ -36,11 +36,12 @@ pub enum EntityKind {
     /// The deer's twin with antlers: its own type, the deer's numbers.
     Stag = 29,
     // Bosses
-    Demon = 30,
+    FireDemon = 30,
     Lich = 31,
     Dragon = 32,
     /// Wildlife (#227): fights back when hit (the next free monster id after the bosses).
     Boar = 33,
+    IceDemon = 34,
     // Projectiles
     Missile = 50,
     Fireball = 51,
@@ -89,7 +90,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 52] = [
+    pub const ALL: [EntityKind; 53] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -114,10 +115,11 @@ impl EntityKind {
         EntityKind::Bunny,
         EntityKind::Deer,
         EntityKind::Stag,
-        EntityKind::Demon,
+        EntityKind::FireDemon,
         EntityKind::Lich,
         EntityKind::Dragon,
         EntityKind::Boar,
+        EntityKind::IceDemon,
         EntityKind::Missile,
         EntityKind::Fireball,
         EntityKind::Bolt,
@@ -164,7 +166,7 @@ impl EntityKind {
             Lich => 28.0,
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
-            Demon => 58.0,
+            FireDemon | IceDemon => 58.0,
             // 12 opaque rows plus the 1-px idle bob (client/scripts/spectre-frames.ts).
             Ghost | Shade => 13.0,
             // Opaque rows of the pack's idle frame f0 (the Mimic: open frame f0), first guesses (#321).

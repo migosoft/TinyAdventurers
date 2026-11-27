@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn anti_magic_pauses_and_restores_a_buff() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         assert!(run.apply(me, magic(EffectKind::Accelerated, 20.0)));
         assert!(run.players[0].effects.speed_mul() > 1.0);
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn a_paused_drain_gives_the_attribute_back() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let me = Creature::Player(0);
         let str0 = run.players[0].sheet.attrs.get(Attr::Str);
         let hp0 = run.players[0].max_hp;
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn an_effect_running_out_while_paused_ends_normally() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.log.forced = true;
         run.apply(me, magic(EffectKind::Slowed, 1.0));
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn paused_invisibility_shows_the_ghost() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let at = run.players[0].pos() + crate::math::Vec2::new(30.0, 0.0);
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn anti_magic_mutes_magic_gear_and_its_light() {
-        let mut run = test_run_with(&wearing(ClassId::Wizard, EquipSlot::Melee, ItemId::EmberStaff), BossId::Demon);
+        let mut run = test_run_with(&wearing(ClassId::Wizard, EquipSlot::Melee, ItemId::EmberStaff), BossId::FireDemon);
         let me = Creature::Player(0);
         let id = run.players[0].id;
         let lit = |run: &Run| run.lights.sources.iter().filter(|s| s.anchor == Anchor::Entity(id)).count();
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn a_dispel_pause_ends_after_its_time() {
-        let mut run = test_run_with(&wearing(ClassId::Paladin, EquipSlot::Ring1, ItemId::BandOfVigor), BossId::Demon);
+        let mut run = test_run_with(&wearing(ClassId::Paladin, EquipSlot::Ring1, ItemId::BandOfVigor), BossId::FireDemon);
         let me = Creature::Player(0);
         let con = |run: &Run| run.players[0].sheet.attrs.get(Attr::Con);
         let con0 = con(&run);
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn a_dispelled_effect_comes_back_with_its_events() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
         run.events.clear();
@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn plain_effects_are_never_paused() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, Apply::plain(EffectKind::Slowed, Some(10.0)));
         run.events.clear();
@@ -343,7 +343,7 @@ mod tests {
 
     #[test]
     fn picks_only_the_wanted_side() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
         run.apply(me, magic(EffectKind::Slowed, 20.0));
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn lasting_sources_go_first() {
-        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let mut run = test_run_with(&lasting_pair(), BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
         let src = run.magic_sources(me);
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn then_the_most_time_left() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Warded, 5.0));
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn ties_break_by_effect_id() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Warded, 10.0));
         run.apply(me, magic(EffectKind::Coated, 10.0));
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn already_dispelled_is_skipped() {
-        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let mut run = test_run_with(&lasting_pair(), BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
         run.apply(me, magic(EffectKind::Warded, 10.0));
@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     fn plain_is_never_picked() {
-        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let mut run = test_run_with(&lasting_pair(), BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, Apply::plain(EffectKind::Accelerated, Some(20.0)));
         run.apply(me, Apply::plain(EffectKind::Slowed, Some(20.0)));
@@ -416,14 +416,14 @@ mod tests {
 
     #[test]
     fn n_zero_picks_nothing() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.apply(Creature::Player(0), magic(EffectKind::Accelerated, 20.0));
         assert!(dispel_picks(&run.players[0].effects, &[Lasting::Item(ItemId::EmberStaff)], Want::Positive, 0).is_empty());
     }
 
     #[test]
     fn dispel_pauses_what_it_picks() {
-        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let mut run = test_run_with(&lasting_pair(), BossId::FireDemon);
         let me = Creature::Player(0);
         run.apply(me, magic(EffectKind::Accelerated, 20.0));
         run.apply(me, magic(EffectKind::Slowed, 20.0));

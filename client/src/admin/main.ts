@@ -114,7 +114,7 @@ function table(head: (string | [string, 'num'])[], rows: (HTMLElement | string |
 
 /** "Dungeon – Demon", or only the level when it has no boss. */
 function levelLabel(level: string, boss: string | null): string {
-  return boss ? `${level} – ${boss}` : level;
+  return boss ? `${level} – ${boss.replace(/(Fire|Ice)Demon/, '$1 Demon')}` : level;
 }
 
 function playerLink(id: number, name: string): HTMLElement {

@@ -1504,7 +1504,7 @@ mod tests {
     fn vanish_goes_invisible_and_waits_while_invisible() {
         use crate::defs::effects::EffectKind;
         use crate::sheet::{monster_kit, Body};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 30.0, 10.0);
         let d = crate::defs::enemies::def(EnemyType::SkeletonWarrior);
         run.monsters[mi].kit = monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &run.monsters[mi].attrs, d.weapons, Body { radius: d.radius }, &[]);
@@ -1531,7 +1531,7 @@ mod tests {
 
     #[test]
     fn a_hero_spell_announces_its_cast() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         put_monster_near(&mut run, 0, 60.0);
         run.events.clear();
         try_use(&mut run, 0, true, 1);
@@ -1553,19 +1553,19 @@ mod tests {
 
     #[test]
     fn a_weapon_attack_announces_nothing() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         put_monster_near(&mut run, 0, 60.0);
         run.events.clear();
         try_use(&mut run, 0, true, 1);
         assert!(!run.projectiles.is_empty(), "Shoot fired");
         assert!(casts(&run).is_empty(), "Shoot: {:?}", casts(&run));
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         put_monster_near(&mut run, 0, 10.0);
         run.events.clear();
         try_use(&mut run, 0, true, 1);
         assert!(casts(&run).is_empty(), "Strike in melee: {:?}", casts(&run));
         // A wizard's magic primary falls back to the staff in melee: no runes.
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         put_monster_near(&mut run, 0, 10.0);
         run.events.clear();
         try_use(&mut run, 0, true, 1);
@@ -1575,7 +1575,7 @@ mod tests {
     #[test]
     fn a_ranged_primary_strikes_in_melee() {
         use crate::defs::damage::DamageType;
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         try_use(&mut run, 0, true, 1);
@@ -1583,7 +1583,7 @@ mod tests {
         assert!(run.projectiles.is_empty(), "no bolt fired");
         assert_cd(run.players[0].cd1, &run, 0, AbilityId::Strike, 0.35);
 
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         let res = run.monsters[mi].res.get(DamageType::Physical);
@@ -1592,7 +1592,7 @@ mod tests {
         assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
         assert_cd(run.players[0].cd1, &run, 0, AbilityId::Strike, 1.0);
 
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         put_monster_near(&mut run, 0, 60.0);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1);
@@ -1601,7 +1601,7 @@ mod tests {
 
     #[test]
     fn a_ranged_secondary_in_melee_does_nothing() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         run.events.clear();
@@ -1610,7 +1610,7 @@ mod tests {
         assert_eq!(run.players[0].cd2, 0.0);
         assert_eq!(run.monsters[mi].hp, hp);
         assert!(run.events.is_empty(), "no event");
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         put_monster_near(&mut run, 0, 60.0);
         try_use(&mut run, 0, false, 1);
         assert_eq!(run.projectiles.len(), 1);
@@ -1620,11 +1620,11 @@ mod tests {
 
     #[test]
     fn area_and_self_abilities_still_fire_in_melee() {
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         put_monster_near(&mut run, 0, 10.0);
         try_use(&mut run, 0, false, 1);
         assert_cd(run.players[0].cd2, &run, 0, AbilityId::HolyLight, 10.0);
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         put_monster_near(&mut run, 0, 10.0);
         try_use(&mut run, 0, false, 1);
         assert!(run.players[0].mv.dash_t > 0.0);
@@ -1632,7 +1632,7 @@ mod tests {
 
     #[test]
     fn shoot_fires_its_weapons_projectile() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.players[0].sheet.primary.projectile = Some(EntityKind::Arrow);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::Arrow);
@@ -1642,7 +1642,7 @@ mod tests {
     fn ranged_properties_stay_off_melee() {
         use crate::defs::damage::DamageType;
         use crate::defs::effects::{EffectKind, OnHit};
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let heat = DamageSplit::pure(DamageType::Heat);
         run.players[0].sheet.primary.split = heat;
         let mi = put_monster_near(&mut run, 0, 10.0);
@@ -1651,12 +1651,12 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         let ty = run.events.iter().find_map(|(e, _)| if let Ev::Dmg { ty, .. } = e { Some(*ty) } else { None });
         assert_eq!(ty, Some(DamageType::Physical as u8), "the thrust is physical");
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.players[0].sheet.primary.split = heat;
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].damage.split, heat, "the bolt carries the primary's split");
 
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
         run.players[0].sheet.secondary.on_hit = vec![hit];
         let mi = put_monster_near(&mut run, 0, 6.0);
@@ -1674,7 +1674,7 @@ mod tests {
             // The Great Axe does not push, so the dash wields the Cleaver (push 20).
             let equipment = crate::defs::items::Equipment::starter(barb).with(EquipSlot::Melee, crate::defs::items::ItemId::Cleaver);
             let build = Build { nodes, equipment, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) };
-            let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::Demon);
+            let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::FireDemon);
             assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 16);
             let mi = put_monster_near(&mut run, 0, 6.0);
             run.monsters[mi].hp = 1000.0;
@@ -1692,7 +1692,7 @@ mod tests {
         let barb = ClassId::Barbarian;
         let equipment = crate::defs::items::Equipment::starter(barb).with(EquipSlot::Melee, crate::defs::items::ItemId::Cleaver);
         let build = Build { equipment, ..Build::start(barb) };
-        let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::Demon);
+        let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::FireDemon);
         let ab = run.players[0].sheet.secondary.clone();
         assert_eq!(ab.id, AbilityId::Charge);
         assert!(ab.push > 0.0, "the Cleaver pushes");
@@ -1712,7 +1712,7 @@ mod tests {
     #[test]
     fn a_melee_kill_carries_on() {
         let goblins = |hps: [f64; 3]| {
-            let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+            let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
             run.monsters.retain(|m| m.is_boss || m.owner.is_some());
             run.players[0].aim = 0.0;
             let mis: Vec<usize> = [8.0, 12.0, 16.0].iter().zip(hps).map(|(&d, hp)| put_enemy(&mut run, 0, EnemyType::GoblinArcher, d, hp)).collect();
@@ -1730,12 +1730,12 @@ mod tests {
     fn a_dash_touches_within_the_ability_radius_of_the_users_edge() {
         // Swoop: body radius + 8 (+ the hero's radius); Pounce: body radius + 4.
         for (id, radius, user_kit) in [
-            (AbilityId::Swoop, 8.0, crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[])),
+            (AbilityId::Swoop, 8.0, crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::FireDemon), &crate::defs::bosses::attr_sources(BossId::FireDemon).total(), &[])),
             (AbilityId::Pounce, 4.0, crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[])),
         ] {
             assert_eq!(user_kit.get(id).unwrap().radius, radius, "{id:?}");
             for (gap, hits) in [(radius, true), (radius + 1.0, false)] {
-                let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+                let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
                 let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
                 run.monsters[bi].dormant = false;
                 run.monsters[bi].kit = user_kit.clone();
@@ -1761,14 +1761,14 @@ mod tests {
         assert!(reach(pounce.range / 2.0) > pounce.range / 2.0, "it still reaches a near mark");
         assert!(reach(pounce.range * 3.0) <= pounce.range + 1e-9, "re-aimed far away it stops at its range: {}", reach(pounce.range * 3.0));
         // An ability with its own duration lasts that long.
-        let swoop = crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[]).get(AbilityId::Swoop).unwrap().clone();
+        let swoop = crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::FireDemon), &crate::defs::bosses::attr_sources(BossId::FireDemon).total(), &[]).get(AbilityId::Swoop).unwrap().clone();
         assert_eq!(monster_dash_secs(&swoop, 1000.0), swoop.duration);
     }
 
     #[test]
     fn a_pushing_weapon_pushes_on_strike() {
         for (push, pushed) in [(20.0, true), (0.0, false)] {
-            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
             run.monsters.retain(|m| m.is_boss || m.owner.is_some());
             run.players[0].aim = 0.0;
             let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 12.0, 1000.0);
@@ -1781,7 +1781,7 @@ mod tests {
     #[test]
     fn melee_cannot_reach_a_flying_monster() {
         // Sword arc.
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 12.0);
         run.monsters[mi].airborne = true;
         let hp = run.monsters[mi].hp;
@@ -1793,13 +1793,13 @@ mod tests {
         assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
 
         // Rapier: the ranger shoots the bow instead.
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].airborne = true;
         assert_eq!(melee_target(&run, 0), None);
 
         // Barbarian dash.
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 6.0);
         run.monsters[mi].airborne = true;
         let hp = run.monsters[mi].hp;
@@ -1809,7 +1809,7 @@ mod tests {
 
     #[test]
     fn a_calm_animal_in_reach_is_no_melee_target_but_a_grudging_boar_is() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss);
         let pos = run.players[0].pos() + Vec2::new(10.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Bunny, pos, None);
@@ -1903,7 +1903,7 @@ mod tests {
 
     #[test]
     fn targets_of_either_side() {
-        let mut run = test_run(&[ClassId::ElvenRanger, ClassId::Paladin], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger, ClassId::Paladin], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
@@ -2015,7 +2015,7 @@ mod tests {
     /// Fires a shot east from a hero, with a Trunk on the tile 40 px east of it when `trunk` is set, and
     /// returns the furthest x any live shot reached and the left edge of that tile.
     fn furthest_shot_x(trunk: bool) -> (f64, f64) {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let start = run.players[0].pos();
         let (tx, ty) = crate::dungeon::Map::tile_of(start + Vec2::new(40.0, 0.0));
@@ -2045,7 +2045,7 @@ mod tests {
 
     #[test]
     fn shots_hit_the_upper_body_of_tall_figures() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let pos = run.players[0].pos() + Vec2::new(40.0, 0.0);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.spawn_enemy(EnemyType::Ogre, pos, None);
@@ -2059,11 +2059,11 @@ mod tests {
         missile_past(&mut run, mi, 32.0);
         assert_eq!(run.monsters[mi].hp, hp, "over its head");
         // The demon (58 px) is hit up to its horns.
-        let demon = run.monsters.iter().find(|m| m.kind == EntityKind::Demon).unwrap();
+        let demon = run.monsters.iter().find(|m| m.kind == EntityKind::FireDemon).unwrap();
         assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 45.0)) < demon.radius);
         assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 70.0)) > demon.radius + 3.0);
         // Small figures keep their round hitbox.
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 40.0);
         let hp = run.monsters[mi].hp;
         missile_past(&mut run, mi, 16.0);
@@ -2092,14 +2092,14 @@ mod tests {
 
     #[test]
     fn shots_carry_the_type_of_their_kind() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].damage.split, crate::defs::damage::DamageSplit::pure(crate::defs::damage::DamageType::Magical));
     }
 
     #[test]
     fn hits_by_heroes_are_shown_even_out_of_view() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 40.0);
         run.events.clear();
         run.hurt_monster(mi, Damage::physical(5.0), false, Some(0));
@@ -2118,7 +2118,7 @@ mod tests {
         for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::ElvenRanger, AbilityId::Shoot)] {
             // Up to 150 ms fast-forward: the shot starts ~40 px out, past the first orc.
             for rtt in [0.0, 0.1, 0.3] {
-                let mut run = test_run(&[class], BossId::Demon);
+                let mut run = test_run(&[class], BossId::FireDemon);
                 run.monsters.retain(|m| m.is_boss || m.owner.is_some());
                 let p = run.players[0].pos();
                 let line: Vec<usize> = [30.0, 40.0, 50.0]
@@ -2163,7 +2163,7 @@ mod tests {
 
     #[test]
     fn a_killing_bolt_flies_on() {
-        let run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         assert_eq!(run.players[0].sheet.primary.damage, 16.0);
         let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0, 50.0], &[5.0, 5.0, 24.0]);
         assert!(!r[0].0 && !r[1].0, "{r:?}");
@@ -2173,7 +2173,7 @@ mod tests {
     #[test]
     fn an_exact_kill_stops_the_shot() {
         use crate::defs::effects::{EffectKind, OnHit};
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         assert_eq!(run.players[0].sheet.primary.damage, 16.0);
         run.players[0].sheet.primary.on_hit = vec![OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain }];
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
@@ -2192,7 +2192,7 @@ mod tests {
 
     #[test]
     fn an_exact_melee_kill_stops_the_strike() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         // The rapier thrust does 18 (a_melee_kill_carries_on).
@@ -2208,7 +2208,7 @@ mod tests {
 
     #[test]
     fn spells_stop_at_the_first_enemy() {
-        let run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0], &[1.0, 1.0]);
         assert_eq!(r, [(false, 1.0), (true, 0.0)]);
 
@@ -2218,7 +2218,7 @@ mod tests {
         let mut b = Build::start(c);
         b.equipment = crate::defs::items::Equipment::starter(c).with(EquipSlot::Ring1, ItemId::SeekersBand);
         b.loadout.primary = Pick { ability: AbilityId::MagicMissile, source: Source::Item(EquipSlot::Ring1) };
-        let run = test_run_with(&[(c, b)], BossId::Demon);
+        let run = test_run_with(&[(c, b)], BossId::FireDemon);
         assert_eq!(run.players[0].sheet.primary.pierce, 1);
         let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0, 50.0], &[1.0, 1.0, 1.0]);
         assert_eq!(r, [(false, 1.0), (false, 1.0), (true, 0.0)]);
@@ -2227,7 +2227,7 @@ mod tests {
     #[test]
     fn an_immune_target_stops_the_shot() {
         use crate::defs::damage::DamageType;
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.players[0].sheet.primary.split = DamageSplit::pure(DamageType::Poison);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
@@ -2243,7 +2243,7 @@ mod tests {
 
     #[test]
     fn overkill_never_hits_the_same_enemy_twice() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         run.players[0].rtt = 0.3;
@@ -2282,7 +2282,7 @@ mod tests {
     #[test]
     fn a_through_mod_works_on_a_spell() {
         use crate::defs::loadout::{apply_mods, AbilityMod};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary.clone(), &[AbilityMod::PierceThrough(1)]);
         let dmg = run.players[0].sheet.primary.damage;
         let r = shoot_line(run, EnemyType::OrcWarrior, &[30.0, 40.0, 50.0], &[70.0, 70.0, 70.0]);
@@ -2292,11 +2292,11 @@ mod tests {
     #[test]
     fn an_unlimited_through_mod_passes_every_enemy() {
         use crate::defs::loadout::{apply_mods, AbilityMod};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary.clone(), &[AbilityMod::PierceThrough(200), AbilityMod::PierceThrough(200)]);
         assert_eq!(run.players[0].sheet.primary.pierce_through, u8::MAX);
         let dmg = run.players[0].sheet.primary.damage;
-        let mut one = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut one = test_run(&[ClassId::Wizard], BossId::FireDemon);
         one.players[0].sheet.primary = run.players[0].sheet.primary.clone();
         one.monsters.retain(|m| m.is_boss || m.owner.is_some());
         one.players[0].aim = 0.0;
@@ -2344,7 +2344,7 @@ mod tests {
 
     #[test]
     fn cooldown_is_enforced() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         try_use(&mut run, 0, true, 1);
         try_use(&mut run, 0, true, 2);
         assert_eq!(run.projectiles.len(), 1);
@@ -2379,7 +2379,7 @@ mod tests {
     #[test]
     fn an_overkill_shot_stops_at_a_chest() {
         use crate::run::objects::ObjState;
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         run.players[0].aim_dist = 60.0;
@@ -2711,7 +2711,7 @@ mod tests {
             (ClassId::ElvenRanger, false, AbilityId::SummonWolf, Shape::Summon, Anim::Cast, 8.0, None),
         ];
         for (class, primary, id, shape, anim, cooldown, kind) in rows {
-            let mut run = test_run(&[class], BossId::Demon);
+            let mut run = test_run(&[class], BossId::FireDemon);
             let sheet = run.players[0].sheet.clone();
             let a = if primary { sheet.primary } else { sheet.secondary };
             assert_eq!(a.id, id);
@@ -2749,7 +2749,7 @@ mod tests {
         // Each starter's primary and secondary against a goblin: the hit that arrives names the hero and the ability.
         for class in ClassId::ALL {
             for primary in [true, false] {
-                let mut run = test_run(&[class], BossId::Demon);
+                let mut run = test_run(&[class], BossId::FireDemon);
                 run.monsters.retain(|m| m.is_boss || m.owner.is_some());
                 let a = if primary { run.players[0].sheet.primary.clone() } else { run.players[0].sheet.secondary.clone() };
                 let hero = run.players[0].id;
@@ -2825,7 +2825,7 @@ mod tests {
         let build = Build { own: vec![id], loadout, extra, equipment, ..Build::start(class) };
         let mut heroes = vec![(class, build)];
         heroes.extend(others.iter().map(|&c| (c, Build::start(c))));
-        let mut run = super::super::tests::test_run_with(&heroes, BossId::Demon);
+        let mut run = super::super::tests::test_run_with(&heroes, BossId::FireDemon);
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 2..=tx + 14 {
@@ -3294,7 +3294,7 @@ mod tests {
 
     #[test]
     fn a_shot_carries_its_weapon_and_own_effects() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.players[0].sheet.primary.on_hit = vec![eff(EffectKind::Slowed)];
         run.players[0].sheet.primary.effect = vec![eff(EffectKind::Blind)];
         try_use(&mut run, 0, true, 1);
@@ -3305,7 +3305,7 @@ mod tests {
     #[test]
     fn one_hit_orders_weapon_own_mod_then_coat() {
         use crate::defs::loadout::{apply_mods, AbilityMod};
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         let mut bow = run.players[0].sheet.primary.clone();
         bow.on_hit = vec![eff(EffectKind::Slowed)];
         bow.effect = vec![eff(EffectKind::Blind)];
@@ -3380,7 +3380,7 @@ mod tests {
     #[test]
     fn vanish_applies_its_own_effect_list() {
         use crate::sheet::{monster_kit, Body};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 30.0, 10.0);
         let d = crate::defs::enemies::def(EnemyType::SkeletonWarrior);
         let kit = monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &run.monsters[mi].attrs, d.weapons, Body { radius: d.radius }, &[]);
@@ -3561,13 +3561,13 @@ mod tests {
         let start = Loadout::start(barb);
         let pick = Pick { ability: AbilityId::WarCry, source: Source::Own };
         let build = Build { own: vec![AbilityId::WarCry], loadout: Loadout { secondary: pick, ..start }, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) };
-        let mut run = super::super::tests::test_run_with(&[(barb, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+        let mut run = super::super::tests::test_run_with(&[(barb, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::FireDemon);
         let here = run.players[0].pos();
         run.players[1].mv.x = here.x + 50.0;
         run.players[1].mv.y = here.y;
         try_use(&mut run, 0, false, 1);
         assert_eq!(left(&run, Creature::Player(1), EffectKind::Accelerated), Some(3.0));
-        let mut run2 = super::super::tests::test_run_with(&[(barb, Build { own: vec![AbilityId::WarCry], loadout: Loadout { secondary: pick, ..Loadout::start(barb) }, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) }), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+        let mut run2 = super::super::tests::test_run_with(&[(barb, Build { own: vec![AbilityId::WarCry], loadout: Loadout { secondary: pick, ..Loadout::start(barb) }, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) }), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::FireDemon);
         let here = run2.players[0].pos();
         run2.players[1].mv.x = here.x + 100.0;
         run2.players[1].mv.y = here.y;
@@ -3778,7 +3778,7 @@ mod tests {
         let wiz = ClassId::Wizard;
         let pick = Pick { ability: AbilityId::Haste, source: Source::Own };
         let mk = || Build { own: vec![AbilityId::Haste], loadout: Loadout { secondary: pick, ..Loadout::start(wiz) }, extra: Attributes::new(0, 0, 0, 5, 2, 0), ..Build::start(wiz) };
-        let mut run = super::super::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin)), (ClassId::Barbarian, Build::start(ClassId::Barbarian))], BossId::Demon);
+        let mut run = super::super::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin)), (ClassId::Barbarian, Build::start(ClassId::Barbarian))], BossId::FireDemon);
         let here = run.players[0].pos();
         run.players[1].mv.x = here.x + 50.0;
         run.players[1].mv.y = here.y;
@@ -3980,7 +3980,7 @@ mod tests {
 
     #[test]
     fn a_swing_over_an_invisible_monster_hits_it() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
         run.players[0].aim = 0.0;
@@ -3994,7 +3994,7 @@ mod tests {
 
     #[test]
     fn a_frightened_hidden_mimic_does_not_walk() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let mimic = put_enemy(&mut run, 0, EnemyType::Mimic, 40.0, 1000.0);
         run.monsters[mimic].hiding = true;
         run.apply_effect(Creature::Monster(mimic), EffectKind::Fear, Some(3.0));
@@ -4119,7 +4119,7 @@ mod tests {
 
     #[test]
     fn a_rooted_frightened_monster_does_not_play_its_walk() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
         run.apply_effect(Creature::Monster(g), EffectKind::Fear, Some(3.0));
         run.apply_effect(Creature::Monster(g), EffectKind::Entangled, Some(3.0));
@@ -4247,7 +4247,7 @@ mod tests {
     #[test]
     fn passes_through_rules() {
         use crate::defs::damage::{DamageSplit, DamageType::*};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 40.0);
         let c = Creature::Monster(mi);
         assert!(!run.passes_through(c, &DamageSplit::physical()), "a plain orc has a body");
@@ -4266,7 +4266,7 @@ mod tests {
     #[test]
     fn passes_through_reads_the_final_resistance() {
         use crate::defs::damage::{DamageSplit, DamageType::*};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 40.0);
         make_bodiless(&mut run, mi);
         run.monsters[mi].res.set(Physical, 0.5);
@@ -4277,7 +4277,7 @@ mod tests {
 
     /// A ranger aimed east with a ghost 60 px away; the ghost is invisible and has 100 HP.
     fn ranger_and_ghost() -> (Run, usize) {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.objects.clear();
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
@@ -4304,7 +4304,7 @@ mod tests {
 
     /// An Elven Ranger alone (a clear field), aiming east at `aim_dist`; fires its primary.
     fn ranger_fires(aim_dist: f64, rtt: f64) -> Run {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         run.players[0].aim_dist = aim_dist;
@@ -4344,7 +4344,7 @@ mod tests {
 
     /// A Goblin archer (10 px tall) `d` px east of the ranger, who fires at `aim_dist`; its HP lost and the lands.
     fn arrow_at_goblin(d: f64, aim_dist: f64, tweak: impl Fn(&mut Run, usize)) -> (f64, usize) {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let gi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, d, 1000.0);
         tweak(&mut run, gi);
@@ -4376,7 +4376,7 @@ mod tests {
 
     #[test]
     fn a_creature_just_beyond_the_landing_point_is_not_hit() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let gi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 70.0, 1000.0);
         // Its edge is 0.5 px out of the arrow's reach at the landing point.
@@ -4468,7 +4468,7 @@ mod tests {
 
     #[test]
     fn magic_missile_hits_bodiless() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 60.0, 100.0);
         make_bodiless(&mut run, gi);
@@ -4502,7 +4502,7 @@ mod tests {
     #[test]
     fn explosion_passes_bodiless() {
         use crate::defs::damage::{DamageSplit, DamageType};
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 40.0, 100.0);
         make_bodiless(&mut run, gi);
@@ -4522,7 +4522,7 @@ mod tests {
         // The wolf's Pounce through an incorporeal enemy: nothing happens, and it does not end the leap.
         let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]);
         let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
@@ -4539,7 +4539,7 @@ mod tests {
 
     #[test]
     fn hero_dash_passes_bodiless() {
-        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::FireDemon);
         let mi = put_monster_near(&mut run, 0, 6.0);
         run.monsters[mi].hp = 1000.0;
         make_bodiless(&mut run, mi);
@@ -4736,7 +4736,7 @@ mod hero_sides {
 
     /// Heroes of `classes` on open floor with no monsters but the boss, hero `i` standing `40 * i` px east of hero 0.
     fn crowd(classes: &[ClassId]) -> Run {
-        let mut run = test_run(classes, BossId::Demon);
+        let mut run = test_run(classes, BossId::FireDemon);
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         for i in 1..classes.len() {

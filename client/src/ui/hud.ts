@@ -362,7 +362,7 @@ export class Hud {
       if (key !== this.bossKey) {
         this.bossKey = key;
         const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}`;
-        this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].name} ${tags}</div><div class="bbar"><div class="fill"></div></div>`;
+        this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].short} ${tags}</div><div class="bbar"><div class="fill"></div></div>`;
         this.bossFill = this.boss.querySelector('.fill');
       }
       this.bossFill!.style.width = `${(s.boss.hp / s.boss.max_hp) * 100}%`;

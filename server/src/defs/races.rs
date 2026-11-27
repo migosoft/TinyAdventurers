@@ -248,7 +248,7 @@ mod tests {
         assert_eq!(lich.res.get(Poison), 1.0);
         let dragon = bosses::profile(BossId::Dragon);
         assert_eq!(dragon.res.get(Heat), 1.0);
-        let demon = bosses::profile(BossId::Demon);
+        let demon = bosses::profile(BossId::FireDemon);
         assert!((demon.res.get(Magical) - 0.4).abs() < 1e-12);
         assert!((demon.res.get(Cold) + 0.5).abs() < 1e-12);
     }
@@ -371,7 +371,7 @@ mod tests {
         let adj = Adjust { cone: Some(200.0), neck: Some(10.0), turn: Some(0.9), ..Adjust::NONE };
         let p = profile(&[Race::Ogre], adj);
         assert_eq!((p.sight.cone, p.sight.neck, p.turn), (200.0, 10.0, 0.9));
-        assert_eq!(bosses::profile(BossId::Demon).turn, 0.5);
+        assert_eq!(bosses::profile(BossId::FireDemon).turn, 0.5);
         assert_eq!(bosses::profile(BossId::Dragon).turn, 0.5, "the Dragon race");
         assert_eq!(bosses::profile(BossId::Lich).turn, 1.0);
     }

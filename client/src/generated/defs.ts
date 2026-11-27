@@ -16,7 +16,6 @@ export const KIND = {
   "Chort": 20,
   "Crystal": 83,
   "Deer": 28,
-  "Demon": 30,
   "DireWolf": 23,
   "Disciple": 17,
   "Dragon": 32,
@@ -24,6 +23,7 @@ export const KIND = {
   "ElvenRanger": 3,
   "FireBolt": 59,
   "FireBreath": 56,
+  "FireDemon": 30,
   "FireOrb": 57,
   "FirePatch": 70,
   "Fireball": 51,
@@ -32,6 +32,7 @@ export const KIND = {
   "GloomBolt": 60,
   "GoblinArcher": 10,
   "HolyGround": 71,
+  "IceDemon": 34,
   "Imp": 19,
   "Judgement": 64,
   "Knight": 26,
@@ -1121,6 +1122,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 12.0,
     "r": 4.0
   },
+  "34": {
+    "h": 58.0,
+    "r": 11.0
+  },
   "80": {
     "h": 0.0,
     "r": 6.0
@@ -1769,10 +1774,11 @@ export const TAG_NAME: Record<number, string> = {
   27: "Bunny",
   28: "Deer",
   29: "Stag",
-  30: "Demon",
+  30: "Fire Demon",
   31: "Lich",
   32: "Dragon",
   33: "Boar",
+  34: "Ice Demon",
   80: "Chest",
   81: "Barrel",
 };

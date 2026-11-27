@@ -28,13 +28,14 @@ impl ClassId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum BossId {
-    Demon,
+    FireDemon,
     Lich,
     Dragon,
+    IceDemon,
 }
 
 impl BossId {
-    pub const ALL: [BossId; 3] = [BossId::Demon, BossId::Lich, BossId::Dragon];
+    pub const ALL: [BossId; 4] = [BossId::FireDemon, BossId::Lich, BossId::Dragon, BossId::IceDemon];
 }
 
 /// Which kind of level a run plays.

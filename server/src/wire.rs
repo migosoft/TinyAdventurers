@@ -220,7 +220,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             cd_rate: 1.25,
             charmed_by: Some("the Orc Warrior".into()),
         },
-        boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true }),
+        boss: Some(BossBar { kind: BossId::FireDemon, hp: 1234.5, max_hp: 2000.0, immune: true }),
         ev: vec![
             Ev::Dmg { x: 10.3, y: 20.7, v: 12.5, crit: true, p: false, ty: 2, imm: false },
             Ev::Heal { x: 11.0, y: 21.0, v: 4.25, p: true },

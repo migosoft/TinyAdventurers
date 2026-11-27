@@ -27,7 +27,7 @@ fn count(run: &Run, kind: EntityKind) -> usize {
 /// A fresh run whose level setup has a mimic (about one chest in four is one).
 fn run_with_a_mimic() -> Run {
     (1..200)
-        .map(|seed| test_run_seed(&[ClassId::Wizard], BossId::Demon, seed))
+        .map(|seed| test_run_seed(&[ClassId::Wizard], BossId::FireDemon, seed))
         .find(|r| r.monsters.iter().any(|m| m.kind == EntityKind::Mimic))
         .expect("some seed has a mimic")
 }
@@ -43,7 +43,7 @@ fn lit(ents: Vec<EntSnap>) -> Sent {
 
 #[test]
 fn monsters_are_numbered_per_kind_in_spawn_order() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     let n = count(&run, EntityKind::GoblinArcher);
     let m = count(&run, EntityKind::OrcWarrior);
     let pos = run.players[0].pos();
@@ -91,7 +91,7 @@ fn mimics_are_only_spawned_hiding() {
 
 #[test]
 fn heroes_and_the_wolf_go_by_name() {
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     let hero = run.players[0].id;
     let name = run.players[0].name.clone();
     assert_eq!(tag_of(&run, hero), name);
@@ -165,7 +165,7 @@ fn a_snapw(log: Option<LogW>) -> SnapW {
 
 #[test]
 fn nothing_is_recorded_or_sent_while_off() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     assert!(!on(&run));
     // The encoding without the log is the thirteen-field array, byte for byte.
     let w = a_snapw(None);
@@ -227,7 +227,7 @@ fn orc_at(run: &mut Run, tile: (i32, i32)) -> usize {
 
 #[test]
 fn a_line_naming_an_unseen_creature_is_not_sent() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     let mi = orc_at(&mut run, (tx + 4, ty));
@@ -246,7 +246,7 @@ fn a_line_naming_an_unseen_creature_is_not_sent() {
 fn a_creature_in_the_dark_is_sent_but_neither_tagged_nor_logged() {
     use crate::defs::lights::LightKind;
     use crate::run::light::Anchor;
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     run.layout.map.set(tx + 2, ty, Tile::Floor);
     run.players[0].darkvision = Some(0.0);
@@ -275,7 +275,7 @@ fn a_creature_in_the_dark_is_sent_but_neither_tagged_nor_logged() {
 
 #[test]
 fn the_unseen_short_line_goes_only_to_its_viewer() {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     set_prefs(&mut run, 1, true, true);
@@ -297,7 +297,7 @@ fn the_unseen_short_line_goes_only_to_its_viewer() {
 
 #[test]
 fn party_members_are_always_seen() {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     run.players[1].mv.x += 3000.0;
@@ -309,7 +309,7 @@ fn party_members_are_always_seen() {
 
 #[test]
 fn details_off_sends_headlines_only() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     walled(&mut run);
     let h0 = run.players[0].id;
     let (view, dark) = view_of(&mut run, 0);
@@ -327,7 +327,7 @@ fn details_off_sends_headlines_only() {
 
 #[test]
 fn the_log_is_capped_per_snapshot() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     let h0 = run.players[0].id;
@@ -349,7 +349,7 @@ fn the_log_is_capped_per_snapshot() {
 
 #[test]
 fn the_log_message_turns_recording_on() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     assert!(!on(&run));
     run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::RulesLog { on: true, details: false } });
     assert!(on(&run));
@@ -362,7 +362,7 @@ fn the_log_message_turns_recording_on() {
 
 #[test]
 fn leaving_forgets_the_player() {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     run.handle(RunCmd::Msg { conn: 2, msg: ClientMsg::RulesLog { on: true, details: true } });
     assert!(on(&run));
     run.handle(RunCmd::Leave { conn: 2 });
@@ -382,7 +382,7 @@ fn wizard_with(id: AbilityId, extra: Attributes) -> Run {
     let start = Loadout::start(ClassId::Wizard);
     let loadout = Loadout { primary: Pick { ability: id, source: Source::Own }, ..start };
     let build = Build { own: vec![id], loadout, extra, equipment: Equipment::starter(ClassId::Wizard), ..Build::start(ClassId::Wizard) };
-    let mut run = crate::run::tests::test_run_with(&[(ClassId::Wizard, build)], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::Wizard, build)], BossId::FireDemon);
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     for y in ty - 3..=ty + 3 {
         for x in tx - 2..=tx + 14 {
@@ -434,7 +434,7 @@ fn the_logged_damage_is_the_damage_dealt() {
         ("fire on an imp", Box::new(|run, _| Damage::new(11.0, DamageSplit::pure(DamageType::Heat)).by(hero_id(run), What::Ability(AbilityId::Fireball))), EnemyType::Imp),
     ];
     for (name, make, etype) in cases {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         run.log.forced = true;
         run.monsters.retain(|m| m.is_boss);
         let pos = run.players[0].pos() + crate::math::Vec2::new(60.0, 0.0);
@@ -558,7 +558,7 @@ fn the_shielded_boss_says_so() {
 
 #[test]
 fn damage_from_an_unseen_attacker_gives_the_short_line() {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     set_prefs(&mut run, 1, true, true);
@@ -586,7 +586,7 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
 #[test]
 fn a_hit_that_sets_off_another_files_both_in_order() {
     // Two hits opened one inside the other, as a kill that sets off a blast would: the outer one is filed first.
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     run.log.forced = true;
     let hero = run.players[0].id;
     let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
@@ -640,7 +640,7 @@ fn hero_secondary(class: ClassId, id: AbilityId, extra: Attributes) -> Run {
     let start = Loadout::start(class);
     let loadout = Loadout { secondary: Pick { ability: id, source: Source::Own }, ..start };
     let build = Build { own: vec![id], loadout, extra, equipment: Equipment::starter(class), ..Build::start(class) };
-    let mut run = crate::run::tests::test_run_with(&[(class, build)], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(class, build)], BossId::FireDemon);
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     for y in ty - 3..=ty + 3 {
         for x in tx - 2..=tx + 14 {
@@ -695,7 +695,7 @@ fn the_logged_duration_is_the_duration_applied() {
     assert_eq!(hit.secs, Some(left), "bit-equal");
     assert!(all_text(hit).contains(&n1(left)), "{}", all_text(hit));
     // The lich's Sleep on a hero.
-    let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Paladin], BossId::FireDemon);
     run.log.forced = true;
     let _ = take(&mut run);
     let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain };
@@ -777,7 +777,7 @@ fn each_refusal_names_its_rule() {
     assert!(!run.apply(c, burn(10)));
     said(&only_rec(&mut run), "Burning: refused (in water)");
     // A hero's race: the elf is immune to Sleep.
-    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
     run.log.forced = true;
     let _ = take(&mut run);
     run.apply(Creature::Player(0), Apply::from_hit(OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain }));
@@ -933,7 +933,7 @@ fn a_full_hero_gets_no_heal_line() {
 #[test]
 fn a_resistance_over_100_percent_heals_nothing() {
     // Resistance over 100 % is capped: the hit is immune, nothing heals and no heal line appears.
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     run.log.forced = true;
     run.players[0].hp = 1.0;
     run.players[0].res.set(DamageType::Heat, 1.5);
@@ -962,7 +962,7 @@ fn a_kill_names_the_killer() {
 fn a_death_follows_its_own_hit_even_when_hits_nest() {
     // A hit sets off another before it ends (as a kill that sets off a blast would): both are filed in
     // order, each death right after the hit that caused it.
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     run.log.forced = true;
     let hero = run.players[0].id;
     let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
@@ -1187,7 +1187,7 @@ fn too_close_is_logged_once_a_second() {
     let start = Loadout::start(ClassId::ElvenRanger);
     let loadout = Loadout { primary: Pick { ability: AbilityId::Volley, source: Source::Own }, ..start };
     let build = Build { own: vec![AbilityId::Volley], loadout, equipment: Equipment::starter(ClassId::ElvenRanger), ..Build::start(ClassId::ElvenRanger) };
-    let mut run = crate::run::tests::test_run_with(&[(ClassId::ElvenRanger, build)], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::ElvenRanger, build)], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss || m.owner.is_some());
     run.log.forced = true;
     let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
@@ -1240,7 +1240,7 @@ fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
     let pick = Pick { ability: AbilityId::GroundSlam, source: Source::Own };
     let equipment = Equipment::starter(ClassId::Barbarian).with(crate::defs::items::EquipSlot::Melee, crate::defs::items::ItemId::WarHammer);
     let build = Build { own: vec![AbilityId::GroundSlam], loadout: Loadout { secondary: pick, ..Loadout::start(ClassId::Barbarian) }, extra: Attributes::new(2, 0, 0, 0, 0, 0), equipment, ..Build::start(ClassId::Barbarian) };
-    let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, build)], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, build)], BossId::FireDemon);
     crate::run::tests::without_neutrals(&mut run);
     run.log.forced = true;
     let (tx, ty) = Map::tile_of(run.players[0].pos());
@@ -1298,7 +1298,7 @@ fn names(text: &str, tag: &str) -> bool {
 fn leak_run(class: ClassId, primary: AbilityId, secondary: AbilityId) -> Run {
     let loadout = Loadout { primary: Pick { ability: primary, source: Source::Own }, secondary: Pick { ability: secondary, source: Source::Own } };
     let build = Build { own: vec![primary, secondary], loadout, extra: Attributes::new(1, 0, 0, 7, 0, 7), equipment: Equipment::starter(class), ..Build::start(class) };
-    let mut run = crate::run::tests::test_run_with(&[(class, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(class, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::FireDemon);
     run.monsters.retain(|m| m.is_boss || m.owner.is_some());
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     for y in ty - 4..=ty + 4 {
@@ -1695,7 +1695,7 @@ fn an_arrow_from_a_dead_archer_does_not_name_it() {
 #[test]
 fn an_effect_on_a_hit_from_something_unseen_adds_only_its_name_to_the_short_line() {
     // Ruling 11: the hero's own state may show, the attacker's power may not.
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
@@ -1714,7 +1714,7 @@ fn an_effect_on_a_hit_from_something_unseen_adds_only_its_name_to_the_short_line
 
 #[test]
 fn a_pure_effect_hit_from_something_unseen_does_not_reach_the_hero_with_its_power() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
@@ -1736,7 +1736,7 @@ fn haste_and_purify_credit_the_user_on_every_target() {
     let wiz = ClassId::Wizard;
     let pick = Pick { ability: AbilityId::Haste, source: Source::Own };
     let mk = || Build { own: vec![AbilityId::Haste], loadout: Loadout { secondary: pick, ..Loadout::start(wiz) }, extra: Attributes::new(0, 0, 0, 5, 2, 0), ..Build::start(wiz) };
-    let mut run = crate::run::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+    let mut run = crate::run::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::FireDemon);
     run.log.forced = true;
     let here = run.players[0].pos();
     run.players[1].mv.x = here.x + 30.0;
@@ -1763,7 +1763,7 @@ fn haste_and_purify_credit_the_user_on_every_target() {
 #[test]
 fn an_invisible_monsters_records_are_seen_by_nobody_until_it_is_revealed() {
     use crate::defs::effects::EffectKind;
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     run.log.forced = true;
     let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
     assert!(!record::seen_creature(&run, Creature::Monster(mi)).gone);
@@ -1781,7 +1781,7 @@ fn an_invisible_monsters_records_are_seen_by_nobody_until_it_is_revealed() {
 fn a_skip_line_naming_an_invisible_monster_is_held_back() {
     use crate::defs::effects::EffectKind;
     use crate::run::targets::Skip;
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
     run.log.forced = true;
     let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
     run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
@@ -1849,7 +1849,7 @@ fn n2_rounds_to_two_decimals_and_drops_trailing_zeros() {
 
 /// A hero poisoned by an archer behind a wall; the poison's ticks, as every hero's log gets them.
 fn poisoned_by_an_unseen_archer(hp: Option<f64>) -> (Run, Vec<LogRec>, String) {
-    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::FireDemon);
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     set_prefs(&mut run, 1, true, true);

@@ -1114,7 +1114,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
   });
 
   describe('the demon as a built figure (#379)', () => {
-    const demon = (o: Partial<EntState> = {}) => ent(11, KIND.Demon, o);
+    const demon = (o: Partial<EntState> = {}) => ent(11, KIND.FireDemon, o);
     const painted = (): FigureKit => ({ ...kit, picture: (k) => (k === 'demon' ? { w: 8, h: 8, data: new Uint8Array(4) } : null) });
     const built = (ents: EntState[], k: FigureKit = painted(), fg = make()) => fg.frame(frame(ents), cam(), look({ kit: k, ...all }));
 
@@ -1174,7 +1174,7 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
     });
 
     it('two demons give two instances with their own buffers', () => {
-      const out = built([demon(), ent(13, KIND.Demon, { x: at(2) })]);
+      const out = built([demon(), ent(13, KIND.FireDemon, { x: at(2) })]);
       expect(out.built.length).toBe(2);
       expect(out.built[0].body.position === out.built[1].body.position).toBe(false);
       expect(out.built[0].hull!.position === out.built[1].hull!.position).toBe(false);
@@ -1929,7 +1929,7 @@ describe('Figures3d on the bed of a dip (#324)', () => {
 
   it('a hero, a big figure and the demon all float LAVA_SINK below the surface: the pool has one depth (#404)', () => {
     expect(bedAt(dm, 6.5, 1.5)).toBeLessThan(LAVA_LEVEL - LAVA_SINK);   // the pool is deeper than the sink: no one stands on its bed
-    for (const kind of [KIND.Knight, KIND.Ogre, KIND.Demon]) {
+    for (const kind of [KIND.Knight, KIND.Ogre, KIND.FireDemon]) {
       const fg = dipFigs();
       run(fg, () => [ent(10, kind, { side: SIDE.Friendly, ...at2(6, 1) })], 600);
       expect(fg.anchors.get(10)!.y, `${kind}`).toBeCloseTo(LAVA_LEVEL - LAVA_SINK, 2);
