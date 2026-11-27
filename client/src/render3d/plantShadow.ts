@@ -15,6 +15,10 @@ export interface TileCam { C: Vec3; R: Vec3; U: Vec3; F: Vec3; ext: Vec3; persp:
 export interface ShadowTile { kind: 'crack' | 'face'; slot: number; face: number; cam: TileCam }
 export interface ShadowPlan { tiles: ShadowTile[]; lightFaces: Int16Array; crackTile: Int16Array }
 
+/** The plants that cast: `plants` without the unseen ones (`hidden`, matched by foot), so no tile is spent on a light that reaches only those. */
+export const castingPlants = (plants: readonly PlantBound[], hidden: readonly { x: number; z: number }[]): PlantBound[] =>
+  plants.filter((p) => !hidden.some((h) => h.x === p.x && h.z === p.z));
+
 /** The six faces: +x, -x, +y, -y, +z, -z. R = F x U. */
 export const FACES: readonly { F: Vec3; U: Vec3 }[] = [
   { F: [1, 0, 0], U: [0, 1, 0] },

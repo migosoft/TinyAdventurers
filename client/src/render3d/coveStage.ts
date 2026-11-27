@@ -1,6 +1,6 @@
 // The stage of the ?r3d=cove page (#329): the nymph's cove in the 3D view, no server, no login. A dark stone room of the real cove's size with
 // the trunk tile at its middle, the cove's willow and bushes as grown trees with their shadows, its five suns' cracks, its tufts and ferns as bushels in the ground cover (with moss in the room), its seven pixies, two wall
-// torches and a knight to walk with WASD, with the sight on. There is no sun: the trees are lit by the torches, the pixies and the base light.
+// torches and a knight to walk with WASD, with the sight on. There is no sun, but the cove's five suns show as cracks in the ceiling; the trees are lit by the torches, the pixies, the cracks and the base light, and cast real shadows.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { ANIM, CONST, KIND, LEAF_PALETTE, LIGHT, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
 import { LightField } from '../game/light';

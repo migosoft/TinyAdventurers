@@ -173,7 +173,7 @@ export class RunView3d implements RunView {
   /** The figures that scare its frogs this frame: the drawn ones the viewer sees (reused every frame). */
   private readonly frogScares: { x: number; z: number }[] = [];
   private fireflies: Fireflies | null = null;
-  // The nymph's cove (dungeon runs): its tufts and ferns as bushel spots, the bushes' casters, the pixies.
+  // The nymph's cove (dungeon runs): its tufts and ferns as bushel spots, the pixies.
   private cove: Cove3d | null = null;
   // The ground cover's heights, once the stage has set a good cover (#330); null before and after a failed one: nothing is lifted.
   private coverField: CoverField | null = null;
@@ -556,7 +556,6 @@ export class RunView3d implements RunView {
     return this.stats(c, view.meshes);
   }
 
-  /** The crystals and wall torches of this frame (reused object): a crystal whose light is off is broken (#380), a torch out (#391); a rebuilt view learns it on its first frame. */
   /** The cove's plant shadows of this frame (#333): the plants built so far, and the feet the viewer does not see (the mask of the last frame), which cast nothing. Null without a cove. */
   private plantShadowsIn(p: R3dParams): FrameInput['plantShadows'] {
     const size = plantShadowOf(p);
@@ -566,6 +565,7 @@ export class RunView3d implements RunView {
     return { plants, hidden, ...size };
   }
 
+  /** The crystals and wall torches of this frame (reused object): a crystal whose light is off is broken (#380), a torch out (#391); a rebuilt view learns it on its first frame. */
   private readonly wallLightFrame = { off: (id: number): boolean => this.field.lights.get(id)?.on === false, now: 0 };
   private wallLightsIn(now: number): { off: (id: number) => boolean; now: number } {
     this.wallLightFrame.now = now;

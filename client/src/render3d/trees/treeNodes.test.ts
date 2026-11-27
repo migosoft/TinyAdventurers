@@ -7,7 +7,7 @@ import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
 import { makeBrushUniforms } from '../windNodes';
-import { HIDDEN_CAP, makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
+import { HIDDEN_CAP, setHidden, makeTreeShared, leafGone, packTreeStreams, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
 import { buildTree } from './build';
 import { GROUND, LEAF_DRIFT, LEAF_FADE, LEAF_FALL, LEAF_FLUTTER, LEAF_FLUTTER_RATE, LEAF_HALF, LEAF_LIE, LEAF_LIFE, newLeafBuf, pushLeaves, type LeafBuf } from './leaves';
 import { leafGeometry } from './treeLayer';
@@ -131,9 +131,11 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       const v = vertex(B, cast, { compare: true, geometry });
       expect(v).toMatch(/-50\.0/);
       expect(v).toContain('brushSum');
-      const hidden = wgsl ? /treeHidden/ : /vec4 \w+\[8\]/; // GLSL drops an array uniform's name
+      const hidden = wgsl ? /treeHidden/ : new RegExp(`vec4 \\w+\\[${HIDDEN_CAP}\\]`); // GLSL drops an array uniform's name
       expect(v).toMatch(hidden);
-      expect(vertex(B, build(true).mats.sun!, { compare: true, geometry })).not.toMatch(hidden);
+      // Other 16-entry arrays exist (the brush's): the cast pass must carry one array more than the sun's.
+      const n = (c: string) => [...c.matchAll(new RegExp(hidden.source, 'g'))].length;
+      expect(n(v)).toBeGreaterThan(n(vertex(B, build(true).mats.sun!, { compare: true, geometry })));
     });
 
     it('the three materials collapse a leafless vertex with the same code', () => {
@@ -268,10 +270,22 @@ describe('tree material state', () => {
     expect(c.positionNode).not.toBe(mats.depth.positionNode);
   });
 
-  it('the hidden feet are 8 uniform entries, all empty at first', () => {
+  it('the hidden feet are HIDDEN_CAP uniform entries, all empty at first', () => {
     const h = makeTreeShared().hidden;
     expect(h.array).toHaveLength(HIDDEN_CAP);
     for (const e of h.array as { z: number }[]) expect(e.z).toBe(0);
+  });
+
+  it('setHidden keeps the feet of every unseen plant of a cove (12 plants) and clears the empty slots', () => {
+    expect(HIDDEN_CAP).toBeGreaterThanOrEqual(12);
+    const s = makeTreeShared();
+    const feet = Array.from({ length: 12 }, (_, i) => ({ x: 3 + i, z: 5 + 2 * i }));
+    setHidden(s, feet);
+    const a = s.hidden.array as { x: number; y: number; z: number }[];
+    feet.forEach((f, i) => expect([a[i].x, a[i].y, a[i].z]).toEqual([f.x, f.z, 1]));
+    for (let i = 12; i < HIDDEN_CAP; i++) expect(a[i].z).toBe(0);
+    setHidden(s, feet.slice(0, 2));
+    expect(a[2].z).toBe(0);
   });
 
   it('all three take their position and their collapse from the one shared treePoint', () => {

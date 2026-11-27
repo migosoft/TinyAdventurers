@@ -5,7 +5,7 @@ import { CRACK_CAP } from './air/cracks';
 import { CHASM_BED } from './dips/shape';
 import { LIGHT_CAP, type Light } from './light';
 import { sunCamera } from './sunNodes';
-import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, atlasLayout, faceHits, packTable, tileRect, planTiles, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
+import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, atlasLayout, faceHits, packTable, tileRect, planTiles, castingPlants, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
 
 const light = (x: number, y: number, z: number, shadow = true, radius = 6): Light => ({ x, y, z, radius, r: 1, g: 1, b: 1, shadow, skip: -1 });
 const crack = (fx: number, fz: number): Crack => ({
@@ -98,6 +98,15 @@ describe('planTiles', () => {
     expect(plan.tiles.length).toBe(3);
     expect(plan.tiles.map((t) => [t.kind, t.slot, t.face])).toEqual(full.tiles.slice(0, 3).map((t) => [t.kind, t.slot, t.face]));
     expect(Array.from(plan.lightFaces).filter((v) => v >= 0).length + Array.from(plan.crackTile).filter((v) => v >= 0).length).toBe(3);
+  });
+  it('a light that reaches only a hidden plant gets no tile once the hidden plants are left out', () => {
+    const all = [plant(8, 5), plant(40, 40)];
+    const hidden = [{ x: 40, z: 40 }];
+    const lights = [light(40, 1, 38)];
+    expect(planTiles(lights, [], all, 99).tiles.length).toBeGreaterThan(0);
+    const cast = castingPlants(all, hidden);
+    expect(cast).toEqual([all[0]]);
+    expect(planTiles(lights, [], cast, 99).tiles.length).toBe(0);
   });
   it('no plants gives no tiles', () => {
     expect(planTiles([light(5, 1, 5)], [crack(8, 5)], [], 99).tiles.length).toBe(0);

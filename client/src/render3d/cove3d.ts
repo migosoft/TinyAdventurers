@@ -176,7 +176,7 @@ export class Cove3d {
     return this.willow.spec;
   }
 
-  /** The forest's tree builder: the willow comes from the fit that already built it, every other tree from `base`. */
+  /** The forest's tree builder (for the cove's own forest only: it records the looks `plants()` reports): the willow comes from the fit that already built it, every other tree from `base`. */
   builder(base: (s: TreeSpec) => BuiltTree = buildTree): (s: TreeSpec) => BuiltTree {
     const key = lookKey(this.willow.spec);
     return (s) => {

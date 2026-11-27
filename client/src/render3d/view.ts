@@ -58,8 +58,8 @@ import type { AirParts } from './air/airParts';
 import { cardMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
-import { PLANT_FAR, PLANT_NEAR, TABLE_LEN, atlasLayout, packTable, planTiles, tileRect, type PlantBound } from './plantShadow';
-import { HIDDEN_CAP } from './trees/treeNodes';
+import { castingPlants, PLANT_FAR, PLANT_NEAR, TABLE_LEN, atlasLayout, packTable, planTiles, tileRect, type PlantBound } from './plantShadow';
+import { setHidden } from './trees/treeNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
 import { treeMaterials } from './trees/treeNodes';
@@ -1306,15 +1306,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       plantTiles = 0;
       if (castScene && plantShadowsOn(f)) {
         const ps = f.plantShadows!;
-        const plan = planTiles(f.lights, f.cracks ?? [], ps.plants, ps.cap);
+        const plan = planTiles(f.lights, f.cracks ?? [], castingPlants(ps.plants, ps.hidden), ps.cap);
         const { perRow, size } = atlasLayout(ps.tile, ps.cap);
         plantTable ??= new Float32Array(TABLE_LEN * 4);
         if (plan.tiles.length > 0) {
           const depth = plantTargetFor(size);
-          for (let i = 0; i < HIDDEN_CAP; i++) {
-            const h = ps.hidden[i];
-            (trees.shared.hidden.array[i] as Vector4).set(h ? h.x : 0, h ? h.z : 0, h ? 1 : 0, 0);
-          }
+          setHidden(trees.shared, ps.hidden);
           const rt = plantTarget!;
           const autoClear = renderer.autoClear;
           // Three reads a render target's own viewport and scissor, in px from the top left. One clear for the whole atlas: WebGPU would clear the

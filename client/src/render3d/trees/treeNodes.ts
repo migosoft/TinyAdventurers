@@ -36,7 +36,14 @@ const GONE = [0, -50, 0] as const;
 const DAB_CELL = 2.3;
 
 /** How many plant feet the cast pass can hide at once (first guess). */
-export const HIDDEN_CAP = 8;
+export const HIDDEN_CAP = 16;
+/** Writes the feet of the unseen plants into `shared.hidden` (empty slots cleared). shortcut: more than `HIDDEN_CAP` unseen plants leave the rest casting; a cove has at most 12 plants, raise the cap with a bigger one. */
+export function setHidden(shared: TreeShared, hidden: readonly { x: number; z: number }[]): void {
+  for (let i = 0; i < HIDDEN_CAP; i++) {
+    const h = hidden[i];
+    (shared.hidden.array[i] as Vector4).set(h ? h.x : 0, h ? h.z : 0, h ? 1 : 0, 0);
+  }
+}
 /** A vertex whose plant foot is this near a hidden foot (tiles) is moved away in the cast pass. */
 const HIDDEN_REACH = 0.02;
 
