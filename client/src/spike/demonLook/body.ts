@@ -128,11 +128,16 @@ function prims(id: (n: string) => number): Prim[] {
     cone([0, 2.16, 0], [0, 2.4, 0.08], 0.17, 0.14, id('neck'), sk(0.3)),
     ball([0, 2.5, 0.12], [0.175, 0.18, 0.2], id('head'), sk(0.1)),
     { ...cone([0, 2.34, 0.3], [0, 2.2, 0.37], 0.06, 0.012, id('jaw'), sk(0), 0.02), wr: 0.02 },
-    cone([0, 2.66, 0.24], [0, 2.93, 0.17], 0.07, 0.008, id('head'), HORN, 0.015),
+    ...(on('crest') ? [] : [cone([0, 2.66, 0.24], [0, 2.93, 0.17], 0.07, 0.008, id('head'), HORN, 0.015)]),
     { ...ball([0, 2.43, 0.27], [0.095, 0.075, 0.1], id('head'), sk(0), 0.04), wr: 0.02 },
     { ...ball([0, 2.335, 0.24], [0.095, 0.045, 0.11], id('jaw'), sk(0), 0.02), wr: 0.02 },
     { ...ball([0, 2.365, on('teeth') ? 0.29 : 0.31], on('teeth') ? [0.075, 0.018, 0.1] : [0.085, 0.02, 0.13], 0, sk(0), 0.01), sub: true },
   ];
+  // the crest: an arrowhead of a plate standing on the middle of the head, rising from the forehead back and up to a point
+  if (on('crest')) {
+    const d = norm([0, 0.86, -0.5]);
+    for (const [c, h] of [[[0, 2.73, 0.155], [0.27, 0.1, 0.012]], [[0, 2.64, 0.2], [0.14, 0.125, 0.016]]] as [V, V][]) { const pl = plate(c, h, d, [1, 0, 0], id('head'), HORN, 0.012); pl.box!.rhomb = true; P.push(pl); }
+  }
   // the grin: the mouth's line runs round the muzzle and turns up into the cheeks
   if (on('teeth')) for (const s of [1, -1]) for (let i = 0; i + 1 < SMILE.length; i++) P.push({ ...cone(mx(s, SMILE[i]), mx(s, SMILE[i + 1]), 0.015, i === 2 ? 0.006 : 0.015, 0, sk(0), 0.008), sub: true });
   for (const s of [1, -1]) {
@@ -140,7 +145,7 @@ function prims(id: (n: string) => number): Prim[] {
     const m = (v: V) => mx(s, v);
     const c = (a: V, b: V, ra: number, rb: number, bone: string, tag: Tag, k?: number) => P.push(cone(m(a), m(b), ra, rb, n(bone), tag, k));
     const e = (a: V, r: V, bone: string, tag: Tag, k?: number) => P.push(ball(m(a), r, n(bone), tag, k));
-    P.push({ ...cone(m([0.04, 2.478, 0.325]), m([0.115, 2.512, 0.3]), 0.014, 0.018, 0, sk(0), 0.012), sub: true });
+    P.push({ ...cone(m([0.04, 2.478, 0.325]), m([0.115, 2.512, 0.3]), on('gaze') ? 0.007 : 0.014, on('gaze') ? 0.009 : 0.018, 0, sk(0), 0.012), sub: true });
     P.push(ball(m([0.17, 2.0, 0.14]), [0.2, 0.16, 0.11], id('chest'), sk(1)), ball(m([0.26, 1.82, -0.1]), [0.15, 0.28, 0.16], id('chest'), sk(0.3)));
     const eb = (a: V, r: V, bone: string, tag: Tag, k?: number) => P.push(ball(m(a), r, id(bone), tag, k));
     if (on('traps')) { eb([0.17, 2.2, -0.08], [0.2, 0.115, 0.14], 'chest', sk(0.3), 0.05); P.push(cone(m([0.07, 2.37, -0.04]), m([0.37, 2.14, -0.07]), 0.105, 0.095, id('chest'), sk(0.3), 0.05)); }
@@ -339,6 +344,9 @@ export function build(r: Rig): Built {
     tube(tubes, [WR, HM, WE].map(m), [0.1, 0.06, 0.085], [w1, w1], () => LEATHER, 8, 10);
     tube(tubes, [WE, FM, WW].map(m), [0.09, 0.05, 0.075], [w2, w2], () => LEATHER, 8, 10);
     tube(tubes, [WW, add(WW, [0.06, 0.2, 0.08]), add(WW, [0.02, 0.4, 0.14])].map(m), [0.05, 0.03, 0.004], [w2, w2], (u) => [1, 1, u > 0.7 ? 1 : 0, 0], 4, 8);
+    // knobbly joints: a swelling at the elbow, the wrist and every knuckle
+    const knob = (p: V, to: V, rad: number, bone: number) => { const d = norm([to[0] - p[0], to[1] - p[1], to[2] - p[2]]), o = (k: number): V => [p[0] + d[0] * rad * k, p[1] + d[1] * rad * k, p[2] + d[2] * rad * k]; tube(tubes, [o(-1.5), o(-0.7), o(0), o(0.7), o(1.5)].map(m), [0.3 * rad, 0.85 * rad, rad, 0.85 * rad, 0.3 * rad], [bone, bone, bone, bone], () => LEATHER, 3, 10); };
+    if (on('knobs')) { knob(WE, FM, 0.12, w2); knob(WW, FM, 0.105, w2); FINGER.forEach((f, i) => { knob(f[0], f[1], 0.06 - i * 0.004, n(`wf${i}b`)); knob(lerp(WW, f[0], 0.12), f[0], 0.05, n(`wf${i}a`)); }); }
     const fingers = FINGER.map((f, i) => {
       const pts = [WW, lerp(WW, f[0], 0.5), f[0], lerp(f[0], f[1], 0.5), f[1]].map(m), a = n(`wf${i}a`), b = n(`wf${i}b`);
       pts[1][1] += 0.04; pts[3][0] += s * 0.05;

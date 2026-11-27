@@ -64,6 +64,7 @@ function twist(b: THREE.Bone, axis: THREE.Vector3, angle: number) {
 /** The wing beat's phase at a time. */
 export const beat = (t: number) => t * Math.PI * 2 * 1.5;
 
+let lastT = 0, follow = 0, lagVel = 0;
 export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number, s: State) {
   const fly = ease(s.fly), cur: Pose = {};
   for (const b of r.bones) {
@@ -94,6 +95,13 @@ export function animate(r: Rig, rest: Map<THREE.Bone, THREE.Vector3>, t: number,
     cur.jaw[0] += 0.06 * Math.max(0, Math.sin(t * 0.7)) ** 2 + 0.3 * wind + 0.15 * strike;
     if (s.attack >= 0) { const ph = s.attack % 2.4, after = ph > 0.9 ? Math.exp(-(ph - 0.9) * 1.6) : 0; cur.chest[0] += 0.05 * after * Math.sin(ph * 9); cur.clavL[2] += 0.05 * after * Math.sin(ph * 9); cur.clavR[2] -= 0.05 * after * Math.sin(ph * 9); }
     for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += 0.1 * Math.sin(t * 0.5 - 0.6 - i * 0.5) * (1 - fly);
+  }
+  if (on('life')) {
+    // the tail trails behind a turn of the body and whips after it
+    const yaw = cur.hips[1] + 0.6 * cur.chest[1], dt = Math.min(0.05, Math.max(0, t - lastT)); lastT = t;
+    lagVel += ((yaw - follow) * 38 - lagVel * 4.5) * dt; follow += lagVel * dt;
+    const off = Math.max(-1, Math.min(1, follow - yaw));
+    for (let i = 0; i < 5; i++) cur[`tail${i}`][1] += off * (i ? 0.45 : 0.9);
   }
   const out = breathOut(s.breath);
   if (s.breath >= 0) { const ph = s.breath % 3.6; addTo(INHALE, ph < 0.6 ? ease(ph / 0.5) : 1 - ease((ph - 0.6) / 0.15)); addTo(BREATHE, out); }

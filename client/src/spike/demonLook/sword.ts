@@ -6,7 +6,7 @@ const LEN = 1.9, BEND = 0.46;
 const sm = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 /** The blade in its own space: z runs along it, y is the back (the edge is down), x its thickness. */
 const spine = (u: number) => new THREE.Vector3(0, BEND * u * u, LEN * u);
-const width = (u: number) => (0.08 + 0.085 * sm(0, 0.6, u)) * (1 - sm(0.55, 1, u)) ** 1.25 + 0.0015;
+const width = (u: number) => (0.08 + 0.085 * sm(0, 0.6, u)) * (1 - sm(0.62, 1.0, u) ** 1.6) ** 0.8 + 0.0015;
 /** Barbs on the blade's back, growing toward the point: each rises slowly and drops off sharply. */
 const barb = (u: number) => { if (u < 0.3 || u > 0.93) return 0; const f = ((u - 0.3) * 9.5) % 1; return 0.05 * sm(0.3, 0.6, u) * (1 - sm(0.8, 0.93, u)) * (f < 0.8 ? f / 0.8 : (1 - f) / 0.2); };
 /** Small teeth along the edge. */

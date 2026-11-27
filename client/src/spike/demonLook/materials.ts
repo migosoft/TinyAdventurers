@@ -13,6 +13,8 @@ export const uBreath = { value: 0 };
 /** x: the heartbeat's phase (beats so far), y: where the breath's charge is on its way up (0 belly, 1 throat), z: its strength. */
 export const uBeat = { value: new THREE.Vector3() };
 /** x, y: where the eyes look (-1..1), z: how far they narrow. */
+/** How brightly the runes burn (0 a dull ember, 1 in a blow or before the breath). */
+export const uRune = { value: 0 };
 export const uGaze = { value: new THREE.Vector3() };
 /** The lights that shine through the wings: world places, and colour times strength. */
 export const uLPos = { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] };
@@ -62,10 +64,26 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBeat, uGaze, uRune, uRunesOn: { value: on('runes') ? 1 : 0 }, uGazeOn: { value: on('gaze') ? 1 : 0 }, uOpt: { value: new THREE.Vector4(on('pulse') ? 1 : 0, on('asym') ? 1 : 0, on('ash') ? 1 : 0, on('scales') ? 1 : 0) }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth; uniform vec3 uBeat; uniform vec3 uGaze; uniform vec4 uOpt; uniform float uGazeOn; uniform float uRune; uniform float uRunesOn;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
+    // Runes cut into the outside of the forearm: how far a point is from the nearest stroke (m); 1 where there is none.
+    float seg(vec2 q, vec2 a, vec2 b){ vec2 d = b-a; return length(q-a - d*clamp(dot(q-a, d)/dot(d, d), 0., 1.)); }
+    float runeDist(vec3 pa){
+      vec3 A = vec3(0.69,1.57,-0.03), D = vec3(0.87,1.04,0.) - A; float len = length(D); D /= len;
+      float t = dot(pa-A, D)/len; vec3 rv = pa - A - D*t*len; float rr = length(rv);
+      if (uRunesOn < 0.5 || t < 0.12 || t > 0.88 || rr > 0.22) return 1.;
+      vec3 X = normalize(vec3(1.,0.,-0.25) - D*dot(vec3(1.,0.,-0.25), D)), B = cross(D, X);
+      float lx = atan(dot(rv, B), dot(rv, X))*0.115, c = (t-0.12)/0.76*5., i = floor(c);
+      vec2 q = vec2(lx, (0.5 - fract(c))*0.76*len/5.) / 0.03; // the glyph's own square, the stem upright
+      float h1 = hash1(vec3(i, 3., 7.)), h2 = hash1(vec3(i, 11., 2.)), h3 = hash1(vec3(i, 5., 13.));
+      float d = seg(q, vec2(0.,-1.), vec2(0.,1.));
+      d = min(d, h1 < 0.5 ? seg(q, vec2(0.,1.), vec2(0.75,0.35)) : seg(q, vec2(0.,0.25), vec2(0.75,0.9)));
+      d = min(d, h2 < 0.6 ? seg(q, vec2(0.,-0.05), vec2(0.75,-0.7)) : seg(q, vec2(0.,-1.), vec2(-0.75,-0.35)));
+      if (h3 < 0.5) d = min(d, seg(q, vec2(0.,0.4), vec2(-0.75,-0.25)));
+      return d*0.03;
+    }
     // How much a point lies in a joint or a hollow (the plates are small scales there).
     float joints(vec3 pa){ float j = 0.; vec3 q;
       #define JT(c, r) q = (pa - c)/r; j = max(j, exp(-dot(q, q)));
@@ -113,6 +131,9 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float ridge = pow(0.5 + 0.5*cos(gHa*9. + gHu*5.), 1.6), rib = 0.5 + 0.5*cos(gHu*150. + 0.6*sin(gHa*3.));
       gRidge = mix(0.5, ridge, oh*fade);
       float hornH = (ridge*1.5 + rib*0.3)*fade + streak*0.2;
+      // the runes are cut into the plates: a groove with a raised, burnt lip
+      float rd = runeDist(p) * (1. + 0.25*(n-0.5)), cut = (1.-smoothstep(0.003, 0.0075, rd))*1.6 - (1.-smoothstep(0.0075, 0.016, rd))*0.35;
+      rock -= cut * (1.-vInfo.y);
       return mix(mix(mix(rock, streak*0.5, vInfo.y*0.55), hornH, oh), wr*0.7, leather) * 0.013 * (1. - step(0.9, vInfo.y*vInfo.w));
     }`,
     surface: /* glsl */ `
@@ -165,6 +186,11 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     dEmit = crack*crack*patchy*pow(max(glow, 0.), 0.7)*pulse * mix(vec3(1.,0.14,0.01), vec3(1.,0.55,0.12), crack*crack*glow) * 2.4;
     dEmit += (1.-smoothstep(0.0, 0.2, gEdge))*patchy*glow*glow * vec3(0.5,0.06,0.0);
     dEmit += vInfo.z * vec3(1.,0.3,0.04) * 0.1 * (1.-onHorn);
+    // the runes: scorched round the cut, a dull ember inside that flares with a blow or before the breath, crawling like the lava
+    float rd = runeDist(vec3(abs(p.x), p.yz)) * (1. + 0.25*(n-0.5)), rune = (1.-smoothstep(0.002, 0.0065, rd)) * (1.-vInfo.y);
+    dAlb *= 1. - 0.75*(1.-smoothstep(0.006, 0.022, rd));
+    float rfl = 0.6 + 0.4*fbm(p*14. + vec3(0., uTime*0.5, 0.));
+    dEmit += rune * mix(vec3(0.9,0.12,0.01)*0.5, vec3(1.,0.55,0.16)*1.7, uRune) * rfl + (1.-smoothstep(0.004, 0.013, rd)) * vec3(1.,0.22,0.02) * 0.22 * uRune;
     // an old wound across the chest that never closed: the fire shows through it
     vec2 sa = vec2(-0.27,2.08), sb = vec2(0.2,1.72), sp = p.xy + 0.012*vec2(fbm(p*18.), fbm(p*18.+5.)) - sa;
     float st = clamp(dot(sp, sb-sa)/dot(sb-sa, sb-sa), 0., 1.), sd = length(sp - (sb-sa)*st);
@@ -175,14 +201,14 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float hot = smoothstep(0.8, 1., hu) * onHorn;
     dEmit += (hot*hot*vec3(1.,0.25,0.02)*1.8 + smoothstep(0.94, 1., hu)*onHorn*vec3(1.,0.7,0.3)*1.2) * (0.85+0.15*sin(uTime*2.1+p.x*4.));
     // the eyes: narrow slanted slits; the mouth: a jagged glowing maw
-    vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
     #define UG uGazeOn
+    vec3 e = p - vec3(sign(p.x)*uEye.x, uEye.y, uEye.z); float sl = sign(p.x)*0.42;
     vec3 e0 = e - vec3(uGaze.x*0.032, uGaze.y*0.004, 0.);
     e.xy = vec2(e.x*cos(sl)+e.y*sin(sl), -e.x*sin(sl)+e.y*cos(sl));
-    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011*(1.-0.45*uGaze.z),0.07)));
+    float eye = 1.-smoothstep(0.55, 1., length(e/vec3(0.062,0.011*(1.-0.45*uGaze.z),mix(0.07,0.03,UG))));
     e0.xy = vec2(e0.x*cos(sl)+e0.y*sin(sl), -e0.x*sin(sl)+e0.y*cos(sl));
     float core = (1.-smoothstep(0.3, 1., length(e0/vec3(0.02,0.012,0.07)))) * eye * step(0.5, dot(uGaze, uGaze) + 1.) ;
-    float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.062,0.018,0.07)));
+    float halo = 1.-smoothstep(0.5, 2.2, length(e/vec3(0.062,0.018,mix(0.07,0.035,UG))));
     vec3 q = (p-uMouth)/vec3(0.095,0.034,0.14);
     float fang = abs(fract(p.x*24.)-0.5)*2.;
     float maw = (1.-smoothstep(0.5, 1., length(q))) * step(abs(q.y)*1.5, fang);

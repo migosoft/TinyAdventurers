@@ -7,7 +7,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { build, rig } from './body';
-import { sheetMaterial, skinMaterial, uBeat, uGaze, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
+import { sheetMaterial, skinMaterial, uBeat, uGaze, uRune, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
 import { OPTS, on } from './opts';
 import { makeSword } from './sword';
@@ -25,7 +25,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], sword: [-4.5, 2.2, 4.2, 1.1], hand: [-2.6, 1.6, 1.6, 0.9], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], top: [0, 17, -3, 3], behind: [0, 6, -13, 3], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], sword: [-4.5, 2.2, 4.2, 1.1], arm: [3.4, 2.2, 1.6, 1.25], crest: [2.6, 3.3, 1.4, 2.4], crestside: [-2.4, 3.5, -1.2, 2.5], wingj: [3.5, 4.6, -4.5, 3.0], hand: [-2.6, 1.6, 1.6, 0.9], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -159,6 +159,8 @@ function frame() {
   const aph = st.attack >= 0 ? st.attack % 2.4 : 9;
   squint += ((aph < 0.6 ? 1 : 0) - squint) * (pinned !== null ? 1 : Math.min(1, dt * 6));
   uGaze.value.set(Math.max(-1, Math.min(1, headLocal.x * 1.6)), Math.max(-1, Math.min(1, headLocal.y * 1.6)), squint);
+  const runeTo = Math.max(aph < 1.0 ? 1 : 0, bph < 2.4 ? 1 : 0);
+  uRune.value += (runeTo - uRune.value) * (pinned !== null ? 1 : Math.min(1, dt * (runeTo ? 5 : 1.2)));
   if (embers) embers(dt, time, px, uBreath.value);
   if (chain) chain(dt, time);
   if (sword) { if (!warmed) { warmed = true; for (let i = 0; i < 90; i++) sword.update(1 / 30, time, px); } sword.update(dt, time, px); }
