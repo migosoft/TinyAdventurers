@@ -41,6 +41,13 @@ describe('crackCam', () => {
     expect(crackCoord(cam, top).depth).toBeCloseTo(0, 3);
     expect(crackCoord(cam, bot).depth).toBeCloseTo(1, 3);
   });
+  it('clamps depth: below the bed is 1, above the ceiling is 0', () => {
+    const c = crack(10, 10);
+    const cam = crackCam(c, [plant(10.3, 10.1, 0.5, 1.5)])!;
+    const at = (y: number): [number, number, number] => [c.fx + (c.dir[0] * y) / c.dir[1], y, c.fz + (c.dir[2] * y) / c.dir[1]];
+    expect(crackCoord(cam, at(-(CHASM_BED + 1) - 3)).depth).toBe(1);
+    expect(crackCoord(cam, at(c.ceil + 3)).depth).toBe(0);
+  });
   it('matches an ortho camera built from the TileCam', () => {
     const cam = crackCam(crack(10, 10), [plant(10.3, 10.1, 0.5, 1.5)])!;
     const o = sunCamera({ ...cam, size: 1, texel: 1 }) as OrthographicCamera;
@@ -137,7 +144,11 @@ describe('packTable', () => {
     expect(t[s + 3]).toBe(plan.crackTile[0]);
     expect(t[s + 7]).toBeCloseTo(cam.ext[0]);
     expect(t[s + 15]).toBeCloseTo(cam.ext[2]);
-    expect(t[s + 4 * 1 + 3]).toBeCloseTo(cam.ext[0]);
+    expect(t[s + 11]).toBeCloseTo(cam.ext[1]);
+    expect(Array.from(t.slice(s, s + 3))).toEqual(cam.C.map(Math.fround));
+    expect(Array.from(t.slice(s + 4, s + 7))).toEqual(cam.R.map(Math.fround));
+    expect(Array.from(t.slice(s + 8, s + 11))).toEqual(cam.U.map(Math.fround));
+    expect(Array.from(t.slice(s + 12, s + 15))).toEqual(cam.F.map(Math.fround));
     expect(t[s + 16 + 3]).toBe(-1); // crack slot 1: no tile
     expect(t[TABLE_LEN * 4 - 1]).not.toBe(7);
     expect(CRACK_CAP).toBeGreaterThan(1);
