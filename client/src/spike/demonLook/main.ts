@@ -9,6 +9,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { build, rig } from './body';
 import { sheetMaterial, skinMaterial, uBillow, uBreath, uFold, uLCol, uLPos, uTime } from './materials';
 import { animate, beat, breathOut, type State } from './pose';
+import { OPTS, on } from './opts';
 
 const url = new URLSearchParams(location.search);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -22,7 +23,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -82,7 +83,7 @@ const built = build(r);
 const demon = new THREE.Group();
 demon.add(r.root);
 const skinMat = skinMaterial();
-for (const [geo, mat] of [[built.body, skinMat], [built.tubes, skinMat], [built.web, sheetMaterial(true)], [built.cloth, sheetMaterial(false)]] as const) {
+for (const [geo, mat] of [[built.body, skinMat], [built.tail, skinMat], [built.tubes, skinMat], [built.web, sheetMaterial(true)], [built.cloth, sheetMaterial(false)]] as const) {
   const m = new THREE.SkinnedMesh(geo, mat);
   m.bind(r.skeleton, new THREE.Matrix4());
   m.castShadow = m.receiveShadow = true; m.frustumCulled = false;
@@ -112,6 +113,12 @@ for (const m of ['stand', 'look', 'attack', 'breath', 'fly']) {
 const fold = document.createElement('input'); fold.type = 'range'; fold.min = '0'; fold.max = '1'; fold.step = '0.01'; fold.value = String(st.fold);
 fold.oninput = () => { st.fold = Number(fold.value); };
 const label = document.createElement('label'); label.textContent = ' fold wings '; label.append(fold); panel.append(label);
+// every adaptation can be switched off again (the page builds the demon anew)
+for (const o of OPTS) {
+  const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on(o);
+  c.onchange = () => { const u = new URL(location.href); if (c.checked) u.searchParams.delete(o); else u.searchParams.set(o, '0'); location.href = u.href; };
+  const l = document.createElement('label'); l.append(' ', c, o); panel.append(l);
+}
 const note = document.createElement('span'); note.textContent = ` built in ${Math.round(built.ms)} ms, ${built.verts} points; drag to turn, wheel to zoom`; panel.append(note);
 
 const pinned = url.has('t') ? Number(url.get('t')) : null;

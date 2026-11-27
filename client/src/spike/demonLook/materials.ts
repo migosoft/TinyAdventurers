@@ -2,7 +2,8 @@
 // the skin when the bones move): armour plates of rock with lava in the grooves, horn, the leather of the wing bones, and the
 // thin torn skin of the wings, which lets light through and hangs in pleats.
 import * as THREE from 'three';
-import { EYE, MOUTH } from './body';
+import { EYE, HORN_PATH, MOUTH } from './body';
+import { on } from './opts';
 
 export const uTime = { value: 0 };
 /** How far the wings are folded (deeper pleats), and how hard the air pushes the skin in a wing beat (-1..1). */
@@ -57,10 +58,22 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark;',
     fdecl: /* glsl */ `
-    float gEdge; float gRnd; float gPlate;
+    float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
+    // Where a point is on the great horn: how far along it (0 base, 1 tip), the angle round it, and how far outside its skin.
+    void hornAt(vec3 p){
+      float best = 1e9, acc = 0., tot = 0.;
+      for (int i = 0; i < 7; i++) tot += length(uHorn[i+1].xyz - uHorn[i].xyz);
+      for (int i = 0; i < 7; i++) {
+        vec3 a = uHorn[i].xyz, ab = uHorn[i+1].xyz - a; float L = length(ab), t = clamp(dot(p-a, ab)/(L*L), 0., 1.);
+        vec3 d = p - (a + ab*t); float dd = length(d);
+        if (dd < best) { best = dd; vec3 T = ab/L, N = normalize(vec3(0.,0.,1.) - T*T.z), B = cross(T, N);
+          gHu = (acc + t*L)/tot; gHa = atan(dot(d, B), dot(d, N)); gHd = dd - mix(uHorn[i].w, uHorn[i+1].w, t); }
+        acc += L;
+      }
+    }
     // The relief at a point of the resting body. Mirrored left to right, so the plates read as grown armour.
     float relief(vec3 p0){
       vec3 p = vec3(abs(p0.x), p0.y, p0.z);
@@ -77,7 +90,13 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
       float rock = plate*(0.9 + 0.4*v1.y + 1.3*tilt) + scale*(0.1 + 0.3*limb) + n*0.3;
       float streak = fbm(p0*vec3(26.,9.,26.));
       float wr = fbm(p0*vec3(46.,12.,46.));
-      return mix(mix(rock, streak*0.5, vInfo.y*0.55), wr*0.7, leather) * 0.013;
+      // the great horns: ridges running their length (with a slow twist), fine ribs across, both dying out toward the hot tip
+      hornAt(p);
+      float oh = vInfo.y * step(gHd, 0.04) * step(2.3, p.y) * uRidges, fade = 1. - smoothstep(0.7, 0.92, gHu);
+      float ridge = pow(0.5 + 0.5*cos(gHa*9. + gHu*5.), 1.6), rib = 0.5 + 0.5*cos(gHu*150. + 0.6*sin(gHa*3.));
+      gRidge = mix(0.5, ridge, oh*fade);
+      float hornH = (ridge*1.5 + rib*0.3)*fade + streak*0.2;
+      return mix(mix(mix(rock, streak*0.5, vInfo.y*0.55), hornH, oh), wr*0.7, leather) * 0.013;
     }`,
     surface: /* glsl */ `
     vec3 p = vRest;
@@ -91,14 +110,24 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float wr = fbm(p*vec3(46.,12.,46.));
     vec3 hide = mix(vec3(0.05,0.022,0.02), vec3(0.2,0.07,0.05), wr*wr);
     // the great horns: near black at the base, lighter along the middle, black again toward the tip, and the tip itself hot metal
-    float onHorn = vInfo.y * step(2.42, p.y) * step(p.y, 3.12) * step(abs(p.x), 1.0) * smoothstep(0.07, 0.12, abs(p.x));
-    float hu = clamp((abs(p.x)-0.1)/0.76, 0., 1.)*0.55 + clamp((p.y-2.5)/0.55, 0., 1.)*0.45;
-    float ramp = smoothstep(0.14, 0.42, hu) * (1.-smoothstep(0.5, 0.78, hu));
+    float onHorn = vInfo.y * step(gHd, 0.04) * step(2.3, p.y);
+    float hu = gHu;
+    float ramp = smoothstep(0.22, 0.4, hu) * (1.-smoothstep(0.46, 0.64, hu)) * (0.45 + 0.75*gRidge);
     horn = mix(horn, mix(vec3(0.01,0.008,0.008), vec3(0.19,0.12,0.09)*(0.6+0.8*streak), ramp), onHorn);
     dAlb = mix(mix(rock, horn, max(vInfo.y*0.6, onHorn)), hide, leather);
     // darker where two parts of the body meet
     float open = mix(clamp(vInfo.x, 0., 1.), 1., leather);
     dAlb *= mix(0.12, 1., smoothstep(0.3, 0.95, open));
+    // darker paint (not shadow) where parts meet and in the hollows: armpits, the insides of the joints, the middle line of
+    // chest and belly, under the chest muscles, the flanks, the groin, beside the spine, round the eyes
+    vec3 pa = vec3(abs(p.x), p.yz); float dk = 0.; vec3 dq;
+    #define DK(c, r) dq = (pa - c)/r; dk = max(dk, exp(-dot(dq, dq)));
+    DK(vec3(0.36,1.93,0.), vec3(0.1,0.14,0.14)) DK(vec3(0.69,1.57,-0.03), vec3(0.11)) DK(vec3(0.87,1.04,0.), vec3(0.09))
+    DK(vec3(0.,2.28,0.), vec3(0.2,0.09,0.2)) DK(vec3(0.,1.9,0.2), vec3(0.035,0.2,0.1)) DK(vec3(0.,1.55,0.2), vec3(0.03,0.22,0.1))
+    DK(vec3(0.17,1.86,0.17), vec3(0.2,0.035,0.1)) DK(vec3(0.2,1.27,0.1), vec3(0.16,0.07,0.15)) DK(vec3(0.3,0.72,0.02), vec3(0.1,0.08,0.08))
+    DK(vec3(0.3,0.28,-0.1), vec3(0.09)) DK(vec3(0.13,1.85,-0.25), vec3(0.05,0.35,0.08)) DK(vec3(0.27,1.5,0.), vec3(0.08,0.1,0.2))
+    DK(vec3(0.,1.15,-0.25), vec3(0.15)) DK(vec3(0.08,2.5,0.3), vec3(0.09,0.04,0.06)) DK(vec3(0.,2.28,0.2), vec3(0.12,0.05,0.12))
+    dAlb *= 1. - 0.65*dk*uDark*(1.-onHorn);
     dRough = mix(mix(mix(0.98, 0.86, gPlate), 0.72, vInfo.y), 0.8, leather);
     // lava in the grooves: hottest on the chest, fading out over belly, hips, shoulders and limbs; breathing slowly up the body
     vec3 gq = (p - vec3(0.,1.84,0.06)) / vec3(0.5,0.72,0.5);

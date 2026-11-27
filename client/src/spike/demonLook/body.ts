@@ -1,7 +1,8 @@
 // SPIKE (#379): the demon's skeleton and its shapes. Left is +x, up +y, the front +z; about 2.7 units tall to the crown.
 // The bind pose stands upright with the arms a little out and the wings spread; every stance is bone turns on top (pose.ts).
 import * as THREE from 'three';
-import { ball, cone, kite, skin, slab, type Prim, type Tag, type V } from './sdf';
+import { ball, cone, field, kite, skin, slab, type Prim, type Tag, type V } from './sdf';
+import { on } from './opts';
 
 const add = (a: V, b: V): V => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const lerp = (a: V, b: V, t: number): V => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -10,7 +11,12 @@ const mx = (s: number, v: V): V => [s * v[0], v[1], v[2]];
 // Joints of the left side; the right side is the mirror.
 const S: V = [0.45, 2.07, -0.03], E: V = [0.69, 1.57, -0.03], W: V = [0.87, 1.04, 0], KN: V = [0.92, 0.85, 0];
 const HP: V = [0.22, 1.24, 0], KNEE: V = [0.3, 0.72, 0.12], AN: V = [0.3, 0.28, -0.1], BA: V = [0.31, 0.07, 0.1];
-const TAIL: V[] = [[0, 1.2, -0.2], [0, 1.02, -0.5], [0, 0.75, -0.8], [0, 0.5, -1.08], [0, 0.32, -1.38], [0, 0.3, -1.7]];
+const TAIL: V[] = on('tail')
+  ? [[0, 1.2, -0.2], [0, 1.02, -0.52], [0, 0.74, -0.86], [0, 0.47, -1.2], [0, 0.3, -1.62], [0, 0.36, -2.15]]
+  : [[0, 1.2, -0.2], [0, 1.02, -0.5], [0, 0.75, -0.8], [0, 0.5, -1.08], [0, 0.32, -1.38], [0, 0.3, -1.7]];
+const TAIL_R = on('tail') ? [0.15, 0.115, 0.08, 0.05, 0.026, 0.003] : [0.15, 0.12, 0.09, 0.065, 0.04, 0.008];
+/** The left horn's middle line and its radius there, base to tip (the paint follows it too). */
+export const HORN_PATH: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5, 0.2], 0.122], [[0.5, 2.45, 0.27], 0.112], [[0.68, 2.47, 0.3], 0.097], [[0.8, 2.58, 0.28], 0.08], [[0.86, 2.74, 0.22], 0.058], [[0.86, 2.9, 0.16], 0.034], [[0.82, 3.05, 0.11], 0.008]];
 // The wing arm, as a bat's: shoulder, a short upper arm to the elbow, a long forearm up to the wrist; HM and FM bow the two bones.
 const WR: V = [0.2, 2.15, -0.2], WE: V = [1.05, 2.55, -0.55], WW: V = [1.2, 3.8, -0.5], WHIP: V = [0.22, 1.35, -0.24];
 const HM: V = [0.62, 2.4, -0.4], FM: V = [1.16, 3.18, -0.55];
@@ -51,6 +57,60 @@ export function rig(): Rig {
   return { root: by.hips, bones, by, skeleton: new THREE.Skeleton(bones), id: (n) => { const i = DEFS.findIndex((d) => d[0] === n); if (i < 0) throw new Error(n); return i; } };
 }
 
+const norm = (v: V): V => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const dot = (a: V, b: V) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: V, b: V): V => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+/** A plate given by its own x axis and its normal. */
+function plate(c: V, h: V, xa: V, za: V, bone: number, tag: Tag, k = 0.005, round = 0.006): Prim {
+  const z = norm(za), d = dot(xa, z), x = norm([xa[0] - z[0] * d, xa[1] - z[1] * d, xa[2] - z[2] * d]), y = cross(z, x);
+  return { a: c, ra: 0, rb: 0, k, bone, tag, c, br: Math.hypot(h[0], h[1], h[2]) + round, box: { h, m: [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]], round } };
+}
+interface Ray { o: V; d: V; bone: number; size: number }
+/**
+ * Armour down the spine: chevrons (two arms meeting in a point that aims at the tail), each lapping over the next, as wide as
+ * `size` says at that place. The rays find the surface of `base` along the middle line.
+ */
+function chevrons(base: Prim[], rays: Ray[], tag: Tag): Prim[] {
+  const pts: { p: V; ray: Ray }[] = [];
+  for (const ray of rays) for (let t = 0; t < 1.4; t += 0.003) {
+    const p: V = [ray.o[0] + ray.d[0] * t, ray.o[1] + ray.d[1] * t, ray.o[2] + ray.d[2] * t];
+    if (field(base, p[0], p[1], p[2]) < 0) { pts.push({ p, ray }); break; }
+  }
+  const out: Prim[] = [], A = 0.62, e = 0.01;
+  let next = 0, s = 0;
+  for (let i = 1; i + 1 < pts.length; i++) {
+    const { p, ray } = pts[i], q = pts[i - 1].p;
+    s += Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    if (s < next) continue;
+    const L = ray.size; next = s + L * 0.72;
+    const T = norm([0, pts[i + 1].p[1] - q[1], pts[i + 1].p[2] - q[2]]);
+    const N = norm([0, field(base, p[0], p[1] + e, p[2]) - field(base, p[0], p[1] - e, p[2]), field(base, p[0], p[1], p[2] + e) - field(base, p[0], p[1], p[2] - e)]);
+    const nz: V = norm([N[0] - 0.3 * T[0], N[1] - 0.3 * T[1], N[2] - 0.3 * T[2]]);
+    for (const side of [1, -1]) {
+      const dir = norm([side * Math.cos(A), -T[1] * Math.sin(A) - N[1] * 0.3, -T[2] * Math.sin(A) - N[2] * 0.3]);
+      const lift = 0.006 + 0.1 * L;
+      const c: V = [p[0] + N[0] * lift + dir[0] * L * 0.5, p[1] + N[1] * lift + dir[1] * L * 0.5, p[2] + N[2] * lift + dir[2] * L * 0.5];
+      out.push(plate(c, [L * 0.6, L * 0.3, 0.008 + 0.07 * L], dir, nz, ray.bone, tag));
+    }
+  }
+  return out;
+}
+const PLATE: Tag = [0, 0.9, 0, 0];
+
+/** The tail: its own skin, long and thin to a point, with the spine's chevrons running on to the tip. */
+function tailPrims(id: (n: string) => number): Prim[] {
+  const P: Prim[] = [];
+  for (let i = 0; i < 5; i++) P.push(cone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1], id(`tail${i}`), i === 4 ? [0, 1, 1, 0] : [0, 0, 0, 0.3], 0.05));
+  if (!on('spine')) return P;
+  const rays: Ray[] = [];
+  for (let i = 0; i < 5; i++) for (let f = i ? 0 : 0.45; f < (i === 4 ? 0.55 : 1); f += 0.02) {
+    const p = lerp(TAIL[i], TAIL[i + 1], f), T = norm([0, TAIL[i + 1][1] - TAIL[i][1], TAIL[i + 1][2] - TAIL[i][2]]), U: V = [0, -T[2], T[1]];
+    const r = TAIL_R[i] + (TAIL_R[i + 1] - TAIL_R[i]) * f;
+    rays.push({ o: [0, p[1] + U[1] * 0.4, p[2] + U[2] * 0.4], d: [0, -U[1], -U[2]], bone: id(`tail${i}`), size: 0.85 * r + 0.012 });
+  }
+  return [...P, ...chevrons(P, rays, PLATE)];
+}
+
 function prims(id: (n: string) => number): Prim[] {
   const sk = (glow: number, dark = 0): Tag => [glow, 0, 0, dark];
   const HORN: Tag = [0, 1, 0, 0], TIP: Tag = [0, 1, 1, 0];
@@ -74,6 +134,26 @@ function prims(id: (n: string) => number): Prim[] {
     const e = (a: V, r: V, bone: string, tag: Tag, k?: number) => P.push(ball(m(a), r, n(bone), tag, k));
     P.push({ ...cone(m([0.04, 2.478, 0.325]), m([0.115, 2.512, 0.3]), 0.014, 0.018, 0, sk(0), 0.012), sub: true });
     P.push(ball(m([0.17, 2.0, 0.14]), [0.2, 0.16, 0.11], id('chest'), sk(1)), ball(m([0.26, 1.82, -0.1]), [0.15, 0.28, 0.16], id('chest'), sk(0.3)));
+    const eb = (a: V, r: V, bone: string, tag: Tag, k?: number) => P.push(ball(m(a), r, id(bone), tag, k));
+    if (on('traps')) { eb([0.17, 2.2, -0.08], [0.2, 0.115, 0.14], 'chest', sk(0.3), 0.05); P.push(cone(m([0.07, 2.37, -0.04]), m([0.37, 2.14, -0.07]), 0.105, 0.095, id('chest'), sk(0.3), 0.05)); }
+    if (on('muscle')) {
+      const um = lerp(S, E, 0.5), th = (f: number) => lerp(HP, KNEE, f), cf = lerp(KNEE, AN, 0.28);
+      e(add(S, [0.07, -0.06, 0]), [0.12, 0.16, 0.13], 'upperArm', sk(0.4), 0.02);
+      e(add(um, [-0.01, 0.02, 0.085]), [0.085, 0.16, 0.075], 'upperArm', sk(0.25), 0.02);
+      e(add(um, [0.03, 0.04, -0.085]), [0.08, 0.15, 0.07], 'upperArm', sk(0.1), 0.02);
+      e(add(lerp(E, W, 0.25), [0.05, 0, 0.03]), [0.075, 0.15, 0.07], 'foreArm', sk(0.2, 0.1), 0.02);
+      eb([0.17, 1.97, 0.17], [0.17, 0.12, 0.085], 'chest', sk(1), 0.015);
+      eb([0.075, 1.72, 0.175], [0.07, 0.055, 0.045], 'chest', sk(1), 0.015);
+      eb([0.075, 1.6, 0.185], [0.07, 0.055, 0.045], 'waist', sk(0.9), 0.015);
+      eb([0.072, 1.48, 0.18], [0.065, 0.055, 0.045], 'waist', sk(0.8), 0.015);
+      eb([0.24, 1.62, 0.08], [0.08, 0.13, 0.1], 'waist', sk(0.5), 0.02);
+      e(add(th(0.55), [0.09, 0, 0.06]), [0.085, 0.2, 0.09], 'thigh', sk(0.15, 0.2), 0.02);
+      e(add(th(0.8), [-0.07, 0, 0.07]), [0.07, 0.11, 0.07], 'thigh', sk(0.15, 0.2), 0.02);
+      e(add(th(0.45), [0, 0, 0.12]), [0.08, 0.2, 0.07], 'thigh', sk(0.15, 0.2), 0.02);
+      e(add(cf, [0.045, 0, -0.09]), [0.06, 0.13, 0.07], 'shin', sk(0.05, 0.5), 0.02);
+      e(add(cf, [-0.045, 0, -0.09]), [0.06, 0.13, 0.07], 'shin', sk(0.05, 0.5), 0.02);
+      eb(add(HP, [0.02, 0.05, -0.16]), [0.13, 0.14, 0.1], 'hips', sk(0.1, 0.1), 0.03);
+    }
     // arm
     const mid = lerp(S, E, 0.5);
     e(add(S, [0.02, 0, 0]), [0.165, 0.17, 0.165], 'upperArm', sk(0.4));
@@ -109,7 +189,7 @@ function prims(id: (n: string) => number): Prim[] {
       c(tip, [BA[0] + d[0] * 0.36, 0.012, BA[2] + d[2] * 0.36], 0.04, 0.005, 'toes', TIP, 0.015);
     }
     // horns: very thick at the base, out and a little forward and down, then bending up to a point
-    const horn: [V, number][] = [[[0.1, 2.56, 0.12], 0.125], [[0.3, 2.5, 0.2], 0.122], [[0.5, 2.45, 0.27], 0.112], [[0.68, 2.47, 0.3], 0.097], [[0.8, 2.58, 0.28], 0.08], [[0.86, 2.74, 0.22], 0.058], [[0.86, 2.9, 0.16], 0.034], [[0.82, 3.05, 0.11], 0.008]];
+    const horn = HORN_PATH;
     for (let i = 0; i + 1 < horn.length; i++) P.push(cone(m(horn[i][0]), m(horn[i + 1][0]), horn[i][1], horn[i + 1][1], id('head'), i > 5 ? TIP : HORN, 0.02));
     // armour over the forehead and crown: a crest of tall kites up the middle, each lapping over the next toward the back, its
     // lowest point between the eyes; rows of kites beside it running onto the horns' bases; and a heavy brow plate over each
@@ -129,6 +209,12 @@ function prims(id: (n: string) => number): Prim[] {
     }
     P.push(slab(m([0.115, 2.592, 0.25]), [0.1, 0.055, 0.018], [-0.35, s * 0.4, s * 0.45], id('head'), sk(0)));
     P.push(slab(m([0.125, 2.42, 0.25]), [0.045, 0.06, 0.02], [0, s * 0.95, s * -0.25], id('head'), sk(0)));
+  }
+  if (on('spine')) {
+    const size = (y: number) => { const t: [number, number][] = [[2.62, 0.05], [2.32, 0.06], [2.16, 0.11], [1.92, 0.16], [1.62, 0.12], [1.46, 0.12]]; let i = 0; while (i < t.length - 2 && y < t[i + 1][0]) i++; const f = Math.min(1, Math.max(0, (t[i][0] - y) / (t[i][0] - t[i + 1][0]))); return t[i][1] + (t[i + 1][1] - t[i][1]) * f; };
+    const rays: Ray[] = [];
+    for (let y = 2.6; y > 1.47; y -= 0.008) rays.push({ o: [0, y, -0.9], d: [0, 0, 1], bone: id(y > 2.38 ? 'head' : y > 2.2 ? 'neck' : y > 1.74 ? 'chest' : 'waist'), size: size(y) });
+    P.push(...chevrons(P.filter((p) => !p.sub), rays, PLATE));
   }
   return P;
 }
@@ -209,7 +295,7 @@ function sheet(b: Buf, A: Curve, B: Curve, panel: number, scallop: number, bulge
   }
 }
 
-export interface Built { body: THREE.BufferGeometry; tubes: THREE.BufferGeometry; web: THREE.BufferGeometry; cloth: THREE.BufferGeometry; ms: number; verts: number }
+export interface Built { body: THREE.BufferGeometry; tail: THREE.BufferGeometry; tubes: THREE.BufferGeometry; web: THREE.BufferGeometry; cloth: THREE.BufferGeometry; ms: number; verts: number }
 export function build(r: Rig): Built {
   const t0 = performance.now();
   const sk = skin(prims(r.id), [-1.2, -0.06, -0.5], [1.2, 3.12, 0.7], 0.008);
@@ -217,7 +303,8 @@ export function build(r: Rig): Built {
 
   const tubes = new Buf(), web = new Buf(), cloth = new Buf();
   const LEATHER: Tag = [2, 0, 0, 0];
-  tube(tubes, TAIL, [0.15, 0.12, 0.09, 0.065, 0.04, 0.008], [0, 1, 2, 3, 4].map((i) => r.id(`tail${i}`)), (u) => [1, u > 0.9 ? 1 : 0, u > 0.93 ? 1 : 0, 0.3], 8, 14);
+  const tk = skin(tailPrims(r.id), [-0.3, 0, -2.3], [0.3, 1.5, -0.05], 0.008);
+  const tail = geometry(tk.position, tk.index, tk.info, tk.skinIndex, tk.skinWeight);
   // the strap round the hips that the cloth hangs from
   const strap: V[] = [];
   for (let i = 0; i <= 16; i++) { const a = (i / 16) * Math.PI * 2; strap.push([0.3 * Math.sin(a), 1.41 - 0.035 * Math.cos(a), 0.225 * Math.cos(a) - 0.01]); }
@@ -251,5 +338,5 @@ export function build(r: Rig): Built {
     }
     for (let it = 0; it < NT; it++) for (let is = 0; is < NS; is++) { const a = v0 + it * (NS + 1) + is; cloth.idx.push(a, a + 1, a + NS + 1, a + 1, a + NS + 2, a + NS + 1); }
   }
-  return { body, tubes: tubes.geometry(), web: web.geometry(), cloth: cloth.geometry(), ms: performance.now() - t0, verts: sk.position.length / 3 };
+  return { body, tail, tubes: tubes.geometry(), web: web.geometry(), cloth: cloth.geometry(), ms: performance.now() - t0, verts: sk.position.length / 3 };
 }

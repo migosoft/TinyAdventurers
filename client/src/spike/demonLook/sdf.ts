@@ -67,7 +67,7 @@ function dist(p: Prim, x: number, y: number, z: number): number {
   return (Math.sqrt(x2 * a2 * il2) + y1 * rr) * il2 - p.ra;
 }
 
-function field(prims: Prim[], x: number, y: number, z: number): number {
+export function field(prims: Prim[], x: number, y: number, z: number): number {
   let d = 1e3;
   for (const p of prims) {
     if (p.sub) continue;
