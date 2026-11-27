@@ -30,7 +30,7 @@ vec2 voro(vec3 x, float jit){ vec3 n=floor(x), f=fract(x); float d1=8., d2=8.;
   return vec2(sqrt(d2)-sqrt(d1), hash1(cellId)); }
 vec3 bumped(vec3 n, vec3 viewPos, float hx, float hy, float face){
   vec3 sx=dFdx(viewPos), sy=dFdy(viewPos); vec3 r1=cross(sy,n), r2=cross(n,sx); float det=dot(sx,r1)*face;
-  vec3 g=sign(det)*(hx*r1+hy*r2); return normalize(abs(det)*n-g); }
+  vec3 g=sign(det)*(hx*r1+hy*r2); vec3 o=abs(det)*n-g; return dot(o,o)>1e-20 ? normalize(o) : n; }
 `;
 
 interface Patch { key: string; uniforms: Record<string, { value: unknown }>; decl: string; vertex?: string; fdecl?: string; surface: string; late?: string }
@@ -46,7 +46,9 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
       .replace('#include <color_fragment>', `#include <color_fragment>\n{ ${p.surface} }\ndiffuseColor.rgb = dAlb;`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = dRough;')
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = bumped(normal, -vViewPosition, dHx, dHy, faceDirection);')
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${p.late ?? ''}\ntotalEmissiveRadiance += dEmit;`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${p.late ?? ''}\ntotalEmissiveRadiance += dEmit;`)
+      // one invalid pixel (a NaN) is smeared by the bloom into a big black box: never let one out
+      .replace('#include <opaque_fragment>', 'if (any(isnan(outgoingLight)) || any(isinf(outgoingLight)) || !(dot(outgoingLight, outgoingLight) < 1e8)) outgoingLight = vec3(0.);\n#include <opaque_fragment>');
   };
   return m;
 }
@@ -104,7 +106,7 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     float patchy = smoothstep(0.3, 0.55, fbm(p*2.6+7.) + glow*0.75 - 0.12);
     float crack = 1.-smoothstep(0.0, mix(0.02, 0.075, glow), gEdge);
     float pulse = 0.72+0.28*sin(uTime*1.6 - p.y*3.5);
-    dEmit = crack*crack*patchy*pow(glow, 0.7)*pulse * mix(vec3(1.,0.14,0.01), vec3(1.,0.55,0.12), crack*crack*glow) * 2.4;
+    dEmit = crack*crack*patchy*pow(max(glow, 0.), 0.7)*pulse * mix(vec3(1.,0.14,0.01), vec3(1.,0.55,0.12), crack*crack*glow) * 2.4;
     dEmit += (1.-smoothstep(0.0, 0.2, gEdge))*patchy*glow*glow * vec3(0.5,0.06,0.0);
     dEmit += vInfo.z * vec3(1.,0.3,0.04) * 0.1 * (1.-onHorn);
     float hot = smoothstep(0.8, 1., hu) * onHorn;
