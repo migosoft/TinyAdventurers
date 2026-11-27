@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, ZOOM_MAX, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
+import { DEFAULTS, ZOOM_MAX, blooms, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
 
 describe('reflects', () => {
   it('needs the switch and a quality above Fast', () => {
@@ -114,7 +114,7 @@ describe('toSearch', () => {
       see: 'off', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
-      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false, brush: true,
+      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false, bloom: false, brush: true,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -224,6 +224,23 @@ describe('toSearch', () => {
     expect(shimmers({ heat: true, quality: 'high' })).toBe(true);
     expect(shimmers({ heat: true, quality: 'fast' })).toBe(false);
     expect(shimmers({ heat: false, quality: 'balanced' })).toBe(false);
+  });
+
+  it('bloom is on by default, off with bloom=0, and off at quality Fast (#442)', () => {
+    expect(DEFAULTS.bloom).toBe(true);
+    expect(parseParams('?r3d').bloom).toBe(true);
+    expect(parseParams('?r3d&bloom=0').bloom).toBe(false);
+    expect(parseParams('?r3d&bloom=bogus').bloom).toBe(true);
+    expect(blooms({ bloom: true, quality: 'balanced' })).toBe(true);
+    expect(blooms({ bloom: true, quality: 'high' })).toBe(true);
+    expect(blooms({ bloom: true, quality: 'fast' })).toBe(false);
+    expect(blooms({ bloom: false, quality: 'balanced' })).toBe(false);
+  });
+
+  it('bloom round-trips through toSearch (#442)', () => {
+    expect(toSearch({ ...DEFAULTS, bloom: false }, '?r3d')).toBe('?r3d&bloom=0');
+    expect(toSearch(DEFAULTS, '?r3d&bloom=0')).toBe('?r3d');
+    expect(parseParams(toSearch({ ...DEFAULTS, bloom: false }, '?r3d')).bloom).toBe(false);
   });
 
   it('reads the reflections switch (on by default, refl=0 turns it off) and writes it back (#345)', () => {

@@ -25,6 +25,7 @@ import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLigh
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
+import { blooms } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF } from './sightNodes';
@@ -206,7 +207,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null,
           casters, sight, cracks, shafts: c.params.shafts, air: frameAir, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },

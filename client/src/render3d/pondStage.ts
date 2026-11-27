@@ -21,6 +21,7 @@ import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR, WORK_AMBIENT } from './light';
 import { footprint } from './lights';
 import { DEFAULT_HOUR, reflects, type R3dParams } from './params';
+import { blooms } from './params';
 import { walkBedAt } from './dips/shape';
 import { roadEdge, setRoadEdge } from '../game/woodland/road';
 import { pondField, pondViewMap, setPondField, type PondField } from './pond/pondField';
@@ -262,7 +263,7 @@ export function createPondStage(assets: Assets, p: R3dParams, search: string, ho
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights: [], ambient, shadows: params.shadows, smooth: params.smooth, t: now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights: [], ambient, bloom: blooms(params), shadows: params.shadows, smooth: params.smooth, t: now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           brush: [], lava: null, lavaVersion: 0, darkvision: null, casters: [], sight: SIGHT_OFF, sun,
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },

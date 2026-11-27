@@ -56,6 +56,7 @@ import { Shake, blastFalloff, groundShift } from './fx/shake';
 import { onOwnHero } from '../game/damage';
 import type { FrameRects } from './worldMesh';
 import { reflects, shimmers } from './params';
+import { blooms } from './params';
 import { Lava3d, type LavaCues, type LavaIn } from './lava/lava';
 
 const TILE = 16;
@@ -552,7 +553,7 @@ export class RunView3d implements RunView {
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam: drawCam, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now),
       },
       c.timer,

@@ -36,6 +36,7 @@ import type { FigureKit } from './models/kit';
 import { seenOpeners } from './openers';
 import type { PageButton } from './panel';
 import { reflects, shimmers, type R3dParams } from './params';
+import { blooms } from './params';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import { createStageKit, modelsReadouter } from './stageKit';
@@ -252,7 +253,7 @@ export function createHallStage(assets: Assets, p: R3dParams, map: ReturnType<ty
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: lava && game ? lava.texels : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF,
           ...(lo ? { lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: clock, heat: shimmers(c.params) } } : {}),

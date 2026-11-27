@@ -34,8 +34,8 @@ describe('run and render3d imports', () => {
     const targets = new Set([...read('main.ts').matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]));
     expect([...targets]).toEqual(['./render3d/boot']);
   });
-  it('render3d/ uses only three/webgpu and three/tsl as bare specifiers', () => {
-    for (const f of render3d) for (const s of bare(f)) expect(['three/webgpu', 'three/tsl'], `${f} imports ${s}`).toContain(s);
+  it('render3d/ uses only three/webgpu, three/tsl and the bloom addon as bare specifiers', () => {
+    for (const f of render3d) for (const s of bare(f)) expect(['three/webgpu', 'three/tsl', 'three/addons/tsl/display/BloomNode.js'], `${f} imports ${s}`).toContain(s);
   });
   it('run/ has no bare specifier at all', () => {
     for (const f of run) expect(bare(f), f).toEqual([]);

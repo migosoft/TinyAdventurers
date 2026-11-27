@@ -42,6 +42,8 @@ export interface R3dParams {
   refl: boolean;
   /** The lava's heat shimmer (#344): the distortion of the picture above lava on or off (quality Fast leaves it out whatever this says). */
   heat: boolean;
+  /** The bloom (#442): colours above full white bleed light round themselves (quality Fast leaves it out whatever this says). */
+  bloom: boolean;
   /** The woodland page's brush lane (#331): the knight paces through a bush, with a pinned `t` for the same picture every time. */
   brush: boolean;
 }
@@ -57,7 +59,7 @@ export const DEFAULTS: R3dParams = {
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
   hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false, leafRate: 1, cover: true, gh: 1,
-  shafts: true, dust: true, smoke: true, embers: true, haze: true, drips: true, stir: true, draft: true, respawn: 0, refl: true, heat: true, brush: false,
+  shafts: true, dust: true, smoke: true, embers: true, haze: true, drips: true, stir: true, draft: true, respawn: 0, refl: true, heat: true, bloom: true, brush: false,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -81,6 +83,11 @@ export const ZOOM_MAX = 48;
 /** Whether the water's mirror pass runs: the Reflections switch, and never on quality Fast (#345). */
 export function reflects(p: Pick<R3dParams, 'refl' | 'quality'>): boolean {
   return p.refl && p.quality !== 'fast';
+}
+
+/** Whether the bloom runs: the switch, and never on quality Fast (#442). */
+export function blooms(p: Pick<R3dParams, 'bloom' | 'quality'>): boolean {
+  return p.bloom && p.quality !== 'fast';
 }
 
 /** Whether the heat shimmer runs: the switch, and never on quality Fast (#344). */
@@ -154,11 +161,12 @@ export function parseParams(search: string): R3dParams {
     respawn: range(num(q.get('respawn')), 0, 10, DEFAULTS.respawn),
     refl: q.get('refl') === '0' ? false : DEFAULTS.refl,
     heat: q.get('heat') === '0' ? false : DEFAULTS.heat,
+    bloom: q.get('bloom') === '0' ? false : DEFAULTS.bloom,
     brush: q.get('brush') === '1',
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh', 'shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft', 'respawn', 'refl', 'heat', 'brush']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh', 'shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft', 'respawn', 'refl', 'heat', 'bloom', 'brush']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -203,6 +211,7 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.respawn !== DEFAULTS.respawn) s += `&respawn=${p.respawn}`;
   if (p.refl !== DEFAULTS.refl) s += '&refl=0';
   if (p.heat !== DEFAULTS.heat) s += '&heat=0';
+  if (p.bloom !== DEFAULTS.bloom) s += '&bloom=0';
   if (p.brush !== DEFAULTS.brush) s += '&brush=1';
   return s;
 }

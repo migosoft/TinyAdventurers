@@ -8,6 +8,7 @@ import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { AMBIENT, sceneLights } from './light';
 import { newScene, stepScene } from './scene';
 import { seeLook } from './seeThrough';
+import { blooms } from './params';
 import { coverJob, coverSources, type CoverJob } from './cover/coverJob';
 import { tilesSeed } from './cover/moss';
 import { marksOf, type Assets, type View, type WorldInput } from './view';
@@ -55,7 +56,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(
-        { cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) }, cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now } },
+        { cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) }, cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now } },
         c.timer,
       );
     },

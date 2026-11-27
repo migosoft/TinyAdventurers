@@ -29,6 +29,7 @@ import type { FigureKit } from './models/kit';
 import { MODEL_OF_KIND } from './models/table';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
+import { blooms } from './params';
 import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { emitLavaCues } from './fx/lavaFx';
 import { rng } from './fx/rand';
@@ -233,7 +234,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       return c.view.draw(
         {
           ...(kit ? { models: { insts: fo.models, built: fo.built, kit } } : {}),
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, cracks: [], shafts: c.params.shafts, fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },
           wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },

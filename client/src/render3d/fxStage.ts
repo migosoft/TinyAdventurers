@@ -23,6 +23,7 @@ import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands, type Cand } from './lights';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
+import { blooms } from './params';
 import { seeLook } from './seeThrough';
 import { SIGHT_OFF } from './sightNodes';
 import { createStageKit } from './stageKit';
@@ -539,7 +540,7 @@ export function createFxStage(assets: Assets, p: R3dParams, search: string, host
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters, sight: SIGHT_OFF, models: { insts: fo.models, built: fo.built, kit }, fx: { tris: pass.blend, lit: pass.lit }, field: { age: fx.fieldAge(t), t },
           wallLights: { off: (i) => field.lights.get(i)?.on === false, now: t },

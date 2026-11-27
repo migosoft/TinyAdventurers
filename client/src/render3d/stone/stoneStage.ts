@@ -9,6 +9,7 @@ import { MOVE_KEYS, type Stage, type StageCtx } from '../host';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from '../light';
 import { footprint, lightView, movingCands, selectLights, staticCands } from '../lights';
 import { reflects, type R3dParams } from '../params';
+import { blooms } from '../params';
 import { newScene, stepScene } from '../scene';
 import { seeLook } from '../seeThrough';
 import { coverJob, coverSources, type CoverJob } from '../cover/coverJob';
@@ -96,7 +97,7 @@ export function createStoneStage(assets: Assets, p: R3dParams, search: string): 
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) },
           lava: null, lavaVersion: 0, darkvision: null, casters: [],
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },

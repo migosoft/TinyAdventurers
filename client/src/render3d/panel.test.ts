@@ -214,6 +214,18 @@ describe('panel', () => {
     }
   });
 
+  it('has a Bloom switch after Heat shimmer on the demo pages and in runs (#442)', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { host, calls, btn } = setup(DEFAULTS, mode);
+      const names = [...host.querySelectorAll('button')].map((b) => b.textContent);
+      expect(names.indexOf('Bloom')).toBe(names.indexOf('Heat shimmer') + 1);
+      expect(btn('Bloom').getAttribute('aria-pressed')).toBe('true');
+      btn('Bloom').click();
+      expect(calls[0].bloom).toBe(false);
+      expect(btn('Bloom').getAttribute('aria-pressed')).toBe('false');
+    }
+  });
+
   it('the tree rows (#329) show with the sky: a leaf slider with an Own button, and a Plain trees switch', () => {
     const { host, calls, panel, btn } = setup();
     const leaf = host.querySelector<HTMLInputElement>('#r3d-leaf')!;

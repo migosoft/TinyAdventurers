@@ -24,6 +24,7 @@ import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLigh
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import type { R3dParams } from './params';
+import { blooms } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask, hiddenAt } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
@@ -190,7 +191,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(params), shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),

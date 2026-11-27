@@ -25,6 +25,7 @@ import type { FigureKit } from './models/kit';
 import { createStageKit, modelsReadouter } from './stageKit';
 import { seenOpeners } from './openers';
 import { DEFAULT_HOUR, type R3dParams } from './params';
+import { blooms } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
@@ -266,7 +267,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(params), shadows: params.shadows, smooth: params.smooth, t: now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           ...(kit ? { models: { insts: fo.models, built: fo.built, kit } } : {}),
           brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds }, trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),

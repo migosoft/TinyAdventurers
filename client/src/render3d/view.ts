@@ -31,6 +31,8 @@ import {
 } from 'three/webgpu';
 import type { StoneField } from './stone/field';
 import { sharpCopyNode } from './sharpCopy';
+import { bloomPresent } from './bloom';
+import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
@@ -165,6 +167,8 @@ export interface FrameInput {
    * triangle, one chunk mesh of each kind though off screen), so three builds their programs and pipelines now and not at the first sight in play.
    */
   warm?: boolean;
+  /** The bloom (#442; `blooms(params)`): the picture is half-float and the present step adds the glow of colours above 1. False: the plain path, 8-bit, drawn straight to the canvas at High. */
+  bloom: boolean;
   /** The effects (#308): blended triangles (unlit) and lit triangles; absent: none. */
   fx?: { tris: FxBuf; lit: FxBuf; /** The smoke quads of the smoke bodies (#359); absent: none. */ smoke?: SmokeBuf };
   /** The force field's life (#308): `age` seconds since it appeared (absent: an old one, no fade-in), `t` the clock. */
@@ -443,8 +447,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const toward = viewTowardUniform();
   const water = waterMaterial(lighting, sight, fieldTex, map, toward, { daylight: world.painted, pond: pondFieldOf(map) });
   // The copy of the opaque scene the water sees through, and the mirror picture: resized in place (the water's nodes keep the texture objects).
-  const sceneCopy = new RenderTarget(1, 1, { depthBuffer: false, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false });
-  sceneCopy.texture.colorSpace = NoColorSpace;
+  const makeSceneCopy = (half: boolean): RenderTarget => {
+    const t = new RenderTarget(1, 1, { depthBuffer: false, magFilter: NearestFilter, minFilter: NearestFilter, generateMipmaps: false, ...(half ? { type: HalfFloatType } : {}) });
+    t.texture.colorSpace = NoColorSpace;
+    return t;
+  };
+  // Half-float while the bloom is on, so a colour above 1 seen through the water or the heat shimmer keeps its value; swapped by `setBloomPicture`.
+  let sceneCopy = makeSceneCopy(false);
   const mirrorTarget = new RenderTarget(1, 1, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
   mirrorTarget.texture.colorSpace = NoColorSpace;
   water.setScene(sceneCopy.texture);
@@ -882,17 +891,39 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const fullViewport = new Vector4();
   // The copy samples the target linearly at sharpened positions (sharpCopy.ts), so the target is always LinearFilter.
   let copy: ReturnType<typeof sharpCopyNode> | null = null;
-  function targetFor(w: number, h: number): RenderTarget {
-    if (!target || target.width !== w || target.height !== h) {
+  // The bloom's present step (#442), its own quad: `quad` also copies the picture into the scene copy and must stay a plain copy. Built with the first bloom frame.
+  let bloomShow: { quad: QuadMesh; material: NodeMaterial; input: ReturnType<typeof texture>; node: ReturnType<typeof bloomPresent>['bloom'] } | null = null;
+  /** Whether the picture target and the scene copy are half-float (the bloom is on). */
+  let halfPicture = false;
+  function targetFor(w: number, h: number, half = false): RenderTarget {
+    if (!target || target.width !== w || target.height !== h || half !== halfPicture) {
       target?.dispose();
-      target = new RenderTarget(w, h, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
+      target = new RenderTarget(w, h, { depthBuffer: true, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false, ...(half ? { type: HalfFloatType } : {}) });
       target.texture.colorSpace = NoColorSpace;
+      if (half !== halfPicture) {
+        sceneCopy.dispose();
+        sceneCopy = makeSceneCopy(half);
+        water.setScene(sceneCopy.texture);
+        shimmer.setScene(sceneCopy.texture);
+        halfPicture = half;
+      }
       if (!copy) {
         // Built once: the shader stays, a new target only swaps the sampled texture.
         copy = sharpCopyNode(target.texture);
         copyMaterial.fragmentNode = copy.node;
         copyMaterial.needsUpdate = true;
       } else copy.node.value = target.texture;
+      if (half) {
+        if (!bloomShow) {
+          const input = texture(target.texture);
+          const m = new NodeMaterial();
+          m.depthTest = false;
+          m.depthWrite = false;
+          const b = bloomPresent(copy.node, input);
+          m.fragmentNode = b.node;
+          bloomShow = { quad: new QuadMesh(m), material: m, input, node: b.bloom };
+        } else bloomShow.input.value = target.texture;
+      }
     }
     return target;
   }
@@ -911,6 +942,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   };
   /** Whether the last frame's picture was drawn with the scene copy (a pool in view), for `readback`. */
   let lastCopy = false;
+  /** Whether the last frame was drawn with the bloom, for `readback`. */
+  let lastBloom = false;
   /**
    * The picture with a pool in view, into `target`: the opaque scene (layer 0), a copy of its colour, then the water and everything
    * translucent over it with the depth kept. The water reads the copy: what lies behind its surface.
@@ -1103,7 +1136,17 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       try {
         // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does. The composite keeps the last
         // frame's `uvScale`, so this is right only when the readback target matches the picture's plan (its crop of the art-size frustum).
-        if (lastCopy && target && target.width === w && target.height === h) {
+        if (lastBloom && target && target.width === w && target.height === h && bloomShow) {
+          // The bloom's picture: the half-float target, then the present step with the glow of the last frame.
+          if (lastCopy) splitPicture(target);
+          else {
+            renderer.setRenderTarget(target);
+            renderer.render(scene, camera);
+          }
+          if (lastShafts && shafts) compositeShafts(shafts);
+          renderer.setRenderTarget(rt);
+          bloomShow.quad.render(renderer);
+        } else if (lastCopy && target && target.width === w && target.height === h) {
           // A pool was in view: the same split picture as `draw` (the water's uniforms and the mirror picture are the last frame's), then copied over.
           splitPicture(target);
           if (lastShafts && shafts) compositeShafts(shafts);
@@ -1307,6 +1350,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const pools = f.warm ? warmDraws++ % 2 === 1 : null;
       const wp = picturePasses({ water: pools ?? poolInView(boxesOfWater(), fp), lava: pools ?? poolInView(boxesOfLava(), fp), reflect: f.water?.reflect ?? false, heat: f.lavaPool?.heat ?? false }, p.targetW, p.targetH);
       lastCopy = wp.copy;
+      lastBloom = f.bloom;
+      // The direct path (High at a whole zoom) draws to the canvas in 8 bit: no bloom there.
+      const direct = p.direct && !wp.copy && !f.bloom;
       if (wp.shimmer !== shimmerOn) {
         shimmerOn = wp.shimmer;
         for (const c of shimmerChunks) if (c) c.mesh.visible = shimmerOn;
@@ -1350,7 +1396,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       if (figures.drawn.figures > 0 || builtIds) {
         // The id pass: the size of the target the picture is drawn into, so the hull's texel fetch hits its own pixel on both backends.
         let iw = p.targetW, ih = p.targetH;
-        if (p.direct && !wp.copy) {
+        if (direct) {
           const sz = renderer.getDrawingBufferSize(idSize);
           iw = sz.x;
           ih = sz.y;
@@ -1363,7 +1409,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         figures.shared.idOn.value = 1;
         timer?.lap('models');
       }
-      if (p.direct && !wp.copy) {
+      if (direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
         // High draws straight to the canvas: there is no copy, so 'present' is not booked (it stays 0).
@@ -1375,7 +1421,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         return renderer.info.render.drawCalls;
       }
       // Into the picture's target; with a pool in view also on High, where the target has the canvas's size.
-      const rt = targetFor(p.targetW, p.targetH);
+      const rt = targetFor(p.targetW, p.targetH, f.bloom);
       copy!.size.value.set(p.targetW, p.targetH);
       copy!.scale.value.set(p.scaleX, p.scaleY);
       if (wp.copy) splitPicture(rt);
@@ -1389,12 +1435,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         timer?.lap('shafts');
       }
       renderer.setRenderTarget(null);
-      if (p.direct) quad.render(renderer); // the whole canvas
+      const present = f.bloom && bloomShow ? bloomShow.quad : quad;
+      if (p.direct) present.render(renderer); // the whole canvas
       else {
         renderer.getViewport(fullViewport);
         // The viewport origin is the top-left corner of the canvas on both backends.
         renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
-        quad.render(renderer);
+        present.render(renderer);
         renderer.setViewport(fullViewport);
       }
       timer?.lap('present');
@@ -1437,6 +1484,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
           shafts = null;
         }
         copyMaterial.dispose();
+        bloomShow?.material.dispose();
+        bloomShow?.node.dispose();
         mask.dispose();
         sunTarget?.dispose();
         sunDepth?.dispose();

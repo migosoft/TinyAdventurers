@@ -34,6 +34,7 @@ import { stoneField } from './stone/field';
 import { makeStoneRun } from './stone/stoneRun';
 import { Water3d } from './water/water';
 import { reflects } from './params';
+import { blooms } from './params';
 
 const TILE = 16;
 /** The free camera's speed in tiles per second. */
@@ -563,7 +564,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) }, models: { insts: fo.models, built: fo.built, kit },
           water: { ripples: wo.ripples, now: t, reflect: reflects(c.params) },
           fx: { tris: pass.blend, lit: pass.lit, smoke: pass.smoke },

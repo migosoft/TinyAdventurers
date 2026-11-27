@@ -16,6 +16,7 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import { shimmers, type R3dParams } from './params';
+import { blooms } from './params';
 import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { rng } from './fx/rand';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
@@ -204,7 +205,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion, lavaPool: { bubbles: lo.bubbles, stirs: lo.stirs, now: t, heat: shimmers(c.params) },
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,

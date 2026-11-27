@@ -30,6 +30,7 @@ import { assignSkips,CASTER_CAP, footprint, lavaTexels, lightView, movingCands, 
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
 import { reflects, shimmers, type R3dParams } from './params';
+import { blooms } from './params';
 import { LAVA_SEED, Lava3d, type LavaIn } from './lava/lava';
 import { rng } from './fx/rand';
 import { seeLook } from './seeThrough';
@@ -233,7 +234,7 @@ export function createMoodStage(assets: Assets, p: R3dParams, search: string, ho
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, bloom: blooms(c.params), shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: 0,
           darkvision: null,
