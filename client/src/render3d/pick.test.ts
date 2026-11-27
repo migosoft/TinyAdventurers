@@ -27,6 +27,13 @@ for (const p of [30, 48.6, 80]) for (const yaw of [0, 90, 135]) {
       expect(pickCylinder(cam, plan, zoom, ...at(g, 0, 9), [g])).toBe(g);
       expect(pickCylinder(cam, plan, zoom, ...at(g, 0, g.h + g.r * sp + 1), [g])).toBeNull();
     });
+    it('the foot ellipse reaches below the foot point', () => {
+      expect(pickCylinder(cam, plan, zoom, ...at(g, 0, -g.r * sp / 2), [g])).toBe(g);
+      expect(pickCylinder(cam, plan, zoom, ...at(g, 0, -g.r * sp - 1), [g])).toBeNull();
+    });
+    it('the width is in art px, not canvas px', () => {
+      expect(pickCylinder(cam, plan, zoom, ...at(g, g.r - 1, 4), [g])).toBe(g);
+    });
     it('misses beside it', () => {
       expect(pickCylinder(cam, plan, zoom, ...at(g, g.r + 1, 4), [g])).toBeNull();
     });
@@ -55,6 +62,7 @@ describe('cylinderOf', () => {
       { kind: KIND.Chest, side: SIDE.Neutral, flags: 0 },
       { kind: KIND.Barrel, side: SIDE.Neutral, flags: 0 },
       { kind: KIND.Knight, side: SIDE.Friendly, flags: 0 },
+      { kind: KIND.Wizard, side: SIDE.Hostile, flags: 0 },
       { kind: KIND.RaisedSkeleton, side: SIDE.Friendly, flags: 0 },
     ];
     for (const e of skip) { expect(pickable(e)).toBe(false); expect(cylinderOf({ id: 1, ...e }, here)).toBeNull(); }
