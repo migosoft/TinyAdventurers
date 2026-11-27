@@ -27,6 +27,8 @@ const FINGER: [V, V][] = [
   [[1.56, 2.6, -0.74], [1.76, 1.0, -0.7]],
   [[1.22, 2.45, -0.7], [1.16, 0.95, -0.6]],
 ];
+/** The left half of the mouth's line, from the middle of the muzzle to the corner turned up in the cheek. */
+const SMILE: V[] = [[0, 2.352, 0.365], [0.05, 2.358, 0.35], [0.088, 2.39, 0.3], [0.112, 2.445, 0.235]];
 export const EYE: V = [0.078, 2.495, 0.32], MOUTH: V = [0, 2.365, 0.36];
 
 const DEFS: [string, string | null, V][] = [
@@ -115,8 +117,8 @@ function prims(id: (n: string) => number): Prim[] {
   const sk = (glow: number, dark = 0): Tag => [glow, 0, 0, dark];
   const HORN: Tag = [0, 1, 0, 0], TIP: Tag = [0, 1, 1, 0];
   const P: Prim[] = [
-    ball([0, 1.28, -0.03], [0.31, 0.19, 0.21], id('hips'), sk(0.3, 0.1)),
-    ball([0, 1.55, 0.01], [0.29, 0.25, 0.2], id('waist'), sk(0.8)),
+    ball([0, 1.28, -0.03], [on('slim') ? 0.265 : 0.31, 0.19, 0.21], id('hips'), sk(0.3, 0.1)),
+    ball([0, 1.55, 0.01], [on('slim') ? 0.24 : 0.29, 0.25, 0.2], id('waist'), sk(0.8)),
     ball([0, 1.9, -0.02], [0.35, 0.34, 0.25], id('chest'), sk(1)),
     ball([0, 2.11, -0.1], [0.35, 0.16, 0.19], id('chest'), sk(0.2)),
     cone([0, 2.16, 0], [0, 2.4, 0.08], 0.17, 0.14, id('neck'), sk(0.3)),
@@ -125,8 +127,10 @@ function prims(id: (n: string) => number): Prim[] {
     cone([0, 2.66, 0.24], [0, 2.93, 0.17], 0.07, 0.008, id('head'), HORN, 0.015),
     { ...ball([0, 2.43, 0.27], [0.095, 0.075, 0.1], id('head'), sk(0), 0.04), wr: 0.02 },
     { ...ball([0, 2.335, 0.24], [0.095, 0.045, 0.11], id('jaw'), sk(0), 0.02), wr: 0.02 },
-    { ...ball([0, 2.365, 0.31], [0.085, 0.02, 0.13], 0, sk(0), 0.01), sub: true },
+    { ...ball([0, 2.365, on('teeth') ? 0.29 : 0.31], on('teeth') ? [0.075, 0.018, 0.1] : [0.085, 0.02, 0.13], 0, sk(0), 0.01), sub: true },
   ];
+  // the grin: the mouth's line runs round the muzzle and turns up into the cheeks
+  if (on('teeth')) for (const s of [1, -1]) for (let i = 0; i + 1 < SMILE.length; i++) P.push({ ...cone(mx(s, SMILE[i]), mx(s, SMILE[i + 1]), 0.015, i === 2 ? 0.006 : 0.015, 0, sk(0), 0.008), sub: true });
   for (const s of [1, -1]) {
     const n = (name: string) => id(name + (s > 0 ? 'L' : 'R'));
     const m = (v: V) => mx(s, v);
@@ -146,7 +150,7 @@ function prims(id: (n: string) => number): Prim[] {
       eb([0.075, 1.72, 0.175], [0.07, 0.055, 0.045], 'chest', sk(1), 0.015);
       eb([0.075, 1.6, 0.185], [0.07, 0.055, 0.045], 'waist', sk(0.9), 0.015);
       eb([0.072, 1.48, 0.18], [0.065, 0.055, 0.045], 'waist', sk(0.8), 0.015);
-      eb([0.24, 1.62, 0.08], [0.08, 0.13, 0.1], 'waist', sk(0.5), 0.02);
+      eb([on('slim') ? 0.195 : 0.24, 1.62, 0.08], [0.08, 0.13, 0.1], 'waist', sk(0.5), 0.02);
       e(add(th(0.55), [0.09, 0, 0.06]), [0.085, 0.2, 0.09], 'thigh', sk(0.15, 0.2), 0.02);
       e(add(th(0.8), [-0.07, 0, 0.07]), [0.07, 0.11, 0.07], 'thigh', sk(0.15, 0.2), 0.02);
       e(add(th(0.45), [0, 0, 0.12]), [0.08, 0.2, 0.07], 'thigh', sk(0.15, 0.2), 0.02);
@@ -307,8 +311,19 @@ export function build(r: Rig): Built {
   const tail = geometry(tk.position, tk.index, tk.info, tk.skinIndex, tk.skinWeight);
   // the strap round the hips that the cloth hangs from
   const strap: V[] = [];
-  for (let i = 0; i <= 16; i++) { const a = (i / 16) * Math.PI * 2; strap.push([0.3 * Math.sin(a), 1.41 - 0.035 * Math.cos(a), 0.225 * Math.cos(a) - 0.01]); }
+  for (let i = 0; i <= 16; i++) { const a = (i / 16) * Math.PI * 2; strap.push([(on('slim') ? 0.262 : 0.3) * Math.sin(a), 1.41 - 0.035 * Math.cos(a), 0.225 * Math.cos(a) - 0.01]); }
   tube(tubes, strap, strap.map(() => 0.04), strap.slice(1).map(() => r.id('hips')), () => LEATHER, 3, 8);
+  // teeth: pointed fangs along the grin, the upper ones on the skull, the lower ones on the jaw, meshing when the mouth shuts
+  if (on('teeth')) for (const s of [1, -1]) {
+    const at = (t: number): V => { const f = Math.min(2.999, t * 3), i = Math.floor(f); return lerp(SMILE[i], SMILE[i + 1], f - i); };
+    const tooth = (t: number, up: boolean, len: number) => {
+      const p = at(t), n = norm([p[0], 0, p[2] - 0.2]), dy = up ? 1 : -1;
+      const base: V = [s * (p[0] - n[0] * 0.017), p[1] + dy * 0.02, p[2] - n[2] * 0.017], tip: V = [s * (p[0] - n[0] * 0.006), p[1] - dy * len, p[2] - n[2] * 0.006];
+      tube(tubes, [base, tip], [0.013 + len * 0.1, 0.0012], [r.id(up ? 'head' : 'jaw')], () => [1, 1, 0, 0], 4, 7);
+    };
+    [[0.07, 0.03], [0.24, 0.034], [0.42, 0.056], [0.58, 0.036], [0.73, 0.03], [0.87, 0.024]].forEach(([t, l]) => { if (s > 0 || t > 0.02) tooth(t, true, l); });
+    [[0.155, 0.03], [0.33, 0.046], [0.5, 0.034], [0.655, 0.03], [0.8, 0.024]].forEach(([t, l]) => tooth(t, false, l));
+  }
   for (const [side, s] of [['L', 1], ['R', -1]] as const) {
     const n = (name: string) => r.id(name + side), m = (v: V) => mx(s, v);
     const w1 = n('wing1'), w2 = n('wing2');

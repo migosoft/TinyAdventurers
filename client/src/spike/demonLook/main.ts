@@ -23,7 +23,7 @@ document.body.append(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x050302);
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
+const CAMS: Record<string, [number, number, number, number]> = { game: [0, 8.4, 9.2, 2.3], front: [0, 3.2, 14, 2.2], side: [13, 4, 2, 2.2], headside: [3.4, 2.5, 0.9, 2.3], back: [5, 5, -12, 2.2], spine: [1.6, 3.6, -5.2, 1.7], close: [1.2, 3.4, 4.6, 2.1], face: [0.5, 3.3, 2.6, 2.25], grin: [0.7, 1.95, 2.2, 2.1], level: [0, 2.3, 2.4, 2.3], zoom: [0, 5.6, 5.4, 2.3], head: [0.9, 2.5, 2.6, 2.3], jaw: [3.2, 2.3, 2.4, 2.25], maw: [0.7, 1.75, 3.0, 2.15], wing: [-3.2, 4.2, 5.5, 2.9] };
 const cam = CAMS[url.get('cam') ?? 'game'] ?? CAMS.game;
 camera.position.set(cam[0], cam[1], cam[2]);
 const controls = new OrbitControls(camera, renderer.domElement);

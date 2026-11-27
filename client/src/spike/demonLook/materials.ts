@@ -58,8 +58,8 @@ function patch(m: THREE.MeshStandardMaterial, p: Patch) {
 export function skinMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.7, side: THREE.DoubleSide });
   return patch(m, {
-    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
-    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark;',
+    key: 'skin', uniforms: { uHorn: { value: HORN_PATH.map(([p, r]) => new THREE.Vector4(p[0], p[1], p[2], r)) }, uRidges: { value: on('ridges') ? 1 : 0 }, uDark: { value: on('dark') ? 1 : 0 }, uTeeth: { value: on('teeth') ? 1 : 0 }, uBreath, uEye: { value: new THREE.Vector3(...EYE) }, uMouth: { value: new THREE.Vector3(...MOUTH) } },
+    decl: 'uniform vec3 uEye; uniform vec3 uMouth; uniform float uBreath; uniform vec4 uHorn[8]; uniform float uRidges; uniform float uDark; uniform float uTeeth;',
     fdecl: /* glsl */ `
     float gEdge; float gRnd; float gPlate; float gHu; float gHa; float gHd; float gRidge;
     // Where a point is on the great horn: how far along it (0 base, 1 tip), the angle round it, and how far outside its skin.
@@ -148,6 +148,9 @@ export function skinMaterial(): THREE.MeshStandardMaterial {
     vec3 q = (p-uMouth)/vec3(0.095,0.034,0.14);
     float fang = abs(fract(p.x*24.)-0.5)*2.;
     float maw = (1.-smoothstep(0.5, 1., length(q))) * step(abs(q.y)*1.5, fang);
+    // with real teeth: the glow fills whatever lies inside the mouth, behind them
+    vec3 q2 = (p - uMouth - vec3(0.,0.02,-0.06))/vec3(0.125,0.06,0.13);
+    maw = mix(maw, (1.-smoothstep(0.6, 1., length(q2))) * (1.-smoothstep(0.2, 0.5, open)) * (1.-vInfo.y) * 0.7, uTeeth);
     dEmit += (eye*vec3(1.,0.5,0.1)*3.2 + halo*halo*vec3(0.9,0.12,0.0)*0.5 + maw*vec3(1.,0.4,0.06)*(2.+6.*uBreath)) * (0.85+0.15*sin(uTime*3.1));
     dAlb *= 1.-0.8*max(eye, maw);`,
   });
