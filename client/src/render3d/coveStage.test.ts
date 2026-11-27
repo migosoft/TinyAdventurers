@@ -91,7 +91,7 @@ describe('the ?r3d=cove stage', () => {
     expect(ids.filter((i) => i.startsWith('x'))).toHaveLength(7);
     expect(ids.filter((i) => i === 's1' || i === 's2')).toHaveLength(2);
     expect(f.plantShadows!.plants.length).toBeGreaterThan(0);
-    expect(f.plantShadows).toMatchObject({ tile: 128, cap: 16 });
+    expect(f.plantShadows).toMatchObject({ tile: 128, cap: 40 });
     expect(setup('?r3d=cove&quality=fast').run(1, 0.016).plantShadows).toBeNull();
   });
 

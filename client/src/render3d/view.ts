@@ -58,7 +58,7 @@ import type { AirParts } from './air/airParts';
 import { cardMaterial, fxLitMaterial, fxMaterial, glowMaterial, maskMaterial, shadowMaterial, SMOKE_ORDER, smokeMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { SunFit, Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
-import { castingPlants, PLANT_FAR, PLANT_NEAR, TABLE_LEN, atlasLayout, packTable, planTiles, tileRect, type PlantBound } from './plantShadow';
+import { castingPlants, PLANT_FAR, PLANT_NEAR, TABLE_LEN, atlasLayout, faceTile, packTable, planTiles, tileRect, type PlantBound } from './plantShadow';
 import { setHidden } from './trees/treeNodes';
 import type { TreeFrame } from './trees/forest';
 import { TreeLayer } from './trees/treeLayer';
@@ -691,7 +691,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     scene.add(ceiling);
   }
   const chunks = { total: chunkTotal(), drawn: 0 };
-  // The warm-up (#434) draws every mesh of the scene and the sun's scene though off screen (frustum culling off), then puts it back:
+  // The warm-up (#434) draws every mesh of the scene, the sun's scene and the plant shadows' scene though off screen (frustum culling off), then puts it back:
   // each material compiles and each geometry uploads under the loading screen; a geometry's first upload in a run frame stalled WebGL2 (#437).
   let chunksWarm = false;
   let warmDraws = 0;
@@ -699,7 +699,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const setChunksWarm = (on: boolean): void => {
     for (const m of warmChunks) m.frustumCulled = true;
     warmChunks = [];
-    if (on) for (const s of [scene, sunScene]) s.traverse((o) => { if ((o as Mesh).isMesh && o.frustumCulled) warmChunks.push(o as Mesh); });
+    if (on) for (const s of [scene, sunScene, castScene]) s?.traverse((o) => { if ((o as Mesh).isMesh && o.frustumCulled) warmChunks.push(o as Mesh); });
     for (const m of warmChunks) m.frustumCulled = false;
     chunksWarm = on;
   };
@@ -1309,7 +1309,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         const plan = planTiles(f.lights, f.cracks ?? [], castingPlants(ps.plants, ps.hidden), ps.cap);
         const { perRow, size } = atlasLayout(ps.tile, ps.cap);
         plantTable ??= new Float32Array(TABLE_LEN * 4);
-        if (plan.tiles.length > 0) {
+        // A warm frame (#434) draws one tile even when none is wanted, so the cast pipeline compiles under the loading screen, not at the first light near a plant.
+        const drawn = plan.tiles.length > 0 ? plan.tiles : f.warm ? [{ kind: 'face' as const, slot: 0, face: 0, cam: faceTile([0, 1, 0], 0) }] : plan.tiles;
+        if (drawn.length > 0) {
           const depth = plantTargetFor(size);
           setHidden(trees.shared, ps.hidden);
           const rt = plantTarget!;
@@ -1321,7 +1323,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
           renderer.clearDepth();
           renderer.autoClear = false;
           rt.scissorTest = true;
-          plan.tiles.forEach((t, i) => {
+          for (let i = 0; i < drawn.length; i++) {
+            const t = drawn[i];
             const r = tileRect(i, perRow, ps.tile);
             rt.viewport.set(r.x, r.y, r.w, r.h);
             rt.scissor.set(r.x, r.y, r.w, r.h);
@@ -1334,18 +1337,25 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
               cam = plantPersp;
             } else cam = plantOrtho = sunCamera({ ...t.cam, size: 0, texel: 0 }, plantOrtho ?? undefined);
             renderer.render(castScene, cam);
-          });
+          }
           rt.scissorTest = false;
           rt.viewport.set(0, 0, size, size);
           rt.scissor.set(0, 0, size, size);
           renderer.autoClear = autoClear;
-          packTable(plan, perRow, SUN_FLIP_V, plantTable);
-          lighting.plants?.set(plantTable, depth, size);
-          plantTiles = plan.tiles.length;
-          plantLive = true;
+          if (plan.tiles.length > 0) {
+            packTable(plan, perRow, SUN_FLIP_V, plantTable);
+            lighting.plants?.set(plantTable, depth, size);
+            plantTiles = plan.tiles.length;
+            plantLive = true;
+          } else {
+            plantTable.fill(0); // the warm tile only: no tiles, every lookup is lit
+            lighting.plants?.set(plantTable, depth, size);
+            plantLive = false;
+          }
         } else {
           plantTable.fill(0); // tile count 0: every lookup is lit
           if (plantDepth) lighting.plants?.set(plantTable, plantDepth, plantTarget!.width);
+          plantLive = false;
         }
         timer?.lap('plantShadows');
       } else if (plantTable && plantDepth && plantLive) {
@@ -1526,6 +1536,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunDepth?.dispose();
         plantTarget?.dispose();
         plantDepth?.dispose();
+        lighting.plants?.dispose();
         sunStandIn.dispose();
         casterMaterial?.dispose();
         trees.dispose();

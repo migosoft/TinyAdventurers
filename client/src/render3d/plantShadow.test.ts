@@ -5,7 +5,7 @@ import { CRACK_CAP } from './air/cracks';
 import { CHASM_BED } from './dips/shape';
 import { LIGHT_CAP, type Light } from './light';
 import { sunCamera } from './sunNodes';
-import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, atlasLayout, faceHits, packTable, tileRect, planTiles, castingPlants, pointVisAt, crackVisAt, PLANT_BIAS, CRACK_BIAS, type PlantBound } from './plantShadow';
+import { FACES, PLANT_FAR, PLANT_NEAR, TABLE_LEN, crackCam, crackCoord, faceCoord, atlasLayout, faceHits, packTable, tileRect, planTiles, castingPlants, pointVisAt, crackVisAt, PLANT_BIAS0, CRACK_BIAS, type PlantBound } from './plantShadow';
 
 const light = (x: number, y: number, z: number, shadow = true, radius = 6): Light => ({ x, y, z, radius, r: 1, g: 1, b: 1, shadow, skip: -1 });
 const crack = (fx: number, fz: number): Crack => ({
@@ -108,6 +108,19 @@ describe('planTiles', () => {
     expect(cast).toEqual([all[0]]);
     expect(planTiles(lights, [], cast, 99).tiles.length).toBe(0);
   });
+  it('takes a light only when all its faces still fit under the cap', () => {
+    const lights = [light(5, 1, 5), light(5, 1, 6)];
+    const two = [plant(8, 5), plant(5, 8)];
+    const full = planTiles(lights, [], two, 99);
+    const n0 = full.tiles.filter((t) => t.slot === 0).length;
+    expect(n0).toBeGreaterThan(1);
+    const plan = planTiles(lights, [], two, n0 + 1); // the second light needs more than one tile
+    expect(plan.tiles.length).toBe(n0);
+    expect(plan.tiles.every((t) => t.slot === 0)).toBe(true);
+  });
+  it('a light with no casting plant in reach gets no tile', () => {
+    expect(planTiles([light(60, 1, 60)], [], plants, 99).tiles.length).toBe(0);
+  });
   it('no plants gives no tiles', () => {
     expect(planTiles([light(5, 1, 5)], [crack(8, 5)], [], 99).tiles.length).toBe(0);
   });
@@ -189,7 +202,19 @@ describe('the lookup twin', () => {
     expect(pointVisAt(table(plan), a.read, size, P, 0, L)).toBe(1);
     fill(a, id, 0, 0, 0, T); // the whole tile holds something nearer
     expect(pointVisAt(table(plan), a.read, size, P, 0, L)).toBe(0);
-    expect(c.depth).toBeGreaterThan(0 + PLANT_BIAS);
+    expect(c.depth).toBeGreaterThan(0);
+  });
+  it('point: the bias is linear in tiles: a blocker 0.3 in front of a receiver at a = 6 shadows it, 0.01 in front does not', () => {
+    const plan = facePlan();
+    const P: [number, number, number] = [L[0] + 6, 2, 10];
+    const z = (lin: number): number => (PLANT_FAR * (lin - PLANT_NEAR)) / (lin * (PLANT_FAR - PLANT_NEAR)); // window depth of a distance
+    const lit = (blockerAt: number): number => {
+      const a = atlas();
+      fill(a, plan.lightFaces[0], 0, 0, z(blockerAt), T);
+      return pointVisAt(table(plan), a.read, size, P, 0, L);
+    };
+    expect(lit(5.7)).toBe(0);
+    expect(lit(5.99)).toBe(1);
   });
   it('point: a tile of -1 is lit and reads nothing', () => {
     const a = atlas();
@@ -249,7 +274,8 @@ describe('the lookup twin', () => {
     const plan = cp();
     expect(crackVisAt(table(plan), atlas().read, size, [10.2, 0.5, 10], 0)).toBe(1);
     expect(crackVisAt(table(plan), () => 0, size, [10.2, 0.5, 10], 3)).toBe(1); // slot 3 has no tile
-    expect(CRACK_BIAS).toBeLessThan(PLANT_BIAS);
+    expect(CRACK_BIAS).toBeLessThan(0.0015);
+    expect(PLANT_BIAS0).toBeGreaterThan(0);
   });
   it('crack: the flip reads the mirrored row', () => {
     const plan = cp();
@@ -278,7 +304,7 @@ describe('the atlas', () => {
   it('a receiver past PLANT_FAR (depth clamped to 1) is shadowed by a texel below 1', () => {
     const T = 4, perRow = 1, size = T;
     const L: [number, number, number] = [0, 2, 0];
-    const plan = planTiles([light(...L)], [], [plant(2, 0, 0.5, 3)], 1);
+    const plan = planTiles([light(...L)], [], [plant(2, 0, 0.5, 3)], 6);
     const t = new Float32Array(TABLE_LEN * 4);
     packTable(plan, perRow, false, t);
     const P: [number, number, number] = [PLANT_FAR + 5, 2, 0];

@@ -145,7 +145,7 @@ describe('the run view and the game lights', () => {
     expect(f).not.toHaveProperty('plants');
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
     expect(f?.plantShadows?.plants.length).toBeGreaterThan(0);
-    expect(f?.plantShadows).toMatchObject({ tile: 128, cap: 16, hidden: [] });
+    expect(f?.plantShadows).toMatchObject({ tile: 128, cap: 40, hidden: [] });
     expect(run({ params: { quality: 'fast' } }).f?.plantShadows ?? null).toBeNull();
     expect(run().f?.plantShadows ?? null).toBeNull(); // no cove: no pass
     expect(Array.isArray(r.v.bushelSpots())).toBe(true); // this small cove may place no tuft; Cove3d's own test counts them

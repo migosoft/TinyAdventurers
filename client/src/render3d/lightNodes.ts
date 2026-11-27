@@ -76,7 +76,7 @@ export interface Lighting {
   /** The ambient light (a uniform); `AMBIENT` is its start value. */
   setAmbient(rgb: [number, number, number]): void;
   /** The plant shadows of a level with a cove (#333): the frame's table, the atlas depth texture and its size in texels. Null without `opts.plants`: the shaders then carry nothing of it. */
-  readonly plants: Pick<PlantShadow, 'set'> | null;
+  readonly plants: Pick<PlantShadow, 'set' | 'dispose'> | null;
 }
 
 /** `opts.sun`: the world has a sun (a woodland): `lightAt` then takes its `sun` option. Without it the shaders carry nothing of the sun. `opts.plants`: the world has a cove: the light and crack loops look up the plants' depth tiles (#333). */

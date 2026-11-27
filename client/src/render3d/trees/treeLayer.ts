@@ -92,14 +92,14 @@ export class TreeLayer {
   private readonly dirty = new Set<number>();
   private readonly uploadedAt = new Map<number, number>();
 
-  /** `sunScene`: the sun's pass, or null without a sun. `castScene`: the plant shadow tiles' pass (#333), or null without a cove. `make` builds the three materials once, from the palette texture and the shared uniforms. `now`: the clock in ms. */
+  /** `sunScene`: the sun's pass, or null without a sun. `castScene`: the plant shadow tiles' pass (#333), or null without a cove. `make` builds the materials (depth, colour, sun, cast) once, from the palette texture and the shared uniforms. `now`: the clock in ms. */
   constructor(
     private readonly scene: Scene, private readonly sunScene: Scene | null, private readonly castScene: Scene | null,
     private readonly make: (palette: Texture, shared: TreeShared) => TreeMaterials,
     private readonly now: () => number = () => performance.now(),
   ) {}
 
-  /** Meshes held, in both scenes. */
+  /** Meshes held, in every scene. */
   get meshCount(): number {
     let n = 0;
     for (const l of this.meshes.values()) n += l.length;

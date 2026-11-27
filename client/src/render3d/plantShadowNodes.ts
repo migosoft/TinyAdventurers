@@ -4,7 +4,7 @@
 import { DepthTexture, Vector4 } from 'three/webgpu';
 import { Fn, If, abs, clamp, cross, dot, float, floor, int, ivec2, max, min, mix, select, texture, uniform, vec3 } from 'three/tsl';
 import { sharedArray } from './sharedArray';
-import { CRACK_BIAS, FACES, PLANT_BIAS, PLANT_FAR, PLANT_NEAR, TABLE_LEN } from './plantShadow';
+import { CRACK_BIAS, FACES, PLANT_BIAS0, PLANT_BIAS1, PLANT_FAR, PLANT_NEAR, TABLE_LEN } from './plantShadow';
 import { LIGHT_CAP } from './light';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,20 +17,23 @@ export interface PlantShadow {
   crackVis(P: N, slot: N): N;
   /** Takes the frame's table (`packTable`'s TABLE_LEN * 4 floats), the atlas depth texture and its size in texels. */
   set(table: Float32Array, depth: DepthTexture, atlasTexels: number): void;
+  /** Frees the stand-in depth texture. */
+  dispose(): void;
 }
 
 export function makePlantShadow(): PlantShadow {
   const table = sharedArray(Array.from({ length: TABLE_LEN }, () => new Vector4()), 'vec4').setName('plantTable');
   const uAtlas = uniform(1).setName('plantAtlas');
-  const atlas = texture(new DepthTexture(1, 1));
+  const standIn = new DepthTexture(1, 1);
+  const atlas = texture(standIn);
   const head: N = table.element(0);
 
   /** `vals[face]` as a vec3 node (a chain of selects over constants). */
   const pick = (face: N, vals: readonly (readonly number[])[]): N =>
     vals.reduceRight<N>((acc, v, i) => (acc ? select(face.lessThan(i + 0.5), vec3(v[0], v[1], v[2]), acc) : vec3(v[0], v[1], v[2])), null);
 
-  // softCompare: four texel loads, a 0/1 compare each, the bilinear mix; `id` the tile (a float node), `v` unflipped.
-  const soft = (id: N, u: N, v: N, depth: N, bias: number): N => {
+  // softCompare: four texel loads, a 0/1 `lit(texel)` each, the bilinear mix; `id` the tile (a float node), `v` unflipped.
+  const soft = (id: N, u: N, v: N, lit: (z: N) => N): N => {
     const perRow = head.x;
     const T = uAtlas.div(perRow);
     const row = floor(id.add(0.5).div(perRow)); // as the twin: the +0.5 keeps an inexact division in the right row
@@ -42,7 +45,7 @@ export function makePlantShadow(): PlantShadow {
     const at = (dx: number, dy: number): N => {
       const x = clamp(x0.add(dx), 0, T.sub(1)), y = clamp(y0.add(dy), 0, T.sub(1));
       const px = int(col.mul(T).add(x)), py = int(row.mul(T).add(y));
-      return select((atlas.load(ivec2(px, py)) as N).setUpdateMatrix(false).x.greaterThanEqual(depth.sub(bias)), float(1), float(0));
+      return select(lit((atlas.load(ivec2(px, py)) as N).setUpdateMatrix(false).x), float(1), float(0));
     };
     const top = mix(at(0, 0), at(1, 0), wx), bot = mix(at(0, 1), at(1, 1), wx);
     return mix(top, bot, wy);
@@ -62,9 +65,10 @@ export function makePlantShadow(): PlantShadow {
         const F = pick(face, FACES.map((f) => f.F)), U = pick(face, FACES.map((f) => f.U));
         const R = cross(F, U);
         const aa = max(dot(d, F), PLANT_NEAR);
-        const depth = min(float(1), aa.sub(PLANT_NEAR).mul(PLANT_FAR).div(aa.mul(PLANT_FAR - PLANT_NEAR)));
+        const ac = min(aa, float(PLANT_FAR)); // past far the receiver is compared at far
         const u = dot(d, R).div(aa.mul(2)).add(0.5), v = dot(d, U).div(aa.mul(2)).add(0.5);
-        vis.assign(soft(id, u, v, depth, PLANT_BIAS));
+        // the texel's window depth as the distance along the axis (the twin's `faceLinear`), lit when not nearer than a minus the bias
+        vis.assign(soft(id, u, v, (z) => z.mul(-(PLANT_FAR - PLANT_NEAR)).add(PLANT_FAR).reciprocal().mul(PLANT_NEAR * PLANT_FAR).greaterThanEqual(ac.sub(ac.mul(PLANT_BIAS1).add(PLANT_BIAS0)))));
       });
     });
     return vis;
@@ -82,7 +86,7 @@ export function makePlantShadow(): PlantShadow {
         const u = dot(d, e1.xyz).div(e1.w.mul(2)).add(0.5), v = dot(d, e2.xyz).div(e2.w.mul(2)).add(0.5);
         const depth = clamp(dot(d, e3.xyz).div(e3.w.mul(2)).add(0.5), 0, 1);
         If(u.greaterThanEqual(0).and(u.lessThanEqual(1)).and(v.greaterThanEqual(0)).and(v.lessThanEqual(1)), () => {
-          vis.assign(soft(id, u, v, depth, CRACK_BIAS));
+          vis.assign(soft(id, u, v, (z) => z.greaterThanEqual(depth.sub(CRACK_BIAS))));
         });
       });
     });
@@ -97,6 +101,7 @@ export function makePlantShadow(): PlantShadow {
       atlas.value = depth;
       uAtlas.value = atlasTexels;
     },
+    dispose: () => standIn.dispose(),
   };
 }
 

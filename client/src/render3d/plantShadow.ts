@@ -93,15 +93,16 @@ export function faceHits(L: Vec3, face: number, reach: number, plants: readonly 
   return false;
 }
 
-const faceTile = (L: Vec3, face: number): TileCam => {
+export const faceTile = (L: Vec3, face: number): TileCam => {
   const { F, U } = FACES[face];
   return { C: L, R: cross(F, U), U, F, ext: [0, 0, 0], persp: true };
 };
 
-/** Cracks first (slot order), then lights in list order with their faces in `FACES` order, until `cap` tiles. */
+/** Cracks first (slot order), then lights in list order with their faces in `FACES` order, until `cap` tiles; a light whose faces no longer all fit is skipped (a later, smaller one may still fit). */
 export function planTiles(lights: readonly Light[], cracks: readonly Crack[], plants: readonly PlantBound[], cap: number): ShadowPlan {
   const plan: ShadowPlan = { tiles: [], lightFaces: new Int16Array(LIGHT_CAP * 6).fill(-1), crackTile: new Int16Array(CRACK_CAP).fill(-1) };
   if (plants.length === 0) return plan;
+  const faces: number[] = [];
   const { tiles } = plan;
   for (let s = 0; s < Math.min(cracks.length, CRACK_CAP) && tiles.length < cap; s++) {
     const cam = crackCam(cracks[s], plants);
@@ -112,9 +113,15 @@ export function planTiles(lights: readonly Light[], cracks: readonly Crack[], pl
   for (let i = 0; i < Math.min(lights.length, LIGHT_CAP); i++) {
     const l = lights[i];
     if (!l.shadow) continue;
+    const reach = l.radius + LIGHT_MARGIN;
+    let near = false;
+    for (const p of plants) if (Math.hypot(Math.max(Math.abs(l.x - p.x) - p.r, 0), Math.max(Math.abs(l.z - p.z) - p.r, 0)) <= reach) { near = true; break; }
+    if (!near) continue;
     const L: Vec3 = [l.x, l.y, l.z];
-    for (let f = 0; f < 6 && tiles.length < cap; f++) {
-      if (!faceHits(L, f, l.radius + LIGHT_MARGIN, plants)) continue;
+    faces.length = 0;
+    for (let f = 0; f < 6; f++) if (faceHits(L, f, reach, plants)) faces.push(f);
+    if (tiles.length + faces.length > cap) continue; // a light is taken whole or not at all
+    for (const f of faces) {
       plan.lightFaces[i * 6 + f] = tiles.length;
       tiles.push({ kind: 'face', slot: i, face: f, cam: faceTile(L, f) });
     }
@@ -123,11 +130,11 @@ export function planTiles(lights: readonly Light[], cracks: readonly Crack[], pl
 }
 
 /** The CPU twin of the shader's face lookup: `d` = P - L. u, v in 0..1 (v unflipped), window depth `f(a - n) / (a(f - n))` clamped to 0..1 (1 past PLANT_FAR). */
-export function faceCoord(d: Vec3, face: number): { u: number; v: number; depth: number } {
+export function faceCoord(d: Vec3, face: number): { u: number; v: number; depth: number; a: number } {
   const { F, U } = FACES[face];
   const a = Math.max(dot(d, F), PLANT_NEAR);
   const depth = Math.min(1, (PLANT_FAR * (a - PLANT_NEAR)) / (a * (PLANT_FAR - PLANT_NEAR)));
-  return { u: 0.5 + dot(d, cross(F, U)) / (2 * a), v: 0.5 + dot(d, U) / (2 * a), depth: a >= PLANT_FAR ? 1 : depth };
+  return { u: 0.5 + dot(d, cross(F, U)) / (2 * a), v: 0.5 + dot(d, U) / (2 * a), depth: a >= PLANT_FAR ? 1 : depth, a };
 }
 
 /** The CPU twin of the crack lookup: P in the tile's box (ext, centred at C). depth clamped to 0..1; `inside` is about u and v. */
@@ -170,16 +177,19 @@ export function tileRect(i: number, perRow: number, tile: number): { x: number; 
   return { x: (i - row * perRow) * tile, y: row * tile, w: tile, h: tile };
 }
 
-/** Depth biases (window depth, first guesses, set by eye in Task 5): a point light's face and a crack's tile. */
-export const PLANT_BIAS = 0.0015;
+/** Biases (first guesses, set by eye): a crack's tile in window depth; a point light's face in tiles of linear distance, `PLANT_BIAS0 + PLANT_BIAS1 * a` (a perspective depth would make a constant window bias grow with a squared). */
 export const CRACK_BIAS = 0.0005;
+export const PLANT_BIAS0 = 0.02;
+export const PLANT_BIAS1 = 0.01;
+/** A face texel's window depth `z` as the distance along the face axis (1, an empty texel, is PLANT_FAR). */
+export const faceLinear = (z: number): number => (PLANT_NEAR * PLANT_FAR) / (PLANT_FAR - z * (PLANT_FAR - PLANT_NEAR));
 
 /**
  * The CPU twin of the shader's soft compare (`plantShadowNodes.ts` mirrors it line by line): the four texels around (u, v) of tile `id`
- * (tiles of `atlasTexels / perRow` texels, row 0 on top), each a 0/1 compare (lit when its depth is not nearer than `depth - bias`), mixed by
+ * (tiles of `atlasTexels / perRow` texels, row 0 on top), each a 0/1 `lit(texel)`, mixed by
  * the bilinear weights; every texel is clamped inside the tile. `v` is unflipped; the table's flip flag mirrors it (the sun's rule).
  */
-function softCompare(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, id: number, u: number, v: number, depth: number, bias: number): number {
+function softCompare(table: Float32Array, read: (x: number, y: number) => number, atlasTexels: number, id: number, u: number, v: number, lit: (texel: number) => boolean): number {
   const perRow = table[0], T = atlasTexels / perRow;
   const row = Math.floor((id + 0.5) / perRow), col = id - row * perRow; // the +0.5 keeps an inexact GPU division from landing in the wrong row
   const fu = Math.min(Math.max(u, 0), 1) * T - 0.5;
@@ -187,7 +197,7 @@ function softCompare(table: Float32Array, read: (x: number, y: number) => number
   const fvv = Math.min(Math.max(fv, 0), 1) * T - 0.5;
   const x0 = Math.floor(fu), y0 = Math.floor(fvv), wx = fu - x0, wy = fvv - y0;
   const cl = (k: number): number => Math.min(Math.max(k, 0), T - 1);
-  const at = (dx: number, dy: number): number => (read(col * T + cl(x0 + dx), row * T + cl(y0 + dy)) >= depth - bias ? 1 : 0);
+  const at = (dx: number, dy: number): number => (lit(read(col * T + cl(x0 + dx), row * T + cl(y0 + dy))) ? 1 : 0);
   const top = at(0, 0) * (1 - wx) + at(1, 0) * wx, bot = at(0, 1) * (1 - wx) + at(1, 1) * wx;
   return top * (1 - wy) + bot * wy;
 }
@@ -201,7 +211,8 @@ export function pointVisAt(table: Float32Array, read: (x: number, y: number) => 
   const id = table[(1 + 2 * slot) * 4 + face];
   if (id < 0) return 1;
   const c = faceCoord(d, face);
-  return softCompare(table, read, atlasTexels, id, c.u, c.v, c.depth, PLANT_BIAS);
+  const aa = Math.min(c.a, PLANT_FAR); // past far the receiver is compared at far: a nearer blocker still shadows it
+  return softCompare(table, read, atlasTexels, id, c.u, c.v, (z) => faceLinear(z) >= aa - (PLANT_BIAS0 + PLANT_BIAS1 * aa));
 }
 
 /** The same for crack slot `slot`: the tile's box at P; a point outside it, a slot without a tile or an empty table is lit and reads nothing. */
@@ -215,5 +226,5 @@ export function crackVisAt(table: Float32Array, read: (x: number, y: number) => 
     F: [table[o + 12], table[o + 13], table[o + 14]], ext: [table[o + 7], table[o + 11], table[o + 15]], persp: false,
   };
   const c = crackCoord(cam, P);
-  return c.inside ? softCompare(table, read, atlasTexels, id, c.u, c.v, c.depth, CRACK_BIAS) : 1;
+  return c.inside ? softCompare(table, read, atlasTexels, id, c.u, c.v, (z) => z >= c.depth - CRACK_BIAS) : 1;
 }

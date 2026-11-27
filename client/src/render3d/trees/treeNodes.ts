@@ -45,7 +45,7 @@ export function setHidden(shared: TreeShared, hidden: readonly { x: number; z: n
   }
 }
 /** A vertex whose plant foot is this near a hidden foot (tiles) is moved away in the cast pass. */
-const HIDDEN_REACH = 0.02;
+const HIDDEN_REACH = 0.02; // first guess
 
 /** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp; `leafRate`: the dev page's multiplier on how often leaves fall. */
 export function makeTreeShared() {
@@ -319,12 +319,13 @@ export function treeMaterials(o: {
   colour.side = DoubleSide;
 
   // ---------------------------------------------------------------- the sun's pass
+  const cutColour = vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
   let sun: MeshBasicNodeMaterial | null = null;
   if (hasSun) {
     sun = new MeshBasicNodeMaterial();
     sun.positionNode = p.sunPosition;
     // The cut-outs of the depth pass without the stipple and the see-through: plants always cast, and the shadow does not change when foliage opens.
-    sun.colorNode = vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
+    sun.colorNode = cutColour;
     sun.alphaTest = 0.5;
     sun.colorWrite = false;
     sun.side = DoubleSide;
@@ -340,7 +341,7 @@ export function treeMaterials(o: {
       isHidden = isHidden.or(h.z.greaterThan(0.5).and(abs(s.foot.x.sub(h.x)).lessThan(HIDDEN_REACH)).and(abs(s.foot.y.sub(h.y)).lessThan(HIDDEN_REACH)));
     }
     cast.positionNode = select(isHidden, vec3(...GONE), p.sunPosition);
-    cast.colorNode = sun ? sun.colorNode : vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
+    cast.colorNode = cutColour;
     cast.alphaTest = 0.5;
     cast.colorWrite = false;
     cast.side = DoubleSide;
