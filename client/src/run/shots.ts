@@ -2,7 +2,7 @@
 // fired, advanced each frame, ended at a wall, an enemy or when the server's shot
 // is gone. The server's copy of an own shot stays hidden (`hidden`).
 // A view only draws `live` and reacts to `ended`.
-import { CONST, ENEMY_KINDS, FLAG, KIND } from '../generated/defs';
+import { CONST, ENEMY_KINDS, FLAG, HITBOX, KIND } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { isProjectileKind } from '../game/anim/defs';
@@ -177,7 +177,7 @@ export class Shots {
         // (`hidden`).
         if (hitEnemy) {
           const v = Math.hypot(c.vx, c.vy) || 1;
-          this.stoppedShots.set(c.shot, { x: touched.x, y: touched.y, dx: c.vx / v, dy: c.vy / v, past: (hitRadius(touched.kind) ?? 6) + c.r });
+          this.stoppedShots.set(c.shot, { x: touched.x, y: touched.y, dx: c.vx / v, dy: c.vy / v, past: (hitRadius(touched.kind) ?? CONST.SHOT_MIN_RADIUS) + c.r });
         }
         continue;
       }
@@ -202,7 +202,11 @@ export class Shots {
         const px = c.x + ((nx - c.x) * k) / steps;
         const py = c.y + ((ny - c.y) * k) / steps;
         // Objects have no body height (HITBOX h 0): they stop an arc at any height, as on the server.
-        const hit = c.flight === undefined || e.kind === KIND.Chest || e.kind === KIND.Barrel
+        // Objects use their body radius, like the server's `stopping_object` (not the hit cylinder's minimum).
+        const isObject = e.kind === KIND.Chest || e.kind === KIND.Barrel;
+        const hit = isObject
+          ? Math.hypot(px - e.x, py - e.y) < HITBOX[e.kind].r + c.r
+          : c.flight === undefined
           ? shotHits(e.kind, e.x, e.y, px, py, c.r)
           : arcHits(e.kind, e.x, e.y, air, px, py, shotZ(c.flight, c.flown + ((nflown - c.flown) * k) / steps), c.r);
         if (hit) return e;

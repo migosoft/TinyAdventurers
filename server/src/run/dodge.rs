@@ -350,7 +350,7 @@ mod tests {
         enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
         assert!(threats(&run, mi).is_empty(), "an enemy's bolt does not threaten an enemy");
         run.projectiles.clear();
-        // Aimed to pass about 13 px south of the orc's edge (the capsule only reaches north).
+        // Aimed to pass about 13 px south of the orc's edge.
         let r = run.monsters[mi].radius + 2.0 + 15.0;
         fire(&mut run, AbilityId::Shoot, r.atan2(50.0), 50.0);
         assert!(threats(&run, mi).is_empty(), "a near miss");
