@@ -92,7 +92,7 @@ export class DemonLayer implements BuiltLayer {
   private res(i: BuiltInst, geoms: BufferGeometry[]): Res {
     let r = this.owners.get(i.owner);
     if (!r) {
-      const mats = this.make(i.key === 'iceDemon' ? 'ice' : 'fire');
+      const mats = this.make(i.temper === -1 ? 'ice' : 'fire');
       const meshes = geoms.map((g) => {
         const m = new Mesh(g, mats.mat);
         m.frustumCulled = false;

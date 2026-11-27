@@ -26,7 +26,9 @@ export type DemonUniforms = LichUniforms;
  */
 export function skinned(bones: UniformArrayNode): { P: N; N: N; rest: N } {
   const rest: N = attribute('position', 'vec3'), normal: N = attribute('normal', 'vec3');
-  const index: N = attribute('skinIndex', 'uvec4'), weight: N = attribute('skinWeight', 'vec4');
+  const index: N = attribute('skinIndex', 'uvec4'), raw: N = attribute('skinWeight', 'vec4');
+  // the file stores the weights as bytes, so they sum to a little off 1: divide by their sum
+  const weight: N = raw.div(raw.x.add(raw.y).add(raw.z).add(raw.w).max(1e-6));
   const p4: N = vec4(rest, 1), n4: N = vec4(normal, 0);
   let P: N = vec3(0), Nn: N = vec3(0);
   for (const k of ['x', 'y', 'z', 'w'] as const) {

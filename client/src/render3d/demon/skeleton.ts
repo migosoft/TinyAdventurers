@@ -73,11 +73,11 @@ function euler(x: number, y: number, z: number, o: Float64Array): void {
   o[3] = de * b - cf; o[4] = a * e; o[5] = df + ce * b;
   o[6] = a * d; o[7] = -b; o[8] = a * c;
 }
-/** `o = a * b`; `o` is neither of them. */
-function mul3(a: Float64Array, b: Float64Array, o: Float64Array): void {
+/** `o = a * b`, `a` read from `a[ao..ao + 9]`; `o` is neither of them. */
+function mul3(a: Float64Array, ao: number, b: Float64Array, o: Float64Array): void {
   for (let j = 0; j < 9; j += 3) {
     const x = b[j], y = b[j + 1], z = b[j + 2];
-    o[j] = a[0] * x + a[3] * y + a[6] * z; o[j + 1] = a[1] * x + a[4] * y + a[7] * z; o[j + 2] = a[2] * x + a[5] * y + a[8] * z;
+    o[j] = a[ao] * x + a[ao + 3] * y + a[ao + 6] * z; o[j + 1] = a[ao + 1] * x + a[ao + 4] * y + a[ao + 7] * z; o[j + 2] = a[ao + 2] * x + a[ao + 5] * y + a[ao + 8] * z;
   }
 }
 /** The shortest turn from the unit vector (ax, ay, az) to (bx, by, bz), written to `o` at `at`. */
@@ -111,22 +111,39 @@ let restJ: Float32Array | null = null;
 export function setRest(j: Float32Array): void { restJ = j; restAnkles = false; }
 let restAnkles = false;
 
+const ZERO: Readonly<E> = Object.freeze([0, 0, 0]) as unknown as Readonly<E>;
+/** Per bone: its stance angles, which control turns it (a `R_*` role, 0 none) and its side (+1 the demon's left, -1 right, 0 none). */
+const STANCE_OF: Readonly<E>[] = BONE_DEFS.map((d) => STANCE[d[0]] ?? ZERO);
+const R_HEAD = 5, R_JAW = 6, R_UPPER = 7, R_FORE = 8, R_HAND = 9, R_FINGERS = 10;
+const ROLE = Uint8Array.from(BONE_DEFS.map((d) => {
+  const n = d[0];
+  const trunk = ['hips', 'waist', 'chest', 'neck', 'head'].indexOf(n);
+  if (trunk >= 0) return trunk + 1;
+  if (n === 'jaw') return R_JAW;
+  return /^upperArm[LR]$/.test(n) ? R_UPPER : /^foreArm[LR]$/.test(n) ? R_FORE : /^hand[LR]$/.test(n) ? R_HAND : /^fingers[LR]$/.test(n) ? R_FINGERS : 0;
+}));
+const SIDE = Int8Array.from(BONE_DEFS.map((d) => (d[0].endsWith('L') ? 1 : d[0].endsWith('R') ? -1 : 0)));
+/** Where each trunk role's TURN, LEAN, ROLL lie in the joints, by role (1 hips .. 5 head). */
+const TRUNK = [0, J.hips, J.spine, J.chest, J.neck, J.head];
+
 /** The stance's own turn for a bone, plus what the pose's controls add (`j` minus the rest pose's values). Writes `LOCAL`. */
 function local(i: number, j: Float32Array | null): void {
-  const s = STANCE[BONE_DEFS[i][0]] ?? [0, 0, 0];
+  const s = STANCE_OF[i];
   let x = s[0], y = s[1], z = s[2];
-  if (j) {
-    const r = restJ!, name = BONE_DEFS[i][0], side = name.endsWith('L') ? 1 : name.endsWith('R') ? -1 : 0;
-    const trunk = (at: number): void => { x += j[at + LEAN]; y -= j[at + TURN]; z += j[at + ROLL]; };
-    if (name === 'hips') trunk(J.hips); else if (name === 'waist') trunk(J.spine); else if (name === 'chest') trunk(J.chest); else if (name === 'neck') trunk(J.neck); else if (name === 'head') trunk(J.head);
-    else if (name === 'jaw') x += j[J.jaw] * RIG.jawOpen;
-    else if (side) {
-      // the pose's arms: R is `armR` (+1 there), the spike's left is +x
-      const a = side > 0 ? J.armL : J.armR, d = (k: number): number => j[a + k] - r[a + k];
-      if (name.startsWith('upperArm')) { x -= d(ARM.swing); z += side * d(ARM.out); y -= side * d(ARM.twist); }
-      else if (name.startsWith('foreArm')) x -= d(ARM.elbow);
-      else if (name.startsWith('hand')) { x -= d(ARM.wristBend); y -= side * d(ARM.wristTurn); }
-      else if (name.startsWith('fingers')) z -= side * d(ARM.curl);
+  const role = ROLE[i];
+  if (j && role) {
+    if (role <= R_HEAD) {
+      // a trunk bone: TURN, LEAN, ROLL from `TRUNK[role]` on
+      const at = TRUNK[role];
+      x += j[at + LEAN]; y -= j[at + TURN]; z += j[at + ROLL];
+    } else if (role === R_JAW) x += j[J.jaw] * RIG.jawOpen;
+    else {
+      // the pose's arms: the spike's left (+1, +x) is the demon's left, `armL`
+      const side = SIDE[i], a = side > 0 ? J.armL : J.armR, r = restJ!;
+      if (role === R_UPPER) { x -= j[a + ARM.swing] - r[a + ARM.swing]; z += side * (j[a + ARM.out] - r[a + ARM.out]); y -= side * (j[a + ARM.twist] - r[a + ARM.twist]); }
+      else if (role === R_FORE) x -= j[a + ARM.elbow] - r[a + ARM.elbow];
+      else if (role === R_HAND) { x -= j[a + ARM.wristBend] - r[a + ARM.wristBend]; y -= side * (j[a + ARM.wristTurn] - r[a + ARM.wristTurn]); }
+      else z -= side * (j[a + ARM.curl] - r[a + ARM.curl]);
     }
   }
   euler(x, y, z, LOCAL);
@@ -149,7 +166,7 @@ function solve(pose: DemonPose | null): void {
     WP[q] = WP[pq] + WR[pr] * OFF[q] + WR[pr + 3] * OFF[q + 1] + WR[pr + 6] * OFF[q + 2];
     WP[q + 1] = WP[pq + 1] + WR[pr + 1] * OFF[q] + WR[pr + 4] * OFF[q + 1] + WR[pr + 7] * OFF[q + 2];
     WP[q + 2] = WP[pq + 2] + WR[pr + 2] * OFF[q] + WR[pr + 5] * OFF[q + 1] + WR[pr + 8] * OFF[q + 2];
-    mul3(WR.subarray(pr, pr + 9) as Float64Array, LOCAL, TMP);
+    mul3(WR, pr, LOCAL, TMP);
     for (let k = 0; k < 9; k++) WR[o + k] = TMP[k];
     if (j && (BONE_DEFS[i][0] === 'thighL' || BONE_DEFS[i][0] === 'thighR')) leg(i, j, pose!.lift);
   }
@@ -210,7 +227,8 @@ function init(): void {
 
 /**
  * Fills `out` (`BONES` x 16 floats, column-major) from the pose: forward from the hips; the controls on top of the stance; the legs by
- * two-bone solve to the pose's foot points. Fingers, the wings, the tail's joints and the chain stay at the stance.
+ * two-bone solve to the pose's foot points. The finger and thumb bones, the wings, the tail's joints and the chain stay at the stance
+ * (the `fingers` bone does take `curl`; `ARM.thumb` is unused until task 8).
  */
 export function placeBones(pose: DemonPose, out: Float32Array): void {
   if (!restAnkles) init();

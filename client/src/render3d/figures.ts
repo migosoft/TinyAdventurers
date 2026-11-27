@@ -1024,7 +1024,7 @@ export class Figures3d {
     // A flier's body hangs above its foot: the body, its points and what is listed for the effects go up with it; the oval and the lamp outline stay on the floor.
     const yb = y + ((dr.lift ?? 0) * scale) / this.cp;
     out.built.push({
-      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, bones: dr.bones, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
+      owner: e.id, key: b.key, x, z, lift: this.lifted(yb), yaw: dr.yaw, scale, body: dr.body, glow: dr.glow, hull: dr.hull, bones: dr.bones, temper: dr.temper, levels: dr.levels, tint, stone: pose.grey, alpha: pose.alpha * k,
       dark, cut: false, groundY: hidingHeightAt(this.map, x, z), sight: { hard: 0, soft: 0 }, reach,
     });
 
@@ -1067,8 +1067,10 @@ export class Figures3d {
     if (dr.anchors.eyeL) lf.eyeL = builtPoint(dr.anchors.eyeL, x, z, yb, dr.yaw, scale, stretch, (this.eyeLPool[slot] ??= [0, 0, 0]));
     if (dr.anchors.eyeR) lf.eyeR = builtPoint(dr.anchors.eyeR, x, z, yb, dr.yaw, scale, stretch, (this.eyeRPool[slot] ??= [0, 0, 0]));
     if (dr.anchors.blade) {
-      const pool = (this.bladePool[slot] ??= dr.anchors.blade.map((): MV3 => [0, 0, 0]));
-      lf.blade = dr.anchors.blade.map((p, k) => builtPoint(p, x, z, yb, dr.yaw, scale, stretch, pool[k]));
+      const src = dr.anchors.blade, pool = (this.bladePool[slot] ??= []);
+      for (let k = 0; k < src.length; k++) builtPoint(src[k], x, z, yb, dr.yaw, scale, stretch, (pool[k] ??= [0, 0, 0]));
+      pool.length = src.length;
+      lf.blade = pool;
     }
     if (dr.temper) lf.temper = dr.temper;
     const mg = (this.magicPool[slot] ??= { gem: 0, flare: 0 });
@@ -1100,6 +1102,7 @@ export class Figures3d {
     f.spectre = spectre; f.form = form; f.rig = rig;
     f.mouth = undefined; f.nostril = undefined;
     f.gem = undefined; f.eyes = undefined; f.chest = undefined; f.magic = undefined;
+    f.eyeL = undefined; f.eyeR = undefined; f.blade = undefined; f.temper = undefined;
     out.figs.push(f);
     return f;
   }

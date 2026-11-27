@@ -54,7 +54,7 @@ describe('placeBones', () => {
     for (let k = 0; k < part.position.length / 3; k++) {
       let y = 0, z = 0;
       for (let j = 0; j < 4; j++) {
-        const w = part.skinWeight[k * 4 + j];
+        const w = part.skinWeight[k * 4 + j] / (part.skinWeight[k * 4] + part.skinWeight[k * 4 + 1] + part.skinWeight[k * 4 + 2] + part.skinWeight[k * 4 + 3]);
         if (!w) continue;
         p[0] = part.position[k * 3]; p[1] = part.position[k * 3 + 1]; p[2] = part.position[k * 3 + 2];
         onBone(M, part.skinIndex[k * 4 + j], p, q);
@@ -112,6 +112,16 @@ describe('placeBones', () => {
     const t = p('thighL'), s = p('shinL'), f = p('footL');
     const a = [s[0] - t[0], s[1] - t[1], s[2] - t[2]], b = [f[0] - s[0], f[1] - s[1], f[2] - s[2]];
     expect((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (Math.hypot(...a) * Math.hypot(...b))).toBeGreaterThan(0.999);
+  });
+
+  it('gives the same bytes when it places the same pose twice into one array (no state is kept between calls)', () => {
+    const pose = restPose();
+    pose.joints[J.head] = 0.4; pose.joints[J.armL + ARM.swing] = 0.7; pose.joints[J.footR + FOOT.x] += 2;
+    placeBones(pose, M);
+    const first = Array.from(M);
+    placeBones(restPose(), M);   // something else in between
+    placeBones(pose, M);
+    expect(Array.from(M)).toEqual(first);
   });
 
   it('writes no NaN for any act of the page\'s script', () => {

@@ -43,6 +43,8 @@ export interface BuiltInst {
   tint: [number, number, number]; stone: boolean; alpha: number; dark: boolean; cut: boolean; groundY: number;
   /** A skinned figure's bone matrices (`BuiltDrawn.bones`), copied by the layer each frame; `body` is then empty. */
   bones?: Float32Array;
+  /** `BuiltDrawn.temper`: which material the layer makes (-1 cold). */
+  temper?: 1 | -1;
   sight: { hard: number; soft: number }; reach: number;
 }
 

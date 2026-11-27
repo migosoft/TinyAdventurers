@@ -1197,6 +1197,16 @@ describe('Figures3d hands chosen figures to the model layer (#338)', () => {
       expect(out.built.length).toBe(2);
       expect(out.built[0].bones === out.built[1].bones).toBe(false);
     });
+
+    it('a pooled figure slot that held a demon keeps none of its anchors for the next figure', () => {
+      const fg = make();
+      const first = built([demon()], painted(), fg).figs[0];
+      expect(first.blade!.length).toBe(5);
+      expect([first.eyeL, first.eyeR, first.temper].every((v) => v !== undefined)).toBe(true);
+      const second = built([ent(12, KIND.Knight)], painted(), fg).figs[0];
+      expect(second).toBe(first);   // the same pooled object
+      expect([second.blade, second.eyeL, second.eyeR, second.temper]).toEqual([undefined, undefined, undefined, undefined]);
+    });
   });
 
   it('scales the weapon by the model weaponScale', () => {

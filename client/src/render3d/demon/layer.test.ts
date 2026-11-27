@@ -44,7 +44,7 @@ describe('DemonLayer', () => {
   it('two owners share the geometry and have their own bone uniforms', () => {
     const mats: DemonMats[] = [];
     const scene = new Scene(), layer = new DemonLayer(scene, (k) => { const m = make(k); mats.push(m); return m; });
-    const fire = inst(1), ice = inst(2, { key: 'iceDemon' });
+    const fire = inst(1), ice = inst(2, { key: 'iceDemon', temper: -1 });
     ice.bones![12] = 5;
     layer.frame([fire, ice], slotOf);
     const ms = meshes(scene);

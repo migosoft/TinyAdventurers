@@ -67,8 +67,9 @@ function draw(s: BuiltIn, dt: number, memory: unknown): BuiltDrawn {
 
 let rested: BuiltBuf | null = null;
 /**
- * The coarse skin (cell 0.04) of the body and the tail, skinned on the CPU by the stance, once: the lamp outline's shape. The wings are
- * left out: spread as the stance leaves them (until task 8) two such outlines (fire and ice) would not fit the atlas's 2048 px.
+ * The coarse skin (cell 0.04) of the body and the tail, skinned on the CPU by the stance, once: the lamp outline's shape.
+ * shortcut: the wings are left out, so the shadow caster has none (spread as the stance leaves them they are 84 px tall and the
+ * atlas would pass 2048 px); task 8 folds them in the stance and adds them back here.
  */
 function rest(): BuiltBuf {
   if (rested) return rested;
@@ -83,8 +84,10 @@ function rest(): BuiltBuf {
     const n = part.position.length / 3;
     for (let k = 0; k < n; k++) {
       let x = 0, y = 0, z = 0;
+      // the file's byte weights sum to a little off 1: divide by their sum
+      const sum = part.skinWeight[k * 4] + part.skinWeight[k * 4 + 1] + part.skinWeight[k * 4 + 2] + part.skinWeight[k * 4 + 3] || 1;
       for (let j = 0; j < 4; j++) {
-        const w = part.skinWeight[k * 4 + j];
+        const w = part.skinWeight[k * 4 + j] / sum;
         if (w === 0) continue;
         p[0] = part.position[k * 3]; p[1] = part.position[k * 3 + 1]; p[2] = part.position[k * 3 + 2];
         onBone(bones, part.skinIndex[k * 4 + j], p, q);
@@ -103,7 +106,7 @@ function rest(): BuiltBuf {
 export function demonFigure(kind: 'fire' | 'ice'): BuiltFigure {
   return {
     key: kind === 'fire' ? 'demon' : 'iceDemon', picture: null,
-    // shortcut: both demons share one outline frame (two would not fit the atlas's 2048 px); give the ice demon its own when the atlas has room
+    // shortcut: both demons share one outline frame; they are the same pixels (one skin, one stance), so nothing is lost, and two would not fit the atlas's 2048 px
     ...(kind === 'ice' ? { outline: 'demon' } : {}),
     unit: DEMON.unit, top: DEMON.top, hem: DEMON.hem,
     newMem: newMem(kind === 'fire' ? 1 : -1),
