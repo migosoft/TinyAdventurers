@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
+import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three/webgpu';
 import type { Crack } from './air/cracks';
 import { CRACK_CAP } from './air/cracks';
 import { CHASM_BED } from './dips/shape';

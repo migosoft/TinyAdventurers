@@ -1,6 +1,6 @@
 // Plant shadows (#333), the pure part: which depth tiles a frame needs (one orthographic tile per crack whose beam meets a plant, up to
 // six 90 degree cube faces per point light whose frustum meets one) and the table the shader reads to find them. No GPU here.
-import { Box3, Frustum, Matrix4, PerspectiveCamera } from 'three';
+import { Box3, Frustum, Matrix4, PerspectiveCamera } from 'three/webgpu';
 import { LIGHT } from '../generated/defs';
 import { CRACK_CAP, RIM_HI, type Crack } from './air/cracks';
 import { CHASM_BED } from './dips/shape';
