@@ -69,7 +69,7 @@ pub const DRAGON_FLIGHT_EVERY: (f64, f64) = (10.0, 12.0);
 /// The races of each boss.
 pub fn races(id: BossId) -> &'static [Race] {
     match id {
-        BossId::Demon => &[Race::Demon],
+        BossId::Demon => &[Race::Demon, Race::Fire],
         BossId::Lich => &[Race::Undead],
         BossId::Dragon => &[Race::Dragon],
     }

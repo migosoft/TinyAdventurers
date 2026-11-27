@@ -491,7 +491,7 @@ pub fn races(t: EnemyType) -> &'static [Race] {
         Ogre => &[Race::Ogre],
         Bunny | Deer | Stag | Boar => &[Race::Animal],
         Mimic => &[Race::Mimic],
-        Imp | Chort | SummonedImp => &[Race::Demon],
+        Imp | Chort | SummonedImp => &[Race::Demon, Race::Fire],
         Ghost | Shade => &[Race::Undead, Race::Incorporeal],
     }
 }
@@ -736,9 +736,9 @@ mod tests {
             (Summoner, &[Race::Human]),
             (Disciple, &[Race::Human]),
             (Mimic, &[Race::Mimic]),
-            (Imp, &[Race::Demon]),
-            (SummonedImp, &[Race::Demon]),
-            (Chort, &[Race::Demon]),
+            (Imp, &[Race::Demon, Race::Fire]),
+            (SummonedImp, &[Race::Demon, Race::Fire]),
+            (Chort, &[Race::Demon, Race::Fire]),
             (Ogre, &[Race::Ogre]),
             (Ghost, &[Race::Undead, Race::Incorporeal]),
             (Shade, &[Race::Undead, Race::Incorporeal]),

@@ -29,6 +29,10 @@ super::enum_list::listed_enum! {
         Incorporeal = 11,
         /// Wild animals (#227): bunnies, deer, boars. `MagicalBeast` stays the wolf's.
         Animal = 12,
+        /// Fire creatures: the temperature is its own race (#442), added to a body race.
+        Fire = 13,
+        /// Ice creatures (#442).
+        Ice = 14,
     }
 }
 
@@ -124,7 +128,10 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Mimic => RaceDef { neck: 0.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
         Race::Animal => RaceDef { cone: 270.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
         Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)).strongest(charm(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
-        Race::Demon => RaceDef { effect_res: fear(0.5).strongest(charm(0.5)), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), 9.0, 1.0) },
+        Race::Demon => RaceDef { effect_res: fear(0.5).strongest(charm(0.5)), ..plain(Resistances::of(&[(Magical, 0.2)]), 9.0, 1.0) },
+        // Sight, cone, neck 0: `profile` takes the best of the races, so the body race's wins.
+        Race::Fire => RaceDef { cone: 0.0, neck: 0.0, ..plain(Resistances::of(&[(Heat, 1.0), (Cold, -0.5)]), 0.0, 0.0) },
+        Race::Ice => RaceDef { cone: 0.0, neck: 0.0, ..plain(Resistances::of(&[(Cold, 1.0), (Heat, -0.5)]), 0.0, 0.0) },
         Race::Dragon => RaceDef { neck: 120.0, turn: 0.5, effect_res: charm(0.5), ..plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0) },
         Race::Object => RaceDef { cone: 0.0, neck: 0.0, ..plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), 0.0, 0.0) },
         Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), 18.0, 1.0 / 3.0) },
@@ -206,6 +213,31 @@ mod tests {
     use crate::defs::enemies::{self, EnemyType};
     use crate::defs::{bosses, classes};
     use crate::protocol::{BossId, ClassId};
+
+    #[test]
+    fn fire_and_ice_add_resistances_only() {
+        for r in [Race::Fire, Race::Ice] {
+            let d = race_def(r);
+            assert_eq!((d.vision, d.darkvision, d.cone, d.neck), (0.0, 0.0, 0.0, 0.0), "{r:?}: sight is the other race's");
+            assert_eq!(d.turn, 1.0);
+            assert_eq!(d.attrs, Attributes::default());
+            assert_eq!(d.effect_res, EffectResistances::NONE);
+            assert_eq!(d.traits, Traits::default());
+        }
+    }
+
+    #[test]
+    fn a_fire_demon_is_what_a_demon_was() {
+        let p = profile(&[Race::Demon, Race::Fire], Adjust::NONE);
+        assert_eq!((p.res.get(Magical), p.res.get(Heat), p.res.get(Cold)), (0.2, 1.0, -0.5));
+        assert_eq!((p.sight.vision, p.sight.darkvision, p.sight.cone, p.sight.neck, p.turn), (9.0, 1.0, 150.0, 80.0, 1.0));
+    }
+
+    #[test]
+    fn an_ice_demon_turns_the_temperature_round() {
+        let p = profile(&[Race::Demon, Race::Ice], Adjust::NONE);
+        assert_eq!((p.res.get(Magical), p.res.get(Heat), p.res.get(Cold)), (0.2, -0.5, 1.0));
+    }
 
     #[test]
     fn adjustments_add_to_the_races() {
@@ -328,6 +360,7 @@ mod tests {
                 Race::Mimic => (150.0, 0.0, 1.0),
                 Race::Dragon => (150.0, 120.0, 0.5),
                 Race::Ogre => (150.0, 80.0, 0.6),
+                Race::Fire | Race::Ice => (0.0, 0.0, 1.0),
                 _ => (150.0, 80.0, 1.0),
             };
             assert_eq!((p.sight.cone, p.sight.neck, p.turn), (cone, neck, turn), "{r:?}");
