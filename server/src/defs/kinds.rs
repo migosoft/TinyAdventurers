@@ -208,6 +208,8 @@ super::enum_list::listed_enum! {
         Ambush = 15,
         /// The wind-up of a summoning (Raise Dead, Summon Imps).
         Summon = 16,
+        /// The demons' scimitar blow (#442): the melee frames and swing with their own wind-up.
+        Cleave = 17,
     }
 }
 
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn the_summon_wind_up_has_its_own_anim() {
-        assert_eq!(Anim::COUNT, 17);
+        assert_eq!(Anim::COUNT, 18);
         assert_eq!(Anim::Summon as u8, 16);
     }
 

@@ -30,7 +30,7 @@ pub fn def(id: BossId) -> BossDef {
     use ItemId::*;
     match id {
         // The ice demon holds the fire demon's kit until its own weapons and abilities come (#442).
-        BossId::FireDemon | BossId::IceDemon => BossDef { id, kind: if id == BossId::IceDemon { EntityKind::IceDemon } else { EntityKind::FireDemon }, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire, TailWhip, Fireball, FireBreath, Smash], weapons: &[DemonClaws, DemonTail] },
+        BossId::FireDemon | BossId::IceDemon => BossDef { id, kind: if id == BossId::IceDemon { EntityKind::IceDemon } else { EntityKind::FireDemon }, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Cleave, Swoop, RingOfFire, TailWhip, Fireball, FireBreath, Smash], weapons: &[DemonClaws, BurningScimitar, DemonTail] },
         BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attr_mods: Attributes::new(0, 4, 4, 12, 8, 6), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
         BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attr_mods: Attributes::new(14, 0, 12, 6, 4, 10), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
@@ -38,7 +38,8 @@ pub fn def(id: BossId) -> BossDef {
 
 /// The recovery after each demon attack (s), shared with the client: the animation starts with the ability's
 /// wind-up (from its kit) and the strike frames play out in this short recovery. The abilities' own numbers are the kit's.
-pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
+pub const DEMON_CLAW_RECOVER: f64 = 0.3;
+pub const DEMON_SCIMITAR_RECOVER: f64 = 0.5;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
 pub const DEMON_TAIL_RECOVER: f64 = 0.5;
 /// After Fireball or Ring of Fire.

@@ -97,6 +97,8 @@ super::enum_list::listed_enum! {
         SummonImps = 40,
         /// A Wizard's orb that charms a monster to fight for the caster for a while.
         Charm = 41,
+        /// The demons' scimitar blow: a Sword secondary, monsters only (#442).
+        Cleave = 42,
     }
 }
 
@@ -373,6 +375,7 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::MagicMissile => "Fast arcane bolts.",
         AbilityId::Fireball => "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
         AbilityId::Strike => "A sweeping blow with your melee weapon.",
+        AbilityId::Cleave => "A wide, slow blow with a sword.",
         AbilityId::HolyLight => "Heals you and the allies close to you.",
         AbilityId::Charge => "Dash toward the cursor, hitting everything in the way.",
         AbilityId::Shoot => "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
@@ -555,6 +558,10 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::WeaponKind(&[WeaponKind::Tail])],
             backward: true,
             ..base("Tail Whip", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        Cleave => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Sword])],
+            ..base("Cleave", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
         },
         FireBreath => AbilityDef {
             weapon_mult: WeaponMult { arc: Some(2.0 * BREATH_HALF_ARC), ..WeaponMult::ONE },

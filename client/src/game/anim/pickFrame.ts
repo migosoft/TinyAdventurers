@@ -68,10 +68,11 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
     const air = s.flags & FLAG.AIRBORNE ? 1 : 0;
     const ground = (frame: string, wu = false): Picked => ({ frame, lift: air, windup: wu });
     switch (s.anim) {
-      case ANIM.Melee: {
+      case ANIM.Melee:
+      case ANIM.Cleave: {
         // Wind-up, the arm coming through just before the hit, then impact, follow-through, recovery.
         if (t < w) return ground(at('cleave', t < w - SWING_T ? 0 : 1), t < w - SWING_T);
-        const k = (t - w) / CONST.DEMON_CLEAVE_RECOVER;
+        const k = (t - w) / (s.anim === ANIM.Cleave ? CONST.DEMON_SCIMITAR_RECOVER : CONST.DEMON_CLAW_RECOVER);
         return ground(at('cleave', k < 0.4 ? 2 : k < 0.75 ? 3 : 4));
       }
       case ANIM.Tail: {

@@ -1,5 +1,5 @@
 //! Horned red demon: it uses the abilities of its kit and decides which, when and where to aim. Strike with
-//! its claws (the cleave), Swoop (a charge on foot), Ring of Fire, Tail Whip against heroes behind it,
+//! its claws, Cleave with its scimitar (from 3 s), Swoop (a charge on foot), Ring of Fire, Tail Whip against heroes behind it,
 //! Fireball, Fire Breath and, on landing, Smash. Among the attacks it can use it picks at random; the tail
 //! goes first when a foe is behind. Every 10-14 s it takes off and hovers after the party: only Fireball and
 //! the breath then. The numbers (damage, reach, push, wind-up, cooldown) are the kit's. Each attack's
@@ -22,6 +22,7 @@ use rand::Rng;
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
     Claw,
+    Scimitar,
     Tail,
     SwoopWindup,
     /// The dash runs (`Monster.dash`) until it ends.
@@ -56,8 +57,9 @@ impl Default for Demon {
 }
 
 /// How long (s) after the fight starts each ability may first be used.
-const OPENING: [(AbilityId, f64); 6] = [
+const OPENING: [(AbilityId, f64); 7] = [
     (AbilityId::Strike, 1.0),
+    (AbilityId::Cleave, 3.0),
     (AbilityId::TailWhip, 2.0),
     (AbilityId::Swoop, 4.0),
     (AbilityId::Fireball, 5.0),
@@ -66,8 +68,8 @@ const OPENING: [(AbilityId, f64); 6] = [
 ];
 /// How far (px, centre distance) a hero must be for the swoop to start.
 const SWOOP_FROM: f64 = 50.0;
-/// The cleave starts this far (px) inside its reach, like the enemies' swings.
-const CLEAVE_SLACK: f64 = 6.0;
+/// The claws and the scimitar start this far (px) inside their reach, like the enemies' swings.
+const CLAW_SLACK: f64 = 6.0;
 /// The tail whip starts this far (px) inside its reach.
 const TAIL_SLACK: f64 = 2.0;
 /// Hovering, it does not chase heroes closer than this.
@@ -124,7 +126,11 @@ impl BossBehaviour for Demon {
             match action {
                 Action::Claw => {
                     use_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
-                    self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));
+                    self.action = Some((Action::Recover, DEMON_CLAW_RECOVER));
+                }
+                Action::Scimitar => {
+                    use_in_pose(run, bi, AbilityId::Cleave, ahead(run, bi));
+                    self.action = Some((Action::Recover, DEMON_SCIMITAR_RECOVER));
                 }
                 Action::Tail => {
                     use_in_pose(run, bi, AbilityId::TailWhip, ahead(run, bi));
@@ -164,12 +170,16 @@ impl BossBehaviour for Demon {
         let to_target = pos.angle_to(ppos);
         // The head follows the hero; the body turns only for an attack it wants to start.
         run.monsters[bi].look_to = Some(to_target);
-        let cleave_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLEAVE_SLACK;
+        let claw_from = kit(run, bi, AbilityId::Strike).range + PLAYER_RADIUS - CLAW_SLACK;
+        let scimitar_from = kit(run, bi, AbilityId::Cleave).range + PLAYER_RADIUS - CLAW_SLACK;
         let breath = kit(run, bi, AbilityId::FireBreath);
         let usable = |id: AbilityId| ready(run, bi, &self.opening, id);
         let mut picks: Vec<AbilityId> = Vec::new();
-        if !air && usable(AbilityId::Strike) && dist <= cleave_from {
+        if !air && usable(AbilityId::Strike) && dist <= claw_from {
             picks.push(AbilityId::Strike);
+        }
+        if !air && usable(AbilityId::Cleave) && dist <= scimitar_from {
+            picks.push(AbilityId::Cleave);
         }
         if !air && usable(AbilityId::Swoop) && dist > SWOOP_FROM {
             picks.push(AbilityId::Swoop);
@@ -189,6 +199,7 @@ impl BossBehaviour for Demon {
             let cast_time = kit(run, bi, AbilityId::RingOfFire).windup;
             match id {
                 AbilityId::Strike => self.start(run, bi, Action::Claw, id, kit(run, bi, id).windup, Anim::Melee),
+                AbilityId::Cleave => self.start(run, bi, Action::Scimitar, id, kit(run, bi, id).windup, Anim::Cleave),
                 AbilityId::Swoop => {
                     self.swoop_dir = (ppos - pos).norm();
                     self.start(run, bi, Action::SwoopWindup, id, kit(run, bi, id).windup, Anim::Dash);
@@ -199,7 +210,7 @@ impl BossBehaviour for Demon {
             }
             return;
         }
-        let walk = if air { dist > HOVER_KEEP } else { dist > cleave_from * 0.8 };
+        let walk = if air { dist > HOVER_KEEP } else { dist > claw_from * 0.8 };
         if walk {
             let speed = run.monsters[bi].speed;
             path_toward(run, bi, ppos, speed, dt);
@@ -223,7 +234,7 @@ mod tests {
     use crate::run::DT;
     use rand::SeedableRng;
 
-    const SIX: [AbilityId; 6] = [AbilityId::Strike, AbilityId::Swoop, AbilityId::RingOfFire, AbilityId::TailWhip, AbilityId::Fireball, AbilityId::FireBreath];
+    const SEVEN: [AbilityId; 7] = [AbilityId::Strike, AbilityId::Cleave, AbilityId::Swoop, AbilityId::RingOfFire, AbilityId::TailWhip, AbilityId::Fireball, AbilityId::FireBreath];
 
     /// A demon run with heroes at `offs` from the demon; only the abilities named are ready (of the six the
     /// script chooses from; Smash is the landing's), no opening waits, the first flight far away.
@@ -238,7 +249,7 @@ mod tests {
             p.mv.x = at.x + off.x;
             p.mv.y = at.y + off.y;
         }
-        for id in SIX {
+        for id in SEVEN {
             if !ready.contains(&id) {
                 run.monsters[bi].cds.start(id, 99.0);
             }
@@ -286,6 +297,58 @@ mod tests {
         assert_eq!(tail.split, DamageSplit::pure(DamageType::Physical));
         assert_eq!(windup(&run, bi, AbilityId::Swoop), 0.6, "the claws' wind-up");
         assert!(kit(&run, bi, AbilityId::Smash).radius > 0.0);
+    }
+
+    #[test]
+    fn the_claw_is_unchanged_and_the_scimitar_is_its_own_blow() {
+        let (run, _, bi) = demon_with(Vec2::new(20.0, 0.0), &[]);
+        let (claw, blade) = (kit(&run, bi, AbilityId::Strike), kit(&run, bi, AbilityId::Cleave));
+        assert_eq!((claw.windup, claw.range), (0.45, 24.0 + 11.0), "today's numbers");
+        assert_eq!((blade.windup, blade.cd_steps.base, blade.range),(0.8, 4.0, 34.0 + 11.0));
+        assert!(blade.damage > claw.damage);
+    }
+
+    /// Plays a demon beside a hero for `secs`, the hero kept alive; the animations seen, each with the time it first showed.
+    fn anims_seen(ready: &[AbilityId], secs: f64) -> (Run, Vec<(Anim, f64)>) {
+        let (mut run, mut d, bi) = demon_with_heroes(&[Vec2::new(20.0, 0.0)], ready);
+        d.opening = OPENING.to_vec();
+        let mut seen: Vec<(Anim, f64)> = Vec::new();
+        for i in 0..(secs / DT) as usize {
+            let cdt = run.monsters[bi].effects.cooldown_dt(DT);
+            run.monsters[bi].cds.tick(cdt);
+            d.tick(&mut run, DT);
+            run.players[0].hp = run.players[0].max_hp;
+            let a = run.monsters[bi].anim;
+            if !seen.iter().any(|(s, _)| *s == a) {
+                seen.push((a, i as f64 * DT));
+            }
+        }
+        (run, seen)
+    }
+
+    #[test]
+    fn the_scimitar_opens_at_three_seconds_and_plays_its_own_anim() {
+        let (_, seen) = anims_seen(&[AbilityId::Cleave], 2.9);
+        assert!(seen.iter().all(|(a, _)| *a != Anim::Cleave), "no scimitar before its opening: {seen:?}");
+        let (_, seen) = anims_seen(&[AbilityId::Strike, AbilityId::Cleave], 30.0);
+        let first = |anim: Anim| seen.iter().find(|(a, _)| *a == anim).map(|(_, t)| *t);
+        assert!(first(Anim::Melee).is_some(), "the claws are used: {seen:?}");
+        assert!(first(Anim::Cleave).expect("the scimitar is used") >= 2.9, "{seen:?}");
+    }
+
+    #[test]
+    fn the_burning_scimitar_singes_and_the_claws_do_not() {
+        use crate::defs::effects::EffectKind;
+        let hit_by = |id: AbilityId| {
+            let (mut run, mut d, bi) = demon_with(Vec2::new(20.0, 0.0), &[id]);
+            run.monsters[bi].cds.start(AbilityId::Smash, 99.0);
+            let w = kit(&run, bi, id).windup;
+            ticks(&mut run, &mut d, w + 2.0 * DT);
+            assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(id));
+            run.players[0].effects.has(EffectKind::Singed)
+        };
+        assert!(hit_by(AbilityId::Cleave), "the scimitar singes");
+        assert!(!hit_by(AbilityId::Strike), "the claws do not");
     }
 
     #[test]
@@ -417,7 +480,7 @@ mod tests {
 
     #[test]
     fn in_the_air_only_fireball_and_breath() {
-        let (mut run, mut d, bi) = flying_demon_with(&[Vec2::new(20.0, 0.0)], &SIX);
+        let (mut run, mut d, bi) = flying_demon_with(&[Vec2::new(20.0, 0.0)], &SEVEN);
         let hp = run.players[0].hp;
         let mut seen = Vec::new();
         for _ in 0..(3.0 / DT) as usize {
@@ -440,7 +503,7 @@ mod tests {
     #[test]
     fn the_pick_is_among_usable_attacks_only() {
         let first = |dist: f64, seed: u64| {
-            let (mut run, mut d, _) = demon_with(Vec2::new(dist, 0.0), &SIX);
+            let (mut run, mut d, _) = demon_with(Vec2::new(dist, 0.0), &SEVEN);
             run.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
             d.tick(&mut run, DT);
             d.action.map(|(a, _)| a).expect("it starts something")
@@ -460,7 +523,7 @@ mod tests {
     #[test]
     fn it_waits_its_opening_delays() {
         assert_eq!(Demon::default().flight.t, DEMON_FLIGHT_FIRST);
-        let (mut run, _, _) = demon_with(Vec2::new(20.0, 0.0), &SIX);
+        let (mut run, _, _) = demon_with(Vec2::new(20.0, 0.0), &SEVEN);
         let mut d = Demon::default();
         d.flight.t = 99.0;
         ticks(&mut run, &mut d, 0.9);
@@ -524,7 +587,7 @@ mod tests {
         assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Strike));
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed away");
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "the strike frames play out");
-        ticks(&mut run, &mut d, DEMON_CLEAVE_RECOVER + 3.0 * DT);
+        ticks(&mut run, &mut d, DEMON_CLAW_RECOVER + 3.0 * DT);
         assert_ne!(run.monsters[bi].anim, Anim::Melee, "back to idle or walking after the recovery");
     }
 

@@ -1234,6 +1234,19 @@ export const ITEMS = {
     "slot": "Shoes",
     "sprite": ""
   },
+  "BurningScimitar": {
+    "base": "45 damage · every 4 s · arc 2.8 · push 40 · wind-up 0.8 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Sword",
+    "name": "Burning Scimitar",
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_machete"
+  },
   "ChainMail": {
     "base": "Medium armor · +15 % physical resistance · weight 4",
     "classes": [
@@ -1571,6 +1584,32 @@ export const ITEMS = {
     "req": [],
     "slot": "Ranged",
     "sprite": "weapon_bow"
+  },
+  "IceClaws": {
+    "base": "25 damage · every 1.6 s · arc 2.1 · push 56 · wind-up 0.45 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Ice Claws",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "IceScimitar": {
+    "base": "45 damage · every 4 s · arc 2.8 · push 40 · wind-up 0.8 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Sword",
+    "name": "Ice Scimitar",
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_machete"
   },
   "ImpClaws": {
     "base": "6 damage · every 0.9 s · arc 1.6 · wind-up 0.25 s",
@@ -2240,6 +2279,15 @@ export const ABILITY_INFO = {
     "text": "Charms a foe: it fights for your side for a while, then turns back.",
     "tint": null,
     "uses": "Nothing"
+  },
+  "Cleave": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Sword"
+    ],
+    "text": "A wide, slow blow with a sword.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Consecrate": {
     "category": "Innate",

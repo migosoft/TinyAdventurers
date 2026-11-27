@@ -1909,7 +1909,8 @@ pub mod tests {
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): creatures see in a cone on their head's direction and turn at limited speeds, so all three fights play out differently. Re-recorded once, on purpose.
         // 2026-11-27, the ice demon (#442): a fourth value (BossId::ALL has four); it moves again when its own kit comes.
-        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294, 14913345704900044084]);
+        // 2026-11-27, the demon's second blow (#442): the scimitar (Cleave) joins the demon's kit and script, so the fire demon's (first) and, sharing its kit until its own comes, the ice demon's (fourth) values differ. Lich and dragon unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 5220512608260745949]);
     }
 
     #[test]
@@ -1932,7 +1933,8 @@ pub mod tests {
         // 2026-11-23, torch caves (#391): the demon's (first) and dragon's (third) values differ, for the reason in `level_setup_is_unchanged` (the cove's animals stand elsewhere). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. The lich's is unchanged. Re-recorded once, on purpose.
         // Same re-recording as in the test without the log (facing vision, #341).
         // 2026-11-27, the ice demon (#442): a fourth value, as in the test without the log.
-        assert_eq!(got, vec![3341197689757846368, 6903614873764001335, 1838548789640004294, 14913345704900044084]);
+        // 2026-11-27, the demon's second blow (#442): the same re-recording as in the test without the log.
+        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 5220512608260745949]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s

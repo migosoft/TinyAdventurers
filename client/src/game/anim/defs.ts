@@ -150,7 +150,7 @@ export const FIGURES: Record<number, FigureDef> = {
     idle: demonFrames.idle.prefix,
     run: demonFrames.walk.prefix,
     frames: demonFrames,
-    windups: { [ANIM.Melee]: CONST.DEMON_CLEAVE_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Tail]: CONST.DEMON_TAIL_WINDUP, [ANIM.Breath]: CONST.DEMON_BREATH_WINDUP, [ANIM.Cast]: CONST.DEMON_CAST_WINDUP },
+    windups: { [ANIM.Melee]: CONST.DEMON_CLAW_WINDUP, [ANIM.Cleave]: CONST.DEMON_SCIMITAR_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Tail]: CONST.DEMON_TAIL_WINDUP, [ANIM.Breath]: CONST.DEMON_BREATH_WINDUP, [ANIM.Cast]: CONST.DEMON_CAST_WINDUP },
     flight: { takeoff: CONST.DEMON_TAKEOFF, land: CONST.DEMON_LAND },
     slam: { r: CONST.DEMON_SMASH_RADIUS, anim: ANIM.Land, t: CONST.DEMON_LAND },
     lift: 14,

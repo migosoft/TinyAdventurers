@@ -52,7 +52,7 @@ const DEG = Math.PI / 180;
 export const DEMON_POSE = {
   armOut: 0.16, elbow: 0.5, px: 31.7 / 54,
   ease: 0.15,
-  easeFrom: { [ANIM.Land]: 0.45, [ANIM.Dash]: 0.5, [ANIM.Melee]: 0.4, [ANIM.Tail]: 0.4, [ANIM.Cast]: 0.3, [ANIM.Breath]: 0.45, [ANIM.TakeOff]: 0.3 } as Record<number, number>,
+  easeFrom: { [ANIM.Land]: 0.45, [ANIM.Dash]: 0.5, [ANIM.Melee]: 0.4, [ANIM.Cleave]: 0.4, [ANIM.Tail]: 0.4, [ANIM.Cast]: 0.3, [ANIM.Breath]: 0.45, [ANIM.TakeOff]: 0.3 } as Record<number, number>,
   lift: (17 * 31.7) / 54, liftAtTakeoff: 0.6, bob: 2.4, bobAt: 0.46, labour: { beats: 2, pace: 0.85, deep: 1.15, bob: 1.8 },
   faceRate: 4, turnMax: 2.5, headRate: 5, neck: 1.4, headShare: [0.15, 0.35, 0.5], headRoll: 0.12, headKeep: 0.8, airLook: 20 * DEG,
   hurt: 0.22, hurtHead: 1.2, hurtChest: 0.4, hurtWing: 0.08, headMid: 29.8,
@@ -229,9 +229,9 @@ function gait(q: Float32Array, m: DemonMem): void {
 }
 
 /** Claws: the weight onto the back leg, a step into the strike, the swing carrying the trunk past the target, the recovery catching it. */
-function claws(q: Float32Array, m: DemonMem, t: number, g: number): void {
-  const A = P.claws, W = CONST.DEMON_CLEAVE_WINDUP, sd = m.side, a = sd > 0 ? J.armR : J.armL, o = sd > 0 ? J.armL : J.armR;
-  const w = S(0, W * 0.85, t), k = S(W - A.strike / 2, W + A.strike / 2, t), r = S(W + A.strike, W + CONST.DEMON_CLEAVE_RECOVER + 0.2, t), back = w * (1 - k), thru = k * (1 - r);
+function claws(q: Float32Array, m: DemonMem, t: number, g: number, W: number, R: number): void {
+  const A = P.claws, sd = m.side, a = sd > 0 ? J.armR : J.armL, o = sd > 0 ? J.armL : J.armR;
+  const w = S(0, W * 0.85, t), k = S(W - A.strike / 2, W + A.strike / 2, t), r = S(W + A.strike, W + R + 0.2, t), back = w * (1 - k), thru = k * (1 - r);
   q[J.hipsX] += (-A.back * back + A.into * thru) * g; q[J.hipsY] -= A.low * (back + thru) * g;
   q[J.hips + TURN] += sd * (A.hipsTurn[0] * back - A.hipsTurn[1] * thru) * g;
   // the shoulders wind up later than the hips and swing through after them
@@ -242,7 +242,7 @@ function claws(q: Float32Array, m: DemonMem, t: number, g: number): void {
   q[a + ARM.curl] += A.spread * Math.max(late, thru); q[a + ARM.thumb] += A.spread * Math.max(late, thru);
   q[o + ARM.swing] += A.arm.other[0] * late + A.arm.other[1] * thru;
   // the far foot steps into the strike and comes back in the recovery
-  const f = sd > 0 ? J.footL : J.footR, out = S(W - 0.2, W, t), home = S(W + 0.14, W + CONST.DEMON_CLEAVE_RECOVER, t);
+  const f = sd > 0 ? J.footL : J.footR, out = S(W - 0.2, W, t), home = S(W + 0.14, W + R, t);
   q[f + FOOT.x] += A.step * (out - home) * g; q[f + FOOT.y] += A.stepUp * (bell(out) + bell(home)) * g;
   if (g > 0) {
     const T = sd > 0 ? m.wr : m.wl;
@@ -421,7 +421,7 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   // a new anim (or the same attack begun again): the arms take turns, the clocks of the flight start
   const acts = ATTACK(s.anim), again = !first && acts && s.anim === m.lastAnim && s.animT < m.lastAnimT - 1e-4;
   const changed = first || again || air !== m.airborne || (s.anim !== m.lastAnim && (acts || ATTACK(m.lastAnim)));
-  if (changed && (s.anim === ANIM.Melee || s.anim === ANIM.Cast)) { m.side = m.turn; m.turn = m.turn > 0 ? -1 : 1; }
+  if (changed && (s.anim === ANIM.Melee || s.anim === ANIM.Cleave || s.anim === ANIM.Cast)) { m.side = m.turn; m.turn = m.turn > 0 ? -1 : 1; }
   const t = s.animT, flying = air && s.anim !== ANIM.Land;
   if (!first && m.lastAnim === ANIM.Land && s.anim !== ANIM.Land && !air && m.lastAnimT > CONST.DEMON_LAND * 0.8) m.landT = 0; else if (!jump) m.landT += dt; else m.landT = 99;
   if (flying) {
@@ -437,7 +437,8 @@ export function demonPose(s: BuiltIn, dt: number, m: DemonMem): DemonPose {
   if (flying) { hover(q, m, labour); lift = P.lift * (P.liftAtTakeoff + (1 - P.liftAtTakeoff) * S(0, labourFor, m.climb)); }
   else if (s.anim === ANIM.Land) { m.beat = 0; hover(q, m, 0); q[J.hipsY] -= BOB; lift = land(q, m, t); }
   else { stand(q, m); if (s.anim === ANIM.TakeOff) lift = takeOff(q, m, t); else if (!acts) gait(q, m); }
-  if (s.anim === ANIM.Melee) claws(q, m, t, g);
+  if (s.anim === ANIM.Melee) claws(q, m, t, g, CONST.DEMON_CLAW_WINDUP, CONST.DEMON_CLAW_RECOVER);
+  else if (s.anim === ANIM.Cleave) claws(q, m, t, g, CONST.DEMON_SCIMITAR_WINDUP, CONST.DEMON_SCIMITAR_RECOVER);
   else if (s.anim === ANIM.Tail) tailWhip(q, m, t);
   else if (s.anim === ANIM.Dash) swoop(q, m, t);
   else if (s.anim === ANIM.Cast) { cast(q, m, t, g); pose.caster = m.side; }

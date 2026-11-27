@@ -64,6 +64,7 @@ export const ANIM = {
   "Breath": 8,
   "Cast": 4,
   "Channel": 7,
+  "Cleave": 17,
   "Dash": 5,
   "Gaze": 14,
   "Idle": 0,
@@ -124,11 +125,13 @@ export const CONST = {
   "DEMON_BREATH_WINDUP": 0.8,
   "DEMON_CAST_RECOVER": 0.35,
   "DEMON_CAST_WINDUP": 0.5,
-  "DEMON_CLEAVE_KNOCK": 56.0,
-  "DEMON_CLEAVE_RECOVER": 0.3,
-  "DEMON_CLEAVE_WINDUP": 0.45,
+  "DEMON_CLAW_KNOCK": 56.0,
+  "DEMON_CLAW_RECOVER": 0.3,
+  "DEMON_CLAW_WINDUP": 0.45,
   "DEMON_FLIGHT": 3.5,
   "DEMON_LAND": 0.6,
+  "DEMON_SCIMITAR_RECOVER": 0.5,
+  "DEMON_SCIMITAR_WINDUP": 0.8,
   "DEMON_SMASH_RADIUS": 40.0,
   "DEMON_SWOOP_KNOCK": 64.0,
   "DEMON_SWOOP_RECOVER": 0.25,
@@ -357,6 +360,15 @@ export const ABILITIES = {
     "name": "Charm",
     "ranged": true,
     "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "Cleave": {
+    "arcs": false,
+    "classes": [],
+    "hero": false,
+    "name": "Cleave",
+    "ranged": false,
+    "shape": "Swing",
     "slot": "Secondary"
   },
   "Consecrate": {
@@ -746,6 +758,12 @@ export const ITEMS = {
     "name": "Bone Staff",
     "slot": "Melee"
   },
+  "BurningScimitar": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Burning Scimitar",
+    "slot": "Melee"
+  },
   "Cleaver": {
     "classes": [
       "Wizard",
@@ -830,6 +848,12 @@ export const ITEMS = {
     "kind": "Bow",
     "name": "Hunter's Bow",
     "slot": "Ranged"
+  },
+  "IceScimitar": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Ice Scimitar",
+    "slot": "Melee"
   },
   "Knife": {
     "classes": [
