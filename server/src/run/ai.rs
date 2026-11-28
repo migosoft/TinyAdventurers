@@ -28,7 +28,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, dir: f64, side: ta
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !p.effects.has(EffectKind::Invisible))
+        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !crate::dungeon::head_under(p.mv.water_t) && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, dir, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -44,7 +44,7 @@ pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
     let others = (0..run.monsters.len()).filter(|&i| run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
     heroes
         .chain(others)
-        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
+        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
         .filter(|&(_, p)| super::perception::sees(run, sight, from, dir, p))
         .map(|(c, p)| (c, p.dist(from)))
@@ -353,7 +353,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).
     let mut seen = match &run.monsters[mi].companion {
-        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
+        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && !run.under(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
         None => find_visible_foe(run, mi),
     };
     // A chaser whose head glances at a blow keeps the target it is engaged with while it is in the open; a closer
@@ -364,7 +364,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         let held = match run.monsters[mi].ai.target {
             Some(Target::Player(id) | Target::Monster(id)) => run
                 .creature_by_id(id)
-                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible) && super::perception::in_open(run, sight, pos, run.creature_pos(c))),
+                .filter(|&c| run.creature_alive(c) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible) && super::perception::in_open(run, sight, pos, run.creature_pos(c))),
             _ => None,
         };
         if let Some(t) = held {
@@ -400,7 +400,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             // An invisible target is hidden, however open the ground between.
             Some(Target::Player(id) | Target::Monster(id)) => run
                 .creature_by_id(id)
-                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible))
+                .filter(|&c| run.creature_alive(c) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible))
                 .map(|c| run.creature_pos(c)),
             _ => None,
         };
@@ -478,7 +478,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         let foe = seen.or_else(|| match run.monsters[mi].ai.target {
-            Some(Target::Player(id) | Target::Monster(id)) => run.creature_by_id(id).filter(|&c| run.creature_alive(c)),
+            Some(Target::Player(id) | Target::Monster(id)) => run.creature_by_id(id).filter(|&c| run.creature_alive(c) && !run.under(c)),
             _ => None,
         });
         if let Some(foe) = foe {

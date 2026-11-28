@@ -48,7 +48,7 @@ impl Run {
             let caster = self
                 .monsters
                 .iter()
-                .filter(|m| m.alive && m.side == Side::Hostile && m.sinking.is_none())
+                .filter(|m| m.alive && m.side == Side::Hostile && m.sinking.is_none() && !crate::dungeon::head_under(m.water_t))
                 .min_by(|a, b| a.pos.dist(from).total_cmp(&b.pos.dist(from)))
                 .map(|m| (m.id, m.pos));
             if caster.is_none() {
@@ -105,7 +105,7 @@ impl Run {
         let found = (0..self.monsters.len())
             .filter(|&i| {
                 let m = &self.monsters[i];
-                m.alive && m.side == Side::Hostile && m.sinking.is_none() && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
+                m.alive && m.side == Side::Hostile && m.sinking.is_none() && !crate::dungeon::head_under(m.water_t) && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
             })
             .min_by(|&a, &b| self.monsters[a].pos.dist(from).total_cmp(&self.monsters[b].pos.dist(from)));
         let Some(mi) = found else { return };

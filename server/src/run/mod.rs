@@ -1095,11 +1095,11 @@ impl Run {
         let sees = |p: Vec2| crate::collision::line_of_sight(&self.layout.map, at, p);
         let monsters = (0..self.monsters.len()).filter(|&mi| {
             let m = &self.monsters[mi];
-            m.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Monster(mi)) && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && sees(m.pos)
+            m.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Monster(mi)) && !m.hiding && !m.dormant && m.sinking.is_none() && !self.under(effects::Creature::Monster(mi)) && m.pos.dist(at) < r + m.radius && sees(m.pos)
         });
         let heroes = (0..self.players.len()).filter(|&pi| {
             let p = &self.players[pi];
-            p.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Player(pi)) && p.sinking.is_none() && p.pos().dist(at) < r + classes::PLAYER_RADIUS && sees(p.pos())
+            p.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Player(pi)) && p.sinking.is_none() && !self.under(effects::Creature::Player(pi)) && p.pos().dist(at) < r + classes::PLAYER_RADIUS && sees(p.pos())
         });
         monsters.map(effects::Creature::Monster).chain(heroes.map(effects::Creature::Player)).collect()
     }
@@ -1116,7 +1116,7 @@ impl Run {
             self.last_hit = Some(dmg.clone());
         }
         // A hero still loading the level is safe from everything, not only from targeting (#322).
-        if !self.players[pi].alive || self.players[pi].loading {
+        if !self.players[pi].alive || self.players[pi].loading || self.under(effects::Creature::Player(pi)) {
             return;
         }
         if !dmg.from_effect {
@@ -1215,8 +1215,8 @@ impl Run {
     /// The enemies' foes: living heroes on another side than the enemies' within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
-        let heroes = self.players.iter().enumerate().filter(|(_, p)| targets::foes(Side::Hostile, p.side) && p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| targets::foes(Side::Hostile, p.side) && p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i)).filter(|&c| !self.under(c));
+        let allies = self.monsters.iter().enumerate().filter(|(i, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && !self.under(effects::Creature::Monster(*i)) && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
@@ -1244,6 +1244,15 @@ impl Run {
             effects::Creature::Player(i) => self.players[i].alive,
             effects::Creature::Monster(i) => self.monsters[i].alive,
         }
+    }
+
+    /// Is `c`'s head under water? Then it is out of reach: not targeted, and no hit, damage or effect reaches
+    /// it (its own breath still runs out).
+    pub fn under(&self, c: effects::Creature) -> bool {
+        dungeon::head_under(match c {
+            effects::Creature::Player(i) => self.players[i].mv.water_t,
+            effects::Creature::Monster(i) => self.monsters[i].water_t,
+        })
     }
 
     pub fn creature_pos(&self, c: effects::Creature) -> Vec2 {
@@ -1345,6 +1354,9 @@ impl Run {
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
         // Nothing hurts a Neutral monster that is not wild, not even a hit that would pass through it.
         if self.monsters[mi].side == Side::Neutral && self.monsters[mi].wild.is_none() {
+            return false;
+        }
+        if self.under(effects::Creature::Monster(mi)) {
             return false;
         }
         // One central guard: a hit a bodiless monster fully resists is no hit at all (no keystone, reveal, number or effect).
