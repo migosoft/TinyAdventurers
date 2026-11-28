@@ -364,8 +364,9 @@ export class Figures3d {
     if (ev.t === 'Sink' && ev.how === 2) { this.descents.end(ev.id); this.parts.delete(ev.id); }
     if (ev.t !== 'Died') return false;
     if (lost === 'lost') return true;
-    // A creature that drowned (#448) has been sinking out of sight: no skull, no body.
-    if (this.motions.get(ev.id)?.sw != null) return true;
+    // A creature that drowned (#448) has been sinking out of sight: no skull, no body. One killed with its head still above water dies the ordinary way.
+    const sw = this.motions.get(ev.id)?.sw;
+    if (sw != null && headUnder(sw)) return true;
     if (ev.kind === KIND.Shade) {
       // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart.
       const fig = this.figs.get(ev.id);
@@ -726,7 +727,7 @@ export class Figures3d {
     const flags = st.s.flags ?? 0;
     const dashing = st.predicted ? f.own.dashing : e.anim === ANIM.Dash;
     const skims = skimsTerrain(flags, dashing) || (flags & FLAG.AIRBORNE) !== 0;
-    const start = this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null;
+    const start = this.states.sinking(e.id) ? 'fall' : null;   // a creature's drowning is the drown byte (#448); only a barrel's anim 3 starts 'drown'
     let fig = this.figs.get(e.id);
     if (!fig) {
       const pi = isPlayerKind(e.kind) ? this.players.find((p) => p.ent === e.id) : undefined;

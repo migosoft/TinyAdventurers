@@ -1,7 +1,7 @@
 // Pure per-figure bookkeeping: which state a figure is drawn from (predicted
 // for the own hero, interpolated otherwise), the fall into a chasm or the drowning of a hero lost to the terrain, and
 // the vanish and reappear marks of Invisible. The view keeps the pictures (splashes, bubbles, ghost images).
-import { ANIM, CONST, EFFECT, SIDE, TILE_ID } from '../../generated/defs';
+import { ANIM, CONST, EFFECT, SIDE } from '../../generated/defs';
 import type { OwnHero, PictureEv } from '../../run/view';
 import type { TileMap } from '../../sim/map';
 import { sinkDepth } from '../terrain-layers';
@@ -13,7 +13,6 @@ import type { ViewState } from './pose';
 interface Sink {
   x: number;
   y: number;
-  drown: boolean;
   /** When it began; null until the first frame that draws the figure, for an event that came before the view had a clock. */
   t: number | null;
 }
@@ -29,7 +28,7 @@ export class FigureStates {
   constructor(private readonly map: TileMap) {}
 
   /** The ViewState a figure is drawn from this frame: predicted for the own hero (unless charmed), interpolated otherwise; sink, fall and drown applied. `started` is true on the frame a predicted sink begins (the view plays its start effect). */
-  stateOf(e: EntState, f: { you: number; own: OwnHero }, nowS: number): { s: ViewState; predicted: boolean; started: boolean; drowning: boolean } {
+  stateOf(e: EntState, f: { you: number; own: OwnHero }, nowS: number): { s: ViewState; predicted: boolean; started: boolean } {
     // The own figure is drawn from prediction, except while charmed: then it is the server's, interpolated hero.
     const predicted = e.id === f.you && f.own.alive && !f.own.charmed;
     let s: ViewState;
@@ -42,19 +41,19 @@ export class FigureStates {
     const tile = this.map.tileAt(s.x, s.y);
     let started = false;
     if (predicted && f.own.sinking && !this.sinks.has(e.id)) {
-      this.sinks.set(e.id, { x: s.x, y: s.y, drown: tile === TILE_ID.DeepWater, t: nowS });
+      this.sinks.set(e.id, { x: s.x, y: s.y, t: nowS });
       started = true;
     }
     const sk = this.sinks.get(e.id);
     if (sk) {
       sk.t ??= nowS;
-      const k = Math.min(1, (nowS - sk.t) /(sk.drown ? CONST.DROWN_TIME : CONST.FALL_TIME));
-      Object.assign(s, { x: sk.x, y: sk.y, anim: ANIM.Idle, animT: 0, fall: sk.drown ? 0 : k, drown: sk.drown ? k : 0 });
-      return { s, predicted, started, drowning: sk.drown };
+      const k = Math.min(1, (nowS - sk.t) / CONST.FALL_TIME);
+      Object.assign(s, { x: sk.x, y: sk.y, anim: ANIM.Idle, animT: 0, fall: k, drown: 0 });
+      return { s, predicted, started };
     }
     const dashing = skimsTerrain(e.flags, predicted ? f.own.dashing : e.anim === ANIM.Dash);
     s.sink = dashing ? 0 : sinkDepth(tile);
-    return { s, predicted, started, drowning: false };
+    return { s, predicted, started };
   }
 
   /** Whether a figure is falling or drowning (the view plays its start effect when a Sink event begins one). */
@@ -72,7 +71,7 @@ export class FigureStates {
         return this.sinks.delete(ev.id) ? 'lost' : null;
       case 'Sink':
         if (ev.how === 2) this.sinks.delete(ev.id); // debug: back on safe ground
-        else if (!this.sinks.has(ev.id)) this.sinks.set(ev.id, { x: ev.x, y: ev.y, drown: ev.how === 1, t: nowS });
+        else if (ev.how === 0 && !this.sinks.has(ev.id)) this.sinks.set(ev.id, { x: ev.x, y: ev.y, t: nowS });   // a drowning is the snapshot's drown byte (#448), no event
         return null;
       case 'Effect':
         // Invisible has a default fade: the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
