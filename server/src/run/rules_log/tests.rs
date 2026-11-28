@@ -1827,6 +1827,23 @@ fn a_cast_logs_the_cooldown_it_started() {
 }
 
 #[test]
+fn a_cooldown_line_is_written_only_when_the_cooldown_changes() {
+    let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
+    let lines = |run: &mut Run| take(run).iter().filter(|r| r.head.contains("cooldown")).count();
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    assert_eq!(lines(&mut run), 1, "the first cast logs it");
+    run.players[0].cd2 = 0.0;
+    crate::run::abilities::try_use(&mut run, 0, false, 2);
+    assert_eq!(lines(&mut run), 0, "the same cooldown again is silent");
+    run.players[0].cd2 = 0.0;
+    run.players[0].sheet.keystones.insert(crate::defs::trees::Keystone::Berserker);
+    run.players[0].hp = 0.4 * run.players[0].sheet.max_hp;
+    crate::run::abilities::try_use(&mut run, 0, false, 3);
+    assert_eq!(lines(&mut run), 1, "a changed cooldown logs again");
+}
+
+#[test]
 fn a_berserk_cast_names_berserker() {
     let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
     run.players[0].sheet.keystones.insert(crate::defs::trees::Keystone::Berserker);
