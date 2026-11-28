@@ -31,6 +31,8 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 **The camera.** You see the dungeon from above at an angle, in 3D. Besides the controls above there are three keys and a mouse drag to turn the camera, and the mouse wheel zooms. Every run starts facing north.
 
+The walls between the camera and your hero are drawn low so you can see the room; they still block sight, shots and movement as full walls.
+
 | Input | Action |
 |---|---|
 | **Z** | Turn the camera 45°, so it walks around the scene to the left. Press again for another step. |
