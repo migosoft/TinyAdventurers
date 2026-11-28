@@ -11,7 +11,7 @@ import { buildTree } from './trees/build';
 import type { FrameInput } from './view';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
-  cove_tree: { x: 0, y: 0, w: 96, h: 100 }, cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
+  cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
   cove_tuft_a: { x: 160, y: 0, w: 12, h: 8 }, cove_tuft_b: { x: 180, y: 0, w: 12, h: 8 }, cove_fern: { x: 200, y: 0, w: 14, h: 14 },
   floor_1: { x: 300, y: 0, w: 16, h: 16 },
 };

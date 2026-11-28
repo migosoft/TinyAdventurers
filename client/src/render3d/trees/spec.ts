@@ -1,6 +1,6 @@
 // What the server says about one plant, as the tree builder needs it.
 import type { PlantInfo } from '../../generated/PlantInfo';
-import { PLANT_KINDS } from '../../game/vegetation';
+import { PLANT_KINDS } from './kinds';
 
 export type TreeForm = 'round' | 'wide' | 'tall' | 'willow' | 'conifer' | 'bush';
 

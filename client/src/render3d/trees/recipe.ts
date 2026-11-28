@@ -1,5 +1,5 @@
 // The plant recipe (#334): what a leafy tree, a conifer or a bush is made of, from (kind, seed, scale) alone. No canvas, no painting:
-// the 3D trees (grow.ts) read it, and the painters (game/vegetation/*, kept until #333) paint from the same functions.
+// the 3D trees (grow.ts) read it, and nothing else draws plants (the 2D painters were removed by #333).
 // Self-contained: it imports nothing.
 //
 // A plant's numbers come from one random stream per seed. The painters draw from that stream between the recipe's parts (bark

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEAF_PALETTE } from '../../generated/defs';
-import { P } from '../../game/vegetation/canvas';
+import { P } from './kinds';
 import { LEAF_PALETTES, paletteBytes } from './palette';
 import { RAMP } from './mesh';
 

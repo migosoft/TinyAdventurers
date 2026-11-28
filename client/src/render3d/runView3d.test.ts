@@ -77,7 +77,7 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
+for (const n of ['cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: 14, h: 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
 function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; dark?: number[]; pond?: boolean; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {

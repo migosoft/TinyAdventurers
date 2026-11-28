@@ -10,7 +10,6 @@ import type { Cand } from './lights';
 import type { PlantBound } from './plantShadow';
 import type { BushelSpot } from './cover/source';
 import { hiddenAt, type SightMask } from './sightmask';
-import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { buildTree, type BuiltTree } from './trees/build';
 import { lookKey, type TreeSpec } from './trees/spec';
 import type { FrameRects } from './worldMesh';
@@ -97,29 +96,23 @@ export const COVE_PIXIES = { above: 3, aboveLift: 0.5, aboveBob: 0.25, aboveSpan
 const WALL_GAP = 0.5; // first guess
 
 /** The cove's willow, with the shape it builds into (its radius and height decide the plant shadows' bounds and the pixies' height). */
-function fitWillow(c: CoveInfo, build: (s: TreeSpec) => BuiltTree = buildTree): { spec: TreeSpec; built: BuiltTree; reach: number } {
+function fitWillow(c: CoveInfo): { spec: TreeSpec; built: BuiltTree; reach: number } {
   const { foot } = coveLayout(c);
   const x = foot.x / TILE, z = foot.y / TILE;
   // The room in tiles; the reach is measured from the foot to every wall.
   const room = Math.min(x - (c.x + WALL_GAP), c.x + c.w - WALL_GAP - x, z - (c.y + WALL_GAP), c.y + c.h - WALL_GAP - z);
-  // From the largest size down: the first that fits the room. The generator's drawing canvas is finite, so a size it cannot draw counts as too large.
+  // From the largest size down: the first that fits the room.
   for (let pct = WILLOW_SCALE.max; ; pct -= WILLOW_SCALE.step) {
     const spec: TreeSpec = { form: 'willow', x, z, seed: c.seed, scalePct: pct, mirrored: false, leaf: 1, dead: false };
     const last = pct - WILLOW_SCALE.step < WILLOW_SCALE.min;
-    let built: BuiltTree;
-    try {
-      built = build(spec);
-    } catch (e) {
-      if (!(e instanceof CanvasEdgeError) || last) throw e;
-      continue;
-    }
+    const built = buildTree(spec);
     if (built.radius <= room || last) return { spec, built, reach: room };
   }
 }
 
 /** The cove's tree in the 3D view: a willow of the grown-tree system at the trunk's foot, the largest size whose curtains stay 0.5 tiles inside the room. */
-export function coveWillow(c: CoveInfo, build?: (s: TreeSpec) => BuiltTree): TreeSpec {
-  return fitWillow(c, build).spec;
+export function coveWillow(c: CoveInfo): TreeSpec {
+  return fitWillow(c).spec;
 }
 
 /** The pixies' paths round the willow (`COVE_PIXIES`): above its crown, or in a ring outside its curtains, never past the room's walls. */

@@ -7,7 +7,7 @@
 // a pond and a few px at a stream. Without a shore the paint is exactly as it was before ponds: water tiles are grass.
 import { TILE_ID } from '../../generated/defs';
 import { TILE, type TileMap } from '../../sim/map';
-import type { Rgba } from '../vegetation';
+import type { Rgba } from '../../render3d/trees/kinds';
 import { BASE, EDGE, FLOWERS, G1, noise, PATCH, rng, type Rgb } from '../covemath';
 import type { RoadEdge } from './road';
 

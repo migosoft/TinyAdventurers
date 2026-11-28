@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CoveInfo } from '../generated/CoveInfo';
 import { coveLayout, placeCovePlants } from '../game/covemath';
-import { CanvasEdgeError } from '../game/vegetation/canvas';
 import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY } from '../game/pixieMath';
 import { BufferAttribute, BufferGeometry, DataTexture, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
 import { project, type Cam } from './camera';
@@ -27,7 +26,7 @@ import type { FrameRects } from './worldMesh';
 
 const cove: CoveInfo = { x: 10, y: 8, w: 14, h: 10, tree_x: 16, tree_y: 12, seed: 5 };
 const frames: FrameRects = {
-  cove_tree: { x: 0, y: 0, w: 96, h: 100 }, cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
+  cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
   cove_tuft_a: { x: 160, y: 0, w: 12, h: 8 }, cove_tuft_b: { x: 180, y: 0, w: 12, h: 8 }, cove_fern: { x: 200, y: 0, w: 14, h: 14 },
   floor_1: { x: 300, y: 0, w: 16, h: 16 },
 };
@@ -71,14 +70,6 @@ describe('coveWillow', () => {
     expect(tight.scalePct).toBeLessThan(200);
     expect(tight.scalePct).toBeGreaterThanOrEqual(60);
     expect(coveWillow(room(1)).scalePct).toBeGreaterThan(130);
-  });
-
-  it('treats only the generator\'s canvas-edge error as too large a size, and rethrows any other', () => {
-    const c = room(1);
-    const edge = (s: TreeSpec): BuiltTree => { if (s.scalePct > 100) throw new CanvasEdgeError(); return buildTree(s); };
-    expect(coveWillow(c, edge).scalePct).toBeLessThanOrEqual(100);
-    const broken = (): BuiltTree => { throw new RangeError('not the canvas'); };
-    expect(() => coveWillow(c, broken)).toThrow('not the canvas');
   });
 
   it('falls back to the smallest size in a room too small for it', () => {

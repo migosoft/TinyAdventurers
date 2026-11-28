@@ -3,7 +3,7 @@
 import { TILE_ID } from '../../generated/defs';
 import type { CoveInfo } from '../../generated/CoveInfo';
 import { noise, type Rgb } from '../../game/covemath';
-import { P } from '../../game/vegetation/canvas';
+import { P } from '../trees/kinds';
 import { TILE, type TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
 import { isWater, maskAt } from '../dips/shape';
