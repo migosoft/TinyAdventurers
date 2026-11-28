@@ -35,8 +35,8 @@ pub struct RulesLog {
     open: Vec<(usize, LogRec, Vec<LogRec>)>,
     /// When "Too close" was last logged, per hero id and slot (`true` is the primary).
     too_close: Vec<(u32, bool, f64)>,
-    /// The cooldown last logged per hero id and ability (#207): a cast logs its line only when this changes.
-    last_cd: Vec<(u32, AbilityId, f64)>,
+    /// The cooldown last logged and when, per hero id and ability (#207): see `CAST_EVERY`.
+    last_cd: Vec<(u32, AbilityId, f64, f64)>,
 }
 
 /// An entity was spawned: it takes the next number of its name (whether or not the log is on).
@@ -102,7 +102,7 @@ pub fn set_prefs(run: &mut Run, pi: usize, on: bool, details: bool) {
 pub fn forget(run: &mut Run, player_id: u32) {
     run.log.prefs.retain(|(i, _)| *i != player_id);
     run.log.too_close.retain(|(h, _, _)| *h != player_id);
-    run.log.last_cd.retain(|(h, _, _)| *h != player_id);
+    run.log.last_cd.retain(|(h, _, _, _)| *h != player_id);
     if !self::on(run) {
         run.log.records.clear();
         run.log.open.clear();
@@ -402,16 +402,20 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(Creature, Skip)], c
     }
 }
 
+/// An unchanged cooldown is told at most this often (seconds) per hero and ability; a changed one at once (#207).
+pub const CAST_EVERY: f64 = 10.0;
+
 /// Hero `pi` cast `ability`, which started a cooldown of `started` seconds (Berserker included).
 pub fn cast(run: &mut Run, pi: usize, ability: &crate::sheet::ResolvedAbility, started: f64) {
     if !on(run) {
         return;
     }
     let hero = run.players[pi].id;
-    match run.log.last_cd.iter_mut().find(|(h, a, _)| *h == hero && *a == ability.id) {
-        Some((_, _, last)) if *last == started => return,
-        Some((_, _, last)) => *last = started,
-        None => run.log.last_cd.push((hero, ability.id, started)),
+    let now = run.time;
+    match run.log.last_cd.iter_mut().find(|(h, a, _, _)| *h == hero && *a == ability.id) {
+        Some((_, _, cd, at)) if *cd == started && now - *at < CAST_EVERY - 1e-9 => return,
+        Some((_, _, cd, at)) => (*cd, *at) = (started, now),
+        None => run.log.last_cd.push((hero, ability.id, started, now)),
     }
     let berserk = crate::run::keystones::berserk(&run.players[pi]);
     let head = text::cast_head(run, hero, ability.id, started);

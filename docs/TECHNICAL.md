@@ -2397,7 +2397,7 @@ Every line outside `run/rules_log/` that contains `rules_log` or `RulesLog` (`gr
 | `run/companion.rs` | 2 | `tags::tag_name` for the recruit and fallen messages |
 | `run/companion/tests.rs` | 1 | a test line (`tags::tag_of`) |
 | `run/charm.rs` | 17 | the two `use` lines; `hero_charm` when a hero's charm comes on and ends; `charm` when a monster's comes on and ends; test lines |
-| `run/abilities.rs` | 23 | `too_close` for the melee-blocked secondary; `cast` after the cooldown is set (the fallback Strike and the normal use, heroes only; it logs the cooldown and its `CdSteps`, #198, but only when the cooldown differs from the one last logged for that hero and ability, `Log.last_cd`: the first cast logs it, repeats of an unchanged one stay silent, #207); the `rules_log::on(run)` guards and `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify; and the log's own test lines at the end of the file |
+| `run/abilities.rs` | 23 | `too_close` for the melee-blocked secondary; `cast` after the cooldown is set (the fallback Strike and the normal use, heroes only; it logs the cooldown and its `CdSteps`, #198, at once when the cooldown differs from the one last logged for that hero and ability, otherwise at most every `CAST_EVERY` (10 s), `Log.last_cd`, #207); the `rules_log::on(run)` guards and `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify; and the log's own test lines at the end of the file |
 
 (85 lines in all; the effect names come from `EffectKind::name()` in `defs`, which does not reach into the log. The counts are the ones the test pins; the test and `grep` are the authority if they differ.)
 
