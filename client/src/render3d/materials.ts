@@ -9,7 +9,7 @@ import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
 import type { SunLight } from './sunNodes';
 import { CARD_GAIN } from './sun';
 import { GRASS_FLAT, STONE } from './light';
-import { cutPositionNode, cutUniforms, cutWeightNode, type CutUniforms } from './cutNodes';
+import { cutPositionNode, cutUniforms, cutWeightNode, type CutEnv, type CutUniforms } from './cutNodes';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
@@ -77,7 +77,7 @@ export interface WorldMaterial {
   /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** The wall cut's uniforms (#347; the torches share them): `on` 0 or 1, `floor`, `stub`, `line`, `ramp` in tiles, `edge` 0..1, `slope` = 1 / tan(pitch). */
-  cut: { [K in Exclude<keyof CutUniforms, 'target' | 'env'>]: { value: number } } & { target: { value: Vector3 }; env: unknown };
+  cut: { [K in Exclude<keyof CutUniforms, 'target' | 'env'>]: { value: number } } & { target: { value: Vector3 }; env: CutEnv };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */
@@ -286,11 +286,12 @@ export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex:
   const see = seeUniforms();
   const onWall = isTop.or(isFace);
   const cut = cutUniforms({ cellH: lighting.cellH, sight });
-  // Stubs never open: the mask sample stays at the top level of seeOpenNode.
-  const open = onWall.and(cutWeightNode(wp, cut, see).lessThanEqual(0)).and(seeOpenNode(maskTex, wp, see));
+  const cutW: N = varying(cutWeightNode(positionGeometry, cut, see), 'cutW');
+  // Stubs never open: the vertex stage's weight, as a varying (the hide test's samples stay out of the fragment stage); the mask sample stays at the top level of seeOpenNode.
+  const open = onWall.and(cutW.lessThanEqual(0)).and(seeOpenNode(maskTex, wp, see));
 
   const m = new MeshBasicNodeMaterial();
-  m.positionNode = cutPositionNode(positionGeometry, cut, see);
+  m.positionNode = cutPositionNode(positionGeometry, cut, cutW);
   m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wpLight, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {

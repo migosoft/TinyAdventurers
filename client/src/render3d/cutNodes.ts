@@ -1,7 +1,7 @@
 // The wall cut (#347) in the world material's vertex stage; the rule is `cut.ts`. Paint, light, sight and shadows keep the unmoved point.
 import { float, floor, fract, max, min, mix, smoothstep, uniform, vec2, vec3 } from 'three/tsl';
 import { Vector3 } from 'three/webgpu';
-import { CUT_DEFAULTS } from './cut';
+import { CUT_DEFAULTS, FLOOR_SOFT, HIDE_MID } from './cut';
 import type { SeeUniforms } from './materials';
 import type { Sight } from './sightNodes';
 
@@ -24,7 +24,7 @@ export function cutUniforms(env: CutEnv) {
     env,
   };
 }
-export type CutUniforms = Record<keyof ReturnType<typeof cutUniforms>, N>;
+export type CutUniforms = Record<Exclude<keyof ReturnType<typeof cutUniforms>, 'env'>, N> & { env: CutEnv };
 
 /**
  * 1 where the ground at `q` (xz) is floor the followed hero sees, else 0: the heights bilinear over the four nearest tile centres
@@ -32,10 +32,10 @@ export type CutUniforms = Record<keyof ReturnType<typeof cutUniforms>, N>;
  * times 1 - hard from the sight mask (1 while the sight is off). All samples at the top level: no branch.
  */
 function hidesNode(q: N, cut: CutUniforms): N {
-  const { cellH, sight } = cut.env as CutEnv;
+  const { cellH, sight } = cut.env;
   const u: N = q.sub(0.5), c0: N = floor(u), f: N = fract(u);
   const limit = cut.floor.add(cut.stub);
-  const open = (dx: number, dz: number): N => float(1).sub(smoothstep(limit, limit.add(0.05), cellH(c0.add(vec2(dx, dz)))));
+  const open = (dx: number, dz: number): N => float(1).sub(smoothstep(limit, limit.add(FLOOR_SOFT), cellH(c0.add(vec2(dx, dz)))));
   const ground = mix(mix(open(0, 0), open(1, 0), f.x), mix(open(0, 1), open(1, 1), f.x), f.y);
   const seen = mix(float(1), float(1).sub(sight.unseenAt(q).x), sight.active);
   return ground.mul(seen);
@@ -49,12 +49,11 @@ export function cutWeightNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
   const d = p.xz.sub(cut.target.xz).dot(see.ray.xz);
   const q = p.xz.sub(see.ray.xz.mul(max(p.y.sub(cut.floor), 0).mul(cut.slope)));
   const side = smoothstep(cut.line, cut.line.add(cut.ramp), d);
-  const hides = smoothstep(float(0.5).sub(cut.edge.mul(0.5)), float(0.5).add(cut.edge.mul(0.5)), hidesNode(q, cut));
+  const hides = smoothstep(float(HIDE_MID).sub(cut.edge.mul(0.5)), float(HIDE_MID).add(cut.edge.mul(0.5)), hidesNode(q, cut));
   return side.mul(hides).mul(cut.on);
 }
 
-/** The point after the cut: lowered toward `floor + stub`, never raised. */
-export function cutPositionNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
-  const w = cutWeightNode(p, cut, see);
+/** The point after the cut, `w` the weight from `cutWeightNode` at `p`: lowered toward `floor + stub`, never raised. */
+export function cutPositionNode(p: N, cut: CutUniforms, w: N): N {
   return vec3(p.x, mix(p.y, min(p.y, cut.floor.add(cut.stub)), w), p.z);
 }
