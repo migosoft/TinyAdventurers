@@ -269,6 +269,7 @@ impl Placed {
     }
 }
 
+/// Tiles a hero reaches on foot. A hero may now swim (#448), but swimming is deadly, so deep water counts as blocking here.
 fn bfs_hero(map: &Map, sx: i32, sy: i32) -> Vec<bool> {
     let mut seen = vec![false; (map.w * map.h) as usize];
     let mut q = VecDeque::new();
@@ -277,7 +278,7 @@ fn bfs_hero(map: &Map, sx: i32, sy: i32) -> Vec<bool> {
     while let Some((x, y)) = q.pop_front() {
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x + dx, y + dy);
-            if map.in_bounds(nx, ny) && !map.blocks(nx, ny, super::Mover::Hero) && !seen[(ny * map.w + nx) as usize] {
+            if map.in_bounds(nx, ny) && !map.blocks(nx, ny, super::Mover::Hero) && map.get(nx, ny) != Tile::DeepWater as u8 && !seen[(ny * map.w + nx) as usize] {
                 seen[(ny * map.w + nx) as usize] = true;
                 q.push_back((nx, ny));
             }

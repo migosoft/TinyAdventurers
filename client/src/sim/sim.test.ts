@@ -127,7 +127,9 @@ describe('tile rules', () => {
 });
 
 describe('deep water (server collision.rs: water_t_counts_in_deep_water_and_slows)', () => {
-  const m = new TileMap(10, 10, new Uint8Array(100).fill(TILE_ID.Floor));
+  // Like the server's `room()`: floor inside, walls around.
+  const m = new TileMap(10, 10, new Uint8Array(100).fill(TILE_ID.Wall));
+  for (let y = 1; y < 9; y++) for (let x = 1; x < 9; x++) m.set(x, y, TILE_ID.Floor);
   for (let y = 1; y < 9; y++) for (let x = 3; x <= 6; x++) m.set(x, y, TILE_ID.DeepWater);
   const dt = 1 / 60;
   const start: MoveState = { x: 20, y: 40, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0, waterT: 0 };
@@ -150,6 +152,22 @@ describe('deep water (server collision.rs: water_t_counts_in_deep_water_and_slow
     }
     expect(headSeen).toBe(true);
     expect(s.waterT).toBe(0);
+  });
+
+  it('walk-in and walk-out numbers equal the server\'s (collision.rs: walk_in_and_out_numbers)', () => {
+    const want: [number, number, number][] = [[28, 48.0, 0.0], [30, 49.400000000000006, 0.03333333333333333], [60, 70.40000000000009, 0.5333333333333333], [100, 98.0500000000002, 1.2000000000000006], [140, 112.04999999999997, 1.866666666666665], [160, 132.04999999999995, 0.0], [200, 139.0, 0.0]];
+    let s = start;
+    const got: [number, number, number][] = [];
+    for (let i = 1; i <= 200; i++) {
+      s = stepMove(m, s, 1, 0, 60, 300, 5, dt);
+      if (want.some((w) => w[0] === i)) got.push([i, s.x, s.waterT]);
+    }
+    got.forEach((g, k) => {
+      expect(g[0]).toBe(want[k][0]);
+      expect(g[1]).toBeCloseTo(want[k][1], 9);
+      expect(g[2]).toBeCloseTo(want[k][2], 9);
+    });
+    expect(got.length).toBe(want.length);
   });
 
   it('a dash stops the clock', () => {

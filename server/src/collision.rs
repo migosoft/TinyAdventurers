@@ -355,6 +355,30 @@ mod tests {
         assert_eq!(s.water_t, 0.0);
     }
 
+    /// The same numbers are asserted by the client's `sim.test.ts` ("walk-in and walk-out numbers"): a drift on either side fails.
+    #[test]
+    fn walk_in_and_out_numbers() {
+        let mut m = room();
+        for y in 1..9 {
+            for x in 3..=6 {
+                m.set(x, y, Tile::DeepWater);
+            }
+        }
+        let mut s = MoveState::at(20.0, 40.0);
+        let mut got = Vec::new();
+        for i in 1..=200 {
+            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
+            if [28, 30, 60, 100, 140, 160, 200].contains(&i) {
+                got.push((i, s.x, s.water_t));
+            }
+        }
+        let want = [(28, 48.0, 0.0), (30, 49.400000000000006, 0.03333333333333333), (60, 70.40000000000009, 0.5333333333333333), (100, 98.0500000000002, 1.2000000000000006), (140, 112.04999999999997, 1.866666666666665), (160, 132.04999999999995, 0.0), (200, 139.0, 0.0)];
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert!(g.0 == w.0 && (g.1 - w.1).abs() < 1e-9 && (g.2 - w.2).abs() < 1e-9, "{g:?} vs {w:?}");
+        }
+    }
+
     #[test]
     fn a_dash_stops_the_water_clock() {
         let mut m = room();
