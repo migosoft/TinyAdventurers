@@ -157,6 +157,9 @@ describe('buildDipChunk', () => {
         if (n[v * 3 + 1] === 0) continue; // a skirt vertex (horizontal normal)
         const x = p[v * 3], z = p[v * 3 + 2];
         if (Math.abs(p[v * 3 + 1] - bedAt(m, x, z)) > 1e-6) continue; // a skirt's top vertex on the wall side: y = 0
+        // beside a broken-off piece of the chasm's rim (#444) the bed jumps: the float32 point or a probe may fall on either side
+        const jump = (px: number, pz: number) => Math.abs(bedAt(m, px + 1e-3, pz) - bedAt(m, px - 1e-3, pz)) > 0.05 || Math.abs(bedAt(m, px, pz + 1e-3) - bedAt(m, px, pz - 1e-3)) > 0.05;
+        if ([[x, z], [x + h, z], [x - h, z], [x, z + h], [x, z - h]].some(([px, pz]) => jump(px, pz))) continue;
         const dx = (bedAt(m, x + h, z) - bedAt(m, x - h, z)) / (2 * h);
         const dz = (bedAt(m, x, z + h) - bedAt(m, x, z - h)) / (2 * h);
         const len = Math.hypot(dx, 1, dz);
@@ -196,7 +199,7 @@ describe('buildDipChunk', () => {
       const x = p[v * 3], z = p[v * 3 + 2], n = [0, 0];
       nearAt(m, x, z, n, 0);
       expect(marks[v * 3]).toBeCloseTo(maskAt(m, x, z, isChasm), 6);
-      expect(marks[v * 3 + 1]).toBeCloseTo(n[0], 6);
+      expect(marks[v * 3 + 1]).toBeCloseTo(n[0], 5);   // float32 positions, and lava's grown shore divides (#444)
       expect(marks[v * 3 + 2]).toBeCloseTo(n[1], 6);
       expect(dip[v]).toBe(kindOf(maskAt(m, x, z, isWater), maskAt(m, x, z, isLava), maskAt(m, x, z, isChasm)));
       seen[dip[v]]++;

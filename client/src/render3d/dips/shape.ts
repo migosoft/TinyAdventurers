@@ -61,14 +61,66 @@ export function growAt(x: number, z: number): number {
  * outside the cell edge of water and lava. Outside the map is no member. The rules still use the cell squares; the outline is a look.
  * Water and lava take the largest mask within `growAt` along the two axes and the diagonals (a dilation: a straight edge moves out by
  * exactly that, a corner is rounded), so no part of their tiles is drawn dry and lava never looks smaller than where it burns. A
- * chasm's cells do not grow (the mask is linear in the cells, so the other members keep theirs): its broken-off rim already breaks the
- * line, a figure walking along it never stands over the void, and a faller keeps the room the descent counts on.
+ * chasm does not grow but breaks (`chasmMask`). The mask is linear in the cells, so a member with chasm and other cells takes each part
+ * its own way.
  */
 export function maskAt(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
-  return member === isChasm ? cellMask(map, x, z, member) : grownMask(map, x, z, member);
+  return member === isChasm ? chasmMask(map, x, z) : grownMask(map, x, z, member);
 }
 
-/** The member's non-chasm cells and the chasm cells of the 3 by 3 cells from (`win0x`, `win0z`): every sample `grownMask` reads. */
+/**
+ * The broken rim of a chasm (#444): the floor beside it is split into pieces (`shardOf`, a Voronoi cell of a jittered lattice,
+ * `SHARD_FREQ` per tile), and a piece has broken off where the plain mask reaches `OUTLINE_EDGE` less its chip (`CHIP` times
+ * smoothstep(`CHIP_ID_FROM`, `CHIP_ID_TO`, its id)): up to about 0.22 tiles into the floor. A broken piece lies `BREAK_DEPTH` below the
+ * floor with straight sides, and the chasm's wall drops on from there, so the rim runs in steps and jags. The dip material paints the
+ * same pieces (`dipNodes.ts` shares these numbers and the hash) and its cracks run along their edges. Only outward and only a step:
+ * a faller keeps the room and the wall its descent counts on, and a grounded foot (`walkBedAt`) stands on the floor.
+ */
+export const SHARD_FREQ = 1.35, CHIP = 0.3, CHIP_ID_FROM = 0.25, CHIP_ID_TO = 0.75, BREAK_DEPTH = 0.35;
+
+const f32 = Math.fround;
+const fract = (v: number): number => f32(v - Math.floor(v));
+
+/** The shader's `hash21` (Dave Hoskins, `noiseNodes.ts`) in float32 steps, so the CPU's pieces are the GPU's: vec2 -> 0..1. */
+export function hash21(x: number, y: number): number {
+  const ax = fract(f32(x) * f32(0.1031)), ay = fract(f32(y) * f32(0.1031)), az = ax;
+  const d = f32(f32(ax * f32(ay + f32(33.33))) + f32(ay * f32(az + f32(33.33))) + f32(az * f32(ax + f32(33.33))));
+  const qx = f32(ax + d), qy = f32(ay + d), qz = f32(az + d);
+  return fract(f32(f32(qx + qy) * qz));
+}
+
+/** The id (0..1) of the piece (x, z) in tiles lies in: the shader's `shards` (`dipNodes.ts`) at the same scale. */
+export function shardOf(x: number, z: number): number {
+  const qx = f32(x * SHARD_FREQ), qz = f32(z * SHARD_FREQ);
+  const ix = Math.floor(qx), iz = Math.floor(qz), fx = f32(qx - ix), fz = f32(qz - iz);
+  let best = 8, id = 0;
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    const cx = ix + ox, cz = iz + oy;
+    const rx = f32(f32(ox + hash21(cx, cz)) - fx), ry = f32(f32(oy + hash21(f32(cx + 37.2), f32(cz + 17.7))) - fz);
+    const dd = f32(rx * rx + ry * ry);
+    if (dd <= best) { best = dd; id = hash21(f32(cx + 5.3), f32(cz + 71.9)); }
+  }
+  return id;
+}
+
+const chipOf = (t: number): number => CHIP * ss(CHIP_ID_FROM, CHIP_ID_TO, t);
+
+/** Whether (x, z) lies on a broken-off piece of a chasm's rim, by the chasm's mask there. */
+function brokenAt(x: number, z: number, chasm: number): boolean {
+  return chasm >= OUTLINE_EDGE - CHIP && chasm >= OUTLINE_EDGE - chipOf(shardOf(x, z));
+}
+
+/** A chasm's mask (the plain one: the rim's broken pieces are a step in the bed, `brokenAt`). */
+function chasmMask(map: TileMap, x: number, z: number): number {
+  win0x = Math.floor(x) - 1; win0z = Math.floor(z) - 1;
+  let pits = 0;
+  for (let b = 0; b < 3; b++) for (let a = 0; a < 3; a++) pits += pit[b * 3 + a] = map.get(win0x + a, win0z + b) === TILE_ID.Chasm ? 1 : 0;
+  if (pits === 0) return 0;
+  if (pits === 9) return 1;
+  return winMask(pit, x, z);
+}
+
+/** The member's non-chasm cells and the chasm cells of the 3 by 3 cells from (`win0x`, `win0z`): every sample `grownMask` and `chasmMask` read. */
 const own = new Float64Array(9), pit = new Float64Array(9);
 let win0x = 0, win0z = 0;
 
@@ -90,9 +142,8 @@ function grownMask(map: TileMap, x: number, z: number, member: (tile: number) =>
   for (let b = 0; b < 3; b++) for (let a = 0; a < 3; a++) {
     const t = map.get(win0x + a, win0z + b), chasm = t === TILE_ID.Chasm;
     owned += own[b * 3 + a] = !chasm && member(t) ? 1 : 0;
-    pits += pit[b * 3 + a] = chasm ? 1 : 0;
+    pits += chasm ? 1 : 0;
   }
-  const pc = pits === 0 ? 0 : winMask(pit, x, z);
   let m = owned === 9 ? 1 : 0;
   if (owned > 0 && owned < 9) {
     if (x !== lastX || z !== lastZ) { lastX = x; lastZ = z; lastR = growAt(x, z); }
@@ -100,19 +151,9 @@ function grownMask(map: TileMap, x: number, z: number, member: (tile: number) =>
     m = Math.max(winMask(own, x, z), winMask(own, x - r, z), winMask(own, x + r, z), winMask(own, x, z - r), winMask(own, x, z + r),
       winMask(own, x - d, z - d), winMask(own, x + d, z - d), winMask(own, x - d, z + d), winMask(own, x + d, z + d));
   }
-  // The grown outline gives way to a chasm's plain one, so the two never overlap (their depths would add).
+  // The grown outline gives way to a chasm's, so the two never overlap (their depths would add).
+  const pc = pits === 0 ? 0 : chasmMask(map, x, z);
   return member(TILE_ID.Chasm) ? Math.min(1, m + pc) : Math.min(m, 1 - pc);
-}
-
-/** The tile-bound mask: the bilinear interpolation of membership between cell centres, smoothstep weights. */
-function cellMask(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
-  const u = x - 0.5, v = z - 0.5;
-  const i = Math.floor(u), j = Math.floor(v);
-  const fx = ss(0, 1, u - i), fz = ss(0, 1, v - j);
-  const m = (a: number, b: number) => (member(map.get(a, b)) ? 1 : 0);
-  const top = m(i, j) * (1 - fx) + m(i + 1, j) * fx;
-  const bot = m(i, j + 1) * (1 - fx) + m(i + 1, j + 1) * fx;
-  return top * (1 - fz) + bot * fz;
 }
 
 function lattice(i: number, j: number): number {
@@ -167,7 +208,7 @@ export function waterMaskAt(map: TileMap, x: number, z: number): number {
 function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   const pond = pondFieldOf(map);
   const mW = pond ? pond.wetAt(x, z) : grownMask(map, x, z, isWater), mD = grownMask(map, x, z, isDeep);
-  const mL = grownMask(map, x, z, isLava), mC = cellMask(map, x, z, isChasm);
+  const mL = grownMask(map, x, z, isLava), mC = chasmMask(map, x, z);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
   const water = pond ? pond.depthAt(x, z) : SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD);
@@ -176,13 +217,16 @@ function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(OUTLINE_EDGE, 0.7, any) * (1 - ss(0.56, 0.9, mC));
   // A continuous bump on the outside of the outline: 0 at the cell edge (any = OUTLINE_EDGE) and beyond 0.25.
   h += LIP * ss(0.25, 0.4, any) * (1 - ss(0.42, OUTLINE_EDGE, any)) * (0.4 + 0.6 * vnoise(x * 6, z * 6));
+  // A broken-off piece of a chasm's rim (#444): a step down, then the wall.
+  if (chasm && mC >= OUTLINE_EDGE - CHIP && brokenAt(x, z, mC)) h = Math.min(h, -BREAK_DEPTH);
   return h;
 }
 
 /**
  * How far the marks of lava and of a chasm reach at (x, z): 1 minus the distance in tiles to the nearest cell of that kind, so 1 in and
  * on such a cell, falling to 0 one tile away. One tile is how far the dip mesh reaches (the cells beside terrain), so the marks end
- * where the world mesh's plain floor begins. Writes the lava's value to `out[at]` and the chasm's to `out[at + 1]`.
+ * where the world mesh's plain floor begins. Lava's is 1 up to its grown shore (`growAt`) and falls to 0 between there and a tile
+ * out. Writes the lava's value to `out[at]` and the chasm's to `out[at + 1]`.
  */
 export function nearAt(map: TileMap, x: number, z: number, out: { [i: number]: number }, at: number): void {
   const cx = Math.floor(x), cz = Math.floor(z);
@@ -193,7 +237,9 @@ export function nearAt(map: TileMap, x: number, z: number, out: { [i: number]: n
     const dx = Math.max(i - x, 0, x - i - 1), dz = Math.max(j - z, 0, z - j - 1), d2 = dx * dx + dz * dz;
     if (kind === DIP.lava) lava = Math.min(lava, d2); else chasm = Math.min(chasm, d2);
   }
-  out[at] = 1 - Math.sqrt(lava);
+  // Lava's marks start at its grown shore (#444) and still end a tile out, so they follow the drawn outline and stay on the dip mesh.
+  const d = Math.sqrt(lava), g = d < 1 ? growAt(x, z) : 0;
+  out[at] = d <= g ? 1 : 1 - (d - g) / (1 - g);
   out[at + 1] = 1 - Math.sqrt(chasm);
 }
 

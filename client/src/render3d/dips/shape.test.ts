@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
-  CHASM_BED, DEEP_BED, OUTLINE_EDGE, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
+  BREAK_DEPTH, CHASM_BED, DEEP_BED, OUTLINE_EDGE, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
   NOTHING_HIDDEN, bedAt, growAt, depthFade, dipOf, hidingHeightAt, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
@@ -40,7 +40,23 @@ describe('dip shape', () => {
     expect(bedAt(pool('L', 5), mid, mid)).toBeLessThan(-LAVA_BED + ROUGH);
   });
 
-  it('meets the floor on a straight cell edge', () => expect(Math.abs(bedAt(pool('C', 5), edgeX, mid))).toBeLessThan(1e-9));
+  it('meets the floor on a straight cell edge, or a broken-off piece of the rim a step lower (#444)', () => {
+    const b = bedAt(pool('C', 5), edgeX, mid);
+    expect(Math.min(Math.abs(b), Math.abs(b + BREAK_DEPTH))).toBeLessThan(1e-9);
+  });
+
+  it('breaks the rim of a chasm into pieces a step lower, outside the outline only, where a foot still stands on the floor (#444)', () => {
+    const m = pool('C', 9);
+    let broken = 0, whole = 0;
+    for (let z = 3.5; z <= 11.5; z += 0.05) {
+      const out = bedAt(m, edgeX - 0.08, z);   // on the floor, just outside the outline
+      if (out <= -BREAK_DEPTH + 1e-9) broken++; else whole++;
+      expect(walkBedAt(m, edgeX - 0.08, z)).toBeGreaterThan(-ROUGH);
+      expect(bedAt(m, edgeX - 0.3, z)).toBeGreaterThanOrEqual(0);   // never further out than the chip
+    }
+    expect(broken).toBeGreaterThan(10);
+    expect(whole).toBeGreaterThan(10);
+  });
   it('is exactly 0 half a tile outside the outline', () => expect(Math.abs(bedAt(pool('C', 5), edgeX - 0.5, mid))).toBe(0));
 
   it('bends the outline of water and lava outward off a straight tile edge, flat again a tile out, and keeps a chasm on its edge (#444)', () => {
@@ -132,14 +148,19 @@ describe('dip shape', () => {
       const m = room(...Array.from({ length: 9 }, (_, j) => Array.from({ length: 9 }, (_, i) => (i === 4 && j === 4 ? c : '.')).join('')));
       for (const [px, pz] of pts) {
         const o = at(m, px, pz);
-        expect(o[1 + slot], `${ch} at ${px}, ${pz}`).toBeCloseTo(near(cell, px, pz), 9);
+        // lava's marks start at its grown shore (#444): 1 up to growAt, then falling to 0 a tile out
+        const d = 1 - near(cell, px, pz), g = d < 1 ? growAt(px, pz) : 0;
+        const want = slot === 1 ? 1 - d : d <= g ? 1 : 1 - (d - g) / (1 - g);
+        expect(o[1 + slot], `${ch} at ${px}, ${pz}`).toBeCloseTo(want, 9);
         expect(o[1 + 1 - slot], `other kind at ${px}, ${pz}`).toBe(0);
         expect([o[0], o[3]], 'outside the written slots').toEqual([9, 9]);
       }
     }
     const two = room('~.L');
     const o = at(two, 2.5, 1.5);
-    expect([o[1], o[2]]).toEqual([0.5, 0]);                            // lava is one cell and half a tile away; the chasm is none
+    const g = growAt(2.5, 1.5);
+    expect(o[1]).toBeCloseTo(1 - (0.5 - g) / (1 - g), 9);              // lava is one cell and half a tile away, less its grown shore
+    expect(o[2]).toBe(0);                                              // the chasm is none
   });
   it('picks the kind from three masks', () => {
     expect(kindOf(0.1, 0.14, 0.149)).toBe(DIP.none);                   // none below 0.15
