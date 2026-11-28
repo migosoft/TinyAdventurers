@@ -46,7 +46,7 @@ fn nearest_foe(run: &Run, pi: usize) -> Option<Creature> {
     let sight = crate::defs::races::Sight { cone: (sight.cone + 2.0 * sight.neck).min(360.0), ..sight };
     let me = targets::stance(run, Creature::Player(pi));
     // A creature in the drowning state (`water_t > 0`) is out of reach.
-    let heroes = (0..run.players.len()).filter(|&i| i != pi && run.players[i].alive && run.players[i].sinking.is_none() && run.players[i].mv.water_t <= 0.0).map(Creature::Player);
+    let heroes = (0..run.players.len()).filter(|&i| i != pi && run.players[i].alive && run.players[i].sinking.is_none() && run.players[i].water_total() <= 0.0).map(Creature::Player);
     let monsters = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
@@ -145,7 +145,7 @@ fn shots_of(a: &ResolvedAbility) -> u16 {
 pub fn input(run: &mut Run, pi: usize) -> InputMsg {
     let me = Creature::Player(pi);
     let pos = run.players[pi].pos();
-    if run.players[pi].mv.water_t > 0.0 {
+    if run.players[pi].water_total() > 0.0 {
         // In deep water: swim straight back to the last safe ground, nothing else.
         let p = &run.players[pi];
         let (mx, my) = quantize(p.last_safe - pos);

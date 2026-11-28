@@ -147,6 +147,11 @@ pub enum Sink {
 }
 
 impl Player {
+    /// Seconds in deep water as the server counts them: the predicted clock plus the stall (targeting, breath).
+    pub fn water_total(&self) -> f64 {
+        self.mv.water_t + self.stall_water_t
+    }
+
     /// Takes in what every processed input says about the connection: its sequence number, and the client's
     /// view lag and round trip. A charmed hero's inputs do only this.
     pub fn acknowledge(&mut self, input: &InputMsg) {

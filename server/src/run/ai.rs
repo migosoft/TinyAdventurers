@@ -28,7 +28,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, dir: f64, side: ta
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !crate::dungeon::head_under(p.mv.water_t) && !p.effects.has(EffectKind::Invisible))
+        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !crate::dungeon::head_under(p.water_total()) && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, dir, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))

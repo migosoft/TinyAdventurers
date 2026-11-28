@@ -919,6 +919,7 @@ impl Run {
             return;
         }
         if p.mv.dash_t > 0.0 {
+            p.stall_water_t = 0.0; // in the air, like `step_move`'s water_t
             return;
         }
         let pos = p.pos();
@@ -934,8 +935,9 @@ impl Run {
             return;
         }
         if dungeon::drowning_tile(tile, false) {
-            p.stall_water_t = if applied == 0 { p.stall_water_t + DT } else { (p.stall_water_t - DT * applied as f64).max(0.0) };
-            if p.mv.water_t + p.stall_water_t >= dungeon::breath(p.sheet.attrs.get(crate::defs::attributes::Attr::Con), false) {
+            // A tick with an input covers its own time; only the surplus of a burst pays an earlier stall back.
+            p.stall_water_t = (p.stall_water_t + DT - DT * applied as f64).max(0.0);
+            if p.water_total() >=dungeon::breath(p.sheet.attrs.get(crate::defs::attributes::Attr::Con), false) {
                 self.kill_player(pi, Sink::Drown);
                 return;
             }
@@ -1259,7 +1261,7 @@ impl Run {
     /// it (its own breath still runs out).
     pub fn under(&self, c: effects::Creature) -> bool {
         dungeon::head_under(match c {
-            effects::Creature::Player(i) => self.players[i].mv.water_t + self.players[i].stall_water_t,
+            effects::Creature::Player(i) => self.players[i].water_total(),
             effects::Creature::Monster(i) => self.monsters[i].water_t,
         })
     }
@@ -2512,17 +2514,36 @@ pub mod tests {
         run.players[0].mv.y = at.y;
         run.step(); // silent: no input queued
         assert_eq!((run.players[0].mv.water_t, run.players[0].stall_water_t), (0.0, DT), "the stall is kept apart");
-        send_input(&mut run, 1, (0, 0));
-        run.step();
-        assert!((run.players[0].mv.water_t - DT).abs() < 1e-9, "one input, one dt: what the client predicts");
-        assert_eq!(run.players[0].stall_water_t, 0.0, "the input paid the stall back");
-        run.players[0].mv.x = at.x;
-        run.step();
-        run.step();
-        assert_eq!(run.players[0].stall_water_t, 2.0 * DT);
+        for seq in 1..=4 {
+            send_input(&mut run, seq, (0, 0));
+        }
+        run.step(); // a burst of two: one covers the tick, the surplus pays the stall back
+        assert!((run.players[0].mv.water_t - 2.0 * DT).abs() < 1e-9, "two inputs, two dt: what the client predicts");
+        assert_eq!(run.players[0].stall_water_t, 0.0, "the surplus input paid the stall back");
         run.players[0].mv = MoveState::at(at.x - 3.0 * dungeon::TILE, at.y);
         run.step();
-        assert_eq!(run.players[0].stall_water_t, 0.0, "out of the water the stall is gone");
+        assert_eq!(run.players[0].stall_water_t, 0.0);
+    }
+
+    #[test]
+    fn an_input_every_other_tick_drowns_at_the_same_time_as_one_per_tick() {
+        let ticks_to_drown = |every: usize| {
+            let (mut run, at) = terrain_run(Tile::DeepWater);
+            run.players[0].mv.x = at.x;
+            run.players[0].mv.y = at.y;
+            let (mut n, mut seq) = (0, 0);
+            while run.players[0].alive && n < 600 {
+                if n % every == 0 {
+                    seq += 1;
+                    send_input(&mut run, seq, (0, 0));
+                }
+                run.step();
+                n += 1;
+            }
+            n as i64
+        };
+        let (full, throttled) = (ticks_to_drown(1), ticks_to_drown(2));
+        assert!((full - throttled).abs() <= 1, "{full} vs {throttled} ticks");
     }
 
     #[test]
