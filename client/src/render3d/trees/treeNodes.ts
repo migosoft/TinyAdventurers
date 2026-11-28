@@ -179,7 +179,6 @@ export function treePoint(shared: TreeShared, brush: BrushUniforms) {
     sunPosition: select(gone.or(s.isTuft.and(s.misc.y.greaterThan(0.5))), away, point),
   };
 }
-export type TreePoint = ReturnType<typeof treePoint>;
 
 /** The palette texel of ramp `row` and step `level` (a 5 x 4 nearest texture, `paletteBytes`). */
 const paletteAt = (palette: Texture, level: N, row: N): N => texture(palette, vec2(level.add(0.5).div(5), row.add(0.5).div(4))).rgb;

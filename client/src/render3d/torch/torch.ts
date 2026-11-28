@@ -7,7 +7,8 @@ import { CHUNK } from '../stone/grid';
 /** Tiles. The flame's axis stands this far in front of the wall cell's edge; the fuel's top is at FLAME_BASE_Y; the flame is FLAME_H high and FLAME_R wide at size 1. */
 export const FLAME_STAND = 0.3, FLAME_BASE_Y = 1.14, FLAME_H = 0.52, FLAME_R = 0.135;
 /** The flame's foot lies this far under the fuel's top (the fuel hides that part): the fire comes out of the fuel at its full width, with no gap. */
-export const FLAME_SINK = 0.07, FLAME_FOOT_Y = FLAME_BASE_Y - FLAME_SINK;
+const FLAME_SINK = 0.07;
+export const FLAME_FOOT_Y = FLAME_BASE_Y - FLAME_SINK;
 /** The plate: its middle's height, width along the wall, height, and how deep it is set into the stone. */
 export const PLATE_Y = 0.95, PLATE_W = 0.22, PLATE_H = 0.34, PLATE_SINK = 0.03;
 /** The plate stands this far out of the wall, and its front is this much smaller on every side (a bevel). */
