@@ -1,5 +1,7 @@
 // Which entities a hero's shot flies through (server: a Friendly shot only hits `Side::Hostile` monsters).
 import { FLAG, KIND, SIDE } from '../generated/defs';
+import { headUnder } from '../sim/map';
+import { drownOf } from '../wire';
 import { FIGURES, isAnimalKind, isPlayerKind } from './anim/defs';
 
 /** True for a creature that is not Hostile (a neutral or recruited knight, the wolf, a teammate), except wildlife. Objects are sent with side 0 too but have no figure, so they still stop shots. */
@@ -13,7 +15,9 @@ export function shotPassesThrough(e: { kind: number; side: number; flags: number
  * True for a creature a hero's melee strike reaches: a Hostile one on the ground with a figure (a grudging boar is sent Hostile; a calm animal is not).
  * A hero is one while it is Hostile, i.e. charmed by an enemy (not when downed). Chests are handled by the caller.
  */
-export function meleeFoe(e: { kind: number; side: number; flags: number }): boolean {
+export function meleeFoe(e: { kind: number; side: number; flags: number; drown?: number }): boolean {
+  // The server's `melee_targets` skips a creature whose head is under water (`drown` is the snapshot's stage byte).
+  if (headUnder(drownOf(e.drown ?? 0)?.t ?? 0)) return false;
   if (isPlayerKind(e.kind)) return e.side === SIDE.Hostile && !(e.flags & FLAG.DEAD);
   return e.side === SIDE.Hostile && !(e.flags & FLAG.AIRBORNE) && (!!FIGURES[e.kind] || e.kind === KIND.Mimic);
 }

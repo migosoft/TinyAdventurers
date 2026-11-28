@@ -326,6 +326,7 @@ export class RunSession {
     o.entangled = lookOf(this.lastSnap?.looks ?? [], this.runInfo.you, EFFECT.Entangled);
     o.dashing = this.pred.state.dashT > 0;
     o.sinking = this.pred.falling;
+    o.waterT = this.pred.state.waterT;
     o.aimsAtPointer = this.isAlive && !this.pred.charmed && !this.pred.noTurn;
     o.aimFromX = this.pred.state.x;
     o.aimFromY = this.pred.state.y;

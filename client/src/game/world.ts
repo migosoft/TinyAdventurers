@@ -36,6 +36,8 @@ export interface EntState {
   faces?: boolean;
   /** The head's angle relative to the body (rad), interpolated; absent in dev literals (straight ahead). */
   head?: number;
+  /** The drowning stage byte of the newer snapshot (`drownOf`); absent or 0: not in the drowning state. */
+  drown?: number;
 }
 
 interface TimedSnap {
@@ -136,7 +138,7 @@ export class Interpolator {
 function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks'], animMs0 = e[7], f = 1, head = headOf(e[13])): EntState {
   // f > 1 extrapolates (a late snapshot); a shot's height never goes below the ground.
   const z = isProjectileKind(e[1]) ? Math.max(0, animMs0 + (e[7] - animMs0) * f) / 10 : 0;
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled), hurtDir: hurtDirOf(e[12]), head, faces: true };
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], z, flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled), hurtDir: hurtDirOf(e[12]), head, drown: e[14], faces: true };
 }
 
 // ------------------------------------------------------------ abilities

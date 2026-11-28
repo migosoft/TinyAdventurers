@@ -23,6 +23,13 @@ export const hurtDirOf = (b: number): number | null => {
 };
 /** The head-angle byte (`head_byte`): 128 = straight ahead, 1 and 255 = ∓π. */
 export const headOf = (b: number): number => ((b - 128) / 127) * Math.PI;
+/** The drowning-stage byte of a creature `t` s in deep water (the server's `drown_byte`; for dev pages and tests): 0 outside the water. */
+export const drownByte = (t: number, breathless = false): number => (t <= 0 ? 0 : 1 + Math.min(Math.round(t * 10), 126) + (breathless ? 128 : 0));
+/** The drowning-stage byte (`drown_byte`): null = not in the drowning state, else the seconds in deep water (1/10 s steps) and whether the creature is breathless (no bubbles). */
+export const drownOf = (b: number): { t: number; breathless: boolean } | null => {
+  const n = b & 127;
+  return n === 0 ? null : { t: (n - 1) / 10, breathless: (b & 128) !== 0 };
+};
 
 type DmgW = [number, number, number, number, boolean, boolean, number, boolean];
 type HealW = [number, number, number, number, boolean];
@@ -128,7 +135,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     tick,
     ack,
     // Element 6 is the aim in 1/256 turns, but a hazard's radius in whole px (no angle to wrap).
-    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], isHazardKind(e[1]) ? e[6] : angle(e[6]), e[7], e[8], e[9], e[10], e[11], e[12], e[13]]),
+    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], isHazardKind(e[1]) ? e[6] : angle(e[6]), e[7], e[8], e[9], e[10], e[11], e[12], e[13], e[14]]),
     me: {
       alive: me[0],
       hp: me[1],

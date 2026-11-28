@@ -56,6 +56,8 @@ export interface OwnHero {
   entangled: number;
   dashing: boolean;
   sinking: boolean;
+  /** Seconds the predicted hero has been in deep water (the drowning state when > 0); absent: 0. Never read from the own snapshot byte (#448). */
+  waterT?: number;
 }
 
 export interface DebugDraw {

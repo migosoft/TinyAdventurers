@@ -49,10 +49,22 @@ pub fn head_byte(gaze: f64) -> u8 {
     (128.0 + gaze / std::f64::consts::PI * 127.0).round().clamp(1.0, 255.0) as u8
 }
 
-/// `[id, kind, x, y, hp, anim, aim (a hazard: radius px), anim_ms, flags, extra, effects, side, hurt_dir, head]`, see `EntSnap`.
+/// A creature's drowning stage (`water_t` seconds in deep water; 0 or less: not drowning): 0 = not in the drowning state, else
+/// `1 + min(round(t * 10), 126)`, plus `DROWN_BREATHLESS` for a breathless creature (it makes no bubbles).
+pub fn drown_byte(t: f64, breathless: bool) -> u8 {
+    if t <= 0.0 {
+        return 0;
+    }
+    1 + (t * 10.0).round().min(126.0) as u8 + if breathless { DROWN_BREATHLESS } else { 0 }
+}
+
+/// The bit of a drown byte that marks a breathless creature.
+pub const DROWN_BREATHLESS: u8 = 128;
+
+/// `[id, kind, x, y, hp, anim, aim (a hazard: radius px), anim_ms, flags, extra, effects, side, hurt_dir, head, drown]`, see `EntSnap`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u16, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8);
+pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u16, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u8);
 
 /// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by, water_t]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
@@ -167,7 +179,7 @@ fn ev_w(e: &Ev) -> EvW {
 }
 
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
-    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim_or_radius(e.1, e.6 as f64), e.7, e.8, e.9, e.10, e.11, e.12, e.13)).collect();
+    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim_or_radius(e.1, e.6 as f64), e.7, e.8, e.9, e.10, e.11, e.12, e.13, e.14)).collect();
     let m = &s.me;
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul, m.cd_rate, m.paused_items.clone(), m.paused_nodes.clone(), m.charmed_by.clone(), m.water_t);
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
@@ -187,13 +199,13 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         tick: 1234,
         ack: 567,
         ents: vec![
-            EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0, 0, 2, 0, 128),
-            EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0, 0b101, 2, 77, 200),
-            EntSnap(3, 1, 141.5, 470.25, 255, 0, 0.5, 0, 0, 0, (1 << 11) | (1 << 18), 2, 0, 128),
-            EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1, 0, 1, 255, 1),
-            EntSnap(301, 26, 2010.5, 1810.27, 255, 0, 0.0, 0, 0, 0, 0, 0, 0, 128),
-            EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42, 0, 0, 0, 128),
-            EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0, 0, 0, 0, 128),
+            EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0, 0, 2, 0, 128, 0),
+            EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0, 0b101, 2, 77, 200, drown_byte(0.5, false)),
+            EntSnap(3, 1, 141.5, 470.25, 255, 0, 0.5, 0, 0, 0, (1 << 11) | (1 << 18), 2, 0, 128, drown_byte(1.4, true)),
+            EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1, 0, 1, 255, 1, 0),
+            EntSnap(301, 26, 2010.5, 1810.27, 255, 0, 0.0, 0, 0, 0, 0, 0, 0, 128, 0),
+            EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42, 0, 0, 0, 128, 0),
+            EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0, 0, 0, 0, 128, 0),
         ],
         me: SelfState {
             alive: true,
@@ -255,7 +267,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         tick: 99,
         ack: 0,
         // Two hazards: element 6 is the radius in px, not an angle (40 and 48 would wrap as angles).
-        ents: vec![EntSnap(500, 71, 160.0, 320.0, 255, 0, 40.0, 0, 0, 4000, 0, 0, 0, 128), EntSnap(501, 70, 176.0, 336.0, 255, 0, 48.0, 0, 0, 2500, 0, 0, 0, 128)],
+        ents: vec![EntSnap(500, 71, 160.0, 320.0, 255, 0, 40.0, 0, 0, 4000, 0, 0, 0, 128, 0), EntSnap(501, 70, 176.0, 336.0, 255, 0, 48.0, 0, 0, 2500, 0, 0, 0, 128, 0)],
         me: SelfState {
             alive: false,
             hp: 0.0,
@@ -323,6 +335,25 @@ mod tests {
         assert_eq!(head_byte(9.0), 255, "clamped");
         let b = head_byte(1.0);
         assert!(((b as f64 - 128.0) / 127.0 * PI - 1.0).abs() < PI / 127.0);
+    }
+
+    #[test]
+    fn drown_byte_table() {
+        assert_eq!(drown_byte(0.0, false), 0, "not in deep water");
+        assert_eq!(drown_byte(0.0, true), 0, "breathless, not in deep water: still 0");
+        assert_eq!(drown_byte(0.05, false), 2);
+        assert_eq!(drown_byte(1.2, false), 13);
+        assert_eq!(drown_byte(20.0, false), 127, "capped");
+        assert_eq!(drown_byte(0.05, true), 2 + 128);
+        assert_eq!(drown_byte(20.0, true), 127 + 128);
+    }
+
+    #[test]
+    fn a_creature_sends_its_drown_byte_last() {
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&sample_snapshots()[0])).unwrap();
+        assert_eq!(v[2][0][14], serde_json::json!(0));
+        assert_eq!(v[2][1][14], serde_json::json!(drown_byte(0.5, false)));
+        assert_eq!(v[2][2][14], serde_json::json!(drown_byte(1.4, true)));
     }
 
     #[test]

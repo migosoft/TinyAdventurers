@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CONST, TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { bedAt, LAVA_LEVEL } from './shape';
+import { bedAt, LAVA_LEVEL, WATER_LEVEL } from './shape';
 import {
+  followT, stepSwimY, swimDepth, SWIM,
   DROWN_SINK, FALL_G, FALL_RADIUS, FALL_GONE, FALL_MAX_AGE, LAVA_SINK, type Faller, SLIDE_MAX, drownY, sinkCell, standY, startFall, stepFall, stepLavaSink,
 } from './descent';
 
@@ -232,5 +233,52 @@ describe('descent', () => {
     expect(sinkCell(m, 3.5, 3.5, 3, 0)).toEqual({ cx: 4.5, cz: 3.5 });
     expect(sinkCell(m, 3.5, 3.5, -3, 0)).toEqual({ cx: 2.5, cz: 3.5 });
     expect(startFall(3.5, 3.5, 0, 0, 0, { cx: 4.5, cz: 3.5 }).cx).toBe(4.5);
+  });
+});
+
+describe('swimming (#448)', () => {
+  const HU = CONST.HEAD_UNDER, DEEP = -2.3, H = 1.2;
+  it('starts as wading, floats chin-deep, is fully under by HEAD_UNDER, and never leaves the bed', () => {
+    expect(swimDepth(0, -0.3, H)).toBeCloseTo(WATER_LEVEL + 0.3, 9);   // the feet on the bed, as wading
+    expect(swimDepth(0, DEEP, H)).toBeCloseTo(H * SWIM.chin, 9);
+    expect(swimDepth(HU, DEEP, H)).toBeGreaterThanOrEqual(H);
+    expect(swimDepth(0.6 * HU, DEEP, H)).toBeGreaterThanOrEqual(H * 0.95);   // the head about at the surface by 0.6 HEAD_UNDER
+    expect(swimDepth(9, DEEP, H)).toBeCloseTo(H + SWIM.margin, 9);
+    expect(swimDepth(HU, -0.4, H)).toBeCloseTo(WATER_LEVEL + 0.4, 9);   // a shallow bed holds it
+  });
+
+  it('is continuous and monotone in t, at most 0.05 tiles per 0.01 s', () => {
+    let prev = swimDepth(0, DEEP, H);
+    for (let t = 0.01; t <= 2; t += 0.01) {
+      const d = swimDepth(t, DEEP, H);
+      expect(d).toBeGreaterThanOrEqual(prev - 1e-12);
+      expect(d - prev).toBeLessThan(0.05);
+      prev = d;
+    }
+  });
+
+  it('a clock fed in 0.1 s snapshot steps sinks without a visible step per frame', () => {
+    let local: number | null = null, prev: number | null = null;
+    for (let f = 0; f < 150; f++) {
+      const target = Math.round((f / 60) * 10) / 10 + 0.1;   // the byte: 0.1 s steps, a little ahead
+      local = followT(local, target, 1 / 60);
+      const y = swimDepth(local, DEEP, H);
+      if (prev !== null) expect(Math.abs(y - prev)).toBeLessThan(0.05);
+      prev = y;
+    }
+    expect(followT(null, 0.7, 1 / 60)).toBe(0.7);
+    expect(followT(0.2, 1.7, 1 / 60)).toBe(1.7);   // far off: jumps
+  });
+
+  it('rises out along the bed: no jump over 0.1 tiles per frame, never below the bed', () => {
+    let y = WATER_LEVEL - swimDepth(HU, DEEP, H);
+    for (let f = 0; f < 120; f++) {
+      const bed = Math.min(0, -2.2 + f * 0.03);   // the slope up to the shore
+      const n = stepSwimY(y, bed, bed, 1 / 60);
+      expect(Math.abs(n - y)).toBeLessThan(0.1);
+      expect(n).toBeGreaterThanOrEqual(bed);
+      y = n;
+    }
+    expect(y).toBe(0);
   });
 });

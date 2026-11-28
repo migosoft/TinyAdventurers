@@ -72,7 +72,7 @@ describe('the ?r3d=liquids stage', () => {
     let seen = 0;
     for (let k = 0; k < 20; k++) { r.step(1); seen = Math.max(seen, g()!.fallers); }
     expect(seen).toBe(1);
-    expect(r.buttons.map((b) => b.name)).toEqual(['Push chasm', 'Push water', 'Push barrel']);
+    expect(r.buttons.map((b) => b.name)).toEqual(['Push chasm', 'Push water', 'Push barrel', 'Walk in and out']);
   });
 
   it('pins the clock with &t and asks &push at 1 s', () => {

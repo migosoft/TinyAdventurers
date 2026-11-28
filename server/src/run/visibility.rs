@@ -23,7 +23,7 @@ use crate::protocol::{EntSnap, Ev, MovingLight, SelfState, Snapshot};
 use crate::sheet::Lasting;
 use crate::run::light::{Lights, Lit};
 use crate::run::perception::dark_reach;
-use crate::wire::{encode_snap, head_byte, hurt_byte};
+use crate::wire::{drown_byte, encode_snap, head_byte, hurt_byte};
 
 fn visible(view: &View, p: Vec2, radius: f64) -> bool {
     let (x, y) = Map::tile_of(p);
@@ -190,7 +190,7 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
         None if m.anim == Anim::Gaze => gaze,
         None => m.owner.unwrap_or(0),
     };
-    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), side as u8, hurt_byte(m.hurt_dir), head_byte(m.gaze))
+    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), side as u8, hurt_byte(m.hurt_dir), head_byte(m.gaze), drown_byte(m.water_t, m.traits.breathless))
 }
 
 /// The entities hero `pi` is sent: the party and its allies always, the rest what is in sight through
@@ -212,7 +212,7 @@ pub(crate) fn snapshot_ents(run: &Run, view:&View, dark: &Dark) -> Sent {
             if !p.alive {
                 f |= flags::DEAD;
             }
-            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits(), p.side as u8, hurt_byte(p.hurt_dir), 128)
+            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits(), p.side as u8, hurt_byte(p.hurt_dir), 128, drown_byte(p.mv.water_t, false))
         })
         .collect();
     ents.extend(run.monsters.iter().filter(|m| m.alive && m.side == Side::Friendly).map(|m| monster_snap(run, m, boss_immune, gaze)));
@@ -239,7 +239,7 @@ pub(crate) fn snapshot_ents(run: &Run, view:&View, dark: &Dark) -> Sent {
             marked.push(pr.id);
         }
         let extra = (pr.owner << 16) | pr.shot as u32;
-        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, (pr.z() * 10.0).round() as u16, 0, extra, 0, 0, 0, 128));
+        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, (pr.z() * 10.0).round() as u16, 0, extra, 0, 0, 0, 128, 0));
     }
     for o in &run.objects {
         if o.gone || !visible(view, o.pos, 0.0) {
@@ -259,7 +259,7 @@ pub(crate) fn snapshot_ents(run: &Run, view:&View, dark: &Dark) -> Sent {
             marked.push(h.id);
         }
         let extra = (h.life * 1000.0) as u32;
-        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0, 0, 0, 128));
+        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0, 0, 0, 128, 0));
     }
     Sent { ents, dark: marked }
 }
@@ -748,6 +748,29 @@ mod tests {
         assert_eq!(flag_of(&mut run) & flags::INCORPOREAL, 0);
         run.monsters[mi].traits.phasing = true;
         assert_ne!(flag_of(&mut run) & flags::INCORPOREAL, 0);
+    }
+
+    #[test]
+    fn the_snapshot_carries_each_creatures_drowning_stage() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        let imp = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
+        let skel = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty + 1), None);
+        let (ii, si) = (run.monster_idx(imp).unwrap(), run.monster_idx(skel).unwrap());
+        run.monsters[si].traits.breathless = true;
+        let drown_of = |run: &mut Run, id: u32| {
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            snapshot_ents(run, &run.players[0].view, &dark).ents.into_iter().find(|e| e.0 == id).unwrap().14
+        };
+        assert_eq!((drown_of(&mut run, imp), drown_of(&mut run, skel)), (0, 0), "on land: not drowning");
+        run.monsters[ii].water_t = 0.5;
+        run.monsters[si].water_t = 0.5;
+        assert_eq!(drown_of(&mut run, imp), drown_byte(0.5, false));
+        assert_eq!(drown_of(&mut run, skel), drown_byte(0.5, true));
+        run.players[0].mv.water_t = 1.3;
+        let hero = run.players[0].id;
+        assert_eq!(drown_of(&mut run, hero), drown_byte(1.3, false));
     }
 
     #[test]

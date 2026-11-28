@@ -45,8 +45,8 @@ import { tilesSeed } from './cover/moss';
 import { TILE } from '../sim/map';
 
 const PAN_SPEED = 12;
-const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel' };
-const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel' };
+const KEYS: Record<string, Push> = { Digit1: 'chasm', Digit2: 'water', Digit3: 'barrel', Digit4: 'wade' };
+const NAMES: Record<Push, string> = { chasm: 'Push chasm', water: 'Push water', barrel: 'Push barrel', wade: 'Walk in and out' };
 const NONE_IDS: ReadonlySet<number> = new Set();
 const ALL_VISIBLE = { isVisible: (): boolean => true };
 /**
@@ -68,6 +68,8 @@ export interface LiquidsOpts {
   models: number | null;
   /** `&models=barrel` (#317): the ordinary cast, but the page's barrel is drawn as its 3D model. */
   barrelModel: boolean;
+  /** `&at=pool`: the camera starts over the deep water. */
+  pool: boolean;
 }
 
 export function parseLiquids(search: string): LiquidsOpts {
@@ -76,11 +78,12 @@ export function parseLiquids(search: string): LiquidsOpts {
   const push = q.get('push');
   const slow = Number(q.get('slow') ?? 1);
   return {
-    push: push === 'chasm' || push === 'water' || push === 'barrel' ? push : null,
+    push: push === 'chasm' || push === 'water' || push === 'barrel' || push === 'wade' ? push : null,
     start: Number.isFinite(t) && t > 0 ? t : 0, pinned: q.has('t') && Number.isFinite(t),
     slow: Number.isFinite(slow) && slow > 0 ? slow : 1,
     models: modelKindOf(q.get('models') ?? ''),
     barrelModel: q.get('models') === 'barrel',
+    pool: q.get('at') === 'pool',
   };
 }
 
@@ -90,8 +93,9 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
   const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
   const stoneRun = makeStoneRun(world, { x: map.w / 2, z: map.h / 2 });
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
-  const cam = { x: map.w / 2, z: map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
-  const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null };
+  // `&at=pool` frames the deep water (#448).
+  const cam = { x: opts.pool ? 5.5 : map.w / 2, z: opts.pool ? 6.5 : map.h / 2 + 0.6, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
+  const pushes: Record<Push, number | null> = { chasm: null, water: null, barrel: null, wade: null };
   if (opts.push) pushes[opts.push] = 1;
   // The kit of a `&models` page, kept across a rebuilt view and ended with the stage.
   const kit: FigureKit | null = opts.models !== null || opts.barrelModel ? createStageKit(assets) : null;
@@ -188,7 +192,7 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
             const wo = figures.frame(galleryFrame([...torchEnts, ...w.ents], tau, STEP), cam, look);
             for (const fl of wo.falls) fx.emit(FX_KIND.RimDust, tau, fl.x, fl.z, fl.id);
             // The droplets of the replayed seconds too, stamped with the replay's own time (the cues of the main frame go through the pass).
-            emitWaterCues(fx, water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, landed: null, hidden: NONE_IDS }).cues, tau, NONE_IDS);
+            emitWaterCues(fx, water.step({ dt: STEP, now: tau, figs: wo.figs, sinks: wo.sinks, swims: wo.swims, landed: null, hidden: NONE_IDS }).cues, tau, NONE_IDS);
             // ... and the lava's sparks, pops and rings of the replayed seconds.
             emitLavaCues(fx, lava3d.step(lavaStep(STEP, tau, wo.figs, fp)).cues, tau, NONE_IDS);
           }
@@ -200,13 +204,13 @@ export function createLiquidsStage(assets: Assets, p: R3dParams, search: string,
       prev = t;
       for (const ev of sc.events) send(ev, t);
       const ents = [...torchEnts, ...sc.ents];
-      label.textContent = `liquids (#324): t ${t.toFixed(2)} s; 1 push into the chasm, 2 into deep water, 3 the barrel; WASD pans`;
+      label.textContent = `liquids (#324): t ${t.toFixed(2)} s; 1 push into the chasm, 2 into deep water, 3 the barrel, 4 a knight walks into the deep and out; WASD pans`;
       c.timer.lap('sim');
       stoneRun.frame(c.view);
       if (!c.view) return 0;
 
       const fo = figures.frame(galleryFrame(ents, t, fdt), cam, look);
-      const wo = water.step({ dt: fdt, now: t, figs: fo.figs, sinks: fo.sinks, landed: null, hidden: NONE_IDS });
+      const wo = water.step({ dt: fdt, now: t, figs: fo.figs, sinks: fo.sinks, swims: fo.swims, landed: null, hidden: NONE_IDS });
       const lo = lava3d.step(lavaStep(fdt, t, fo.figs, fp));
       pass.run(fx, { cam, now: t, quality: c.params.quality, figs: fo.figs, ents: new Map(ents.map((e) => [e.id, e])), shots: [], hiddenShots: NONE_IDS, snap: undefined, hidden: NONE_IDS, you: -1, ownCast: null, falls: fo.falls, water: wo.cues, lava: lo.cues, fp }, fo.glows);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), glows: glowsOf(fo.glows) };

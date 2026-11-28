@@ -3,7 +3,7 @@ import { CONST, KIND } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import { predictedSolids } from './solids';
 
-const ent = (kind: number, x: number, y: number, anim: number): EntSnap => [1, kind, x, y, 255, anim, 0, 0, 0, 0, 0, 0, 0, 128];
+const ent = (kind: number, x: number, y: number, anim: number): EntSnap => [1, kind, x, y, 255, anim, 0, 0, 0, 0, 0, 0, 0, 128, 0];
 
 describe('predictedSolids (#274)', () => {
   it('takes the sent barrels at rest and the near solids the server did not send', () => {
