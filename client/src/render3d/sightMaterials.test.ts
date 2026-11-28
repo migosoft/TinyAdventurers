@@ -31,9 +31,9 @@ const AIR_ATTRS: [string, number][] = [['position', 3], ['corner', 2], ['size', 
 const HAZE_ATTRS: [string, number][] = [['position', 3], ['sheet', 4]];
 const FX_ATTRS: [string, number][] = [['position', 3], ['rgba', 4], ['sight', 2]];
 const LAVA_ATTRS: [string, number][] = [['position', 3], ['shore', 2]];
-const CRYSTAL_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['gem', 3], ['foot', 2]];
-const HOLDER_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['warm', 1], ['foot', 2]];
-const TORCH_FLAME_ATTRS: [string, number][] = [['position', 3], ['flame', 4], ['reach', 2], ['foot', 2]];
+const CRYSTAL_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['gem', 3], ['foot', 4]];
+const HOLDER_ATTRS: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['warm', 1], ['foot', 4]];
+const TORCH_FLAME_ATTRS: [string, number][] = [['position', 3], ['flame', 4], ['reach', 2], ['foot', 4]];
 const geometryOf = (attrs?: [string, number][]): BufferGeometry | undefined => {
   if (!attrs) return undefined;
   const g = new BufferGeometry();

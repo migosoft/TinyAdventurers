@@ -135,14 +135,14 @@ describe('buildTorchChunk', () => {
     expect(Math.abs(mean(flame!.position, 2) - (3 + FLAME_STAND))).toBeLessThan(0.02);
     for (let i = 0; i < flame!.position.length / 3; i++) {
       expect(flame!.flame[i * 4 + 2]).toBeCloseTo(3.4, 5);
-      expect([flame!.foot[i * 2], flame!.foot[i * 2 + 1]]).toEqual([5.5, 3.5]);
+      expect([...flame!.foot.slice(i * 4, i * 4 + 4)]).toEqual([5.5, 3.5, 5.5, 3]); // floor point, then the wall point
       expect(flame!.position[i * 3 + 1]).toBeGreaterThanOrEqual(FLAME_FOOT_Y - 1e-6);
     }
     expect(flame!.reach.length / 2).toBe(flame!.position.length / 3);
-    expect(flame!.foot.length / 2).toBe(flame!.position.length / 3);
-    expect(holder!.foot.length / 2).toBe(holder!.position.length / 3);
+    expect(flame!.foot.length / 4).toBe(flame!.position.length / 3);
+    expect(holder!.foot.length / 4).toBe(holder!.position.length / 3);
     for (let i = 0; i < holder!.position.length / 3; i++) {
-      expect([holder!.foot[i * 2], holder!.foot[i * 2 + 1]]).toEqual([5.5, 3.5]);
+      expect([...holder!.foot.slice(i * 4, i * 4 + 4)]).toEqual([5.5, 3.5, 5.5, 3]);
       expect(holder!.position[i * 3 + 2]).toBeGreaterThanOrEqual(3 - PLATE_SINK - 1e-6);
     }
   });

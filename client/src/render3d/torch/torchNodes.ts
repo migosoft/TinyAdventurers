@@ -67,12 +67,12 @@ const blob = (d2: N): N => {
 };
 
 /**
- * 1 where the torch's wall is cut (#347), else 0: read at the torch's floor point, the same for all its vertices, so it hides whole.
+ * 1 where the torch's wall is cut (#347), else 0: read at the torch's wall point, the same for all its vertices, so it hides whole.
  * shortcut: a torch is assumed to hang above floor + stub; give the test its mount height if a low wall light ever appears.
  */
 const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
-  const foot: N = attribute('foot', 'vec2');
-  return cutWeightNode(vec3(foot.x, 0, foot.y), cut, see).greaterThan(0).select(1, 0);
+  const wall: N = attribute('foot', 'vec4'); // .zw: the wall point (.xy, the floor point in front, is the sight's)
+  return cutWeightNode(vec3(wall.z, 0, wall.w), cut, see).greaterThan(0).select(1, 0);
 };
 
 export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniforms, see: SeeUniforms): NodeMaterial {
@@ -80,9 +80,10 @@ export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniform
   // every triangle has its own three vertices with its own normal (torch.ts): flat faces
   const lit = lighting.lightAt(P, attribute('normal', 'vec3'), HOLDER_WRAP);
   const m = new MeshBasicNodeMaterial();
+  // the mesh's positions are world tiles about the origin, so scaling toward 0 collapses each triangle
   m.positionNode = positionLocal.mul(float(1).sub(hiddenByCut(cut, see))); // collapsed to zero-area triangles; the light stays
   const colour: N = lighting.finish(attribute('colour', 'vec3'), lit).add(rgb(HOLDER_WARM).mul(attribute('warm', 'float')));
-  m.colorNode = vec4(sight.apply(colour, P, sight.unseenAt(attribute('foot', 'vec2'))), 1);
+  m.colorNode = vec4(sight.apply(colour, P, sight.unseenAt(attribute('foot', 'vec4').xy)), 1);
   return m;
 }
 
@@ -144,7 +145,7 @@ export function flameMaterial(sight: Sight, toward: ViewToward, cut: CutUniforms
   const out: N = mix(fire, vec4(glow, 0), halo);
   // Added light gets no `sight.apply` (it would add the dark's or the mist's colour over the whole quads): like a glow it is only
   // dimmed and hidden, as scenery (the mist does not hide it).
-  const u: N = sight.unseenAt(attribute('foot', 'vec2')), shown: N = sight.shown(u.x, 1);
+  const u: N = sight.unseenAt(attribute('foot', 'vec4').xy), shown: N = sight.shown(u.x, 1);
   m.colorNode = vec4(sight.dim(out.xyz, u.y).mul(shown), out.w.mul(shown));
   // rgb is added whole and the alpha only says how much of the picture behind is hidden; the target's own alpha is left alone
   m.transparent = true;

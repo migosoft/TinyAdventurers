@@ -46,9 +46,9 @@ const WARM_UP = 0.05, WARM_REACH = 0.2, WARM_BACK = 0.15;
 
 /** A torch of the level's marks: the point on the wall cell's edge, the wall's normal into the room, its light. */
 export interface TorchMark { x: number; z: number; nx: number; nz: number; lightId: number }
-export interface HolderArrays { position: Float32Array; normal: Float32Array; /** rgb 0..1 */ colour: Float32Array; /** 0..1: the fire's own light on the vertex (0: out) */ warm: Float32Array; /** the floor point the sight is read at */ foot: Float32Array; index: Uint32Array }
+export interface HolderArrays { position: Float32Array; normal: Float32Array; /** rgb 0..1 */ colour: Float32Array; /** 0..1: the fire's own light on the vertex (0: out) */ warm: Float32Array; /** per vertex: the floor point the sight is read at (x, z), then the wall point the cut is read at (x, z) */ foot: Float32Array; index: Uint32Array }
 /** Two quads a flame, every vertex on its quad's anchor (the material spreads them): the card (anchor the foot) and the halo (anchor the middle). */
-export interface FlameArrays { position: Float32Array; /** the corner (x -1..1; y 0..1 on the card, -1..1 on the halo), phase, kind (0 card, 1 halo) */ flame: Float32Array; /** how far a corner's 1 is from the anchor (tiles): across, up */ reach: Float32Array; foot: Float32Array; index: Uint32Array }
+export interface FlameArrays { position: Float32Array; /** the corner (x -1..1; y 0..1 on the card, -1..1 on the halo), phase, kind (0 card, 1 halo) */ flame: Float32Array; /** how far a corner's 1 is from the anchor (tiles): across, up */ reach: Float32Array; /** as the holder's: floor point, wall point */ foot: Float32Array; index: Uint32Array }
 
 /** x, y, z and what the builder carries (the holder a colour, the flame its heat). */
 type V = number[];
@@ -173,7 +173,7 @@ export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: nu
       hn.push(qx, m.normal[i + 1], qz);
       hc.push(m.colour[i], m.colour[i + 1], m.colour[i + 2]);
       hw.push(m.warm[i / 3]);
-      hf.push(sx, sz);
+      hf.push(sx, sz, t.x, t.z);
     }
     if (out) continue;
     const f = flameMesh(1), [ax, , az] = flameTip(t), first = fp.length / 3;
@@ -183,7 +183,7 @@ export function buildTorchChunk(torches: readonly TorchMark[], off: (lightId: nu
       // the phase of the light's flicker and the crystals' pulse
       fa.push(f.flame[i * 4], f.flame[i * 4 + 1], t.lightId * 1.7, f.flame[i * 4 + 3]);
       fr.push(f.reach[i * 2], f.reach[i * 2 + 1]);
-      ff.push(sx, sz);
+      ff.push(sx, sz, t.x, t.z);
     }
     for (const i of f.index) fi.push(first + i);
   }

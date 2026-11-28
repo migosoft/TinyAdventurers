@@ -581,10 +581,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     crystalChunks[i] = wallMesh(a, [['normal', 3], ['gem', 3]], crystal.material, 0);
   };
   /** The mesh of a chunk's crystals or torches: its `position`, `foot` and index, and the attributes named. `grow`: the box is this much wider on every side (tiles), for what its material moves. */
-  const wallMesh = <A extends { position: Float32Array; foot: Float32Array; index: Uint32Array }>(a: A, attrs: [keyof A & string, number][], mat: NodeMaterial, grow: number): ChunkMesh => {
+  const wallMesh = <A extends { position: Float32Array; foot: Float32Array; index: Uint32Array }>(a: A, attrs: [keyof A & string, number][], mat: NodeMaterial, grow: number, footSize = 2): ChunkMesh => {
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(a.position, 3));
-    g.setAttribute('foot', new BufferAttribute(a.foot, 2));
+    g.setAttribute('foot', new BufferAttribute(a.foot, footSize));
     for (const [name, size] of attrs) g.setAttribute(name, new BufferAttribute(a[name] as Float32Array, size));
     g.setIndex(new BufferAttribute(a.index, 1));
     g.computeBoundingBox();
@@ -600,9 +600,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     dropChunk(torchChunks, i);
     dropChunk(flameChunks, i);
     const a = buildTorchChunk(kit.marks.torches, (id) => torchesOff.has(id), cx, cz);
-    if (a.holder) torchChunks[i] = wallMesh(a.holder, [['normal', 3], ['colour', 3], ['warm', 1]], holder, 0);
+    if (a.holder) torchChunks[i] = wallMesh(a.holder, [['normal', 3], ['colour', 3], ['warm', 1]], holder, 0, 4);
     if (!a.flame) return;
-    const fm = (flameChunks[i] = wallMesh(a.flame, [['flame', 4], ['reach', 2]], flame.material, FLAME_REACH)).mesh;
+    const fm = (flameChunks[i] = wallMesh(a.flame, [['flame', 4], ['reach', 2]], flame.material, FLAME_REACH, 4)).mesh;
     skipInAirPrepass(fm).renderOrder = FLAME_ORDER;
     fm.layers.enable(FLAME_MIRROR_LAYER);
   };

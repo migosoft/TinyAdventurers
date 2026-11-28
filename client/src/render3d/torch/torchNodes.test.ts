@@ -15,8 +15,8 @@ const geometryOf = (attrs: [string, number][]) => {
   for (const [n, s] of attrs) g.setAttribute(n, new BufferAttribute(new Float32Array(6 * s), s));
   return g;
 };
-const HOLDER: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['warm', 1], ['foot', 2]];
-const FLAME: [string, number][] = [['position', 3], ['flame', 4], ['reach', 2], ['foot', 2]];
+const HOLDER: [string, number][] = [['position', 3], ['normal', 3], ['colour', 3], ['warm', 1], ['foot', 4]];
+const FLAME: [string, number][] = [['position', 3], ['flame', 4], ['reach', 2], ['foot', 4]];
 
 describe('wall torches on a cut wall (#347)', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
