@@ -1,5 +1,5 @@
 // Pure per-figure bookkeeping: which state a figure is drawn from (predicted
-// for the own hero, interpolated otherwise), the fall into a chasm or the drowning of a hero lost to the terrain, and
+// for the own hero, interpolated otherwise), the fall into a chasm or a barrel's drowning (creatures sink in the drowning state, by the drown byte), and
 // the vanish and reappear marks of Invisible. The view keeps the pictures (splashes, bubbles, ghost images).
 import { ANIM, CONST, EFFECT, SIDE } from '../../generated/defs';
 import type { OwnHero, PictureEv } from '../../run/view';

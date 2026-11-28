@@ -20,9 +20,9 @@ pub const FALL_TIME: f64 = 0.7;
 pub const DROWN_TIME: f64 = 0.9;
 /// Seconds in deep water until the head is under (balancing pass).
 pub const HEAD_UNDER: f64 = 1.2;
-/// Seconds of breath once the head is under (balancing pass).
+/// Total seconds in deep water before drowning, at baseline CON (balancing pass).
 pub const BREATH: f64 = 2.2;
-/// Share of max HP lost for every second without breath (balancing pass).
+/// Change of that breath per CON point, through `factor` (balancing pass).
 pub const BREATH_PCT: f64 = 0.10;
 /// Swimming speed with the head above water (balancing pass).
 pub const SWIM_SPEED: f64 = SHALLOW_SPEED;

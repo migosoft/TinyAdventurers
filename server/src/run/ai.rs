@@ -293,11 +293,15 @@ fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
 }
 
 /// May this monster rest here (idle, wait, attack)? Ordinary monsters always may; a phantom may not
-/// inside a wall, a closed door or a solid object, which it can only pass through.
+/// inside a wall, a closed door or a solid object, which it can only pass through; a breathless one not in deep water.
 pub(crate) fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
     let m = &run.monsters[mi];
-    m.mover != Mover::Incorporeal
-        || run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius)
+    // A breathless creature never rests in deep water either (it would sit there untouchable once its head is under).
+    match m.mover {
+        Mover::Incorporeal => run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius),
+        Mover::Breathless => run.layout.map.can_stop_at(p, m.mover),
+        _ => true,
+    }
 }
 
 /// A phantom that is somewhere it may not rest walks straight to the nearest spot it may.

@@ -81,6 +81,9 @@ pub struct Player {
     pub sinking: Option<(f64, Sink)>,
     /// Centre of the last safe tile stood on (debug mode puts a fallen hero back here).
     pub last_safe: Vec2,
+    /// Server-only: seconds in deep water on silent ticks (no input), not yet matched by inputs. Kept apart from
+    /// `mv.water_t`, which stays exactly what the client predicts; inputs pay it back, death counts both.
+    pub stall_water_t: f64,
     /// Time since the last lava burn.
     pub burn_t: f64,
     /// What the hero sees (from the class profile) and an override of its darkvision fraction.
