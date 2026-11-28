@@ -38,8 +38,8 @@ describe('Fish (#360)', () => {
         // (the positions are read back as 32-bit floats: on the slope to the deep that is worth a little depth)
         for (const f of list(fish)) expect(field.depthAt(f.x, f.z)).toBeGreaterThanOrEqual(FISH.deep - 1e-4);
       }
-      // ... and they do swim: every one has left its place
-      list(fish).forEach((f, i) => expect(Math.hypot(f.x - start[i].x, f.z - start[i].z), `fish ${i}`).toBeGreaterThan(0.2));
+      // ... and they do swim: every one has left its place (#448: the deep part of the demo ponds got smaller, so 0.1)
+      list(fish).forEach((f, i) => expect(Math.hypot(f.x - start[i].x, f.z - start[i].z), `fish ${i}`).toBeGreaterThan(0.1));
     }
   });
 

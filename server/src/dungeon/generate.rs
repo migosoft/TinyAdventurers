@@ -262,7 +262,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     if theme.liquid == Liquid::Lava {
         place_boss_lava(&mut hall_rng, &mut map, &boss);
     }
-    // One ogre per run (stream 10), after the terrain so it stands on safe ground.
+    // One ogre per run (stream 10), after the terrain so it stands on a Floor tile with safe ground around it.
     let mut ogre_rng = rng.clone();
     ogre_rng.set_stream(10);
     let depths: Vec<f64> = rooms.iter().map(|r| room_dist(&r.rect) as f64 / max_d as f64).collect();
@@ -454,7 +454,7 @@ fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mu
 }
 
 /// The ogre roams a room or hall in the deeper part of the dungeon (`depths`
-/// per room, 0 at the start, 1 the deepest), on a tile with safe ground all
+/// per room, 0 at the start, 1 the deepest), on a Floor tile with safe ground all
 /// around it (it is wide) and never on a chest. Falls back to any ordinary
 /// room when the deeper ones have no such tile.
 fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], chests: &[ChestSpawn]) -> Option<Vec2> {
@@ -696,8 +696,8 @@ fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i3
 }
 
 /// An oval pool, a tile away from the room's walls. Water pools are deep
-/// wherever the whole neighbourhood is pool, so a shallow rim always surrounds
-/// the deep centre; lava pools are all lava.
+/// wherever the whole 5×5 neighbourhood is pool, so two rings of shallows always
+/// surround the deep centre; lava pools are all lava.
 fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32, Tile)>> {
     let (max_w, max_h) = (r.w - 2, r.h - 2);
     let (min, cap) = if liquid == Liquid::Water { (5, (11, 9)) } else { (4, (7, 6)) };
@@ -1086,7 +1086,7 @@ mod tests {
     #[test]
     fn water_pools_have_two_rings_of_shallows() {
         let room = Rect { x: 0, y: 0, w: 14, h: 12 };
-        let (mut wide, mut cored, mut total) = (0, 0, 0);
+        let (mut wide, mut cored) = (0, 0);
         for seed in 0..200u64 {
             let cells = pool(&mut ChaCha8Rng::seed_from_u64(seed), &room, Liquid::Water).unwrap();
             let set: std::collections::HashSet<(i32, i32)> = cells.iter().map(|c| (c.0, c.1)).collect();
@@ -1101,11 +1101,9 @@ mod tests {
             }
             let xs = cells.iter().map(|c| c.0);
             let w = xs.clone().max().unwrap() - xs.min().unwrap() + 1;
-            total += 1;
             wide += (w >= 10) as i32;
             cored += cells.iter().any(|c| c.2 == Tile::DeepWater) as i32;
         }
-        eprintln!("pools {total}: width>=10 {wide}, deep core {cored}");
         assert!(wide > 0 && cored > 0);
     }
 
