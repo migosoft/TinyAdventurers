@@ -302,7 +302,7 @@ mod tests {
             }
         }
         // Seed 156 hits step 4: its start room's torch cave lost every lit rock torch to a crystal's light, so it flips to a crystal cave. (Was 109 before rand 0.10 changed the stream, #445; found by scanning seeds for a torch-cave start room that ends with a crystal and no lit torch.)
-        let d = of_layout(156,Theme::WATER, StoneLayout::Rock);
+        let d = of_layout(156, Theme::WATER, StoneLayout::Rock);
         let start = &d.rooms[d.start].rect;
         let fronting: Vec<_> = d.torches.iter().filter(|t| start.contains_tile(t.front().0, t.front().1)).collect();
         assert!(fronting.iter().any(|t| t.kind == WallLight::Crystal), "the start room has a crystal");
