@@ -7,12 +7,12 @@
 //! request that checks it moves its `expires_at` forward.
 
 use crate::client_ip::TrustedProxies;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::phc::PasswordHash;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -226,8 +226,8 @@ fn argon2() -> Argon2<'static> {
 
 /// Slow (tens of ms): call from `spawn_blocking`.
 pub fn hash_password(password: &str) -> String {
-    let salt = SaltString::generate(&mut OsRng);
-    argon2().hash_password(password.as_bytes(), &salt).expect("argon2 hash").to_string()
+    let hash: PasswordHash = argon2().hash_password(password.as_bytes()).expect("argon2 hash");
+    hash.to_string()
 }
 
 /// Slow (tens of ms): call from `spawn_blocking`. `None` checks against a
