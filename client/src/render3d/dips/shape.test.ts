@@ -48,13 +48,26 @@ describe('dip shape', () => {
     // The pond's profile (DEEP_OUT 0.9, DEEP_INSIDE 0.8, wobble 0.3): 0.5 tiles outside the edge the slope has started (it takes
     // 0.25 tiles of depth at best, 0.02 at worst, so the test only asks it to be below the shelf's flat part); on the edge the bed is
     // at least 0.47 below it, 0.8 inside it is deep.
-    expect(-bedAt(m, edge - 0.5, z)).toBeGreaterThan(SHALLOW_BED + 0.02);
+    // (the mean over z along the edge, so the +-ROUGH noise cancels)
+    const mean = (x: number) => { let s = 0, n = 0; for (let zz = 6.5; zz <= 8.5; zz += 0.1) { s -= bedAt(m, x, zz); n++; } return s / n; };
+    expect(mean(edge - 0.5) - mean(3.5)).toBeGreaterThan(0.1);
     expect(-bedAt(m, edge, z)).toBeGreaterThan(SHALLOW_BED + 0.3);
     expect(-bedAt(m, edge + 0.8, z)).toBeGreaterThan(DEEP_BED - ROUGH - 0.2);
     expect(-bedAt(m, edge + 2, z)).toBeGreaterThan(DEEP_BED - ROUGH);
   });
 
-  it('is flat floor away from terrain',() => expect(Math.abs(bedAt(room('...', '...', '...'), 1.5, 1.5))).toBe(0));
+  it('dry floor beside a DeepWater tile with no shallows between stays at floor level (#448)', () => {
+    const m = room('.....', '.WWW.', '.WWW.', '.WWW.', '.....');
+    // the floor ring is the cells 1 and 5 (the room's wall border is cell 0)
+    // (beyond 0.5 tiles of the deep tiles: the grown outline of #444 reaches that far and is water)
+    const ring = [1.1, 1.4, 5.6, 5.9];
+    for (let t = 1.1; t < 5.95; t += 0.25) for (const r of ring) {
+      expect(Math.abs(bedAt(m, t, r))).toBeLessThanOrEqual(ROUGH + LIP);
+      expect(Math.abs(bedAt(m, r, t))).toBeLessThanOrEqual(ROUGH + LIP);
+    }
+  });
+
+  it('is flat floor away from terrain', () => expect(Math.abs(bedAt(room('...', '...', '...'), 1.5, 1.5))).toBe(0));
 
   it('reaches the full depth in the middle of a wide pool', () => {
     expect(bedAt(pool('C', 5), mid, mid)).toBeCloseTo(-CHASM_BED, 5);
@@ -147,11 +160,15 @@ describe('dip shape', () => {
       m.set(2, 3, TILE_ID.Floor); m.set(3, 3, TILE_ID.Floor);
       return m;
     };
-    const a = make(TILE_ID.Floor), b = make(TILE_ID.Lava);
+    // the deep water's slope reads a 5 by 5 window (cells 0..4 or 1..5 in z, 1..5 in x here): a DeepWater column and row outside it change nothing
+    const far = make(TILE_ID.Floor);
+    for (let i = 0; i < 7; i++) { far.set(6, i, TILE_ID.DeepWater); far.set(i, 6, TILE_ID.DeepWater); }
+    const a = make(TILE_ID.Floor), b = make(TILE_ID.Lava), c = far;
     let seen = 0;
     for (let z = 2.5; z < 3.5; z += 0.05) {
       // the window of (3, z): cells 2..3 in x, floor(z - 0.5) .. +1 in z: rows 2 and 3 for z in [2.5, 3.5): all set the same in the copies
       expect(bedAt(b, 3, z)).toBe(bedAt(a, 3, z));
+      expect(bedAt(c, 3, z)).toBe(bedAt(a, 3, z));
       if (bedAt(a, 3, z) < -1) seen++;
     }
     expect(seen).toBeGreaterThan(0);
