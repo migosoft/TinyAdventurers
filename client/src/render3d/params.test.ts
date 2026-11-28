@@ -115,6 +115,7 @@ describe('toSearch', () => {
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
       shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false, brush: true,
+      cut: false, stub: 0.5,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -124,6 +125,15 @@ describe('toSearch', () => {
     expect(parseParams('?r3d=woodland&brush=1').brush).toBe(true);
     expect(toSearch({ ...DEFAULTS, brush: true }, '?r3d=woodland')).toBe('?r3d=woodland&brush=1');
     expect(toSearch(DEFAULTS, '?r3d=woodland&brush=1')).toBe('?r3d=woodland');
+  });
+
+  it('reads the wall cut switch and the stub, clamps the stub, and leaves defaults out of the URL (#347)', () => {
+    expect(parseParams('?r3d').cut).toBe(true);
+    expect(parseParams('?r3d&cut=0').cut).toBe(false);
+    expect(parseParams('?r3d&stub=0.5').stub).toBe(0.5);
+    expect(parseParams('?r3d&stub=9').stub).toBe(2);
+    expect(toSearch({ ...DEFAULTS, cut: false, stub: 0.5 }, '?r3d')).toBe('?r3d&cut=0&stub=0.5');
+    expect(toSearch(DEFAULTS, '?r3d&cut=0&stub=0.5')).toBe('?r3d');
   });
 
   it('reads the see-through switch and sliders, clamps them, and leaves defaults out of the URL', () => {

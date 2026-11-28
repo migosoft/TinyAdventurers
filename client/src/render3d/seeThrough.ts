@@ -3,26 +3,22 @@
 // quarter-size mask and `materials.ts` reads it in the wall shader.
 import type { Cam } from './camera';
 import type { Opener } from './figures';
+import { CUT_DEFAULTS, smoothstep, type CutLook } from './cut';
 
 export type SeeMode = 'soft' | 'off';
 /** `radius` in tiles on screen; `keep` 0..1 of the wall that stays at the centre; `edge` 0..1 of the radius the fade runs over. */
-export interface SeeLook { mode: SeeMode; radius: number; keep: number; edge: number }
-export const SEE_DEFAULTS: SeeLook = { mode: 'soft', radius: 0.8, keep: 0.15, edge: 0.4 };
+export interface SeeLook { mode: SeeMode; radius: number; keep: number; edge: number; cut: CutLook }
+export const SEE_DEFAULTS: SeeLook = { mode: 'soft', radius: 0.8, keep: 0.15, edge: 0.4, cut: CUT_DEFAULTS };
 
-/** The look the page's parameters ask for. */
-export function seeLook(p: { see: SeeMode; seeR: number; seeKeep: number; seeEdge: number }): SeeLook {
-  return { mode: p.see, radius: p.seeR, keep: p.seeKeep, edge: p.seeEdge };
+/** The look the page's parameters ask for (the wall cut, #347, rides along). */
+export function seeLook(p: { see: SeeMode; seeR: number; seeKeep: number; seeEdge: number; cut: boolean; stub: number }): SeeLook {
+  return { mode: p.see, radius: p.seeR, keep: p.seeKeep, edge: p.seeEdge, cut: { ...CUT_DEFAULTS, on: p.cut, stub: p.stub } };
 }
 
 /** The mask stores `SEE_DEPTH_BIAS - near` in green, so that every value is positive and the cleared 0 loses a MAX blend against any disc. */
 export const SEE_DEPTH_BIAS = 48;
 /** A wall opens only if it is at least this many tiles nearer the camera than the thing. */
 export const SEE_DEPTH_MARGIN = 0.05;
-
-const smoothstep = (a: number, b: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
-  return t * t * (3 - 2 * t);
-};
 
 /** Strength of the opening at distance `d` (tiles on screen) from a disc's centre: 1 inside (1 - edge) * radius, a smoothstep to 0 at the radius. */
 export function discStrength(d: number, look: SeeLook): number {

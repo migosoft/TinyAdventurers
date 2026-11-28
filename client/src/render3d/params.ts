@@ -44,6 +44,8 @@ export interface R3dParams {
   heat: boolean;
   /** The woodland page's brush lane (#331): the knight paces through a bush, with a pinned `t` for the same picture every time. */
   brush: boolean;
+  /** The wall cut (#347): level geometry on the camera's side of the hero lowered to a stub (tiles above the floor, 0..2). */
+  cut: boolean; stub: number;
 }
 
 /** The hour the sky pages start at (and the panel's slider shows) when the URL gives none. */
@@ -58,6 +60,7 @@ export const DEFAULTS: R3dParams = {
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
   hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false, leafRate: 1, cover: true, gh: 1,
   shafts: true, dust: true, smoke: true, embers: true, haze: true, drips: true, stir: true, draft: true, respawn: 0, refl: true, heat: true, brush: false,
+  cut: SEE_DEFAULTS.cut.on, stub: SEE_DEFAULTS.cut.stub,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -161,10 +164,12 @@ export function parseParams(search: string): R3dParams {
     refl: q.get('refl') === '0' ? false : DEFAULTS.refl,
     heat: q.get('heat') === '0' ? false : DEFAULTS.heat,
     brush: q.get('brush') === '1',
+    cut: q.get('cut') === '0' ? false : DEFAULTS.cut,
+    stub: range(num(q.get('stub')), 0, 2, DEFAULTS.stub),
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh', 'shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft', 'respawn', 'refl', 'heat', 'brush']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh', 'shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft', 'respawn', 'refl', 'heat', 'brush', 'cut', 'stub']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -210,5 +215,7 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.refl !== DEFAULTS.refl) s += '&refl=0';
   if (p.heat !== DEFAULTS.heat) s += '&heat=0';
   if (p.brush !== DEFAULTS.brush) s += '&brush=1';
+  if (p.cut !== DEFAULTS.cut) s += '&cut=0';
+  if (p.stub !== DEFAULTS.stub) s += `&stub=${p.stub}`;
   return s;
 }

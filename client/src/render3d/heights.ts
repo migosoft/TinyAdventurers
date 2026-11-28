@@ -14,6 +14,12 @@ export function heightAt(map: TileMap, x: number, z: number): number {
   return cellHeight(map.get(x, z));
 }
 
+/** The floor level at (x, z) that the wall cut's stub rises from. */
+// shortcut: one floor level (0) for the whole map; #450 replaces the body with the top of the span the hero stands on
+export function floorAt(_map: TileMap, _x: number, _z: number): number {
+  return 0;
+}
+
 /** round(height * 100) per tile, row by row; the shader reads r * 2.55. */
 export function heightBytes(map: TileMap): Uint8Array {
   const out = new Uint8Array(map.w * map.h);

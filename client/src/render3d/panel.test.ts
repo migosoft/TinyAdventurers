@@ -119,6 +119,21 @@ describe('panel', () => {
     }
   });
 
+  it('has a Wall cut switch and a Stub slider (#347)', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { host, calls, btn } = setup(DEFAULTS, mode);
+      expect(btn('Wall cut').getAttribute('aria-pressed')).toBe('true');
+      btn('Wall cut').click();
+      expect(calls[0].cut).toBe(false);
+      const s = host.querySelector<HTMLInputElement>('#r3d-stub')!;
+      expect([s.min, s.max, s.step]).toEqual(['0', '2', '0.05']);
+      s.value = '0.5';
+      s.dispatchEvent(new Event('input'));
+      expect(calls[1].stub).toBe(0.5);
+      expect(host.textContent).toContain('Stub 0.5');
+    }
+  });
+
   it('has a Sight switch in both modes; the mist sliders (Mist day too) only on daylight', () => {
     for (const mode of ['demo', 'run'] as const) {
       const { host, calls, btn, panel } = setup(DEFAULTS, mode);

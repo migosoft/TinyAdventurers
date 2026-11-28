@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
-import { WALL_H, cellHeight, heightAt, heightBytes, wallOf } from './heights';
+import { WALL_H, cellHeight, floorAt, heightAt, heightBytes, wallOf } from './heights';
 import { parseMap } from './demoMap';
 
 describe('heights', () => {
@@ -19,6 +19,13 @@ describe('heights', () => {
     expect(heightAt(m, 1, 0)).toBe(0);
     expect(heightAt(m, 2, 0)).toBe(2);
     expect(heightAt(m, 1, 1)).toBe(2);
+  });
+
+  it('has one floor level for now: 0 on a floor, a wall and outside the map (#347)', () => {
+    const m = parseMap(['#.']);
+    expect(floorAt(m, 1, 0)).toBe(0);
+    expect(floorAt(m, 0, 0)).toBe(0);
+    expect(floorAt(m, -3, 9)).toBe(0);
   });
 
   it('puts a light on the edge of the wall it hangs on', () => {
