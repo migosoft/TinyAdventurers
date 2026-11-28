@@ -235,10 +235,16 @@ describe('the ground cover in the run view (#330)', () => {
     expect(run().f?.cover).toEqual({ on: true, gh: 1, wind: true, t: 0 });
   });
 
-  it('the frame carries the followed hero as the wall cut\'s ground point, not the drawn camera (#347)', () => {
-    const { f } = run();
-    expect(f?.ground).toBeDefined();
-    expect(f!.ground!.x).toBeCloseTo(f!.cam.x, 0);
+  it('the cut\'s ground point is the hero before the follow clamp, smoothing and shake, not the drawn camera (#347)', () => {
+    // A hero at the map's edge: followClamp moves the camera away from him.
+    const r = run({ camera: { x: 24, y: 24 } });
+    for (const f of [r.f, r.again()]) {
+      expect(f!.ground).toEqual({ x: 24 / 16, z: 24 / 16 });
+      expect(f!.cam.x !== f!.ground!.x || f!.cam.z !== f!.ground!.z).toBe(true);
+    }
+    // The free camera: the ground point is the camera's own.
+    const fr = run({ camera: { x: 24, y: 24 }, params: { free: true } });
+    for (const f of [fr.f, fr.again()]) expect(f!.ground).toEqual({ x: f!.cam.x, z: f!.cam.z });
   });
 
   it('lifts the ground ovals onto the cover after setCover, none before, and not with the switch off', () => {
