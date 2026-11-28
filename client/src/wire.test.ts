@@ -55,7 +55,7 @@ describe('wire', () => {
   });
 
   it('reads a hazard\'s element 6 as a radius in px, not an angle', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
     const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0, 0, 128, 0], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0, 0, 128, 0], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0, 0, 128, 0]];
     const snap = unpackSnap([1, 0, hazards, me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents.map((e) => e[6])).toEqual([40, 48, 64]);
@@ -65,7 +65,7 @@ describe('wire', () => {
   });
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
     const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1, 0, 128, 0]], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
@@ -101,17 +101,18 @@ describe('wire', () => {
   });
 
   it('keeps the Attribute amount of an own effect', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5'], 'the Orc Warrior', 1.35];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5'], 'the Orc Warrior', 1.35, 2.2];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.me.effects).toEqual([[16, 12.5, -2, false], [4, 3, 0, true]]);
     expect(snap.me.paused_items).toEqual(['BandOfVigor']);
     expect(snap.me.paused_nodes).toEqual(['PU5']);
     expect(snap.me.charmed_by).toBe('the Orc Warrior');
     expect(snap.me.water_t).toBe(1.35);
+    expect(snap.me.breath).toBe(2.2);
   });
 
   it('unpacks moving lights with an optional colour', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], [], [], [], null]);
     expect(snap.lights).toEqual([[10, 20, 2, null], [1, 2, 3, 0x78c8ff]]);
   });

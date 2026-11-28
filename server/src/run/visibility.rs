@@ -333,6 +333,7 @@ pub fn send_snapshots(run: &mut Run) {
                 knock_vx: me.mv.knock_vx,
                 knock_vy: me.mv.knock_vy,
                 water_t: me.mv.water_t,
+                breath: crate::dungeon::breath(me.sheet.attrs.get(crate::defs::attributes::Attr::Con), false),
                 cd1: me.cd1 as f32,
                 cd2: me.cd2 as f32,
                 spectating: if me.alive { None } else { me.spectating },
@@ -677,6 +678,24 @@ mod tests {
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
         assert!(!snap[10].as_array().unwrap().iter().any(|e| e.as_u64() == Some(near as u64)), "and so not marked dark");
+    }
+
+    #[test]
+    fn the_snapshot_carries_the_heros_breath_and_a_con_drain_shortens_it() {
+        use crate::defs::attributes::Attr;
+        let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        let mut breath_sent = |run: &mut Run| {
+            send_snapshots(run);
+            let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+            let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+            snap[3][23].as_f64().unwrap()
+        };
+        let full = breath_sent(&mut run);
+        assert_eq!(full, crate::dungeon::breath(run.players[0].sheet.attrs.get(Attr::Con), false));
+        run.players[0].sheet.attrs.add(Attr::Con, -6);
+        assert!(breath_sent(&mut run) < full, "a drained CON shortens it");
     }
 
     #[test]

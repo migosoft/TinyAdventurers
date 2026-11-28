@@ -328,7 +328,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 | Terrain | What happens |
 |---|---|
 | Shallow water (the light rim of a pool) | Slows everyone down, heroes and enemies alike. |
-| Deep water (the dark centre) | You can walk in, but you are **drowning**: you can only move (no abilities, no attacks, no using things) and slowly, and you sink. After about a second you are fully under and move at half that speed. When your **breath** runs out you drown ("X drowned"). Step out into shallow water or onto the floor and your breath is full again at once. Walking, a dash that ends in it, or a knock all start it. |
+| Deep water (the dark centre) | You can walk in, but you are **drowning**: you can only move (no abilities, no attacks, no using things) and slowly, and you sink. After about a second you are fully under and move at half that speed. When your **breath** runs out you drown ("X drowned"). Step out into shallow water or onto the floor and your breath is full again at once. A thin light-blue **breath bar** under your HP bar shows the air left while you are in deep water, and pulses red when it is nearly gone (a higher CON gives a longer breath). Walking, a dash that ends in it, or a knock all start it. |
 | Chasm | Step in, or get **knocked** in, and you **fall to your death** ("X fell into the abyss"). Every chasm across a room leaves a bridge of floor. |
 | Lava | You can walk in, but it slows you a lot and **burns for 20 damage a second**, and it sets you **burning** (see Status effects). |
 

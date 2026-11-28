@@ -1,10 +1,42 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, debugBadgeHtml, effectChipHtml, effectRows, effectsRowHtml, helpHtml, secondaryLabel, statsText } from './hud';
+import { Hud, breathShare, debugBadgeHtml, effectChipHtml, effectRows, effectsRowHtml, helpHtml, secondaryLabel, statsText } from './hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EFFECT } from '../generated/defs';
 import { BOSS_TEXT } from './text';
 import { EFFECT_ICON } from './effectIcons';
+
+describe('breathShare', () => {
+  it('is null (bar hidden) outside deep water', () => expect(breathShare(0, 2.2)).toBeNull());
+  it('is nearly full at entry, half at half the breath, empty at the breath', () => {
+    expect(breathShare(0.001, 2)).toBeCloseTo(1, 2);
+    expect(breathShare(1, 2)).toBe(0.5);
+    expect(breathShare(2, 2)).toBe(0);
+  });
+  it('never goes below empty', () => expect(breathShare(5, 2)).toBe(0));
+  it('is hidden for an unknown or infinite breath', () => {
+    expect(breathShare(1, 0)).toBeNull();
+    expect(breathShare(1, Infinity)).toBeNull();
+  });
+});
+
+describe('breath bar', () => {
+  it('shows only in deep water, filled by the predicted time, warning when low', () => {
+    document.body.innerHTML = '';
+    const hud = new Hud(document.body, () => {}, () => {});
+    const bar = document.querySelector<HTMLElement>('.breath-bar')!;
+    const fill = bar.querySelector<HTMLElement>('.fill')!;
+    const f = (waterT: number) => ({ cd1: 0, cd2: 0, wolf: null, waterT, breath: 2 }) as unknown as Parameters<Hud['frame']>[0];
+    hud.frame(f(0));
+    expect(bar.classList.contains('hidden')).toBe(true);
+    hud.frame(f(1));
+    expect(bar.classList.contains('hidden')).toBe(false);
+    expect(fill.style.width).toBe('50%');
+    expect(bar.classList.contains('low')).toBe(false);
+    hud.frame(f(1.5));
+    expect(bar.classList.contains('low')).toBe(true);
+  });
+});
 
 describe('secondaryLabel', () => {
   it('reads Heal Wolf while the wolf lives', () => expect(secondaryLabel(true, 'Dire Wolf')).toBe('Heal Wolf'));

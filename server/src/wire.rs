@@ -66,11 +66,11 @@ pub const DROWN_BREATHLESS: u8 = 128;
 #[ts(export)]
 pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u16, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u8);
 
-/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by, water_t]`, exact values;
+/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by, water_t, breath]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32, i16, bool)>, pub f32, pub bool, pub f32, pub f32, pub Vec<ItemId>, pub Vec<NodeId>, pub Option<String>, pub f64);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32, i16, bool)>, pub f32, pub bool, pub f32, pub f32, pub Vec<ItemId>, pub Vec<NodeId>, pub Option<String>, pub f64, pub f64);
 
 /// `[kind, hp, max_hp, immune]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -181,7 +181,7 @@ fn ev_w(e: &Ev) -> EvW {
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim_or_radius(e.1, e.6 as f64), e.7, e.8, e.9, e.10, e.11, e.12, e.13, e.14)).collect();
     let m = &s.me;
-    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul, m.cd_rate, m.paused_items.clone(), m.paused_nodes.clone(), m.charmed_by.clone(), m.water_t);
+    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul, m.cd_rate, m.paused_items.clone(), m.paused_nodes.clone(), m.charmed_by.clone(), m.water_t, m.breath);
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let solids = s.solids.iter().flat_map(|&(x, y, half)| [q_pos(x as f64), q_pos(y as f64), q_pos(half as f64)]).collect();
@@ -219,6 +219,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             knock_vx: -412.75,
             knock_vy: 31.0625,
             water_t: 1.35,
+            breath: 2.2,
             cd1: 0.25,
             cd2: 1.5,
             spectating: None,
@@ -280,6 +281,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             knock_vx: 0.0,
             knock_vy: 0.0,
             water_t: 0.0,
+            breath: 2.75,
             cd1: 0.0,
             cd2: 0.0,
             spectating: Some(2),

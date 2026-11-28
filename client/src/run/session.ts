@@ -304,6 +304,8 @@ export class RunSession {
       cd1: this.pred.cd1,
       cd2: this.pred.cd2,
       ents: this.ents.size,
+      waterT: this.isAlive ? this.pred.state.waterT : 0,
+      breath: this.lastSnap?.me.breath,
       darkvision,
       wolf: this.runInfo.abilities[1].id === 'SummonWolf' ? this.hasOwnWolf() : null,
     });

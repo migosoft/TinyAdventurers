@@ -51,6 +51,9 @@ export interface FrameStats {
   darkvision: number;
   /** Whether the hero has a living wolf; null when the secondary is not Summon Wolf. */
   wolf: boolean | null;
+  /** Seconds the predicted hero has been in deep water (0: not drowning or not alive) and the hero's breath length (s), for the breath bar. */
+  waterT?: number;
+  breath?: number;
 }
 
 /** The 3D view's backend and its scene pass, for the F3 panel (#314). */
@@ -88,6 +91,15 @@ export function statsText(f: FrameStats): string {
     `darkvision ${Math.round(f.darkvision * 100)}%`
   );
 }
+
+/** The breath bar's fill (0 to 1) after `waterT` seconds in deep water of a `breath` long; null (bar hidden) outside deep water or with no finite breath. */
+export function breathShare(waterT: number, breath: number): number | null {
+  if (!(waterT > 0) || !(breath > 0) || !Number.isFinite(breath)) return null;
+  return Math.max(0, 1 - waterT / breath);
+}
+
+/** Below this share of the breath the bar turns to its warning pulse. */
+const BREATH_LOW = 0.3;
 
 /** The secondary slot's name: the ranger's reads by whether the wolf lives. */
 export function secondaryLabel(wolf: boolean | null, base: string): string {
@@ -144,6 +156,8 @@ export class Hud {
   private hp = el('div', 'hp-bar');
   private hpFill = el('div', 'fill');
   private hpText = el('span');
+  private breathFill = el('div', 'fill');
+  private breathBar = el('div', 'breath-bar hidden');
   private fx = el('div', 'effects');
   private rows = new Map<number, HTMLElement>(); // party row per hero entity, filled in startRun
   private bossKey = ''; // kind and immunity of the boss box as built; '' = not built
@@ -194,7 +208,8 @@ export class Hud {
       abil.append(s);
     }
     const hpCol = el('div', 'hp-col');
-    hpCol.append(this.statusHint, this.hp, this.fx);
+    this.breathBar.append(this.breathFill);
+    hpCol.append(this.statusHint, this.hp, this.breathBar, this.fx);
     bottom.append(hpCol, this.coins, abil);
     this.menu.append(el('div', 'title', 'Paused'), el('p', '', 'The dungeon keeps going while this is open.'));
     const leave = el('button', 'danger', 'Leave dungeon');
@@ -414,6 +429,12 @@ export class Hud {
 
   frame(f: FrameStats): void {
     if (this.inSettings) this.view.sync();
+    const air = breathShare(f.waterT ?? 0, f.breath ?? 0);
+    this.breathBar.classList.toggle('hidden', air === null);
+    if (air !== null) {
+      this.breathFill.style.width = `${air * 100}%`;
+      this.breathBar.classList.toggle('low', air < BREATH_LOW);
+    }
     const now = performance.now();
     [0, 1].forEach((i) => {
       const name = this.slots[i].querySelector('.name')!;

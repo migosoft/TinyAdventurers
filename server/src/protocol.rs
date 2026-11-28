@@ -364,6 +364,8 @@ pub struct SelfState {
     pub knock_vy: f64,
     /// Seconds in deep water (0 outside it); prediction counts on from it.
     pub water_t: f64,
+    /// Seconds the hero can stay in deep water before drowning, from its current CON (drains included); the breath bar's length.
+    pub breath: f64,
     /// Remaining cooldowns (s).
     pub cd1: f32,
     pub cd2: f32,

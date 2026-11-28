@@ -22,7 +22,7 @@ export const PUDDLE_STIR = { enter: 1.5, ring: 1, step: 0.3, within: 0.85, foot:
 const PLUNGE_SCATTER = 0.15, STIR_SCATTER = 0.2;
 
 /** Bubbles per second above a breathing creature in the drowning state (#448): while its head is above water, and from `HEAD_UNDER` on (the main sign of where it is). */
-export const SWIM_BUBBLES = { above: 2, under: 5, ring: 0.5, scatter: 0.12 } as const;
+export const SWIM_BUBBLES = { above: 2, under: 2, ring: 0.5, scatter: 0.12 } as const;
 
 export interface WaterSpot { id: number; x: number; z: number }
 /** A creature in the drowning state (`FigureOut.swims`). */

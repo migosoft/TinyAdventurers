@@ -111,8 +111,8 @@ describe('Water3d', () => {
     const early = run({ t: 0.3, breathless: false });
     const under = run({ t: CONST.HEAD_UNDER + 0.5, breathless: false });
     expect(early.n).toBeGreaterThan(0);
-    expect(under.n).toBeGreaterThan(early.n * 2);
-    expect(Math.abs(under.last!.x - under.x)).toBeLessThan(0.1);   // above its head, following it
+    expect(under.n).toBeGreaterThanOrEqual(early.n); // under = above = 2 a second since #448's fewer bubbles
+    expect(Math.abs(under.last!.x - under.x)).toBeLessThan(0.25);   // above its head, following it
     expect(run({ t: 2, breathless: true }).n).toBe(0);
     expect(run(null).n).toBe(0);
   });

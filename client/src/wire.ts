@@ -161,6 +161,7 @@ export function unpackSnap(w: SnapW): Snapshot {
       paused_nodes: me[20],
       charmed_by: me[21],
       water_t: me[22],
+      breath: me[23],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3] },
     ev: ev.map(unpackEv),
