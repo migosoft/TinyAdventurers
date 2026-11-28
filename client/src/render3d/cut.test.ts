@@ -57,9 +57,9 @@ describe('cut', () => {
   });
 
   it('the edge is steep and the line only keeps what lies behind it', () => {
-    expect(cutWeight(0, 0.7, L)).toBe(0);
-    expect(cutWeight(0, 0.8, L)).toBe(1);
-    expect(cutWeight(0, 0.75, L)).toBeCloseTo(0.5);
+    expect(cutWeight(0, 0.55, L)).toBe(0);
+    expect(cutWeight(0, 0.7, L)).toBe(1);
+    expect(cutWeight(0, 0.62, L)).toBeCloseTo(0.5);
     expect(cutWeight(-1.6, 1, L)).toBe(0);
     expect(cutWeight(-1.4, 1, L)).toBe(1);
   });
@@ -100,6 +100,17 @@ describe('whole columns and torches', () => {
     const top = w(3, 2.5, 2, -1, 0);
     expect(top).toBe(1);
     for (const y of [0, 0.31, 0.66, 0.91, 1.28, 1.63, 2]) expect(w(3, 2.5, y, -1, 0)).toBe(top);
+  });
+
+  it('a frieze vertex standing 0.05 out of the wall gets the weight of the wall top', () => {
+    for (const y of [0, 0.31, 1.28, 1.63, 2]) expect(w(2.95, 2.5, y, -1, 0)).toBe(w(3, 2.5, 2, -1, 0));
+  });
+
+  it('at 45 degrees both edges of a thin near wall are cut (the south edge covers floor a quarter tile from the wall)', () => {
+    const rows = ['#########', ...Array(4).fill('#.......#'), '#########', ...Array(3).fill('#.......#'), '#########'];
+    const hh = (x: number, z: number) => (rows[z]?.[x] === '.' ? 0 : 2);
+    const r = Math.SQRT1_2;
+    for (const z of [5, 6]) for (const x of [3, 3.5, 4]) for (const y of [0, 1.28, 2]) expect(cutWeightAt(x, z, y, 4.5, 2.5, 0, -r, r, SLOPE, hh, () => 1, L)).toBe(1);
   });
 
   it('a torch on a thin near wall is hidden when its wall is cut, on a far wall kept, edge-on kept', () => {

@@ -68,12 +68,17 @@ const blob = (d2: N): N => {
 };
 
 /**
- * 1 where the torch's wall is cut (#347), else 0: the larger of the weights at the torch's wall point and at the wall cell's far edge, at the flame's height with the column-top rule (the wall's height; a thin wall's two edges can differ at 45 degrees), the same for all its vertices, so it hides whole.
+ * 1 where the torch's wall is cut (#347), else 0: the largest of the weights at six points of the torch's wall cell (the wall point and the far edge, each in the middle and half a tile to either side), at the flame's height with the column-top rule (the wall's height; a thin wall's two edges can differ at 45 degrees), the same for all its vertices, so it hides whole.
  */
 const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
   const wall: N = attribute('foot', 'vec4'); // .zw: the wall point (.xy, the floor point in front, is the sight's)
-  const at = vec2(wall.z, wall.w), other = at.mul(3).sub(vec2(wall.x, wall.y).mul(2)); // the wall cell's far edge: wall point - n, with foot.xy = wall point + n / 2
-  const w = max(cutWeightNode(vec3(at.x, FLAME_BASE_Y, at.y), cut, see), cutWeightNode(vec3(other.x, FLAME_BASE_Y, other.y), cut, see));
+  const at = vec2(wall.z, wall.w), n = vec2(wall.x, wall.y).sub(at).mul(2); // foot.xy = wall point + n / 2
+  const tangent = vec2(n.y.negate(), n.x);
+  let w: N = float(0);
+  for (const s of [0, 1]) for (const a of [-0.5, 0, 0.5]) {
+    const p = at.sub(n.mul(s)).add(tangent.mul(a));
+    w = max(w, cutWeightNode(vec3(p.x, FLAME_BASE_Y, p.y), cut, see));
+  }
   return w.greaterThan(TORCH_HIDE_ABOVE).select(1, 0);
 };
 

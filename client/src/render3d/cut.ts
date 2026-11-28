@@ -19,17 +19,18 @@ export function hiddenPoint(px: number, pz: number, y: number, floor: number, rx
   return { x: px - rx * k, z: pz - rz * k };
 }
 
-/** The `hides` value at the middle of the edge band. 0.75, not 0.5: a wall seen edge-on (the ray parallel to it) reads exactly 0.5 from the bilinear mix of wall and floor centres and must stay full. */
-export const HIDE_MID = 0.75;
+/** The `hides` value at the middle of the edge band. Above 0.5: a wall seen edge-on (the ray parallel to it) reads exactly 0.5 from the bilinear mix of wall and floor centres and must stay full. Below 0.75: at 45 degrees the south edge of a thin wall covers floor 0.24 tile from the wall, which the bilinear blur reads as 0.74, and that edge must be cut with the rest of its wall. */
+export const HIDE_MID = 0.62;
 /** A tile counts as floor when no higher than `floor + stub`; the threshold is this soft, so the bilinear mix stays continuous. */
 export const FLOOR_SOFT = 0.05;
 
-/** The height the hide test reads a point at: its own `y`, or the highest tile touching it (read a hair off the point on each side), so a wall is cut as a whole column. */
+/** The height the hide test reads a point at: its own `y`, or the highest tile touching it (read this far off the point on each side), so a wall is cut as a whole column. */
 export function columnTop(px: number, pz: number, y: number, cellH: (x: number, z: number) => number): number {
   const e = COLUMN_EPS;
   return Math.max(y, cellH(Math.floor(px - e), Math.floor(pz - e)), cellH(Math.floor(px + e), Math.floor(pz - e)), cellH(Math.floor(px - e), Math.floor(pz + e)), cellH(Math.floor(px + e), Math.floor(pz + e)));
 }
-export const COLUMN_EPS = 0.01;
+/** How far the column probe reaches off the point (tiles): the laid friezes stand out of the wall by `FRIEZE_OUT` (0.05), and their vertices must still read the wall's height. */
+export const COLUMN_EPS = 0.1;
 
 /**
  * 1 where the ground the point (px, pz) covers on screen is floor the hero sees: the heights bilinear over the four nearest
@@ -64,9 +65,15 @@ export function cutWeightAt(px: number, pz: number, y: number, tx: number, tz: n
   return cutWeight((px - tx) * rx + (pz - tz) * rz, hides(px, pz, y, floor, rx, rz, slope, look.stub, cellH, seen), look);
 }
 
-/** Whether a wall torch hides (the torch materials' rule): the larger of the weights at its wall point (a cell edge) and at the cell's far edge, `n` the normal into the room, is above this. */
+/**
+ * Whether a wall torch hides (the torch materials' rule): the largest of the weights at six points of its wall cell, the wall point (a cell edge) and the
+ * cell's far edge (`n` the normal into the room), each at its middle and half a tile to either side along the wall, is above this. The wall's own vertices
+ * differ along its length at an angle, and a torch should go when any part of its wall's face is lowered.
+ */
 export const TORCH_HIDE_ABOVE = 0.5;
 export function torchHidden(wx: number, wz: number, nx: number, nz: number, flameY: number, tx: number, tz: number, floor: number, rx: number, rz: number, slope: number, cellH: (x: number, z: number) => number, seen: (x: number, z: number) => number, look: CutLook): boolean {
   const at = (x: number, z: number) => cutWeightAt(x, z, flameY, tx, tz, floor, rx, rz, slope, cellH, seen, look);
-  return Math.max(at(wx, wz), at(wx - nx, wz - nz)) > TORCH_HIDE_ABOVE;
+  let w = 0;
+  for (const s of [0, 1]) for (const a of [-0.5, 0, 0.5]) w = Math.max(w, at(wx - nx * s - nz * a, wz - nz * s + nx * a));
+  return w > TORCH_HIDE_ABOVE;
 }
