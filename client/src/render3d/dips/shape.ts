@@ -41,8 +41,71 @@ function ss(a: number, b: number, t: number): number {
   return u * u * (3 - 2 * u);
 }
 
-/** Smooth membership of the cells around (x, z) in tiles: `OUTLINE_EDGE` (0.5) on a straight cell edge. Outside the map is no member. */
+/**
+ * How far the drawn outline of water and lava grows out past the tile edge (#444): 0 to `EDGE_GROW` tiles, by low-frequency noise
+ * (wavelength about `1 / EDGE_GROW_FREQ` tiles), so a straight run of tiles draws as a wavy shore. The lip ends at mask 0.25, about
+ * 0.17 tiles outside the grown edge, so below 0.83 tiles the bed is flat again a tile out, where the dip mesh ends. 0 gives the
+ * tile-bound outline of #324.
+ */
+export const EDGE_GROW = 0.5, EDGE_GROW_FREQ = 0.8;
+
+/** How far (tiles) the outline of water and lava grows past the tile edge at (x, z): two octaves of noise, stretched to use the whole range. */
+export function growAt(x: number, z: number): number {
+  const f = EDGE_GROW_FREQ;
+  const n = 0.65 * vnoise(x * f + 31.7, z * f + 5.3) + 0.35 * vnoise(x * f * 2.3 + 11.1, z * f * 2.3 + 47.9);
+  return EDGE_GROW * ss(0.25, 0.75, n);
+}
+
+/**
+ * Smooth membership of the cells around (x, z) in tiles: `OUTLINE_EDGE` (0.5) on a straight cell edge of a chasm, a wavy line on or
+ * outside the cell edge of water and lava. Outside the map is no member. The rules still use the cell squares; the outline is a look.
+ * Water and lava take the largest mask within `growAt` along the two axes and the diagonals (a dilation: a straight edge moves out by
+ * exactly that, a corner is rounded), so no part of their tiles is drawn dry and lava never looks smaller than where it burns. A
+ * chasm's cells do not grow (the mask is linear in the cells, so the other members keep theirs): its broken-off rim already breaks the
+ * line, a figure walking along it never stands over the void, and a faller keeps the room the descent counts on.
+ */
 export function maskAt(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
+  return member === isChasm ? cellMask(map, x, z, member) : grownMask(map, x, z, member);
+}
+
+/** The member's non-chasm cells and the chasm cells of the 3 by 3 cells from (`win0x`, `win0z`): every sample `grownMask` reads. */
+const own = new Float64Array(9), pit = new Float64Array(9);
+let win0x = 0, win0z = 0;
+
+/** The bilinear mask of a window (`own` or `pit`) at (x, z), which must lie within a half tile of the window's middle cell. */
+function winMask(w: Float64Array, x: number, z: number): number {
+  const u = x - 0.5, v = z - 0.5;
+  const i = Math.floor(u), j = Math.floor(v);
+  const tx = u - i, tz = v - j, fx = tx * tx * (3 - 2 * tx), fz = tz * tz * (3 - 2 * tz), k = (j - win0z) * 3 + (i - win0x);
+  return (w[k] * (1 - fx) + w[k + 1] * fx) * (1 - fz) + (w[k + 3] * (1 - fx) + w[k + 4] * fx) * fz;
+}
+
+/** `growAt` of the last point asked: `bedAt` reads three grown masks at one point. */
+let lastX = NaN, lastZ = NaN, lastR = 0;
+
+/** `maskAt` of a member other than the chasm, grown by `growAt` (at most half a tile, so every sample lies in the 3 by 3 cells around the point). */
+function grownMask(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
+  win0x = Math.floor(x) - 1; win0z = Math.floor(z) - 1;
+  let owned = 0, pits = 0;
+  for (let b = 0; b < 3; b++) for (let a = 0; a < 3; a++) {
+    const t = map.get(win0x + a, win0z + b), chasm = t === TILE_ID.Chasm;
+    owned += own[b * 3 + a] = !chasm && member(t) ? 1 : 0;
+    pits += pit[b * 3 + a] = chasm ? 1 : 0;
+  }
+  const pc = pits === 0 ? 0 : winMask(pit, x, z);
+  let m = owned === 9 ? 1 : 0;
+  if (owned > 0 && owned < 9) {
+    if (x !== lastX || z !== lastZ) { lastX = x; lastZ = z; lastR = growAt(x, z); }
+    const r = lastR, d = r * Math.SQRT1_2;   // the diagonals round the grown corner
+    m = Math.max(winMask(own, x, z), winMask(own, x - r, z), winMask(own, x + r, z), winMask(own, x, z - r), winMask(own, x, z + r),
+      winMask(own, x - d, z - d), winMask(own, x + d, z - d), winMask(own, x - d, z + d), winMask(own, x + d, z + d));
+  }
+  // The grown outline gives way to a chasm's plain one, so the two never overlap (their depths would add).
+  return member(TILE_ID.Chasm) ? Math.min(1, m + pc) : Math.min(m, 1 - pc);
+}
+
+/** The tile-bound mask: the bilinear interpolation of membership between cell centres, smoothstep weights. */
+function cellMask(map: TileMap, x: number, z: number, member: (tile: number) => boolean): number {
   const u = x - 0.5, v = z - 0.5;
   const i = Math.floor(u), j = Math.floor(v);
   const fx = ss(0, 1, u - i), fz = ss(0, 1, v - j);
@@ -102,11 +165,11 @@ export function waterMaskAt(map: TileMap, x: number, z: number): number {
 }
 
 function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
-  const mW = waterMaskAt(map, x, z), mD = maskAt(map, x, z, isDeep);
-  const mL = maskAt(map, x, z, isLava), mC = maskAt(map, x, z, isChasm);
+  const pond = pondFieldOf(map);
+  const mW = pond ? pond.wetAt(x, z) : grownMask(map, x, z, isWater), mD = grownMask(map, x, z, isDeep);
+  const mL = grownMask(map, x, z, isLava), mC = cellMask(map, x, z, isChasm);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
-  const pond = pondFieldOf(map);
   const water = pond ? pond.depthAt(x, z) : SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD);
   let h = -water
     - LAVA_BED * ss(OUTLINE_EDGE, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(OUTLINE_EDGE, STEEP.chasm, mC) : 0);

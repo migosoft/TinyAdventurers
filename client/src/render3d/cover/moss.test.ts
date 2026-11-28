@@ -71,13 +71,17 @@ describe('mossSource', () => {
   it('rims every pool with moss, in a room the area noise leaves bare too, and keeps it off the bank', () => {
     const m = roomsMap(), s = make(m); // not `everywhere`: only the waterside is certain
     const pool = roomOrigin(1, 1);
-    // The floor tile left of the pool's upper left water tile: moss at its edge to the water, none at its far edge.
+    // The floor tile left of the pool's upper left water tile: moss just outside the drawn shore, which grows past the tiles (#444).
+    // The band ends EDGE_GROW + waterReach + wobble (21 px) from the tiles: none in the tile beyond, 22 px and more out (lx < 10).
     const tx = pool.x + 1, ty = pool.y + 2;
     const at = (lx: number, ly: number) => (ty * TILE + ly) * W * TILE + tx * TILE + lx;
     let nearEdge = 0, farEdge = 0;
     for (let ly = 0; ly < TILE; ly++) {
-      for (let lx = TILE - 5; lx < TILE; lx++) nearEdge += s.grow[at(lx, ly)];
-      for (let lx = 0; lx < 2; lx++) farEdge += s.grow[at(lx, ly)];
+      for (let lx = 0; lx < TILE; lx++) {
+        const mask = maskAt(m, (tx * TILE + lx + 0.5) / TILE, (ty * TILE + ly + 0.5) / TILE, isWater);
+        if (mask > 0.2 && mask < MOSS.waterEdge) nearEdge += s.grow[at(lx, ly)];
+      }
+      for (let lx = 0; lx < 10; lx++) farEdge += s.grow[at(lx - TILE, ly)];
     }
     expect(nearEdge).toBeGreaterThan(20);
     expect(farEdge).toBe(0);
@@ -229,9 +233,9 @@ describe('mossSource', () => {
         let any = false;
         px(tx, ty, (i) => { if (s.grow[i]) any = true; });
         if (!any) continue;
-        // A waterside tile is mossy whatever the area noise says (the rim of a pool).
+        // A waterside tile is mossy whatever the area noise says (the rim of a pool), and the rim's band reaches the next ring (#444).
         let wet = false;
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (m.get(tx + dx, ty + dy) === TILE_ID.ShallowWater) wet = true;
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (m.get(tx + dx, ty + dy) === TILE_ID.ShallowWater) wet = true;
         if (wet) continue;
         checked++;
         let near = false;

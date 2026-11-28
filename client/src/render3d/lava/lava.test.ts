@@ -93,11 +93,14 @@ describe('Lava3d bubbles', () => {
     }
   });
 
-  it('never bubbles a pool too small for one', () => {
-    // the rim of a lone tile is all bank: its points never reach the mask, and the search ends after `tries`
-    const l = new Lava3d(room(6, 6, [[3, 3, T.Lava]]), seeded(4));
-    const { spots } = run(l, 20);
-    expect(spots.size).toBe(0);
+  it('bubbles a lone tile only inside its drawn outline, which grows past the tile (#444)', () => {
+    // where the grown outline leaves no room the search ends after `tries`
+    const map = room(6, 6, [[3, 3, T.Lava]]);
+    const { spots } = run(new Lava3d(map, seeded(4)), 20);
+    for (const s of spots) {
+      const [x, z] = s.split(',').map(Number);
+      expect(maskAt(map, x, z, isLava)).toBeGreaterThanOrEqual(LAVA.mask);
+    }
   });
 
   it('leaves a pool out of view or unseen alone', () => {

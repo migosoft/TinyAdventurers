@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
 import {
-  CHASM_BED, DEEP_BED, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
-  NOTHING_HIDDEN, bedAt, depthFade, dipOf, hidingHeightAt, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
+  CHASM_BED, DEEP_BED, OUTLINE_EDGE, DIP, LAVA_BED, LAVA_LEVEL, LIP, ROUGH, SHALLOW_BED, WATER_LEVEL,
+  NOTHING_HIDDEN, bedAt, growAt, depthFade, dipOf, hidingHeightAt, inDipMesh, kindOf, maskAt, nearAt, isChasm, isLava, isWater, surfaceAt, walkBedAt, type DipKind,
 } from './shape';
 
 const CH: Record<string, number> = {
@@ -43,6 +43,24 @@ describe('dip shape', () => {
   it('meets the floor on a straight cell edge', () => expect(Math.abs(bedAt(pool('C', 5), edgeX, mid))).toBeLessThan(1e-9));
   it('is exactly 0 half a tile outside the outline', () => expect(Math.abs(bedAt(pool('C', 5), edgeX - 0.5, mid))).toBe(0));
 
+  it('bends the outline of water and lava outward off a straight tile edge, flat again a tile out, and keeps a chasm on its edge (#444)', () => {
+    for (const c of ['~', 'L']) {
+      const m = pool(c, 9), member = c === '~' ? isWater : isLava;
+      let far = 0;
+      for (let z = 3.5; z <= 11.5; z += 0.05) {
+        // the outline's crossing along the pool's left side (x 3), from a tile out (x 2, where the dip mesh ends) into the pool
+        let x = 2;
+        while (maskAt(m, x, z, member) < OUTLINE_EDGE) x += 0.005;
+        far = Math.max(far, 3 - x);
+        expect(x, `${c} at z ${z}`).toBeGreaterThan(2.05);
+        expect(x, `${c} at z ${z}: never inside the tiles`).toBeLessThanOrEqual(3.005);
+        expect(bedAt(m, 2, z), `${c} a tile out`).toBe(0);
+      }
+      expect(far, c).toBeGreaterThan(0.3);
+    }
+    expect(maskAt(pool('C', 5), 3, 4.3, isChasm)).toBeCloseTo(0.5, 9);
+  });
+
   it('never rises above the lip and is finite everywhere', () => {
     const maps = [
       room('...', '.C.', '...'),
@@ -69,7 +87,11 @@ describe('dip shape', () => {
     for (const c of ['C', '~', 'L']) {
       const m = pool(c, 5);
       let top = -Infinity;
-      for (let z = 4.5; z < 6.5; z += 0.05) for (const x of [edgeX - 0.15, edgeX - 0.1, edgeX - 0.07]) top = Math.max(top, bedAt(m, x, z));
+      // water and lava: outside the outline grown by `growAt` (#444), which varies slowly enough to read at the tile edge
+      for (let z = 4.5; z < 6.5; z += 0.05) for (const d of [0.15, 0.1, 0.07]) {
+        const x = edgeX - (c === 'C' ? 0 : growAt(edgeX, z)) - d;
+        top = Math.max(top, bedAt(m, x, z));
+      }
       expect(top, c).toBeGreaterThan(0.005);
       expect(top, c).toBeLessThanOrEqual(LIP);
     }

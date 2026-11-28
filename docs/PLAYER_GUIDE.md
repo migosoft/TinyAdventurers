@@ -336,6 +336,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 - No chasm is wider than 3 tiles, so a dash can always clear it.
 - **Demons** (imps, chorts, summoners, Kharzul and Ysskar) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
 - Shots and sight pass over all terrain.
+- Pools and lava are drawn with natural, rounded shores that can reach up to half a tile past the ground that really counts: what slows, drowns or burns you is the terrain under your feet, so a figure at the very edge may look a little wet or singed without being so.
 - Enemies can fall, drown and burn too, if a **barrel blast** pushes them in (see Explosive barrels).
 - In debug mode (test accounts only) a hero who falls or drowns climbs back out onto the last safe tile.
 

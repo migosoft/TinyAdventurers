@@ -26,7 +26,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapFollowed, snapGround, viewRay, type Cam } from './camera';
-import { bedAt, depthFade, isWater, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
+import { bedAt, depthFade, growAt, isWater, LAVA_LEVEL, NOTHING_HIDDEN, walkBedAt, WATER_LEVEL } from './dips/shape';
 import { LAVA_SINK } from './dips/descent';
 import { AMBIENT } from './light';
 import { Figures3d, screenAim, SHADE_FADE, SPECTRE_FORM, SPECTRE_SINK, untinted, type FigureOut } from './figures';
@@ -2171,9 +2171,10 @@ describe('Figures3d on the bed of a dip (#324)', () => {
   });
 
   it('draws no shadow under water or in the air, and one at the bed on the bank above the level', () => {
-    const bank = dipFigs().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: 0.9 * TILE, y: 1.5 * TILE })]), cam());
+    const bx = 0.9 - growAt(1, 1.5);   // a tenth of a tile outside the drawn shore, which grows past the tiles (#444)
+    const bank = dipFigs().frame(frame([ent(10, KIND.Knight, { side: SIDE.Friendly, x: bx * TILE, y: 1.5 * TILE })]), cam());
     expect(bank.shadows.n).toBe(1);
-    expect(bedAt(dm, 0.9, 1.5)).toBeGreaterThanOrEqual(WATER_LEVEL);
+    expect(bedAt(dm, bx, 1.5)).toBeGreaterThanOrEqual(WATER_LEVEL);
     const wade = dipFigs().frame(frame([knight(1, 1)]), cam());
     expect(wade.shadows.n).toBe(0);
     const air = dipFigs().frame(frame([knight(3, 1, { anim: ANIM.Dash })]), cam());   // dashing over the deep: above its bed

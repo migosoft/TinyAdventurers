@@ -6,7 +6,7 @@ import { noise, type Rgb } from '../../game/covemath';
 import { P } from '../trees/kinds';
 import { TILE, type TileMap } from '../../sim/map';
 import { heightAt } from '../heights';
-import { isWater, maskAt } from '../dips/shape';
+import { growAt, isWater, maskAt } from '../dips/shape';
 import { STONE_PX } from '../stone/field';
 import { onPiece, piecesOf, type Marks } from '../stone/place';
 import { COVER } from './kinds';
@@ -47,7 +47,8 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, marks: Marks, op
   const wall = (x: number, z: number): boolean => heightAt(map, x, z) > 0;
 
   // A waterside tile (a Floor tile with water among its eight neighbours) is always mossy, corridor or not: moss rims every pool.
-  const eligible = new Uint8Array(tw * th), waterside = new Uint8Array(tw * th);
+  // A shore tile (water within two tiles) carries the rim's band only: the drawn shore grows past the tiles (#444), and the band with it.
+  const eligible = new Uint8Array(tw * th), waterside = new Uint8Array(tw * th), shore = new Uint8Array(tw * th);
   for (let ty = 0; ty < th; ty++) for (let tx = 0; tx < tw; tx++) {
     if (map.get(tx, ty) !== TILE_ID.Floor) continue;
     if (cove && tx >= cove.x && tx < cove.x + cove.w && ty >= cove.y && ty < cove.y + cove.h) continue;
@@ -61,6 +62,7 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, marks: Marks, op
     if (!wet && ((wall(tx - 1, ty) && wall(tx + 1, ty)) || (wall(tx, ty - 1) && wall(tx, ty + 1)))) continue; // corridor
     eligible[ty * tw + tx] = 1;
     if (wet) waterside[ty * tw + tx] = 1;
+    for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (isWater(map.get(tx + dx, ty + dz))) shore[ty * tw + tx] = 1;
   }
 
   const area = noise(seed, MOSS.area * TILE), wobble = noise(seed + 1, 48), fine = noise(seed + 2, 6);
@@ -111,7 +113,7 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, marks: Marks, op
         const gu = ((x + 0.5) * STONE_PX) / TILE - 0.5, gv = ((y + 0.5) * STONE_PX) / TILE - 0.5;
         if (basins.some((p) => Math.hypot((x + 0.5) / TILE - p.x, (y + 0.5) / TILE - p.z) < p.r) || pits.some((s) => onPiece(gu, gv, s.x0, s.z0, s.x1, s.z1, s.half))) continue;
         allow[o] = 1;
-        if (!mossy[i]) continue;
+        if (!mossy[i] && !shore[i]) continue;
         let d = 99;
         if (reach > 0) {
           for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
@@ -122,18 +124,19 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, marks: Marks, op
           }
         }
         let on = reach > 0 && d < reach + (wobble(x, y) - 0.5) * 2 * MOSS.wobble;
-        if (!on && waterside[i]) {
-          // From the water's edge: the distance to the nearest water tile, like the distance to a wall above.
+        if (!on && shore[i]) {
+          // From the drawn shore: the distance (px) to the nearest water tile, less how far the shore grows past it here (#444). The
+          // band ends within two tiles (EDGE_GROW + waterReach + wobble), which the shore tiles cover.
           let dw = 99;
-          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
             if ((dx || dz) && isWater(map.get(tx + dx, ty + dz))) {
-              const ex = dx < 0 ? lx + 1 : dx > 0 ? TILE - lx : 0, ez = dz < 0 ? ly + 1 : dz > 0 ? TILE - ly : 0;
+              const ex = dx < 0 ? lx + 1 + (-dx - 1) * TILE : dx > 0 ? (dx * TILE) - lx : 0, ez = dz < 0 ? ly + 1 + (-dz - 1) * TILE : dz > 0 ? (dz * TILE) - ly : 0;
               dw = Math.min(dw, Math.hypot(ex, ez));
             }
           }
-          on = dw < MOSS.waterReach + (wobble(x, y) - 0.5) * 2 * MOSS.wobble;
+          on = dw - growAt((x + 0.5) / TILE, (y + 0.5) / TILE) * TILE < MOSS.waterReach + (wobble(x, y) - 0.5) * 2 * MOSS.wobble;
         }
-        if (!on) for (const p of patches) if (((x + 0.5 - p.x) / p.rx) ** 2 + ((y + 0.5 - p.y) / p.ry) ** 2 < 1) { on = true; break; }
+        if (!on && mossy[i]) for (const p of patches) if (((x + 0.5 - p.x) / p.rx) ** 2 + ((y + 0.5 - p.y) / p.ry) ** 2 < 1) { on = true; break; }
         if (on) grow[o] = 1;
       }
     }

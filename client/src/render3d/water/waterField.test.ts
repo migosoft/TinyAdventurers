@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TileMap } from '../../sim/map';
-import { BED_RES, OUTLINE_EDGE, bedAt, isWater, maskAt } from '../dips/shape';
+import { BED_RES, OUTLINE_EDGE, bedAt, inDipMesh, isWater, maskAt } from '../dips/shape';
 import { ROCK, stoneField } from '../stone/field';
 import { noMarks } from '../stone/place';
 import { PUDDLE_LEVEL, floorHeight } from '../stone/shape';
@@ -9,8 +9,8 @@ import { pondField, setPondField } from '../pond/pondField';
 import type { PondInfo } from '../../generated/PondInfo';
 import { FIELD_STRIDE as S, refreshWaterField, sampleWaterField, waterField } from './waterField';
 
-/** The weighted sum of the bed and the mask of the field of the test below, recorded before puddles existed (and before the field held the current, #360: two floats per texel then). */
-const PINNED_SUM = -4653.0024;
+/** The weighted sum of the bed and the mask of the field of the test below, recorded before puddles existed (and before the field held the current, #360: two floats per texel then); re-recorded once for the warped outline (#444). */
+const PINNED_SUM = -4850.3254;
 
 const CH: Record<string, number> = {
   '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, W: TILE_ID.DeepWater,
@@ -35,8 +35,11 @@ describe('waterField', () => {
     let wet = 0, deep = 0;
     for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
       const k = j * f.w + i, x = i / BED_RES, z = j / BED_RES;
-      expect(f.data[S *k], `bed at ${i}, ${j}`).toBe(Math.fround(bedAt(m, x, z)));
-      expect(f.data[S *k + 1], `mask at ${i}, ${j}`).toBe(Math.fround(maskAt(m, x, z, isWater)));
+      // a point inside a wall is not evaluated (the warped outline's lip may reach under the wall, #444)
+      const touches = [[Math.ceil(x) - 1, Math.ceil(z) - 1], [Math.floor(x), Math.ceil(z) - 1], [Math.ceil(x) - 1, Math.floor(z)], [Math.floor(x), Math.floor(z)]]
+        .some(([cx, cz]) => inDipMesh(m, cx, cz));
+      expect(f.data[S *k], `bed at ${i}, ${j}`).toBe(touches ? Math.fround(bedAt(m, x, z)) : 0);
+      expect(f.data[S *k + 1], `mask at ${i}, ${j}`).toBe(touches ? Math.fround(maskAt(m, x, z, isWater)) : 0);
       if (f.data[S *k + 1] > OUTLINE_EDGE) wet++;
       if (f.data[S *k] < -1) deep++;
     }
