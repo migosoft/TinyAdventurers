@@ -469,7 +469,7 @@ fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], c
                 (r.y + 1..r.y + r.h - 1)
                     .flat_map(|y| (r.x + 1..r.x + r.w - 1).map(move |x| (x, y)))
                     .filter(|&(x, y)| {
-                        (-1..=1).all(|dy| (-1..=1).all(|dx| map.safe(x + dx, y + dy) && !chest_tiles.contains(&(x + dx, y + dy))))
+                        map.get(x, y) == Tile::Floor as u8 && (-1..=1).all(|dy| (-1..=1).all(|dx| map.safe(x + dx, y + dy) && !chest_tiles.contains(&(x + dx, y + dy))))
                     })
                     .collect::<Vec<_>>()
             })
@@ -700,7 +700,7 @@ fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i3
 /// the deep centre; lava pools are all lava.
 fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32, Tile)>> {
     let (max_w, max_h) = (r.w - 2, r.h - 2);
-    let (min, cap) = if liquid == Liquid::Water { (5, (9, 7)) } else { (4, (7, 6)) };
+    let (min, cap) = if liquid == Liquid::Water { (5, (11, 9)) } else { (4, (7, 6)) };
     if max_w < min || max_h < min {
         return None;
     }
@@ -717,7 +717,7 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32,
             if !inside(x, y) {
                 continue;
             }
-            let deep = (-1..=1).all(|dy| (-1..=1).all(|dx| inside(x + dx, y + dy)));
+            let deep = (-2..=2).all(|dy| (-2..=2).all(|dx| inside(x + dx, y + dy)));
             let t = match liquid {
                 Liquid::Lava => Tile::Lava,
                 Liquid::Water if deep => Tile::DeepWater,
@@ -1082,6 +1082,32 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
 mod tests {
     use super::*;
     use crate::dungeon::is_terrain;
+
+    #[test]
+    fn water_pools_have_two_rings_of_shallows() {
+        let room = Rect { x: 0, y: 0, w: 14, h: 12 };
+        let (mut wide, mut cored, mut total) = (0, 0, 0);
+        for seed in 0..200u64 {
+            let cells = pool(&mut ChaCha8Rng::seed_from_u64(seed), &room, Liquid::Water).unwrap();
+            let set: std::collections::HashSet<(i32, i32)> = cells.iter().map(|c| (c.0, c.1)).collect();
+            for &(x, y, t) in &cells {
+                if t == Tile::DeepWater {
+                    for dy in -2..=2 {
+                        for dx in -2..=2 {
+                            assert!(set.contains(&(x + dx, y + dy)), "seed {seed}");
+                        }
+                    }
+                }
+            }
+            let xs = cells.iter().map(|c| c.0);
+            let w = xs.clone().max().unwrap() - xs.min().unwrap() + 1;
+            total += 1;
+            wide += (w >= 10) as i32;
+            cored += cells.iter().any(|c| c.2 == Tile::DeepWater) as i32;
+        }
+        eprintln!("pools {total}: width>=10 {wide}, deep core {cored}");
+        assert!(wide > 0 && cored > 0);
+    }
 
     #[test]
     fn regions_puts_rooms_first() {

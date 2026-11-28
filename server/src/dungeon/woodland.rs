@@ -1307,7 +1307,8 @@ mod tests {
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
         // Re-pinned in #431: bigger ponds, more footbridges. Re-pinned in #438: willows at the pond (seed 42 keeps its value).
         // Re-pinned in #445 (rand 0.10): the random stream maps differently, so every seed's map differs. Rules unchanged.
-        assert_eq!(got, vec![17380683272970541128, 10700253614260391318, 10900070364394571890, 10752533025122834650, 5257703936492519330]);
+        // Re-pinned in #448: the shallows around a pond's deep part are a tile wider (DEEP_IN 3.0); seeds 1, 2 and 3 differ, 7 and 42 have no deep part that changes.
+        assert_eq!(got, vec![18385793181006754425, 11857959918021212177, 4924031797302141272, 10752533025122834650, 5257703936492519330]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
