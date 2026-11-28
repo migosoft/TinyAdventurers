@@ -13,7 +13,7 @@ pub struct Blob {
     pub ry: f64,
 }
 
-pub const DEEP_IN: f64 = 2.4; // balancing
+pub const DEEP_IN: f64 = 3.0; // balancing
 const WOBBLE_AMP: f64 = 0.6; // balancing
 const WOBBLE_WAVE: f64 = 4.0; // balancing
 const PATH_STEP: f64 = 3.0; // balancing
@@ -183,6 +183,19 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn deep_is_two_tiles_from_the_shore() {
+        for seed in 0..50 {
+            let tiles = blob_tiles(&[blob(30.0, 30.0, 6.0, 5.0)], seed);
+            let water: HashSet<(i32, i32)> = tiles.iter().map(|t| (t.0, t.1)).collect();
+            assert!(tiles.iter().any(|t| t.2 == Tile::DeepWater), "seed {seed}");
+            let deep: Vec<_> = tiles.iter().filter(|t| t.2 == Tile::DeepWater).collect();
+            // The wobble can pinch a ring of shallows to one tile in a few places, so most (not all) have two.
+            let two = deep.iter().filter(|t| (-2..=2).all(|dy| (-2..=2).all(|dx| water.contains(&(t.0 + dx, t.1 + dy))))).count();
+            assert!(two * 10 >= deep.len() * 9, "seed {seed}: {two} of {}", deep.len());
         }
     }
 

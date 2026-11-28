@@ -87,7 +87,7 @@ export const FX_LIFE: Readonly<Record<FxKind, number>> = {
   [FX_KIND.ShadeVeil]: 1,
   [FX_KIND.RimDust]: 0.6,
   [FX_KIND.WaterSplash]: 0.45,
-  [FX_KIND.WaterDrop]: 0.35,
+  [FX_KIND.WaterDrop]: 0.9, // a bubble's longest life (waterFx.ts BUBBLE); a spray droplet ends sooner by its own life
   [FX_KIND.LavaBurst]: 1.2,
   [FX_KIND.LavaSpray]: 0.3,
 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FLAG, KIND, SIDE } from '../generated/defs';
+import { CONST, FLAG, KIND, SIDE } from '../generated/defs';
 import { meleeFoe, shotPassesThrough } from './shotTargets';
 
 describe('shotPassesThrough', () => {
@@ -47,5 +47,12 @@ describe('meleeFoe', () => {
     expect(meleeFoe({ kind: KIND.OrcWarrior, side: SIDE.Hostile, flags: 0 })).toBe(true);
     expect(meleeFoe({ kind: KIND.OrcWarrior, side: SIDE.Hostile, flags: FLAG.AIRBORNE })).toBe(false);
     expect(meleeFoe({ kind: KIND.Paladin, side: SIDE.Friendly, flags: 0 })).toBe(false);
+  });
+  it('one whose head is under water is out of reach (server melee_targets), one still swimming is not', () => {
+    const orc = { kind: KIND.OrcWarrior, side: SIDE.Hostile, flags: 0 };
+    expect(meleeFoe({ ...orc, drown: 0 })).toBe(true);
+    expect(meleeFoe({ ...orc, drown: 1 + Math.round((CONST.HEAD_UNDER - 0.2) * 10) })).toBe(true);
+    expect(meleeFoe({ ...orc, drown: 1 + Math.round(CONST.HEAD_UNDER * 10) })).toBe(false);
+    expect(meleeFoe({ ...orc, drown: 1 + Math.round(CONST.HEAD_UNDER * 10) + 128 })).toBe(false);
   });
 });

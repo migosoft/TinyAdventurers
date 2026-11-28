@@ -2,6 +2,7 @@ import { TILE_ID } from '../../generated/defs';
 import { cellHeight } from '../heights';
 import type { TileMap } from '../../sim/map';
 import type { PondField } from '../pond/pondField';
+import { deepSlope } from '../pond/pondField';
 
 /** Which kind of dip a terrain tile makes. */
 export const DIP = { none: 0, water: 1, lava: 2, chasm: 3 } as const;
@@ -13,8 +14,10 @@ export const SHALLOW_BED = 0.55, DEEP_BED = 2.3, LAVA_BED = 1.7, CHASM_BED = 12;
 /** The mask's value on a straight cell edge: the dip's outline. The bank starts here, the liquid's surface lies inside it, and the dip material's broken-off floor pieces break off by it. */
 export const OUTLINE_EDGE = 0.5;
 /** The mask value at which each bed reaches its full depth (the slope of the bank). */
-export const STEEP = { water: 0.85, deep: 0.95, lava: 0.8, chasm: 0.56 } as const;
+export const STEEP = { water: 0.85, lava: 0.8, chasm: 0.56 } as const;
 export const ROUGH = 0.06, LIP = 0.05;
+/** The deep water's share of the bed is gone where a chasm's mask leaves less than this of the cell (1 - mask below it): inside the chasm's outline. */
+const CHASM_YIELD = 0.95;
 
 /** The dip kind of a tile id: ShallowWater and DeepWater water, Lava lava, Chasm chasm, everything else none. */
 export function dipOf(tile: number): DipKind {
@@ -172,7 +175,19 @@ function vnoise(x: number, z: number): number {
 }
 
 export const isWater = (t: number) => t === TILE_ID.ShallowWater || t === TILE_ID.DeepWater;
-const isDeep = (t: number) => t === TILE_ID.DeepWater;
+
+/** Signed distance in tiles from (x, z) to the DeepWater tiles' edge, positive inside them, from the 5 by 5 cells around, clamped to +-2. */
+export function deepDistAt(map: TileMap, x: number, z: number): number {
+  const cx = Math.floor(x), cz = Math.floor(z), inDeep = map.get(cx, cz) === TILE_ID.DeepWater;
+  let d2 = 4;
+  for (let j = cz - 2; j <= cz + 2; j++) for (let i = cx - 2; i <= cx + 2; i++) {
+    if ((map.get(i, j) === TILE_ID.DeepWater) === inDeep) continue;   // the nearest cell of the other kind
+    const dx = Math.max(i - x, 0, x - i - 1), dz = Math.max(j - z, 0, z - j - 1);
+    d2 = Math.min(d2, dx * dx + dz * dz);
+  }
+  const d = Math.sqrt(d2);
+  return inDeep ? d : -d;
+}
 export const isLava = (t: number) => t === TILE_ID.Lava;
 export const isChasm = (t: number) => t === TILE_ID.Chasm;
 
@@ -207,11 +222,13 @@ export function waterMaskAt(map: TileMap, x: number, z: number): number {
 
 function bed(map: TileMap, x: number, z: number, chasm: boolean): number {
   const pond = pondFieldOf(map);
-  const mW = pond ? pond.wetAt(x, z) : grownMask(map, x, z, isWater), mD = grownMask(map, x, z, isDeep);
+  const mW = pond ? pond.wetAt(x, z) : grownMask(map, x, z, isWater);
   const mL = grownMask(map, x, z, isLava), mC = chasmMask(map, x, z);
   const any = Math.max(mW, mL, mC);
   if (any === 0) return 0;
-  const water = pond ? pond.depthAt(x, z) : SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.deep, mD);
+  // A dungeon pool slopes into the deep as the woodland pond does (#448); the shallow part keeps the grown outline (#444).
+  // The grown outline of a chasm gives way to the water's, so the two depths never add: the deep part is gone inside a chasm's outline (as the old deep mask was).
+  const water = pond ? pond.depthAt(x, z) : SHALLOW_BED * ss(OUTLINE_EDGE, STEEP.water, mW) + (DEEP_BED - SHALLOW_BED) * ss(OUTLINE_EDGE, STEEP.water, mW) * ss(OUTLINE_EDGE, CHASM_YIELD, 1 - mC) * deepSlope(0, x, z, deepDistAt(map, x, z));
   let h = -water
     - LAVA_BED * ss(OUTLINE_EDGE, STEEP.lava, mL) - (chasm ? CHASM_BED * ss(OUTLINE_EDGE, STEEP.chasm, mC) : 0);
   h += (vnoise(x * 4.3, z * 4.3) - 0.5) * 2 * ROUGH * ss(OUTLINE_EDGE, 0.7, any) * (1 - ss(0.56, 0.9, mC));

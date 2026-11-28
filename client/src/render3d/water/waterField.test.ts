@@ -9,8 +9,8 @@ import { pondField, setPondField } from '../pond/pondField';
 import type { PondInfo } from '../../generated/PondInfo';
 import { FIELD_STRIDE as S, refreshWaterField, sampleWaterField, waterField } from './waterField';
 
-/** The weighted sum of the bed and the mask of the field of the test below, recorded before puddles existed (and before the field held the current, #360: two floats per texel then); re-recorded once for the warped outline (#444). */
-const PINNED_SUM = -4912.1521;
+/** The weighted sum of the bed and the mask of the field of the test below, recorded before puddles existed (and before the field held the current, #360: two floats per texel then); re-recorded once for the warped outline (#444) and again for the gentle slope into the deep (#448). */
+const PINNED_SUM = -4979.7072;
 
 const CH: Record<string, number> = {
   '#': TILE_ID.Wall, '.': TILE_ID.Floor, '~': TILE_ID.ShallowWater, W: TILE_ID.DeepWater,

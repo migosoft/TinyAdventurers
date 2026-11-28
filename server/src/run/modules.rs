@@ -312,13 +312,9 @@ mod tests {
     #[test]
     fn a_leaper_on_deep_water_with_pounce_cooling_drowns() {
         let (mut run, mi) = suffers(Tile::DeepWater);
-        let id = run.monsters[mi].id;
         run.step();
-        assert!(run.monsters[mi].dash.is_none() && run.monsters[mi].sinking.is_some_and(|(_, how)| how == Sink::Drown));
-        for _ in 0..80 {
-            run.step();
-        }
-        assert!(run.monsters.iter().all(|m| m.id != id), "it drowned and is gone");
+        assert!(run.monsters[mi].dash.is_none() && run.monsters[mi].water_t > 0.0, "the drowning state: no leap, the clock runs");
+        assert!(run.monsters[mi].sinking.is_none(), "no sinking: it drowns by breath");
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, dir: f64, side: ta
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !p.effects.has(EffectKind::Invisible))
+        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !crate::dungeon::head_under(p.water_total()) && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, dir, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -44,7 +44,7 @@ pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
     let others = (0..run.monsters.len()).filter(|&i| run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
     heroes
         .chain(others)
-        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
+        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
         .filter(|&(_, p)| super::perception::sees(run, sight, from, dir, p))
         .map(|(c, p)| (c, p.dist(from)))
@@ -63,7 +63,7 @@ pub(crate) fn set_anim(run: &mut Run, mi: usize, a: Anim) {
 /// A monster on ground it cannot walk (blown into lava): it walks straight
 /// to the nearest tile it can, ignoring heroes until it is out.
 pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
-    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul());
+    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul() * run.monsters[mi].swim_mul());
     if speed <= 0.0 {
         return;
     }
@@ -154,7 +154,7 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let mover = m.mover_now();
     // Walking off the facing is slower; a flying creature (a dash) goes where it likes.
     let off = if mover == Mover::Dash { 1.0 } else { super::facing::off_facing_mul(d.angle(), m.aim) };
-    let speed = speed * m.effects.speed_mul() * off;
+    let speed = speed * m.effects.speed_mul() * m.swim_mul() * off;
     if speed <= 0.0 {
         return false;
     }
@@ -293,11 +293,15 @@ fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
 }
 
 /// May this monster rest here (idle, wait, attack)? Ordinary monsters always may; a phantom may not
-/// inside a wall, a closed door or a solid object, which it can only pass through.
+/// inside a wall, a closed door or a solid object, which it can only pass through; a breathless one not in deep water.
 pub(crate) fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
     let m = &run.monsters[mi];
-    m.mover != Mover::Incorporeal
-        || run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius)
+    // A breathless creature never rests in deep water either (it would sit there untouchable once its head is under).
+    match m.mover {
+        Mover::Incorporeal => run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius),
+        Mover::Breathless => run.layout.map.can_stop_at(p, m.mover),
+        _ => true,
+    }
 }
 
 /// A phantom that is somewhere it may not rest walks straight to the nearest spot it may.
@@ -353,7 +357,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).
     let mut seen = match &run.monsters[mi].companion {
-        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
+        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && !run.under(pc) && super::perception::sees(run, sight, pos, dir, run.creature_pos(pc))),
         None => find_visible_foe(run, mi),
     };
     // A chaser whose head glances at a blow keeps the target it is engaged with while it is in the open; a closer
@@ -364,7 +368,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         let held = match run.monsters[mi].ai.target {
             Some(Target::Player(id) | Target::Monster(id)) => run
                 .creature_by_id(id)
-                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible) && super::perception::in_open(run, sight, pos, run.creature_pos(c))),
+                .filter(|&c| run.creature_alive(c) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible) && super::perception::in_open(run, sight, pos, run.creature_pos(c))),
             _ => None,
         };
         if let Some(t) = held {
@@ -400,7 +404,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             // An invisible target is hidden, however open the ground between.
             Some(Target::Player(id) | Target::Monster(id)) => run
                 .creature_by_id(id)
-                .filter(|&c| run.creature_alive(c) && !run.has_effect(c, EffectKind::Invisible))
+                .filter(|&c| run.creature_alive(c) && !run.under(c) && !run.has_effect(c, EffectKind::Invisible))
                 .map(|c| run.creature_pos(c)),
             _ => None,
         };
@@ -478,7 +482,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         let foe = seen.or_else(|| match run.monsters[mi].ai.target {
-            Some(Target::Player(id) | Target::Monster(id)) => run.creature_by_id(id).filter(|&c| run.creature_alive(c)),
+            Some(Target::Player(id) | Target::Monster(id)) => run.creature_by_id(id).filter(|&c| run.creature_alive(c) && !run.under(c)),
             _ => None,
         });
         if let Some(foe) = foe {
@@ -801,7 +805,9 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
             }
             // Tiles beside a barrel are a tight squeeze for a wide body only: go around when there is room.
             let squeeze = clear && nb != goal && (-1..=1).any(|dy| (-1..=1).any(|dx| blocked.contains(&(nb.0 + dx, nb.1 + dy))));
-            let ng = cg + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
+            // A wade is slow and cannot be rested in: worth it only against a clearly longer way round.
+            let wade = if mover == Mover::Breathless && map.get(nb.0, nb.1) == crate::dungeon::Tile::DeepWater as u8 { 3 } else { 0 };
+            let ng = cg + wade + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
             if g.get(&nb).map_or(true, |&old| ng < old) {
                 g.insert(nb, ng);
                 came.insert(nb, cur);
@@ -1286,6 +1292,35 @@ pub(crate) mod tests {
         assert!(!around(&astar(&m, from, to, 1000, Mover::Demon).unwrap()), "demons walk through lava");
         let past = Map::center_of(9, 2);
         assert!(around(&astar(&m, from, past, 1000, Mover::Demon).unwrap()), "demons go around chasms");
+    }
+
+    #[test]
+    fn a_skeleton_paths_through_deep_water_but_never_stops_in_it() {
+        // A wall column at x = 5 with one deep tile at (5, 2); `gap` rows of floor open the way round.
+        let wall = |gap_from: i32| {
+            let mut m = Map::new(12, 14);
+            for y in 1..13 {
+                for x in 1..11 {
+                    m.set(x, y, Tile::Floor);
+                }
+            }
+            for y in 1..gap_from {
+                m.set(5, y, Tile::Wall);
+            }
+            m.set(5, 2, Tile::DeepWater);
+            m
+        };
+        let (from, to) = (Map::center_of(2, 2), Map::center_of(8, 2));
+        let wades = |p: &Vec<Vec2>| p.iter().any(|w| Map::tile_of(*w) == (5, 2));
+        // The dry way round is much longer: through the moat.
+        let far = wall(12);
+        let p = astar(&far, from, to, 1000, Mover::Breathless).unwrap();
+        assert!(wades(&p), "wades the moat");
+        assert!(!far.can_stop(5, 2, Mover::Breathless), "but never rests in it");
+        assert!(astar(&far, from, to, 1000, Mover::Enemy).is_some_and(|p| !wades(&p)), "an ordinary enemy goes round");
+        // The way round is one step shorter than the wade: round.
+        let near = wall(3);
+        assert!(!wades(&astar(&near, from, to, 1000, Mover::Breathless).unwrap()), "round when it is shorter");
     }
 
     #[test]

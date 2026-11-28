@@ -100,11 +100,13 @@ pub struct MoveState {
     /// Knockback velocity (px/s), decaying each step; zero when not pushed.
     pub knock_vx: f64,
     pub knock_vy: f64,
+    /// Seconds in deep water (0 outside it); the head is under from `HEAD_UNDER` on.
+    pub water_t: f64,
 }
 
 impl MoveState {
     pub fn at(x: f64, y: f64) -> MoveState {
-        MoveState { x, y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0, knock_vx: 0.0, knock_vy: 0.0 }
+        MoveState { x, y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0, knock_vx: 0.0, knock_vy: 0.0, water_t: 0.0 }
     }
     /// Being pushed: no control over movement or abilities until the slide ends.
     pub fn knocked(&self) -> bool {
@@ -125,7 +127,10 @@ pub fn step_move(map: &Map, s: &MoveState, mx: i8, my: i8, speed: f64, dash_spee
     let mut n = *s;
     let knocked = n.dash_t <= 0.0 && n.knocked();
     let mover = if n.dash_t > 0.0 || knocked { Mover::Dash } else { Mover::Hero };
-    let speed = speed * map.speed_factor(Vec2::new(n.x, n.y), mover);
+    // A pushed hero keeps counting: only a dash (in the air) stops the clock.
+    let tile = map.tile_at(Vec2::new(n.x, n.y));
+    n.water_t = if crate::dungeon::drowning_tile(tile, n.dash_t > 0.0) { n.water_t + dt } else { 0.0 };
+    let speed = speed * map.speed_factor(Vec2::new(n.x, n.y), mover) * crate::dungeon::under_factor(n.water_t);
     let (vx, vy) = if n.dash_t > 0.0 {
         n.dash_t = (n.dash_t - dt).max(0.0);
         (n.dash_dx * dash_speed, n.dash_dy * dash_speed)
@@ -268,8 +273,8 @@ mod tests {
         m.set(4, 2, Tile::Chasm);
         m.set(5, 2, Tile::Lava);
         use Mover::*;
-        // Blocked for [Hero, Enemy, Demon, Dash].
-        for (x, want) in [(2, [false; 4]), (3, [true, true, true, false]), (4, [false, true, true, false]), (5, [false, true, false, false])] {
+        // Blocked for [Hero, Enemy, Demon, Dash]: a hero is blocked by no terrain (#448).
+        for (x, want) in [(2, [false; 4]), (3, [false, true, true, false]), (4, [false, true, true, false]), (5, [false, true, false, false])] {
             for (mover, w) in [Hero, Enemy, Demon, Dash].into_iter().zip(want) {
                 assert_eq!(m.blocks(x, 2, mover), w, "tile {x}, {mover:?}");
             }
@@ -300,18 +305,91 @@ mod tests {
             m.set(4, y, Tile::Chasm);
             m.set(5, y, Tile::DeepWater);
         }
-        // Walking: into the chasm, stopped by deep water.
+        // Walking: into the chasm and on into the deep water, which no longer stops a hero.
         let mut s = MoveState::at(40.0, 40.0);
-        for _ in 0..120 {
+        for _ in 0..55 {
             s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
-        assert!((s.x - (5.0 * TILE - 5.0)).abs() < 1e-9, "x {}", s.x);
+        assert_eq!(m.tile_at(Vec2::new(s.x, s.y)), Tile::DeepWater as u8, "x {}", s.x);
         // Dashing: over both.
         let mut d = MoveState { dash_t: 0.3, dash_dx: 1.0, dash_dy: 0.0, ..MoveState::at(40.0, 40.0) };
         for _ in 0..18 {
             d = step_move(&m, &d, 0, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         assert!(d.x > 6.0 * TILE, "x {}", d.x);
+    }
+
+    #[test]
+    fn water_t_counts_in_deep_water_and_slows() {
+        use crate::dungeon::{HEAD_UNDER, SWIM_SPEED, UNDER_SPEED};
+        let dt = 1.0 / 60.0;
+        let mut m = room();
+        for y in 1..9 {
+            m.set(3, y, Tile::DeepWater);
+            m.set(4, y, Tile::DeepWater);
+            m.set(5, y, Tile::DeepWater);
+            m.set(6, y, Tile::DeepWater);
+        }
+        let mut s = MoveState::at(20.0, 40.0);
+        let mut want_t = 0.0;
+        let mut prev = s.x;
+        let mut head_seen = false;
+        for _ in 0..200 {
+            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, dt, &[]);
+            let inside = m.tile_at(Vec2::new(prev, 40.0)) == Tile::DeepWater as u8;
+            want_t = if inside { want_t + dt } else { 0.0 };
+            assert!((s.water_t - want_t).abs() < 1e-9, "water_t {} want {want_t}", s.water_t);
+            let step = s.x - prev;
+            if inside {
+                let k = if want_t >= HEAD_UNDER { UNDER_SPEED } else { SWIM_SPEED };
+                head_seen |= want_t >= HEAD_UNDER;
+                assert!((step - 60.0 * k * dt).abs() < 1e-9, "step {step} at t {want_t}");
+            }
+            prev = s.x;
+        }
+        assert!(head_seen, "the column is long enough to put the head under");
+        assert_eq!(s.water_t, 0.0, "out on the floor again");
+        // Walking back out onto the floor resets the clock in that very step.
+        let mut s = MoveState { water_t: 0.5, ..MoveState::at(2.5 * TILE, 40.0) };
+        s = step_move(&m, &s, -1, 0, 60.0, 300.0, 5.0, dt, &[]);
+        assert_eq!(s.water_t, 0.0);
+    }
+
+    /// The same numbers are asserted by the client's `sim.test.ts` ("walk-in and walk-out numbers"): a drift on either side fails.
+    #[test]
+    fn walk_in_and_out_numbers() {
+        let mut m = room();
+        for y in 1..9 {
+            for x in 3..=6 {
+                m.set(x, y, Tile::DeepWater);
+            }
+        }
+        let mut s = MoveState::at(20.0, 40.0);
+        let mut got = Vec::new();
+        for i in 1..=200 {
+            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
+            if [28, 30, 60, 100, 140, 160, 200].contains(&i) {
+                got.push((i, s.x, s.water_t));
+            }
+        }
+        let want = [(28, 48.0, 0.0), (30, 49.400000000000006, 0.03333333333333333), (60, 70.40000000000009, 0.5333333333333333), (100, 98.0500000000002, 1.2000000000000006), (140, 112.04999999999997, 1.866666666666665), (160, 132.04999999999995, 0.0), (200, 139.0, 0.0)];
+        assert_eq!(got.len(), want.len());
+        for (g, w) in got.iter().zip(want) {
+            assert!(g.0 == w.0 && (g.1 - w.1).abs() < 1e-9 && (g.2 - w.2).abs() < 1e-9, "{g:?} vs {w:?}");
+        }
+    }
+
+    #[test]
+    fn a_dash_stops_the_water_clock() {
+        let mut m = room();
+        for y in 1..9 {
+            m.set(3, y, Tile::DeepWater);
+            m.set(4, y, Tile::DeepWater);
+        }
+        let mut s = MoveState { dash_t: 0.3, dash_dx: 1.0, ..MoveState::at(3.5 * TILE, 40.0) };
+        s = step_move(&m, &s, 0, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
+        assert_eq!(s.water_t, 0.0);
+        assert!((s.x - (3.5 * TILE + 300.0 / 60.0)).abs() < 1e-9, "dash speed: {}", s.x);
     }
 
     #[test]

@@ -6,7 +6,7 @@ import { lineOfSight, moveBox, stepMove, type MoveState } from './collision';
 import { Fov } from './fov';
 import { View } from './view';
 import { TILE, TileMap, type Mover } from './map';
-import { TILE_ID } from '../generated/defs';
+import { CONST, TILE_ID } from '../generated/defs';
 
 const map = new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
 
@@ -14,7 +14,7 @@ describe('collision port', () => {
   it('matches the server step for step', () => {
     const solids = fixtures.solids.map(([x, y, half]) => ({ x, y, half }));
     for (const c of fixtures.moves) {
-      let s: MoveState = { x: c.start[0], y: c.start[1], dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
+      let s: MoveState = { x: c.start[0], y: c.start[1], dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0, waterT: 0 };
       c.inputs.forEach((inp, i) => {
         if (inp.dash) {
           s = { ...s, dashT: 0.18, dashDx: inp.dash[0], dashDy: inp.dash[1] };
@@ -118,10 +118,67 @@ describe('tile rules', () => {
     for (const r of fixtures.tileRules) {
       one.set(0, 0, r.id);
       expect([one.opaque(0, 0), one.hardOpaque(0, 0)], `tile ${r.id}`).toEqual([r.opaque, r.hardOpaque]);
-      for (const mover of ['hero', 'enemy', 'demon', 'dash'] as Mover[]) {
+      for (const mover of ['hero', 'enemy', 'demon', 'dash', 'breathless'] as Mover[]) {
         expect(one.blocks(0, 0, mover), `tile ${r.id} blocks ${mover}`).toBe(r.blocks[mover]);
         expect(one.speedFactor(TILE / 2, TILE / 2, mover), `tile ${r.id} speed ${mover}`).toBe(r.speed[mover]);
       }
     }
+  });
+});
+
+describe('deep water (server collision.rs: water_t_counts_in_deep_water_and_slows)', () => {
+  // Like the server's `room()`: floor inside, walls around.
+  const m = new TileMap(10, 10, new Uint8Array(100).fill(TILE_ID.Wall));
+  for (let y = 1; y < 9; y++) for (let x = 1; x < 9; x++) m.set(x, y, TILE_ID.Floor);
+  for (let y = 1; y < 9; y++) for (let x = 3; x <= 6; x++) m.set(x, y, TILE_ID.DeepWater);
+  const dt = 1 / 60;
+  const start: MoveState = { x: 20, y: 40, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0, waterT: 0 };
+
+  it('counts from the first step that starts inside, slows, and resets on leaving', () => {
+    let s = start;
+    let want = 0;
+    let headSeen = false;
+    for (let i = 0; i < 200; i++) {
+      const inside = m.tileAt(s.x, s.y) === TILE_ID.DeepWater;
+      const prev = s.x;
+      s = stepMove(m, s, 1, 0, 60, 300, 5, dt);
+      want = inside ? want + dt : 0;
+      expect(s.waterT).toBeCloseTo(want, 9);
+      if (inside) {
+        const k = want >= CONST.HEAD_UNDER ? CONST.UNDER_SPEED : CONST.SWIM_SPEED;
+        headSeen ||= want >= CONST.HEAD_UNDER;
+        expect(s.x - prev).toBeCloseTo(60 * k * dt, 9);
+      }
+    }
+    expect(headSeen).toBe(true);
+    expect(s.waterT).toBe(0);
+  });
+
+  it('walk-in and walk-out numbers equal the server\'s (collision.rs: walk_in_and_out_numbers)', () => {
+    const want: [number, number, number][] = [[28, 48.0, 0.0], [30, 49.400000000000006, 0.03333333333333333], [60, 70.40000000000009, 0.5333333333333333], [100, 98.0500000000002, 1.2000000000000006], [140, 112.04999999999997, 1.866666666666665], [160, 132.04999999999995, 0.0], [200, 139.0, 0.0]];
+    let s = start;
+    const got: [number, number, number][] = [];
+    for (let i = 1; i <= 200; i++) {
+      s = stepMove(m, s, 1, 0, 60, 300, 5, dt);
+      if (want.some((w) => w[0] === i)) got.push([i, s.x, s.waterT]);
+    }
+    got.forEach((g, k) => {
+      expect(g[0]).toBe(want[k][0]);
+      expect(g[1]).toBeCloseTo(want[k][1], 9);
+      expect(g[2]).toBeCloseTo(want[k][2], 9);
+    });
+    expect(got.length).toBe(want.length);
+  });
+
+  it('a dash stops the clock', () => {
+    const d = stepMove(m, { ...start, x: 3.5 * TILE, dashT: 0.3, dashDx: 1 }, 0, 0, 60, 300, 5, dt);
+    expect(d.waterT).toBe(0);
+    expect(d.x).toBeCloseTo(3.5 * TILE + 5, 9);
+  });
+
+  it('breathless is blocked by chasm and lava only; a hero by nothing', () => {
+    const t = new TileMap(4, 1, Uint8Array.from([TILE_ID.DeepWater, TILE_ID.Chasm, TILE_ID.Lava, TILE_ID.Floor]));
+    expect([0, 1, 2].map((x) => t.blocks(x, 0, 'breathless'))).toEqual([false, true, true]);
+    expect([0, 1, 2].map((x) => t.blocks(x, 0, 'hero'))).toEqual([false, false, false]);
   });
 });

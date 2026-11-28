@@ -2,7 +2,7 @@
 // drips that land become ripple sources (for the surface) and cues (for the droplet effects), in tiles. Pure: no three.js, no effects.
 import { CONST } from '../../generated/defs';
 import { WATER_LEVEL, isWater, pondFieldOf } from '../dips/shape';
-import type { TileMap } from '../../sim/map';
+import { headUnder, type TileMap } from '../../sim/map';
 import type { DrawnFig } from '../fx/types';
 import type { Footprint } from '../lights';
 import { Fish } from '../pond/fish';
@@ -21,7 +21,12 @@ export const PUDDLE_STIR = { enter: 1.5, ring: 1, step: 0.3, within: 0.85, foot:
 /** How far (tiles) the ripples of a drowning scatter around the spot: the plunge, the stirring. */
 const PLUNGE_SCATTER = 0.15, STIR_SCATTER = 0.2;
 
+/** Bubbles per second above a breathing creature in the drowning state (#448): while its head is above water, and from `HEAD_UNDER` on (the main sign of where it is). */
+export const SWIM_BUBBLES = { above: 2, under: 2, ring: 0.5, scatter: 0.12 } as const;
+
 export interface WaterSpot { id: number; x: number; z: number }
+/** A creature in the drowning state (`FigureOut.swims`). */
+export interface Swimmer extends WaterSpot { t: number; breathless: boolean }
 export interface WaterCues { enters: WaterSpot[]; plunges: WaterSpot[]; spray: WaterSpot[]; bubbles: WaterSpot[] }
 export interface WaterIn {
   dt: number;
@@ -29,6 +34,8 @@ export interface WaterIn {
   figs: readonly Pick<DrawnFig, 'id' | 'x' | 'z' | 'foot' | 'dashing'>[];
   /** The drownings that began this frame (`FigureOut.sinks`). */
   sinks: readonly WaterSpot[];
+  /** The creatures in the drowning state (`FigureOut.swims`): the breathing ones send bubbles up at the surface above their heads. Absent: none. */
+  swims?: readonly Swimmer[];
   /** The drips that reached the water this frame: (x, z) pairs. */
   landed: { count: number; pos: Float32Array } | null;
   /** The rings the pond's life made this frame (#360: a frog that lands, peeks or dives): (x, z, strength) triples; with `fp` only those inside it. Absent: none. */
@@ -40,7 +47,7 @@ export interface WaterIn {
 }
 
 /** `standing`: in the water last frame; a dash over water counts as in it (a figure keeps its tile during a dash), so a dash that ends in water makes no entering. */
-interface FigState { x: number; z: number; standing: boolean; puddle: boolean; walked: number; ring: number; spray: number; seen: number }
+interface FigState { x: number; z: number; standing: boolean; puddle: boolean; walked: number; ring: number; spray: number; seen: number; bubble: number }
 interface Drown { id: number; x: number; z: number; left: number; stir: number; bubble: number }
 
 /** A list of cues that reuses its spot objects from frame to frame. */
@@ -121,7 +128,7 @@ export class Water3d {
       const quiet = hidden.has(f.id);
       let s = this.states.get(f.id);
       if (!s) {
-        s = { x: f.x, z: f.z, standing, puddle, walked: 0, ring: 0, spray: 0, seen: frame };
+        s = { x: f.x, z: f.z, standing, puddle, walked: 0, ring: 0, spray: 0, seen: frame, bubble: 0 };
         this.states.set(f.id, s);
       } else {
         const speed = dt > 0 ? Math.hypot(f.x - s.x, f.z - s.z) / dt : 0;
@@ -149,6 +156,22 @@ export class Water3d {
       } else s.spray = 0;
     }
     if (this.states.size > 0) for (const [id, s] of this.states) if (s.seen !== frame) this.states.delete(id);
+
+    // A breathing creature in the drowning state bubbles at the surface above its head, every frame at its place, faster once the head is under.
+    const swims = i.swims;
+    if (swims) {
+      for (let k = 0; k < swims.length; k++) {
+        const w = swims[k], s = this.states.get(w.id);
+        if (!s || w.breathless || hidden.has(w.id)) continue;
+        s.bubble += (headUnder(w.t) ? SWIM_BUBBLES.under : SWIM_BUBBLES.above) * dt;
+        const n = Math.floor(s.bubble);
+        s.bubble -= n;
+        for (let c = 0; c < n; c++) {
+          this.bubbles.push(w.id, w.x, w.z);
+          this.ring(w.x, w.z, now, SWIM_BUBBLES.ring, SWIM_BUBBLES.scatter); // where the cluster surfaces
+        }
+      }
+    }
 
     // the drownings that began before this frame stir the water and bubble until their time is up
     let w = 0;

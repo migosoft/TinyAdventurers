@@ -150,6 +150,8 @@ pub fn may_hit(run: &Run, side: Side, c: Creature) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Skip {
     Dead,
+    /// Its head is under in deep water: nothing reaches it (`Run::under`).
+    Under,
     Ally,
     /// Neutral: nobody's foe, never a target.
     Neutral,
@@ -217,6 +219,9 @@ pub fn check(run: &Run, user: &Stance, c: Creature, pos: Vec2, rule: &Rule, hit:
     };
     if !alive {
         return Err(Skip::Dead);
+    }
+    if run.under(c) {
+        return Err(Skip::Under);
     }
     let d = pos.dist(rule.at);
     let limit = if rule.plus_radius { rule.reach + radius } else { rule.reach };
@@ -695,5 +700,78 @@ mod tests {
         let hates_both = st(Side::Neutral, true, true);
         assert!(fights(&hates_both, &hero) && fights(&enemy, &hates_both));
         assert!(!fights(&hates_both, &calm));
+    }
+}
+
+#[cfg(test)]
+mod under_tests {
+    use super::*;
+    use crate::defs::damage::Damage;
+    use crate::defs::effects::EffectKind;
+    use crate::defs::enemies::EnemyType;
+    use crate::protocol::{BossId, ClassId};
+    use crate::run::effects::Apply;
+    use crate::run::tests::test_run;
+
+    /// A lone ranger and an orc beside it; both in deep water, the orc `orc_t` and the hero `hero_t` seconds in.
+    fn swimmers(orc_t: f64, hero_t: f64) -> (Run, usize) {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
+        let spot = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, spot + Vec2::new(30.0, 0.0), None);
+        let oi = run.monster_idx(id).unwrap();
+        let (tx, ty) = crate::dungeon::Map::tile_of(spot);
+        for dy in -1..=1 {
+            for dx in -1..=2 {
+                run.layout.map.set(tx + dx, ty + dy, crate::dungeon::Tile::DeepWater);
+            }
+        }
+        run.monsters[oi].water_t = orc_t;
+        run.players[0].mv.water_t = hero_t;
+        (run, oi)
+    }
+
+    fn rule(at: Vec2) -> Rule {
+        Rule { at, reach: 80.0, plus_radius: true, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, skip_calm: false, passes: None }
+    }
+
+    #[test]
+    fn before_head_under_it_is_hit() {
+        let (mut run, oi) = swimmers(0.5, 0.5);
+        let (orc, hero) = (Creature::Monster(oi), Creature::Player(0));
+        assert!(!run.under(orc) && !run.under(hero));
+        let r = rule(run.players[0].pos());
+        assert_eq!(check(&run, &Stance::of_side(Side::Friendly), orc, run.monsters[oi].pos, &r, &[]), Ok(()));
+        assert_eq!(check(&run, &Stance::of_side(Side::Hostile), hero, run.players[0].pos(), &r, &[]), Ok(()));
+        let hp = run.monsters[oi].hp;
+        assert!(run.hurt_monster(oi, Damage::physical(5.0), false, Some(0)));
+        assert!(run.monsters[oi].hp < hp);
+        let php = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(5.0));
+        assert!(run.players[0].hp < php);
+        for c in [orc, hero] {
+            let a = Apply { power: Some(1), magical: false, ..Apply::plain(EffectKind::Slowed, Some(5.0)) };
+            assert!(run.apply(c, a), "{c:?} takes the effect");
+        }
+    }
+
+    #[test]
+    fn after_head_under_nothing_reaches_it() {
+        let (mut run, oi) = swimmers(1.3, 1.3);
+        let (orc, hero) = (Creature::Monster(oi), Creature::Player(0));
+        assert!(run.under(orc) && run.under(hero));
+        let r = rule(run.players[0].pos());
+        assert_eq!(check(&run, &Stance::of_side(Side::Friendly), orc, run.monsters[oi].pos, &r, &[]), Err(Skip::Under));
+        assert_eq!(check(&run, &Stance::of_side(Side::Hostile), hero, run.players[0].pos(), &r, &[]), Err(Skip::Under));
+        let hp = run.monsters[oi].hp;
+        assert!(!run.hurt_monster(oi, Damage::physical(5.0), false, Some(0)));
+        assert_eq!(run.monsters[oi].hp, hp);
+        let php = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(5.0));
+        assert_eq!(run.players[0].hp, php);
+        for c in [orc, hero] {
+            let a = Apply { power: Some(1), magical: false, ..Apply::plain(EffectKind::Slowed, Some(5.0)) };
+            assert!(!run.apply(c, a), "{c:?} takes no effect");
+            assert!(!run.has_effect(c, EffectKind::Slowed));
+        }
     }
 }

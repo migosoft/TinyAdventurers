@@ -3,7 +3,22 @@ import { CONST, TILE_ID } from '../generated/defs';
 export const TILE = 16;
 
 /** Who is moving. The walking rules (`TileMap.blocks`) differ per mover. Mirrors `Mover` in server/src/dungeon/mod.rs. */
-export type Mover = 'hero' | 'enemy' | 'demon' | 'dash';
+export type Mover = 'hero' | 'enemy' | 'demon' | 'dash' | 'breathless';
+
+/** Does this tile start the water clock of a walker? Here only deep water, and not mid-dash. #346's Swim trait plugs in here. Mirrors `drowning_tile`. */
+export function drowningTile(t: number, dashing: boolean): boolean {
+  return !dashing && t === TILE_ID.DeepWater;
+}
+
+/** Is the head under water after `t` seconds in deep water? Mirrors `head_under`. */
+export function headUnder(t: number): boolean {
+  return t >= CONST.HEAD_UNDER;
+}
+
+/** Factor on walking speed for the time `t` in deep water. Mirrors `under_factor`. */
+export function underFactor(t: number): number {
+  return headUnder(t) ? CONST.UNDER_SPEED / CONST.SWIM_SPEED : 1;
+}
 
 /** Which tiles stop a sight line: every opaque tile, or only the hard ones (light passes trunks and thickets). Mirrors `Blocker`. */
 export type Blocker = 'all' | 'hard';
@@ -62,7 +77,9 @@ export class TileMap {
       case 'dash':
         return false;
       case 'hero':
-        return t === TILE_ID.DeepWater;
+        return false;
+      case 'breathless':
+        return t === TILE_ID.Chasm || t === TILE_ID.Lava;
       case 'demon':
         return t === TILE_ID.DeepWater || t === TILE_ID.Chasm;
       case 'enemy':
@@ -75,6 +92,7 @@ export class TileMap {
     const t = this.tileAt(px, py);
     if (mover === 'dash') return 1;
     if (t === TILE_ID.ShallowWater) return CONST.SHALLOW_SPEED;
+    if (t === TILE_ID.DeepWater) return CONST.SWIM_SPEED;
     if (t === TILE_ID.Lava && mover !== 'demon') return CONST.LAVA_SPEED;
     return 1;
   }

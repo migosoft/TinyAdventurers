@@ -1,7 +1,7 @@
 // Port of server/src/collision.rs. Must stay operation-for-operation identical
 // so client prediction matches the server (verified by collision.test.ts).
 import { CONST, TILE_ID } from '../generated/defs';
-import { TILE, TileMap, type Mover } from './map';
+import { TILE, TileMap, drowningTile, underFactor, type Mover } from './map';
 
 const EPS = 0.001;
 
@@ -102,6 +102,8 @@ export interface MoveState {
   /** Knockback velocity (px/s), decaying each step; zero when not pushed. */
   knockVx: number;
   knockVy: number;
+  /** Seconds in deep water (0 outside it); the head is under from `HEAD_UNDER` on. */
+  waterT: number;
 }
 
 /** Being pushed: no control over movement or abilities until the slide ends. */
@@ -127,7 +129,9 @@ export function stepMove(
   const n = { ...s };
   const isKnocked = n.dashT <= 0 && knocked(n);
   const mover: Mover = n.dashT > 0 || isKnocked ? 'dash' : 'hero';
-  speed = speed * map.speedFactor(n.x, n.y, mover);
+  // A pushed hero keeps counting: only a dash (in the air) stops the clock.
+  n.waterT = drowningTile(map.tileAt(n.x, n.y), n.dashT > 0) ? n.waterT + dt : 0;
+  speed = speed * map.speedFactor(n.x, n.y, mover) * underFactor(n.waterT);
   let vx: number;
   let vy: number;
   if (n.dashT > 0) {
@@ -171,9 +175,8 @@ export function lineOfSight(map: TileMap, ax: number, ay: number, bx: number, by
   return true;
 }
 
-/** The server's terrain rule: a hero not dashing whose centre is over a chasm or deep water is falling or drowning and moves no more. */
-export function sinking(map: TileMap, s: MoveState): boolean {
+/** The server's terrain rule: a hero not dashing whose centre is over a chasm is falling and moves no more (deep water does not stop a hero). */
+export function falling(map: TileMap, s: MoveState): boolean {
   if (s.dashT > 0) return false;
-  const t = map.tileAt(s.x, s.y);
-  return t === TILE_ID.Chasm || t === TILE_ID.DeepWater;
+  return map.tileAt(s.x, s.y) === TILE_ID.Chasm;
 }

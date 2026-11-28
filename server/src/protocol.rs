@@ -337,14 +337,15 @@ pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool, pub u
 pub struct MovingLight(pub f32, pub f32, pub u8, pub Option<u32>);
 
 /// Compact entity state, serialized as an array:
-/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side, hurt_dir, head]`.
+/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side, hurt_dir, head, drown]`.
+/// `drown`: the drowning stage, `wire::drown_byte` (0 = not drowning).
 /// `extra` for projectiles is `(owner_id << 16) | shot_id`.
 /// `effects`: bitmask of `EffectKind` ids (creatures only).
 /// `side`: a `Side` (0 Neutral, 1 Hostile, 2 Friendly) for creatures, 0 for everything else.
 /// `hurt_dir`: the direction of the last blow, `wire::hurt_byte` (0 = none); `head`: the head's angle, `wire::head_byte` (128 = ahead).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8);
+pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u8);
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -361,6 +362,10 @@ pub struct SelfState {
     /// Knockback velocity (px/s), zero when not pushed.
     pub knock_vx: f64,
     pub knock_vy: f64,
+    /// Seconds in deep water (0 outside it); prediction counts on from it.
+    pub water_t: f64,
+    /// Seconds the hero can stay in deep water before drowning, from its current CON (drains included); the breath bar's length.
+    pub breath: f64,
     /// Remaining cooldowns (s).
     pub cd1: f32,
     pub cd2: f32,

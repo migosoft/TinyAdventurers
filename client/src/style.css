@@ -844,6 +844,35 @@ kbd {
       inset 0 2px 3px rgba(0, 0, 0, 0.6);
   }
 }
+/* The breath bar under the HP bar: thin, light blue, shown only in deep water; pulses red when nearly out. */
+.breath-bar {
+  --air: linear-gradient(#9fdcff, #4a9ad8);
+  width: 200px;
+  height: 8px;
+  background: var(--well);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px #4f7a99,
+    0 0 0 3px rgba(0, 0, 0, 0.55),
+    inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.breath-bar.hidden {
+  display: none;
+}
+.breath-bar .fill {
+  height: 100%;
+  background: var(--air);
+}
+.breath-bar.low .fill {
+  background: linear-gradient(#ffb0a0, #e04848);
+  animation: breath-pulse 0.4s infinite alternate;
+}
+@keyframes breath-pulse {
+  to {
+    opacity: 0.55;
+  }
+}
 .hp-col {
   position: relative;
   display: flex;

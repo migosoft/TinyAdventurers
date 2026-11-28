@@ -121,6 +121,8 @@ export const CONST = {
   "BARREL_BLAST_R": 40.0,
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
+  "BREATH": 2.2,
+  "BREATH_PCT": 0.1,
   "CHEST_RADIUS": 6.0,
   "COOLDOWN_LEEWAY": 0.05,
   "CRYSTAL_RADIUS": 5.0,
@@ -165,6 +167,7 @@ export const CONST = {
   "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
   "GRAVITY": 320.0,
+  "HEAD_UNDER": 1.2,
   "HERO_REACH": 17.0,
   "KNOCK_DECAY": 0.7788007830714049,
   "KNOCK_MIN_SPEED": 8.0,
@@ -196,9 +199,11 @@ export const CONST = {
   "SOLID_OBJECTS": {
     "81": 6.0
   },
+  "SWIM_SPEED": 0.7,
   "TICK_HZ": 60.0,
   "TILE": 16.0,
   "TORCH_RADIUS": 4.0,
+  "UNDER_SPEED": 0.35,
   "USE_REACH": 6.0,
   "VOLLEY_ARROWS": 3,
   "VOLLEY_SPREAD": 0.5235987755982988

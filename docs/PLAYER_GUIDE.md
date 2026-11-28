@@ -109,7 +109,7 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 **Your wolf**
 - It has 80 HP, runs a little faster than you and uses **Bite** for 10 about once a second, with a small push.
 - **It guards you.** It stays close, bites any enemy that comes within about three tiles of you, and fights back when something attacks it. It does not run off after what you shoot at, and it turns back when it has strayed about six tiles from you.
-- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (about every 3.3 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm, deep water or lava is escaped the same way, with the dash, if the dash is ready and the wolf can act. With the dash resting, or while the wolf is asleep, petrified or frightened, it falls, drowns or burns like any monster. After a leap that bites, it waits a moment before the next bite.
+- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (about every 3.3 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm or lava is escaped the same way, with the dash, if the dash is ready and the wolf can act. With the dash resting, or while the wolf is asleep, petrified or frightened, it falls or burns like any monster. Pushed into deep water, the wolf swims out at once, and it never attacks or steps into deep water on its own. After a leap that bites, it waits a moment before the next bite.
 - **Nobody gets locked out.** If it falls far behind, or you are in the sealed boss hall without it, it appears next to you again in green sparkles.
 - **Enemies fight it.** They attack it and their area attacks hit it. Your own arrows, fireballs and swords, and those of your friends, **never** hurt it. The Paladin's Holy Light heals it.
 - **Its figure shows only where there is light**, but its small green health bar, like a hero's, shows even in the dark, with the name "<your name>'s wolf" above it. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
@@ -187,7 +187,7 @@ The host can pick the **Woodland** in the lobby instead of the dungeon. It is a 
 - **The road** winds through a wide strip of open meadow, with small clumps of bushes and only a tree here and there; further back on both sides the trees stand in groves with grass between them, and behind them a thick wall of undergrowth (you cannot walk through the thicket). The party starts at the left end of its stretch of road. The road and the forest go on beyond both ends, but an **invisible wall** stops you there (your shots and your sight pass it; nothing lives beyond it). Small clearings open among the trees to the side of the road. Bushes and tufts of grass rustle and shake when a hero or a creature pushes through them (only for looks).
 - **Trees block sight and shots.** Every trunk stops you and your dash (ghosts and shades slip through), and works like a pillar: **arrows and spells stop at it, and you cannot see what stands behind it**. The ground behind a trunk is only hazy (clear at the trunk, hazier the further behind it), so you can still see the grass, but an enemy or animal there stays hidden until you step aside. Trees keep well clear of the road, so you can walk it freely. The wood has leafy trees, firs and, here and there by the road, a dead tree without leaves: it blocks like any other tree. When you stand behind a tree's crown, the leaves in front of your hero thin out in a soft, speckled disc so you can still see yourself, also where several crowns overlap (the trunk stays solid).
 - **The thick forest at the edge** blocks your movement and your sight: creatures beyond it stay hidden, though its ground shows hazy.
-- **A pond and its brooks:** some runs have a **pond** beside the road, and sometimes a **brook** runs into it, out of it, or across the road. The water follows the rules of "Water, lava and chasms": the **shallow edge** (often a wide, light shelf you can wade across) and a **brook** slow you down, **deep water** (the dark middle of the pond) stops you, and a hero who is **knocked** into deep water or whose **dash ends** in it **drowns**. Go around the pond, or wade the shallows. The edge of the water is drawn soft, not tile by tile, so right at the shore the slow-down can start a step earlier or later than it looks. Trees and creatures keep clear of the water, except the **willows**: every pond has one to three on its shore, their long curtains of leaves hanging over the water. A willow's trunk blocks you like any tree's; its curtains don't. The pond never cuts the party off from the road's end.
+- **A pond and its brooks:** some runs have a **pond** beside the road, and sometimes a **brook** runs into it, out of it, or across the road. The water follows the rules of "Water, lava and chasms": the **shallow edge** (often a wide, light shelf you can wade across) and a **brook** slow you down, **deep water** (the dark middle of the pond) is where you start to **drown** (see "Water, lava and chasms"). The shallows are wide, so you can see the water getting deeper long before the deadly part: go around the pond, or wade the shallows. The edge of the water is drawn soft, not tile by tile, so right at the shore the slow-down can start a step earlier or later than it looks. Trees and creatures keep clear of the water, except the **willows**: every pond has one to three on its shore, their long curtains of leaves hanging over the water. A willow's trunk blocks you like any tree's; its curtains don't. The pond never cuts the party off from the road's end.
 - **Bridges:** where a brook crosses the road, a **wooden bridge** carries the road over it. A pond may also have a small **footbridge** across a narrow part. On a bridge you walk **dry and at full speed**.
 - **Life at the pond** (only for looks, it never blocks or hurts you): lily pads (some in flower) and reeds that sway in the wind, **frogs** that sit on the bank or on a pad and **leap into the water when anyone you can see comes near** (a hero, an enemy or an animal), peek out again once it is quiet, **dragonflies** by day and **fish** that dart away from a wader. Everyone sees their own, so your frog may not be your teammate's.
 - **Enemies:** groups of two to four goblin archers, orc warriors and orc archers wait in some of the clearings, away from where you start. They notice you as they would in the light.
@@ -265,12 +265,12 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 | Lich: Nova | only the Wizard, 16 px (the lich's STR is only 10) |
 
 - The push slides you for a moment. **You have no control until it ends**: no walking, no attacks, and a dash can't break out of it.
-- Walls stop the slide, but **chasms and deep water do not**: a push over the edge is a fall or a drowning. Lava just burns.
+- Walls stop the slide, but **chasms and deep water do not**: a push over a chasm's edge is a fall, a push into deep water starts the drowning (you can still swim out if there is time). Lava just burns.
 - **Only a few attacks push**: the orc warrior's and chort's claws, the ogre's club and Ground Slam, the bosses' big attacks, and any **Fireball**. Imps, skeletons, mimics and other shots don't push.
 - **Bosses are never pushed**, not even by your Fireball. Neither are your friends by your Fireball, nor a mimic that is still hiding.
 - The bosses push with **their own STR**. The lich is weak (STR 10): its Nova hardly moves anyone any more.
 - A Barbarian in the middle of a dash is in the air and can't be pushed.
-- Tip: don't fight orcs or bosses with your back to a chasm or deep water.
+- Tip: don't fight orcs or bosses with your back to a chasm, and keep out of reach of a push into deep water.
 
 ## Treasure chests
 
@@ -289,7 +289,7 @@ Wooden **barrels** stand in some rooms, usually two to four together, and a few 
 - **Chain reaction:** a blast lights every barrel in its reach, so a group goes off one after the other, a third of a second apart.
 - **Pushing:** stand right next to a barrel (touching it) and press **E**. It slides about three tiles straight away from you, until a wall, another barrel, a hero or an enemy stops it. A small **E** appears over the barrel you would push.
 - **Terrain:** a barrel pushed over a **chasm** falls, one pushed into **deep water** sinks, and neither explodes. One pushed into **lava** explodes at once.
-- **Enemies in the blast:** an enemy that is pushed over a chasm or into deep water **falls or drowns** and counts as a kill for you, as if you had made it. In lava it burns.
+- **Enemies in the blast:** an enemy that is pushed over a chasm **falls** and counts as a kill for you, as if you had made it. One pushed into deep water starts drowning and, unless it is undead, swims out if it can; if its breath runs out first it counts as your kill too. In lava it burns.
 - **Archers use them too:** an enemy with a ranged attack that sees a barrel next to you may shoot the **barrel** instead of you. It will not do that if the blast would catch it as well. Don't stand next to barrels when archers are about.
 - **Kills and damage** from a chain count for the hero who lit the first barrel. If an enemy lit it, nobody gets credit.
 
@@ -330,17 +330,22 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 | Terrain | What happens |
 |---|---|
 | Shallow water (the light rim of a pool) | Slows everyone down, heroes and enemies alike. |
-| Deep water (the dark centre) | You can't walk into it. A hero whose **dash ends** in deep water, or who is **knocked** into it, **drowns**. |
+| Deep water (the dark centre) | You can walk in, but you are **drowning**: you can only move (no abilities, no attacks, no using things) and slowly, and you sink. After about a second you are fully under and move at half that speed. When your **breath** runs out you drown ("X drowned"). Step out into shallow water or onto the floor and your breath is full again at once. A thin light-blue **breath bar** under your HP bar shows the air left while you are in deep water, and pulses red when it is nearly gone (a higher CON gives a longer breath). Walking, a dash that ends in it, or a knock all start it. |
 | Chasm | Step in, or get **knocked** in, and you **fall to your death** ("X fell into the abyss"). Every chasm across a room leaves a bridge of floor. |
 | Lava | You can walk in, but it slows you a lot and **burns for 20 damage a second**, and it sets you **burning** (see Status effects). |
 
-- The Barbarian's **dash jumps** deep water, chasms and lava. Only where the dash ends counts: land on solid ground.
+- The Barbarian's **dash jumps** deep water, chasms and lava. Only where the dash ends counts: land on solid ground (a dash that ends in deep water starts the drowning, it does not kill on the spot).
 - No chasm is wider than 3 tiles, so a dash can always clear it.
-- **Demons** (imps, chorts, summoners, Kharzul and Ysskar) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
+- **Demons** (imps, chorts, summoners, Kharzul and Ysskar) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water on its own.
 - Shots and sight pass over all terrain.
 - Pools and lava are drawn with natural, rounded shores that can reach up to half a tile past the ground that really counts: what slows, drowns or burns you is the terrain under your feet, so a figure at the very edge may look a little wet or singed without being so.
 - Enemies can fall, drown and burn too, if a **barrel blast** pushes them in (see Explosive barrels).
-- In debug mode (test accounts only) a hero who falls or drowns climbs back out onto the last safe tile.
+- **Your breath** is about 2.2 seconds at 10 Constitution, and each point of **Constitution** above or below 10 adds or takes away about a fifth of a second (10 %). A drain on your Constitution (Frail) shortens it. Your breath counts from the moment you step in, not from when you go under, so with a low Constitution you can drown before you are fully under.
+- **Undead never drown** (skeletons, the lich's servants): they have no breath, make no bubbles, and wade through deep water, but they never stop or fight in it, and they walk out if they are pushed in. Ghosts and Shades float over it. Other enemies never walk into deep water themselves.
+- **Once your head is under water you are out of reach:** nobody can target or hit you, no arrow or spell finds you and no heal reaches you (damage over time keeps its time but does nothing). That goes for enemies too: you cannot hit one whose head is under. Before that point you are in the fight as usual, but you cannot act.
+- **Bubbles** rise above a drowning creature that breathes, and many more once its head is under.
+- Tip: in a pool the shallows are two tiles wide (a bit wider in a woodland pond), and the water gets slowly deeper towards the middle. Turn back at the first deep water, and never dash into the middle of a pool.
+- In debug mode (test accounts only) a hero who falls or drowns (when the breath runs out) climbs back out onto the last safe tile.
 
 ## Final bosses
 

@@ -191,6 +191,8 @@ export function snap(over: Partial<Snapshot> = {}): Extract<ServerMsg, { t: 'Sna
       dash_dy: 0,
       knock_vx: 0,
       knock_vy: 0,
+      water_t: 0,
+      breath: 2.2,
       cd1: 0,
       cd2: 0,
       spectating: null,

@@ -269,6 +269,7 @@ impl Placed {
     }
 }
 
+/// Tiles a hero reaches on foot. A hero may now swim (#448), but swimming is deadly, so deep water counts as blocking here.
 fn bfs_hero(map: &Map, sx: i32, sy: i32) -> Vec<bool> {
     let mut seen = vec![false; (map.w * map.h) as usize];
     let mut q = VecDeque::new();
@@ -277,7 +278,7 @@ fn bfs_hero(map: &Map, sx: i32, sy: i32) -> Vec<bool> {
     while let Some((x, y)) = q.pop_front() {
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x + dx, y + dy);
-            if map.in_bounds(nx, ny) && !map.blocks(nx, ny, super::Mover::Hero) && !seen[(ny * map.w + nx) as usize] {
+            if map.in_bounds(nx, ny) && !map.blocks(nx, ny, super::Mover::Hero) && map.get(nx, ny) != Tile::DeepWater as u8 && !seen[(ny * map.w + nx) as usize] {
                 seen[(ny * map.w + nx) as usize] = true;
                 q.push_back((nx, ny));
             }
@@ -1306,7 +1307,8 @@ mod tests {
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
         // Re-pinned in #431: bigger ponds, more footbridges. Re-pinned in #438: willows at the pond (seed 42 keeps its value).
         // Re-pinned in #445 (rand 0.10): the random stream maps differently, so every seed's map differs. Rules unchanged.
-        assert_eq!(got, vec![17380683272970541128, 10700253614260391318, 10900070364394571890, 10752533025122834650, 5257703936492519330]);
+        // Re-pinned in #448: the shallows around a pond's deep part are a tile wider (DEEP_IN 3.0); seeds 1, 2 and 3 differ, 7 and 42 have no deep part that changes.
+        assert_eq!(got, vec![18385793181006754425, 11857959918021212177, 4924031797302141272, 10752533025122834650, 5257703936492519330]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.

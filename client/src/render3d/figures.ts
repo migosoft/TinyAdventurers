@@ -21,8 +21,10 @@ import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pus
 import { AMBIENT, darkAlpha } from './light';
 import type { ShadowCaster } from './lights';
 import { Descents, type Descent } from './dips/descents';
-import { drownY, LAVA_SINK, sinkCell, standY, stepLavaSink } from './dips/descent';
-import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, pondFieldOf, surfaceAt, walkBedAt } from './dips/shape';
+import { drownY, followT, LAVA_SINK, sinkCell, standY, stepLavaSink, stepSwimY, swimDepth } from './dips/descent';
+import { bedAt, depthFade, hidingHeightAt, isLava, LAVA_LEVEL, pondFieldOf, surfaceAt, walkBedAt, WATER_LEVEL } from './dips/shape';
+import { headUnder } from '../sim/map';
+import { drownOf } from '../wire';
 import { opensWalls } from './openers';
 import type { DrawnFig, MimicCue, StuckShot } from './fx/types';
 import type { MV3 } from './fx/shapes';
@@ -151,12 +153,15 @@ export interface FigureOut {
   falls: Array<{ id: number; x: number; z: number }>;
   /** The drownings that began this frame (a figure, or a barrel's anim 3) the hero can see, where it went under, in tiles. Ids in `dark` are left out, as in `falls`. */
   sinks: Array<{ id: number; x: number; z: number }>;
+  /** The creatures in the drowning state (#448) the hero can see, where they are (tiles), the snapshot's seconds in the water, and whether they are breathless (no bubbles). Ids in `dark` are left out. */
+  swims: Array<{ id: number; x: number; z: number; t: number; breathless: boolean }>;
   /** The shots stuck where they landed (#321), for the effects (`fx/frameShots.ts` draws them). The objects live as long as the shot is stuck. */
   stuck: StuckShot[];
 }
 
 /** A thing's drawn motion: where it was drawn last frame, its eased speed (tiles/s), its foot's last height and its lava sink. */
-interface Motion { px: number; pz: number; vx: number; vz: number; y: number; lava: number }
+/** `sw`: the local drowning clock (s; null: not drowning); `swum`: the foot was a swimmer's last frame, so it eases to the bed on leaving (#448). */
+interface Motion { px: number; pz: number; vx: number; vz: number; y: number; lava: number; sw: number | null; swum: boolean }
 
 /** One card of a faller, as it was drawn: the card before the dark of the depth, and its offsets from the faller's spot. */
 interface FallCard { base: Card; ox: number; oz: number; dl: number }
@@ -166,7 +171,8 @@ interface FallInst { base: FigureInst; ox: number; oz: number; dl: number }
 interface FallParts { cards: FallCard[]; insts: FallInst[]; /** Whether the entity was dark when last drawn: its id leaves `dark` with the entity, the faller stays as it was. */ dark: boolean }
 
 /** The foot of a figure or a barrel this frame: where it is drawn, and the descent it is in. */
-interface Foot { x: number; z: number; y: number; d: Descent | undefined; started: boolean; gone: boolean }
+/** `under`: a swimmer whose head is under water (no bar, no name). */
+interface Foot { x: number; z: number; y: number; d: Descent | undefined; started: boolean; gone: boolean; under?: boolean }
 
 interface Fig {
   mem: PoseMemory;
@@ -320,6 +326,8 @@ export class Figures3d {
   private falls: FigureOut['falls'] = [];
   /** The drownings that began this frame (the output's). */
   private sinks: FigureOut['sinks'] = [];
+  /** The creatures in the drowning state this frame (the output's). */
+  private swims: FigureOut['swims'] = [];
   /** The things falling this frame: entities and the fallers that outlived theirs. */
   fallers = 0;
 
@@ -356,6 +364,9 @@ export class Figures3d {
     if (ev.t === 'Sink' && ev.how === 2) { this.descents.end(ev.id); this.parts.delete(ev.id); }
     if (ev.t !== 'Died') return false;
     if (lost === 'lost') return true;
+    // A creature that drowned (#448) has been sinking out of sight: no skull, no body. One killed with its head still above water dies the ordinary way.
+    const sw = this.motions.get(ev.id)?.sw;
+    if (sw != null && headUnder(sw)) return true;
     if (ev.kind === KIND.Shade) {
       // The Shade's body fades out over 0.3 s as its veil (the effects') drifts apart.
       const fig = this.figs.get(ev.id);
@@ -393,9 +404,10 @@ export class Figures3d {
     const cover = look.ground ?? (() => 0);
     this.ground = (x, z, r) => cover(x, z, r) + this.bedAt(x, z);
     this.models = look.models ?? null;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), openers: [], casters: [], floats: [], models: [], built: [], figs: [], cues: [], falls: [], sinks: [], stuck: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), openers: [], casters: [], floats: [], models: [], built: [], figs: [], cues: [], falls: [], sinks: [], swims: [], stuck: [] };
     this.falls = out.falls;
     this.sinks = out.sinks;
+    this.swims = out.swims;
     this.figUsed = 0;
     const seen = new Set<number>();
     this.anchors.clear();
@@ -715,7 +727,7 @@ export class Figures3d {
     const flags = st.s.flags ?? 0;
     const dashing = st.predicted ? f.own.dashing : e.anim === ANIM.Dash;
     const skims = skimsTerrain(flags, dashing) || (flags & FLAG.AIRBORNE) !== 0;
-    const start = this.states.sinking(e.id) ? (st.drowning ? 'drown' : 'fall') : null;
+    const start = this.states.sinking(e.id) ? 'fall' : null;   // a creature's drowning is the drown byte (#448); only a barrel's anim 3 starts 'drown'
     let fig = this.figs.get(e.id);
     if (!fig) {
       const pi = isPlayerKind(e.kind) ? this.players.find((p) => p.ent === e.id) : undefined;
@@ -733,8 +745,12 @@ export class Figures3d {
 
   /** Where a figure's foot is this frame, once its pose (and so its height in tiles, the lava sink's share) is known; reports a descent it begins. */
   private figFoot(e: EntState, s: ViewState, f: RunFrame, o: { skims: boolean; start: 'fall' | 'drown' | null }, height: number): Foot {
-    const foot = this.foot(e.id, s.x / TILE, s.y / TILE, f.dt, f.now, { skims: o.skims, start: o.start, height });
+    // The drowning stage: the own hero's from the prediction (never its own snapshot byte), the rest's from theirs.
+    const own = e.id === f.you && f.own.alive && !f.own.charmed;
+    const swim = own ? ((f.own.waterT ?? 0) > 0 ? f.own.waterT! : null) : drownOf(e.drown ?? 0)?.t ?? null;
+    const foot = this.foot(e.id, s.x / TILE, s.y / TILE, f.dt, f.now, { skims: o.skims, start: o.start, height, swim });
     this.reportDescent(e.id, foot);
+    if (swim !== null && !o.skims && !foot.d && !this.dark.has(e.id)) this.swims.push({ id: e.id, x: foot.x, z: foot.z, t: swim, breathless: drownOf(e.drown ?? 0)?.breathless ?? false });
     // The followed hero's foot is snapped relative to the snapped camera, so it does not wobble by an art px while the camera eases (#349).
     const cam = this.cam;
     if (cam && e.id === f.you && !foot.d) { const g = snapFollowed(cam.pitch, cam.yaw, cam.x, cam.z, foot.x, foot.z); foot.x = g.x; foot.z = g.z; }
@@ -776,9 +792,9 @@ export class Figures3d {
    * is at 0 when it skims the terrain or flies. `o.start` begins a descent on the first frame it is asked for, from the foot's last
    * height and its drawn speed (which are not updated once it is in one). A fall is not stepped on its first frame.
    */
-  private foot(id: number, x: number, z: number, dt: number, now: number, o: { skims: boolean; start: 'fall' | 'drown' | null; height: number }): Foot {
+  private foot(id: number, x: number, z: number, dt: number, now: number, o: { skims: boolean; start: 'fall' | 'drown' | null; height: number; swim?: number | null }): Foot {
     let mo = this.motions.get(id);
-    if (!mo) this.motions.set(id, (mo = { px: x, pz: z, vx: 0, vz: 0, y: 0, lava: 0 }));
+    if (!mo) this.motions.set(id, (mo = { px: x, pz: z, vx: 0, vz: 0, y: 0, lava: 0, sw: null, swum: false }));
     let d = this.descents.get(id);
     let started = false;
     if (!d && o.start) {
@@ -799,8 +815,24 @@ export class Figures3d {
     mo.pz = z;
     const inLava = !o.skims && this.map.get(Math.floor(x), Math.floor(z)) === TILE_ID.Lava;
     mo.lava = stepLavaSink(mo.lava, inLava ? LAVA_SINK : 0, dt);
-    mo.y = o.skims ? (pondFieldOf(this.map)?.deckAt(x, z) ?? 0) : standY(this.bedAt(x, z), inLava || mo.lava > 0.001 ? mo.lava : null);
-    return { x, z, y: mo.y, d: undefined, started, gone: false };
+    const bed = this.bedAt(x, z);
+    let under = false;
+    if (o.swim != null && !o.skims) {
+      // Drowning state (#448): wading on the bed, then chin-deep, then sinking smoothly until the head is under; the clock is local and eased to the snapshot's.
+      mo.sw = followT(mo.sw, o.swim, dt);
+      const depthY = WATER_LEVEL - swimDepth(mo.sw, bed, o.height);
+      // Already swimming (or still easing out after a one-frame flicker of the state): approach at the bounded speed, never a jump.
+      mo.y = mo.swum ? stepSwimY(mo.y, depthY, bed, dt) : depthY;
+      mo.swum = true;
+      under = headUnder(mo.sw);
+    } else {
+      mo.sw = null;
+      const goal = o.skims ? (pondFieldOf(this.map)?.deckAt(x, z) ?? 0) : standY(bed, inLava || mo.lava > 0.001 ? mo.lava : null);
+      // Out of the water: no jump to the ground, the foot goes there at a bounded speed (rising back along the bed).
+      mo.y = mo.swum && !o.skims ? stepSwimY(mo.y, goal, bed, dt) : goal;
+      mo.swum = mo.swum && mo.y !== goal;
+    }
+    return { x, z, y: mo.y, d: undefined, started, gone: false, under };
   }
 
   /**
@@ -958,7 +990,7 @@ export class Figures3d {
       pushShadow(out.shadows, cam, gf.x, gf.z, rx, rz, SHADOW_ALPHA * pose.alpha * this.oval, this.ground(gf.x, gf.z, rx));
     }
 
-    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * ms) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
+    this.anchors.set(e.id, { x, z, y, height: sa.height, tag: sa.tag, head: pose.lie ? Math.min(sa.head, (2 - LIE_SINK) * sideReach(m) * ms) : sa.head, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !foot.under && !this.states.sinking(e.id), descending: !!foot.d || !!foot.under || this.states.sinking(e.id), effects: s.effects ?? 0 });
     // The swoosh lies at the shoulder; a bite (an armless model's attack) has its fangs before the muzzle.
     const stretch = 1 / Math.cos(cam.pitch), shoulder = (m.shoulderY * ms) / TILE;
     // Fangs are the wolf's: an armless model that does not butt and whose kind has a melee swing (the deer and the bunny have none).
@@ -972,7 +1004,7 @@ export class Figures3d {
     const lf = this.listFig(out, cam, e, s, d, x, z, y, pose.lie ? 3 : sa.height, pose.alpha * k, true, p3.yaw, y + shoulder * stretch, bite, dashing, sp, form, rig);
     if (bite >= 0) this.muzzle(lf, cam, p3.yaw, y + 0.8 * shoulder * stretch, m.baseHeight / TILE + m.radius);
     const standing = (m.stands !== undefined ? h : Math.max(0, (footY - ib.t) * m.size)) * sc;   // as the card path's `height`: the smaller model's opaque height, times the pose scale
-    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    this.opener(e, !!foot.d || !!foot.under || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : standing / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 
@@ -1051,7 +1083,7 @@ export class Figures3d {
     }
 
     const up = top + (dr.lift ?? 0) * b.unit * sc;   // the flier's body hangs above its foot
-    this.anchors.set(e.id, { x, z, y, height: up, tag: up + 3, head: up, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0 });
+    this.anchors.set(e.id, { x, z, y, height: up, tag: up + 3, head: up, cx: 0, alpha: pose.alpha, tagShown: !foot.d && !foot.under && !this.states.sinking(e.id), descending: !!foot.d || !!foot.under || this.states.sinking(e.id), effects: s.effects ?? 0 });
     const hand = dr.anchors.hand;
     const lf = this.listFig(out, cam, e, s, d, x, z, yb, top, pose.alpha * k, true, dr.yaw, builtPoint(hand, x, z, yb, dr.yaw, scale, stretch, this.haloAt)[1], -1, dashing);
     builtPoint(hand, x, z, yb, dr.yaw, scale, stretch, lf.hand as MV3);
@@ -1064,7 +1096,7 @@ export class Figures3d {
     const mg = (this.magicPool[slot] ??= { gem: 0, flare: 0 });
     mg.gem = dr.magic.gem; mg.flare = dr.magic.flare; mg.chest = dr.magic.chest; mg.mouth = dr.magic.mouth;
     lf.magic = mg;
-    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + up / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    this.opener(e, !!foot.d || !!foot.under || this.states.sinking(e.id), x, z, y + up / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 
@@ -1212,7 +1244,7 @@ export class Figures3d {
       x, z, y, height: sa.height, tag: sa.tag,
       head: pose.lie ? (fb.r - fb.l + 1) * ds : sa.head,
       cx: pose.lie ? 0 : (mid + 0.5 - pose.originX * fb.w) * ds,
-      alpha: pose.alpha, tagShown: !foot.d && !this.states.sinking(e.id), descending: !!foot.d || this.states.sinking(e.id), effects: s.effects ?? 0,
+      alpha: pose.alpha, tagShown: !foot.d && !foot.under && !this.states.sinking(e.id), descending: !!foot.d || !!foot.under || this.states.sinking(e.id), effects: s.effects ?? 0,
     });
 
     // The hand's height is the card's; the wolf bites with fangs (as its model does); the dragon's mouth and nostrils are points of its frame.
@@ -1228,7 +1260,7 @@ export class Figures3d {
     if (kept) this.parts.set(e.id, kept); else this.parts.delete(e.id);
     const height = Math.max(0, pose.footY - fb.t) * sc;
     // Falling or drowning stops it opening walls; wading does not.
-    this.opener(e, !!foot.d || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : height / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
+    this.opener(e, !!foot.d || !!foot.under || this.states.sinking(e.id), x, z, y + (pose.lie ? 0.15 : height / 2 / TILE), isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 

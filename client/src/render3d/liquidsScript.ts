@@ -4,9 +4,12 @@ import { floats } from './models/table';
 import type { EntState } from '../game/world';
 import type { PictureEv } from '../run/view';
 import { TILE } from '../sim/map';
+import { drownByte } from '../wire';
 
-export type Push = 'chasm' | 'water' | 'barrel';
-export const PUSHES: readonly Push[] = ['chasm', 'water', 'barrel'];
+export type Push = 'chasm' | 'water' | 'barrel' | 'wade';
+export const PUSHES: readonly Push[] = ['chasm', 'water', 'barrel', 'wade'];
+/** The ask times of the pushes (s); a push not named is not asked. */
+export type Pushes = Partial<Record<Push, number | null>>;
 export interface LiquidsFrame { ents: EntState[]; events: PictureEv[] }
 
 /** Seconds a pushed actor slides to its target cell, and until it is back after the Sink. */
@@ -25,10 +28,24 @@ const K_WAIT = 0.6, K_STAND = 5;
 const K_LEG = (K_X1 - K_X0) / KNIGHT_SPEED;
 export const KNIGHT_LOOP = K_WAIT + K_LEG + K_STAND + K_LEG;
 
+/** The wader's lane (#448): a knight on the floor north of the pool walks into the deep water at x 5.5 and back out; it is drowning while its tile is deep. */
+const WADER_ID = 105, WADER_X = 5.5, WADER_Y0 = 4.3, WADER_Y1 = 6.3, WADER_SPEED = 1.5, DEEP_EDGE = 5;
+/** Seconds the lane takes (there and back), and the second its centre crosses into the deep tile. */
+export const WADE_TIME = (2 * (WADER_Y1 - WADER_Y0)) / WADER_SPEED;
+const WADE_IN = (DEEP_EDGE - WADER_Y0) / WADER_SPEED;
+
+/** The wader at `s` seconds into its lane (null: at rest): its place and the seconds it has been in deep water. */
+function waderAt(s: number | null, kind: number): EntState {
+  if (s === null || s < 0 || s >= WADE_TIME) return ent(WADER_ID, kind, WADER_X, WADER_Y0, SIDE.Friendly);
+  const half = WADE_TIME / 2, back = s > half;
+  const y = WADER_Y0 + (back ? WADE_TIME - s : s) * WADER_SPEED;
+  return ent(WADER_ID, kind, WADER_X, y, SIDE.Friendly, { anim: ANIM.Move, animMs: s * 1000, drown: drownByte(y >= DEEP_EDGE ? s - WADE_IN : 0) });
+}
+
 interface Pusher { push: Push; id: number; kind: number; from: [number, number]; to: [number, number]; how: number; dur: number; side: number }
 const PUSHERS: readonly Pusher[] = [
   { push: 'chasm', id: 102, kind: KIND.Imp, from: [9.5, 7.5], to: [10.5, 7.5], how: 0, dur: CONST.FALL_TIME, side: SIDE.Hostile },
-  { push: 'water', id: 103, kind: KIND.Imp, from: [4.5, 4.5], to: [4.5, 5.5], how: 1, dur: CONST.DROWN_TIME, side: SIDE.Hostile },
+  { push: 'water', id: 103, kind: KIND.Imp, from: [4.5, 4.5], to: [4.5, 5.5], how: 1, dur: CONST.BREATH, side: SIDE.Hostile },
   { push: 'barrel', id: 104, kind: KIND.Barrel, from: [9.5, 5.5], to: [10.5, 5.5], how: 0, dur: CONST.FALL_TIME, side: SIDE.Neutral },
 ];
 
@@ -73,26 +90,27 @@ function reach(q: Pusher): [number, number] {
 function eventsOf(q: Pusher, kind: number, p: number): { at: number; ev: PictureEv }[] {
   const at = p + SLIDE_TIME;
   const [x, y] = [reach(q)[0] * TILE, reach(q)[1] * TILE];
-  return [
-    { at, ev: { t: 'Sink', id: q.id, x, y, how: q.how } },
-    { at: at + q.dur, ev: { t: 'Died', id: q.id, kind, x, y } },
-  ];
+  // A drowning (how 1) has no Sink: the creature only enters the drowning state (its snapshot's `drown` byte) and dies when its breath ends (#448).
+  const died = { at: at + q.dur, ev: { t: 'Died', id: q.id, kind, x, y } satisfies PictureEv };
+  return q.how === 1 ? [died] : [{ at, ev: { t: 'Sink', id: q.id, x, y, how: q.how } }, died];
 }
 
 /**
  * The page's actors at time `t` (s) and the events born in the window (t - dt, t] (each event once when the windows follow each other):
  * an elf wading up and down the shallow rim, a knight walking into the lava, standing 5 s and walking out, an imp beside the water
  * and one beside the chasm, a barrel beside the chasm. `pushes`: when each push was asked (s) or null. A pushed imp slides 0.35 s to
- * its target cell, gets `Sink` (how 0 or 1), stays FALL_TIME or DROWN_TIME, gets `Died` and leaves; it is back after 3.2 s (counted
- * from the Sink). A pushed barrel rolls in and shows anim 2 for FALL_TIME, then leaves, with no Sink and no Died (as the server does
+ * its target cell; the chasm imp gets `Sink` (how 0), stays FALL_TIME, gets `Died` and leaves; the water imp is in the drowning state
+ * (its `drown` byte counts up) until its breath (CONST.BREATH) ends, gets `Died` and leaves; it is back after 3.2 s (counted from the
+ * end of the slide). `wade` starts the knight's walk into the deep water and out again (`WADE_TIME` s, drowning while it is in a deep tile). A pushed barrel rolls in and shows anim 2 for FALL_TIME, then leaves, with no Sink and no Died (as the server does
  * it); it too is back after 3.2 s, so the button works again. `as` (a kind) lets that kind play the wader, the lava walker and the two
  * pushed figures (the barrel stays a barrel); the ids and the events are the same.
  */
-export function liquidsScript(t: number, dt: number, pushes: Record<Push, number | null>, as?: number): LiquidsFrame {
-  const ents: EntState[] = [elfAt(t, as ?? KIND.ElvenRanger), knightAt(t, as ?? KIND.Knight)];
+export function liquidsScript(t: number, dt: number, pushes: Pushes, as?: number): LiquidsFrame {
+  const w = pushes.wade ?? null;
+  const ents: EntState[] = [elfAt(t, as ?? KIND.ElvenRanger), knightAt(t, as ?? KIND.Knight), waderAt(w === null ? null : t - w, as ?? KIND.Knight)];
   const events: PictureEv[] = [];
   for (const q of PUSHERS) {
-    const p = pushes[q.push];
+    const p = pushes[q.push] ?? null;
     const kind = q.kind === KIND.Barrel ? q.kind : as ?? q.kind;
     const rest = ent(q.id, kind, q.from[0], q.from[1], q.side);
     if (p === null || t < p) { ents.push(rest); continue; }
@@ -102,7 +120,8 @@ export function liquidsScript(t: number, dt: number, pushes: Record<Push, number
       const k = (t - p) / SLIDE_TIME;
       ents.push({ ...rest, x: (q.from[0] + (rx - q.from[0]) * k) * TILE, y: (q.from[1] + (ry - q.from[1]) * k) * TILE, ...(kind !== KIND.Barrel ? { anim: ANIM.Move, animMs: (t - p) * 1000 } : {}) });
     } else if (t < sink + q.dur) {
-      ents.push({ ...rest, x: rx * TILE, y: ry * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : {}) });
+      // A drowning imp stays where it went in (its drowning state counts up from there); a barrel shows its fall anim.
+      ents.push({ ...rest, x: rx * TILE, y: ry * TILE, ...(q.kind === KIND.Barrel ? { anim: 2, animMs: (t - sink) * 1000 } : q.how === 1 ? { drown: drownByte(t - sink) } : {}) });
     } else if (t >= sink + BACK_TIME) ents.push(rest);
     // The server sends no Sink and no Died for a barrel (objects.rs): it only shows anim 2 and is gone.
     if (q.kind !== KIND.Barrel) for (const e of eventsOf(q, kind, p)) if (e.at > t - dt + EPS && e.at <= t + EPS) events.push(e.ev);

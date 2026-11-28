@@ -12,6 +12,14 @@ x: number, y: number, dash_t: number, dash_dx: number, dash_dy: number,
  */
 knock_vx: number, knock_vy: number, 
 /**
+ * Seconds in deep water (0 outside it); prediction counts on from it.
+ */
+water_t: number, 
+/**
+ * Seconds the hero can stay in deep water before drowning, from its current CON (drains included); the breath bar's length.
+ */
+breath: number, 
+/**
  * Remaining cooldowns (s).
  */
 cd1: number, cd2: number, 

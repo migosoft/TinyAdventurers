@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { decodePng } from '../../scripts/png';
+import { drownByte } from '../wire';
 import { ROW, ROW_TEXELS, packInstance } from './models/instances';
 import { cardHeight, createKit, directRunner, type FigureKit } from './models/kit';
 import { BONES } from './models/model';
@@ -276,8 +277,7 @@ describe('Figures3d', () => {
     fell.event({ t: 'Sink', id: 11, x: at(2), y: 8, how: 0 });
     expect(fell.frame(frame([ent(11, KIND.Knight, { x: at(2), side: SIDE.Friendly })]), cam()).openers).toEqual([]);
     const drowned = make();
-    drowned.event({ t: 'Sink', id: 12, x: at(1), y: 8, how: 1 });
-    expect(drowned.frame(frame([ent(12, KIND.Knight, { x: at(1), side: SIDE.Friendly })]), cam()).openers).toEqual([]);
+    expect(drowned.frame(frame([ent(12, KIND.Barrel, { x: at(1), side: SIDE.Neutral, anim: 3 })]), cam()).openers).toEqual([]);
   });
 
   it('starts a fall that came before the first frame on that frame, not at clock 0 (#319)', () => {
@@ -2082,18 +2082,10 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     }
   });
 
-  it('reports a drowning once, a dark figure none, a barrel one', () => {
+  it('reports a barrel drowning once, and no creature (its drowning is the drown byte, #448)', () => {
     const fg = dipFigs();
-    const e = knight(3, 1);
-    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
-    const first = fg.frame(frame([e], { now: 10 }), cam());
-    expect(first.sinks).toEqual([{ id: 10, x: 3.5, z: 1.5 }]);
-    expect(first.falls).toEqual([]);
-    const next = fg.frame(frame([e], { now: 10.1 }), cam());
-    expect(next.sinks).toEqual([]);
-    const dk = dipFigs();
-    dk.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
-    expect(dk.frame(frame([e], { dark: new Set([10]) }), cam()).sinks).toEqual([]);
+    const e = knight(3, 1, { drown: drownByte(0.5) });
+    expect(fg.frame(frame([e], { now: 10 }), cam()).sinks).toEqual([]);
     const bg = dipFigs();
     const barrel = (anim: number): EntState => ent(20, KIND.Barrel, { ...at2(3, 1), anim, side: SIDE.Neutral });
     const o = bg.frame(frame([barrel(3)], { now: 10 }), cam());
@@ -2110,17 +2102,72 @@ describe('Figures3d on the bed of a dip (#324)', () => {
     expect(o.falls).toHaveLength(1);
   });
 
-  it('drowns onto the bed and leaves nothing', () => {
-    const fg = dipFigs();
-    const e = knight(3, 1);
-    fg.event({ t: 'Sink', id: 10, x: e.x, y: e.y, how: 1 });
-    const n = Math.ceil((CONST.DROWN_TIME + 0.1) * 60);
-    const o = run(fg, () => [e], n);
-    expect(low(o.cards) - dryLow).toBeCloseTo(bedAt(dm, 3.5, 1.5), 6);
-    expect(o.falls).toEqual([]);
-    fg.event({ t: 'Died', id: 10, x: e.x, y: e.y, kind: KIND.Knight });
-    expect(total(fg.frame(frame([], { now: 20 }), cam()))).toBe(0);
-    expect(total(fg.frame(frame([], { now: 20.1 }), cam()))).toBe(0);
+  describe('the drowning state (#448)', () => {
+    // The server sends the byte from the first tick in the deep tile (never 0 there): `t` starts at 0.05.
+    const swimmer = (t: number): EntState => knight(3, 1, { drown: drownByte(t + 0.05) });
+    /** Frames 1/60 s apart of a knight `t0 + i / 60` s into the water; returns the foot (card bottom, tiles) and whether the anchor is descending. */
+    const series = (fg: Figures3d, from: number, n: number, ent: (t: number) => EntState, t0 = 0) => {
+      const out: Array<{ y: number; descending: boolean }> = [];
+      for (let i = from; i < from + n; i++) {
+        const o = fg.frame(frame([ent(t0 + i / 60)], { now: 10 + i / 60, dt: 1 / 60 }), cam());
+        out.push({ y: low(o.cards) - dryLow, descending: fg.anchors.get(10)!.descending });
+      }
+      return out;
+    };
+
+    it('sinks smoothly from wading to under, with no bar or name once the head is under, and leaves unseen when it dies', () => {
+      const fg = dipFigs();
+      const s = series(fg, 0, 150, swimmer);
+      let step = 0;
+      for (let i = 1; i < s.length; i++) step = Math.max(step, Math.abs(s[i].y - s[i - 1].y));
+      expect(step).toBeLessThan(0.08);
+      expect(s[149].y).toBeLessThan(s[0].y - 0.3);
+      expect(s[30].descending).toBe(false);
+      expect(s[100].descending).toBe(true);
+      fg.event({ t: 'Died', id: 10, x: swimmer(2).x, y: swimmer(2).y, kind: KIND.Knight });
+      expect(total(fg.frame(frame([], { now: 20, dt: 1 / 60 }), cam()))).toBe(0);
+    });
+
+    it('a creature killed with its head above water dies the ordinary way (a skull); one drowned under leaves none', () => {
+      const died = (t: number) => {
+        const fg = dipFigs();
+        series(fg, 0, Math.round(t * 60) + 1, swimmer);
+        const lost = fg.event({ t: 'Died', id: 10, x: swimmer(t).x, y: swimmer(t).y, kind: KIND.Knight });
+        return { lost, skulls: total(fg.frame(frame([], { now: 20, dt: 1 / 60 }), cam())) };
+      };
+      expect(died(0.6)).toEqual({ lost: false, skulls: 1 });
+      expect(died(1.8)).toEqual({ lost: true, skulls: 0 });
+    });
+
+    it('rises with the bed after it leaves the deep tile, never more than 0.04 tiles a frame (gently, not a pop)', () => {
+      const fg = dipFigs();
+      series(fg, 0, 100, swimmer);
+      const s = series(fg, 100, 90, (t) => knight(3 - Math.min(1, (t - 100 / 60) * 1), 1, { drown: 0 }), 0);
+      let step = 0;
+      for (let i = 1; i < s.length; i++) step = Math.max(step, Math.abs(s[i].y - s[i - 1].y));
+      expect(step).toBeLessThan(0.04);
+      expect(s[s.length - 1].y).toBeGreaterThan(s[0].y);
+      expect(s[s.length - 1].descending).toBe(false);
+    });
+
+    it('reports the swimmers: a breathing one with its time, a breathless one marked, none on land', () => {
+      const fg = dipFigs();
+      const o = fg.frame(frame([swimmer(1.45), ent(11, KIND.Knight, { ...at2(1, 1), drown: drownByte(0.5, true) }), ent(12, KIND.Knight, at2(0, 3))], { dt: 1 / 60 }), cam());
+      expect(o.swims.map((w) => [w.id, w.t, w.breathless])).toEqual([[10, 1.5, false], [11, 0.5, true]]);
+    });
+
+    it('draws the own hero from its predicted time in the water, never from its own snapshot byte', () => {
+      const fg = dipFigs();
+      const x = at(3), y = 1.5 * TILE;
+      const mine = (waterT: number, byte: number) => {
+        const o = fg.frame(frame([ent(1, KIND.Wizard, { side: SIDE.Friendly, x, y, drown: byte })], { dt: 1 / 60, now: 10, own: own({ alive: true, x, y, waterT }) }), cam());
+        return { under: fg.anchors.get(1)!.descending, swims: o.swims.map((w) => w.t) };
+      };
+      expect(mine(1.5, 0)).toEqual({ under: true, swims: [1.5] });
+      const fg2 = dipFigs();
+      const o = fg2.frame(frame([ent(1, KIND.Wizard, { side: SIDE.Friendly, x, y, drown: drownByte(1.5) })], { dt: 1 / 60, own: own({ alive: true, x, y, waterT: 0 }) }), cam());
+      expect([fg2.anchors.get(1)!.descending, o.swims]).toEqual([false, []]);
+    });
   });
 
   it('falls a barrel: whole size, opaque, below the floor, drawn after the entity is gone', () => {

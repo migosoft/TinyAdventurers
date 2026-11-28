@@ -262,7 +262,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     if theme.liquid == Liquid::Lava {
         place_boss_lava(&mut hall_rng, &mut map, &boss);
     }
-    // One ogre per run (stream 10), after the terrain so it stands on safe ground.
+    // One ogre per run (stream 10), after the terrain so it stands on a Floor tile with safe ground around it.
     let mut ogre_rng = rng.clone();
     ogre_rng.set_stream(10);
     let depths: Vec<f64> = rooms.iter().map(|r| room_dist(&r.rect) as f64 / max_d as f64).collect();
@@ -454,7 +454,7 @@ fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mu
 }
 
 /// The ogre roams a room or hall in the deeper part of the dungeon (`depths`
-/// per room, 0 at the start, 1 the deepest), on a tile with safe ground all
+/// per room, 0 at the start, 1 the deepest), on a Floor tile with safe ground all
 /// around it (it is wide) and never on a chest. Falls back to any ordinary
 /// room when the deeper ones have no such tile.
 fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], chests: &[ChestSpawn]) -> Option<Vec2> {
@@ -469,7 +469,7 @@ fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], c
                 (r.y + 1..r.y + r.h - 1)
                     .flat_map(|y| (r.x + 1..r.x + r.w - 1).map(move |x| (x, y)))
                     .filter(|&(x, y)| {
-                        (-1..=1).all(|dy| (-1..=1).all(|dx| map.safe(x + dx, y + dy) && !chest_tiles.contains(&(x + dx, y + dy))))
+                        map.get(x, y) == Tile::Floor as u8 && (-1..=1).all(|dy| (-1..=1).all(|dx| map.safe(x + dx, y + dy) && !chest_tiles.contains(&(x + dx, y + dy))))
                     })
                     .collect::<Vec<_>>()
             })
@@ -696,11 +696,11 @@ fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i3
 }
 
 /// An oval pool, a tile away from the room's walls. Water pools are deep
-/// wherever the whole neighbourhood is pool, so a shallow rim always surrounds
-/// the deep centre; lava pools are all lava.
+/// wherever every cell within two tiles is pool, so two rings of shallows
+/// (cells within 2 tiles, not the 5×5 square) surround the deep centre; lava pools are all lava.
 fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32, Tile)>> {
     let (max_w, max_h) = (r.w - 2, r.h - 2);
-    let (min, cap) = if liquid == Liquid::Water { (5, (9, 7)) } else { (4, (7, 6)) };
+    let (min, cap) = if liquid == Liquid::Water { (5, (11, 9)) } else { (4, (7, 6)) };
     if max_w < min || max_h < min {
         return None;
     }
@@ -717,7 +717,7 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32,
             if !inside(x, y) {
                 continue;
             }
-            let deep = (-1..=1).all(|dy| (-1..=1).all(|dx| inside(x + dx, y + dy)));
+            let deep = (-2..=2).all(|dy| (-2..=2).all(|dx| dx * dx + dy * dy > 4 || inside(x + dx, y + dy)));
             let t = match liquid {
                 Liquid::Lava => Tile::Lava,
                 Liquid::Water if deep => Tile::DeepWater,
@@ -1082,6 +1082,65 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
 mod tests {
     use super::*;
     use crate::dungeon::is_terrain;
+
+    #[test]
+    fn water_pools_have_two_rings_of_shallows() {
+        let room = Rect { x: 0, y: 0, w: 14, h: 12 };
+        let (mut wide, mut cored) = (0, 0);
+        for seed in 0..200u64 {
+            let cells = pool(&mut ChaCha8Rng::seed_from_u64(seed), &room, Liquid::Water).unwrap();
+            let set: std::collections::HashSet<(i32, i32)> = cells.iter().map(|c| (c.0, c.1)).collect();
+            for &(x, y, t) in &cells {
+                if t == Tile::DeepWater {
+                    for dy in -2..=2 {
+                        for dx in -2..=2i32 {
+                            assert!(dx * dx + dy * dy > 4 || set.contains(&(x + dx, y + dy)), "seed {seed}");
+                        }
+                    }
+                }
+            }
+            let xs = cells.iter().map(|c| c.0);
+            let w = xs.clone().max().unwrap() - xs.min().unwrap() + 1;
+            wide += (w >= 10) as i32;
+            let ys = cells.iter().map(|c| c.1);
+            let h = ys.clone().max().unwrap() - ys.min().unwrap() + 1;
+            let has_deep = cells.iter().any(|c| c.2 == Tile::DeepWater);
+            cored += has_deep as i32;
+            assert!(w < 5 || h < 5 || has_deep, "seed {seed}: {w}x{h} pool without a deep core");
+        }
+        assert!(wide > 0 && cored > 0);
+    }
+
+    #[test]
+    fn most_dungeon_water_pools_keep_a_deep_core() {
+        let (mut pools, mut cored, mut deep_tiles) = (0, 0, 0);
+        for seed in 0..60u64 {
+            let d = generate(seed, Theme::WATER);
+            let wet = |x: i32, y: i32| matches!(d.map.get(x, y), t if t == Tile::ShallowWater as u8 || t == Tile::DeepWater as u8);
+            let mut seen = std::collections::HashSet::new();
+            for y in 0..d.map.h {
+                for x in 0..d.map.w {
+                    if !wet(x, y) || !seen.insert((x, y)) {
+                        continue;
+                    }
+                    let (mut stack, mut deep) = (vec![(x, y)], 0);
+                    while let Some((cx, cy)) = stack.pop() {
+                        deep += (d.map.get(cx, cy) == Tile::DeepWater as u8) as i32;
+                        for (nx, ny) in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
+                            if wet(nx, ny) && seen.insert((nx, ny)) {
+                                stack.push((nx, ny));
+                            }
+                        }
+                    }
+                    pools += 1;
+                    cored += (deep > 0) as i32;
+                    deep_tiles += deep;
+                }
+            }
+        }
+        eprintln!("pools {pools}, with a deep core {cored}, deep tiles {deep_tiles}");
+        assert!(pools > 20 && cored * 10 > pools * 6, "{cored} of {pools} pools have a deep core");
+    }
 
     #[test]
     fn regions_puts_rooms_first() {

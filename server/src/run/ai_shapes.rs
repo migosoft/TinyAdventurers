@@ -46,8 +46,8 @@ fn foes_within(run: &Run, user: Creature, r: f64) -> usize {
     let at = run.creature_pos(user);
     let me = targets::stance(run, user);
     let near = |c: Creature| c != user && run.creature_pos(c).dist(at) <= r && targets::fights(&me, &targets::stance(run, c));
-    let heroes = (0..run.players.len()).map(Creature::Player).filter(|&c| run.creature_alive(c) && near(c)).count();
-    let others = (0..run.monsters.len()).filter(|&mi| run.monsters[mi].sinking.is_none()).map(Creature::Monster).filter(|&c| run.creature_alive(c) && near(c)).count();
+    let heroes = (0..run.players.len()).map(Creature::Player).filter(|&c| run.creature_alive(c) && !run.under(c) && near(c)).count();
+    let others = (0..run.monsters.len()).filter(|&mi| run.monsters[mi].sinking.is_none()).map(Creature::Monster).filter(|&c| run.creature_alive(c) && !run.under(c) && near(c)).count();
     heroes + others
 }
 

@@ -8,7 +8,7 @@ import type { Ev } from './generated/Ev';
 import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
 import fixtures from './generated/wire-fixtures.json';
-import { headOf, hurtDirOf, packInput, unpackSnap } from './wire';
+import { drownByte, drownOf, headOf, hurtDirOf, packInput, unpackSnap } from './wire';
 
 const POS_TOL = 0.5 / CONST.POS_SCALE + 1e-6;
 const AIM_TOL = Math.PI / 256 + 1e-6;
@@ -55,8 +55,8 @@ describe('wire', () => {
   });
 
   it('reads a hazard\'s element 6 as a radius in px, not an angle', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0, 0, 128], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0, 0, 128], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0, 0, 128]];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
+    const hazards: SnapW[2] = [[5, KIND.HolyGround, 16, 16, 255, 0, 40, 0, 0, 0, 0, 0, 0, 128, 0], [6, KIND.FirePatch, 16, 16, 255, 0, 48, 0, 0, 0, 0, 0, 0, 128, 0], [7, KIND.Roots, 16, 16, 255, 0, 64, 0, 0, 0, 0, 0, 0, 128, 0]];
     const snap = unpackSnap([1, 0, hazards, me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents.map((e) => e[6])).toEqual([40, 48, 64]);
     // The wire fixture's hazards (case 1) agree.
@@ -65,8 +65,8 @@ describe('wire', () => {
   });
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
-    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1, 0, 128]], me, null, [], 0, null, [], [], [], [], [], null]);
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0, 1, 0, 128, 0]], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
@@ -89,17 +89,30 @@ describe('wire', () => {
     expect(headOf(1)).toBeCloseTo(-Math.PI, 9);
   });
 
+  it('reads the drowning stage: 0 is none, 1 + tenths of a second, plus 128 when breathless', () => {
+    expect(drownOf(0)).toBeNull();
+    expect(drownOf(128)).toBeNull();
+    expect(drownOf(1)).toEqual({ t: 0, breathless: false });
+    expect(drownOf(13)).toEqual({ t: 1.2, breathless: false });
+    expect(drownOf(127)).toEqual({ t: 12.6, breathless: false });
+    expect(drownOf(2 + 128)).toEqual({ t: 0.1, breathless: true });
+    // the server's table (`drown_byte_table`)
+    expect([drownByte(0), drownByte(0.05), drownByte(1.2), drownByte(20), drownByte(0.05, true), drownByte(20, true)]).toEqual([0, 2, 13, 127, 130, 255]);
+  });
+
   it('keeps the Attribute amount of an own effect', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5'], 'the Orc Warrior'];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5'], 'the Orc Warrior', 1.35, 2.2];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], [], [], [], null]);
     expect(snap.me.effects).toEqual([[16, 12.5, -2, false], [4, 3, 0, true]]);
     expect(snap.me.paused_items).toEqual(['BandOfVigor']);
     expect(snap.me.paused_nodes).toEqual(['PU5']);
     expect(snap.me.charmed_by).toBe('the Orc Warrior');
+    expect(snap.me.water_t).toBe(1.35);
+    expect(snap.me.breath).toBe(2.2);
   });
 
   it('unpacks moving lights with an optional colour', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], [], null, 0, 2.2];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], [], [], [], null]);
     expect(snap.lights).toEqual([[10, 20, 2, null], [1, 2, 3, 0x78c8ff]]);
   });

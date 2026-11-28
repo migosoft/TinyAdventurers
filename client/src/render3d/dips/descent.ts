@@ -1,10 +1,10 @@
-import { CHASM_BED, LAVA_LEVEL } from './shape';
-import { TILE_ID } from '../../generated/defs';
+import { CHASM_BED, LAVA_LEVEL, WATER_LEVEL } from './shape';
+import { CONST, TILE_ID } from '../../generated/defs';
 import type { TileMap } from '../../sim/map';
 
 // First guesses for the user to tune; every number of the descent lives here.
 export const FALL_G = 14, SLIDE_MAX = 3, RIM_PULL = 2, FALL_GONE = CHASM_BED - 0.5, FALL_MAX_AGE = 3;
-/** Seconds a drowning figure takes to drop to the bed: a look; the server's rule (CONST.DROWN_TIME) is unchanged. */
+/** Seconds a drowning barrel (anim 3) takes to drop to the bed; creatures swim instead (`swimDepth`). */
 export const DROWN_SINK = 0.4;
 /** The faller's body radius in tiles (a card or model is about 0.6 wide): a falling figure keeps this far from a wall. */
 export const FALL_RADIUS = 0.3;
@@ -90,7 +90,7 @@ export function stepFall(f: Faller, dt: number, bed: (x: number, z: number) => n
   return f.y > -FALL_GONE;
 }
 
-/** A drowning foot: from y0 to the bed over DROWN_SINK (ease-in, u squared: it drops), then it rests on the bed until `Died`. */
+/** A drowning barrel's foot: from y0 to the bed over DROWN_SINK (ease-in, u squared: it drops), then it rests on the bed until `Died`. */
 export function drownY(y0: number, bed: number, age: number): number {
   const u = Math.min(1, Math.max(0, age / DROWN_SINK));
   if (u >= 1) return bed;
@@ -106,4 +106,37 @@ export function stepLavaSink(sink: number, goal: number, dt: number): number {
 /** Where a grounded foot stands: on the bed, or floating in lava at LAVA_LEVEL - sink when that is higher. `sink` null: not in lava. */
 export function standY(bed: number, sink: number | null): number {
   return sink === null ? bed : Math.max(bed, LAVA_LEVEL - sink);
+}
+
+// ---- Swimming (#448): a creature in the drowning state. First guesses for the user to tune. ----
+/**
+ * `chin`: the foot's depth below the surface as a share of the figure's height while it floats (the chin at the water); `margin`:
+ * tiles it is below the surface when fully under (past its height); `rise`: the most the foot moves (tiles/s) toward the bed after the
+ * state ends or the bed changes under it; `follow`: how fast (1/s) the local clock closes on the snapshot's; `resync`: a gap (s) beyond
+ * which it jumps to the snapshot's.
+ */
+export const SWIM = { chin: 0.7, margin: 0.15, rise: 0.9, follow: 6, resync: 0.3 } as const;
+
+/**
+ * The foot's depth below the water (tiles, `WATER_LEVEL` is 0) of a figure `height` tiles tall `t` s into the drowning state over a
+ * bed at world height `bed`: it wades on the bed (while the bed is shallower than it would float), floats chin-deep, then sinks
+ * smoothly (smoothstep) to `margin` below its top by HEAD_UNDER; never deeper than the bed.
+ */
+export function swimDepth(t: number, bed: number, height = 1): number {
+  const u = Math.min(1, Math.max(0, t / CONST.HEAD_UNDER));
+  const chin = height * SWIM.chin, under = height + SWIM.margin;
+  return Math.min(WATER_LEVEL - bed, chin + (under - chin) * u * u * (3 - 2 * u));
+}
+
+/** The local drowning clock closing on the snapshot's (`target`, in 1/10 s steps): advances with `dt`, eases to the target, jumps when far off or new (`local` null). */
+export function followT(local: number | null, target: number, dt: number): number {
+  if (local === null || Math.abs(target - (local + dt)) > SWIM.resync) return target;
+  const l = local + dt;
+  return l + (target - l) * Math.min(1, dt * SWIM.follow);
+}
+
+/** A swimmer's foot height: toward `goal` by at most `SWIM.rise * dt`, never below the bed. */
+export function stepSwimY(y: number, goal: number, bed: number, dt: number): number {
+  const m = SWIM.rise * dt;
+  return Math.max(bed, y + Math.max(-m, Math.min(m, goal - y)));
 }

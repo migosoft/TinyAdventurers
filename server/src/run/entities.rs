@@ -81,6 +81,9 @@ pub struct Player {
     pub sinking: Option<(f64, Sink)>,
     /// Centre of the last safe tile stood on (debug mode puts a fallen hero back here).
     pub last_safe: Vec2,
+    /// Server-only: seconds in deep water on silent ticks (no input), not yet matched by inputs. Kept apart from
+    /// `mv.water_t`, which stays exactly what the client predicts; inputs pay it back, death counts both.
+    pub stall_water_t: f64,
     /// Time since the last lava burn.
     pub burn_t: f64,
     /// What the hero sees (from the class profile) and an override of its darkvision fraction.
@@ -144,6 +147,11 @@ pub enum Sink {
 }
 
 impl Player {
+    /// Seconds in deep water as the server counts them: the predicted clock plus the stall (targeting, breath).
+    pub fn water_total(&self) -> f64 {
+        self.mv.water_t + self.stall_water_t
+    }
+
     /// Takes in what every processed input says about the connection: its sequence number, and the client's
     /// view lag and round trip. A charmed hero's inputs do only this.
     pub fn acknowledge(&mut self, input: &InputMsg) {
@@ -430,6 +438,8 @@ pub struct Monster {
     pub burn_t: f64,
     /// Centre of the last safe tile it stood on (a creature with a Leap leaps back there from danger).
     pub last_safe: Vec2,
+    /// Seconds in deep water on the ground (0 when out): the breath clock, as the heroes' `MoveState::water_t`.
+    pub water_t: f64,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
     /// Status effects (run/effects.rs).
@@ -478,6 +488,15 @@ impl Monster {
             Mover::Dash
         } else {
             self.mover
+        }
+    }
+
+    /// The factor on its walking speed while it swims (1 on dry ground): slower in deep water, slower again with the head under.
+    pub fn swim_mul(&self) -> f64 {
+        if self.water_t > 0.0 {
+            crate::dungeon::SWIM_SPEED * crate::dungeon::under_factor(self.water_t)
+        } else {
+            1.0
         }
     }
 

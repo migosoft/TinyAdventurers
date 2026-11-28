@@ -58,22 +58,16 @@ describe('FigureStates.stateOf', () => {
     expect(fs.stateOf(ent(), frame({ x: at(3), dashing: true }), 0).s.sink).toBe(0);
     expect(fs.stateOf(ent(), frame({ x: at(3) }), 0).s.sink).toBeGreaterThan(0);
   });
-  it('drowns a hero after a Sink event: drown rises over DROWN_TIME, position pinned', () => {
+  it('ignores a Sink how 1: a drowning is the snapshot byte (#448), not an event', () => {
     const fs = new FigureStates(map());
     fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 10);
-    const e = ent({ id: 7, x: at(0), y: 3 });
-    const a = fs.stateOf(e, frame(), 10);
-    expect(a.drowning).toBe(true);
-    expect(a.s).toMatchObject({ x: at(1), y: 9, drown: 0, fall: 0, anim: ANIM.Idle, animT: 0 });
-    const b = fs.stateOf(e, frame(), 10 + CONST.DROWN_TIME / 2);
-    expect(b.s.drown).toBeCloseTo(0.5);
-    expect(fs.stateOf(e, frame(), 20).s.drown).toBe(1);
+    expect(fs.sinking(7)).toBe(false);
+    expect(fs.event({ t: 'Died', id: 7, x: 0, y: 0, kind: KIND.Paladin }, 11)).toBeNull();
   });
   it('falls into a chasm over FALL_TIME', () => {
     const fs = new FigureStates(map());
     fs.event({ t: 'Sink', id: 7, x: at(2), y: 9, how: 0 }, 0);
     const a = fs.stateOf(ent({ id: 7 }), frame(), CONST.FALL_TIME / 2);
-    expect(a.drowning).toBe(false);
     expect(a.s.fall).toBeCloseTo(0.5);
     expect(a.s.drown).toBe(0);
   });
@@ -86,17 +80,16 @@ describe('FigureStates.stateOf', () => {
   });
   it('Sink how 2 clears the sink', () => {
     const fs = new FigureStates(map());
-    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 0);
+    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 0 }, 0);
     fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 2 }, 0.1);
     const r = fs.stateOf(ent({ id: 7, x: at(0) }), frame(), 0.2);
     expect(r.s.drown).toBeUndefined();
-    expect(r.drowning).toBe(false);
+    expect(fs.sinking(7)).toBe(false);
   });
   it('starts a predicted sink for the own hero once, and reports it', () => {
     const fs = new FigureStates(map());
     const a = fs.stateOf(ent(), frame({ x: at(1), sinking: true }), 5);
     expect(a.started).toBe(true);
-    expect(a.drowning).toBe(true);
     const b = fs.stateOf(ent(), frame({ x: at(0), sinking: true }), 5.1);
     expect(b.started).toBe(false);
     expect(b.s.x).toBe(at(1));
@@ -105,9 +98,7 @@ describe('FigureStates.stateOf', () => {
     const fs = new FigureStates(map());
     const a = fs.stateOf(ent(), frame({ x: at(2), sinking: true }), 5);
     expect(a.started).toBe(true);
-    expect(a.drowning).toBe(false);
     const b = fs.stateOf(ent(), frame({ x: at(0), sinking: true }), 5 + CONST.FALL_TIME / 2);
-    expect(b.drowning).toBe(false);
     expect(b.s.fall).toBeCloseTo(0.5);
     expect(b.s.drown).toBe(0);
     expect(b.s.x).toBe(at(2));
@@ -119,15 +110,15 @@ describe('FigureStates.event', () => {
   it('Died after a sink returns lost, once; otherwise null', () => {
     const fs = new FigureStates(map());
     expect(fs.event(died, 0)).toBeNull();
-    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 0);
+    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 0 }, 0);
     expect(fs.event(died, 1)).toBe('lost');
     expect(fs.event(died, 1)).toBeNull();
   });
   it('a second Sink event does not restart the sink', () => {
     const fs = new FigureStates(map());
-    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 1 }, 0);
+    fs.event({ t: 'Sink', id: 7, x: at(1), y: 9, how: 0 }, 0);
     fs.event({ t: 'Sink', id: 7, x: at(2), y: 9, how: 0 }, 5);
-    expect(fs.stateOf(ent({ id: 7 }), frame(), CONST.DROWN_TIME / 2).s.drown).toBeCloseTo(0.5);
+    expect(fs.stateOf(ent({ id: 7 }), frame(), CONST.FALL_TIME / 2).s.fall).toBeCloseTo(0.5);
   });
   it('Invisible on then takeVanish is true once; off then takeReappear is true once', () => {
     const fs = new FigureStates(map());

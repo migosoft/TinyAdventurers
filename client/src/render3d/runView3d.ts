@@ -472,7 +472,7 @@ export class RunView3d implements RunView {
     if (sight.mask) hiddenByPicture([cardsQ, ghostsQ], sight.mask, this.hiddenSeen, this.hidden, fo.models, fo.built);
     // The water (#345): after the figures and the hidden ids, before the effects (they draw its droplets); the drips of the air's last step ring it.
     const ws = this.waterStepIn;
-    ws.dt = dt; ws.now = c.now; ws.figs = fo.figs; ws.sinks = fo.sinks; ws.landed = this.landed; ws.hidden = this.hidden;
+    ws.dt = dt; ws.now = c.now; ws.figs = fo.figs; ws.sinks = fo.sinks; ws.swims = fo.swims; ws.landed = this.landed; ws.hidden = this.hidden;
     ws.puddles = view.stone?.marks.puddles; ws.fp = fp;
     const wo = this.water.step(ws);
     this.landed = null;

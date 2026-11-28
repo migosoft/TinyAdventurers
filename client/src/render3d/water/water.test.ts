@@ -96,6 +96,43 @@ describe('Water3d', () => {
     expect(after.cues.bubbles.length).toBe(0);
   });
 
+  it('a breathing creature in the drowning state sends bubbles that follow it and thicken once its head is under; a breathless one and a wader make none (#448)', () => {
+    const run = (swim: { t: number; breathless: boolean } | null, ticks = 120) => {
+      const w = new Water3d(room(), rng);
+      let n = 0, last: { x: number; z: number } | null = null;
+      for (let i = 0; i < ticks; i++) {
+        const x = 6 + i * 0.005;
+        const r = w.step(inp(i / 60, 1 / 60, [fig(1, x, 2)], { swims: swim ? [{ id: 1, x, z: 2, ...swim }] : [] }));
+        n += r.cues.bubbles.length;
+        if (r.cues.bubbles.length) last = { x: r.cues.bubbles[r.cues.bubbles.length - 1].x, z: r.cues.bubbles[r.cues.bubbles.length - 1].z };
+      }
+      return { n, last, x: 6 + (ticks - 1) * 0.005 };
+    };
+    const early = run({ t: 0.3, breathless: false });
+    const under = run({ t: CONST.HEAD_UNDER + 0.5, breathless: false });
+    expect(early.n).toBeGreaterThan(0);
+    expect(under.n).toBeGreaterThanOrEqual(early.n); // under = above = 2 a second since #448's fewer bubbles
+    expect(Math.abs(under.last!.x - under.x)).toBeLessThan(0.25);   // above its head, following it
+    expect(run({ t: 2, breathless: true }).n).toBe(0);
+    expect(run(null).n).toBe(0);
+  });
+
+  it('a breathing swimmer rings the surface where its bubbles come up; a breathless one makes neither (#448)', () => {
+    const live = (breathless: boolean) => {
+      const w = new Water3d(room(), rng);
+      let bubbles = 0, l = 0;
+      for (let i = 0; i < 90; i++) {
+        const r = w.step(inp(i / 60, 1 / 60, [fig(1, 6.5, 2)], { swims: [{ id: 1, x: 6.5, z: 2, t: CONST.HEAD_UNDER + 0.5, breathless }] }));
+        bubbles += r.cues.bubbles.length; l = r.live;
+      }
+      return { bubbles, l };
+    };
+    const a = live(false), b = live(true);
+    expect(a.bubbles).toBeGreaterThan(0);
+    expect(a.l).toBeGreaterThan(b.l);
+    expect(b.bubbles).toBe(0);
+  });
+
   it('rings where a drip lands', () => {
     const w = new Water3d(room(), rng);
     const pos = new Float32Array([6.5, 1.5, 8.5, 2.5]);

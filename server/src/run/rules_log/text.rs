@@ -335,6 +335,7 @@ pub(super) fn skip_reason(s: Skip) -> Option<&'static str> {
         Skip::Dormant => Some("it is dormant"),
         Skip::Airborne => Some("it is flying"),
         Skip::Bodiless => Some("it has no body"),
+        Skip::Under => Some("its head is under water"),
         Skip::Invisible => Some("it is invisible"),
         Skip::NoLineOfSight => Some("no line of sight"),
         Skip::AlreadyHit => Some("already hit"),

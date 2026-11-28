@@ -437,7 +437,8 @@ impl Run {
             Creature::Monster(i) => self.monsters.get(i).map(|m| (m.pos, m.alive && m.sinking.is_none())),
         }
         .unwrap_or((Vec2::new(0.0, 0.0), false));
-        if !ok {
+        // Head under water: out of reach of every effect, like a creature that is gone.
+        if !ok || self.under(c) {
             return Err((EffectOutcome::NotThere, d));
         }
         let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_present(c, k)).collect();
@@ -553,6 +554,9 @@ impl Run {
 
     /// A monster starts a wind-up (an attack): it ends its Invisible.
     pub fn start_windup(&mut self, mi: usize, w: super::entities::Windup) {
+        if self.monsters[mi].water_t > 0.0 {
+            return; // nothing winds up in deep water
+        }
         self.act(Creature::Monster(mi));
         self.monsters[mi].ai.windup = Some(w);
     }

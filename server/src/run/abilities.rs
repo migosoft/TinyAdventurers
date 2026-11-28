@@ -135,13 +135,13 @@ pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarg
         .monsters
         .iter()
         .enumerate()
-        .filter(|&(i, m)| m.alive && !m.airborne && targets::fights(&me, &targets::stance(run, Creature::Monster(i))) && !run.passes_through(Creature::Monster(i), split))
+        .filter(|&(i, m)| m.alive && !m.airborne && !run.under(Creature::Monster(i)) && targets::fights(&me, &targets::stance(run, Creature::Monster(i))) && !run.passes_through(Creature::Monster(i), split))
         .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
     let heroes = run
         .players
         .iter()
         .enumerate()
-        .filter(|&(i, p)| i != pi && p.alive && targets::fights(&me, &targets::stance(run, Creature::Player(i))))
+        .filter(|&(i, p)| i != pi && p.alive && !run.under(Creature::Player(i)) && targets::fights(&me, &targets::stance(run, Creature::Player(i))))
         .map(|(i, p)| (MeleeTarget::Player(i), p.pos_ago(rw).dist(pos) - PLAYER_RADIUS));
     let chests = run
         .objects
@@ -316,6 +316,10 @@ impl Cooldowns {
 /// nothing is passed in.
 pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     let Some(a) = run.monsters[mi].kit.get(id).cloned() else { return false };
+    // Nothing is released from deep water (the one gate every blow, bolt and cast passes).
+    if run.monsters[mi].water_t > 0.0 {
+        return false;
+    }
     if id == AbilityId::Vanish {
         // Its cooldown is `invis_cd`, which pauses while Invisible, not the ability cooldowns.
         return run.go_invisible(mi, &a.effect, a.cooldown);
@@ -1166,7 +1170,8 @@ pub(crate) fn stopping_object(run: &Run, p: Vec2, r: f64) -> Option<usize> {
 /// Whether shot `pr` hits creature `c` when it is close enough: everything but the distance (side, alive, not
 /// already hit, not flown through, not sinking). The real flight and the dodge's replay both ask this.
 pub(crate) fn shot_takes(run: &Run, pr: &Projectile, c: Creature) -> bool {
-    if !targets::may_hit(run, pr.side, c) {
+    // Head under water: shots fly over it (#448).
+    if !targets::may_hit(run, pr.side, c) || run.under(c) {
         return false;
     }
     match c {
@@ -2200,6 +2205,59 @@ mod tests {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
         }
         mis.iter().zip(hps).map(|(&mi, &hp)| (run.monsters[mi].alive, hp - run.monsters[mi].hp.max(0.0))).collect()
+    }
+
+    /// An orc 30 px east with its head under, a second one 60 px east: the fired shot (burst or not) flies over
+    /// the first and hits the second (#448).
+    #[test]
+    fn a_shot_flies_over_a_creature_whose_head_is_under() {
+        for burst in [false, true] {
+            let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
+            run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+            run.players[0].aim = 0.0;
+            run.players[0].aim_dist = 60.0;
+            let near = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 30.0, 1000.0);
+            let far = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 60.0, 1000.0);
+            run.monsters[near].water_t = 1.3;
+            try_use(&mut run, 0, true, 1);
+            if burst {
+                run.projectiles[0].explode_r = 8.0;
+            }
+            for _ in 0..30 {
+                tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            }
+            assert_eq!(run.monsters[near].hp, 1000.0, "burst={burst}: untouched");
+            assert!(run.monsters[far].hp < 1000.0, "burst={burst}: the one behind it is hit");
+        }
+    }
+
+    #[test]
+    fn melee_targets_skip_a_creature_whose_head_is_under() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
+        let mi = put_monster_near(&mut run, 0, 10.0);
+        let split = run.players[0].sheet.fallback.split;
+        run.monsters[mi].water_t = 0.5;
+        assert!(melee_targets(&run, 0, &split).contains(&MeleeTarget::Monster(mi)));
+        run.monsters[mi].water_t = 1.3;
+        assert!(melee_targets(&run, 0, &split).is_empty());
+    }
+
+    #[test]
+    fn a_heal_does_not_reach_a_creature_whose_head_is_under() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::FireDemon);
+        let mi = put_monster_near(&mut run, 0, 100.0);
+        run.monsters[mi].hp = 1.0;
+        run.players[0].hp = 1.0;
+        run.monsters[mi].water_t = 0.5;
+        run.players[0].mv.water_t = 0.5;
+        assert!(run.heal_monster(mi, 5.0, None) > 0.0 && run.heal_player(0, 5.0, None) > 0.0, "before the head goes under");
+        run.monsters[mi].hp = 1.0;
+        run.players[0].hp = 1.0;
+        run.monsters[mi].water_t = 1.3;
+        run.players[0].mv.water_t = 1.3;
+        assert_eq!(run.heal_monster(mi, 5.0, None), 0.0);
+        assert_eq!(run.heal_player(0, 5.0, None), 0.0);
+        assert!(run.monsters[mi].hp == 1.0 && run.players[0].hp == 1.0);
     }
 
     #[test]

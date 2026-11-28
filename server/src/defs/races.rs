@@ -88,12 +88,14 @@ pub struct Traits {
     pub knock_immune: bool,
     /// No physical body: attacks it fully resists pass through it.
     pub bodiless: bool,
+    /// Does not breathe: never drowns; any later suffocation (gas, smoke, no air) reads this too.
+    pub breathless: bool,
 }
 
 impl Traits {
     /// Field-wise OR: a trait of any race is the entity's.
     pub fn merge(self, o: Traits) -> Traits {
-        Traits { phasing: self.phasing || o.phasing, invisibility: self.invisibility || o.invisibility, knock_immune: self.knock_immune || o.knock_immune, bodiless: self.bodiless || o.bodiless }
+        Traits { phasing: self.phasing || o.phasing, invisibility: self.invisibility || o.invisibility, knock_immune: self.knock_immune || o.knock_immune, bodiless: self.bodiless || o.bodiless, breathless: self.breathless || o.breathless }
     }
 }
 
@@ -127,7 +129,7 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Ogre => RaceDef { turn: 0.6, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
         Race::Mimic => RaceDef { neck: 0.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
         Race::Animal => RaceDef { cone: 270.0, ..plain(Resistances::NONE, 8.0, 1.0 / 3.0) },
-        Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)).strongest(charm(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
+        Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)).strongest(charm(1.0)), traits: Traits { breathless: true, ..Traits::default() }, ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
         Race::Demon => RaceDef { effect_res: fear(0.5).strongest(charm(0.5)), ..plain(Resistances::of(&[(Magical, 0.2)]), 9.0, 1.0) },
         // Sight, cone, neck 0: `profile` takes the best of the races, so the body race's wins.
         Race::Fire => RaceDef { cone: 0.0, neck: 0.0, ..plain(Resistances::of(&[(Heat, 1.0), (Cold, -0.5)]), 0.0, 0.0) },
@@ -141,7 +143,7 @@ pub fn race_def(r: Race) -> RaceDef {
                 Physical | Cold | Heat | Poison => 1.0,
                 Magical => -0.1,
             })));
-            RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true }, ..plain(res, 0.0, 0.0) }
+            RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true, breathless: false }, ..plain(res, 0.0, 0.0) }
         }
         Race::MagicalBeast => RaceDef { attrs: Attributes::new(0, 0, 0, 3, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), 18.0, 1.0) },
     }
@@ -405,8 +407,16 @@ mod tests {
         assert_eq!(p.effect_res.get(EffectKind::Entangled), 1.0);
         assert_eq!(p.effect_res.get(EffectKind::Fear), 1.0, "from Undead");
         assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0, cone: 150.0, neck: 80.0 }, "Undead's sight");
-        assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true });
-        assert_eq!(profile(&[Race::Undead], Adjust::NONE).traits, Traits::default());
+        assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true, breathless: true });
+        assert_eq!(profile(&[Race::Undead], Adjust::NONE).traits, Traits { breathless: true, ..Traits::default() });
+    }
+
+    #[test]
+    fn undead_are_breathless() {
+        assert!(profile(&[Race::Undead], Adjust::NONE).traits.breathless);
+        assert!(profile(&[Race::Undead, Race::Incorporeal], Adjust::NONE).traits.breathless);
+        assert!(!profile(&[Race::Human], Adjust::NONE).traits.breathless);
+        assert!(!profile(&[Race::Orc], Adjust::NONE).traits.breathless);
     }
 
     #[test]

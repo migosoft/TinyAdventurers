@@ -46,7 +46,7 @@ pub fn act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
         }
         return true;
     }
-    if seen.is_some() {
+    if seen.is_some() && run.monsters[mi].water_t <= 0.0 {
         let raise = run.monsters[mi].kit.iter().cloned().find(|a| {
             ab::def(a.id).module == Some(Module::Minions) && run.monsters[mi].cds.ready(a.id) && room(run, mi, a) > 0
         });
