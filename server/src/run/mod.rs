@@ -1191,6 +1191,9 @@ impl Run {
 
     /// Heals hero `pi` up to the maximum; returns what they gained. `by` is who heals them and with what.
     pub fn heal_player(&mut self, pi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
+        if self.under(effects::Creature::Player(pi)) {
+            return 0.0;
+        }
         let hp_before = self.players[pi].hp;
         let healed = self.mend_player(pi, amount);
         rules_log::heal(self, rules_log::HealFacts { target: effects::Creature::Player(pi), by, healed, hp_before });
@@ -1297,7 +1300,7 @@ impl Run {
     /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
     pub fn heal_monster(&mut self, mi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.side == Side::Neutral {
+        if !m.alive || m.side == Side::Neutral || dungeon::head_under(m.water_t) {
             return 0.0;
         }
         let hp_before = m.hp;
