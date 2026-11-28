@@ -9,7 +9,7 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::foliage::{LeafPalette, WOODLAND_FOLIAGE};
 use crate::math::Vec2;
 use rand::seq::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::{HashSet, VecDeque};
 
@@ -224,7 +224,7 @@ struct Noise {
 }
 impl Noise {
     fn new(rng: &mut ChaCha8Rng, len: i32, step: f64) -> Self {
-        Noise { v: (0..(len as f64 / step) as usize + 3).map(|_| rng.gen_range(-1.0..=1.0)).collect(), step }
+        Noise { v: (0..(len as f64 / step) as usize + 3).map(|_| rng.random_range(-1.0..=1.0)).collect(), step }
     }
     fn at(&self, x: f64) -> f64 {
         let (i, t) = ((x / self.step).floor(), (x / self.step).fract());
@@ -315,12 +315,12 @@ fn in_ellipse(e: &[f64; 4], x: i32, y: i32) -> bool {
 }
 
 fn jitter(rng: &mut ChaCha8Rng, x: i32, y: i32) -> Vec2 {
-    Vec2::new(x as f64 * TILE + rng.gen_range(3.0..13.0), y as f64 * TILE + rng.gen_range(3.0..13.0))
+    Vec2::new(x as f64 * TILE + rng.random_range(3.0..13.0), y as f64 * TILE + rng.random_range(3.0..13.0))
 }
 
 fn fresh_seed(rng: &mut ChaCha8Rng, used: &mut HashSet<u32>) -> u32 {
     loop {
-        let s = rng.gen_range(1..=1_000_000u32);
+        let s = rng.random_range(1..=1_000_000u32);
         if used.insert(s) {
             return s;
         }
@@ -372,7 +372,7 @@ fn band_edge(map: &Map, x: i32, dir: i32) -> Option<(i32, i32)> {
 fn plan_stream(rng: &mut ChaCha8Rng, c: &WaterCtx, inflow: bool, far: bool, apart: Option<i32>) -> Option<StreamPlan> {
     let (floor, road) = (Tile::Floor as u8, Tile::Road as u8);
     for _ in 0..STREAM_TRIES {
-        let x = rng.gen_range(c.reach.0..=c.reach.1);
+        let x = rng.random_range(c.reach.0..=c.reach.1);
         if !playable_x(x) || apart.is_some_and(|a| (x - a).abs() < STREAM_APART) {
             continue;
         }
@@ -443,24 +443,24 @@ fn all_reached(map: &Map, road0: (i32, i32)) -> bool {
 /// every walkable tile is still reached. Its own rng: a seed without a pond is the old map.
 fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, ellipses: &[[f64; 4]], road0: (i32, i32)) -> Option<(Map, Pond)> {
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ POND_SALT);
-    if rng.gen_range(0..100) >= POND_PCT {
+    if rng.random_range(0..100) >= POND_PCT {
         return None;
     }
     let end = ellipses[ellipses.len() - 1];
     let (min_x, max_x) = (start.x + start.w - 1 + POND_FROM_ENDS, (end[0] - end[2]).floor() as i32 - POND_FROM_ENDS);
     let floor = Tile::Floor as u8;
     for _ in 0..POND_TRIES {
-        let pond_seed = rng.gen_range(1..=1_000_000u32);
-        let side = if rng.gen_bool(0.5) { -1 } else { 1 };
-        let (rx, ry) = (rng.gen_range(POND_FIRST_RX), rng.gen_range(POND_FIRST_RY));
-        let cx = rng.gen_range(min_x as f64 + rx..=max_x as f64 - rx);
-        let cy = centre(cx as i32) + 0.5 + side as f64 * (ry + rng.gen_range(POND_ROAD_GAP));
+        let pond_seed = rng.random_range(1..=1_000_000u32);
+        let side = if rng.random_bool(0.5) { -1 } else { 1 };
+        let (rx, ry) = (rng.random_range(POND_FIRST_RX), rng.random_range(POND_FIRST_RY));
+        let cx = rng.random_range(min_x as f64 + rx..=max_x as f64 - rx);
+        let cy = centre(cx as i32) + 0.5 + side as f64 * (ry + rng.random_range(POND_ROAD_GAP));
         let mut blobs = vec![Blob { cx, cy, rx, ry }];
-        for _ in 1..rng.gen_range(POND_BLOBS) {
+        for _ in 1..rng.random_range(POND_BLOBS) {
             let p = &blobs[blobs.len() - 1];
-            let (a, f) = (rng.gen_range(0.0..std::f64::consts::TAU), rng.gen_range(POND_NEXT_AT));
+            let (a, f) = (rng.random_range(0.0..std::f64::consts::TAU), rng.random_range(POND_NEXT_AT));
             let (nx, ny) = (p.cx + a.cos() * p.rx * f, p.cy + a.sin() * p.ry * f);
-            blobs.push(Blob { cx: nx, cy: ny, rx: rng.gen_range(POND_NEXT_RX), ry: rng.gen_range(POND_NEXT_RY) });
+            blobs.push(Blob { cx: nx, cy: ny, rx: rng.random_range(POND_NEXT_RX), ry: rng.random_range(POND_NEXT_RY) });
         }
         let body = blob_tiles(&blobs, pond_seed);
         let mut nearest = f64::MAX;
@@ -495,11 +495,11 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
             reach: (tiles.iter().map(|t| t.0).min().unwrap() - STREAM_REACH, tiles.iter().map(|t| t.0).max().unwrap() + STREAM_REACH),
         };
         // the plans: every draw comes before the checks, so dropping a part does not move the others
-        let roll = rng.gen_range(0..100);
+        let roll = rng.random_range(0..100);
         let (mut inflow, mut outflow) = (None, None);
         let mut far = false;
         if roll >= STREAM_NONE_PCT {
-            far = rng.gen_range(0..100) < STREAM_FAR_PCT;
+            far = rng.random_range(0..100) < STREAM_FAR_PCT;
             inflow = plan_stream(&mut rng, &ctx, true, far, None);
         }
         if roll >= STREAM_NONE_PCT + STREAM_INFLOW_PCT {
@@ -509,7 +509,7 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
         }
         let used: HashSet<(i32, i32)> = [&inflow, &outflow].into_iter().flatten().flat_map(|s| s.tiles.iter().chain(&s.wide).copied()).collect();
         let mut bridge: Option<(Bridge, Vec<(i32, i32)>)> = None;
-        if rng.gen_range(0..100) < POND_BRIDGE_PCT {
+        if rng.random_range(0..100) < POND_BRIDGE_PCT {
             // a straight line of 2 to 5 shallow tiles with Floor at both ends
             let shallow = |x: i32, y: i32| pond_map.get(x, y) == Tile::ShallowWater as u8 && water.contains(&(x, y)) && !used.contains(&(x, y));
             let dry = |x: i32, y: i32| pond_map.get(x, y) == floor && playable_x(x) && !used.contains(&(x, y));
@@ -530,7 +530,7 @@ fn place_water(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, start: Rect, e
                 }
             }
             if !lines.is_empty() {
-                bridge = Some(lines.swap_remove(rng.gen_range(0..lines.len())));
+                bridge = Some(lines.swap_remove(rng.random_range(0..lines.len())));
             }
         }
         // drop the outflow, then the pond bridge, then the inflow, then the pond
@@ -592,7 +592,7 @@ fn place_willows(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, pond: &Pond,
         })
         .collect();
     cand.shuffle(&mut rng);
-    let n = rng.gen_range(WILLOWS);
+    let n = rng.random_range(WILLOWS);
     let mut out: Vec<Plant> = vec![];
     for (x, y) in cand {
         if out.len() == n {
@@ -602,7 +602,7 @@ fn place_willows(seed: u64, map: &Map, centre: &dyn Fn(i32) -> f64, pond: &Pond,
         // the road's clearing, as for every tree
         let road = (foot.y - (centre(x) + 0.5) * TILE).abs() / TILE;
         if road >= ROAD_CLEAR && out.iter().all(|w| w.foot.dist(foot) >= WILLOW_GAP * TILE) {
-            let (scale_pct, mirrored, seed) = (rng.gen_range(WILLOW_SCALE), rng.gen_bool(0.5), fresh_seed(&mut rng, used));
+            let (scale_pct, mirrored, seed) = (rng.random_range(WILLOW_SCALE), rng.random_bool(0.5), fresh_seed(&mut rng, used));
             out.push(Plant { kind: PlantKind::Willow, foot, seed, scale_pct, mirrored, leaf_pct: WOODLAND_FOLIAGE.leaf_pct, dead: false });
         }
     }
@@ -620,7 +620,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     map.tiles.fill(Tile::Thicket as u8);
 
     // 1. The road.
-    let (p1, p2) = (rng.gen_range(0.0..std::f64::consts::TAU), rng.gen_range(0.0..std::f64::consts::TAU));
+    let (p1, p2) = (rng.random_range(0.0..std::f64::consts::TAU), rng.random_range(0.0..std::f64::consts::TAU));
     let centre = |x: i32| -> f64 {
         let x = x as f64;
         // balancing
@@ -641,11 +641,11 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     // 3. Clearings, the start and the end.
     let mut clearings: Vec<Rect> = vec![];
     let mut ellipses: Vec<[f64; 4]> = vec![];
-    let mut above = rng.gen_bool(0.5);
+    let mut above = rng.random_bool(0.5);
     for i in 0..6 {
-        let x = x0 + (24.0 + i as f64 * (WOODLAND_PLAY_W - 48) as f64 / 5.0 + rng.gen_range(-5.0..=5.0)).round() as i32; // balancing
-        let (rx, ry) = (rng.gen_range(5.0..=8.0), rng.gen_range(4.0..=6.0)); // balancing
-        let dy = rng.gen_range(13.0..=18.0); // balancing: beyond the road's clearing
+        let x = x0 + (24.0 + i as f64 * (WOODLAND_PLAY_W - 48) as f64 / 5.0 + rng.random_range(-5.0..=5.0)).round() as i32; // balancing
+        let (rx, ry) = (rng.random_range(5.0..=8.0), rng.random_range(4.0..=6.0)); // balancing
+        let dy = rng.random_range(13.0..=18.0); // balancing: beyond the road's clearing
         let c = centre(x);
         let mut cy = if above { c - dy } else { c + dy };
         if cy < 3.0 + ry || cy > (h - 4) as f64 - ry {
@@ -732,20 +732,20 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         .collect();
     tiles.shuffle(&mut rng);
     let mut trees: Vec<Plant> = willows;
-    let lone: Vec<bool> = tiles.iter().map(|_| rng.gen_ratio(1, ROAD_SPARSE_ONE_IN)).collect();
+    let lone: Vec<bool> = tiles.iter().map(|_| rng.random_ratio(1, ROAD_SPARSE_ONE_IN)).collect();
     // Groves (#427): beyond the road's clearing the trees stand in clumps with open grass between them, so the
     // forest reads lush with fewer plants. (centre x, centre y, radius; tiles)
     let mut groves: Vec<[f64; 3]> = vec![];
     for &(x, y) in &tiles {
         let (gx, gy) = (x as f64 + 0.5, y as f64 + 0.5);
         if (gy - centre(x) - 0.5).abs() >= ROAD_SPARSE && groves.iter().all(|g| (g[0] - gx).hypot(g[1] - gy) >= GROVE_GAP) {
-            groves.push([gx, gy, rng.gen_range(GROVE_R)]);
+            groves.push([gx, gy, rng.random_range(GROVE_R)]);
         }
     }
     let in_grove = |x: i32, y: i32, extra: f64| groves.iter().any(|g| (g[0] - x as f64 - 0.5).hypot(g[1] - y as f64 - 0.5) <= g[2] + extra);
     for _pass in 0..3 {
         for (i, &(x, y)) in tiles.iter().enumerate() {
-            let roll = rng.gen_range(0..100);
+            let roll = rng.random_range(0..100);
             // (kind, spacing in tiles, scale range); round 28, conifer 24, tall 19, small round 14, wide 10, dead 5.
             // A dead tree's kind is a placeholder until its seed is drawn.
             let dead = roll >= 100 - WOODLAND_FOLIAGE.dead_pct as i32;
@@ -767,8 +767,8 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 continue;
             }
             placed.add(foot, spacing);
-            let scale_pct = rng.gen_range(lo..=hi);
-            let mirrored = rng.gen_bool(0.5);
+            let scale_pct = rng.random_range(lo..=hi);
+            let mirrored = rng.random_bool(0.5);
             let seed = fresh_seed(&mut rng, &mut used);
             let (kind, leaf_pct) = if dead {
                 ([PlantKind::Round, PlantKind::Wide, PlantKind::Tall][seed as usize % 3], 0)
@@ -802,14 +802,14 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut edge_placed = Placed::new();
     let mut edge: Vec<Plant> = vec![];
     let edge_plant = |rng: &mut ChaCha8Rng, kind: PlantKind, foot: Vec2| {
-        let (seed, scale_pct) = EDGE_SEEDS[kind as usize][rng.gen_range(0..12)];
-        Plant { kind, foot, seed, scale_pct, mirrored: rng.gen_bool(0.5), leaf_pct: WOODLAND_FOLIAGE.leaf_pct, dead: false }
+        let (seed, scale_pct) = EDGE_SEEDS[kind as usize][rng.random_range(0..12)];
+        Plant { kind, foot, seed, scale_pct, mirrored: rng.random_bool(0.5), leaf_pct: WOODLAND_FOLIAGE.leaf_pct, dead: false }
     };
     for &(x, y, _) in &edge_tiles {
         let foot = jitter(&mut rng, x, y);
         if edge_placed.free(foot, 3.2) {
             edge_placed.add(foot, 3.2);
-            let kind = [PlantKind::Round, PlantKind::Wide, PlantKind::Conifer][rng.gen_range(0..3)];
+            let kind = [PlantKind::Round, PlantKind::Wide, PlantKind::Conifer][rng.random_range(0..3)];
             edge.push(edge_plant(&mut rng, kind, foot));
         }
     }
@@ -819,7 +819,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             2 => 0.3,
             _ => 0.08,
         }; // balancing
-        if !rng.gen_bool(keep) {
+        if !rng.random_bool(keep) {
             continue;
         }
         let foot = jitter(&mut rng, x, y);
@@ -850,8 +850,8 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             break;
         }
         // a small clump: the tile's own bush and up to two more within two tiles
-        for k in 0..rng.gen_range(BUSH_CLUMP) {
-            let (x, y) = if k == 0 { (sx, sy) } else { (sx + rng.gen_range(-2..=2), sy + rng.gen_range(-2..=2)) };
+        for k in 0..rng.random_range(BUSH_CLUMP) {
+            let (x, y) = if k == 0 { (sx, sy) } else { (sx + rng.random_range(-2..=2), sy + rng.random_range(-2..=2)) };
             if map.get(x, y) != Tile::Floor as u8 || bridge_zone.contains(&(x, y)) {
                 continue;
             }
@@ -860,13 +860,13 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 continue;
             }
             placed.add(foot, 1.5);
-            let scale_pct = rng.gen_range(75..=150); // balancing: 24..48 px wide
+            let scale_pct = rng.random_range(75..=150); // balancing: 24..48 px wide
             bushes.push(Plant {
                 kind: PlantKind::Bush,
                 foot,
                 seed: fresh_seed(&mut rng, &mut used),
                 scale_pct,
-                mirrored: rng.gen_bool(0.5),
+                mirrored: rng.random_bool(0.5),
                 leaf_pct: WOODLAND_FOLIAGE.leaf_pct,
                 dead: false,
             });
@@ -930,7 +930,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             break;
         }
         let r = clearings[ci];
-        let n = rng.gen_range(2..=4);
+        let n = rng.random_range(2..=4);
         let mut cand: Vec<Vec2> = (r.y..r.y + r.h)
             .flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y)))
             .filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8 && !bridge_zone.contains(&(x, y)))
@@ -948,7 +948,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         }
         groups += 1;
         for p in mine {
-            let enemy = [EnemyType::GoblinArcher, EnemyType::OrcWarrior, EnemyType::OrcArcher][rng.gen_range(0..3)];
+            let enemy = [EnemyType::GoblinArcher, EnemyType::OrcWarrior, EnemyType::OrcArcher][rng.random_range(0..3)];
             taken.push(p);
             spawns.push(Spawn { enemy, pos: p });
         }
@@ -968,9 +968,9 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let walk: Vec<(i32, i32)> = floor.iter().copied().filter(|&(x, y)| playable_x(x) && !start.contains_tile(x, y) && !end_all.contains_tile(x, y)).collect();
     let mut anchors: Vec<Vec2> = vec![];
     for (ty, lo, hi, stag) in plan {
-        let n = rng.gen_range(lo..=hi);
+        let n = rng.random_range(lo..=hi);
         for _try in 0..200 {
-            let (ax, ay) = walk[rng.gen_range(0..walk.len())];
+            let (ax, ay) = walk[rng.random_range(0..walk.len())];
             let a = Map::center_of(ax, ay);
             if !ok_spot(a, &taken) || anchors.iter().any(|b| b.dist(a) < 6.0 * TILE) {
                 continue;
@@ -1000,8 +1000,8 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(bushes);
     plants.extend(edge);
     let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
-    let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, pond, road: (0..WOODLAND_W).map(centre).collect(), ellipses };
+    let sun = Sun { side: if sun_rng.random_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.random_range(SUN_ELEVATION) };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.random_range(1..=1_000_000), sun, palette: WOODLAND_FOLIAGE.palette, pond, road: (0..WOODLAND_W).map(centre).collect(), ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()), stone: vec![] };
     (layout, wl)
 }
@@ -1305,7 +1305,8 @@ mod tests {
         // Re-pinned in #279: the bare roll moved the plants. Re-pinned in #427: a larger map, the road's clearing, groves, bush clumps.
         // Re-pinned in #360 for seeds 1, 2, 3 and 7, which got a pond; seed 42 has none and keeps its value.
         // Re-pinned in #431: bigger ponds, more footbridges. Re-pinned in #438: willows at the pond (seed 42 keeps its value).
-        assert_eq!(got, vec![3475023259742059176, 12101050213717879184, 11048658168964646419, 9361667727841432891, 1831013090409208476]);
+        // Re-pinned in #445 (rand 0.10): the random stream maps differently, so every seed's map differs. Rules unchanged.
+        assert_eq!(got, vec![17380683272970541128, 10700253614260391318, 10900070364394571890, 10752533025122834650, 5257703936492519330]);
     }
 
     /// The fingerprints pinned before the water (#360): a seed without a pond must still print them.
@@ -1313,8 +1314,8 @@ mod tests {
         (1, 10293044552774504163),
         (2, 2449216727139127116),
         (3, 3178422832859391124),
-        (7, 7367593523915622726),
-        (42, 1831013090409208476),
+        (7, 10752533025122834650),
+        (42, 5257703936492519330),
     ];
 
     #[test]

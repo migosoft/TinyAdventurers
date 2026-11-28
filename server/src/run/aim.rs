@@ -10,7 +10,7 @@ use crate::defs::attributes::{Attr, Attributes};
 use crate::defs::smarts::Smart;
 use crate::math::Vec2;
 use crate::sheet::ResolvedAbility;
-use rand::Rng;
+use rand::RngExt;
 
 /// Lead reads the target's speed over this many ticks.
 const LEAD_TICKS: usize = 4;
@@ -58,8 +58,8 @@ pub fn creature_aim(run: &mut Run, c: Creature, foe: Creature, a: &ResolvedAbili
     let f = if ranged { factor(mem) } else { 1.0 };
     let radius = pos.dist(at) * run.smarts.scatter.per(&attrs) * f;
     // Uniform over the disc: r = R sqrt(u).
-    let r = radius * run.rng.gen::<f64>().sqrt();
-    let th = run.rng.gen_range(0.0..std::f64::consts::TAU);
+    let r = radius * run.rng.random::<f64>().sqrt();
+    let th = run.rng.random_range(0.0..std::f64::consts::TAU);
     at + Vec2::from_angle(th) * r
 }
 

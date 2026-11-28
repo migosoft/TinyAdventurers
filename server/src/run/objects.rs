@@ -173,7 +173,7 @@ fn break_chest(run: &mut Run, oi: usize) {
     o.gone = true;
     let (pos, r) = (o.pos, o.radius);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_CHEST }, Some(pos));
-    let coins = rand::Rng::gen_range(&mut run.rng, crate::defs::progression::CHEST_COINS);
+    let coins = rand::RngExt::random_range(&mut run.rng, crate::defs::progression::CHEST_COINS);
     run.give_coins(pos, (coins as f64 * BROKEN_CHEST_SHARE).round() as u32);
 }
 

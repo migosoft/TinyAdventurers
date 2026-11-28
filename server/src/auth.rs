@@ -13,7 +13,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use base64::Engine;
 use hmac::{Hmac, KeyInit, Mac};
-use rand::RngCore;
+use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -106,7 +106,7 @@ impl Auth {
 
     pub fn new_session(&self) -> NewSession {
         let mut sid = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut sid);
+        rand::rng().fill_bytes(&mut sid);
         self.sign(&sid, now_secs() + SESSION_MAX_SECS)
     }
 
@@ -166,7 +166,7 @@ impl Auth {
     /// An admin session: the same signed token format, with a shorter expiry.
     pub fn new_admin_session(&self) -> NewSession {
         let mut sid = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut sid);
+        rand::rng().fill_bytes(&mut sid);
         self.sign(&sid, now_secs() + ADMIN_TOKEN_MAX_SECS)
     }
 

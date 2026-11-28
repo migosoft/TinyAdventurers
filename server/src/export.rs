@@ -21,7 +21,7 @@ use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::protocol::ClassId;
 use crate::run::targets::Side;
 use crate::run::{DT, SNAPSHOT_EVERY, TICK_HZ};
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde_json::json;
 use std::path::PathBuf;
@@ -585,12 +585,12 @@ fn export_fixtures() {
         let (mut mx, mut my) = (1i8, 0i8);
         for step in 0..400 {
             if step % 25 == 0 {
-                mx = rng.gen_range(-1..=1);
-                my = rng.gen_range(-1..=1);
+                mx = rng.random_range(-1..=1);
+                my = rng.random_range(-1..=1);
             }
             let dash = step % 97 == 50;
             if dash {
-                let a: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
+                let a: f64 = rng.random_range(0.0..std::f64::consts::TAU);
                 s.dash_t = 0.18;
                 s.dash_dx = a.cos();
                 s.dash_dy = a.sin();
@@ -598,8 +598,8 @@ fn export_fixtures() {
             // A push (14-44 px, any direction) now and then, carried into terrain and walls.
             let knock = step % 97 == 20;
             if knock {
-                let a: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
-                let v = crate::collision::knock_speed(rng.gen_range(14.0..44.0), DT);
+                let a: f64 = rng.random_range(0.0..std::f64::consts::TAU);
+                let v = crate::collision::knock_speed(rng.random_range(14.0..44.0), DT);
                 s.knock_vx = a.cos() * v;
                 s.knock_vy = a.sin() * v;
             }

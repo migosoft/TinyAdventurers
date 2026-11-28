@@ -13,7 +13,7 @@ use crate::sheet::ResolvedAbility;
 use crate::defs::races::{BODY_TURN, HEAD_TURN, OFF_FACING_FULL, OFF_FACING_MIN, STARTLE};
 use crate::dungeon::{Mover, TILE};
 use crate::math::{angle_diff, Vec2};
-use rand::Rng;
+use rand::RngExt;
 use std::f64::consts::{PI, TAU};
 
 /// Seconds between idle looks and how long one lasts (min, max; `run.rng`), and how far of the neck they reach.
@@ -349,8 +349,8 @@ pub fn idle_look(run: &mut Run, mi: usize, dt: f64) {
     }
     ai.idle_look_t -= dt;
     if ai.idle_look_t <= 0.0 {
-        let rel = run.rng.gen_range(-IDLE_LOOK_SPAN..IDLE_LOOK_SPAN) * neck;
-        let (every, long) = (run.rng.gen_range(IDLE_LOOK_EVERY.0..IDLE_LOOK_EVERY.1), run.rng.gen_range(IDLE_LOOK_FOR.0..IDLE_LOOK_FOR.1));
+        let rel = run.rng.random_range(-IDLE_LOOK_SPAN..IDLE_LOOK_SPAN) * neck;
+        let (every, long) = (run.rng.random_range(IDLE_LOOK_EVERY.0..IDLE_LOOK_EVERY.1), run.rng.random_range(IDLE_LOOK_FOR.0..IDLE_LOOK_FOR.1));
         let ai = &mut run.monsters[mi].ai;
         ai.idle_look = Some((rel, long));
         ai.idle_look_t = every;
@@ -378,7 +378,7 @@ pub fn spawn_facing(run: &Run, pos: Vec2, pick: f64) -> f64 {
 /// Faces creature `id`, just placed by the level, along its longest free line; that is its home facing too.
 pub fn place(run: &mut Run, id: u32) {
     let Some(mi) = run.monster_idx(id) else { return };
-    let pick = run.rng.gen::<f64>();
+    let pick = run.rng.random::<f64>();
     let a = spawn_facing(run, run.monsters[mi].pos, pick);
     run.monsters[mi].aim = a;
     run.monsters[mi].ai.home_aim = a;

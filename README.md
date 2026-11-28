@@ -75,7 +75,7 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 To run the server tests without a local Rust toolchain:
 
 ```sh
-docker run --rm -v "$PWD":/work -w /work/server rust:1-slim-bookworm cargo test
+docker run --rm -v "$PWD":/work -w /work/server rust:1-slim-trixie cargo test
 ```
 
 `cargo test` also regenerates these client files (commit them):

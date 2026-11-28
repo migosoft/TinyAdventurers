@@ -219,6 +219,8 @@ A lookup by topic: where the code for a topic lives, and which section explains 
 
 ## 3. Build, run, test
 
+**Versions** (updated in #445): images `node:24-alpine`, `rust:1-slim-trixie`, `debian:trixie-slim`, `postgres:17-alpine` (a PostgreSQL major needs a dump and restore of the volume, so it is not bumped with the rest); client Vite 8, Vitest 5, jsdom 31, three.js 0.187 (pinned with `@types/three`). TypeScript stays at 5.9: TypeScript 7 has no `tsserver` for the editor's language server. Server: sqlx 0.9 refuses a dynamic SQL string unless it is wrapped in `AssertSqlSafe`; the few built with `format!` (`db.rs`, `stats.rs`) use only constants and fixed match arms, never input. rand 0.10: the methods are `random_range`/`random_bool` on `rand::RngExt`.
+
 | Task | Command |
 |---|---|
 | Run everything | `cp .env.example .env`, fill in the secrets, `docker compose up --build`, then open http://localhost:8080 |
@@ -229,7 +231,7 @@ A lookup by topic: where the code for a topic lives, and which section explains 
 | Client production build | `cd client && npm run build` (runs the atlas build, tsc, vite) |
 | Browser smoke test | `cd tools/e2e && npm install && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin` (an optional sixth argument picks the level: `... Wizard,Paladin woodland`; default `dungeon`). `node r3d-run.mjs http://localhost:8080/ shots dungeon` plays a run with a debug account |
 
-Server tests in Docker (Git Bash on Windows). `docker-compose.test.yml` starts a throwaway PostgreSQL (in RAM) next to `rust:1-slim-bookworm`. The external volumes `ta-cargo` and `ta-target` cache crates and builds; create them once with `docker volume create`.
+Server tests in Docker (Git Bash on Windows). `docker-compose.test.yml` starts a throwaway PostgreSQL (in RAM) next to `rust:1-slim-trixie`. The external volumes `ta-cargo` and `ta-target` cache crates and builds; create them once with `docker volume create`.
 
 ```sh
 MSYS_NO_PATHCONV=1 docker compose -f docker-compose.test.yml run --rm test

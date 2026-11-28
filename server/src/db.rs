@@ -439,7 +439,7 @@ pub mod tests {
         let url = std::env::var("DATABASE_URL").ok()?;
         let admin = PgPoolOptions::new().max_connections(1).connect(&url).await.expect("test database server");
         let name = format!("ta_test_{:016x}", rand::random::<u64>());
-        admin.execute(format!("CREATE DATABASE {name}").as_str()).await.expect("create test database");
+        admin.execute(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}"))).await.expect("create test database");
         let base = url.rsplit_once('/').map_or(url.as_str(), |(b, _)| b);
         Some(connect(&format!("{base}/{name}")).await)
     }

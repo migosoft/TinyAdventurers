@@ -18,7 +18,7 @@ use crate::run::abilities::{announce_cast, tick_monster_dash};
 use crate::run::ai::path_toward;
 use crate::run::effects::Creature;
 use crate::run::Run;
-use rand::Rng;
+use rand::RngExt;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
@@ -201,7 +201,7 @@ impl BossBehaviour for Demon {
         }
         picks.retain(|&id| face_for(run, bi, ppos, id));
         if !picks.is_empty() {
-            let id = picks[run.rng.gen_range(0..picks.len())];
+            let id = picks[run.rng.random_range(0..picks.len())];
             let cast_time = kit(run, bi, self.ring).windup;
             match id {
                 AbilityId::Strike => self.start(run, bi, Action::Claw, id, kit(run, bi, id).windup, Anim::Melee),

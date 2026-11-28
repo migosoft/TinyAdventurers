@@ -16,7 +16,7 @@ use super::effects::{Apply, Creature};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
-use rand::Rng;
+use rand::RngExt;
 
 /// Cooldowns tick per processed input on both client and server; a small
 /// tolerance absorbs rounding differences.
@@ -632,8 +632,8 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
             crate::run::objects::hurt_object(run, oi, dmg.clone(), None);
         }
     }
-    if run.rng.gen_bool(ab::BREATH_PATCH_CHANCE) {
-        let at = pos + Vec2::from_angle(aim + run.rng.gen_range(-half..half)) * run.rng.gen_range(ab::BREATH_PATCH_NEAREST..a.range);
+    if run.rng.random_bool(ab::BREATH_PATCH_CHANCE) {
+        let at = pos + Vec2::from_angle(aim + run.rng.random_range(-half..half)) * run.rng.random_range(ab::BREATH_PATCH_NEAREST..a.range);
         if !run.layout.map.opaque_at(at) {
             let owner = hero_of(c).map(|pi| run.players[pi].id);
             let kind = if id == AbilityId::FrostBreath { EntityKind::FrostPatch } else { EntityKind::FirePatch };

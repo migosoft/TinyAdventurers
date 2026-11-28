@@ -18,7 +18,7 @@ use crate::run::ai::{move_toward, path_toward};
 use crate::run::effects::Creature;
 use crate::run::minions;
 use crate::run::Run;
-use rand::Rng;
+use rand::RngExt;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
@@ -183,7 +183,7 @@ impl BossBehaviour for Lich {
                     let used = Self::cast(run, bi, id, ahead(run, bi));
                     debug_assert!(used, "the lich's script only picks what its kit has, off cooldown, with room");
                     if id == AbilityId::Nova {
-                        self.hold(id, run.rng.gen_range(0.0..LICH_NOVA_EXTRA_WAIT));
+                        self.hold(id, run.rng.random_range(0.0..LICH_NOVA_EXTRA_WAIT));
                     }
                 }
             }

@@ -1312,7 +1312,7 @@ mod tests {
 
     #[test]
     fn an_on_hit_effect_always_lands() {
-        use rand::RngCore;
+        use rand::Rng;
         let mut run = test_run(&[ClassId::Wizard], BossId::FireDemon);
         let mut twin = run.rng.clone();
         for _ in 0..20 {

@@ -1,7 +1,7 @@
 //! Pure shapes for ponds, streams and rivers (tile coordinates; a tile (x, y) has its centre at (x + 0.5, y + 0.5)).
 
 use super::Tile;
-use rand::Rng;
+use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 
 /// One ellipse of a pond's shape: centre and radii in tiles.
@@ -91,7 +91,7 @@ pub fn winding_path(rng: &mut ChaCha8Rng, from: (f64, f64), to: (f64, f64)) -> V
         .map(|i| {
             let t = i as f64 / n as f64;
             // the sine keeps both ends exactly on `from` and `to`
-            let side = if i == 0 || i == n { 0.0 } else { rng.gen_range(-1.0..=1.0) * PATH_SWING * (t * std::f64::consts::PI).sin() };
+            let side = if i == 0 || i == n { 0.0 } else { rng.random_range(-1.0..=1.0) * PATH_SWING * (t * std::f64::consts::PI).sin() };
             (from.0 + dx * t + nx * side, from.1 + dy * t + ny * side)
         })
         .collect()
@@ -149,12 +149,12 @@ mod tests {
     fn tiles_are_one_piece() {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         for seed in 0..200u32 {
-            let mut blobs = vec![blob(50.0, 50.0, rng.gen_range(3.0..8.0), rng.gen_range(3.0..8.0))];
-            for _ in 0..rng.gen_range(1..4) {
+            let mut blobs = vec![blob(50.0, 50.0, rng.random_range(3.0..8.0), rng.random_range(3.0..8.0))];
+            for _ in 0..rng.random_range(1..4) {
                 let p = &blobs[blobs.len() - 1];
-                let (a, r) = (rng.gen_range(0.0..std::f64::consts::TAU), rng.gen_range(0.0..0.7));
+                let (a, r) = (rng.random_range(0.0..std::f64::consts::TAU), rng.random_range(0.0..0.7));
                 let (cx, cy) = (p.cx + a.cos() * p.rx * r, p.cy + a.sin() * p.ry * r);
-                blobs.push(blob(cx, cy, rng.gen_range(3.0..8.0), rng.gen_range(3.0..8.0)));
+                blobs.push(blob(cx, cy, rng.random_range(3.0..8.0), rng.random_range(3.0..8.0)));
             }
             let tiles = blob_tiles(&blobs, seed);
             let set: HashSet<(i32, i32)> = tiles.iter().map(|t| (t.0, t.1)).collect();

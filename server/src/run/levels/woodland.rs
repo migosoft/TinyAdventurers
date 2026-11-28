@@ -60,7 +60,7 @@ mod tests {
     use crate::protocol::{LevelChoice, LevelId, ServerMsg};
     use crate::run::targets::Side;
     use crate::run::{Build, Member};
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use tokio::sync::mpsc::unbounded_channel;
 
     fn woodland_run(classes: &[ClassId], seed: u64) -> Run {
@@ -89,7 +89,7 @@ mod tests {
         run.lights.refresh(&run.layout.map);
         let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(1);
         for _ in 0..5 {
-            let (x, y) = (rng.gen_range(0..run.layout.map.w), rng.gen_range(0..run.layout.map.h));
+            let (x, y) = (rng.random_range(0..run.layout.map.w), rng.random_range(0..run.layout.map.h));
             assert!(run.lights.lit(x, y), "{x},{y}");
         }
         let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
