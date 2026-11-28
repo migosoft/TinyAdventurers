@@ -585,6 +585,7 @@ impl Run {
                 m.announced = None;
                 m.slam = None;
                 m.dodge = None;
+                m.channel = None;
                 if self.layout.map.blocks_at(m.pos, m.mover) {
                     ai::escape_terrain(self, mi, DT);
                 } else {
@@ -842,8 +843,8 @@ impl Run {
         let m = &mut self.monsters[mi];
         if dungeon::drowning_tile(tile, false) {
             if m.water_t == 0.0 {
-                // The drowning state: knocked still, nothing winds up.
-                m.knock = Vec2::ZERO;
+                // The drowning state: nothing winds up or channels (a knock carries on, as a hero's does).
+                m.channel = None;
                 m.ai.windup = None;
                 m.ai.cast = None;
                 m.announced = None;
@@ -2344,6 +2345,35 @@ pub mod tests {
         (run, id)
     }
 
+    /// Hero 0 hits the creature (the kill credit) and the game's own push drives it east, into the pool.
+    fn push_in(run: &mut Run, id: u32) {
+        let mi = run.monster_idx(id).unwrap();
+        let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
+        run.hurt_monster(mi, Damage::new(1.0, DamageSplit::pure(DamageType::Physical)), false, Some(0));
+        run.knock_monster(mi, from, 40.0, PUSH_STR);
+    }
+
+    #[test]
+    fn a_channelling_monster_put_into_deep_water_stops_channelling() {
+        let (mut run, id) = creature_in_pool(EnemyType::SkeletonWarrior, 7, 3);
+        let mi = run.monster_idx(id).unwrap();
+        let (m, d) = (&run.monsters[mi], enemies::def(EnemyType::SkeletonWarrior));
+        let abilities = [d.abilities, &[crate::defs::abilities::AbilityId::FireBreath]].concat();
+        run.monsters[mi].kit = crate::sheet::monster_kit(&abilities, &m.attrs, d.weapons, crate::sheet::Body { radius: m.radius }, &[]);
+        run.monsters[mi].channel = Some((crate::defs::abilities::AbilityId::FireBreath, 100.0, 0.0));
+        run.events.clear();
+        for _ in 0..30 {
+            run.step();
+            let m = &run.monsters[run.monster_idx(id).unwrap()];
+            assert!(m.channel.is_none(), "no channel from the water");
+        }
+        // Already swimming (the clear of the step loop), a fresh channel is dropped at once too.
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].channel = Some((crate::defs::abilities::AbilityId::FireBreath, 100.0, 0.0));
+        run.step();
+        assert!(run.monsters[run.monster_idx(id).unwrap()].channel.is_none());
+    }
+
     #[test]
     fn a_pushed_orc_swims_out_or_drowns() {
         // One tile into a strip three wide: it walks out and lives.
@@ -2355,15 +2385,29 @@ pub mod tests {
         let mi = run.monster_idx(id).expect("it lived");
         assert!(!run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy), "out of the water");
         assert_eq!(run.monsters[mi].water_t, 0.0);
-        // In the middle of a pool fifteen wide it cannot get out in time: it drowns, the pusher's kill.
-        let (mut run, id) = creature_in_pool(EnemyType::OrcWarrior, 15, 7);
+        // The real push: the hero hits an orc on the shore and knocks it into the strip.
+        let (mut run, id) = creature_in_pool(EnemyType::OrcWarrior, 3, -1);
+        push_in(&mut run, id);
+        for _ in 0..(breath / DT) as usize + 60 {
+            run.step();
+        }
+        assert!(run.monster_idx(id).is_some_and(|mi| run.monsters[mi].water_t == 0.0), "pushed into the strip, it swam out");
+        // Pushed into a pool fifteen wide it cannot get out in time: it drowns, the pusher's kill.
+        let (mut run, id) = creature_in_pool(EnemyType::OrcWarrior, 15, -1);
+        push_in(&mut run, id);
+        for _ in 0..30 {
+            run.step();
+        }
         let mi = run.monster_idx(id).unwrap();
-        run.monsters[mi].last_hit_by = Some(0);
+        assert!(run.monsters[mi].last_hit_by == Some(0), "the hero's hit is remembered");
+        run.monsters[mi].pos = dungeon::Map::center_of(dungeon::Map::tile_of(run.players[0].pos()).0 + 9, dungeon::Map::tile_of(run.players[0].pos()).1); // out in the middle
+        run.monsters[mi].water_t = 0.0;
         let breath = dungeon::breath(run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Con), false);
         let mut steps = 0;
         while run.monster_idx(id).is_some() && steps < 600 {
             run.step();
-            steps += 1;        }
+            steps += 1;
+        }
         assert!(run.monster_idx(id).is_none(), "drowned");
         assert!(((steps as f64 * DT) - breath).abs() < 0.1, "after its breath: {} s vs {breath} s", steps as f64 * DT);
         assert_eq!(run.players[0].kills, 1, "the pusher's kill");
@@ -2405,13 +2449,13 @@ pub mod tests {
         assert!(run.monster_idx(id).is_some(), "never drowns");
     }
 
-    #[test]
-    fn the_lich_crosses_deep_water_breathless() {
+    /// The lich pinned on one tile of `tile` for three breaths with a hero in sight: did it cast, and how it ended.
+    fn lich_pinned_on(tile: Tile) -> (bool, f64, bool) {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         let bi = bosses::boss_idx(&run).unwrap();
         assert_eq!(run.monsters[bi].mover, Mover::Breathless);
         let (tx, ty) = dungeon::Map::tile_of(run.monsters[bi].pos);
-        run.layout.map.set(tx, ty, Tile::DeepWater);
+        run.layout.map.set(tx, ty, tile);
         run.monsters[bi].pos = dungeon::Map::center_of(tx, ty);
         run.level.boss_mut().unwrap().awake = true;
         run.monsters[bi].dormant = false;
@@ -2419,19 +2463,30 @@ pub mod tests {
         let at = run.monsters[bi].pos + Vec2::new(100.0, 0.0);
         run.players[0].mv = MoveState::at(at.x, at.y);
         let hp = run.monsters[bi].hp;
-        run.monsters[bi].water_t = DT; // already swimming
+        if tile == Tile::DeepWater {
+            run.monsters[bi].water_t = DT; // already swimming
+        }
+        let mut cast = false;
         for _ in 0..(dungeon::BREATH / DT) as usize * 3 {
             let bi = bosses::boss_idx(&run).unwrap();
             run.monsters[bi].pos = dungeon::Map::center_of(tx, ty);
             run.step();
             let m = &run.monsters[bosses::boss_idx(&run).unwrap()];
-            if m.water_t > 0.0 {
-                assert!(m.kit.iter().all(|a| m.cds.ready(a.id)), "casts nothing while it swims");
-            }
+            cast |= m.kit.iter().any(|a| !m.cds.ready(a.id));
         }
         let m = &run.monsters[bosses::boss_idx(&run).unwrap()];
         assert!(m.alive && m.hp == hp && m.sinking.is_none(), "never dies");
-        assert!(m.water_t > dungeon::BREATH, "the clock runs: {}", m.water_t);
+        (cast, m.water_t, m.alive)
+    }
+
+    #[test]
+    fn the_lich_crosses_deep_water_breathless() {
+        let (cast, water_t, _) = lich_pinned_on(Tile::DeepWater);
+        assert!(!cast, "casts nothing while it swims");
+        assert!(water_t > dungeon::BREATH, "the clock runs: {water_t}");
+        let (cast, water_t, _) = lich_pinned_on(Tile::Floor);
+        assert!(cast, "control: on dry floor the same lich casts within the same time");
+        assert_eq!(water_t, 0.0);
     }
 
     #[test]
