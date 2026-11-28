@@ -26,6 +26,8 @@ pub type SharedLobby = Arc<Mutex<Lobby>>;
 
 pub struct Conn {
     pub account: i32,
+    /// Hash of the login session that opened it (a password change closes the others).
+    pub session: Vec<u8>,
     /// The account's debug flag when it connected: fixed for the connection's life.
     pub debug: bool,
     pub tx: UnboundedSender<Message>,
@@ -171,12 +173,12 @@ pub struct LivePlayer {
 impl Lobby {
     /// A new connection of a logged-in account. An older connection of the
     /// same account is closed: one account plays in one place only.
-    pub fn connect(&mut self, account: i32, debug: bool, tx: UnboundedSender<Message>) -> u32 {
+    pub fn connect(&mut self, account: i32, session: Vec<u8>, debug: bool, tx: UnboundedSender<Message>) -> u32 {
         self.kick_account(account, "You logged in from another window.");
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id, debug });
-        self.conns.insert(id, Conn { account, debug, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), debug_touched: [false; EquipSlot::COUNT], since: unix_ms() });
+        self.conns.insert(id, Conn { account, session, debug, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), debug_touched: [false; EquipSlot::COUNT], since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -189,7 +191,12 @@ impl Lobby {
     /// Closes every connection of an account (new login elsewhere, logout,
     /// account deleted).
     pub fn kick_account(&mut self, account: i32, why: &str) {
-        let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.account == account).map(|(id, _)| *id).collect();
+        self.kick_account_except(account, None, why);
+    }
+
+    /// The same, but connections of the session `keep` stay open.
+    pub fn kick_account_except(&mut self, account: i32, keep: Option<&[u8]>, why: &str) {
+        let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.account == account && keep != Some(c.session.as_slice())).map(|(id, _)| *id).collect();
         for id in ids {
             if let Some(c) = self.conns.get(&id) {
                 send(&c.tx, &ServerMsg::Error { msg: why.into(), refused: None });
@@ -730,7 +737,7 @@ mod tests {
         let b = join(&mut l, 2, ClassId::Paladin);
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        l.connect(3, false, tx); // no character yet
+        l.connect(3, vec![], false, tx); // no character yet
         l.handle(a, ClientMsg::CreateRun { name: "running".into() });
         l.handle(a, ClientMsg::StartRun);
         l.handle(b, ClientMsg::CreateRun { name: "waiting".into() });
@@ -761,7 +768,7 @@ mod tests {
     fn join_kind(l: &mut Lobby, account: i32, class: ClassId, debug: bool) -> u32 {
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id = l.connect(account, debug, tx);
+        let id = l.connect(account, vec![], debug, tx);
         l.set_character(id, character(account, account * 10, class, debug));
         id
     }
@@ -862,7 +869,7 @@ mod tests {
         let mut l = shared.lock().unwrap();
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id = l.connect(1, false, tx);
+        let id = l.connect(1, vec![], false, tx);
         l.handle(id, ClientMsg::CreateRun { name: "r".into() });
         assert!(l.rooms.is_empty(), "no character, no room");
 
@@ -883,7 +890,7 @@ mod tests {
         let mut l = shared.lock().unwrap();
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let none = l.connect(5, false, tx);
+        let none = l.connect(5, vec![], false, tx);
         assert_eq!(l.can_change(none), Err("Choose a character first."));
         let id = join(&mut l, 1, ClassId::Wizard);
         assert_eq!(l.can_change(id), Ok((10, ClassId::Wizard)), "the lobby is fine");
@@ -922,7 +929,7 @@ mod tests {
             let mut l = shared.lock().unwrap();
             let (tx, rx) = unbounded_channel();
             std::mem::forget(rx);
-            let id = l.connect(a, false, tx);
+            let id = l.connect(a, vec![], false, tx);
             l.set_character(id, played.clone());
             l.handle(id, ClientMsg::CreateRun { name: "r".into() });
             (l.conns[&id].room.unwrap(), id)
@@ -959,6 +966,26 @@ mod tests {
         assert_eq!(l.account_of(second), Some(1));
         l.kick_account(1, "bye");
         assert!(l.conns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_password_change_closes_the_other_sessions_connections_only() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (tx, mut other) = unbounded_channel();
+        let stolen = l.connect(1, b"stolen".to_vec(), false, tx);
+        l.kick_account_except(1, Some(b"mine"), "changed");
+        assert!(!l.conns.contains_key(&stolen), "a connection of another session is closed");
+        assert_eq!(errors(&mut other), vec!["changed".to_string()]);
+        let (tx, mut mine) = unbounded_channel();
+        let current = l.connect(1, b"mine".to_vec(), false, tx);
+        l.kick_account_except(1, Some(b"mine"), "changed");
+        assert!(l.conns.contains_key(&current), "the current session's connection stays");
+        assert!(errors(&mut mine).is_empty());
+        let (tx, _rx) = unbounded_channel();
+        let other_account = l.connect(2, b"stolen".to_vec(), false, tx);
+        l.kick_account_except(1, None, "bye");
+        assert!(!l.conns.contains_key(&current) && l.conns.contains_key(&other_account), "no filter closes the account's connections, no one else's");
     }
 
     fn pick(ability: AbilityId) -> Pick {
@@ -1221,7 +1248,7 @@ mod tests {
 
     fn join_with_kind(l: &mut Lobby, account: i32, class: ClassId, progress: Progress, debug: bool) -> (u32, tokio::sync::mpsc::UnboundedReceiver<Message>) {
         let (tx, rx) = unbounded_channel();
-        let id = l.connect(account, debug, tx);
+        let id = l.connect(account, vec![], debug, tx);
         l.set_character(id, character_with(account, account * 10, class, progress, debug));
         (id, rx)
     }
@@ -1422,7 +1449,7 @@ mod tests {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
         let (tx, mut drx) = unbounded_channel();
-        let d = l.connect(1, true, tx);
+        let d = l.connect(1, vec![], true, tx);
         l.set_character(d, character(1, 10, ClassId::Wizard, true));
         let (n, mut nrx) = join_with(&mut l, 2, ClassId::Wizard, Progress::new(ClassId::Wizard));
         l.handle(d, ClientMsg::CreateRun { name: "dbg".into() });
@@ -1482,12 +1509,12 @@ mod tests {
             let mut l = shared.lock().unwrap();
             let (tx, rx) = unbounded_channel();
             std::mem::forget(rx);
-            let id = l.connect(1, conn_debug, tx);
+            let id = l.connect(1, vec![], conn_debug, tx);
             l.set_character(id, character(1, 10, ClassId::Wizard, !conn_debug));
             assert!(!l.conns.contains_key(&id), "kicked");
             let (tx, rx) = unbounded_channel();
             std::mem::forget(rx);
-            let id = l.connect(1, conn_debug, tx);
+            let id = l.connect(1, vec![], conn_debug, tx);
             l.set_character(id, character(1, 10, ClassId::Wizard, conn_debug));
             assert!(l.conns[&id].character.is_some(), "the matching kind is accepted");
         }

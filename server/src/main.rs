@@ -179,7 +179,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, debug_c
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = unbounded_channel::<Message>();
     let lobby = state.lobby.clone();
-    let id = lobby.lock().unwrap().connect(account, debug_conn, tx.clone());
+    let id = lobby.lock().unwrap().connect(account, id_hash.clone(), debug_conn, tx.clone());
 
     let mut writer = tokio::spawn(async move {
         while let Some(m) = rx.recv().await {

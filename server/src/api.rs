@@ -267,6 +267,7 @@ async fn change_password(State(state): State<AppState>, ClientIp(ip): ClientIp, 
     }
     let hash = hash(c.new_password).await?;
     db::set_password(&state.db, account.id, &hash, Some(&session.id_hash)).await?;
+    state.lobby.lock().unwrap().kick_account_except(account.id, Some(&session.id_hash), "Your password was changed. Please log in again.");
     tracing::info!("account {} changed its password", account.id);
     Ok(StatusCode::NO_CONTENT)
 }

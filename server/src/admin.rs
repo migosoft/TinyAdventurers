@@ -329,7 +329,7 @@ mod tests {
         let call = |id: i32, debug: bool| set_debug(State(state.clone()), AdminSession { name: "root".into() }, Path(id), Json(SetDebug { debug }));
         let connect = |account: i32| {
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-            state.lobby.lock().unwrap().connect(account, false, tx);
+            state.lobby.lock().unwrap().connect(account, vec![], false, tx);
             while rx.try_recv().is_ok() {} // the welcome
             rx
         };
