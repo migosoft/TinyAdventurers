@@ -138,9 +138,11 @@ export function fakeView(
   tiles: [number, number, number][];
   ended: [ShotView, string][];
   stats: ViewStats;
+  pick: { x: number; y: number; r: number } | null;
   onTile?: (x: number, y: number, v: number) => void;
 } {
   const v = {
+    pick: null as { x: number; y: number; r: number } | null,
     stats: NO_STATS as ViewStats,
     frames: [] as RunFrame[],
     events: [] as PictureEv[],
@@ -165,6 +167,7 @@ export function fakeView(
       v.ended.push([s, how]);
     },
     pointerWorld: () => pointer,
+    pointerPick: () => v.pick,
     destroy() {},
   };
   return v;

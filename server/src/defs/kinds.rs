@@ -157,8 +157,8 @@ impl EntityKind {
     ];
 
     /// How tall the figure is drawn above its feet (px, from the sprites; 0 for
-    /// everything that is not a monster). Player shots use it for a hitbox that
-    /// covers the whole body (`Monster::shot_dist`).
+    /// everything that is not a monster): the height of its shot hit cylinder
+    /// (`Monster::hit_radius` is the radius).
     pub fn body_height(self) -> f64 {
         use EntityKind::*;
         match self {

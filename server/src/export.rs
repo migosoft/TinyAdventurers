@@ -154,7 +154,7 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
     consts.as_object_mut().unwrap().insert("AMBUSH_WARNING".into(), json!(crate::run::ambush::AMBUSH_WARNING));
-    let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "GRAVITY": crate::run::entities::GRAVITY, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
+    let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "SHOT_MIN_RADIUS": crate::run::entities::SHOT_MIN_RADIUS, "GRAVITY": crate::run::entities::GRAVITY, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });
     consts.as_object_mut().unwrap().extend(hero.as_object().unwrap().clone());
@@ -176,7 +176,7 @@ fn export_defs() {
     });
     let side = json!({ "Neutral": Side::Neutral as u8, "Hostile": Side::Hostile as u8, "Friendly": Side::Friendly as u8 });
     let tiles: serde_json::Map<_, _> = Tile::ALL.iter().map(|t| (format!("{t:?}"), json!(*t as u8))).collect();
-    // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
+    // Shot hitboxes per monster kind (`Monster::hit_radius`): body radius and drawn height (the hit cylinder).
     let mut hitbox = serde_json::Map::new();
     let monsters = enemies::EnemyType::ALL.iter().map(|&t| (enemies::def(t).kind, enemies::def(t).radius));
     let boss_defs = crate::protocol::BossId::ALL.iter().map(|&b| (bosses::def(b).kind, bosses::def(b).radius));

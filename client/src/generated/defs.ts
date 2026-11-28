@@ -191,6 +191,7 @@ export const CONST = {
   "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,
   "SHOT_HEIGHT": 8.0,
+  "SHOT_MIN_RADIUS": 6.0,
   "SNAPSHOT_HZ": 30.0,
   "SOLID_OBJECTS": {
     "81": 6.0

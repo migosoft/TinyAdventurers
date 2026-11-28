@@ -10,7 +10,7 @@ import { shotPassesThrough } from '../game/shotTargets';
 import { cosmeticPierce, ownPredictedShot, unseenShotLimit, type EntState } from '../game/world';
 import { lineOfSight } from '../sim/collision';
 import { flightTime, shotZ } from '../sim/arc';
-import { arcHits, shotHits } from '../sim/hitbox';
+import { arcHits, hitRadius, shotHits } from '../sim/hitbox';
 import type { TileMap } from '../sim/map';
 import type { ShotView } from './view';
 
@@ -177,7 +177,7 @@ export class Shots {
         // (`hidden`).
         if (hitEnemy) {
           const v = Math.hypot(c.vx, c.vy) || 1;
-          this.stoppedShots.set(c.shot, { x: touched.x, y: touched.y, dx: c.vx / v, dy: c.vy / v, past: (HITBOX[touched.kind]?.r ?? 6) + c.r });
+          this.stoppedShots.set(c.shot, { x: touched.x, y: touched.y, dx: c.vx / v, dy: c.vy / v, past: (hitRadius(touched.kind) ?? CONST.SHOT_MIN_RADIUS) + c.r });
         }
         continue;
       }
@@ -202,8 +202,12 @@ export class Shots {
         const px = c.x + ((nx - c.x) * k) / steps;
         const py = c.y + ((ny - c.y) * k) / steps;
         // Objects have no body height (HITBOX h 0): they stop an arc at any height, as on the server.
-        const hit = c.flight === undefined || e.kind === KIND.Chest || e.kind === KIND.Barrel
-          ? shotHits(e.kind, e.x, e.y, air, px, py, c.r)
+        // Objects use their body radius, like the server's `stopping_object` (not the hit cylinder's minimum).
+        const isObject = e.kind === KIND.Chest || e.kind === KIND.Barrel;
+        const hit = isObject
+          ? Math.hypot(px - e.x, py - e.y) < HITBOX[e.kind].r + c.r
+          : c.flight === undefined
+          ? shotHits(e.kind, e.x, e.y, px, py, c.r)
           : arcHits(e.kind, e.x, e.y, air, px, py, shotZ(c.flight, c.flown + ((nflown - c.flown) * k) / steps), c.r);
         if (hit) return e;
       }

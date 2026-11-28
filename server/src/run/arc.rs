@@ -20,13 +20,10 @@ pub fn arc_touches(body: Vec2, body_r: f64, top: f64, p: Vec2, z: f64, shot_r: f
     p.dist(body) < body_r + shot_r && z < top
 }
 
-/// Whether a shot touches a body: an arcing shot (`z` is its height) by `arc_touches`, a flat one by the capsule
-/// distance `flat` (to the body's nearest point). The real flight and the dodge's replay share it.
-pub fn shot_touches(z: Option<f64>, body: Vec2, body_r: f64, top: f64, p: Vec2, shot_r: f64, flat: f64) -> bool {
-    match z {
-        Some(z) => arc_touches(body, body_r, top, p, z, shot_r),
-        None => flat < body_r + shot_r,
-    }
+/// Whether a shot touches a creature's hit cylinder (radius `hit_r`, height `top`): `z` is the shot's height, or
+/// None for a flat shot, which meets the whole cylinder. The real flight and the dodge's replay share it.
+pub fn shot_touches(z: Option<f64>, body: Vec2, hit_r: f64, top: f64, p: Vec2, shot_r: f64) -> bool {
+    z.map_or(p.dist(body) < hit_r + shot_r, |z| arc_touches(body, hit_r, top, p, z, shot_r))
 }
 
 /// Whether an arc of `flight` seconds has landed after `flown` seconds.
@@ -56,5 +53,36 @@ mod tests {
         assert!(arc_touches(b, 5.0, 20.0, Vec2::new(6.0, 0.0), 19.9, 3.0));
         assert!(!arc_touches(b, 5.0, 20.0, Vec2::new(6.0, 0.0), 20.0, 3.0));
         assert!(!arc_touches(b, 5.0, 20.0, Vec2::new(8.0, 0.0), 1.0, 3.0));
+    }
+
+    #[test]
+    fn the_hit_cylinder_matches_the_parity_table() {
+        use crate::defs::{bosses, enemies::{self, EnemyType}};
+        use crate::run::entities::{hit_radius, DRAGON_LIFT};
+        use crate::protocol::BossId;
+        // (radius, height of the top, point, shot height, hit)
+        let g = (enemies::def(EnemyType::GoblinArcher).radius, EnemyType::GoblinArcher);
+        let gk = enemies::def(g.1).kind;
+        let ogre = enemies::def(EnemyType::Ogre);
+        let fd = bosses::def(BossId::FireDemon);
+        let dr = bosses::def(BossId::Dragon);
+        let rows: [(f64, f64, (f64, f64), Option<f64>, bool); 13] = [
+            (g.0, gk.body_height(), (8.9, 0.0), None, true),
+            (g.0, gk.body_height(), (9.1, 0.0), None, false),
+            (g.0, gk.body_height(), (0.0, -8.9), None, true),
+            (g.0, gk.body_height(), (0.0, -9.1), None, false),
+            (ogre.radius, ogre.kind.body_height(), (0.0, -12.9), None, true),
+            (ogre.radius, ogre.kind.body_height(), (0.0, -18.0), None, false),
+            (fd.radius, fd.kind.body_height(), (0.0, -45.0), None, false),
+            (dr.radius, dr.kind.body_height() + DRAGON_LIFT, (0.0, -19.9), None, true),
+            (dr.radius, dr.kind.body_height() + DRAGON_LIFT, (0.0, -50.0), None, false),
+            (g.0, gk.body_height(), (5.0, 0.0), Some(9.9), true),
+            (g.0, gk.body_height(), (5.0, 0.0), Some(10.0), false),
+            (dr.radius, dr.kind.body_height() + DRAGON_LIFT, (19.9, 0.0), Some(67.9), true),
+            (dr.radius, dr.kind.body_height() + DRAGON_LIFT, (19.9, 0.0), Some(68.0), false),
+        ];
+        for (i, (r, top, p, z, hit)) in rows.into_iter().enumerate() {
+            assert_eq!(shot_touches(z, Vec2::new(0.0, 0.0), hit_radius(r), top, Vec2::new(p.0, p.1), 3.0), hit, "row {i}");
+        }
     }
 }

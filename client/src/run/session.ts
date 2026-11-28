@@ -1,7 +1,7 @@
 // The run session: everything of a run that is not a picture. It owns the map,
 // the light field, the predictor, the interpolator, the HUD and net traffic;
 // a view (the 3D view) draws what the session hands it. The
-// session never imports a view; it asks the view one question (pointerWorld).
+// session never imports a view; it asks the view two questions (pointerWorld, pointerPick).
 import { ABILITIES, ABILITY_RUNES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
 import { has } from '../game/effectBits';
 import { lookOf } from '../game/looks';
@@ -360,7 +360,15 @@ export class RunSession {
    * The aim at the pointer, and its distance (0 without one). Without a pointer the aim follows the movement
    * (`mx`, `my`), else it stays. Used by the step and by the drawn weapon.
    */
-  private aimInfo(mx: number, my: number, ground = false): { aim: number; dist: number } {
+  private aimInfo(mx: number, my: number, ground = false, slot: number | null = null): { aim: number; dist: number } {
+    // Shots and blasts aim at the axis of the creature under the pointer (#323); an arcing shot lands past its far edge.
+    const a = slot === null ? null : this.runInfo.abilities[slot];
+    const shape = a && ABILITIES[a.id].shape;
+    const pick = shape === 'Projectile' || shape === 'Blast' ? this.view?.pointerPick() ?? null : null;
+    if (a && pick) {
+      const r = aimAt(this.pred.state, pick);
+      return ABILITIES[a.id].arcs ? { aim: r.aim, dist: r.dist + pick.r + a.radius } : r;
+    }
     const wp = this.view?.pointerWorld(ground) ?? null;
     if (wp) return aimAt(this.pred.state, wp);
     return { aim: mx !== 0 || my !== 0 ? Math.atan2(my, mx) : this.lastAim, dist: 0 };
@@ -392,7 +400,7 @@ export class RunSession {
     const fires = [wantPrimary && slotReady(this.pred, 0) && usable[0], wantSecondary && slotReady(this.pred, 1) && usable[1]] as const;
     // The ability that fires decides the reading (the primary first): arcing shots read the true ground point, all else the shot height (#321).
     const slot = fires[0] ? 0 : fires[1] ? 1 : null;
-    const { aim: pointerAim, dist } = this.aimInfo(mx, my, slot !== null && ABILITIES[this.runInfo.abilities[slot].id].arcs);
+    const { aim: pointerAim, dist } = this.aimInfo(mx, my, slot !== null && ABILITIES[this.runInfo.abilities[slot].id].arcs, slot);
     // Petrified or asleep: the server keeps the old facing, so the client sends it too.
     const aim = this.pred.noTurn ? this.lastAim : pointerAim;
     this.lastAim = aim;

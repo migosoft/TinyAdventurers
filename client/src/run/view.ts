@@ -1,5 +1,5 @@
 // The boundary between the run session and the view (the 3D view). Types only, except NO_STATS.
-// The session never imports the view; it asks the view one question (pointerWorld), everything else flows to it.
+// The session never imports the view; it asks the view two questions (pointerWorld, pointerPick), everything else flows to it.
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
@@ -137,5 +137,7 @@ export interface RunView {
    *  the screen, then onto the ground; with `ground` the true ground point under the pointer (arcing shots, #321).
    *  Null: no pointer (outside the canvas, before the first frame, during a middle-mouse drag). */
   pointerWorld(ground?: boolean): { x: number; y: number } | null;
+  /** The hostile creature's hit cylinder under the pointer (#323): its foot and hit radius, simulation px. Null: no pointer or none under it. */
+  pointerPick(): { x: number; y: number; r: number } | null;
   destroy(): void;
 }

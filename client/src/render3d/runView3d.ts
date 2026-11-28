@@ -8,6 +8,7 @@ import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit
 import { ART, followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
+import { cylinderOf, pickCylinder, type PickCyl } from './pick';
 import type { Overlay3d } from './overlay';
 import type { EntState } from '../game/world';
 import { Floats, layoutBars, layoutCones, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
@@ -108,6 +109,7 @@ export class RunView3d implements RunView {
   private lastZoom = 1;
   private lastCanvas: StageCtx['canvasEl'] | null = null;
   private lastSize = { w: 0, h: 0 };
+  private lastEnts: ReadonlyMap<number, EntState> = new Map();
   private lastRect: DOMRect | null = null;
   private fast = false;
   private started = false;
@@ -414,6 +416,7 @@ export class RunView3d implements RunView {
     this.lastPlan = c.plan;
     this.lastZoom = c.zoom;
     this.lastCanvas = c.canvasEl;
+    this.lastEnts = f.ents;
     this.lastSize = c.canvas;
     // One layout read per frame, whatever the number of pointer reads; a resize shows in the next frame's rect.
     this.lastRect = c.canvasEl.getBoundingClientRect();
@@ -710,6 +713,21 @@ export class RunView3d implements RunView {
   shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone' | 'landed'): void {
     this.figures.shotEnded(shot, how);
     this.fx.shotEnded(shot, how, this.clockNow);
+  }
+
+  pointerPick(): { x: number; y: number; r: number } | null {
+    const { lastCam: cam, lastPlan: plan, lastCanvas: canvas, mouse } = this;
+    if (!cam || !plan || !canvas || !mouse) return null;
+    const p = mouse.at(canvas, this.lastSize.w, this.lastSize.h, this.lastRect ?? undefined);
+    if (!p) return null;
+    const cyls: PickCyl[] = [];
+    for (const e of this.lastEnts.values()) {
+      const a = this.figures.anchors.get(e.id);
+      const c = a && cylinderOf(e, a);
+      if (c) cyls.push(c);
+    }
+    const hit = pickCylinder(cam, plan, this.lastZoom, p.px, p.py, cyls);
+    return hit && { x: hit.x * TILE, y: hit.z * TILE, r: hit.r };
   }
 
   pointerWorld(ground = false): { x: number; y: number } | null {
