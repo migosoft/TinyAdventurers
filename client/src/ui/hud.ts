@@ -347,7 +347,7 @@ export class Hud {
         pfx.innerHTML = Object.keys(EFFECTS)
           .map(Number)
           .filter((id) => (e[10] & (1 << id)) !== 0)
-          .map((id) => `<span class="fx ${EFFECTS[id].positive ? 'pos' : 'neg'}">${effectIconSvg(id, 11)}</span>`)
+          .map((id) => `<span class="fx ${EFFECTS[id].positive ? 'pos' : 'neg'}" title="${EFFECT_NAME[id]}">${effectIconSvg(id, 11)}</span>`)
           .join('');
       }
     }
@@ -372,10 +372,14 @@ export class Hud {
   /** Own effect icons and paused-source chips; the DOM is rebuilt only when the markup would change. */
   private showEffects(list: Snapshot['me']['effects'], items: ItemId[], nodes: NodeId[]): void {
     const rows = effectRows(list);
-    const key = `${rows.map((r) => r.join(':')).join(',')}|${items.join(',')}|${nodes.join(',')}`;
-    if (key === this.fxKey) return;
-    this.fxKey = key;
-    this.fx.innerHTML = effectsRowHtml(rows, items, nodes);
+    // The seconds are left out of the key and set in place: rebuilding the chips every second would cancel a hover's tooltip (#201).
+    const key = `${rows.map(([k, , amount, paused]) => `${k}:${amount}:${paused}`).join(',')}|${items.join(',')}|${nodes.join(',')}`;
+    if (key !== this.fxKey) {
+      this.fxKey = key;
+      this.fx.innerHTML = effectsRowHtml(rows, items, nodes);
+      return;
+    }
+    this.fx.querySelectorAll('.fx > i').forEach((i, n) => { const s = String(rows[n][1]); if (i.textContent !== s) i.textContent = s; });
   }
 
   /** The equipped abilities changed (an Attribute drain started or ended): names, cooldowns, greyed slots. */
@@ -505,15 +509,18 @@ export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-/** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`) with a tooltip. */
+/** Effect names by kind, from the generated enum ("AntiMagic" → "Anti Magic"). */
+const EFFECT_NAME: Record<number, string> = Object.fromEntries(Object.entries(EFFECT).map(([n, k]) => [k, n.replace(/([a-z])([A-Z])/g, '$1 $2')]));
+
+/** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`); its tooltip names the effect. */
 export function effectChipHtml(k: number, left: number, amount: number, paused = false): string {
   const drain = DRAIN_TEXT[k];
   const rate = EFFECTS[k]?.cd_rate ?? 1;
   const tip = drain && amount !== 0
     ? ` title="${drain.name} (${drain.attr} \u2212${Math.abs(amount)})"`
     : rate !== 1
-      ? ` title="cooldowns ${Math.round(Math.abs(rate - 1) * 100)} % ${rate > 1 ? 'faster' : 'slower'}"`
-      : '';
+      ? ` title="${EFFECT_NAME[k]}: cooldowns ${Math.round(Math.abs(rate - 1) * 100)} % ${rate > 1 ? 'faster' : 'slower'}"`
+      : ` title="${EFFECT_NAME[k] ?? ''}"`;
   const num = amount !== 0 ? `<b>\u2212${Math.abs(amount)}</b>` : '';
   return `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}${paused ? ' paused' : ''}"${tip}>${effectIconSvg(k, 14)}${num}<i>${Math.ceil(left)}</i></span>`;
 }

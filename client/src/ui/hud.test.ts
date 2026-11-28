@@ -240,6 +240,9 @@ describe('Hud', () => {
       expect(fx.classList.contains('neg')).toBe(true);
       hud.snapshot(snap([[EFFECT.Poisoned, 2.3]], 0), info);
       expect(document.querySelector('.effects .fx')).toBe(fx);
+      hud.snapshot(snap([[EFFECT.Poisoned, 1.2]], 0), info);
+      expect(document.querySelector('.effects .fx'), 'the seconds tick in place: a rebuild would cancel the hover tooltip (#201)').toBe(fx);
+      expect(fx.querySelector('i')!.textContent).toBe('2');
     });
     it('draws party effects as symbols', () => {
       hud.startRun(info);
@@ -287,14 +290,14 @@ describe('effectChipHtml', () => {
     expect(html).toContain('title="Weakened (STR \u22122)"');
     expect(html).toContain('<i>13</i>');
   });
-  it('shows no number for an amount of 0', () => {
+  it('shows no number for an amount of 0, and names the effect as a tooltip', () => {
     const html = effectChipHtml(EFFECT.Burning, 3, 0);
     expect(html).not.toContain('<b>');
-    expect(html).not.toContain('title=');
+    expect(html).toContain('title="Burning"');
   });
   it('names a cooldown change as a tooltip', () => {
-    expect(effectChipHtml(EFFECT.Accelerated, 3, 0)).toContain('title="cooldowns 25 % faster"');
-    expect(effectChipHtml(EFFECT.Slowed, 3, 0)).toContain('title="cooldowns 25 % slower"');
+    expect(effectChipHtml(EFFECT.Accelerated, 3, 0)).toContain('title="Accelerated: cooldowns 25 % faster"');
+    expect(effectChipHtml(EFFECT.Slowed, 3, 0)).toContain('title="Slowed: cooldowns 25 % slower"');
   });
 });
 
