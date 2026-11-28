@@ -77,7 +77,7 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
+for (const n of ['cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: 14, h: 12 };
 frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
 
 function run(over: { water?: [number, number][]; lava?: [number, number][]; cove?: boolean; woodland?: boolean; plants?: PlantInfo[]; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; sun?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; dark?: number[]; pond?: boolean; paint?: OverlayItem[]; tick?: number; lavaRng?: () => number; stone?: { done: number; total: number } | null } = {}) {
@@ -135,7 +135,7 @@ describe('the run view and the game lights', () => {
     expect(f?.darkvision).toBeNull();
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
-  it('a dungeon with a cove hands over its willow and bushes as trees (no sun), adds the pixie lights and the bushes as casters, and gives its tufts and ferns as bushel spots', () => {
+  it('a dungeon with a cove hands over its willow and bushes as trees (no sun), adds the pixie lights and the plant bounds for the shadows, and gives its tufts and ferns as bushel spots', () => {
     const r = run({ cove: true, params: { sight: false } });
     const { f } = r;
     expect(f?.trees).toBeDefined();
@@ -144,17 +144,21 @@ describe('the run view and the game lights', () => {
     expect([...f!.trees!.chunks.values()].reduce((n, k) => n + k.mesh.verts, 0)).toBeGreaterThan(0); // the willow is built in the first frame
     expect(f).not.toHaveProperty('plants');
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
-    expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);
+    expect(f?.plantShadows?.plants.length).toBeGreaterThan(0);
+    expect(f?.plantShadows).toMatchObject({ tile: 128, cap: 40, hidden: [] });
+    expect(run({ params: { quality: 'fast' } }).f?.plantShadows ?? null).toBeNull();
+    expect(run().f?.plantShadows ?? null).toBeNull(); // no cove: no pass
     expect(Array.isArray(r.v.bushelSpots())).toBe(true); // this small cove may place no tuft; Cove3d's own test counts them
     expect(run().v.bushelSpots()).toEqual([]);
   });
-  it('with sight on the cove plants cast only where the picture shows them (the mask of this frame: it is filled before the lights, #308)', () => {
+  it('with sight on the plants the picture hides are listed as hidden feet and not otherwise (the mask of the last frame, #333)', () => {
     const r = run({ cove: true });
-    expect(r.f?.casters.some((k) => k.id <= -1000)).toBe(true);
-    for (const k of r.f!.casters) if (k.id <= -1000) expect(hiddenAt((r.v as unknown as { mask: SightMask }).mask, k.x, k.z)).toBe(false);
-    const again = r.again();
-    expect(again?.casters.some((k) => k.id <= -1000)).toBe(true);
-    for (const k of again!.casters) if (k.id <= -1000) expect(hiddenAt((r.v as unknown as { mask: SightMask }).mask, k.x, k.z)).toBe(false);
+    const mask = (r.v as unknown as { mask: SightMask }).mask;
+    for (const f of [r.f, r.again()]) {
+      const ps = f!.plantShadows!;
+      expect(ps.plants.length).toBeGreaterThan(0);
+      expect(ps.hidden).toEqual(ps.plants.filter((b) => hiddenAt(mask, b.x, b.z)));
+    }
   });
   it('light=work is the same', () => {
     const { f } = run({ params: { light: 'work' } });

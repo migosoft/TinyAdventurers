@@ -1,6 +1,6 @@
 // The leaf palettes of the 3D trees: one set of ramps per `LEAF_PALETTE` id, and the 5 x 4 texture data the tree material reads.
 import { LEAF_PALETTE } from '../../generated/defs';
-import { P } from '../../game/vegetation/canvas';
+import { P } from './kinds';
 import { RAMP } from './mesh';
 
 type Rgb = [number, number, number];

@@ -1,7 +1,7 @@
 // The tree materials in TSL (#329): a depth pre-pass with the leaf cut-outs, a colour pass at equal depth, and the sun's shadow caster.
 // All three build their point from one `treePoint`, so the sway, the leaf collapse and the patch spread cannot drift apart. The colour pass
 // is lit by the scene's own light (`Lighting`, shadow map included) and ends with the sight step; the light's brightness picks the ramp step.
-import { DoubleSide, EqualDepth, MeshBasicNodeMaterial } from 'three/webgpu';
+import { DoubleSide, EqualDepth, MeshBasicNodeMaterial, Vector4 } from 'three/webgpu';
 import type { NodeBuilder } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { Fn, abs, atan, attribute, cameraWorldMatrix, clamp, dot, float, floor, fract, length, log2, max, min, mix, mod, normalize, positionGeometry, select, sin, step, texture, uniform, varying, vec2, vec3, vec4 } from 'three/tsl';
@@ -10,6 +10,7 @@ import type { Sight } from '../sightNodes';
 import { bayerAt, seeOpenNode, type SeeUniforms } from '../materials';
 import { hash3 } from '../noiseNodes';
 import { coverHeightNode, type CoverShared } from '../cover/coverRead';
+import { sharedArray } from '../sharedArray';
 import { SWAY, WIND_DIR } from '../wind';
 import { brushNode, gustNode, swayNode, type BrushUniforms } from '../windNodes';
 import { FLUTTER_PX, RAMP, packedLeaf } from './mesh';
@@ -34,11 +35,25 @@ const GONE = [0, -50, 0] as const;
 /** The cell size of the light dabs in art pixels. */
 const DAB_CELL = 2.3;
 
+/** How many plant feet the cast pass can hide at once (first guess). */
+export const HIDDEN_CAP = 16;
+/** Writes the feet of the unseen plants into `shared.hidden` (empty slots cleared). shortcut: more than `HIDDEN_CAP` unseen plants leave the rest casting; a cove has at most 12 plants, raise the cap with a bigger one. */
+export function setHidden(shared: TreeShared, hidden: readonly { x: number; z: number }[]): void {
+  for (let i = 0; i < HIDDEN_CAP; i++) {
+    const h = hidden[i];
+    (shared.hidden.array[i] as Vector4).set(h ? h.x : 0, h ? h.z : 0, h ? 1 : 0, 0);
+  }
+}
+/** A vertex whose plant foot is this near a hidden foot (tiles) is moved away in the cast pass. */
+const HIDDEN_REACH = 0.02; // first guess
+
 /** The uniforms every tree material of a view shares; the view sets them each frame. `leafOverride` -1: none; `plain` 0 or 1: one flat colour per ramp; `leafRate`: the dev page's multiplier on how often leaves fall. */
 export function makeTreeShared() {
   return {
     t: uniform(0), windOn: uniform(0), cosP: uniform(1),
     leafOverride: uniform(-1).setName('treeLeafOverride'), plain: uniform(0), leafRate: uniform(1),
+    // Feet (x, z, 1, 0) of the plants the cast pass skips (an unseen plant casts nothing, #333); z-component 0: an empty slot, w unused.
+    hidden: sharedArray(Array.from({ length: HIDDEN_CAP }, () => new Vector4(0, 0, 0, 0)), 'vec4').setName('treeHidden'),
   };
 }
 export type TreeShared = ReturnType<typeof makeTreeShared>;
@@ -47,6 +62,8 @@ export interface TreeMaterials {
   depth: MeshBasicNodeMaterial;
   colour: MeshBasicNodeMaterial;
   sun: MeshBasicNodeMaterial | null;
+  /** The plant shadow tiles' caster (#333): the sun's pass without a sun, minus the plants in `shared.hidden`. Made when `cast` is asked for. */
+  cast: MeshBasicNodeMaterial | null;
   /** The falling leaves: drawn with their own geometry (`leafGeometry`), after the tree colour pass. */
   leaf: MeshBasicNodeMaterial;
 }
@@ -171,9 +188,9 @@ const paletteAt = (palette: Texture, level: N, row: N): N => texture(palette, ve
  * The light on a tree surface, for the crowns and the falling leaves alike: the scene's light at `P` with normal `nl`, the sun's shadow map read at
  * `Ps` (the caller's point nudged off the surface), and the light's brightness. Each is a variable so a later read reuses it; `name` makes their names.
  */
-function treeLightAt(lighting: Lighting, hasSun: boolean, o: { P: N; Ps: N; nl: N; foot: N; name: string }): { lit: { rgb: N; dv: N }; b: N } {
+function treeLightAt(lighting: Lighting, hasSun: boolean, o: { P: N; Ps: N; nl: N; name: string }): { lit: { rgb: N; dv: N }; b: N } {
   const ndl = mix(max(dot(o.nl, lighting.sun.dir), 0), float(1), 0.3); // first guess: the wrap
-  const lit0 = lighting.lightAt(o.P, o.nl, 0.35, { sun: hasSun ? { Ps: o.Ps, ndl } : undefined, selfFoot: o.foot }); // first guess: wrap 0.35
+  const lit0 = lighting.lightAt(o.P, o.nl, 0.35, { sun: hasSun ? { Ps: o.Ps, ndl } : undefined }); // first guess: wrap 0.35
   const lit = { rgb: lit0.rgb.toVar(`${o.name}Lit`), dv: lit0.dv.toVar(`${o.name}Dv`) };
   return { lit, b: dot(lit.rgb, vec3(0.2126, 0.7152, 0.0722)).toVar(`${o.name}Bright`) };
 }
@@ -207,6 +224,8 @@ function leafTint(bright: N, warm: N): N {
  */
 export function treeMaterials(o: {
   lighting: Lighting; sight: Sight; see: SeeUniforms; mask: Texture; palette: Texture; shared: TreeShared; hasSun: boolean;
+  /** Make the `cast` material (the cove's plant shadow tiles). */
+  cast?: boolean;
   /** The ground cover (#330): a leaf lies on top of it. */
   cover?: CoverShared;
   /** The brushers of the frame (#331): a bush wiggles where a figure brushes it. */
@@ -255,7 +274,7 @@ export function treeMaterials(o: {
     const Ps = cell.add(0.5).div(16).add(off).add(nl.mul(0.05)).add(sunDir.mul(0.05)); // first guess: both nudges
     const unseen = sight.unseenAt(foot);
     // Variables: the light is written once, where it is first read (the shadow map at the top level), and every later read reuses it.
-    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, foot, name: 'tree' });
+    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, name: 'tree' });
 
     // The main light's direction for the crown's form: the sun, or straight up without one.
     const ld: N = hasSun ? sunDir : vec3(0, 1, 0);
@@ -300,19 +319,36 @@ export function treeMaterials(o: {
   colour.side = DoubleSide;
 
   // ---------------------------------------------------------------- the sun's pass
+  const cutColour = vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
   let sun: MeshBasicNodeMaterial | null = null;
   if (hasSun) {
     sun = new MeshBasicNodeMaterial();
     sun.positionNode = p.sunPosition;
     // The cut-outs of the depth pass without the stipple and the see-through: plants always cast, and the shadow does not change when foliage opens.
-    sun.colorNode = vec4(0, 0, 0, select(s.isTuft.and(cut.keep.not()), float(0), float(1)));
+    sun.colorNode = cutColour;
     sun.alphaTest = 0.5;
     sun.colorWrite = false;
     sun.side = DoubleSide;
   }
 
-  for (const m of [depth, colour, sun]) if (m) m.userData.treePoint = p;
-  return { depth, colour, sun, leaf: leafMaterial(o) };
+  // ---------------------------------------------------------------- the plant shadow tiles' pass (#333)
+  let cast: MeshBasicNodeMaterial | null = null;
+  if (o.cast) {
+    cast = new MeshBasicNodeMaterial();
+    let isHidden: N = float(0).greaterThan(1);
+    for (let i = 0; i < HIDDEN_CAP; i++) {
+      const h: N = shared.hidden.element(i);
+      isHidden = isHidden.or(h.z.greaterThan(0.5).and(abs(s.foot.x.sub(h.x)).lessThan(HIDDEN_REACH)).and(abs(s.foot.y.sub(h.y)).lessThan(HIDDEN_REACH)));
+    }
+    cast.positionNode = select(isHidden, vec3(...GONE), p.sunPosition);
+    cast.colorNode = cutColour;
+    cast.alphaTest = 0.5;
+    cast.colorWrite = false;
+    cast.side = DoubleSide;
+  }
+
+  for (const m of [depth, colour, sun, cast]) if (m) m.userData.treePoint = p;
+  return { depth, colour, sun, cast, leaf: leafMaterial(o) };
 }
 
 /**
@@ -366,7 +402,7 @@ export function leafMaterial(o: {
     const nl = vec3(0, 1, 0);
     const Ps = truePos.add(nl.mul(0.05)).add(lighting.sun.dir.mul(0.05)); // first guess: both nudges, as the tree's
     const unseen = sight.unseenAt(foot);
-    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, foot, name: 'leaf' });
+    const { lit, b } = treeLightAt(lighting, hasSun, { P: truePos, Ps, nl, name: 'leaf' });
     const tone = treeToneNode(lighting, hasSun, b);
     const level = select(shared.plain.greaterThan(0.5), float(2), leafLevel(tone.step));
     const pal = paletteAt(palette, level, float(RAMP.leaf)).toVar('leafPalette');

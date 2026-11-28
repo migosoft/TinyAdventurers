@@ -9,6 +9,7 @@ import { CRACK_CAP } from './air/cracks';
 import { WALL_H } from './heights';
 import { CASTER_CAP, LIGHT_MARGIN, type ShadowCaster } from './lights';
 import { makeSunLight, type SunLight } from './sunNodes';
+import { makePlantShadow, type PlantShadow } from './plantShadowNodes';
 
 /** A card casts a shadow on a segment only when its foot is within half its width plus this (tiles) of the segment's line. */
 const CARD_REACH = 0.5;
@@ -30,13 +31,12 @@ export interface Lighting {
   /**
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
    * `self`: the caster slot the surface belongs to, a float node, -1 none (its own shadow does not fall on it); `darkOnly` > 0.5: ambient alone, no lights, no lava, no darkvision.
-   * `selfFoot`: a vec2 node, the foot (x, z) of the plant card the surface belongs to: the caster standing on that foot (the plant's own) does not shadow it.
    * The lava is the sampled lava light alone: the lava's own glow is its surface's (lava/lavaNodes.ts, #344), not a term of the light.
    * `open`: a bool node, true on a wall top: the point lights take no wall and no card test there, only their falloff (#342).
    * `sun`: adds the sun's light (#306): `Ps` is the point the sun's shadow map is read at, `ndl` the surface's cosine term; without it the sun does not touch the surface.
    */
   /** `shadow` (fixed when the shader is built): 'full' (default) walls, cards, sun rays and darkvision; 'walls' only each light's wall test (the haze: no card or sun-ray walk, no darkvision); 'none' only the falloff. */
-  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N }): { rgb: N; dv: N };
+  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N }): { rgb: N; dv: N };
   /** The specular light at P for the normal Nrm and the unit vector V toward the eye (vec3 nodes): for every point light its colour times
    *  the falloff of lightAt times the wall test (when the shadows are on), and for every crack its colour times its mask, each times
    *  pow(n.h, sharp) * sharpGain + pow(n.h, broad) * broadGain with h = normalize(L + V). No card test, no ambient, no lava. Loops 'gl' and 'gc'. */
@@ -51,9 +51,9 @@ export interface Lighting {
   readonly ambient: N;
   /**
    * 1 when the sun ray from `P` along `dir` (toward the sun) is clear of walls and cards, else 0 (the demo's `sunVis`): the wall walk
-   * up to just above the walls, then the card test along nine tiles. `self`: the caster slot the surface belongs to, a float node.
+   * up to just above the walls, then the card test along nine tiles, then crack slot `slot`'s plant shadow (an int node; only with `opts.plants`). `self`: the caster slot the surface belongs to, a float node.
    */
-  sunRayVis(P: N, dir: N, self: N): N;
+  sunRayVis(P: N, dir: N, self: N, slot: N): N;
   /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. `greyAlbedo` (default: `albedo`) is the colour the darkvision grey is made from. */
   finish(albedo: N, lit: { rgb: N; dv: N }, greyAlbedo?: N): N;
   /** The lava light texture (`w * h` half-float rgba texels). */
@@ -75,10 +75,12 @@ export interface Lighting {
   setShadows(on: boolean): void;
   /** The ambient light (a uniform); `AMBIENT` is its start value. */
   setAmbient(rgb: [number, number, number]): void;
+  /** The plant shadows of a level with a cove (#333): the frame's table, the atlas depth texture and its size in texels. Null without `opts.plants`: the shaders then carry nothing of it. */
+  readonly plants: Pick<PlantShadow, 'set' | 'dispose'> | null;
 }
 
-/** `opts.sun`: the world has a sun (a woodland): `lightAt` then takes its `sun` option. Without it the shaders carry nothing of the sun. */
-export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }, atlas: Texture, opts: { sun?: boolean } = {}): Lighting {
+/** `opts.sun`: the world has a sun (a woodland): `lightAt` then takes its `sun` option. Without it the shaders carry nothing of the sun. `opts.plants`: the world has a cove: the light and crack loops look up the plants' depth tiles (#333). */
+export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }, atlas: Texture, opts: { sun?: boolean; plants?: boolean } = {}): Lighting {
   // The casters: (x, z, w, y0), (y1, 0, 0, 0) and the atlas rect (u0, v0, u1, v1) per slot; w 0 ends the list.
   const cA = sharedArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
   const cB = sharedArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
@@ -145,8 +147,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   // 1 when no caster's current frame stands between P and the light L, else 0 (the demo's cardVis). Each card is turned to face the
   // light and its atlas alpha is the occluder. Slot `self` (the surface's own figure) and `skip` (the light's carrier) are not tested;
   // the loop ends at the first empty slot; a card whose foot is far from the segment is rejected before the atlas is touched.
-  // `withFoot`: the foot test (a plant's own caster does not shadow it) is built only for a material that gives a `selfFoot`.
-  const cardVisOf = (withFoot: boolean): N => Fn(([P, L, self, skip, sf]: N[]) => {
+  const cardVis = Fn(([P, L, self, skip]: N[]) => {
     const vis = float(1).toVar();
     const D = L.sub(P);
     const d2 = D.xz;
@@ -158,7 +159,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
       });
       const j = float(i);
       const free = j.notEqual(self).and(j.notEqual(skip));
-      If(withFoot ? free.and(length(a.xy.sub(sf)).greaterThan(0.02)) : free, () => {
+      If(free, () => {
         const F = a.xy;
         const near = F.sub(P.xz.add(d2.mul(clamp(dot(F.sub(P.xz), d2).div(len2), 0, 1))));
         If(length(near).lessThan(a.z.mul(0.5).add(CARD_REACH)), () => {
@@ -202,18 +203,23 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     });
     return vis;
   });
-  const cardVis = cardVisOf(false);
-  let cardVisFoot: N | null = null;
 
   // The sun ray's visibility: below the wall tops the ray is walked up past them, then the figures are tested along nine tiles.
-  const sunVisOf = (cardTest: N) => (P: N, dir: N, self: N, selfFoot?: N): N => Fn(() => {
+  const plant = opts.plants ? makePlantShadow() : null;
+  const sunVis = (P: N, dir: N, self: N, slot: N): N => Fn(() => {
     const v = float(1).toVar();
+    const sl = int(slot).toVar(); // a variable: the slot is the caller's loop index
     If(P.y.lessThan(WALL_H + 0.05), () => {
       v.assign(wallVis(P, P.add(dir.mul(float(WALL_H + 0.1).sub(P.y).div(dir.y)))));
     });
     If(v.greaterThan(0.5), () => {
-      v.assign(cardTest(P, P.add(dir.mul(9)), self, float(-1), selfFoot ?? vec2(0, 0)));
+      v.assign(cardVis(P, P.add(dir.mul(9)), self, float(-1)));
     });
+    if (plant) {
+      If(v.greaterThan(0.5), () => {
+        v.mulAssign(plant.crackVis(P, sl));
+      });
+    }
     return v;
   })();
   const cracks = makeCracks();
@@ -284,13 +290,11 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     return sum;
   })();
 
-  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N } = {}): { rgb: N; dv: N } => {
+  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N }; shadow?: 'full' | 'walls' | 'none'; open?: N } = {}): { rgb: N; dv: N } => {
     const mode = opts.shadow ?? 'full';
     const shadowed = mode === 'full';
     const wallTest = mode !== 'none';
     const w = typeof wrap === 'number' ? float(wrap) : wrap;
-    const selfFoot: N | null = opts.selfFoot ?? null;
-    const cardTest: N = selfFoot ? (cardVisFoot ??= cardVisOf(true)) : cardVis;
     const dark: N = opts.darkOnly ?? float(0);
     const self: N = opts.self ?? float(-1);
     // Sampled outside any branch: a filtered read needs uniform control flow.
@@ -328,8 +332,13 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
                 // The wall test first: a card is looked at only for a light that still reaches P. The shadow channel is skip + 2.
                 if (shadowed) {
                   If(v.greaterThan(0.5), () => {
-                    v.assign(cardTest(Po, L, self, carrier, selfFoot ?? vec2(0, 0)));
+                    v.assign(cardVis(Po, L, self, carrier));
                   });
+                  if (plant) {
+                    If(v.greaterThan(0.5), () => {
+                      v.assign(plant.pointVis(Po, i, L));
+                    });
+                  }
                 }
               });
             }
@@ -348,7 +357,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
             const v = float(1).toVar();
             if (shadowed) {
               If(uShadows.greaterThan(0.5), () => {
-                v.assign(sunVisOf(cardTest)(Po, cr.dir, self, selfFoot ?? undefined));
+                v.assign(sunVis(Po, cr.dir, self, s));
               });
             }
             sum.addAssign(cr.rgb.mul(m.mul(ndl).mul(v)));
@@ -390,7 +399,8 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     cracks,
     shadowsOn: uShadows,
     ambient,
-    sunRayVis: (P, dir, self) => sunVisOf(cardVis)(P, dir, self),
+    sunRayVis: sunVis,
+    plants: plant,
     finish,
     shoulder,
     cellH,

@@ -9,7 +9,7 @@
 //   z 25       Void
 import { TILE_ID } from '../generated/defs';
 import type { PlantInfo } from '../generated/PlantInfo';
-import { PLANT_KINDS, type PlantKind } from '../game/vegetation';
+import { PLANT_KINDS, type PlantKind } from './trees/kinds';
 import { TileMap } from '../sim/map';
 import type { TreeSpec } from './trees/spec';
 

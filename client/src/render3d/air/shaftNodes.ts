@@ -83,7 +83,7 @@ export function makeShaftPass(lighting: Lighting, sight: Sight): ShaftPass {
           const cr = lighting.cracks.at(s);
           const v = float(1).toVar();
           If(lighting.shadowsOn.greaterThan(0.5), () => {
-            v.assign(lighting.sunRayVis(Q, cr.dir, float(-1)));
+            v.assign(lighting.sunRayVis(Q, cr.dir, float(-1), s));
           });
           acc.addAssign(cr.rgb.mul(m.mul(v)));
         });

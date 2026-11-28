@@ -33,6 +33,8 @@ declare global {
       fx?: { records: number; tris: number; dropped: number };
       /** ... and the trees built of all on the woodland dev page (#329), for the pictures script. */
       plants?: { built: number; total: number };
+      /** The cove's plant shadow tiles drawn last frame (#333). */
+      plantTiles?: number;
       /** ... and the ground cover's sheets (the tallest kind, art px) and bushels once it is built (#330). */
       cover?: { sheets: number; bushels: number };
       /** ... and the 3D figures of a dev stage (#338): instances and id, piece and hull draws of the last frame (#364), and the build time (ms) of each model built so far. */

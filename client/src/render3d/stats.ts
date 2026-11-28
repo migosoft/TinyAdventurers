@@ -2,7 +2,7 @@
 // decimals, systems indented); it is not imported from there because render3d takes nothing from the game's UI.
 
 /** The systems of one 3D frame, in the order the readout lists them. The frame books `upload` before it runs the sun's pass, so 'sun' is listed with the update systems although its lap comes after 'upload'. */
-export const R3D_SYSTEMS = ['sim', 'cards', 'plants', 'lights', 'sight', 'air', 'sun', 'shafts', 'mirror', 'upload', 'models', 'scene', 'present', 'hud'] as const;
+export const R3D_SYSTEMS = ['sim', 'cards', 'plants', 'lights', 'sight', 'air', 'sun', 'plantShadows', 'shafts', 'mirror', 'upload', 'models', 'scene', 'present', 'hud'] as const;
 export type R3dSystem = (typeof R3D_SYSTEMS)[number];
 
 export interface R3dStats {

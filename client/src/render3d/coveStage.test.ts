@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { TILE_ID } from '../generated/defs';
+import { LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { isR3dDemo, r3dPage } from '../r3dFlag';
 import { parseParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
 import { COVE_STAGE, PILLARS, coveStageMap, createCoveStage } from './coveStage';
-import { CAST_ID0, Cove3d, coveWillow } from './cove3d';
+import { Cove3d, coveWillow } from './cove3d';
 import { buildTree } from './trees/build';
 import type { FrameInput } from './view';
 
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
-  cove_tree: { x: 0, y: 0, w: 96, h: 100 }, cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
+  cove_bush_a: { x: 100, y: 0, w: 24, h: 20 }, cove_bush_b: { x: 130, y: 0, w: 24, h: 20 },
   cove_tuft_a: { x: 160, y: 0, w: 12, h: 8 }, cove_tuft_b: { x: 180, y: 0, w: 12, h: 8 }, cove_fern: { x: 200, y: 0, w: 14, h: 14 },
   floor_1: { x: 300, y: 0, w: 16, h: 16 },
 };
@@ -85,12 +85,25 @@ describe('the ?r3d=cove stage', () => {
     delete window.__r3d;
   });
 
-  it('lights it with two torches and the pixies, and casts the willow', () => {
+  it('lights it with two torches and the pixies, and shadows the willow and its bushes (#333)', () => {
     const f = setup('?r3d=cove&sight=0').run(1, 0.016);
     const ids = (f.lights as unknown as { id: string }[]).map((l) => l.id);
     expect(ids.filter((i) => i.startsWith('x'))).toHaveLength(7);
-    expect(ids.filter((i) => !i.startsWith('x'))).toHaveLength(2);
-    expect(f.casters.some((k) => k.id === CAST_ID0)).toBe(true);
+    expect(ids.filter((i) => i === 's1' || i === 's2')).toHaveLength(2);
+    expect(f.plantShadows!.plants.length).toBeGreaterThan(0);
+    expect(f.plantShadows).toMatchObject({ tile: 128, cap: 40 });
+    expect(setup('?r3d=cove&quality=fast').run(1, 0.016).plantShadows).toBeNull();
+  });
+
+  it('has the cove\'s five suns, as finish_cove places them, and drops the torches with &torches=0 (#333)', () => {
+    const at = (search: string) => (setup(search).stage.world.taken!.lights as { kind: number; x: number; y: number }[]);
+    const c = COVE_STAGE;
+    const want = [[c.tree_x, c.tree_y], ...[1, 3].flatMap((f) => [1, 3].map((g) => [c.x + Math.floor((c.w * f) / 4), c.y + Math.floor((c.h * g) / 4)]))];
+    const l = at('?r3d=cove');
+    expect(l.filter((k) => k.kind === LIGHT_KIND.Daylight).map((k) => [k.x, k.y])).toEqual(want);
+    expect(l.filter((k) => k.kind === LIGHT_KIND.Torch)).toHaveLength(2);
+    expect(at('?r3d=cove&torches=0').filter((k) => k.kind === LIGHT_KIND.Torch)).toHaveLength(0);
+    expect(setup('?r3d=cove&sight=0').run(1, 0.016).cracks!.length).toBe(5);
   });
 
   it('shows the pixies as glows and has the knight walk with WASD', () => {

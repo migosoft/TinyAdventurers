@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
-import { PLANT_KINDS } from '../game/vegetation';
+import { PLANT_KINDS } from './trees/kinds';
 import { BRUSH_LANE, BRUSH_LANE_PLANTS, brushWalk, DEAD_TREE, KNIGHT_START, LEAF_ROW, ROAD_ROWS, SHAPE_ROW, WILLOW, WOODLAND_H, WOODLAND_STAGE_PLANTS, WOODLAND_W, woodlandStageMap } from './woodlandMap';
 
 describe('the woodland stage map', () => {

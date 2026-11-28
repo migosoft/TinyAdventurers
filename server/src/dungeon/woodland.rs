@@ -1633,7 +1633,7 @@ mod tests {
 
     #[test]
     fn plant_kind_ids_match_the_client() {
-        // client/src/game/vegetation.ts PLANT_KINDS has 6 entries; vegetation.test.ts pins the same
+        // client/src/render3d/trees/kinds.ts PLANT_KINDS has 6 entries; kinds.test.ts pins the same
         // no `_` arm: a seventh variant fails to compile here
         let id = |k: PlantKind| match k {
             PlantKind::Round => 0,

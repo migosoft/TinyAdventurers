@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, ZOOM_MAX, parseParams, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
+import { DEFAULTS, ZOOM_MAX, parseParams, plantShadowOf, reflects, shimmers, toSearch, wrapYaw, type R3dParams } from './params';
 
 describe('reflects', () => {
   it('needs the switch and a quality above Fast', () => {
@@ -234,5 +234,14 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&refl=bogus').refl).toBe(true);
     expect(toSearch({ ...DEFAULTS, refl: false }, '?r3d')).toBe('?r3d&refl=0');
     expect(toSearch(DEFAULTS, '?r3d&refl=0')).toBe('?r3d');
+  });
+});
+
+describe('plantShadowOf', () => {
+  it('gives the tile size by quality and nothing on Fast or with the wall shadows off (#333)', () => {
+    expect(plantShadowOf({ shadows: true, quality: 'high' })).toEqual({ tile: 256, cap: 40 });
+    expect(plantShadowOf({ shadows: true, quality: 'balanced' })).toEqual({ tile: 128, cap: 40 });
+    expect(plantShadowOf({ shadows: true, quality: 'fast' })).toBeNull();
+    expect(plantShadowOf({ shadows: false, quality: 'high' })).toBeNull();
   });
 });

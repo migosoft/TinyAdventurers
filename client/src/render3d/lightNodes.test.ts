@@ -6,11 +6,11 @@ import { GLINT, makeLighting } from './lightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** The fragment shader of a material lit by `lightAt` (a card's options: its own slot, the dark flag). */
-function lightFragment(B: Builder, withSun = false, compare = false, foot = false): string {
+function lightFragment(B: Builder, withSun = false, compare = false, plants = false): string {
   const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
-  const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex(), { sun: withSun });
+  const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex(), { sun: withSun, plants });
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(foot ? { selfFoot: vec2(1, 2) } : {}), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
+  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
   return fragment(B, m, { compare });
 }
 
@@ -57,13 +57,26 @@ describe('the lighting shader', () => {
       expect(inCs).toEqual(expect.arrayContaining(['cr', 'ws', 'ci']));
     });
 
-    it(`${B.name}: the own-foot comparison is built only for a material that gives a selfFoot`, () => {
-      const without = lightFragment(B);
-      const withFoot = lightFragment(B, false, false, true);
-      // The foot test is `length(caster.xy - foot) > 0.02`: it adds a length() of a difference to the card loop.
-      const lengths = (code: string): number => (code.match(/\blength\(/g) ?? []).length;
-      expect(lengths(withFoot)).toBeGreaterThan(lengths(without));
-      expect(withFoot.length).toBeGreaterThan(without.length);
+    it(`${B.name}: lightAt takes no selfFoot: a plant's own shadow falls on it`, () => {
+      const lighting = makeLighting(new DataTexture(new Float32Array(64), 4, 4, RGBAFormat, FloatType), { w: 4, h: 4 }, new DataTexture(new Float32Array(64), 4, 4, RGBAFormat, FloatType));
+      // @ts-expect-error selfFoot is gone from the options (the compile is the check)
+      lighting.lightAt(positionWorld, vec3(0, 1, 0), 0.5, { selfFoot: vec2(1, 2) });
+    });
+
+    it(`${B.name}: with plants the light and crack loops hold the plant lookup, built from texel loads and no compare sample; without it there is none`, () => {
+      const on = lightFragment(B, false, true, true);
+      const off = lightFragment(B, false, true, false);
+      expect(on).toContain('plantAtlas');
+      expect(off).not.toContain('plantAtlas');
+      expect(on.length).toBeGreaterThan(off.length);
+      expect(on).not.toMatch(B === WGSLNodeBuilder ? /textureSampleCompare/ : /\btexture\( \w+, vec3\(/);
+      // The table is read inside both loops: after the opening of 'li' and of 'cs'.
+      const at = (name: string): number => on.search(new RegExp(`for \\( (?:var|int) ${name}\\b`));
+      const uses = [...on.matchAll(/plantAtlas/g)].map((m) => m.index!);
+      for (const loop of ['li', 'cs']) expect(at(loop), loop).toBeGreaterThan(-1);
+      expect(uses.some((u) => u > at('li') && u < at('cs'))).toBe(true);
+      expect(uses.some((u) => u > at('cs'))).toBe(true);
+      for (const l of loops(on)) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
     });
 
     it(`${B.name}: darkvision leaves out the top of a block that rises above the eye`, () => {

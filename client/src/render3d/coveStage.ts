@@ -1,8 +1,8 @@
 // The stage of the ?r3d=cove page (#329): the nymph's cove in the 3D view, no server, no login. A dark stone room of the real cove's size with
-// the trunk tile at its middle, the cove's willow and bushes as grown trees, its tufts and ferns as bushels in the ground cover (with moss in the room), its seven pixies, two wall
-// torches and a knight to walk with WASD, with the sight on. There is no sun: the trees are lit by the torches, the pixies and the base light.
+// the trunk tile at its middle, the cove's willow and bushes as grown trees with their shadows, its five suns' cracks, its tufts and ferns as bushels in the ground cover (with moss in the room), its seven pixies, two wall
+// torches and a knight to walk with WASD, with the sight on. There is no sun, but the cove's five suns show as cracks in the ceiling; the trees are lit by the torches, the pixies, the cracks and the base light, and cast real shadows.
 import type { CoveInfo } from '../generated/CoveInfo';
-import { ANIM, CONST, KIND, LEAF_PALETTE, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, KIND, LEAF_PALETTE, LIGHT, LIGHT_KIND, SIDE, TILE_ID } from '../generated/defs';
 import { LightField } from '../game/light';
 import { DEFAULT_HAZE } from '../game/sightField';
 import type { EntState } from '../game/world';
@@ -20,10 +20,12 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { LIGHT_CAP, dungeonAmbient, stoneClear } from './light';
-import { assignSkips,CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands } from './lights';
+import { assignSkips, CASTER_CAP, footprint, lightView, selectCasters, selectLights, staticCands } from './lights';
+import { CRACK_CAP, crackOf, selectCracks } from './air/cracks';
+import { sunLook } from '../game/sunmath';
 import { MIST } from './mist';
 import { seenOpeners } from './openers';
-import type { R3dParams } from './params';
+import { plantShadowOf, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask, hiddenAt } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
@@ -66,7 +68,7 @@ const ent = (id: number, kind: number, x: number, y: number, o: Partial<EntState
 
 export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stage {
   const map = coveStageMap();
-  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map) };
+  const world: WorldInput = { map, painted: false, clear: 'stone', stone: stoneField(map), cove: true };
   const stoneRun = makeStoneRun(world, KNIGHT_START);
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   // `at=x,z`: the knight (and the camera) starts on that tile when it is walkable; for the pictures.
@@ -78,7 +80,6 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   // The cove as a run makes it: the willow and bushes are grown by `step`, the tufts and ferns are bushels of the cover layer.
   const cove = new Cove3d(COVE_STAGE, assets.frames);
   const forest = new Forest([cove.tree(), ...cove.bushes()], map, LEAF_PALETTE.Summer, cove.builder());
-  const coveCasters = cove.casters();
 
   // The cover as a run builds it (moss in the room, the cove's grass and bushels), whole at the first build and kept for the rebuilds after a lost device.
   let job: CoverJob | null = null;
@@ -91,10 +92,16 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
     return job;
   };
 
-  // The two torches: a light on each torch's tile and an entity.
+  // The two torches (`&torches=0` leaves them out, to see the cracks alone): a light on each torch's tile and an entity.
   const field = new LightField(map);
-  TORCHES.forEach((t, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true, wall: 1 }));
-  const torchEnts = TORCHES.map((t, i) => ent(i + 1, KIND.Torch, t.x, t.y, { extra: 0, anim: 1 }));
+  const torches = /[?&]torches=0/.test(search) ? [] : TORCHES;
+  torches.forEach((t, i) => field.add({ id: i + 1, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true, wall: 1 }));
+  const torchEnts = torches.map((t, i) => ent(i + 1, KIND.Torch, t.x, t.y, { extra: 0, anim: 1 }));
+  // The cove's suns as `finish_cove` gives them: one on the trunk's tile, one at each quarter centre of the room.
+  const suns = [[0, 0], ...[1, 3].flatMap((f) => [1, 3].map((g) => [f, g]))].map(([f, g], i) => ({
+    id: 100 + i, x: f ? COVE_STAGE.x + Math.trunc((COVE_STAGE.w * f) / 4) : COVE_STAGE.tree_x, y: g ? COVE_STAGE.y + Math.trunc((COVE_STAGE.h * g) / 4) : COVE_STAGE.tree_y,
+  }));
+  for (const s of suns) field.add({ id: s.id, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: s.x, y: s.y, on: true, wall: 0 });
 
   // The sight, as a run in a dungeon has it.
   const hardView = new SightView(map.w, map.h);
@@ -103,7 +110,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
-  label.textContent = "the nymph's cove in 3D: a willow and bushes lit by torches and pixies, no sun; WASD walks";
+  label.textContent = "the nymph's cove in 3D: a willow and bushes lit by torches and pixies and five suns' cracks, with real shadows; WASD walks";
   document.body.appendChild(label);
 
   /** Moves the knight by `d` tiles along the world direction (wx, wz), one axis at a time so it slides along what blocks. */
@@ -160,10 +167,13 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const sel = selectLights([...staticCands(field, seconds), ...cove.lights(seconds)], lightView(fp, cam), { x: knight.x, z: knight.z }, Math.min(LIGHT_CAP, params.lcap));
       const lights = sel.list;
-      // The cove's plants cast only where the knight sees them, as in a run.
-      const shown = params.sight ? coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : coveCasters;
-      const casters = selectCasters([...fo.casters, ...shown], lights, Math.min(CASTER_CAP, params.ccap));
+      const casters = selectCasters(fo.casters, lights, Math.min(CASTER_CAP, params.ccap));
       assignSkips(lights, casters);
+      // The cracks of the suns the knight sees, and the plants' shadow tiles: the feet the mask hides cast nothing, as in a run.
+      const cracks = selectCracks(field, fp, params.sight ? mask : null, CRACK_CAP).map((l) => crackOf(l, sunLook, c.now));
+      const plants = cove.plants();
+      const size = plantShadowOf(params);
+      const plantShadows = size ? { plants, hidden: params.sight ? plants.filter((b) => hiddenAt(mask, b.x, b.z)) : [], ...size } : null;
       c.timer.lap('lights');
 
       let sight: SightFrame = SIGHT_OFF;
@@ -183,6 +193,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
         r.figures = figures.count;
         r.lights = { list: lights.length, inView: sel.inView };
         r.casters = casters.length;
+        r.plantTiles = c.view.plantTiles;
         r.plants = { built: forest.built, total: forest.total };
         const cr = (job as CoverJob | null)?.result();
         if (cr) r.cover = { sheets: cr.sheets, bushels: cr.bushels.length };
@@ -193,6 +204,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
           cam: closeCam(cam, c.zoom), plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
           brush: brushers, lava: null, lavaVersion: 0, darkvision: null, casters, sight, wallLights: { off: (i) => field.lights.get(i)?.on === false, now: c.now },
+          cracks, shafts: params.shafts, plantShadows,
           trees: forest.frame({ wind: params.wind, t: seconds, leafOverride: params.leaf === null ? -1 : params.leaf / 100, plain: params.plain, leafRate: params.leafRate }),
           cover: { on: params.cover, gh: params.gh, wind: params.wind, t: seconds },
         },

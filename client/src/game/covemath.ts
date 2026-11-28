@@ -6,8 +6,6 @@ import { TILE } from '../sim/map';
 /** The room's floor area in px (origin = its top-left floor pixel) and the trunk foot in the same space. */
 interface CoveSpec { w: number; h: number; tree: { x: number; y: number }; seed: number }
 
-export { COVE_TREE_FOOT } from './vegetation';
-
 /** The floor rect's top-left and the trunk foot in world px, and the covemath spec (tree relative to the floor). */
 export function coveLayout(c: CoveInfo): { spec: CoveSpec; origin: { x: number; y: number }; foot: { x: number; y: number } } {
   const origin = { x: c.x * TILE, y: c.y * TILE };

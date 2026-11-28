@@ -35,6 +35,7 @@ console.log(`backend: ${await p.evaluate(() => window.__r3d?.backend)}`);
 if (gpuOn) await printGpu(p);
 // WAIT_MS: more time before the picture (the woodland's plants are drawn a few per frame).
 if (process.env.WAIT_MS) await p.waitForTimeout(Number(process.env.WAIT_MS));
+if (page === 'cove') console.log(`plantTiles: ${await p.evaluate(() => window.__r3d?.plantTiles)}`);
 await p.screenshot({ path: `${out}/r3d.png` });
 if (!(await saveReadback(p, `${out}/r3d-readback.png`))) {
   ok = false;

@@ -18,16 +18,17 @@ const spec = (x: number, z: number, seed = 1, extra: Partial<TreeSpec> = {}): Tr
 const MAP = { w: 48, h: 32 }; // 3 x 2 chunks
 const FEET = [spec(2, 2, 1), spec(20, 3, 2), spec(40, 20, 3)]; // three chunks
 
-function layer(hasSun: boolean, now?: () => number): { l: TreeLayer; scene: Scene; sun: Scene | null; made: { n: number } } {
+function layer(hasSun: boolean, now?: () => number, withCast = false): { l: TreeLayer; scene: Scene; sun: Scene | null; cast: Scene | null; made: { n: number } } {
   const scene = new Scene();
   const sun = hasSun ? new Scene() : null;
+  const cast = withCast ? new Scene() : null;
   const made = { n: 0 };
   const lighting = makeLighting(new DataTexture(new Uint8Array(12), 4, 3), { w: 4, h: 3 }, new Texture(), { sun: hasSun });
-  const l = new TreeLayer(scene, sun, (palette, shared) => {
+  const l = new TreeLayer(scene, sun, cast, (palette, shared) => {
     made.n++;
-    return treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette, shared, hasSun, brush: makeBrushUniforms() });
+    return treeMaterials({ lighting, sight: makeSight(), see: seeUniforms(), mask: new Texture(), palette, shared, hasSun, cast: withCast, brush: makeBrushUniforms() });
   }, now);
-  return { l, scene, sun, made };
+  return { l, scene, sun, cast, made };
 }
 const built = (n: number): Forest => {
   const f = new Forest(FEET.slice(0, n), MAP, 0);
@@ -44,6 +45,31 @@ describe('TreeLayer', () => {
     expect(scene.children).toHaveLength(2 * 3);
     expect(sun!.children).toHaveLength(2);
     expect(l.meshCount).toBe(2 * 4);
+  });
+
+  it('adds one cast mesh per chunk to the cast scene and takes it out on drop and clear; without one nothing is added', () => {
+    const a = layer(false, undefined, true);
+    a.l.sync(frame(built(2)));
+    expect(a.cast!.children).toHaveLength(2);
+    const m = (a.cast!.children[0] as Mesh).material;
+    expect(m).toBeDefined();
+    a.l.sync(frame(built(1)));
+    a.l.clear();
+    expect(a.cast!.children).toHaveLength(0);
+    const f = new Forest(FEET, MAP, 0);
+    f.step({ x: 0, z: 0 }, 0);
+    const b = layer(false, undefined, true);
+    b.l.sync(frame(f));
+    expect(b.cast!.children).toHaveLength(1);
+    f.step({ x: 0, z: 0 }, 1e6);
+    b.l.sync(frame(f));
+    expect(b.cast!.children).toHaveLength(3); // each rebuilt chunk replaced its mesh
+    b.l.dispose();
+    expect(b.cast!.children).toHaveLength(0);
+    const none = layer(false);
+    none.l.sync(frame(built(2)));
+    expect(none.cast).toBeNull();
+    expect(none.scene.children).toHaveLength(2 * 3);
   });
 
   it('makes no caster without a sun', () => {
