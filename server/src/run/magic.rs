@@ -114,13 +114,13 @@ impl Run {
     }
 
     /// A Dispel pauses the lasting source `src` of `c` for `secs`.
-    #[allow(dead_code)] // single pauses; `dispel` pauses through `repause` itself
+    #[cfg(test)]
     pub fn pause_lasting(&mut self, c: Creature, src: Lasting, secs: f64) {
         self.repause(c, |fx| fx.dispel_lasting(src, secs));
     }
 
     /// A Dispel pauses the magic entry of `kind` on `c` for `secs`.
-    #[allow(dead_code)] // single pauses; `dispel` pauses through `repause` itself
+    #[cfg(test)]
     pub fn pause_effect(&mut self, c: Creature, kind: EffectKind, secs: f64) {
         self.repause(c, |fx| {
             fx.dispel_effect(kind, secs);

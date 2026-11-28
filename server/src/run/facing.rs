@@ -1030,7 +1030,7 @@ mod tests {
 
     #[test]
     fn a_melee_hit_points_away_from_the_attacker() {
-        let (mut run, mi) = duel(14.0);
+        let (mut run, _mi) = duel(14.0);
         let hp = run.players[0].hp;
         for _ in 0..90 {
             run.step();

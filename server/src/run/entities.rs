@@ -211,16 +211,13 @@ pub struct Windup {
     pub id: Option<AbilityId>,
 }
 
-/// What a monster is after: a hero, an object (a barrel to shoot; later a
-/// torch or the carriage) or a place.
+/// What a monster is after: a hero, a monster foe or an object (a barrel to shoot).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Target {
     Player(u32),
     /// A monster foe: a Friendly one for an enemy, a Hostile one for a companion.
     Monster(u32),
     Object(u32),
-    #[allow(dead_code)] // for torches and the carriage
-    Place(Vec2),
 }
 
 #[derive(Debug, Clone)]

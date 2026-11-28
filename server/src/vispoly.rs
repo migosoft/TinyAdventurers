@@ -17,6 +17,7 @@ pub fn sight_radius(vision: i32) -> f64 {
 
 /// Runs of tile edges between an opaque and an open tile, within `r` px (plus a tile) of (px, py).
 /// Off-map counts as opaque.
+#[cfg(test)]
 pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64, b: Blocker) -> Vec<Segment> {
     let x0 = ((px - r) / TILE).floor() as i32 - 1;
     let y0 = ((py - r) / TILE).floor() as i32 - 1;
@@ -158,6 +159,7 @@ pub struct SightPolygon {
 
 /// The visibility polygon from (px, py) within `r` px: rays at `steps` even angles and to every
 /// segment end (and just beside it), each stopping at the nearest segment or at `r`.
+#[cfg(test)]
 pub fn sight_polygon(map: &Map, px: f64, py: f64, r: f64, steps: usize, b: Blocker) -> SightPolygon {
     polygon_from(wall_segments(map, px, py, r, b), px, py, r, steps)
 }
@@ -247,6 +249,7 @@ impl View {
     }
 
     /// The view when only `b` blockers stop sight (`Hard`: trunks and thickets let it through).
+    #[cfg(test)]
     pub fn compute_with(&mut self, map: &Map, p: Vec2, vision: i32, b: Blocker) {
         self.key = None;
         let poly = sight_polygon(map, p.x, p.y, sight_radius(vision), 96, b);

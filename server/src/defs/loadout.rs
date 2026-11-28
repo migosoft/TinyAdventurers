@@ -58,7 +58,6 @@ pub enum AbilityMod {
     RangeMul(f64),
     DurationAdd(f64),
     /// No item or node uses it yet.
-    #[allow(dead_code)]
     CooldownAdd(f64),
     /// Minions one cast raises, added after the INT step. No item or node uses it yet.
     #[allow(dead_code)]

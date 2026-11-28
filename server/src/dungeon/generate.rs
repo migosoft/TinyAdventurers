@@ -1045,7 +1045,7 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
                 let n = rng.gen_range(3..=5);
                 let mut placed = 0;
                 // The spot is `(x, y)` when it is valid and `try_place` takes it.
-                let mut place = |x: i32, y: i32, walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
+                let place = |x: i32, y: i32, walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
                     // Three tiles of plain floor all round, so a wide boss can always walk past.
                     let open = (-3..=3).all(|dy| (-3..=3).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
                     if !open || hall_keep_clear(r, x, y) || out.iter().any(|&(bx, by)| (bx - x).abs() <= 3 && (by - y).abs() <= 3) {
