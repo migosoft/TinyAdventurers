@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUT_DEFAULTS, cutWeight, cutY, hiddenPoint, hides } from './cut';
+import { CUT_DEFAULTS, columnTop, cutWeight, cutWeightAt, cutY, torchHidden, hiddenPoint, hides } from './cut';
 
 const SLOPE = 1 / Math.tan((48.6 * Math.PI) / 180);
 const L = CUT_DEFAULTS;
@@ -81,5 +81,31 @@ describe('cut', () => {
 
   it('leaves everything alone where nothing is hidden', () => {
     expect(cutY(2, 5, 0, 0, L)).toBe(2);
+  });
+});
+
+describe('whole columns and torches', () => {
+  // A thin wall (column 3) between two rooms, the hero at (2, 2.5) in the left one; `rx` -1: the camera is toward -x, so the wall's -x face hides the right room.
+  const GRID = ['#######', '#..#..#', '#..#..#', '#..#..#', '#######'];
+  const h = (x: number, z: number) => (GRID[z]?.[x] === '.' ? 0 : 2);
+  const w = (px: number, pz: number, y: number, rx = 1, rz = 0) => cutWeightAt(px, pz, y, 2, 2.5, 0, rx, rz, SLOPE, h, () => 1, L);
+
+  it('the column top: a wall edge point reads the wall height, a floor point its own', () => {
+    expect(columnTop(3, 2.5, 0, h)).toBe(2);
+    expect(columnTop(2.5, 2.5, 0.3, h)).toBe(0.3);
+  });
+
+  it('every vertex of the camera-facing face of a cut thin wall has the weight of its top', () => {
+    // Without the column top the vertex at 1.28 reads under the band (0.63) and the face would stand there.
+    const top = w(3, 2.5, 2, -1, 0);
+    expect(top).toBe(1);
+    for (const y of [0, 0.31, 0.66, 0.91, 1.28, 1.63, 2]) expect(w(3, 2.5, y, -1, 0)).toBe(top);
+  });
+
+  it('a torch on a thin near wall is hidden when its wall is cut, on a far wall kept, edge-on kept', () => {
+    const hidden = (wx: number, wz: number, nx: number, nz: number, rx: number, rz: number) => torchHidden(wx, wz, nx, nz, 1.14, 2, 2.5, 0, rx, rz, SLOPE, h, () => 1, L);
+    expect(hidden(3, 2.5, 1, 0, -1, 0)).toBe(true); // the thin wall's right-room face (normal +x), camera toward -x: the wall hides the right room
+    expect(hidden(1, 2.5, 1, 0, 1, 0)).toBe(false); // the west wall behind the hero, camera at +x: nothing to hide
+    expect(hidden(6, 2.5, -1, 0, 0, 1)).toBe(false); // the east wall seen edge-on
   });
 });

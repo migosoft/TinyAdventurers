@@ -6,13 +6,13 @@
 // Both materials end with the sight step, read on the floor in front of the wall (`foot`).
 import { CustomBlending, DoubleSide, MeshBasicNodeMaterial, OneFactor, OneMinusSrcAlphaFactor, ZeroFactor, type NodeMaterial } from 'three/webgpu';
 import { attribute, cross, float, floor, fract, length, max, mix, normalize, positionLocal, positionWorld, pow, sin, smoothstep, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
-import { WALL_H } from '../heights';
 import type { Lighting } from '../lightNodes';
+import { TORCH_HIDE_ABOVE } from '../cut';
 import { cutWeightNode, type CutUniforms } from '../cutNodes';
 import type { SeeUniforms, ViewToward } from '../materials';
 import { hash21, hash22, vnoise2 } from '../noiseNodes';
 import type { Sight } from '../sightNodes';
-import { CARD_H, CARD_W, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
+import { CARD_H, CARD_W, FLAME_BASE_Y, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
@@ -68,11 +68,13 @@ const blob = (d2: N): N => {
 };
 
 /**
- * 1 where the torch's wall is cut (#347), else 0: read at the torch's wall point at the wall's top (the same test as the wall's own top edge there; at the flame's height the ground point lies in the wall cell and reads about 0.5), the same for all its vertices, so it hides whole.
+ * 1 where the torch's wall is cut (#347), else 0: the larger of the weights at the torch's wall point and at the wall cell's far edge, at the flame's height with the column-top rule (the wall's height; a thin wall's two edges can differ at 45 degrees), the same for all its vertices, so it hides whole.
  */
 const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
   const wall: N = attribute('foot', 'vec4'); // .zw: the wall point (.xy, the floor point in front, is the sight's)
-  return cutWeightNode(vec3(wall.z, WALL_H, wall.w), cut, see).greaterThan(0.5).select(1, 0);
+  const at = vec2(wall.z, wall.w), other = at.mul(3).sub(vec2(wall.x, wall.y).mul(2)); // the wall cell's far edge: wall point - n, with foot.xy = wall point + n / 2
+  const w = max(cutWeightNode(vec3(at.x, FLAME_BASE_Y, at.y), cut, see), cutWeightNode(vec3(other.x, FLAME_BASE_Y, other.y), cut, see));
+  return w.greaterThan(TORCH_HIDE_ABOVE).select(1, 0);
 };
 
 export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniforms, see: SeeUniforms): NodeMaterial {

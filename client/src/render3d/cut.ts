@@ -24,12 +24,19 @@ export const HIDE_MID = 0.75;
 /** A tile counts as floor when no higher than `floor + stub`; the threshold is this soft, so the bilinear mix stays continuous. */
 export const FLOOR_SOFT = 0.05;
 
+/** The height the hide test reads a point at: its own `y`, or the highest tile touching it (read a hair off the point on each side), so a wall is cut as a whole column. */
+export function columnTop(px: number, pz: number, y: number, cellH: (x: number, z: number) => number): number {
+  const e = COLUMN_EPS;
+  return Math.max(y, cellH(Math.floor(px - e), Math.floor(pz - e)), cellH(Math.floor(px + e), Math.floor(pz - e)), cellH(Math.floor(px - e), Math.floor(pz + e)), cellH(Math.floor(px + e), Math.floor(pz + e)));
+}
+export const COLUMN_EPS = 0.01;
+
 /**
- * 1 where the ground the point (px, pz) at height `y` covers on screen is floor the hero sees: the heights bilinear over the four nearest
- * tile centres (`cellH(x, z)` a tile's height, `seen(x, z)` 0..1 at the ground point), each tile soft-thresholded at `floor + stub`. The shader mirrors it.
+ * 1 where the ground the point (px, pz) covers on screen is floor the hero sees: the heights bilinear over the four nearest
+ * tile centres, the point taken at its column's top (`columnTop`; `cellH(x, z)` a tile's height, `seen(x, z)` 0..1 at the ground point), each tile soft-thresholded at `floor + stub`. The shader mirrors it.
  */
 export function hides(px: number, pz: number, y: number, floor: number, rx: number, rz: number, slope: number, stub: number, cellH: (x: number, z: number) => number, seen: (x: number, z: number) => number): number {
-  const q = hiddenPoint(px, pz, y, floor, rx, rz, slope);
+  const q = hiddenPoint(px, pz, columnTop(px, pz, y, cellH), floor, rx, rz, slope);
   const u = q.x - 0.5, v = q.z - 0.5, x0 = Math.floor(u), z0 = Math.floor(v), fx = u - x0, fz = v - z0;
   const limit = floor + stub;
   const open = (x: number, z: number) => 1 - smoothstep(limit, limit + FLOOR_SOFT, cellH(x, z));
@@ -50,4 +57,16 @@ export function cutWeight(d: number, hides: number, look: CutLook): number {
 export function cutY(y: number, d: number, hides: number, floor: number, look: CutLook): number {
   const w = cutWeight(d, hides, look);
   return y + (Math.min(y, floor + look.stub) - y) * w;
+}
+
+/** The whole weight at point (px, pz) at height `y` (the shader's `cutWeightNode`): `t` the followed hero's ground point, `r` the unit vector toward the camera. */
+export function cutWeightAt(px: number, pz: number, y: number, tx: number, tz: number, floor: number, rx: number, rz: number, slope: number, cellH: (x: number, z: number) => number, seen: (x: number, z: number) => number, look: CutLook): number {
+  return cutWeight((px - tx) * rx + (pz - tz) * rz, hides(px, pz, y, floor, rx, rz, slope, look.stub, cellH, seen), look);
+}
+
+/** Whether a wall torch hides (the torch materials' rule): the larger of the weights at its wall point (a cell edge) and at the cell's far edge, `n` the normal into the room, is above this. */
+export const TORCH_HIDE_ABOVE = 0.5;
+export function torchHidden(wx: number, wz: number, nx: number, nz: number, flameY: number, tx: number, tz: number, floor: number, rx: number, rz: number, slope: number, cellH: (x: number, z: number) => number, seen: (x: number, z: number) => number, look: CutLook): boolean {
+  const at = (x: number, z: number) => cutWeightAt(x, z, flameY, tx, tz, floor, rx, rz, slope, cellH, seen, look);
+  return Math.max(at(wx, wz), at(wx - nx, wz - nz)) > TORCH_HIDE_ABOVE;
 }

@@ -1,7 +1,7 @@
 // The wall cut (#347) in the world material's vertex stage; the rule is `cut.ts`. Paint, light, sight and shadows keep the unmoved point.
 import { float, floor, fract, max, min, mix, smoothstep, uniform, vec2, vec3 } from 'three/tsl';
 import { Vector3 } from 'three/webgpu';
-import { CUT_DEFAULTS, FLOOR_SOFT, HIDE_MID } from './cut';
+import { COLUMN_EPS, CUT_DEFAULTS, FLOOR_SOFT, HIDE_MID } from './cut';
 import type { SeeUniforms } from './materials';
 import type { Sight } from './sightNodes';
 
@@ -43,11 +43,14 @@ function hidesNode(q: N, cut: CutUniforms): N {
 
 /**
  * How much of the cut applies at world point `p`: `d`, the distance toward the camera along the see-through ray from the hero's line (through `cut.target`,
- * not the drawn camera), times the hide test at the ground point `p` covers on screen (`cut.ts`, `hiddenPoint`).
+ * not the drawn camera), times the hide test at the ground point `p` (at its column's top) covers on screen (`cut.ts`, `hiddenPoint`).
  */
 export function cutWeightNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
   const d = p.xz.sub(cut.target.xz).dot(see.ray.xz);
-  const q = p.xz.sub(see.ray.xz.mul(max(p.y.sub(cut.floor), 0).mul(cut.slope)));
+  // The point at its column's top (the highest tile touching it), so a wall is cut as a whole column (`columnTop` in cut.ts).
+  const e = COLUMN_EPS, cell = (dx: number, dz: number): N => cut.env.cellH(floor(p.xz.add(vec2(dx, dz))));
+  const top = max(p.y, max(max(cell(-e, -e), cell(e, -e)), max(cell(-e, e), cell(e, e))));
+  const q = p.xz.sub(see.ray.xz.mul(max(top.sub(cut.floor), 0).mul(cut.slope)));
   const side = smoothstep(cut.line, cut.line.add(cut.ramp), d);
   const hides = smoothstep(float(HIDE_MID).sub(cut.edge.mul(0.5)), float(HIDE_MID).add(cut.edge.mul(0.5)), hidesNode(q, cut));
   return side.mul(hides).mul(cut.on);
