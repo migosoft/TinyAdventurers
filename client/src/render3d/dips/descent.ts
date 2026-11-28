@@ -115,7 +115,7 @@ export function standY(bed: number, sink: number | null): number {
  * state ends or the bed changes under it; `follow`: how fast (1/s) the local clock closes on the snapshot's; `resync`: a gap (s) beyond
  * which it jumps to the snapshot's.
  */
-export const SWIM = { chin: 0.7, margin: 0.15, rise: 3, follow: 6, resync: 0.3 } as const;
+export const SWIM = { chin: 0.7, margin: 0.15, rise: 0.9, follow: 6, resync: 0.3 } as const;
 
 /**
  * The foot's depth below the water (tiles, `WATER_LEVEL` is 0) of a figure `height` tiles tall `t` s into the drowning state over a

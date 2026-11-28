@@ -2139,13 +2139,13 @@ describe('Figures3d on the bed of a dip (#324)', () => {
       expect(died(1.8)).toEqual({ lost: true, skulls: 0 });
     });
 
-    it('rises with the bed after it leaves the deep tile, never more than 0.1 tiles a frame', () => {
+    it('rises with the bed after it leaves the deep tile, never more than 0.04 tiles a frame (gently, not a pop)', () => {
       const fg = dipFigs();
       series(fg, 0, 100, swimmer);
       const s = series(fg, 100, 90, (t) => knight(3 - Math.min(1, (t - 100 / 60) * 1), 1, { drown: 0 }), 0);
       let step = 0;
       for (let i = 1; i < s.length; i++) step = Math.max(step, Math.abs(s[i].y - s[i - 1].y));
-      expect(step).toBeLessThan(0.1);
+      expect(step).toBeLessThan(0.04);
       expect(s[s.length - 1].y).toBeGreaterThan(s[0].y);
       expect(s[s.length - 1].descending).toBe(false);
     });

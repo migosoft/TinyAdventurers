@@ -270,6 +270,19 @@ describe('swimming (#448)', () => {
     expect(followT(0.2, 1.7, 1 / 60)).toBe(1.7);   // far off: jumps
   });
 
+  it('leaving fully under over a bed 0.4 tiles higher: a gentle rise (under 0.02 a frame), at the bed within a second', () => {
+    let y = WATER_LEVEL - swimDepth(HU, DEEP, H);
+    const bed = y + 0.4;
+    let f = 0;
+    for (; f < 120 && y < bed; f++) {
+      const n = stepSwimY(y, bed, bed - 0.4, 1 / 60);
+      expect(n - y).toBeLessThan(0.02);
+      y = n;
+    }
+    expect(y).toBeCloseTo(bed, 6);
+    expect(f).toBeLessThan(60);
+  });
+
   it('rises out along the bed: no jump over 0.1 tiles per frame, never below the bed', () => {
     let y = WATER_LEVEL - swimDepth(HU, DEEP, H);
     for (let f = 0; f < 120; f++) {

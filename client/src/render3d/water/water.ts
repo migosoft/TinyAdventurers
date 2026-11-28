@@ -22,7 +22,7 @@ export const PUDDLE_STIR = { enter: 1.5, ring: 1, step: 0.3, within: 0.85, foot:
 const PLUNGE_SCATTER = 0.15, STIR_SCATTER = 0.2;
 
 /** Bubbles per second above a breathing creature in the drowning state (#448): while its head is above water, and from `HEAD_UNDER` on (the main sign of where it is). */
-export const SWIM_BUBBLES = { above: 2, under: 9 } as const;
+export const SWIM_BUBBLES = { above: 2, under: 5, ring: 0.5, scatter: 0.12 } as const;
 
 export interface WaterSpot { id: number; x: number; z: number }
 /** A creature in the drowning state (`FigureOut.swims`). */
@@ -166,7 +166,10 @@ export class Water3d {
         s.bubble += (headUnder(w.t) ? SWIM_BUBBLES.under : SWIM_BUBBLES.above) * dt;
         const n = Math.floor(s.bubble);
         s.bubble -= n;
-        for (let c = 0; c < n; c++) this.bubbles.push(w.id, w.x, w.z);
+        for (let c = 0; c < n; c++) {
+          this.bubbles.push(w.id, w.x, w.z);
+          this.ring(w.x, w.z, now, SWIM_BUBBLES.ring, SWIM_BUBBLES.scatter); // where the cluster surfaces
+        }
       }
     }
 

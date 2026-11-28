@@ -13,7 +13,9 @@ const ENTER: BurstSpec = { x: 0, y: 0, z: 0, n: ENTER_N, speed: [8 * PX, 30 * PX
 const PLUNGE: BurstSpec = { x: 0, y: 0, z: 0, n: PLUNGE_N, speed: [10 * PX, 45 * PX], up: [0.6, 1.4], life: [0.25, 0.45], g: 3, drag: 0, size: PX * 2, colours: [0xcae6f5], streak: false, floor: WATER_Y };
 /** A spray droplet: sideways up to 15 px/s, up 20 px/s. A bubble rises at 10 px/s. */
 const SPRAY: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [20 * PX, 25 * PX], up: [0.93, 1.2], life: [0.2, 0.3], g: 3, drag: 0, size: PX * 1.5, colours: [0xcae6f5], streak: false, floor: WATER_Y };
-const BUBBLE: BurstSpec = { x: 0, y: 0, z: 0, n: 1, speed: [10 * PX, 10 * PX], up: [Math.PI / 2 - 0.01, Math.PI / 2 - 0.01], life: [0.4, 0.6], g: 0, drag: 0, size: PX * 2, colours: [0xcae6f5], streak: false, floor: WATER_Y };
+/** A cluster of bubbles (readable at play zoom, #448): BUBBLE_N dots of BUBBLE_SIZE art px, rising 12 px/s with a little drift for 0.7-0.9 s. */
+const BUBBLE_N = 3, BUBBLE_SIZE = 3.5;
+const BUBBLE: BurstSpec = { x: 0, y: 0, z: 0, n: BUBBLE_N, speed: [12 * PX, 16 * PX], up: [Math.PI / 2 - 0.3, Math.PI / 2 - 0.01], life: [0.7, 0.9], g: 0, drag: 0, size: PX * BUBBLE_SIZE, colours: [0xcae6f5, 0xffffff], streak: false, floor: WATER_Y };
 
 function emitAll(fx: Effects3d, hidden: ReadonlySet<number>, now: number, list: readonly WaterSpot[], kind: typeof FX_KIND.WaterSplash | typeof FX_KIND.WaterDrop, a: number): void {
   for (let i = 0; i < list.length; i++) {

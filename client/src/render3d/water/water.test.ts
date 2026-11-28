@@ -117,6 +117,22 @@ describe('Water3d', () => {
     expect(run(null).n).toBe(0);
   });
 
+  it('a breathing swimmer rings the surface where its bubbles come up; a breathless one makes neither (#448)', () => {
+    const live = (breathless: boolean) => {
+      const w = new Water3d(room(), rng);
+      let bubbles = 0, l = 0;
+      for (let i = 0; i < 90; i++) {
+        const r = w.step(inp(i / 60, 1 / 60, [fig(1, 6.5, 2)], { swims: [{ id: 1, x: 6.5, z: 2, t: CONST.HEAD_UNDER + 0.5, breathless }] }));
+        bubbles += r.cues.bubbles.length; l = r.live;
+      }
+      return { bubbles, l };
+    };
+    const a = live(false), b = live(true);
+    expect(a.bubbles).toBeGreaterThan(0);
+    expect(a.l).toBeGreaterThan(b.l);
+    expect(b.bubbles).toBe(0);
+  });
+
   it('rings where a drip lands', () => {
     const w = new Water3d(room(), rng);
     const pos = new Float32Array([6.5, 1.5, 8.5, 2.5]);

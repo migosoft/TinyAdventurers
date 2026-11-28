@@ -820,7 +820,9 @@ export class Figures3d {
     if (o.swim != null && !o.skims) {
       // Drowning state (#448): wading on the bed, then chin-deep, then sinking smoothly until the head is under; the clock is local and eased to the snapshot's.
       mo.sw = followT(mo.sw, o.swim, dt);
-      mo.y = WATER_LEVEL - swimDepth(mo.sw, bed, o.height);
+      const depthY = WATER_LEVEL - swimDepth(mo.sw, bed, o.height);
+      // Already swimming (or still easing out after a one-frame flicker of the state): approach at the bounded speed, never a jump.
+      mo.y = mo.swum ? stepSwimY(mo.y, depthY, bed, dt) : depthY;
       mo.swum = true;
       under = headUnder(mo.sw);
     } else {

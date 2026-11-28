@@ -27,7 +27,7 @@ describe('water effects', () => {
     expect(FX_KIND.WaterSplash).toBe(24);
     expect(FX_KIND.WaterDrop).toBe(25);
     expect(FX_LIFE[FX_KIND.WaterSplash]).toBe(0.45);
-    expect(FX_LIFE[FX_KIND.WaterDrop]).toBe(0.35);
+    expect(FX_LIFE[FX_KIND.WaterDrop]).toBe(0.9);
   });
 
   it('one enters cue makes one splash, lit, gone after its life', () => {
