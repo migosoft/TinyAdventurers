@@ -4,6 +4,6 @@
   "type": "module",
   "description": "Browser smoke tests driving an installed Edge/Chrome via playwright-core.",
   "dependencies": {
-    "playwright-core": "^1.50.0"
+    "playwright-core": "^1.65.1"
   }
 }

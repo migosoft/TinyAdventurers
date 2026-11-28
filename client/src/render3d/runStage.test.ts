@@ -87,7 +87,10 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0, load
 }
 
 beforeEach(() => vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1)));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear(); // the rules log keeps its switch there (jsdom 31 gives the tests a working localStorage)
+});
 
 const NO_BUTTONS = { primary: () => false, secondary: () => false, act: false };
 
