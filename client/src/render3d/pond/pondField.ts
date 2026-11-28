@@ -80,10 +80,15 @@ function depthOf(seed: number, x: number, z: number, shore: number, deep: number
   if (shore <= SHORE_SHALLOW) return SHALLOW_BED * smooth(shore / SHORE_SHALLOW);
   const far = Math.min(1, (shore - SHORE_SHALLOW) / (SHORE_SHELF - SHORE_SHALLOW));
   const shelf = SHALLOW_BED + (SHELF_BED - SHALLOW_BED) * far * (SHELF_EVEN + (1 - SHELF_EVEN) * noise2(seed ^ 0x51f3, x / SHELF_WAVE, z / SHELF_WAVE));
-  const g = deep + (noise2(seed ^ 0x2d07, x / DEEP_WAVE, z / DEEP_WAVE) - 0.5) * 2 * DEEP_WOBBLE;
   // the slope never starts nearer the shore than the shelf's rim
-  const down = smooth((g + DEEP_OUT) / (DEEP_OUT + DEEP_INSIDE)) * smooth((shore - SHORE_SHALLOW) / SHORE_SHALLOW);
+  const down = deepSlope(seed, x, z, deep) * smooth((shore - SHORE_SHALLOW) / SHORE_SHALLOW);
   return shelf + (DEEP_BED - shelf) * down;
+}
+
+/** The share (0..1) of the way down to DEEP_BED at (x, z), `deep` tiles inside the DeepWater tiles' edge (negative: outside): the pond's slope into the deep, which the dungeon pools reuse (#448). */
+export function deepSlope(seed: number, x: number, z: number, deep: number): number {
+  const g = deep + (noise2(seed ^ 0x2d07, x / DEEP_WAVE, z / DEEP_WAVE) - 0.5) * 2 * DEEP_WOBBLE;
+  return smooth((g + DEEP_OUT) / (DEEP_OUT + DEEP_INSIDE));
 }
 
 /** Squared distance transform of a 1D row (Felzenszwalb): `f` in, result in `out`. */

@@ -257,6 +257,17 @@ describe('pondField (#360)', () => {
     expect([bedAt(m, 10.5, 10.5), bedAt(m, 6.1, 10.5), walkBedAt(m, 10.5, 10.5), waterMaskAt(m, 6.1, 10.5), surfaceAt(m, 10.5, 10.5)]).toEqual(before); // ... and removing it restores the old path
   });
 
+  it('the bed of the demo ponds is unchanged by the dungeon pools\' slope (#448)', () => {
+    const rows: string[] = [];
+    for (let i = 0; i < demo.length; i++) {
+      const { rules, pond } = level(i), f = pondField(rules, pond, pondViewMap(rules, pond));
+      let row = '';
+      for (let z = 0; z < rules.h; z += 2) for (let x = 0; x < rules.w; x += 2) row += f.depthAt(x + 0.3, z + 0.7).toFixed(4) + ' ';
+      rows.push(row);
+    }
+    expect(rows).toMatchSnapshot();
+  });
+
   it('a pond without blobs or water has an empty field', () => {
     const f = pondField(new TileMap(6, 6, new Uint8Array(36).fill(TILE_ID.Floor)), NONE);
     expect([f.shoreAt(3, 3), f.wetAt(3, 3), f.depthAt(3, 3), f.bodyAt(3, 3)]).toEqual([0, 0, 0, 0]);
