@@ -18,7 +18,7 @@ use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::defs::effects::EffectKind;
 use crate::defs::races::Sight;
-use rand::Rng;
+use rand::RngExt;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
@@ -627,7 +627,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let home = run.monsters[mi].ai.home;
             run.monsters[mi].ai.wander_t -= dt;
             if run.monsters[mi].ai.wander_t <= 0.0 {
-                let off = Vec2::new(run.rng.gen_range(-24.0..24.0), run.rng.gen_range(-24.0..24.0));
+                let off = Vec2::new(run.rng.random_range(-24.0..24.0), run.rng.random_range(-24.0..24.0));
                 let ai = &mut run.monsters[mi].ai;
                 ai.wander_t = 3.0 + (off.x.abs() / 8.0);
                 ai.wander_to = Some(home + off);
@@ -716,7 +716,7 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
         return;
     }
     let a = run.monsters[mi].kit.get(id).expect("monster_use found it").clone();
-    let pace = if ab::def(id).shape == Shape::Projectile { a.cooldown * (1.0 + run.rng.gen_range(0.0..SHOT_PACE_JITTER)) } else { a.cooldown };
+    let pace = if ab::def(id).shape == Shape::Projectile { a.cooldown * (1.0 + run.rng.random_range(0.0..SHOT_PACE_JITTER)) } else { a.cooldown };
     let ai = &mut run.monsters[mi].ai;
     if alt {
         ai.alt_cd = pace;
@@ -1881,6 +1881,7 @@ pub(crate) mod tests {
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(14.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
+            crate::run::tests::face(&mut run, mi, ppos); // its random first facing (rand 0.10, #445) was away from the hero
             if hasted {
                 run.apply_effect(Creature::Monster(mi), EffectKind::Accelerated, Some(30.0));
             }

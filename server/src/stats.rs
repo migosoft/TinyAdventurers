@@ -10,7 +10,7 @@ use crate::db::{self, Db};
 use crate::lobby::Live;
 use crate::protocol::{CharacterInfo, ClassId};
 use serde::Serialize;
-use sqlx::Row;
+use sqlx::{AssertSqlSafe, Row}; // the dynamic SQL here is built from constants and fixed match arms only
 use ts_rs::TS;
 
 /// Players per page in the admin's player list.
@@ -286,7 +286,7 @@ async fn totals(db: &Db) -> Result<Totals, sqlx::Error> {
 }
 
 async fn window(db: &Db, days: u32) -> Result<WindowStats, sqlx::Error> {
-    let r = sqlx::query(&format!(
+    let r = sqlx::query(AssertSqlSafe(format!(
         "{WINDOW} SELECT \
          (SELECT count(DISTINCT account_id) FROM activity_days, t WHERE day >= t.d), \
          (SELECT count(*) FROM accounts, t WHERE created_at >= t.since), \
@@ -298,7 +298,7 @@ async fn window(db: &Db, days: u32) -> Result<WindowStats, sqlx::Error> {
          (SELECT coalesce(avg(players), 0)::float8 FROM r), \
          (SELECT coalesce(sum(kills), 0)::bigint FROM run_players p JOIN r ON r.id = p.run_id), \
          (SELECT count(*) FROM run_players p JOIN r ON r.id = p.run_id WHERE NOT p.survived AND NOT p.left_run)"
-    ))
+    )))
     .bind(days as i32 - 1)
     .fetch_one(db)
     .await?;
@@ -318,10 +318,10 @@ async fn window(db: &Db, days: u32) -> Result<WindowStats, sqlx::Error> {
 }
 
 async fn level_runs(db: &Db) -> Result<Vec<LevelRunStats>, sqlx::Error> {
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(AssertSqlSafe(format!(
         "{WINDOW} SELECT level, boss, count(*), count(*) FILTER (WHERE outcome = 'victory'), count(*) FILTER (WHERE outcome = 'defeat'), \
          coalesce(avg(duration_s) FILTER (WHERE outcome <> 'abandoned'), 0)::float8 FROM r GROUP BY level, boss ORDER BY level, boss NULLS FIRST"
-    ))
+    )))
     .bind(29)
     .fetch_all(db)
     .await?;
@@ -330,7 +330,7 @@ async fn level_runs(db: &Db) -> Result<Vec<LevelRunStats>, sqlx::Error> {
 
 async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
     let owned = sqlx::query("SELECT c.class, count(*) FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug GROUP BY c.class").fetch_all(db).await?;
-    let played = sqlx::query(&format!("{WINDOW} SELECT p.class, count(*) FROM run_players p JOIN r ON r.id = p.run_id GROUP BY p.class")).bind(29).fetch_all(db).await?;
+    let played = sqlx::query(AssertSqlSafe(format!("{WINDOW} SELECT p.class, count(*) FROM run_players p JOIN r ON r.id = p.run_id GROUP BY p.class"))).bind(29).fetch_all(db).await?;
     let count = |rows: &[sqlx::postgres::PgRow], c: ClassId| rows.iter().find(|r| r.get::<&str, _>(0) == format!("{c:?}")).map_or(0, |r| n(r, 1));
     Ok(ClassId::ALL.into_iter().map(|c| ClassStats { class: c, characters: count(&owned, c), played: count(&played, c) }).collect())
 }
@@ -339,16 +339,16 @@ async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
 const NODES: &str = "(CASE WHEN jsonb_typeof(progress->'nodes') = 'array' THEN jsonb_array_length(progress->'nodes') ELSE 0 END)";
 
 async fn levels(db: &Db) -> Result<Vec<LevelBucket>, sqlx::Error> {
-    let rows = sqlx::query(&format!("SELECT lvl, count(*) FROM (SELECT {NODES} AS lvl FROM characters ch JOIN accounts a ON a.id = ch.account_id WHERE NOT a.debug) c GROUP BY lvl ORDER BY lvl")).fetch_all(db).await?;
+    let rows = sqlx::query(AssertSqlSafe(format!("SELECT lvl, count(*) FROM (SELECT {NODES} AS lvl FROM characters ch JOIN accounts a ON a.id = ch.account_id WHERE NOT a.debug) c GROUP BY lvl ORDER BY lvl"))).fetch_all(db).await?;
     Ok(rows.iter().map(|r| LevelBucket { nodes: r.get::<i32, _>(0).max(0) as u32, characters: n(r, 1) }).collect())
 }
 
 async fn top(db: &Db) -> Result<Vec<TopCharacter>, sqlx::Error> {
-    let rows = sqlx::query(&format!(
+    let rows = sqlx::query(AssertSqlSafe(format!(
         "SELECT c.id, c.name, c.class, a.id, a.name, coalesce((c.progress->>'total_xp')::bigint, 0) AS txp, \
          coalesce((c.progress->>'coins')::bigint, 0), {NODES}::bigint \
          FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug ORDER BY txp DESC, c.id LIMIT 10"
-    ))
+    )))
     .fetch_all(db)
     .await?;
     Ok(rows
@@ -404,7 +404,7 @@ pub async fn players(db: &Db, query: &str, sort: &str, page: u32, online: &(dyn 
         _ => "lower(a.name)",
     };
     let total = sqlx::query("SELECT count(*) FROM accounts WHERE name ILIKE $1").bind(&pattern).fetch_one(db).await?;
-    let rows = sqlx::query(&format!("SELECT {PLAYER_COLUMNS} FROM accounts a WHERE a.name ILIKE $1 ORDER BY {order} LIMIT $2 OFFSET $3"))
+    let rows = sqlx::query(AssertSqlSafe(format!("SELECT {PLAYER_COLUMNS} FROM accounts a WHERE a.name ILIKE $1 ORDER BY {order} LIMIT $2 OFFSET $3")))
         .bind(&pattern)
         .bind(PAGE_SIZE as i64)
         .bind(page as i64 * PAGE_SIZE as i64)
@@ -416,7 +416,7 @@ pub async fn players(db: &Db, query: &str, sort: &str, page: u32, online: &(dyn 
 /// `in_use(account, character)`: is the character being played right now?
 #[tracing::instrument(skip(db, online, in_use))]
 pub async fn player(db: &Db, id: i32, online: &(dyn Fn(i32) -> bool + Sync), in_use: &(dyn Fn(i32) -> bool + Sync)) -> Result<Option<PlayerDetail>, sqlx::Error> {
-    let Some(row) = sqlx::query(&format!("SELECT {PLAYER_COLUMNS} FROM accounts a WHERE a.id = $1")).bind(id).fetch_optional(db).await? else {
+    let Some(row) = sqlx::query(AssertSqlSafe(format!("SELECT {PLAYER_COLUMNS} FROM accounts a WHERE a.id = $1"))).bind(id).fetch_optional(db).await? else {
         return Ok(None);
     };
     let created = sqlx::query("SELECT id, (extract(epoch FROM created_at) * 1000)::float8 FROM characters WHERE account_id = $1").bind(id).fetch_all(db).await?;

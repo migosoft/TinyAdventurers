@@ -114,10 +114,8 @@ pub struct Sheet {
     pub effect_res: EffectResistances,
     /// The Melee slot's weapon, or the class starter. The run reads the resolved abilities instead;
     /// the tests check these.
-    #[allow(dead_code)]
     pub melee: ResolvedWeapon,
     /// The Ranged slot's weapon; none when the slot is empty.
-    #[allow(dead_code)]
     pub ranged: Option<ResolvedWeapon>,
     /// The light of the worn item with the largest radius, or the Radiant keystone's glow when that reaches further (or nothing is worn).
     pub light: Option<LightKind>,

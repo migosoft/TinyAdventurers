@@ -9,8 +9,8 @@ use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSi
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 use crate::protocol::BossId;
-use rand::seq::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::seq::{IndexedRandom, SliceRandom};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
 
@@ -94,7 +94,7 @@ fn place_haunts(rng: &mut ChaCha8Rng, d: &Dungeon) -> Vec<Vec2> {
         if matches!(room.kind, RoomKind::Start | RoomKind::Boss | RoomKind::Cove) || (depth_of(&room.rect) as f64 / max_d as f64) < HAUNT_MIN_DEPTH {
             continue;
         }
-        if !rng.gen_bool(HAUNT_CHANCE) {
+        if !rng.random_bool(HAUNT_CHANCE) {
             continue;
         }
         let r = &room.rect;
@@ -122,18 +122,18 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut cove_rng = rng.clone();
     cove_rng.set_stream(14);
     let cove_rect = (0..100).find_map(|_| {
-        let r = Rect { x: cove_rng.gen_range(3..SIZE - BOSS_W - 3), y: cove_rng.gen_range(min_y..SIZE - BOSS_H - 3), w: BOSS_W, h: BOSS_H };
+        let r = Rect { x: cove_rng.random_range(3..SIZE - BOSS_W - 3), y: cove_rng.random_range(min_y..SIZE - BOSS_H - 3), w: BOSS_W, h: BOSS_H };
         (!start.intersects(&r, 3)).then_some(r)
     })?;
     rooms.push(Room { rect: cove_rect, kind: RoomKind::Cove });
-    let cove_seed: u32 = cove_rng.gen_range(1..=1_000_000);
+    let cove_seed: u32 = cove_rng.random_range(1..=1_000_000);
     let mut attempts = 0;
     while rooms.len() < TARGET_ROOMS && attempts < 600 {
         attempts += 1;
-        let hall = rng.gen_bool(0.3);
-        let (w, h) = if hall { (rng.gen_range(12..=18), rng.gen_range(11..=15)) } else { (rng.gen_range(6..=10), rng.gen_range(6..=10)) };
-        let x = rng.gen_range(3..SIZE - w - 3);
-        let y = rng.gen_range(min_y..SIZE - h - 3);
+        let hall = rng.random_bool(0.3);
+        let (w, h) = if hall { (rng.random_range(12..=18), rng.random_range(11..=15)) } else { (rng.random_range(6..=10), rng.random_range(6..=10)) };
+        let x = rng.random_range(3..SIZE - w - 3);
+        let y = rng.random_range(min_y..SIZE - h - 3);
         let r = Rect { x, y, w, h };
         if rooms.iter().any(|o| o.rect.intersects(&r, 3)) {
             continue;
@@ -188,14 +188,14 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
             if edges.iter().any(|&(x, y)| (x == a && y == b) || (x == b && y == a)) {
                 continue;
             }
-            if dist(a, b) < 34.0 && rng.gen_bool(0.2) {
+            if dist(a, b) < 34.0 && rng.random_bool(0.2) {
                 edges.push((a, b));
                 extra += 1;
             }
         }
     }
     for &(a, b) in &edges {
-        carve_l(&mut map, centers[a], centers[b], rng.gen_bool(0.5));
+        carve_l(&mut map, centers[a], centers[b], rng.random_bool(0.5));
     }
 
     // Boss hall: a single corridor from the bottom center of the hall down to
@@ -291,7 +291,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         stone: Vec::new(),
     };
 
-    let turns = rng.gen_range(0..4);
+    let turns = rng.random_range(0..4);
     for _ in 0..turns {
         rotate(&mut dungeon);
     }
@@ -429,11 +429,11 @@ pub fn bfs(map: &Map, sx: i32, sy: i32) -> Vec<i32> {
 
 fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mut Vec<Spawn>) {
     use EnemyType::*;
-    if room.kind == RoomKind::Room && rng.gen_bool(0.15) {
+    if room.kind == RoomKind::Room && rng.random_bool(0.15) {
         return; // a quiet room
     }
     let hall = room.kind == RoomKind::Hall;
-    let count = if hall { rng.gen_range(4..=7) } else { rng.gen_range(2..=4) } + (depth * 2.0) as usize;
+    let count = if hall { rng.random_range(4..=7) } else { rng.random_range(2..=4) } + (depth * 2.0) as usize;
     let pool: &[EnemyType] = if depth < 0.35 {
         &[GoblinArcher, GoblinArcher, SkeletonWarrior]
     } else if depth < 0.7 {
@@ -442,13 +442,13 @@ fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mu
         &[SkeletonArcher, OrcWarrior, OrcWarrior, OrcArcher]
     };
     let mut types: Vec<EnemyType> = (0..count).map(|_| *pool.choose(rng).unwrap()).collect();
-    if hall && depth > 0.3 && rng.gen_bool(0.5) {
+    if hall && depth > 0.3 && rng.random_bool(0.5) {
         types[0] = Necromancer;
     }
     let r = &room.rect;
     for t in types {
-        let x = rng.gen_range(r.x + 1..r.x + r.w - 1);
-        let y = rng.gen_range(r.y + 1..r.y + r.h - 1);
+        let x = rng.random_range(r.x + 1..r.x + r.w - 1);
+        let y = rng.random_range(r.y + 1..r.y + r.h - 1);
         out.push(Spawn { enemy: t, pos: Map::center_of(x, y) });
     }
 }
@@ -491,13 +491,13 @@ fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], c
 fn place_chests(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<ChestSpawn> {
     let mut out = Vec::new();
     for room in rooms {
-        if !matches!(room.kind, RoomKind::Room | RoomKind::Hall) || !rng.gen_bool(0.35) {
+        if !matches!(room.kind, RoomKind::Room | RoomKind::Hall) || !rng.random_bool(0.35) {
             continue;
         }
         let r = &room.rect;
-        let mimic = rng.gen_bool(0.25);
+        let mimic = rng.random_bool(0.25);
         for _ in 0..8 {
-            let x = rng.gen_range(r.x + 1..r.x + r.w - 1);
+            let x = rng.random_range(r.x + 1..r.x + r.w - 1);
             let y = r.y;
             let fits = map.safe(x, y) && map.opaque(x, y - 1) && map.safe(x - 1, y) && map.safe(x + 1, y) && map.safe(x, y + 1);
             if fits {
@@ -536,10 +536,10 @@ fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: The
             _ => continue,
         };
         for _ in 0..tries {
-            if !rng.gen_bool(if room.kind == RoomKind::Hall { 0.6 } else { 0.4 }) {
+            if !rng.random_bool(if room.kind == RoomKind::Hall { 0.6 } else { 0.4 }) {
                 continue;
             }
-            let chasm = rng.gen_bool(0.4);
+            let chasm = rng.random_bool(0.4);
             for _ in 0..8 {
                 let cells = if chasm { chasm_strip(rng, &room.rect) } else { pool(rng, &room.rect, theme.liquid) };
                 let Some(cells) = cells else { break };
@@ -571,8 +571,8 @@ fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: The
 fn place_boss_chasms(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
     let keep_clear = |x: i32, y: i32| hall_keep_clear(r, x, y);
     let connected = |map: &Map| hall_connected(map, r);
-    let strips = rng.gen_range(1..=2);
-    let pits = rng.gen_range(1..=2);
+    let strips = rng.random_range(1..=2);
+    let pits = rng.random_range(1..=2);
     for k in 0..strips + pits {
         let pit = k >= strips;
         let gap = if pit { 3 } else { 2 };
@@ -636,22 +636,22 @@ fn place_boss_lava(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
 
 /// A pit of 2x2 to 3x2 tiles (either way round), three tiles from the walls.
 fn hall_pit(rng: &mut ChaCha8Rng, r: &Rect) -> Vec<(i32, i32)> {
-    let (mut w, mut h) = (rng.gen_range(2..=3), 2);
-    if rng.gen_bool(0.5) {
+    let (mut w, mut h) = (rng.random_range(2..=3), 2);
+    if rng.random_bool(0.5) {
         std::mem::swap(&mut w, &mut h);
     }
-    let x0 = rng.gen_range(r.x + 3..=r.x + r.w - 3 - w);
-    let y0 = rng.gen_range(r.y + 3..=r.y + r.h - 3 - h);
+    let x0 = rng.random_range(r.x + 3..=r.x + r.w - 3 - w);
+    let y0 = rng.random_range(r.y + 3..=r.y + r.h - 3 - h);
     (y0..y0 + h).flat_map(|y| (x0..x0 + w).map(move |x| (x, y))).collect()
 }
 
 /// A drop-off along one wall: 4 to 7 tiles long, 1 or 2 deep.
 fn wall_strip(rng: &mut ChaCha8Rng, r: &Rect) -> Vec<(i32, i32)> {
-    let depth = rng.gen_range(1..=2);
-    let len = rng.gen_range(4..=7);
-    let side = rng.gen_range(0..4);
+    let depth = rng.random_range(1..=2);
+    let len = rng.random_range(4..=7);
+    let side = rng.random_range(0..4);
     let along = if side < 2 { r.w } else { r.h };
-    let s0 = rng.gen_range(0..=along - len);
+    let s0 = rng.random_range(0..=along - len);
     let mut cells = Vec::new();
     for i in s0..s0 + len {
         for j in 0..depth {
@@ -704,10 +704,10 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32,
     if max_w < min || max_h < min {
         return None;
     }
-    let w = rng.gen_range(min..=max_w.min(cap.0));
-    let h = rng.gen_range(min..=max_h.min(cap.1));
-    let x0 = rng.gen_range(r.x + 1..=r.x + r.w - 1 - w);
-    let y0 = rng.gen_range(r.y + 1..=r.y + r.h - 1 - h);
+    let w = rng.random_range(min..=max_w.min(cap.0));
+    let h = rng.random_range(min..=max_h.min(cap.1));
+    let x0 = rng.random_range(r.x + 1..=r.x + r.w - 1 - w);
+    let y0 = rng.random_range(r.y + 1..=r.y + r.h - 1 - h);
     let (cx, cy) = (x0 as f64 + (w - 1) as f64 / 2.0, y0 as f64 + (h - 1) as f64 / 2.0);
     let (rx, ry) = (w as f64 / 2.0, h as f64 / 2.0);
     let inside = |x: i32, y: i32| ((x as f64 - cx) / rx).powi(2) + ((y as f64 - cy) / ry).powi(2) <= 1.0;
@@ -732,15 +732,15 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32,
 /// A chasm from wall to wall across the room (at most `MAX_CHASM` tiles wide),
 /// with a floor bridge two or three tiles wide.
 fn chasm_strip(rng: &mut ChaCha8Rng, r: &Rect) -> Option<Vec<(i32, i32, Tile)>> {
-    let width = rng.gen_range(1..=MAX_CHASM);
-    let bridge = rng.gen_range(2..=3);
-    let across = rng.gen_bool(0.5); // runs left to right
+    let width = rng.random_range(1..=MAX_CHASM);
+    let bridge = rng.random_range(2..=3);
+    let across = rng.random_bool(0.5); // runs left to right
     let (len, depth) = if across { (r.w, r.h) } else { (r.h, r.w) };
     if depth < width + 4 || len < bridge + 4 {
         return None;
     }
-    let at = rng.gen_range(2..=depth - 2 - width);
-    let b0 = rng.gen_range(1..=len - 1 - bridge);
+    let at = rng.random_range(2..=depth - 2 - width);
+    let b0 = rng.random_range(1..=len - 1 - bridge);
     let mut cells = Vec::new();
     for i in 0..len {
         if (b0..b0 + bridge).contains(&i) {
@@ -811,7 +811,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
     let dark: Vec<bool> = (0..next)
         .map(|ri| {
             let keep_lit = ri < rooms.len() && (ri == 0 || rooms[ri].kind == RoomKind::Boss);
-            !keep_lit && rng.gen_bool(DARK_SHARE)
+            !keep_lit && rng.random_bool(DARK_SHARE)
         })
         .collect();
     // Candidate cells, grouped by (region, side, line) and sorted along the line.
@@ -855,7 +855,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
             }
         }
         for run in runs.into_iter().filter(|r| r.len() >= 3) {
-            let offset = rng.gen_range(0..TORCH_SPACING.min(run.len() as i32)) as usize;
+            let offset = rng.random_range(0..TORCH_SPACING.min(run.len() as i32)) as usize;
             for &a in run.iter().skip(offset).step_by(TORCH_SPACING as usize) {
                 let wall = if side == TorchSide::Face { (a, line) } else { (line, a) };
                 if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
@@ -938,7 +938,7 @@ pub fn sun_margins_ok(r: &Rect, x: i32, y: i32) -> bool {
 /// each with one sun and, with `SUN_SECOND_CHANCE`, a second one 3 to 5 tiles
 /// from the first. Fewer fitting rooms than rolled: place what fits.
 fn place_suns(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<(i32, i32)> {
-    let roll = rng.gen_range(0..SUN_ROOM_WEIGHTS.iter().sum::<u32>());
+    let roll = rng.random_range(0..SUN_ROOM_WEIGHTS.iter().sum::<u32>());
     let wanted = if roll < SUN_ROOM_WEIGHTS[0] { 0 } else if roll < SUN_ROOM_WEIGHTS[0] + SUN_ROOM_WEIGHTS[1] { 1 } else { 2 };
     let mut candidates: Vec<&Room> = rooms.iter().filter(|r| !matches!(r.kind, RoomKind::Boss | RoomKind::Cove) && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H).collect();
     candidates.shuffle(rng);
@@ -953,7 +953,7 @@ fn place_suns(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<(i32, i32)
         let Some(&first) = spots.choose(rng) else { continue };
         suns.push(first);
         rooms_lit += 1;
-        if rng.gen_bool(SUN_SECOND_CHANCE) {
+        if rng.random_bool(SUN_SECOND_CHANCE) {
             let near: Vec<(i32, i32)> = spots.iter().copied().filter(|&(x, y)| SUN_SECOND_DIST.contains(&(((x - first.0).pow(2) + (y - first.1).pow(2)) as f64).sqrt())).collect();
             if let Some(&second) = near.choose(rng) {
                 suns.push(second);
@@ -1030,11 +1030,11 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
     for room in rooms {
         let r = &room.rect;
         match room.kind {
-            RoomKind::Room | RoomKind::Hall if rng.gen_bool(0.25) && r.w >= 6 && r.h >= 6 => {
-                let n = rng.gen_range(2..=4);
+            RoomKind::Room | RoomKind::Hall if rng.random_bool(0.25) && r.w >= 6 && r.h >= 6 => {
+                let n = rng.random_range(2..=4);
                 for _ in 0..12 {
-                    let x = rng.gen_range(r.x + 2..r.x + r.w - 3);
-                    let y = rng.gen_range(r.y + 2..r.y + r.h - 3);
+                    let x = rng.random_range(r.x + 2..r.x + r.w - 3);
+                    let y = rng.random_range(r.y + 2..r.y + r.h - 3);
                     let cells: Vec<(i32, i32)> = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)].into_iter().take(n).collect();
                     if try_place(&cells, &mut walled, &mut out) {
                         break;
@@ -1042,10 +1042,10 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
                 }
             }
             RoomKind::Boss => {
-                let n = rng.gen_range(3..=5);
+                let n = rng.random_range(3..=5);
                 let mut placed = 0;
                 // The spot is `(x, y)` when it is valid and `try_place` takes it.
-                let mut place = |x: i32, y: i32, walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
+                let place = |x: i32, y: i32, walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
                     // Three tiles of plain floor all round, so a wide boss can always walk past.
                     let open = (-3..=3).all(|dy| (-3..=3).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
                     if !open || hall_keep_clear(r, x, y) || out.iter().any(|&(bx, by)| (bx - x).abs() <= 3 && (by - y).abs() <= 3) {
@@ -1057,8 +1057,8 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
                     if placed == n {
                         break;
                     }
-                    let x = rng.gen_range(r.x + 2..r.x + r.w - 2);
-                    let y = rng.gen_range(r.y + 2..r.y + r.h - 2);
+                    let x = rng.random_range(r.x + 2..r.x + r.w - 2);
+                    let y = rng.random_range(r.y + 2..r.y + r.h - 2);
                     placed += place(x, y, &mut walled, &mut out) as usize;
                 }
                 // Too few by luck: take the first valid spots in order, up to the three every hall keeps (no rng, so

@@ -645,7 +645,8 @@ mod tests {
 
     #[test]
     fn a_flying_boss_faces_its_flight() {
-        let (mut run, bi) = stepped(60.0, 200.0, &[]);
+        // The hero's spot was 60 degrees, until rand 0.10 (#445) built another hall: there the dragon's walls bend the path at 60 degrees, so -60 is open.
+        let (mut run, bi) = stepped(-60.0, 200.0, &[]);
         let mut d = Dragon::default();
         d.flight.phase = crate::run::bosses::flight::Phase::Air;
         d.flight.t = 99.0;

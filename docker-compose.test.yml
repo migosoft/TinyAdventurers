@@ -18,7 +18,7 @@ services:
       retries: 30
 
   test:
-    image: rust:1-slim-bookworm
+    image: rust:1-slim-trixie
     working_dir: /work/server
     command: cargo test --release
     environment:

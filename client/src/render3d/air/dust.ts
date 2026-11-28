@@ -9,8 +9,6 @@ import { airLightAt } from './airLight';
 import { CLOUD_MOTES, type AirParts } from './airParts';
 import type { Crack } from './cracks';
 
-/** A speck is this wide, in tiles: one art pixel (the user: smaller than the demo's; first guess). */
-export const SPECK = PX;
 /** A cloud's height when it spawns: DUST_Y0 + DUST_YSPAN * rng, tiles (first guess; the demo's specks reach 2.6, kept lower so they stay in the room). */
 export const DUST_Y0 = 0.2;
 export const DUST_YSPAN = 1.6;

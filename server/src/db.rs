@@ -7,6 +7,8 @@ use crate::progress::{Change, Progress, CURRENT_VERSION};
 use crate::protocol::{CharacterInfo, ClassId};
 use crate::run::{Award, RunRecord};
 use sqlx::postgres::{PgConnection, PgPoolOptions};
+// Every dynamic SQL string here and in stats.rs is built from constants and fixed match arms only, never from input.
+use sqlx::AssertSqlSafe;
 use sqlx::{PgPool, Row};
 use std::time::Duration;
 
@@ -99,13 +101,13 @@ fn account_from(r: &sqlx::postgres::PgRow) -> Account {
 
 #[tracing::instrument(skip_all)]
 pub async fn find_account(db: &Db, name: &str) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query(&format!("{ACCOUNT_SELECT} WHERE lower(name) = lower($1)")).bind(name).fetch_optional(db).await?;
+    let row = sqlx::query(AssertSqlSafe(format!("{ACCOUNT_SELECT} WHERE lower(name) = lower($1)"))).bind(name).fetch_optional(db).await?;
     Ok(row.as_ref().map(account_from))
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn account(db: &Db, id: i32) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query(&format!("{ACCOUNT_SELECT} WHERE id = $1")).bind(id).fetch_optional(db).await?;
+    let row = sqlx::query(AssertSqlSafe(format!("{ACCOUNT_SELECT} WHERE id = $1"))).bind(id).fetch_optional(db).await?;
     Ok(row.as_ref().map(account_from))
 }
 
@@ -193,14 +195,14 @@ const CHARACTER_SELECT: &str = "SELECT c.id, c.account_id, c.name, c.class, c.pr
 
 #[tracing::instrument(skip_all)]
 pub async fn list_characters(db: &Db, account_id: i32) -> Result<Vec<Character>, sqlx::Error> {
-    let rows = sqlx::query(&format!("{CHARACTER_SELECT} WHERE c.account_id = $1 ORDER BY c.id")).bind(account_id).fetch_all(db).await?;
+    let rows = sqlx::query(AssertSqlSafe(format!("{CHARACTER_SELECT} WHERE c.account_id = $1 ORDER BY c.id"))).bind(account_id).fetch_all(db).await?;
     Ok(rows.iter().map(character_from).collect())
 }
 
 /// One of the account's characters (`None` if it belongs to someone else).
 #[tracing::instrument(skip_all)]
 pub async fn load_character(db: &Db, account_id: i32, id: i32) -> Result<Option<Character>, sqlx::Error> {
-    let row = sqlx::query(&format!("{CHARACTER_SELECT} WHERE c.id = $1 AND c.account_id = $2")).bind(id).bind(account_id).fetch_optional(db).await?;
+    let row = sqlx::query(AssertSqlSafe(format!("{CHARACTER_SELECT} WHERE c.id = $1 AND c.account_id = $2"))).bind(id).bind(account_id).fetch_optional(db).await?;
     Ok(row.as_ref().map(character_from))
 }
 
@@ -437,7 +439,7 @@ pub mod tests {
         let url = std::env::var("DATABASE_URL").ok()?;
         let admin = PgPoolOptions::new().max_connections(1).connect(&url).await.expect("test database server");
         let name = format!("ta_test_{:016x}", rand::random::<u64>());
-        admin.execute(format!("CREATE DATABASE {name}").as_str()).await.expect("create test database");
+        admin.execute(sqlx::AssertSqlSafe(format!("CREATE DATABASE {name}"))).await.expect("create test database");
         let base = url.rsplit_once('/').map_or(url.as_str(), |(b, _)| b);
         Some(connect(&format!("{base}/{name}")).await)
     }

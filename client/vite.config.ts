@@ -12,7 +12,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 2000,
-    rollupOptions: {
+    rolldownOptions: {
       // The game and the separate admin page (/admin, served as admin.html).
       input: { index: 'index.html', admin: 'admin.html' },
     },

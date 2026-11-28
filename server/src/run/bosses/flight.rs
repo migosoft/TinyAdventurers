@@ -10,7 +10,7 @@ use crate::defs::abilities::AbilityId;
 use crate::defs::kinds::Anim;
 use crate::run::abilities::monster_use;
 use crate::run::Run;
-use rand::Rng;
+use rand::RngExt;
 
 /// The seconds of each phase and the wait between flights.
 #[derive(Clone, Copy)]
@@ -180,7 +180,7 @@ impl Flight {
                     self.skip.clear();
                     self.prev = None;
                     self.phase = Phase::Ground;
-                    self.t = run.rng.gen_range(self.times.every.0..self.times.every.1);
+                    self.t = run.rng.random_range(self.times.every.0..self.times.every.1);
                     set_anim(run, bi, Anim::Idle);
                 }
                 true

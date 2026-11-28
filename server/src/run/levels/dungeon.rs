@@ -7,14 +7,11 @@ use crate::math::Vec2;
 use crate::protocol::{BossBar, BossId};
 use crate::run::targets::Side;
 use crate::run::{companion, Run};
-use rand::Rng;
+use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 
 pub struct DungeonLevel {
-    // Not read yet; kept as part of the level's interface (debug tools and future rules).
-    #[allow(dead_code)]
     pub rooms: Vec<Room>,
-    #[allow(dead_code)]
     pub start: usize,
     pub boss: BossEncounter,
     /// Where the boss's haunt appears (`enemies::haunt_for`).
@@ -24,8 +21,8 @@ pub struct DungeonLevel {
 impl DungeonLevel {
     /// Picks the boss first (random from the run's rng, as before), then generates its dungeon.
     pub fn build(seed: u64, boss: Option<BossId>, rng: &mut ChaCha8Rng) -> (Layout, DungeonLevel) {
-        let boss_id = boss.unwrap_or_else(|| match rng.gen_range(0..3) {
-            0 => if rng.gen_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
+        let boss_id = boss.unwrap_or_else(|| match rng.random_range(0..3) {
+            0 => if rng.random_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
             1 => BossId::Lich,
             _ => BossId::Dragon,
         });

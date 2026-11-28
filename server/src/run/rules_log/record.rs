@@ -52,7 +52,6 @@ pub struct LogRec {
     #[allow(dead_code)] // Only tests read it.
     /// HP lost, as the record states it (kept for tests, not sent).
     pub dealt: Option<f64>,
-    #[allow(dead_code)] // Only tests read it.
     /// Seconds applied, as the record states it (kept for tests, not sent).
     pub secs: Option<f64>,
 }

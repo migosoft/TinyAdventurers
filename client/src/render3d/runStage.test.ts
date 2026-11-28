@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import type { ClientMsg } from '../generated/ClientMsg';
 import type { Ev } from '../generated/Ev';
@@ -28,7 +28,7 @@ const WOODLAND = { seed: 1, road: [1, 1, 1, 1, 1], end: [0, 0, 1, 1], plants: []
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
 const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
 
-function fakeView(): View & { setGround: ReturnType<typeof vi.fn>; tileChanged: ReturnType<typeof vi.fn> } {
+function fakeView(): View & { setGround: Mock<View['setGround']>; tileChanged: Mock<View['tileChanged']> } {
   return {
     backend: 'WebGL2 fallback', setSize: vi.fn(), draw: vi.fn(() => 3), canForceLoss: true, maxTexture: 8192, forceLoss: vi.fn(() => true), readback: vi.fn(async () => null),
     dispose: vi.fn(), tileChanged: vi.fn(), setGround: vi.fn(), setCover: vi.fn(), stone: null, setStonePages: vi.fn(), chunks: { total: 4, drawn: 2 }, meshes: 7,
@@ -87,7 +87,10 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0, load
 }
 
 beforeEach(() => vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1)));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear(); // the rules log keeps its switch there (jsdom 31 gives the tests a working localStorage)
+});
 
 const NO_BUTTONS = { primary: () => false, secondary: () => false, act: false };
 

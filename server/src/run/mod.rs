@@ -49,7 +49,7 @@ use levels::Level;
 use entities::*;
 use targets::Side;
 use effects::Apply;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -179,11 +179,13 @@ pub struct Run {
 }
 
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
+#[cfg(test)]
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
     spawn_fire_patch_of(run, pos, radius, life, damage, Side::Hostile, None);
 }
 
 /// A fire patch of `side` (what the ground hurts follows it), made by the hero `owner` (an entity id) if any.
+#[cfg(test)]
 pub fn spawn_fire_patch_of(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64, side: Side, owner: Option<u32>) {
     spawn_patch_of(run, EntityKind::FirePatch, pos, radius, life, damage, side, owner);
 }
@@ -951,7 +953,7 @@ impl Run {
             }
             let pos = o.pos;
             self.objects[oi].state = objects::ObjState::Chest { opened: Some(self.time) };
-            let coins = self.rng.gen_range(progression::CHEST_COINS);
+            let coins = self.rng.random_range(progression::CHEST_COINS);
             self.give_coins(pos, coins);
         }
         for mi in 0..self.monsters.len() {
@@ -1829,7 +1831,8 @@ pub mod tests {
         // 2026-11-21, crystals (#380): in rock the server drops a torch of a sunlit room instead of keeping it unlit, and the cove's animal spots keep 16 px clear of every torch in `layout.torches`. Dragon dungeons are all rock and demon dungeons partly, so their cove animals stand elsewhere (seeds 0, 3 and 5; ids unchanged). Proved before re-recording: with the drop switched off, the old values come back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-27, the coin for fire or ice (#442): a random demon dungeon draws one more number from the run's rng, so seeds 0, 3, 4 and 5 differ. Re-recorded once, on purpose.
-        assert_eq!(got, vec![5680271024938382979, 9378562978013154725, 18111976853352986814, 6484346504937147637, 1727094064867014888, 242591783256590688]);
+        // 2026-11-28, rand 0.10 (#445): `random_range` and `random_bool` map random numbers differently than `gen_range` and `gen_bool` did, so every seeded dungeon differs. The game's rules are unchanged. Re-recorded once, on purpose (the same applies to the three pinned fights, the dragon's flight and the boss simulations below).
+        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 8850039180668434083, 12454501438265963300]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1866,7 +1869,7 @@ pub mod tests {
         // Same re-recording as `level_setup_is_unchanged` (crystals, #380).
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-27, the coin for fire or ice (#442): same as in `level_setup_is_unchanged`.
-        assert_eq!(got, vec![5680271024938382979, 9378562978013154725, 18111976853352986814, 6484346504937147637, 1727094064867014888, 242591783256590688]);
+        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 8850039180668434083, 12454501438265963300]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1915,7 +1918,7 @@ pub mod tests {
         // 2026-11-27, the ice demon (#442): a fourth value (BossId::ALL has four); it moves again when its own kit comes.
         // 2026-11-27, the demon's second blow (#442): the scimitar (Cleave) joins the demon's kit and script, so the fire demon's (first) and, sharing its kit until its own comes, the ice demon's (fourth) values differ. Lich and dragon unchanged. Re-recorded once, on purpose.
         // 2026-11-27, the ice kit (#442): the ice demon has its own cold abilities, claws, scimitar and script roles, so only its (fourth) value differs. Re-recorded once, on purpose.
-        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
+        assert_eq!(got, vec![11198503665655787399, 9158270328425899040, 10680021631323931416, 5325127860554647765]);
     }
 
     #[test]
@@ -1940,7 +1943,7 @@ pub mod tests {
         // 2026-11-27, the ice demon (#442): a fourth value, as in the test without the log.
         // 2026-11-27, the demon's second blow (#442): the same re-recording as in the test without the log.
         // 2026-11-27, the ice kit (#442): only the ice demon's (fourth) value differs (its own abilities, weapons and script roles); the same re-recording as in the test without the log.
-        assert_eq!(got, vec![6249324793975283561, 6903614873764001335, 1838548789640004294, 10552459199862029827]);
+        assert_eq!(got, vec![11198503665655787399, 9158270328425899040, 10680021631323931416, 5325127860554647765]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
@@ -1983,7 +1986,7 @@ pub mod tests {
         // 2026-11-21, crystals (#380): dragon dungeons are all rock, where the server drops a torch of a sunlit room; the cove's animals (in the fingerprint) stand elsewhere. The flight is unchanged (the asserts above). Proved before re-recording: with the drop switched off, the old value comes back. Re-recorded once, on purpose.
         // 2026-11-23, torch caves (#391): dragon dungeons are all rock; the cove's animals (in the fingerprint) stand elsewhere, the flight is unchanged. Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old value comes back. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): the dragon sees in a cone, turns its head and body at limited speeds and gates its attacks by facing, so the flight's hash differs. The flight itself still happens (the asserts above). Re-recorded once, on purpose.
-        assert_eq!(got, [12658122597790055329, 12658122597790055329]); // log off, log on: the same value
+        assert_eq!(got, [8766253933822080779, 8766253933822080779]); // log off, log on: the same value
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -2047,7 +2050,7 @@ pub mod tests {
         // 2026-11-23, torch caves (#391): `fight` runs in a demon dungeon, partly rock; the cove's animals in the hash stand elsewhere, the fights themselves are unchanged (the asserts above). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): values unchanged. `fight` now turns its enemies to face the hero (they would otherwise face east, away from it and unable to see it); with that the fights play out as before.
         // 2026-11-27, one hit cylinder per creature (#323): the ranger's fight (the first value) differs, the goblin archers' hit radius being 6 (was 4) so all three fall; the wizard's and the paladin's are unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, [15748663038908748737, 3820251856311624491, 858296736700943210]);
+        assert_eq!(got, [12285919538130761357, 1566324317470547322, 12004481073230177345]);
     }
 
     #[test]
@@ -2060,7 +2063,7 @@ pub mod tests {
         // Same re-recording as in the test without the log (crystals, #380).
         // 2026-11-23, torch caves (#391): `fight` runs in a demon dungeon, partly rock; the cove's animals in the hash stand elsewhere, the fights themselves are unchanged (the asserts above). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-27, one hit cylinder per creature (#323): the ranger's fight (the first value) differs, the goblin archers' hit radius being 6 (was 4) so all three fall; the wizard's and the paladin's are unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, [15748663038908748737, 3820251856311624491, 858296736700943210]);
+        assert_eq!(got, [12285919538130761357, 1566324317470547322, 12004481073230177345]);
     }
 
     #[test]

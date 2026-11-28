@@ -1299,6 +1299,8 @@ fn leak_run(class: ClassId, primary: AbilityId, secondary: AbilityId) -> Run {
     let loadout = Loadout { primary: Pick { ability: primary, source: Source::Own }, secondary: Pick { ability: secondary, source: Source::Own } };
     let build = Build { own: vec![primary, secondary], loadout, extra: Attributes::new(1, 0, 0, 7, 0, 7), equipment: Equipment::starter(class), ..Build::start(class) };
     let mut run = crate::run::tests::test_run_with(&[(class, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::FireDemon);
+    // The archer's aim scatters, so the test needs a stream where the arrow hits and the fight reaches hero 0. Since rand 0.10 (#445) the stream left over after the level setup misses; a fresh seed-7 stream hits (of fresh seeds 1 to 8 only 7 does).
+    run.rng = rand::SeedableRng::seed_from_u64(7);
     run.monsters.retain(|m| m.is_boss || m.owner.is_some());
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     for y in ty - 4..=ty + 4 {

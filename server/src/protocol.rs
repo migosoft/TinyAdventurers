@@ -35,6 +35,7 @@ pub enum BossId {
 }
 
 impl BossId {
+    #[cfg(test)]
     pub const ALL: [BossId; 4] = [BossId::FireDemon, BossId::Lich, BossId::Dragon, BossId::IceDemon];
 }
 

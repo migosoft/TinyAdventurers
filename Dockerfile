@@ -1,5 +1,5 @@
 # 1) Build the browser client (Vite + three.js).
-FROM node:22-alpine AS client
+FROM node:24-alpine AS client
 WORKDIR /app/client
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,7 @@ COPY client/ ./
 RUN npm run build
 
 # 2) Build the Rust game server. Dependencies are cached in their own layer.
-FROM rust:1-slim-bookworm AS server
+FROM rust:1-slim-trixie AS server
 WORKDIR /app/server
 COPY server/Cargo.toml server/Cargo.lock ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
@@ -18,7 +18,7 @@ RUN touch src/main.rs && cargo build --release
 
 # 3) Small runtime image: server binary + static client. Accounts and
 # characters live in PostgreSQL (the `db` service in docker-compose.yml).
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 WORKDIR /app
 COPY --from=server /app/server/target/release/tiny-adventurers-server /app/tiny-adventurers-server
 COPY --from=client /app/client/dist /app/public

@@ -138,7 +138,7 @@ mod tests {
     use crate::protocol::{BossId, ClassId, ServerMsg};
     use crate::run::tests::test_run;
     use crate::run::Run;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
 
     #[test]
     fn dungeon_build_matches_the_generator() {
@@ -216,8 +216,8 @@ mod tests {
         for seed in 0..12u64 {
             let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
             let mut same = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
-            let want = match same.gen_range(0..3) {
-                0 => if same.gen_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
+            let want = match same.random_range(0..3) {
+                0 => if same.random_bool(0.5) { BossId::FireDemon } else { BossId::IceDemon },
                 1 => BossId::Lich,
                 _ => BossId::Dragon,
             };

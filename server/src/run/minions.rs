@@ -11,7 +11,7 @@ use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
-use rand::Rng;
+use rand::RngExt;
 use std::f64::consts::TAU;
 
 /// How far (px) from the caster the minions of one cast appear, evenly around it.
@@ -76,7 +76,7 @@ pub fn raise(run: &mut Run, mi: usize, a: &ResolvedAbility) {
         let now = living(run, mi, kinds);
         kinds.iter().map(|&t| now.iter().filter(|&&l| l == t).count()).collect()
     };
-    let a0 = run.rng.gen_range(0.0..TAU);
+    let a0 = run.rng.random_range(0.0..TAU);
     // The look of the raise: summoned imps are fire, a boss's skeletons dark purple.
     let k = if a.id == ab::AbilityId::SummonImps { 1 } else if boss { 2 } else { 0 };
     for i in 0..n {

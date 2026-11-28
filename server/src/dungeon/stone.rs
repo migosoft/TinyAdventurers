@@ -6,7 +6,7 @@ use super::{Dungeon, Map, Rect, Tile, TorchSpawn, WallLight, TILE};
 use crate::collision::line_of_sight;
 use crate::defs::lights::{def, LightKind};
 use crate::math::Vec2;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
 
@@ -66,7 +66,7 @@ pub const CAVE_SALT: u64 = 0x43_4156_45;
 pub fn crystals(seed: u64, d: &mut Dungeon) {
     let (region, count) = regions(&d.map, &d.rooms);
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ CAVE_SALT);
-    let mut torch_cave: Vec<bool> = (0..count).map(|_| rng.gen_bool(ROCK_TORCH_SHARE)).collect();
+    let mut torch_cave: Vec<bool> = (0..count).map(|_| rng.random_bool(ROCK_TORCH_SHARE)).collect();
     let (w, reach) = (d.map.w, f64::from(def(LightKind::Crystal).radius) * TILE);
     let input = std::mem::take(&mut d.torches);
     let region_of = |t: &TorchSpawn| region[(t.front().1 * w + t.front().0) as usize];
@@ -101,8 +101,8 @@ pub fn lay(seed: u64, layout: StoneLayout, d: &Dungeon) -> Vec<u8> {
         StoneLayout::Zones => {}
     }
     let mut rng = ChaCha8Rng::seed_from_u64(seed ^ STONE_SALT);
-    let n = rng.gen_range(MIN_ZONES..=MAX_ZONES);
-    let first = rng.gen_range(0..2usize);
+    let n = rng.random_range(MIN_ZONES..=MAX_ZONES);
+    let first = rng.random_range(0..2usize);
 
     let depths = room_depths(d);
     let max = depths.iter().copied().max().unwrap_or(0) as usize;
@@ -301,8 +301,8 @@ mod tests {
                 }
             }
         }
-        // Seed 109 hits step 4: its start room's torch cave lost every lit rock torch to a crystal's light, so it flips to a crystal cave.
-        let d = of_layout(109, Theme::WATER, StoneLayout::Rock);
+        // Seed 156 hits step 4: its start room's torch cave lost every lit rock torch to a crystal's light, so it flips to a crystal cave. (Was 109 before rand 0.10 changed the stream, #445; found by scanning seeds for a torch-cave start room that ends with a crystal and no lit torch.)
+        let d = of_layout(156, Theme::WATER, StoneLayout::Rock);
         let start = &d.rooms[d.start].rect;
         let fronting: Vec<_> = d.torches.iter().filter(|t| start.contains_tile(t.front().0, t.front().1)).collect();
         assert!(fronting.iter().any(|t| t.kind == WallLight::Crystal), "the start room has a crystal");
