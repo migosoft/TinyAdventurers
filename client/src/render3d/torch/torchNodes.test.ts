@@ -28,7 +28,7 @@ describe('wall torches on a cut wall (#347)', () => {
       const flame = flameMaterial(sight, viewTowardUniform(), wm.cut, wm.see).material;
       for (const [m, attrs] of [[holder, HOLDER], [flame, FLAME]] as const) {
         const code = vertex(B, m, { geometry: geometryOf([...attrs]) });
-        for (const n of ['cutOn', 'cutLine', 'cutRamp']) expect(code).toContain(n);
+        for (const n of ['cutTarget', 'cutOn', 'cutLine', 'cutRamp']) expect(code).toContain(n);
       }
     });
   }

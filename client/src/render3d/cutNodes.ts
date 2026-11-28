@@ -1,13 +1,15 @@
 // The wall cut (#347) in the world material's vertex stage; the rule is `cut.ts`. Paint, light, sight and shadows keep the unmoved point.
 import { min, mix, smoothstep, uniform, vec3 } from 'three/tsl';
+import { Vector3 } from 'three/webgpu';
 import { CUT_DEFAULTS } from './cut';
 import type { SeeUniforms } from './materials';
 
 type N = any; // eslint-disable-line @typescript-eslint/no-explicit-any -- TSL nodes are untyped, as in materials.ts
 
-/** `on` 0 or 1; `floor`, `stub`, `line`, `ramp` in tiles (the view sets them each frame). */
+/** `on` 0 or 1; `floor`, `stub`, `line`, `ramp` in tiles; `target` the followed hero's ground point (the view sets them each frame). */
 export function cutUniforms() {
   return {
+    target: uniform(new Vector3()).setName('cutTarget'),
     on: uniform(CUT_DEFAULTS.on ? 1 : 0).setName('cutOn'),
     floor: uniform(0).setName('cutFloor'),
     stub: uniform(CUT_DEFAULTS.stub).setName('cutStub'),
@@ -17,9 +19,9 @@ export function cutUniforms() {
 }
 export type CutUniforms = Record<keyof ReturnType<typeof cutUniforms>, N>;
 
-/** How much of the cut applies at world point `p`: the distance toward the camera along the see-through ray, from the hero's line. */
+/** How much of the cut applies at world point `p`: the distance toward the camera along the see-through ray, from the hero's line (through `cut.target`, not the drawn camera). */
 export function cutWeightNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
-  const d = p.xz.sub(see.target.xz).dot(see.ray.xz);
+  const d = p.xz.sub(cut.target.xz).dot(see.ray.xz);
   return smoothstep(cut.line, cut.line.add(cut.ramp), d).mul(cut.on);
 }
 

@@ -235,6 +235,12 @@ describe('the ground cover in the run view (#330)', () => {
     expect(run().f?.cover).toEqual({ on: true, gh: 1, wind: true, t: 0 });
   });
 
+  it('the frame carries the followed hero as the wall cut\'s ground point, not the drawn camera (#347)', () => {
+    const { f } = run();
+    expect(f?.ground).toBeDefined();
+    expect(f!.ground!.x).toBeCloseTo(f!.cam.x, 0);
+  });
+
   it('lifts the ground ovals onto the cover after setCover, none before, and not with the switch off', () => {
     const r = run();
     const before = shadowYs(r.f);

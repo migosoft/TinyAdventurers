@@ -147,6 +147,8 @@ export interface FrameInput {
   shadows: boolean; smooth: boolean; t: number;
   /** What opens the walls this frame (the seen openers) and how; none given = no openers (the mode still applies). */
   see?: { openers: readonly Opener[]; look: SeeLook };
+  /** The followed hero's ground point (tiles), where the wall cut's line and floor are taken (#347); absent: `cam` (stages whose camera target is the player). */
+  ground?: { x: number; z: number };
   /**
    * The lava lights as one rgba texel per tile (`map.w * map.h * 4`); null: no lava, the texture is cleared.
    * Uploaded only when the array object or `lavaVersion` changes: a caller that refills one array in place must bump `lavaVersion`.
@@ -1286,7 +1288,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       wm.cut.stub.value = look.cut.stub;
       wm.cut.line.value = look.cut.line;
       wm.cut.ramp.value = look.cut.ramp;
-      wm.cut.floor.value = cutFloorAt(map, f.cam.x, f.cam.z);
+      const cg = f.ground ?? f.cam;
+      wm.cut.target.value.set(cg.x, 0, cg.z);
+      wm.cut.floor.value = cutFloorAt(map, cg.x, cg.z);
       mm.edge.value = look.edge;
       if (look.mode !== 'off') {
         const dq = discQuads(f.see?.openers ?? [], f.cam, look);

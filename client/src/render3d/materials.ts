@@ -77,7 +77,7 @@ export interface WorldMaterial {
   /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** The wall cut's uniforms (#347; the torches share them): `on` 0 or 1, `floor`, `stub`, `line`, `ramp` in tiles. */
-  cut: { [K in keyof CutUniforms]: { value: number } };
+  cut: { [K in Exclude<keyof CutUniforms, 'target'>]: { value: number } } & { target: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */

@@ -126,6 +126,7 @@ export class RunView3d implements RunView {
   readonly shake = new Shake();
   private readonly shakeAt = { x: 0, y: 0 };
   private readonly shakeGround = { x: 0, z: 0 };
+  private readonly ground = { x: 0, z: 0 };
   /** The run clock of the last host frame, seconds (events are stamped with it). */
   private clockNow = 0;
   /** What the camera follows (the own hero, or the watched teammate), simulation px: a blast shakes by its distance from here. */
@@ -410,6 +411,8 @@ export class RunView3d implements RunView {
       }
     }
     this.started = true;
+    // The cut's ground point (#347): the hero before follow clamp, lerp and shake; the free camera's own point.
+    if (c.params.free) { this.ground.x = this.cam.x; this.ground.z = this.cam.z; } else { this.ground.x = tx; this.ground.z = tz; }
     const cam: Cam = { x: this.cam.x, z: this.cam.z, pitch, yaw };
 
     this.lastCam = cam;
@@ -550,7 +553,7 @@ export class RunView3d implements RunView {
     c.timer.renderStart();
     this.drawCalls = view.draw(
       {
-        cam: drawCam, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+        cam: drawCam, ground: this.ground, warm: this.warm, fx: { tris: this.fxPass.blend, lit: this.fxPass.lit, smoke: this.fxPass.smoke }, field: this.fieldIn(c.now), plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
         see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, cracks, shafts: c.params.shafts, air, brush, ...(this.forest ? { trees: this.forest.frame({ wind: c.params.wind, t: c.now }) } : {}), cover: { on: c.params.cover, gh: c.params.gh, wind: c.params.wind, t: c.now }, water: wi, lavaPool: li, wallLights: this.wallLightsIn(c.now), plantShadows: this.plantShadowsIn(c.params),
       },
       c.timer,
