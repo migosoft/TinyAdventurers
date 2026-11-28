@@ -718,6 +718,8 @@ impl Run {
             p.moving = false;
             return; // falling or drowning: no more moves or attacks (the client predicts this too)
         }
+        // Read before the step, like the client's `mayAct` (`inDeep`): the input that enters the water still acts.
+        let swimming = p.mv.water_t > 0.0;
         let dashing = p.mv.dash_t > 0.0;
         // Pushed: the slide carries the hero; moves and abilities are ignored until it ends.
         let knocked = !dashing && p.mv.knocked();
@@ -739,7 +741,7 @@ impl Run {
         if knocked {
             return;
         }
-        if fx.1 || self.players[pi].mv.water_t > 0.0 {
+        if fx.1 || swimming {
             return; // stunned, or swimming: no objects, no abilities
         }
         if input.act {
@@ -2420,14 +2422,17 @@ pub mod tests {
     #[test]
     fn a_hero_walks_in_and_drowns_when_breath_runs_out() {
         let (mut run, at) = terrain_run(Tile::DeepWater);
-        stand_at(&mut run, at - Vec2::new(8.0, 0.0));
+        stand_at(&mut run, at - Vec2::new(12.0, 0.0)); // clear of the tile's edge (8 px from its centre)
         let breath = dungeon::breath(con0(&run), false);
-        let mut ticks = 0;
+        let (mut ticks, mut entered) = (0, None);
         while run.players[0].alive && ticks < 600 {
             // Walk in, then hold still in the water (an input every tick).
             let mx = if run.players[0].mv.water_t > 0.0 { 0 } else { 1 };
             walk(&mut run, mx, None);
             ticks += 1;
+            if entered.is_none() && dungeon::drowning_tile(run.layout.map.tile_at(run.players[0].pos()), false) {
+                entered = Some(ticks); // the step that carried the centre onto the deep tile
+            }
             if run.players[0].alive {
                 assert!(run.players[0].sinking.is_none(), "no sinking");
                 assert!(run.players[0].mv.water_t < breath);
@@ -2436,7 +2441,8 @@ pub mod tests {
         assert!(!run.players[0].alive);
         assert!(said(&run, "drowned"));
         let want = (breath / DT).ceil() as i64;
-        assert!((ticks as i64 - want).abs() <= 6, "died after {ticks} ticks, breath {want}");
+        let in_water = (ticks - entered.expect("walked in")) as i64;
+        assert!((in_water - want).abs() <= 1, "died {in_water} ticks after entering, breath {want}");
     }
 
     /// Ticks in the water at `at` (a held hero with no input queued), then stop.
@@ -2475,9 +2481,30 @@ pub mod tests {
         stand_at(&mut run, at);
         walk(&mut run, 0, None);
         assert!(run.players[0].mv.water_t > 0.0);
+        let at_pos = run.players[0].pos();
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(InputMsg { seq, primary: Some(1), secondary: Some(2), act: true, ..Default::default() });
+        run.step();
+        let p = &run.players[0];
+        assert_eq!((p.cd1, p.cd2), (0.0, 0.0), "nothing fired");
+        assert!(run.projectiles.is_empty() && run.hazards.is_empty());
+        assert!(!run.events.iter().any(|e| matches!(e.0, Ev::Msg { .. })), "act used no object");
+        assert!(p.alive && p.pos() == at_pos);
+    }
+
+    /// The input that enters the water still acts, as on the client (`mayAct` reads `waterT` before the step);
+    /// the next one does not.
+    #[test]
+    fn the_input_that_starts_on_deep_water_still_fires_the_next_does_not() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        run.players[0].mv.x = at.x;
+        run.players[0].mv.y = at.y; // on the deep tile, water_t still 0 (just walked in)
         walk(&mut run, 0, Some(1));
-        assert_eq!(run.players[0].cd1, 0.0, "nothing fired");
-        assert!(run.players[0].alive);
+        assert!(run.players[0].cd1 > 0.0, "fired on the entry input");
+        assert!(run.players[0].mv.water_t > 0.0);
+        run.players[0].cd1 = 0.0;
+        walk(&mut run, 0, Some(1));
+        assert_eq!(run.players[0].cd1, 0.0, "ignored while swimming");
     }
 
     #[test]
@@ -2513,11 +2540,19 @@ pub mod tests {
         run.debug = true;
         run.set_debug(0, true);
         let breath = dungeon::breath(con0(&run), false);
-        soak(&mut run, at, breath + 0.5);
+        let rescue = (breath / DT).ceil() as usize + 1;
+        for _ in 0..rescue {
+            soak(&mut run, at, DT);
+            if run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })) {
+                break;
+            }
+        }
         let p = &run.players[0];
-        assert!(p.alive);
-        assert!(p.mv.water_t < breath, "the clock restarted");
-        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })));
+        assert!(p.alive, "no death");
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })), "rescued");
+        assert_eq!(p.pos(), p.last_safe, "back on safe ground");
+        assert_eq!(p.mv.water_t, 0.0);
+        assert!(!said(&run, "drowned"));
     }
 
     #[test]
@@ -2528,8 +2563,11 @@ pub mod tests {
         let p = &mut run.players[0];
         p.mv.dash_t = 0.3;
         p.mv.dash_dx = -1.0;
+        walk(&mut run, 0, None); // the dash moves with each input
+        assert_eq!(run.players[0].mv.water_t, 0.0, "in the air: the clock is off");
+        assert!(dungeon::drowning_tile(run.layout.map.tile_at(run.players[0].pos()), false), "still over deep water");
         for _ in 0..(1.0 / DT) as usize {
-            walk(&mut run, 0, None); // the dash moves with each input
+            walk(&mut run, 0, None);
         }
         assert!(run.players[0].alive);
         assert_eq!(run.players[0].mv.water_t, 0.0);
