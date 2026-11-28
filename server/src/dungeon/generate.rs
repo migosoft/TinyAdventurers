@@ -696,8 +696,8 @@ fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i3
 }
 
 /// An oval pool, a tile away from the room's walls. Water pools are deep
-/// wherever the whole 5×5 neighbourhood is pool, so two rings of shallows always
-/// surround the deep centre; lava pools are all lava.
+/// wherever every cell within two tiles is pool, so two rings of shallows
+/// (cells within 2 tiles, not the 5×5 square) surround the deep centre; lava pools are all lava.
 fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32, Tile)>> {
     let (max_w, max_h) = (r.w - 2, r.h - 2);
     let (min, cap) = if liquid == Liquid::Water { (5, (11, 9)) } else { (4, (7, 6)) };
@@ -717,7 +717,7 @@ fn pool(rng: &mut ChaCha8Rng, r: &Rect, liquid: Liquid) -> Option<Vec<(i32, i32,
             if !inside(x, y) {
                 continue;
             }
-            let deep = (-2..=2).all(|dy| (-2..=2).all(|dx| inside(x + dx, y + dy)));
+            let deep = (-2..=2).all(|dy| (-2..=2).all(|dx| dx * dx + dy * dy > 4 || inside(x + dx, y + dy)));
             let t = match liquid {
                 Liquid::Lava => Tile::Lava,
                 Liquid::Water if deep => Tile::DeepWater,
@@ -1093,8 +1093,8 @@ mod tests {
             for &(x, y, t) in &cells {
                 if t == Tile::DeepWater {
                     for dy in -2..=2 {
-                        for dx in -2..=2 {
-                            assert!(set.contains(&(x + dx, y + dy)), "seed {seed}");
+                        for dx in -2..=2i32 {
+                            assert!(dx * dx + dy * dy > 4 || set.contains(&(x + dx, y + dy)), "seed {seed}");
                         }
                     }
                 }
@@ -1102,9 +1102,44 @@ mod tests {
             let xs = cells.iter().map(|c| c.0);
             let w = xs.clone().max().unwrap() - xs.min().unwrap() + 1;
             wide += (w >= 10) as i32;
-            cored += cells.iter().any(|c| c.2 == Tile::DeepWater) as i32;
+            let ys = cells.iter().map(|c| c.1);
+            let h = ys.clone().max().unwrap() - ys.min().unwrap() + 1;
+            let has_deep = cells.iter().any(|c| c.2 == Tile::DeepWater);
+            cored += has_deep as i32;
+            assert!(w < 5 || h < 5 || has_deep, "seed {seed}: {w}x{h} pool without a deep core");
         }
         assert!(wide > 0 && cored > 0);
+    }
+
+    #[test]
+    fn most_dungeon_water_pools_keep_a_deep_core() {
+        let (mut pools, mut cored, mut deep_tiles) = (0, 0, 0);
+        for seed in 0..60u64 {
+            let d = generate(seed, Theme::WATER);
+            let wet = |x: i32, y: i32| matches!(d.map.get(x, y), t if t == Tile::ShallowWater as u8 || t == Tile::DeepWater as u8);
+            let mut seen = std::collections::HashSet::new();
+            for y in 0..d.map.h {
+                for x in 0..d.map.w {
+                    if !wet(x, y) || !seen.insert((x, y)) {
+                        continue;
+                    }
+                    let (mut stack, mut deep) = (vec![(x, y)], 0);
+                    while let Some((cx, cy)) = stack.pop() {
+                        deep += (d.map.get(cx, cy) == Tile::DeepWater as u8) as i32;
+                        for (nx, ny) in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
+                            if wet(nx, ny) && seen.insert((nx, ny)) {
+                                stack.push((nx, ny));
+                            }
+                        }
+                    }
+                    pools += 1;
+                    cored += (deep > 0) as i32;
+                    deep_tiles += deep;
+                }
+            }
+        }
+        eprintln!("pools {pools}, with a deep core {cored}, deep tiles {deep_tiles}");
+        assert!(pools > 20 && cored * 10 > pools * 6, "{cored} of {pools} pools have a deep core");
     }
 
     #[test]

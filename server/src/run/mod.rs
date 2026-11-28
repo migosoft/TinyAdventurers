@@ -1902,8 +1902,9 @@ pub mod tests {
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-27, the coin for fire or ice (#442): a random demon dungeon draws one more number from the run's rng, so seeds 0, 3, 4 and 5 differ. Re-recorded once, on purpose.
         // 2026-11-28, rand 0.10 (#445): `random_range` and `random_bool` map random numbers differently than `gen_range` and `gen_bool` did, so every seeded dungeon differs. The game's rules are unchanged. Re-recorded once, on purpose (the same applies to the three pinned fights, the dragon's flight and the boss simulations below).
-        // 2026-11-28, wider shallows (#448): water pools have two rings of shallows and grow to 11x9, and the ogre stands on floor, so seed 4 (a water dungeon) differs, old 8850039180668434083, new 1948873238254605753. Re-recorded once, on purpose.
-        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 1948873238254605753, 12454501438265963300]);
+        // 2026-11-28, wider shallows (#448): water pools have two rings of shallows and grow to 11x9, and the ogre stands on floor, so seed 4 (a water dungeon) differs, old 8850039180668434083, new 1948873238254605753. Re-recorded again, on purpose:
+        // 2026-11-28, deep cores (#448): a tile is deep where everything within two tiles is pool (before, the whole 5x5 square: almost no pool had deep water), so seed 4 differs again, 1948873238254605753 to 12159987013742696874.
+        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 12159987013742696874, 12454501438265963300]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1940,8 +1941,8 @@ pub mod tests {
         // Same re-recording as `level_setup_is_unchanged` (crystals, #380).
         // 2026-11-23, torch caves (#391): in rock a region is a crystal cave or a torch cave, and unlit rock torches stay; the cove's animal spots keep clear of every torch, so the wild animals in the hash stand elsewhere (seeds 0, 3 and 5, the demon's and dragon's dungeons). Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old values come back. Re-recorded once, on purpose.
         // 2026-11-27, the coin for fire or ice (#442): same as in `level_setup_is_unchanged`.
-        // 2026-11-28, wider shallows (#448): same as in `level_setup_is_unchanged`.
-        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 1948873238254605753, 12454501438265963300]);
+        // 2026-11-28, wider shallows and deep cores (#448): same as in `level_setup_is_unchanged`.
+        assert_eq!(got, vec![1626974968600457370, 431884176882792831, 14881518213423562139, 5132788902567350832, 12159987013742696874, 12454501438265963300]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1991,7 +1992,8 @@ pub mod tests {
         // 2026-11-27, the demon's second blow (#442): the scimitar (Cleave) joins the demon's kit and script, so the fire demon's (first) and, sharing its kit until its own comes, the ice demon's (fourth) values differ. Lich and dragon unchanged. Re-recorded once, on purpose.
         // 2026-11-27, the ice kit (#442): the ice demon has its own cold abilities, claws, scimitar and script roles, so only its (fourth) value differs. Re-recorded once, on purpose.
         // 2026-11-28, wider shallows (#448): the lich's (second) and dragon's (third) dungeons are water dungeons whose pools changed (old 9158270328425899040, 10680021631323931416). Re-recorded once, on purpose.
-        assert_eq!(got, vec![11198503665655787399, 2516629471373438529, 16950142130191230015, 5325127860554647765]);
+        // 2026-11-28, deep cores (#448): the pools now keep a deep core; the lich's (second) and dragon's (third) values moved again (2516629471373438529 to 16255856733048739777, 16950142130191230015 to 12978903233366606015). Re-recorded once, on purpose.
+        assert_eq!(got, vec![11198503665655787399, 16255856733048739777, 12978903233366606015, 5325127860554647765]);
     }
 
     #[test]
@@ -2017,7 +2019,8 @@ pub mod tests {
         // 2026-11-27, the demon's second blow (#442): the same re-recording as in the test without the log.
         // 2026-11-27, the ice kit (#442): only the ice demon's (fourth) value differs (its own abilities, weapons and script roles); the same re-recording as in the test without the log.
         // 2026-11-28, wider shallows (#448): the lich's (second) and dragon's (third) dungeons are water dungeons whose pools changed (old 9158270328425899040, 10680021631323931416). Re-recorded once, on purpose.
-        assert_eq!(got, vec![11198503665655787399, 2516629471373438529, 16950142130191230015, 5325127860554647765]);
+        // 2026-11-28, deep cores (#448): the pools now keep a deep core; the lich's (second) and dragon's (third) values moved again (2516629471373438529 to 16255856733048739777, 16950142130191230015 to 12978903233366606015). Re-recorded once, on purpose.
+        assert_eq!(got, vec![11198503665655787399, 16255856733048739777, 12978903233366606015, 5325127860554647765]);
     }
 
     /// The dragon's behaviour over a whole flight (#379): with today's timings the first flight starts at 10 s
@@ -2061,7 +2064,8 @@ pub mod tests {
         // 2026-11-23, torch caves (#391): dragon dungeons are all rock; the cove's animals (in the fingerprint) stand elsewhere, the flight is unchanged. Proved before re-recording: with ROCK_TORCH_SHARE 0 and unlit rock torches dropped, the old value comes back. Re-recorded once, on purpose.
         // 2026-11-24, facing vision (#341): the dragon sees in a cone, turns its head and body at limited speeds and gates its attacks by facing, so the flight's hash differs. The flight itself still happens (the asserts above). Re-recorded once, on purpose.
         // 2026-11-28, wider shallows (#448): the dragon's dungeon has bigger pools; the flight is unchanged (the asserts above). Old 8766253933822080779. Re-recorded once, on purpose.
-        assert_eq!(got, [2061272295453902320, 2061272295453902320]); // log off, log on: the same value
+        // 2026-11-28, deep cores (#448): the pools keep a deep core; the flight is unchanged. 2061272295453902320 to 8668000233150697117. Re-recorded once, on purpose.
+        assert_eq!(got, [8668000233150697117, 8668000233150697117]); // log off, log on: the same value
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
