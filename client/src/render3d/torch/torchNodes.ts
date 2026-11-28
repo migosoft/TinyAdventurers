@@ -11,7 +11,7 @@ import { cutWeightNode, type CutUniforms } from '../cutNodes';
 import type { SeeUniforms, ViewToward } from '../materials';
 import { hash21, hash22, vnoise2 } from '../noiseNodes';
 import type { Sight } from '../sightNodes';
-import { CARD_H, CARD_W, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
+import { CARD_H, CARD_W, FLAME_BASE_Y, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
@@ -72,7 +72,7 @@ const blob = (d2: N): N => {
  */
 const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
   const wall: N = attribute('foot', 'vec4'); // .zw: the wall point (.xy, the floor point in front, is the sight's)
-  return cutWeightNode(vec3(wall.z, 0, wall.w), cut, see).greaterThan(0).select(1, 0);
+  return cutWeightNode(vec3(wall.z, FLAME_BASE_Y, wall.w), cut, see).greaterThan(0).select(1, 0);
 };
 
 export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniforms, see: SeeUniforms): NodeMaterial {

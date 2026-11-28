@@ -11,8 +11,8 @@ export interface SeeLook { mode: SeeMode; radius: number; keep: number; edge: nu
 export const SEE_DEFAULTS: SeeLook = { mode: 'soft', radius: 0.8, keep: 0.15, edge: 0.4, cut: CUT_DEFAULTS };
 
 /** The look the page's parameters ask for (the wall cut, #347, rides along). */
-export function seeLook(p: { see: SeeMode; seeR: number; seeKeep: number; seeEdge: number; cut: boolean; stub: number }): SeeLook {
-  return { mode: p.see, radius: p.seeR, keep: p.seeKeep, edge: p.seeEdge, cut: { ...CUT_DEFAULTS, on: p.cut, stub: p.stub } };
+export function seeLook(p: { see: SeeMode; seeR: number; seeKeep: number; seeEdge: number; cut: boolean; stub: number; cutEdge: number }): SeeLook {
+  return { mode: p.see, radius: p.seeR, keep: p.seeKeep, edge: p.seeEdge, cut: { ...CUT_DEFAULTS, on: p.cut, stub: p.stub, edge: p.cutEdge } };
 }
 
 /** The mask stores `SEE_DEPTH_BIAS - near` in green, so that every value is positive and the cleared 0 loses a MAX blend against any disc. */

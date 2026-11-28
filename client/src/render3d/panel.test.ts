@@ -131,6 +131,12 @@ describe('panel', () => {
       s.dispatchEvent(new Event('input'));
       expect(calls[1].stub).toBe(0.5);
       expect(host.textContent).toContain('Stub 0.5');
+      const e = host.querySelector<HTMLInputElement>('#r3d-cutEdge')!;
+      expect([e.min, e.max, e.step]).toEqual(['0', '1', '0.05']);
+      e.value = '0.3';
+      e.dispatchEvent(new Event('input'));
+      expect(calls[2].cutEdge).toBe(0.3);
+      expect(host.textContent).toContain('Cut edge 0.3');
     }
   });
 

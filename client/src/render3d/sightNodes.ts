@@ -30,6 +30,8 @@ export interface Sight {
   unseenAt(xz: N): N;
   /** The colour after the sight step: `mode` off unchanged; dark mix(c * (1 - SHADE * soft), clear, hard); mist per `mist.ts` with `P` the true world point (height P.y, drift at P.xz). */
   apply(colour: N, P: N, u: N): N;
+  /** 1 when the sight is on (dark or mist), 0 when off: the wall cut treats everything as seen while it is off. */
+  readonly active: N;
   /** The mask's texels per tile as a node (`sightOrigin.w`): the world's wall faces push their read point out by 1.5 / res (materials.ts). */
   readonly res: N;
   /** `apply` discards a fragment whose P.y lies below this (the mirror pass's clip at the water level); -1e6: no clip. */
@@ -165,5 +167,5 @@ export function makeSight(): Sight {
 
   const dispose = (): void => tex.dispose();
 
-  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, clipBelow: uClip, get uploads() { return uploads; }, get texture() { return tex; } };
+  return { unseenAt, apply, dim, shown, set, dispose, active: uMode.greaterThan(0.5).select(1, 0), res: uOrigin.w, clipBelow: uClip, get uploads() { return uploads; }, get texture() { return tex; } };
 }

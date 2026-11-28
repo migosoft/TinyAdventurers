@@ -1288,6 +1288,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       wm.cut.stub.value = look.cut.stub;
       wm.cut.line.value = look.cut.line;
       wm.cut.ramp.value = look.cut.ramp;
+      wm.cut.edge.value = look.cut.edge;
+      wm.cut.slope.value = 1 / Math.tan(f.cam.pitch);
       const cg = f.ground ?? f.cam;
       wm.cut.target.value.set(cg.x, 0, cg.z);
       wm.cut.floor.value = cutFloorAt(map, cg.x, cg.z);

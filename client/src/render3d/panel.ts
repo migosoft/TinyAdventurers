@@ -26,11 +26,12 @@ export interface PageButton { name: string; pressed: (() => boolean) | null; pre
 const PITCHES = [30, 45, 48.6];
 const ZOOMS = [1, 2, 3, 4, 6, 8];
 const SEE_MODES: [SeeMode, string][] = [['soft', 'Soft'], ['off', 'Off']];
-const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge' | 'stub'; name: string; min: number; max: number; step: number }[] = [
+const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge' | 'stub' | 'cutEdge'; name: string; min: number; max: number; step: number }[] = [
   { key: 'seeR', name: 'Radius', min: 0.5, max: 3, step: 0.1 },
   { key: 'seeKeep', name: 'Keep', min: 0, max: 1, step: 0.05 },
   { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
   { key: 'stub', name: 'Stub', min: 0, max: 2, step: 0.05 },
+  { key: 'cutEdge', name: 'Cut edge', min: 0, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
 const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover' | 'shafts' | 'dust' | 'smoke' | 'embers' | 'haze' | 'drips' | 'stir' | 'draft' | 'refl' | 'heat' | 'cut'>, name: string): Switch =>

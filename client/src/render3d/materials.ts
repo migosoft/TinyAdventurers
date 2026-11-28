@@ -76,8 +76,8 @@ export interface WorldMaterial {
   smooth: { value: number };
   /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
-  /** The wall cut's uniforms (#347; the torches share them): `on` 0 or 1, `floor`, `stub`, `line`, `ramp` in tiles. */
-  cut: { [K in Exclude<keyof CutUniforms, 'target'>]: { value: number } } & { target: { value: Vector3 } };
+  /** The wall cut's uniforms (#347; the torches share them): `on` 0 or 1, `floor`, `stub`, `line`, `ramp` in tiles, `edge` 0..1, `slope` = 1 / tan(pitch). */
+  cut: { [K in Exclude<keyof CutUniforms, 'target' | 'env'>]: { value: number } } & { target: { value: Vector3 }; env: unknown };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */
@@ -285,7 +285,7 @@ export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex:
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
   const see = seeUniforms();
   const onWall = isTop.or(isFace);
-  const cut = cutUniforms();
+  const cut = cutUniforms({ cellH: lighting.cellH, sight });
   // Stubs never open: the mask sample stays at the top level of seeOpenNode.
   const open = onWall.and(cutWeightNode(wp, cut, see).lessThanEqual(0)).and(seeOpenNode(maskTex, wp, see));
 

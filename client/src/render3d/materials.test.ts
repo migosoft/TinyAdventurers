@@ -107,7 +107,13 @@ describe('worldMaterial shader code', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`${B.name}: the vertex stage reads the wall cut's uniforms (#347)`, () => {
       const code = vertex(B, build(), { geometry: geometry() });
-      for (const n of ['cutTarget', 'cutOn', 'cutFloor', 'cutStub', 'cutLine', 'cutRamp']) expect(code).toContain(n);
+      for (const n of ['cutTarget', 'cutOn', 'cutFloor', 'cutStub', 'cutLine', 'cutRamp', 'cutEdge', 'cutSlope']) expect(code).toContain(n);
+    });
+
+    it(`${B.name}: the vertex stage reads the heights and the sight mask without a derivative (#347)`, () => {
+      const code = vertex(B, build(), { geometry: geometry() });
+      expect(code).not.toMatch(/textureSample\(|dFdx|dpdx|fwidth/);
+      expect(code).toContain('sightOrigin');
     });
 
     it(`${B.name}: no sheet or ground sample and no derivative sits in a branch`, () => {

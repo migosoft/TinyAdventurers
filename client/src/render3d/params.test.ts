@@ -115,7 +115,7 @@ describe('toSearch', () => {
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
       shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5, refl: false, heat: false, brush: true,
-      cut: false, stub: 0.5,
+      cut: false, stub: 0.5, cutEdge: 0.3,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -132,6 +132,10 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&cut=0').cut).toBe(false);
     expect(parseParams('?r3d&stub=0.5').stub).toBe(0.5);
     expect(parseParams('?r3d&stub=9').stub).toBe(2);
+    expect(parseParams('?r3d').cutEdge).toBe(0.1);
+    expect(parseParams('?r3d&cutedge=0.3').cutEdge).toBe(0.3);
+    expect(parseParams('?r3d&cutedge=9').cutEdge).toBe(1);
+    expect(toSearch({ ...DEFAULTS, cutEdge: 0.3 }, '?r3d')).toBe('?r3d&cutedge=0.3');
     expect(toSearch({ ...DEFAULTS, cut: false, stub: 0.5 }, '?r3d')).toBe('?r3d&cut=0&stub=0.5');
     expect(toSearch(DEFAULTS, '?r3d&cut=0&stub=0.5')).toBe('?r3d');
   });
