@@ -130,14 +130,17 @@ describe('figurePose', () => {
     expect([a.tint, b.tint]).toEqual([{ mode: 'mul', rgb: 0xff8080 }, { mode: 'mul', rgb: DISCIPLE.tint }]);
   });
 
-  it('a status tint wins in the order poisoned, slowed, chilled, tainted, def tint (#320)', () => {
+  it('a status tint wins in the order poisoned, slowed, chilled, tainted, def tint, and multiplies the def tint (#320, #132)', () => {
     const fx = (...e: number[]) => e.reduce((n, k) => n | (1 << k), 0);
     const rgb = (d: typeof KNIGHT, effects: number) => { const t = pose(d, { effects }).tint; return t.mode === 'mul' ? t.rgb : null; };
     const all = fx(EFFECT.Poisoned, EFFECT.Slowed, EFFECT.Chilled, EFFECT.Tainted);
-    expect(rgb(DISCIPLE, all)).toBe(shade(1, 0x9be37a, 0.5));                                   // poisoned at clock 0
-    expect(rgb(DISCIPLE, fx(EFFECT.Slowed, EFFECT.Chilled, EFFECT.Tainted))).toBe(0xa0c8ff);
-    expect(rgb(DISCIPLE, fx(EFFECT.Chilled, EFFECT.Tainted))).toBe(0xd8ecff);
-    expect(rgb(DISCIPLE, fx(EFFECT.Tainted))).toBe(shade(1, 0x9be37a, 0.15));                    // tainted at clock 0
+    const times = (a: number, b: number) => [16, 8, 0].reduce((n, s) => n | (Math.round((((a >> s) & 255) * ((b >> s) & 255)) / 255) << s), 0);
+    const dt = DISCIPLE.tint!;
+    expect(rgb(DISCIPLE, all)).toBe(times(shade(1, 0x9be37a, 0.5), dt));                        // poisoned at clock 0
+    expect(rgb(DISCIPLE, fx(EFFECT.Slowed, EFFECT.Chilled, EFFECT.Tainted))).toBe(times(0xa0c8ff, dt));
+    expect(rgb(DISCIPLE, fx(EFFECT.Chilled, EFFECT.Tainted))).toBe(times(0xd8ecff, dt));
+    expect(rgb(DISCIPLE, fx(EFFECT.Tainted))).toBe(times(shade(1, 0x9be37a, 0.15), dt));         // tainted at clock 0
+    expect(rgb(KNIGHT, fx(EFFECT.Slowed))).toBe(0xa0c8ff);                                      // untinted: the plain effect colour
     expect(rgb(DISCIPLE, 0)).toBe(DISCIPLE.tint);
     expect(rgb(KNIGHT, 0)).toBeNull();
   });

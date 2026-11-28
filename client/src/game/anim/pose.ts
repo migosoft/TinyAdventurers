@@ -145,6 +145,12 @@ export function shade(k: number, to: number, mix: number): number {
   return ch(16) | ch(8) | ch(0);
 }
 
+/** Channel-wise product of two colours. */
+function mulRgb(a: number, b: number): number {
+  const ch = (s: number) => Math.round((((a >> s) & 255) * ((b >> s) & 255)) / 255) << s;
+  return ch(16) | ch(8) | ch(0);
+}
+
 /** Horizontal origin of the body: the hips for figures not centred in their frames (`hipX`, mirrored when facing left). */
 function originXOf(d: FigureDef, w: number, left: boolean): number {
   if (d.hipX === undefined) return 0.5;
@@ -253,10 +259,12 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
       bx = Math.floor(m.clock * 40) % 2 ? 1 : -1;
       if (own) by += Math.floor(m.clock * 40) % 2;
     }
-  } else if (poisoned) tint = { mode: 'mul', rgb: shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(m.clock * Math.PI * 3)) };
-  else if (slowed) tint = { mode: 'mul', rgb: 0xa0c8ff };
-  else if (chilled) tint = { mode: 'mul', rgb: 0xd8ecff };
-  else if (tainted) tint = { mode: 'mul', rgb: shade(1, 0x9be37a, 0.3 * (0.5 + 0.5 * Math.sin(m.clock * Math.PI * 2))) };
+  } else if (poisoned || slowed || chilled || tainted) {
+    // The effect's colour multiplies the variant tint (#132), so a tinted figure keeps its own colour.
+    const fxRgb = poisoned ? shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(m.clock * Math.PI * 3))
+      : slowed ? 0xa0c8ff : chilled ? 0xd8ecff : shade(1, 0x9be37a, 0.3 * (0.5 + 0.5 * Math.sin(m.clock * Math.PI * 2)));
+    tint = { mode: 'mul', rgb: d.tint ? mulRgb(fxRgb, d.tint) : fxRgb };
+  }
   else if (d.tint) tint = { mode: 'mul', rgb: d.tint };
   else tint = { mode: 'none' };
   // Into the dark (chasm) or the deep (water): the figure darkens as it goes.
