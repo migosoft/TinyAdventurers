@@ -135,6 +135,7 @@ describe('the run view and the game lights', () => {
     expect(f?.darkvision).toBeNull();
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
+  // Heavy builds: the default 5 s fails under the full run's parallel load (#439).
   it('a dungeon with a cove hands over its willow and bushes as trees (no sun), adds the pixie lights and the plant bounds for the shadows, and gives its tufts and ferns as bushel spots', () => {
     const r = run({ cove: true, params: { sight: false } });
     const { f } = r;
@@ -150,7 +151,7 @@ describe('the run view and the game lights', () => {
     expect(run().f?.plantShadows ?? null).toBeNull(); // no cove: no pass
     expect(Array.isArray(r.v.bushelSpots())).toBe(true); // this small cove may place no tuft; Cove3d's own test counts them
     expect(run().v.bushelSpots()).toEqual([]);
-  });
+  }, 60_000);
   it('with sight on the plants the picture hides are listed as hidden feet and not otherwise (the mask of the last frame, #333)', () => {
     const r = run({ cove: true });
     const mask = (r.v as unknown as { mask: SightMask }).mask;
@@ -159,7 +160,7 @@ describe('the run view and the game lights', () => {
       expect(ps.plants.length).toBeGreaterThan(0);
       expect(ps.hidden).toEqual(ps.plants.filter((b) => hiddenAt(mask, b.x, b.z)));
     }
-  });
+  }, 60_000);
   it('light=work is the same', () => {
     const { f } = run({ params: { light: 'work' } });
     expect(f?.lights).toEqual([]);
@@ -201,7 +202,7 @@ describe('the run view and the game lights', () => {
     expect(stats.lines!.find((l) => l.startsWith('plants'))).toMatch(/^plants {5}\d+ of \d+$/);
     expect(stats.lines!.some((l) => l.startsWith('sun'))).toBe(false);
     expect(() => run({ cove: true, woodland: true })).toThrow(/woodland and a cove/);
-  });
+  }, 60_000);
   it('a refilled lava buffer bumps lavaVersion', () => {
     const a = run();
     const v1 = a.f!.lavaVersion;

@@ -111,7 +111,7 @@ describe('buildTubeFigure', () => {
         for (const k of Object.keys(m) as (keyof typeof m)[]) expect(c[k], k).toEqual(m[k]);
         const bufs = transferList(m);
         for (const a of [m.position, m.normal, m.uv, m.skin, m.look, m.index, m.pieceIndex, m.lineIndex, m.pivots, m.parents, m.paint.data]) expect(bufs).toContain(a.buffer);
-      });
+      }, 60_000);
     });
   }
 

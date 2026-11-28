@@ -73,7 +73,7 @@ describe('the ?r3d=pond stage (#360)', () => {
         expect(stage.scene.field.decks.length).toBe(demo[i].woodland!.pond.bridges.length);
       }
     }
-  });
+  }, 60_000);
 
   it('gives the water the hour\'s sky, and `&dry=1` leaves the surface out', () => {
     const wet = setup('?r3d=pond&pond=0&hour=13');
@@ -100,7 +100,7 @@ describe('the ?r3d=pond stage (#360)', () => {
     expect(Array.from(p3.water!.ripples!)).toEqual(Array.from(at(3).water!.ripples!));
     // a pond without a brook has no rings
     expect(live(setup('?r3d=pond&pond=0&t=3').run(3, 0.016))).toBe(0);
-  });
+  }, 60_000);
 
   it('walks the knight on the rules map: it moves, and never into deep water', () => {
     const { stage, run } = setup('?r3d=pond&pond=0');

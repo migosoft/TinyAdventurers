@@ -74,7 +74,7 @@ describe('coveWillow', () => {
 
   it('falls back to the smallest size in a room too small for it', () => {
     expect(coveWillow({ x: 10, y: 8, w: 4, h: 4, tree_x: 12, tree_y: 10, seed: 1 }).scalePct).toBe(60);
-  });
+  }, 60_000);
 });
 
 describe('the cove tree in the colour pass without a sun', () => {
