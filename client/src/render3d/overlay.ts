@@ -54,6 +54,7 @@ export class Overlay3d {
         case 'bar': this.bar(ctx, it, zoom); break;
         case 'text': this.text(ctx, it, zoom); break;
         case 'poly': this.poly(ctx, it); break;
+        case 'line': this.line(ctx, it, zoom); break;
         case 'cap': this.cap(ctx, it, zoom); break;
         case 'icon': this.icon(ctx, it, zoom); break;
       }
@@ -70,6 +71,16 @@ export class Overlay3d {
     ctx.fill();
     ctx.lineWidth = 1;
     ctx.strokeStyle = 'rgba(255,220,80,0.5)';
+    ctx.stroke();
+  }
+
+  private line(ctx: CanvasRenderingContext2D, it: Extract<OverlayItem, { t: 'line' }>, zoom: number): void {
+    ctx.globalAlpha = it.alpha;
+    ctx.beginPath();
+    it.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    if (it.closed) ctx.closePath();
+    ctx.lineWidth = Math.max(1, Math.round(zoom));
+    ctx.strokeStyle = it.color;
     ctx.stroke();
   }
 

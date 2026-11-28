@@ -175,7 +175,7 @@ Enemies, bosses and animals do not see all round. A creature **sees in a cone in
 - **Turning takes time.** A creature has to **face you before it attacks**, and a blow that has begun lands where you were: step out of the way (behind it is best) and it misses. **Big creatures turn slowly**: the ogre, the demon and the dragon take longer to swing round than a goblin. A creature walking backwards or sideways is slower than one walking forward.
 - **Two heroes, one enemy.** An enemy keeps fighting the hero in front of it. A hero who shoots it in the back makes it glance round at most every few seconds, so the one in front takes the fight and the one behind keeps shooting.
 - **What the stats do.** **Willpower** (WIL) widens a creature's view and shortens its startle; **Dexterity** (DEX) makes its head and body turn faster. The same goes for your wolf and for a charmed hero.
-- **Debug runs** (test accounts) show each creature's cone as a translucent fan on the floor.
+- **Debug runs** (test accounts) show each creature's cone as a translucent fan on the floor, and coloured lines on the floor for the paths to the boss (yellow), the ogre (blue) and the cove (green), as the badge lists them.
 
 ## The Woodland
 

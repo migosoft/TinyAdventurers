@@ -5,7 +5,8 @@ import { EFFECT, FLAG } from '../generated/defs';
 import { isPlayerKind } from '../game/anim/defs';
 import { barOf } from '../game/barName';
 import { BODY_RISE, floatOf, onOwnHero } from '../game/damage';
-import type { PictureEv } from '../run/view';
+import type { DebugDraw, PictureEv } from '../run/view';
+import { DEBUG_PATHS } from '../game/debugPaths';
 import { has } from '../game/effectBits';
 import { SOUND_TEXT } from '../game/fxLooks';
 import type { UseHint } from '../game/useHint';
@@ -45,6 +46,7 @@ export type OverlayItem =
   | { t: 'bar'; x: number; y: number; w: number; frac: number; color: string }
   | { t: 'text'; x: number; y: number; text: string; kind: WorldTextKind; color: string; stroke: string; alpha: number; scale: number; align: 'center' | 'left'; base: 'bottom' | 'middle' }
   | { t: 'poly'; pts: [number, number][] }
+  | { t: 'line'; pts: [number, number][]; color: string; alpha: number; closed: boolean }
   | { t: 'cap'; x: number; y: number }
   | { t: 'icon'; x: number; y: number; id: number };
 
@@ -67,6 +69,9 @@ export interface LayoutIn {
   /** Vision cones [entity id, full angle (rad), radius (px)] and whether to draw them (`RunFrame.cones`, `showCones`, #341). */
   cones?: readonly (readonly [number, number, number])[];
   showCones?: boolean;
+  /** The debug paths, notice circles and dodge lines (`RunFrame.debug`, #362) and the frame's clock (the dodge lines fade). */
+  debug?: DebugDraw;
+  now?: number;
 }
 
 /** Points on a cone's arc (the whole cone is the centre plus these; a full circle has no centre). */
@@ -88,6 +93,37 @@ export function layoutCones(i: LayoutIn, out: OverlayItem[]): void {
       pts.push([p.px, p.py]);
     }
     out.push({ t: 'poly', pts });
+  }
+}
+
+const NOTICE_ARC = 24;
+const DODGE_FADE = 0.6;
+
+/** The debug runs' lines on the ground (#362): the three A* paths in the badge's colours, a white circle round each smart creature
+ *  (its notice distance) and the planned dodges, fading over `DODGE_FADE` s. Nothing while `debug.on` is false or a list is empty. */
+export function layoutDebugPaths(i: LayoutIn, out: OverlayItem[]): void {
+  const d = i.debug;
+  if (!d?.on) return;
+  const ground = (x: number, y: number): [number, number] => {
+    const p = i.at(x / TILE, y / TILE, 0);
+    return [p.px, p.py];
+  };
+  [d.path, d.ogre, d.cove].forEach((path, k) => {
+    if (path.length >= 2) out.push({ t: 'line', pts: path.map(([x, y]) => ground(x, y)), color: DEBUG_PATHS[k][0], alpha: 1, closed: false });
+  });
+  for (const [id, radius] of d.notice) {
+    const e = i.ents.get(id);
+    if (!e) continue;
+    const pts: [number, number][] = [];
+    for (let k = 0; k < NOTICE_ARC; k++) {
+      const a = (k / NOTICE_ARC) * Math.PI * 2;
+      pts.push(ground(e.x + Math.cos(a) * radius, e.y + Math.sin(a) * radius));
+    }
+    out.push({ t: 'line', pts, color: '#ffffff', alpha: 0.35, closed: true });
+  }
+  for (const g of d.dodges) {
+    const alpha = 1 - ((i.now ?? 0) - g.at) / DODGE_FADE;
+    if (alpha > 0) out.push({ t: 'line', pts: [ground(g.x0, g.y0), ground(g.x1, g.y1)], color: '#ff5050', alpha, closed: false });
   }
 }
 

@@ -15,6 +15,7 @@ import { endText } from './endText';
 import { BOSS_TEXT, className, needsText } from './text';
 import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
 import { SettingsView, type Choice, type Toggle } from './settings';
+import { DEBUG_PATHS } from '../game/debugPaths';
 import { CharmView, charmLeft } from './charmView';
 
 export interface FrameStats {
@@ -113,12 +114,6 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F9', 'immortal on/off'],
 ];
 
-/** The debug paths and the colours the badge lists them in. */
-const DEBUG_PATHS: [colour: string, label: string][] = [
-  ['#ffe040', 'path to the boss'],
-  ['#40a0ff', 'path to the ogre'],
-  ['#40e070', 'path to the cove'],
-];
 
 /** The debug badge: the immortality state, then one row per debug key and per path colour. */
 export function debugBadgeHtml(immortal: boolean): string {

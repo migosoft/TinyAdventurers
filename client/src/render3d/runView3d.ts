@@ -11,7 +11,7 @@ import { aimGround, toCanvas } from './screen';
 import { cylinderOf, pickCylinder, type PickCyl } from './pick';
 import type { Overlay3d } from './overlay';
 import type { EntState } from '../game/world';
-import { Floats, layoutBars, layoutCones, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, layoutBars, layoutCones, layoutDebugPaths, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { emptyGlows, emptyQuads, emptyShadows, fillGlows, fillQuads, fillShadows, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type FigureOut, type Opener } from './figures';
@@ -631,9 +631,10 @@ export class RunView3d implements RunView {
     const i: LayoutIn = {
       ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: this.hidden, zoom: c.zoom, label: c.labelZoom,
       at: (x, z, y) => toCanvas(cam, c.plan, c.zoom, x, y, z), measure: (t, k) => o.measure(t, k),
-      cones: f.cones, showCones: f.showCones,
+      cones: f.cones, showCones: f.showCones, debug: f.debug, now: f.now,
     };
     layoutCones(i, items); // first: under the bars and names
+    layoutDebugPaths(i, items);
     layoutBars(i, items);
     layoutHeroTags(i, items);
     if (this.tagOf) layoutTags(i, this.tagOf, items);

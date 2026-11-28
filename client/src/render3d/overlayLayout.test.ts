@@ -6,10 +6,11 @@ import type { FigureAnchor } from './figures';
 import { SOUND_TEXT } from '../game/fxLooks';
 import { popScale, WORLD_TEXT } from '../game/worldText';
 import { BODY_RISE } from '../game/damage';
-import type { PictureEv } from '../run/view';
+import type { DebugDraw, PictureEv } from '../run/view';
+import { DEBUG_PATHS } from '../game/debugPaths';
 import { renderPlan } from './quality';
 import { toCanvas } from './screen';
-import { Floats, floatSpot, layoutBars, layoutCones, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, floatSpot, layoutBars, layoutCones, layoutDebugPaths, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
 const TILE = 16;
@@ -158,7 +159,7 @@ describe('layoutBars', () => {
     const items = bars(input([ent(7, KIND.Knight, { side: SIDE.Friendly, hp: 0.4 })], [[7, anchor({ height: 19.5 })]], { at: odd, zoom: 2.5 }));
     expect(items.length).toBeGreaterThan(1);
     for (const i of items) {
-      if (i.t === 'poly') continue;
+      if (i.t === 'poly' || i.t === 'line') continue;
       expect(Number.isInteger(i.x), JSON.stringify(i)).toBe(true);
       expect(Number.isInteger(i.y), JSON.stringify(i)).toBe(true);
     }
@@ -540,5 +541,33 @@ describe('the mark: things in the dark (#309)', () => {
     const lit = new Floats(mid);
     lit.addPicture(dmg, { x: 0, y: 0 }, null, false);
     expect(floatItems(lit)).toHaveLength(1);
+  });
+});
+
+describe('layoutDebugPaths (#362)', () => {
+  const lines = (i: LayoutIn): Of<'line'>[] => {
+    const out: OverlayItem[] = [];
+    layoutDebugPaths(i, out);
+    return only(out, 'line');
+  };
+  const draw = (o: Partial<DebugDraw>): DebugDraw => ({ on: true, path: [], ogre: [], cove: [], notice: [], dodges: [], ...o });
+
+  it('draws each path in its badge colour on the ground and nothing for an empty one', () => {
+    const l = lines(input([], [], { debug: draw({ path: [[16, 32], [48, 32]], cove: [[0, 0], [16, 0]] }) }));
+    expect(l.map((x) => x.color)).toEqual([DEBUG_PATHS[0][0], DEBUG_PATHS[2][0]]);
+    expect(l[0].pts).toEqual([[107, 211], [307, 211]]);
+  });
+
+  it('draws nothing while debug is off', () => {
+    expect(lines(input([], [], { debug: draw({ on: false, path: [[0, 0], [16, 0]] }) }))).toEqual([]);
+  });
+
+  it('a notice circle round the creature, and dodge lines that fade out', () => {
+    const e = ent(7, KIND.SkeletonWarrior);
+    const l = lines(input([e], [], { now: 10.3, debug: draw({ notice: [[7, 32], [9, 32]], dodges: [{ x0: 0, y0: 0, x1: 16, y1: 0, at: 10 }, { x0: 0, y0: 0, x1: 16, y1: 0, at: 9 }] }) }));
+    expect(l).toHaveLength(2); // the unknown id and the faded dodge are skipped
+    expect(l[0].closed).toBe(true);
+    expect(l[0].pts).toHaveLength(24);
+    expect(l[1].alpha).toBeCloseTo(0.5, 5);
   });
 });
