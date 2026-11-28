@@ -9,6 +9,7 @@ import { coverTexel, kindLook, type CoverShared } from './cover/coverRead';
 import type { SunLight } from './sunNodes';
 import { CARD_GAIN } from './sun';
 import { GRASS_FLAT, STONE } from './light';
+import { cutPositionNode, cutUniforms, cutWeightNode, type CutUniforms } from './cutNodes';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
@@ -75,6 +76,8 @@ export interface WorldMaterial {
   smooth: { value: number };
   /** See-through uniforms: `mode` 0 off, 1 soft; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
+  /** The wall cut's uniforms (#347; the torches share them): `on` 0 or 1, `floor`, `stub`, `line`, `ramp` in tiles. */
+  cut: { [K in keyof CutUniforms]: { value: number } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture, w: number, h: number): void;
   /** Points the stone reads at new sheets (the view built new ones: the map's faces changed). */
@@ -241,7 +244,8 @@ export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex:
   const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
   const { texel, bend, smooth, setGround, setSheets } = flatTexel(sheets, groundStart, kind, true);
 
-  const wp = positionWorld;
+  // The unmoved point (the vertex stage lowers the drawn one, #347): paint, light, sight and shadows read this. World chunks sit at the origin.
+  const wp = varying(positionGeometry, 'worldPos');
   const cx = floor(wp.x);
   const cz = floor(wp.z);
   const fx = fract(wp.x);
@@ -281,9 +285,12 @@ export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex:
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
   const see = seeUniforms();
   const onWall = isTop.or(isFace);
-  const open = onWall.and(seeOpenNode(maskTex, wp, see));
+  const cut = cutUniforms();
+  // Stubs never open: the mask sample stays at the top level of seeOpenNode.
+  const open = onWall.and(cutWeightNode(wp, cut, see).lessThanEqual(0)).and(seeOpenNode(maskTex, wp, see));
 
   const m = new MeshBasicNodeMaterial();
+  m.positionNode = cutPositionNode(positionGeometry, cut, see);
   m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wpLight, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
@@ -291,6 +298,7 @@ export function worldMaterial(lighting: Lighting, groundStart: Texture, maskTex:
     see: {
       mode: see.mode, keep: see.keep, target: see.target, ray: see.ray,
     },
+    cut,
     smooth,
     setGround,
     setSheets,

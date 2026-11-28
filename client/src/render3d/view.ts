@@ -33,7 +33,7 @@ import {
 import type { StoneField } from './stone/field';
 import { sharpCopyNode } from './sharpCopy';
 import { snapGround, viewRay, type Cam } from './camera';
-import { WALL_H, cellHeight, heightBytes } from './heights';
+import { WALL_H, cellHeight, floorAt as cutFloorAt, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
 import type { SightMask } from './sightmask';
@@ -1281,6 +1281,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       wm.see.ray.value.set(toward2.x, 0, toward2.z); // horizontal: height does not make a wall nearer
       wm.see.mode.value = look.mode === 'off' ? 0 : 1;
       wm.see.keep.value = look.keep;
+      // The wall cut (#347) stays on in the mirror pass: it draws the same material and the same uniforms.
+      wm.cut.on.value = look.cut.on ? 1 : 0;
+      wm.cut.stub.value = look.cut.stub;
+      wm.cut.line.value = look.cut.line;
+      wm.cut.ramp.value = look.cut.ramp;
+      wm.cut.floor.value = cutFloorAt(map, f.cam.x, f.cam.z);
       mm.edge.value = look.edge;
       if (look.mode !== 'off') {
         const dq = discQuads(f.see?.openers ?? [], f.cam, look);

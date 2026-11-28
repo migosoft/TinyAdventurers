@@ -105,6 +105,11 @@ describe('worldMaterial shader code', () => {
     expect(n).toBeLessThanOrEqual(8);
   });
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: the vertex stage reads the wall cut's uniforms (#347)`, () => {
+      const code = vertex(B, build(), { geometry: geometry() });
+      for (const n of ['cutOn', 'cutFloor', 'cutStub', 'cutLine', 'cutRamp']) expect(code).toContain(n);
+    });
+
     it(`${B.name}: no sheet or ground sample and no derivative sits in a branch`, () => {
       expect(readsInBranches(fragment(B, build(), { geometry: geometry() }))).toEqual([]);
     });
