@@ -43,6 +43,15 @@ pub fn under_factor(t: f64) -> f64 {
     }
 }
 
+/// Seconds in deep water before a creature of this CON drowns (infinite when breathless).
+pub fn breath(con: i32, breathless: bool) -> f64 {
+    if breathless {
+        f64::INFINITY
+    } else {
+        BREATH * crate::defs::attributes::factor(con, BREATH_PCT)
+    }
+}
+
 /// Does this tile start the water clock of a walker? Here only deep water, and not mid-dash. #346's Swim trait plugs in here (and in `drowningTile` in `client/src/sim/map.ts`).
 pub fn drowning_tile(t: u8, dashing: bool) -> bool {
     !dashing && t == Tile::DeepWater as u8

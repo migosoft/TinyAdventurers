@@ -657,6 +657,7 @@ impl Run {
         // A charmed hero's inputs are taken off the queue as usual but only acknowledged; the AI's input
         // below is the one that moves it (Decision 3).
         let charmed = charm::is_hero_charmed(p);
+        let mut applied = false;
         for _ in 0..n {
             let p = &mut self.players[pi];
             if p.input_budget == 0 {
@@ -668,12 +669,12 @@ impl Run {
                 p.acknowledge(&input);
             } else {
                 self.apply_input(pi, input);
-                // Like the client's replay: an input that leaves the hero over a chasm or deep water is the last of
+                applied = true;
+                // Like the client's replay: an input that leaves the hero over a chasm is the last of
                 // this tick; the next waits for `terrain_player` (#393).
                 let p = &self.players[pi];
                 let (tx, ty) = dungeon::Map::tile_of(p.pos());
-                let tile = self.layout.map.get(tx, ty);
-                if p.mv.dash_t <= 0.0 && (tile == Tile::Chasm as u8 || tile == Tile::DeepWater as u8) {
+                if p.mv.dash_t <= 0.0 && self.layout.map.get(tx, ty) == Tile::Chasm as u8 {
                     break;
                 }
             }
@@ -681,8 +682,9 @@ impl Run {
         if charmed {
             let input = hero_brain::input(self, pi);
             self.apply_input(pi, input);
+            applied = true;
         }
-        self.terrain_player(pi);
+        self.terrain_player(pi, applied);
         if !self.players[pi].alive {
             return;
         }
@@ -737,8 +739,8 @@ impl Run {
         if knocked {
             return;
         }
-        if fx.1 {
-            return;
+        if fx.1 || self.players[pi].mv.water_t > 0.0 {
+            return; // stunned, or swimming: no objects, no abilities
         }
         if input.act {
             objects::use_object(self, pi);
@@ -855,9 +857,10 @@ impl Run {
         }
     }
 
-    /// The ground under a hero's centre: a chasm or (where a dash ended) deep
-    /// water takes them, lava burns them. Mid-dash heroes are in the air.
-    fn terrain_player(&mut self, pi: usize) {
+    /// The ground under a hero's centre: a chasm takes them, deep water drowns them when their breath (CON,
+    /// read now) runs out, lava burns them. Mid-dash heroes are in the air. `applied`: an input this tick
+    /// already counted the time in `step_move`; a stalled hero's clock runs here.
+    fn terrain_player(&mut self, pi: usize, applied: bool) {
         let p = &mut self.players[pi];
         if let Some((t, how)) = p.sinking {
             let t = t - DT;
@@ -875,21 +878,25 @@ impl Run {
         let pos = p.pos();
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
-        let how = if tile == Tile::Chasm as u8 {
-            Some((dungeon::FALL_TIME, Sink::Fall))
-        } else if tile == Tile::DeepWater as u8 {
-            Some((dungeon::DROWN_TIME, Sink::Drown))
-        } else {
-            None
-        };
-        if let Some((t, how)) = how {
-            p.sinking = Some((t, how));
+        if tile == Tile::Chasm as u8 {
+            p.sinking = Some((dungeon::FALL_TIME, Sink::Fall));
             p.mv = MoveState::at(p.mv.x, p.mv.y);
             p.anim = Anim::Idle;
             p.anim_start = self.time;
             let id = p.id;
-            self.event(Ev::Sink { id, x: pos.x as f32, y: pos.y as f32, how: how as u8 }, None);
+            self.event(Ev::Sink { id, x: pos.x as f32, y: pos.y as f32, how: Sink::Fall as u8 }, None);
             return;
+        }
+        if dungeon::drowning_tile(tile, false) {
+            if !applied {
+                p.mv.water_t += DT;
+            }
+            if p.mv.water_t >= dungeon::breath(p.sheet.attrs.get(crate::defs::attributes::Attr::Con), false) {
+                self.kill_player(pi, Sink::Drown);
+                return;
+            }
+        } else {
+            p.mv.water_t = 0.0;
         }
         if self.layout.map.safe(tx, ty) {
             // The tile centre: a hero always fits there, clear of its neighbours.
@@ -2370,17 +2377,162 @@ pub mod tests {
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })));
     }
 
+    /// Hero 0's CON, as the breath reads it.
+    fn con0(run: &Run) -> i32 {
+        run.players[0].sheet.attrs.get(crate::defs::attributes::Attr::Con)
+    }
+
     #[test]
-    fn a_dash_ending_in_deep_water_drowns() {
+    fn a_dash_ending_in_deep_water_starts_the_drowning_state() {
         let (mut run, at) = terrain_run(Tile::DeepWater);
-        // Walking into deep water no longer stops (#448); where a dash ends still counts, until the breath rule (Task 2).
+        run.players[0].mv.dash_t = 0.5; // mid-dash: in the air, no clock
         stand_at(&mut run, at);
-        assert!(matches!(run.players[0].sinking, Some((_, Sink::Drown))));
-        for _ in 0..=(dungeon::DROWN_TIME / DT) as usize {
+        assert_eq!(run.players[0].mv.water_t, 0.0);
+        run.players[0].mv.dash_t = 0.0;
+        stand_at(&mut run, at);
+        assert!(run.players[0].sinking.is_none(), "no instant sinking any more");
+        assert!(run.players[0].mv.water_t > 0.0);
+        let breath = dungeon::breath(con0(&run), false);
+        for _ in 0..(breath / DT) as usize + 2 {
             run.step();
         }
         assert!(!run.players[0].alive);
         assert!(said(&run, "drowned"));
+        assert!(!run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 1, .. })), "no sink event for water");
+    }
+
+    #[test]
+    fn a_push_into_deep_water_starts_the_drowning_state() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        stand_at(&mut run, at - Vec2::new(32.0, 0.0));
+        let start = run.players[0].pos();
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, PUSH_STR);
+        for _ in 0..30 {
+            walk(&mut run, 0, None);
+            if run.players[0].mv.water_t > 0.0 {
+                break;
+            }
+        }
+        assert!(run.players[0].mv.water_t > 0.0, "pushed into the water");
+        assert!(run.players[0].sinking.is_none() && run.players[0].alive);
+    }
+
+    #[test]
+    fn a_hero_walks_in_and_drowns_when_breath_runs_out() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        stand_at(&mut run, at - Vec2::new(8.0, 0.0));
+        let breath = dungeon::breath(con0(&run), false);
+        let mut ticks = 0;
+        while run.players[0].alive && ticks < 600 {
+            // Walk in, then hold still in the water (an input every tick).
+            let mx = if run.players[0].mv.water_t > 0.0 { 0 } else { 1 };
+            walk(&mut run, mx, None);
+            ticks += 1;
+            if run.players[0].alive {
+                assert!(run.players[0].sinking.is_none(), "no sinking");
+                assert!(run.players[0].mv.water_t < breath);
+            }
+        }
+        assert!(!run.players[0].alive);
+        assert!(said(&run, "drowned"));
+        let want = (breath / DT).ceil() as i64;
+        assert!((ticks as i64 - want).abs() <= 6, "died after {ticks} ticks, breath {want}");
+    }
+
+    /// Ticks in the water at `at` (a held hero with no input queued), then stop.
+    fn soak(run: &mut Run, at: Vec2, secs: f64) {
+        for _ in 0..(secs / DT) as usize {
+            run.players[0].mv.x = at.x;
+            run.players[0].mv.y = at.y;
+            run.step();
+        }
+    }
+
+    #[test]
+    fn a_hero_who_gets_out_lives_and_breath_refills() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        let dry = at - Vec2::new(32.0, 0.0);
+        let breath = dungeon::breath(con0(&run), false);
+        soak(&mut run, at, breath - 0.3);
+        assert!(run.players[0].alive && run.players[0].mv.water_t > 0.0);
+        stand_at(&mut run, dry);
+        assert_eq!(run.players[0].mv.water_t, 0.0);
+        soak(&mut run, at, breath - 0.3);
+        assert!(run.players[0].alive, "the breath refilled");
+    }
+
+    #[test]
+    fn breath_scales_with_con() {
+        assert!((dungeon::breath(10, false) - 2.2).abs() < 1e-9);
+        assert!(dungeon::breath(14, false) > 2.2);
+        assert!((dungeon::breath(-100, false) - 2.2 * 0.1).abs() < 1e-9);
+        assert_eq!(dungeon::breath(3, true), f64::INFINITY);
+    }
+
+    #[test]
+    fn no_abilities_in_deep_water() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        stand_at(&mut run, at);
+        walk(&mut run, 0, None);
+        assert!(run.players[0].mv.water_t > 0.0);
+        walk(&mut run, 0, Some(1));
+        assert_eq!(run.players[0].cd1, 0.0, "nothing fired");
+        assert!(run.players[0].alive);
+    }
+
+    #[test]
+    fn a_stalled_hero_still_drowns() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        let breath = dungeon::breath(con0(&run), false);
+        let mut n = 0;
+        while run.players[0].alive && n < 600 {
+            run.players[0].mv.x = at.x;
+            run.players[0].mv.y = at.y;
+            run.step();
+            n += 1;
+        }
+        assert!(!run.players[0].alive);
+        assert!((n as i64 - (breath / DT).ceil() as i64).abs() <= 1, "died after {n} ticks");
+    }
+
+    #[test]
+    fn con_drain_shortens_breath_at_once() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        let before = dungeon::breath(con0(&run), false);
+        soak(&mut run, at, before - 0.5);
+        assert!(run.players[0].alive);
+        run.players[0].sheet.attrs.add(crate::defs::attributes::Attr::Con, -6);
+        assert!(dungeon::breath(con0(&run), false) < before - 0.5);
+        soak(&mut run, at, 0.1);
+        assert!(!run.players[0].alive, "the drained CON drowns the hero now");
+    }
+
+    #[test]
+    fn immortal_climbs_out_at_the_end_of_breath() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        run.debug = true;
+        run.set_debug(0, true);
+        let breath = dungeon::breath(con0(&run), false);
+        soak(&mut run, at, breath + 0.5);
+        let p = &run.players[0];
+        assert!(p.alive);
+        assert!(p.mv.water_t < breath, "the clock restarted");
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })));
+    }
+
+    #[test]
+    fn a_dash_out_of_deep_water() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        let breath = dungeon::breath(con0(&run), false);
+        soak(&mut run, at, breath - 0.3);
+        let p = &mut run.players[0];
+        p.mv.dash_t = 0.3;
+        p.mv.dash_dx = -1.0;
+        for _ in 0..(1.0 / DT) as usize {
+            walk(&mut run, 0, None); // the dash moves with each input
+        }
+        assert!(run.players[0].alive);
+        assert_eq!(run.players[0].mv.water_t, 0.0);
     }
 
     /// One input per step, as a connected client sends them.

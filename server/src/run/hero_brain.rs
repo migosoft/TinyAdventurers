@@ -45,7 +45,8 @@ fn nearest_foe(run: &Run, pi: usize) -> Option<Creature> {
     let (from, sight, dir) = (p.pos(), p.sight_now(), p.aim);
     let sight = crate::defs::races::Sight { cone: (sight.cone + 2.0 * sight.neck).min(360.0), ..sight };
     let me = targets::stance(run, Creature::Player(pi));
-    let heroes = (0..run.players.len()).filter(|&i| i != pi && run.players[i].alive && run.players[i].sinking.is_none()).map(Creature::Player);
+    // A creature in the drowning state (`water_t > 0`) is out of reach.
+    let heroes = (0..run.players.len()).filter(|&i| i != pi && run.players[i].alive && run.players[i].sinking.is_none() && run.players[i].mv.water_t <= 0.0).map(Creature::Player);
     let monsters = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
@@ -143,8 +144,15 @@ fn shots_of(a: &ResolvedAbility) -> u16 {
 /// unchanged by it.
 pub fn input(run: &mut Run, pi: usize) -> InputMsg {
     let me = Creature::Player(pi);
-    let foe = nearest_foe(run, pi);
     let pos = run.players[pi].pos();
+    if run.players[pi].mv.water_t > 0.0 {
+        // In deep water: swim straight back to the last safe ground, nothing else.
+        let p = &run.players[pi];
+        let (mx, my) = quantize(p.last_safe - pos);
+        let (view_lag, rtt) = ((p.view_lag * 1000.0).round() as u16, (p.rtt * 1000.0).round() as u16);
+        return InputMsg { seq: p.ack, mx, my, aim: p.aim as f32, aim_dist: p.aim_dist as f32, view_lag, rtt, ..Default::default() };
+    }
+    let foe = nearest_foe(run, pi);
     let goal = goal_of(run, pi, foe);
     let (mx, my) = match goal {
         Some((at, stop)) if pos.dist(at) > stop => steer(run, pi, at),
@@ -283,6 +291,24 @@ mod tests {
         }
         assert!(run.players[1].pos().x < x0 - 3.0, "{} -> {}", x0, run.players[1].pos().x);
         assert_eq!(run.players[0].side, Side::Friendly);
+    }
+
+    #[test]
+    fn a_bot_hero_pushed_into_deep_water_swims_out() {
+        let mut run = arena(&[ClassId::Paladin]);
+        let orc = held_orc(&mut run, -40.0);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        run.layout.map.set(tx + 1, ty, Tile::DeepWater);
+        run.players[0].last_safe = Map::center_of(tx, ty);
+        charm_hero(&mut run, 0, orc, 30.0);
+        put(&mut run, 0, Map::center_of(tx + 1, ty));
+        for _ in 0..90 {
+            run.step();
+        }
+        let p = &run.players[0];
+        assert!(p.alive, "swam out in time");
+        assert_eq!(p.mv.water_t, 0.0);
+        assert_ne!(Map::tile_of(p.pos()), (tx + 1, ty), "out of the water");
     }
 
     #[test]
