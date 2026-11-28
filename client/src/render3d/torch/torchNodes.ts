@@ -7,12 +7,11 @@
 import { CustomBlending, DoubleSide, MeshBasicNodeMaterial, OneFactor, OneMinusSrcAlphaFactor, ZeroFactor, type NodeMaterial } from 'three/webgpu';
 import { attribute, cross, float, floor, fract, length, max, mix, normalize, positionLocal, positionWorld, pow, sin, smoothstep, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
-import { TORCH_HIDE_ABOVE } from '../cut';
-import { cutWeightNode, type CutUniforms } from '../cutNodes';
+import { cellWeightNode, type CutUniforms } from '../cutNodes';
 import type { SeeUniforms, ViewToward } from '../materials';
 import { hash21, hash22, vnoise2 } from '../noiseNodes';
 import type { Sight } from '../sightNodes';
-import { CARD_H, CARD_W, FLAME_BASE_Y, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
+import { CARD_H, CARD_W, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
@@ -67,19 +66,11 @@ const blob = (d2: N): N => {
   return k.mul(k);
 };
 
-/**
- * 1 where the torch's wall is cut (#347), else 0: the largest of the weights at six points of the torch's wall cell (the wall point and the far edge, each in the middle and half a tile to either side), at the flame's height with the column-top rule (the wall's height; a thin wall's two edges can differ at 45 degrees), the same for all its vertices, so it hides whole.
- */
+/** 1 where the torch's own wall column is cut over a half (#347; `torchHidden` in cut.ts), else 0: the same for all its vertices, so it hides whole. */
 const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
   const wall: N = attribute('foot', 'vec4'); // .zw: the wall point (.xy, the floor point in front, is the sight's)
   const at = vec2(wall.z, wall.w), n = vec2(wall.x, wall.y).sub(at).mul(2); // foot.xy = wall point + n / 2
-  const tangent = vec2(n.y.negate(), n.x);
-  let w: N = float(0);
-  for (const s of [0, 1]) for (const a of [-0.5, 0, 0.5]) {
-    const p = at.sub(n.mul(s)).add(tangent.mul(a));
-    w = max(w, cutWeightNode(vec3(p.x, FLAME_BASE_Y, p.y), cut, see));
-  }
-  return w.greaterThan(TORCH_HIDE_ABOVE).select(1, 0);
+  return cellWeightNode(floor(at.sub(n.mul(0.5))), cut, see).greaterThan(0.5).select(1, 0);
 };
 
 export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniforms, see: SeeUniforms): NodeMaterial {

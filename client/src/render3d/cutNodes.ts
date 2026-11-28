@@ -42,18 +42,21 @@ function hidesNode(q: N, cut: CutUniforms): N {
 }
 
 /**
- * How much of the cut applies at world point `p`: `d`, the distance toward the camera along the see-through ray from the hero's line (through `cut.target`,
- * not the drawn camera), times the hide test at the ground point `p` (at its column's top) covers on screen (`cut.ts`, `hiddenPoint`).
+ * The cut of the column of cell `c` (xz, whole numbers; `cellWeight` in cut.ts): 0 unless the cell is wall, else the side of the hero's line its centre is on
+ * (`d` along the see-through ray from `cut.target`, not the drawn camera) times the hide test at the ground point its top covers on screen. 5 loads, 1 mask sample.
  */
-export function cutWeightNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
-  const d = p.xz.sub(cut.target.xz).dot(see.ray.xz);
-  // The point at its column's top (the highest tile touching it), so a wall is cut as a whole column (`columnTop` in cut.ts).
-  const e = COLUMN_EPS, cell = (dx: number, dz: number): N => cut.env.cellH(floor(p.xz.add(vec2(dx, dz))));
-  const top = max(p.y, max(max(cell(-e, -e), cell(e, -e)), max(cell(-e, e), cell(e, e))));
-  const q = p.xz.sub(see.ray.xz.mul(max(top.sub(cut.floor), 0).mul(cut.slope)));
-  const side = smoothstep(cut.line, cut.line.add(cut.ramp), d);
+export function cellWeightNode(c: N, cut: CutUniforms, see: SeeUniforms): N {
+  const h: N = cut.env.cellH(c), m: N = c.add(0.5), limit = cut.floor.add(cut.stub);
+  const q = m.sub(see.ray.xz.mul(max(h.sub(cut.floor), 0).mul(cut.slope)));
+  const side = smoothstep(cut.line, cut.line.add(cut.ramp), m.sub(cut.target.xz).dot(see.ray.xz));
   const hides = smoothstep(float(HIDE_MID).sub(cut.edge.mul(0.5)), float(HIDE_MID).add(cut.edge.mul(0.5)), hidesNode(q, cut));
-  return side.mul(hides).mul(cut.on);
+  return smoothstep(limit, limit.add(FLOOR_SOFT), h).mul(side).mul(hides).mul(cut.on);
+}
+
+/** How much of the cut applies at world point `p`: the largest column weight of the cells `COLUMN_EPS` around `p.xz`; its height plays no part, so a column is cut whole. */
+export function cutWeightNode(p: N, cut: CutUniforms, see: SeeUniforms): N {
+  const e = COLUMN_EPS, cell = (dx: number, dz: number): N => cellWeightNode(floor(p.xz.add(vec2(dx, dz))), cut, see);
+  return max(max(cell(-e, -e), cell(e, -e)), max(cell(-e, e), cell(e, e)));
 }
 
 /** The point after the cut, `w` the weight from `cutWeightNode` at `p`: lowered toward `floor + stub`, never raised. */
