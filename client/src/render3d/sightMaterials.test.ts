@@ -51,8 +51,9 @@ function materials(plants = false): { name: string; m: NodeMaterial; world: bool
   const cover = makeCoverShared(new DataTexture(new Uint8Array(4), 1, 1));
   const trees = treeMaterials({ lighting: l, sight, see: seeUniforms(), mask: t, palette: t, shared: makeTreeShared(), hasSun: false, cover, brush: makeBrushUniforms() });
   const air = airMaterials(l, sight, { sun: false, toward });
+  const wm = worldMaterial(l, t, t, sight, cover, sheets());
   return [
-    { name: 'world', m: worldMaterial(l, t, t, sight, cover, sheets()).material, world: true },
+    { name: 'world', m: wm.material, world: true },
     // The ground cover (#330): sheets and bushels end with the sight step.
     // The dips' ground (#324): floor above, bank rock below.
     { name: 'dip', m: dipMaterial(l, t, sight, cover, sheets()).material, world: true, attrs: DIP_ATTRS },
@@ -62,8 +63,8 @@ function materials(plants = false): { name: string; m: NodeMaterial; world: bool
     // The crystals (#380): gems lit by the room, then the sight step.
     { name: 'crystal', m: crystalMaterial(l, sight).material, world: true, attrs: CRYSTAL_ATTRS },
     // The wall torch (#391): the holder lit by the room, the flame by itself; both end with the sight step.
-    { name: 'torch holder', m: holderMaterial(l, sight), world: true, attrs: HOLDER_ATTRS },
-    { name: 'torch flame', m: flameMaterial(sight, toward).material, world: true, attrs: TORCH_FLAME_ATTRS },
+    { name: 'torch holder', m: holderMaterial(l, sight, wm.cut, wm.see), world: true, attrs: HOLDER_ATTRS },
+    { name: 'torch flame', m: flameMaterial(sight, toward, wm.cut, wm.see).material, world: true, attrs: TORCH_FLAME_ATTRS },
     // The lava's surface (#344) ends with the sight step.
     { name: 'lava', m: lavaMaterial(sight).material, world: true, attrs: LAVA_ATTRS },
     // The heat shimmer (#344) is the one material without the sight step: it shows the scene copy, which went through the step, and its

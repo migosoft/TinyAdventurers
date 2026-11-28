@@ -470,8 +470,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   /** The crystal lights that are off: their clusters are built broken. */
   const crystalsOff = new Set<number>();
   // The wall torches (#391): the holder lit by the room, the flame by itself.
-  const holder = holderMaterial(lighting, sight);
-  const flame = flameMaterial(sight, toward);
+  const holder = holderMaterial(lighting, sight, wm.cut, wm.see);
+  const flame = flameMaterial(sight, toward, wm.cut, wm.see);
   /** The torch lights that are off: their torches are built without a flame. */
   const torchesOff = new Set<number>();
   const shimmer = shimmerMaterial(sight, lighting.lavaTexture, map, toward);

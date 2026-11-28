@@ -7,7 +7,8 @@
 import { CustomBlending, DoubleSide, MeshBasicNodeMaterial, OneFactor, OneMinusSrcAlphaFactor, ZeroFactor, type NodeMaterial } from 'three/webgpu';
 import { attribute, cross, float, floor, fract, length, max, mix, normalize, positionLocal, positionWorld, pow, sin, smoothstep, step, uniform, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from '../lightNodes';
-import type { ViewToward } from '../materials';
+import { cutWeightNode, type CutUniforms } from '../cutNodes';
+import type { SeeUniforms, ViewToward } from '../materials';
 import { hash21, hash22, vnoise2 } from '../noiseNodes';
 import type { Sight } from '../sightNodes';
 import { CARD_H, CARD_W, FLAME_H, FLAME_R, HALO_GAP, HALO_R } from './torch';
@@ -65,17 +66,27 @@ const blob = (d2: N): N => {
   return k.mul(k);
 };
 
-export function holderMaterial(lighting: Lighting, sight: Sight): NodeMaterial {
+/**
+ * 1 where the torch's wall is cut (#347), else 0: read at the torch's floor point, the same for all its vertices, so it hides whole.
+ * shortcut: a torch is assumed to hang above floor + stub; give the test its mount height if a low wall light ever appears.
+ */
+const hiddenByCut = (cut: CutUniforms, see: SeeUniforms): N => {
+  const foot: N = attribute('foot', 'vec2');
+  return cutWeightNode(vec3(foot.x, 0, foot.y), cut, see).greaterThan(0).select(1, 0);
+};
+
+export function holderMaterial(lighting: Lighting, sight: Sight, cut: CutUniforms, see: SeeUniforms): NodeMaterial {
   const P: N = positionWorld;
   // every triangle has its own three vertices with its own normal (torch.ts): flat faces
   const lit = lighting.lightAt(P, attribute('normal', 'vec3'), HOLDER_WRAP);
   const m = new MeshBasicNodeMaterial();
+  m.positionNode = positionLocal.mul(float(1).sub(hiddenByCut(cut, see))); // collapsed to zero-area triangles; the light stays
   const colour: N = lighting.finish(attribute('colour', 'vec3'), lit).add(rgb(HOLDER_WARM).mul(attribute('warm', 'float')));
   m.colorNode = vec4(sight.apply(colour, P, sight.unseenAt(attribute('foot', 'vec2'))), 1);
   return m;
 }
 
-export function flameMaterial(sight: Sight, toward: ViewToward): { material: NodeMaterial; time: { value: number } } {
+export function flameMaterial(sight: Sight, toward: ViewToward, cut: CutUniforms, see: SeeUniforms): { material: NodeMaterial; time: { value: number } } {
   const time = uniform(0);
   /** The corner, the phase, the kind (0 card, 1 halo). */
   const f: N = attribute('flame', 'vec4'), reach: N = attribute('reach', 'vec2');
@@ -83,7 +94,7 @@ export function flameMaterial(sight: Sight, toward: ViewToward): { material: Nod
   // The card stands upright and turns round the axis; the halo faces the camera whole and comes toward it, in front of the wall.
   const to: N = toward, right: N = normalize(vec3(to.z, 0, to.x.negate())), up: N = mix(vec3(0, 1, 0), cross(to, right), halo);
   const m = new MeshBasicNodeMaterial();
-  m.positionNode = positionLocal.add(right.mul(f.x.mul(reach.x))).add(up.mul(f.y.mul(reach.y))).add(to.mul(halo.mul(reach.x.add(HALO_GAP))));
+  m.positionNode = positionLocal.add(right.mul(f.x.mul(reach.x))).add(up.mul(f.y.mul(reach.y))).add(to.mul(halo.mul(reach.x.add(HALO_GAP)))).mul(float(1).sub(hiddenByCut(cut, see)));
 
   // the fire, in FLAME_R from the foot
   const T = FLAME.tongues, B = FLAME.body, top = FLAME_H / FLAME_R;
