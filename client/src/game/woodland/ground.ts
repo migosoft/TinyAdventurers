@@ -58,7 +58,7 @@ const STONE_SHAPES = [['LS', 'SD'], ['LSS', 'SDD'], ['.LS.', 'LSSD', '.DD.']];
 /** One flower per this many px² of grass. */
 const FLOWER_AREA = 40;
 
-// the vegetation palette's browns (d, c, b) and thicket greens (0, 1)
+// the plant palette `P`'s browns (d, c, b) and thicket greens (0, 1)
 const DIRT_D: Rgb = [176, 112, 74], DIRT_C: Rgb = [143, 64, 41], DIRT_B: Rgb = [98, 53, 43];
 /** The road's rim: a darker, greener brown, mixed in at low contrast. */
 const RIM: Rgb = [70, 56, 40], RIM_MIX = 0.4;
