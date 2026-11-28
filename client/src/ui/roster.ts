@@ -1,6 +1,6 @@
 // The roster: the account's characters as cards (a card opens its hub), the "new character" card, and the
 // account actions (logout, change password, delete account).
-import { api, ApiFail } from '../api';
+import { api, ApiFail, toLogin } from '../api';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { Me } from '../generated/Me';
 import type { Atlas } from './atlas';
@@ -37,7 +37,7 @@ export class Roster {
       this.root.innerHTML = `${logoHeader}<div class="panel">${esc(String(e instanceof ApiFail ? e.message : e))}</div>`;
       return;
     }
-    if (!this.me) return location.reload(); // session ended: back to the login form
+    if (!this.me) return toLogin(); // session ended: back to the login form
     this.render();
   }
 

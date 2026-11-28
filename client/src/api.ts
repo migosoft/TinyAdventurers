@@ -14,6 +14,12 @@ export class ApiFail extends Error {
   }
 }
 
+/** The session has ended elsewhere: reload to the login form, which says why (`showAuth`). */
+export function toLogin(): void {
+  sessionStorage.setItem('loggedOut', 'You were logged out: the password was changed, or the account logged out, in another browser. Please log in again.');
+  location.reload();
+}
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {

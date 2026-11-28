@@ -1,6 +1,6 @@
 import type { RunStartInfo } from './generated/RunStartInfo';
 import type { ServerMsg } from './generated/ServerMsg';
-import { api, ApiFail } from './api';
+import { api, ApiFail, toLogin } from './api';
 import type { CharacterInfo } from './generated/CharacterInfo';
 import { Net } from './net';
 import { loadAtlas, type Atlas } from './ui/atlas';
@@ -16,6 +16,13 @@ import { loadFonts } from './fonts';
 import { isR3dDemo, r3dPage } from './r3dFlag';
 import './style.css';
 import './ui/screens.css';
+
+/** Back to the login form when the session has ended (a password change or logout elsewhere); true if it did. */
+async function loggedOut(): Promise<boolean> {
+  if ((await api.me().catch(() => undefined)) !== null) return false; // logged in, or the server cannot be reached
+  toLogin();
+  return true;
+}
 
 function fatal(ui: HTMLElement, msg: string): void {
   ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${esc(msg)}</div></div>`;
@@ -63,7 +70,10 @@ async function main(): Promise<void> {
     })());
   const open = async (c: CharacterInfo) => {
     if (session && !session.net.connected) return location.reload();
-    if (!(await ensureSession())) return fatal(ui, 'Cannot reach the game server. Is it running?');
+    if (!(await ensureSession())) {
+      if (!(await loggedOut())) fatal(ui, 'Cannot reach the game server. Is it running?');
+      return;
+    }
     const s = session!;
     roster.hide();
     create.hide();
@@ -108,6 +118,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     lobby.error(msg);
     hub.error(msg);
     for (const s of outer) s.error(msg);
+    void loggedOut();
   };
 
   await loadFonts();

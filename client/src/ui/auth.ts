@@ -61,5 +61,8 @@ export function showAuth(host: HTMLElement): Promise<Me> {
       };
     };
     render();
+    // why the last page was sent here (`loggedOut` in main.ts), shown once
+    root.querySelector('.error')!.textContent = sessionStorage.getItem('loggedOut') ?? '';
+    sessionStorage.removeItem('loggedOut');
   });
 }
