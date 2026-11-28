@@ -6,7 +6,7 @@ import type { AbilityId } from '../generated/AbilityId';
 import type { Disabled } from '../ui/hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
-import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
+import { falling, knocked, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
 import { isHazardKind, isProjectileKind } from './anim/defs';
 import { lookOf } from './looks';
@@ -226,7 +226,7 @@ function dashDurationOf(abilities: ResolvedAbility[]): number {
 
 /** Whether the hero may attack or use an object at all: not falling, pushed or held (the server ignores it then). */
 export function mayAct(p: Predictor): boolean {
-  return !p.sinking && !p.knocked && !p.noAct;
+  return !p.falling && !p.inDeep && !p.knocked && !p.noAct;
 }
 
 /** Whether the slot's cooldown has run out (the server's leeway is only for the network: the client waits for 0). */
@@ -273,7 +273,7 @@ export class Predictor {
   ) {
     this.speed = speed;
     this.dashDuration = dashDurationOf(abilities);
-    this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
+    this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0, waterT: 0 };
   }
 
   /** The hero's numbers changed (an Attribute drain started or ended): speed, abilities, melee fallback. */
@@ -289,9 +289,14 @@ export class Predictor {
     return this.state.dashT <= 0 && knocked(this.state);
   }
 
-  /** Lost to a chasm or deep water (no more moves or attacks). */
-  get sinking(): boolean {
-    return sinking(this.map, this.state);
+  /** Lost to a chasm (no more moves or attacks). */
+  get falling(): boolean {
+    return falling(this.map, this.state);
+  }
+
+  /** In deep water: no attacks (the server ignores them), walking goes on. */
+  get inDeep(): boolean {
+    return this.state.waterT > 0;
   }
 
   /** Cooldown the server resolved for the slot (or for the melee fallback). */
@@ -317,10 +322,10 @@ export class Predictor {
     this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT * this.cdRate, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
     // Pushed: it ignores them until the slide ends.
-    // The move is kept as sent, not as predicted: if the server sees no sinking
+    // The move is kept as sent, not as predicted: if the server sees no fall
     // (or a debug climb-out already happened there), it applies it.
     this.pending.push({ seq: this.seq, mx, my, dash, used });
-    if (this.sinking) dash = null;
+    if (this.falling) dash = null;
     else {
       if (this.knocked) dash = null;
       this.state = stepMove(this.map, this.state, mx, my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
@@ -353,7 +358,7 @@ export class Predictor {
       }
       // The server's state as it is: no replay, no blending, its cooldowns.
       this.pending = [];
-      this.state = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
+      this.state = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy, waterT: me.water_t };
       this.offX = this.offY = 0;
       this.lastCorrection = 0;
       this.cd1 = me.cd1;
@@ -361,9 +366,9 @@ export class Predictor {
       return;
     }
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
-    let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
+    let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy, waterT: me.water_t };
     for (const p of this.pending) {
-      if (sinking(this.map, s)) break;
+      if (falling(this.map, s)) break;
       // A push the client learned of late still voids the dashes sent during it, as on the server.
       const wasKnocked = s.dashT <= 0 && knocked(s);
       s = stepMove(this.map, s, p.mx, p.my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);

@@ -361,6 +361,8 @@ pub struct SelfState {
     /// Knockback velocity (px/s), zero when not pushed.
     pub knock_vx: f64,
     pub knock_vy: f64,
+    /// Seconds in deep water (0 outside it); prediction counts on from it.
+    pub water_t: f64,
     /// Remaining cooldowns (s).
     pub cd1: f32,
     pub cd2: f32,

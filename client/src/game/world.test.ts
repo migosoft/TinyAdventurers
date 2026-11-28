@@ -26,7 +26,7 @@ function chasmMap(): TileMap {
 }
 
 function snap(ack: number, x: number, y: number): Snapshot {
-  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1, cd_rate: 1, paused_items: [], paused_nodes: [], charmed_by: null };
+  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1, cd_rate: 1, paused_items: [], paused_nodes: [], charmed_by: null, water_t: 0 };
   return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], dark: [], dark_ev: [], solids: [], srv_ms: 0, log: null };
 }
 
@@ -110,7 +110,7 @@ describe('Predictor', () => {
     const map = chasmMap();
     const chasm = [8 * TILE + 8, 2 * TILE + 8];
     const pred = mk(map, 'Barbarian', chasm[0], chasm[1]);
-    expect(pred.sinking).toBe(true);
+    expect(pred.falling).toBe(true);
     // Walking left while the client still predicts the fall: no predicted movement.
     for (let i = 0; i < 10; i++) pred.step(-1, 0, null);
     expect(pred.state.x).toBe(chasm[0]);

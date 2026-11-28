@@ -16,7 +16,37 @@ pub const LAVA_DAMAGE: f64 = 10.0;
 pub const LAVA_TICK: f64 = 0.5;
 /// Seconds from stepping into a chasm (or ending a dash over deep water) to death.
 pub const FALL_TIME: f64 = 0.7;
+/// Barrels only: how long a barrel takes to sink in deep water. A hero or monster drowns by breath (`BREATH`).
 pub const DROWN_TIME: f64 = 0.9;
+/// Seconds in deep water until the head is under (balancing pass).
+pub const HEAD_UNDER: f64 = 1.2;
+/// Seconds of breath once the head is under (balancing pass).
+pub const BREATH: f64 = 2.2;
+/// Share of max HP lost for every second without breath (balancing pass).
+pub const BREATH_PCT: f64 = 0.10;
+/// Swimming speed with the head above water (balancing pass).
+pub const SWIM_SPEED: f64 = SHALLOW_SPEED;
+/// Speed with the head under water (balancing pass).
+pub const UNDER_SPEED: f64 = SHALLOW_SPEED * 0.5;
+
+/// Is the head under water after `t` seconds in deep water?
+pub fn head_under(t: f64) -> bool {
+    t >= HEAD_UNDER
+}
+
+/// Factor on walking speed for the time `t` in deep water: slower once the head is under.
+pub fn under_factor(t: f64) -> f64 {
+    if head_under(t) {
+        UNDER_SPEED / SWIM_SPEED
+    } else {
+        1.0
+    }
+}
+
+/// Does this tile start the water clock of a walker? Here only deep water, and not mid-dash. #346's Swim trait plugs in here (and in `drowningTile` in `client/src/sim/map.ts`).
+pub fn drowning_tile(t: u8, dashing: bool) -> bool {
+    !dashing && t == Tile::DeepWater as u8
+}
 
 /// Water, chasm or lava.
 pub fn is_terrain(t: u8) -> bool {
@@ -66,6 +96,8 @@ pub enum Blocker {
 pub enum Mover {
     Hero,
     Enemy,
+    /// A walker that can enter deep water but must not stop in it (monsters that may swim for a while).
+    Breathless,
     /// Imps, chorts, summoners and the demon boss: lava does not stop them.
     Demon,
     /// A hero mid-dash: jumps deep water, chasms and lava.
@@ -138,11 +170,12 @@ impl Map {
         }
         Map::terrain_blocks(self.get(x, y), mover)
     }
-    /// The movement rules for terrain: the terrain a walker of this kind cannot enter. A hero is blocked only by deep water (a chasm is deadly to it but not blocked); monsters are blocked by what would kill or hurt them.
+    /// The movement rules for terrain: the terrain a walker of this kind cannot enter. A hero is blocked by no terrain (a chasm or deep water is deadly to it but not blocked); monsters are blocked by what would kill or hurt them.
     pub fn terrain_blocks(t: u8, mover: Mover) -> bool {
         match mover {
             Mover::Dash | Mover::Incorporeal => false,
-            Mover::Hero => t == Tile::DeepWater as u8,
+            Mover::Hero => false,
+            Mover::Breathless => t == Tile::Chasm as u8 || t == Tile::Lava as u8,
             Mover::Demon => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8,
             Mover::Enemy => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8 || t == Tile::Lava as u8,
         }
@@ -155,6 +188,9 @@ impl Map {
             // Whatever a dash may cross is passable for a phaser too, so a solid tile added later
             // (columns) is passed but never a resting place.
             return !self.blocks(x, y, Mover::Dash) && self.get(x, y) != Tile::Void as u8;
+        }
+        if mover == Mover::Breathless && self.get(x, y) == Tile::DeepWater as u8 {
+            return false;
         }
         !self.blocks(x, y, mover)
     }
@@ -182,6 +218,8 @@ impl Map {
             1.0
         } else if t == Tile::ShallowWater as u8 {
             SHALLOW_SPEED
+        } else if t == Tile::DeepWater as u8 {
+            SWIM_SPEED
         } else if t == Tile::Lava as u8 && mover != Mover::Demon {
             LAVA_SPEED
         } else {
@@ -436,6 +474,25 @@ mod tests {
         assert!(!m.can_stop(1, 1, Mover::Incorporeal), "a ghost may not rest in the trunk");
         assert!(!m.safe(1, 1));
         assert!(!is_terrain(Tile::Trunk as u8));
+    }
+
+    #[test]
+    fn breathless_swims_through_deep_water_but_never_rests_in_it() {
+        let mut m = Map::new(5, 1);
+        for (x, t) in [Tile::Floor, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::ShallowWater].into_iter().enumerate() {
+            m.set(x as i32, 0, t);
+        }
+        assert!(!m.blocks(1, 0, Mover::Breathless) && !m.can_stop(1, 0, Mover::Breathless));
+        assert!(m.blocks(2, 0, Mover::Breathless) && m.blocks(3, 0, Mover::Breathless));
+        assert!(m.can_stop(4, 0, Mover::Breathless));
+        assert_eq!(m.speed_factor(Map::center_of(1, 0), Mover::Breathless), SWIM_SPEED);
+        for mover in [Mover::Hero, Mover::Enemy, Mover::Demon] {
+            assert_eq!(m.speed_factor(Map::center_of(1, 0), mover), SWIM_SPEED, "{mover:?}");
+        }
+        for t in 0..=Tile::Lava as u8 {
+            assert!(!Map::terrain_blocks(t, Mover::Hero), "a hero is blocked by no terrain: {t}");
+        }
+        assert!(under_factor(HEAD_UNDER) < 1.0 && under_factor(HEAD_UNDER - 0.01) == 1.0);
     }
 
     #[test]

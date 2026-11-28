@@ -159,7 +159,7 @@ fn n1_rounds_to_one_decimal_and_drops_dot_zero() {
 struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>, Vec<u32>);
 
 fn a_snapw(log: Option<LogW>) -> SnapW {
-    let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0, false)], 1.0, false, 1.0, 1.0, vec![], vec![], None);
+    let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0, false)], 1.0, false, 1.0, 1.0, vec![], vec![], None, 0.0);
     SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], vec![], vec![], vec![], log)
 }
 

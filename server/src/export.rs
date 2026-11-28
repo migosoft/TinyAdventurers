@@ -156,6 +156,8 @@ fn export_defs() {
     consts.as_object_mut().unwrap().insert("AMBUSH_WARNING".into(), json!(crate::run::ambush::AMBUSH_WARNING));
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "SHOT_MIN_RADIUS": crate::run::entities::SHOT_MIN_RADIUS, "GRAVITY": crate::run::entities::GRAVITY, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
+    let water = json!({ "HEAD_UNDER": crate::dungeon::HEAD_UNDER, "BREATH": crate::dungeon::BREATH, "BREATH_PCT": crate::dungeon::BREATH_PCT, "SWIM_SPEED": crate::dungeon::SWIM_SPEED, "UNDER_SPEED": crate::dungeon::UNDER_SPEED });
+    consts.as_object_mut().unwrap().extend(water.as_object().unwrap().clone());
     let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });
     consts.as_object_mut().unwrap().extend(hero.as_object().unwrap().clone());
     let objs = json!({
@@ -699,7 +701,7 @@ fn export_fixtures() {
     }
     // Every tile's rules, so a new or changed tile fails the client's port: sight, light, walking and speed per mover.
     use crate::dungeon::Mover;
-    let movers = [("hero", Mover::Hero), ("enemy", Mover::Enemy), ("demon", Mover::Demon), ("dash", Mover::Dash)];
+    let movers = [("hero", Mover::Hero), ("enemy", Mover::Enemy), ("demon", Mover::Demon), ("dash", Mover::Dash), ("breathless", Mover::Breathless)];
     let tile_rules: Vec<serde_json::Value> = Tile::ALL
         .iter()
         .map(|&t| {

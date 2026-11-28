@@ -2373,16 +2373,7 @@ pub mod tests {
     #[test]
     fn a_dash_ending_in_deep_water_drowns() {
         let (mut run, at) = terrain_run(Tile::DeepWater);
-        // Deep water stops walking...
-        let before = run.players[0].pos();
-        for _ in 0..60 {
-            let seq = run.players[0].ack + 1;
-            run.players[0].inputs.push_back(InputMsg { seq, mx: 1, ..Default::default() });
-            run.step();
-        }
-        assert!(run.players[0].pos().x < at.x - 8.0, "walked into deep water from {before:?}");
-        assert!(run.players[0].sinking.is_none());
-        // ...but not a dash, and where the dash ends counts.
+        // Walking into deep water no longer stops (#448); where a dash ends still counts, until the breath rule (Task 2).
         stand_at(&mut run, at);
         assert!(matches!(run.players[0].sinking, Some((_, Sink::Drown))));
         for _ in 0..=(dungeon::DROWN_TIME / DT) as usize {
