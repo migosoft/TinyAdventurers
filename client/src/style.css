@@ -871,6 +871,10 @@ kbd {
   background: linear-gradient(180deg, #1c3a24, #102016);
   box-shadow: 0 0 0 1px #48b060;
 }
+.effects .fx,
+.pfx .fx {
+  pointer-events: auto; /* the only HUD part that takes the pointer: its title tooltips (#201) */
+}
 .fx.paused {
   filter: grayscale(1);
   opacity: 0.5;
