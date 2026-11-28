@@ -116,6 +116,21 @@ pub enum Mover {
     Incorporeal,
 }
 
+impl Mover {
+    /// The mover of a monster: its traits decide (a phantom floats, a breathless one wades), then its lava-walking.
+    pub fn of_creature(traits: crate::defs::races::Traits, demon: bool) -> Mover {
+        if traits.phasing {
+            Mover::Incorporeal
+        } else if traits.breathless {
+            Mover::Breathless
+        } else if demon {
+            Mover::Demon
+        } else {
+            Mover::Enemy
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Map {
     pub w: i32,

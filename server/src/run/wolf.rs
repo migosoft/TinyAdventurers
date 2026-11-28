@@ -73,6 +73,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         sinking: None,
         burn_t: dungeon::LAVA_TICK,
         last_safe: Map::center_of(tx, ty),
+        water_t: 0.0,
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,

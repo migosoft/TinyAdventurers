@@ -490,8 +490,11 @@ fn a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait() {
     let (mut run, id) = ranger_with_wolf();
     lit_arena(&mut run);
     let (tx, ty) = Map::tile_of(run.players[0].pos());
-    for x in tx + 7..=tx + 9 {
-        run.layout.map.set(x, ty, Tile::DeepWater);
+    // A wide lake: a swimmer cannot reach the shore before its breath runs out.
+    for y in ty - 12..=ty + 12 {
+        for x in tx + 7..=tx + 34 {
+            run.layout.map.set(x, y, Tile::DeepWater);
+        }
     }
     let wi = wolf_idx(&run, id);
     // Pounce cooling down: with it ready the wolf would leap out (modules::on_danger).
@@ -502,12 +505,23 @@ fn a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait() {
     let bi = run.objects.len() - 1;
     run.events.clear();
     explode_barrel(&mut run, bi);
+    let mut swum = false;
     for _ in 0..8 {
         run.step();
+        swum |= run.monsters[wolf_idx(&run, id)].water_t > 0.0;
     }
-    assert!(run.monsters[wolf_idx(&run, id)].sinking.is_some(), "it went into the water");
-    for _ in 0..240 {
+    assert!(swum, "it went into the water");
+    let wi = wolf_idx(&run, id);
+    // Well out in the lake, a slow swimmer, within its leader's call (no reappearing): it cannot reach the shore in time.
+    run.monsters[wi].pos = Map::center_of(tx + 11, ty);
+    run.monsters[wi].speed = 1.0;
+    for _ in 0..400 {
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].companion.as_mut().unwrap().reach_t = 1e9;
         run.step();
+        if run.monsters.iter().all(|m| m.id != id || !m.alive) {
+            break;
+        }
     }
     assert!(run.monsters.iter().all(|m| m.id != id || !m.alive), "the wolf is gone");
     let p = &run.players[0];

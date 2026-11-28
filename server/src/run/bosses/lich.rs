@@ -159,6 +159,13 @@ impl BossBehaviour for Lich {
             *left -= cdt;
         }
         let pos = run.monsters[bi].pos;
+        // Wading through deep water, it casts nothing: what it was about to do is dropped, it only moves.
+        let swimming = run.monsters[bi].water_t > 0.0;
+        if swimming {
+            self.action = None;
+            self.gaze = None;
+            self.aim_at = None;
+        }
 
         if let Some((action, t)) = self.action {
             let t = t - dt;
@@ -197,16 +204,16 @@ impl BossBehaviour for Lich {
         // The head follows the hero; the body turns for a cast that needs it, and while it keeps its distance.
         run.monsters[bi].look_to = Some(pos.angle_to(ppos));
         let raise = kit(run, bi, AbilityId::RaiseDead);
-        if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 && face_for(run, bi, ppos, AbilityId::RaiseDead) {
+        if !swimming && self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 && face_for(run, bi, ppos, AbilityId::RaiseDead) {
             self.begin(run, bi, AbilityId::RaiseDead, raise.windup);
             set_anim(run, bi, windup_anim(AbilityId::RaiseDead));
-        } else if self.ready(run, bi, AbilityId::Nova) && face_for(run, bi, ppos, AbilityId::Nova) {
+        } else if !swimming && self.ready(run, bi, AbilityId::Nova) && face_for(run, bi, ppos, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
             self.begin(run, bi, AbilityId::Nova, kit(run, bi, AbilityId::Nova).windup);
             set_anim(run, bi, Anim::Slam);
         } else if let Some((s, pi)) = self.ready_spell(run, bi).filter(|&(s, pi)| {
             let at = run.players[pi].pos();
-            face_for(run, bi, at, s)
+            !swimming && face_for(run, bi, at, s)
         }) {
             self.begin(run, bi, s, kit(run, bi, s).windup);
             if s == AbilityId::StoneGaze {
@@ -217,7 +224,7 @@ impl BossBehaviour for Lich {
                 self.aim_at = Some(run.players[pi].id);
                 set_anim(run, bi, windup_anim(s));
             }
-        } else if self.ready(run, bi, AbilityId::GloomBolts) && face_for(run, bi, ppos, AbilityId::GloomBolts) {
+        } else if !swimming && self.ready(run, bi, AbilityId::GloomBolts) && face_for(run, bi, ppos, AbilityId::GloomBolts) {
             self.begin(run, bi, AbilityId::GloomBolts, kit(run, bi, AbilityId::GloomBolts).windup);
             set_anim(run, bi, windup_anim(AbilityId::GloomBolts));
         } else {

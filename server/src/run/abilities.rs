@@ -316,6 +316,10 @@ impl Cooldowns {
 /// nothing is passed in.
 pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     let Some(a) = run.monsters[mi].kit.get(id).cloned() else { return false };
+    // Nothing is released from deep water (the one gate every blow, bolt and cast passes).
+    if run.monsters[mi].water_t > 0.0 {
+        return false;
+    }
     if id == AbilityId::Vanish {
         // Its cooldown is `invis_cd`, which pauses while Invisible, not the ability cooldowns.
         return run.go_invisible(mi, &a.effect, a.cooldown);

@@ -63,7 +63,7 @@ pub(crate) fn set_anim(run: &mut Run, mi: usize, a: Anim) {
 /// A monster on ground it cannot walk (blown into lava): it walks straight
 /// to the nearest tile it can, ignoring heroes until it is out.
 pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
-    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul());
+    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul() * run.monsters[mi].swim_mul());
     if speed <= 0.0 {
         return;
     }
@@ -154,7 +154,7 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let mover = m.mover_now();
     // Walking off the facing is slower; a flying creature (a dash) goes where it likes.
     let off = if mover == Mover::Dash { 1.0 } else { super::facing::off_facing_mul(d.angle(), m.aim) };
-    let speed = speed * m.effects.speed_mul() * off;
+    let speed = speed * m.effects.speed_mul() * m.swim_mul() * off;
     if speed <= 0.0 {
         return false;
     }
@@ -801,7 +801,9 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
             }
             // Tiles beside a barrel are a tight squeeze for a wide body only: go around when there is room.
             let squeeze = clear && nb != goal && (-1..=1).any(|dy| (-1..=1).any(|dx| blocked.contains(&(nb.0 + dx, nb.1 + dy))));
-            let ng = cg + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
+            // A wade is slow and cannot be rested in: worth it only against a clearly longer way round.
+            let wade = if mover == Mover::Breathless && map.get(nb.0, nb.1) == crate::dungeon::Tile::DeepWater as u8 { 3 } else { 0 };
+            let ng = cg + wade + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
             if g.get(&nb).map_or(true, |&old| ng < old) {
                 g.insert(nb, ng);
                 came.insert(nb, cur);
@@ -1286,6 +1288,35 @@ pub(crate) mod tests {
         assert!(!around(&astar(&m, from, to, 1000, Mover::Demon).unwrap()), "demons walk through lava");
         let past = Map::center_of(9, 2);
         assert!(around(&astar(&m, from, past, 1000, Mover::Demon).unwrap()), "demons go around chasms");
+    }
+
+    #[test]
+    fn a_skeleton_paths_through_deep_water_but_never_stops_in_it() {
+        // A wall column at x = 5 with one deep tile at (5, 2); `gap` rows of floor open the way round.
+        let wall = |gap_from: i32| {
+            let mut m = Map::new(12, 14);
+            for y in 1..13 {
+                for x in 1..11 {
+                    m.set(x, y, Tile::Floor);
+                }
+            }
+            for y in 1..gap_from {
+                m.set(5, y, Tile::Wall);
+            }
+            m.set(5, 2, Tile::DeepWater);
+            m
+        };
+        let (from, to) = (Map::center_of(2, 2), Map::center_of(8, 2));
+        let wades = |p: &Vec<Vec2>| p.iter().any(|w| Map::tile_of(*w) == (5, 2));
+        // The dry way round is much longer: through the moat.
+        let far = wall(12);
+        let p = astar(&far, from, to, 1000, Mover::Breathless).unwrap();
+        assert!(wades(&p), "wades the moat");
+        assert!(!far.can_stop(5, 2, Mover::Breathless), "but never rests in it");
+        assert!(astar(&far, from, to, 1000, Mover::Enemy).is_some_and(|p| !wades(&p)), "an ordinary enemy goes round");
+        // The way round is one step shorter than the wade: round.
+        let near = wall(3);
+        assert!(!wades(&astar(&near, from, to, 1000, Mover::Breathless).unwrap()), "round when it is shorter");
     }
 
     #[test]

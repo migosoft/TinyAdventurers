@@ -553,6 +553,9 @@ impl Run {
 
     /// A monster starts a wind-up (an attack): it ends its Invisible.
     pub fn start_windup(&mut self, mi: usize, w: super::entities::Windup) {
+        if self.monsters[mi].water_t > 0.0 {
+            return; // nothing winds up in deep water
+        }
         self.act(Creature::Monster(mi));
         self.monsters[mi].ai.windup = Some(w);
     }

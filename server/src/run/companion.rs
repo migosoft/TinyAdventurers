@@ -132,11 +132,12 @@ pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<Creat
     // A companion with no attack (a charmed deer) has no prey.
     let attack = w.kit.first()?.split;
     let me = targets::stance(run, Creature::Monster(mi));
-    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && run.players[i].sinking.is_none()).map(Creature::Player);
+    // A creature in the drowning state (`water_t > 0`) is out of reach: not worth chasing.
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && run.players[i].sinking.is_none() && run.players[i].mv.water_t <= 0.0).map(Creature::Player);
     let monsters = (0..run.monsters.len())
         .filter(|&i| {
             let f = &run.monsters[i];
-            i != mi && f.alive && !f.dormant && !f.hiding && !f.airborne && f.sinking.is_none()
+            i != mi && f.alive && !f.dormant && !f.hiding && !f.airborne && f.sinking.is_none() && f.water_t <= 0.0
         })
         .map(Creature::Monster);
     heroes

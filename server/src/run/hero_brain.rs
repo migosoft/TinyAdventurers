@@ -50,7 +50,7 @@ fn nearest_foe(run: &Run, pi: usize) -> Option<Creature> {
     let monsters = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
-            m.alive && !m.dormant && !m.hiding && !m.airborne && m.sinking.is_none()
+            m.alive && !m.dormant && !m.hiding && !m.airborne && m.sinking.is_none() && m.water_t <= 0.0
         })
         .map(Creature::Monster);
     heroes

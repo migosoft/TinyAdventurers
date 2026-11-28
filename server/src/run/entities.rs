@@ -430,6 +430,8 @@ pub struct Monster {
     pub burn_t: f64,
     /// Centre of the last safe tile it stood on (a creature with a Leap leaps back there from danger).
     pub last_safe: Vec2,
+    /// Seconds in deep water on the ground (0 when out): the breath clock, as the heroes' `MoveState::water_t`.
+    pub water_t: f64,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
     /// Status effects (run/effects.rs).
@@ -478,6 +480,15 @@ impl Monster {
             Mover::Dash
         } else {
             self.mover
+        }
+    }
+
+    /// The factor on its walking speed while it swims (1 on dry ground): slower in deep water, slower again with the head under.
+    pub fn swim_mul(&self) -> f64 {
+        if self.water_t > 0.0 {
+            crate::dungeon::SWIM_SPEED * crate::dungeon::under_factor(self.water_t)
+        } else {
+            1.0
         }
     }
 
